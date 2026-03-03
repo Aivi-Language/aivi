@@ -27,8 +27,6 @@ Collections introduce sigil-based literals for concise construction. These are d
 
 ### Map literal
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_list.aivi{aivi}
-
 Rules:
 - Entries use `key => value`.
 - Keys and values are full expressions.
@@ -49,8 +47,6 @@ Rules:
 ### Merge operator
 
 The `++` operator is provided as concatenation for `List`, right-biased merge for `Map`, and union for `Set`. Note that `++` is **not** supported for `Text` — use text interpolation (`"prefix {expr} suffix"`) instead.
-
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_queue.aivi{aivi}
 
 ## `aivi.list`
 

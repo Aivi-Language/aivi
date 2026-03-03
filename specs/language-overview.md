@@ -30,7 +30,7 @@ A one-page reference for experienced users. For full details follow the section 
 | Numeric | `42`, `3.14`, `'a'` |
 | ISO instant | `2024-05-21T12:00:00Z` |
 | Suffixed number | `10px`, `30s`, `100%` — domain-resolved |
-| Keywords | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then use when with yield loop` |
+| Keywords | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then unless use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -195,6 +195,7 @@ val <- riskyOp or
 
 // Conditional
 when cfg.verbose <- print "verbose enabled"
+unless cfg.quiet  <- print "done"
 
 // Precondition guard
 given amount > 0 or fail (InvalidAmount amount)

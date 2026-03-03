@@ -18,13 +18,14 @@ Tests are ordinary bindings annotated with the `@test` [decorator](../../syntax/
 
 | Function | Explanation |
 | --- | --- |
-| **assert** condition<br><code>Bool -> Unit</code> | Fails the test when `condition` is `false`. |
-| **assertEq** expected actual<br><code>A -> A -> Unit</code> | Fails the test when `expected` and `actual` are not equal (requires `Eq` constraint). |
-| **assertNe** a b<br><code>A -> A -> Unit</code> | Fails the test when `a` and `b` are equal. |
-| **assertOk** result<br><code>Result E A -> Unit</code> | Fails the test when `result` is `Err`. |
-| **assertErr** result<br><code>Result E A -> Unit</code> | Fails the test when `result` is `Ok`. |
-| **assertSome** option<br><code>Option A -> Unit</code> | Fails the test when `option` is `None`. |
-| **assertNone** option<br><code>Option A -> Unit</code> | Fails the test when `option` is `Some`. |
+| **assert** condition<br><code>Bool -> Effect Text Unit</code> | Fails the test when `condition` is `false`. |
+| **assertEq** expected actual<br><code>A -> A -> Effect Text Unit</code> | Fails the test when `expected` and `actual` are not equal (requires `Eq` constraint). |
+| **assertNe** a b<br><code>A -> A -> Effect Text Unit</code> | Fails the test when `a` and `b` are equal. |
+| **assertOk** result<br><code>Result E A -> Effect Text Unit</code> | Fails the test when `result` is `Err`. |
+| **assertErr** result<br><code>Result E A -> Effect Text Unit</code> | Fails the test when `result` is `Ok`. |
+| **assertSome** option<br><code>Option A -> Effect Text Unit</code> | Fails the test when `option` is `None`. |
+| **assertNone** option<br><code>Option A -> Effect Text Unit</code> | Fails the test when `option` is `Some`. |
+| **assertSnapshot** name value<br><code>Text -> A -> Effect Text Unit</code> | Compares `value` against a stored `.snap` file identified by `name`. Creates the file on first run. |
 
 ### Running tests
 
@@ -68,11 +69,4 @@ snapshot mocks and multiple mock bindings.
 
 ### Snapshot assertions
 
-`assertSnapshot` compares a value against a stored `.snap` file:
-
-```aivi
-assertSnapshot : Text -> A -> Effect Text Unit
-```
-
-On first run (or `aivi test --update-snapshots`), the snapshot file is created.
-On subsequent runs, the value is compared against the stored snapshot.
+`assertSnapshot` compares a value against a stored `.snap` file. On first run (or `aivi test --update-snapshots`), the snapshot file is created. On subsequent runs, the value is compared against the stored snapshot.
