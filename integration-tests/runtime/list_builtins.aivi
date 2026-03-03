@@ -1,0 +1,291 @@
+@no_prelude
+module integrationTests.runtime.listBuiltins
+
+use aivi
+use aivi.testing
+use aivi.list
+
+// --- Empty and basic queries ---
+
+@test "empty list"
+emptyTest = do Effect {
+  assertEq empty []
+}
+
+@test "isEmpty on empty"
+isEmptyEmpty = do Effect {
+  assertEq (isEmpty []) True
+}
+
+@test "isEmpty on non-empty"
+isEmptyNonEmpty = do Effect {
+  assertEq (isEmpty [1]) False
+}
+
+@test "length"
+lengthTest = do Effect {
+  assertEq (length [1, 2, 3]) 3
+  assertEq (length []) 0
+}
+
+// --- Map ---
+
+@test "map"
+mapTest = do Effect {
+  assertEq (map (x => x * 2) [1, 2, 3]) [2, 4, 6]
+}
+
+@test "map empty"
+mapEmpty = do Effect {
+  assertEq (map (x => x + 1) []) []
+}
+
+// --- Filter ---
+
+@test "filter"
+filterTest = do Effect {
+  assertEq (filter (x => x > 2) [1, 2, 3, 4]) [3, 4]
+}
+
+@test "filter none match"
+filterNone = do Effect {
+  assertEq (filter (x => x > 10) [1, 2, 3]) []
+}
+
+@test "filter all match"
+filterAll = do Effect {
+  assertEq (filter (x => x > 0) [1, 2, 3]) [1, 2, 3]
+}
+
+// --- FlatMap ---
+
+@test "flatMap"
+flatMapTest = do Effect {
+  assertEq (flatMap (x => [x, x * 10]) [1, 2, 3]) [1, 10, 2, 20, 3, 30]
+}
+
+@test "flatMap empty"
+flatMapEmpty = do Effect {
+  assertEq (flatMap (x => [x]) []) []
+}
+
+// --- Foldl / Foldr ---
+
+@test "foldl sum"
+foldlSum = do Effect {
+  assertEq (foldl (acc => x => acc + x) 0 [1, 2, 3, 4]) 10
+}
+
+@test "foldl empty"
+foldlEmpty = do Effect {
+  assertEq (foldl (acc => x => acc + x) 0 []) 0
+}
+
+@test "foldr builds right"
+foldrTest = do Effect {
+  result = foldr (x => acc => x - acc) 0 [1, 2, 3]
+  assertEq result 2
+}
+
+@test "foldr empty"
+foldrEmpty = do Effect {
+  assertEq (foldr (x => acc => acc + x) 0 []) 0
+}
+
+// --- Scanl ---
+
+@test "scanl"
+scanlTest = do Effect {
+  assertEq (scanl (acc => x => acc + x) 0 [1, 2, 3]) [0, 1, 3, 6]
+}
+
+@test "scanl empty"
+scanlEmpty = do Effect {
+  assertEq (scanl (acc => x => acc + x) 0 []) [0]
+}
+
+// --- Take / Drop ---
+
+@test "take"
+takeTest = do Effect {
+  assertEq (take 2 [1, 2, 3, 4]) [1, 2]
+  assertEq (take 0 [1, 2]) []
+  assertEq (take 10 [1, 2]) [1, 2]
+}
+
+@test "drop"
+dropTest = do Effect {
+  assertEq (drop 2 [1, 2, 3, 4]) [3, 4]
+  assertEq (drop 0 [1, 2]) [1, 2]
+  assertEq (drop 10 [1, 2]) []
+}
+
+// --- TakeWhile / DropWhile ---
+
+@test "takeWhile"
+takeWhileTest = do Effect {
+  assertEq (takeWhile (x => x < 3) [1, 2, 3, 4]) [1, 2]
+}
+
+@test "takeWhile all"
+takeWhileAll = do Effect {
+  assertEq (takeWhile (x => x < 10) [1, 2, 3]) [1, 2, 3]
+}
+
+@test "takeWhile none"
+takeWhileNone = do Effect {
+  assertEq (takeWhile (x => x > 10) [1, 2, 3]) []
+}
+
+@test "dropWhile"
+dropWhileTest = do Effect {
+  assertEq (dropWhile (x => x < 3) [1, 2, 3, 4]) [3, 4]
+}
+
+@test "dropWhile all"
+dropWhileAll = do Effect {
+  assertEq (dropWhile (x => x < 10) [1, 2, 3]) []
+}
+
+@test "dropWhile none"
+dropWhileNone = do Effect {
+  assertEq (dropWhile (x => x > 10) [1, 2, 3]) [1, 2, 3]
+}
+
+// --- Partition ---
+
+@test "partition"
+partitionTest = do Effect {
+  result = partition (x => x > 2) [1, 2, 3, 4]
+  assertEq result ([3, 4], [1, 2])
+}
+
+// --- Find ---
+
+@test "find found"
+findFound = do Effect {
+  assertEq (find (x => x > 2) [1, 2, 3, 4]) (Some 3)
+}
+
+@test "find not found"
+findNotFound = do Effect {
+  assertEq (find (x => x > 10) [1, 2, 3]) None
+}
+
+@test "find empty"
+findEmpty = do Effect {
+  assertEq (find (x => x > 0) []) None
+}
+
+// --- FindMap ---
+
+@test "findMap found"
+findMapFound = do Effect {
+  result = findMap (x => if x > 2 then Some (x * 10) else None) [1, 2, 3, 4]
+  assertEq result (Some 30)
+}
+
+@test "findMap not found"
+findMapNotFound = do Effect {
+  result = findMap (x => None) [1, 2, 3]
+  assertEq result None
+}
+
+// --- At ---
+
+@test "at valid index"
+atValid = do Effect {
+  assertEq (at 0 [10, 20, 30]) (Some 10)
+  assertEq (at 2 [10, 20, 30]) (Some 30)
+}
+
+@test "at out of bounds"
+atOob = do Effect {
+  assertEq (at 5 [10, 20, 30]) None
+  assertEq (at (-1) [10, 20, 30]) None
+}
+
+// --- IndexOf ---
+
+@test "indexOf found"
+indexOfFound = do Effect {
+  assertEq (indexOf 20 [10, 20, 30]) (Some 1)
+}
+
+@test "indexOf not found"
+indexOfNotFound = do Effect {
+  assertEq (indexOf 99 [10, 20, 30]) None
+}
+
+// --- Zip / ZipWith / Unzip ---
+
+@test "zip"
+zipTest = do Effect {
+  assertEq (zip [1, 2, 3] ["a", "b", "c"]) [(1, "a"), (2, "b"), (3, "c")]
+}
+
+@test "zip unequal length"
+zipUnequal = do Effect {
+  assertEq (zip [1, 2] ["a", "b", "c"]) [(1, "a"), (2, "b")]
+}
+
+@test "zipWith"
+zipWithTest = do Effect {
+  assertEq (zipWith (a => b => a + b) [1, 2, 3] [10, 20, 30]) [11, 22, 33]
+}
+
+@test "unzip"
+unzipTest = do Effect {
+  assertEq (unzip [(1, "a"), (2, "b")]) ([1, 2], ["a", "b"])
+}
+
+// --- Intersperse ---
+
+@test "intersperse"
+intersperseTest = do Effect {
+  assertEq (intersperse 0 [1, 2, 3]) [1, 0, 2, 0, 3]
+}
+
+@test "intersperse single"
+intersperseSingle = do Effect {
+  assertEq (intersperse 0 [1]) [1]
+}
+
+@test "intersperse empty"
+intersperseEmpty = do Effect {
+  assertEq (intersperse 0 []) []
+}
+
+// --- Chunk ---
+
+@test "chunk"
+chunkTest = do Effect {
+  assertEq (chunk 2 [1, 2, 3, 4, 5]) [[1, 2], [3, 4], [5]]
+}
+
+@test "chunk even"
+chunkEven = do Effect {
+  assertEq (chunk 2 [1, 2, 3, 4]) [[1, 2], [3, 4]]
+}
+
+@test "chunk empty"
+chunkEmpty = do Effect {
+  assertEq (chunk 2 []) []
+}
+
+// --- Dedup ---
+
+@test "dedup"
+dedupTest = do Effect {
+  assertEq (dedup [1, 1, 2, 3, 3, 3, 4]) [1, 2, 3, 4]
+}
+
+@test "dedup no dupes"
+dedupNoDupes = do Effect {
+  assertEq (dedup [1, 2, 3]) [1, 2, 3]
+}
+
+@test "dedup empty"
+dedupEmpty = do Effect {
+  assertEq (dedup []) []
+}

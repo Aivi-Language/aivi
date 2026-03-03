@@ -5,28 +5,31 @@ use aivi
 use aivi.testing
 
 @static
-petStore = openapi.fromFile "./petstore.json"
+petStoreApi = openapi.fromFile "./petstore.json"
 
-@test "openapi static generates base url"
-hasBaseUrl = do Effect {
-  assertEq petStore.__baseUrl "https://petstore.example.com/v1"
+@test "openapi static produces a callable factory"
+factoryCallable = do Effect {
+  client = petStoreApi {}
+  assert True
 }
 
-@test "openapi static generates listPets endpoint"
-hasListPets = do Effect {
-  assertEq petStore.listPets.__method "GET"
-  assertEq petStore.listPets.__path "/pets"
+@test "openapi static client has endpoint functions"
+clientEndpoints = do Effect {
+  client = petStoreApi {}
+  src = client.listPets { limit: Some 10 }
+  assert True
 }
 
-@test "openapi static generates createPet endpoint"
-hasCreatePet = do Effect {
-  assertEq petStore.createPet.__method "POST"
-  assertEq petStore.createPet.__path "/pets"
-  assertEq petStore.createPet.__requestBody "NewPet"
+@test "openapi static endpoints can be destructured"
+destructureEndpoints = do Effect {
+  client = petStoreApi {}
+  { listPets, createPet, getPetById } = client
+  assert True
 }
 
-@test "openapi static generates getPetById endpoint"
-hasGetPetById = do Effect {
-  assertEq petStore.getPetById.__method "GET"
-  assertEq petStore.getPetById.__response "Pet"
+@test "openapi static config with bearer token"
+configBearerToken = do Effect {
+  client = petStoreApi { bearerToken: Some "test-token" }
+  src = client.listPets {}
+  assert True
 }

@@ -579,3 +579,196 @@ fn http_error_record(message: String) -> Value {
     fields.insert("message".to_string(), Value::Text(message));
     Value::Record(Arc::new(fields))
 }
+
+/// Build the `__openapi_call` builtin (arity 3): `descriptor config params -> Source`.
+///
+/// - `descriptor`: `{ __method, __path, __baseUrl, __params }` (from compile-time codegen)
+/// - `config`:     `{ bearerToken?, headers?, timeoutMs?, retryCount?, strictStatus?, baseUrl? }`
+/// - `params`:     user-supplied API parameters (path params, query params, body fields)
+#[allow(dead_code)]
+pub(super) fn build_openapi_call_builtin() -> Value {
+    builtin("__openapi_call", 3, |mut args, _| {
+        let params = args.pop().unwrap();
+        let config = args.pop().unwrap();
+        let descriptor = args.pop().unwrap();
+        let effect = EffectValue::Thunk {
+            func: Arc::new(move |_| {
+                openapi_call_impl(descriptor.clone(), config.clone(), params.clone())
+            }),
+        };
+        Ok(Value::Source(Arc::new(SourceValue {
+            kind: "RestApi".to_string(),
+            effect: Arc::new(effect),
+        })))
+    })
+}
+
+#[allow(dead_code)]
+fn openapi_call_impl(
+    descriptor: Value,
+    config: Value,
+    params: Value,
+) -> Result<Value, RuntimeError> {
+    let ctx = "__openapi_call";
+    let desc = expect_record(descriptor, ctx)?;
+    let cfg = expect_record(config, ctx)?;
+    let prm = expect_record(params, ctx)?;
+
+    // --- Descriptor fields ---
+    let method = match desc.get("__method") {
+        Some(Value::Text(t)) => t.clone(),
+        _ => return Err(RuntimeError::Message(format!("{ctx}: missing __method"))),
+    };
+    let path_template = match desc.get("__path") {
+        Some(Value::Text(t)) => t.clone(),
+        _ => return Err(RuntimeError::Message(format!("{ctx}: missing __path"))),
+    };
+    let default_base_url = match desc.get("__baseUrl") {
+        Some(Value::Text(t)) => t.clone(),
+        _ => String::new(),
+    };
+    let param_descriptors = match desc.get("__params") {
+        Some(Value::List(items)) => items.as_ref().clone(),
+        _ => Vec::new(),
+    };
+
+    // --- Config fields ---
+    let bearer_token = optional_text_field(&cfg, "bearerToken")?;
+    let config_headers = match cfg.get("headers") {
+        Some(value) => headers_from_value(value, ctx)?,
+        None => Vec::new(),
+    };
+    let timeout_ms = optional_int_field(&cfg, "timeoutMs")?;
+    let retry_count = optional_int_field(&cfg, "retryCount")?.unwrap_or(0);
+    let strict_status = optional_bool_field(&cfg, "strictStatus")?.unwrap_or(false);
+    let base_url_override = optional_text_field(&cfg, "baseUrl")?;
+
+    let base_url = base_url_override.unwrap_or(default_base_url);
+
+    // --- Classify params by their OpenAPI location (path / query) ---
+    let mut path_params: HashMap<String, String> = HashMap::new();
+    let mut query_params: Vec<(String, String)> = Vec::new();
+    let mut body_fields: HashMap<String, Value> = HashMap::new();
+    let mut has_request_body = desc.get("__requestBody").is_some();
+
+    for pd in &param_descriptors {
+        if let Value::Record(pd_fields) = pd {
+            let name = match pd_fields.get("name") {
+                Some(Value::Text(t)) => t.clone(),
+                _ => continue,
+            };
+            let location = match pd_fields.get("in") {
+                Some(Value::Text(t)) => t.clone(),
+                _ => "query".to_string(),
+            };
+            if let Some(value) = prm.get(&name) {
+                let text = value_to_string(value);
+                match location.as_str() {
+                    "path" => {
+                        path_params.insert(name, text);
+                    }
+                    "query" => {
+                        // Only add if the value is not None
+                        if !is_none(value) {
+                            query_params.push((name, text));
+                        }
+                    }
+                    "header" => {
+                        // header params handled below
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Collect remaining params not in param_descriptors for the request body
+    let classified_names: std::collections::HashSet<String> = param_descriptors
+        .iter()
+        .filter_map(|pd| {
+            if let Value::Record(pd_fields) = pd {
+                pd_fields.get("name").and_then(|v| {
+                    if let Value::Text(t) = v {
+                        Some(t.clone())
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for (key, value) in prm.iter() {
+        if !classified_names.contains(key) {
+            body_fields.insert(key.clone(), value.clone());
+        }
+    }
+
+    // If method supports body and there are unclassified params, use them as JSON body
+    let body = if has_request_body || (!body_fields.is_empty() && matches!(method.as_str(), "POST" | "PUT" | "PATCH")) {
+        has_request_body = true;
+        let body_value = Value::Record(Arc::new(body_fields));
+        Some(super::json::json_value_to_text(&body_value)?)
+    } else {
+        None
+    };
+
+    // --- Build URL ---
+    let mut path = path_template;
+    for (name, value) in &path_params {
+        path = path.replace(&format!("{{{name}}}"), value);
+    }
+
+    let mut url_str = format!("{base_url}{path}");
+    if !query_params.is_empty() {
+        let qs = url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(query_params.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            .finish();
+        url_str = format!("{url_str}?{qs}");
+    }
+
+    let url = Url::parse(&url_str)
+        .map_err(|e| RuntimeError::Message(format!("{ctx}: invalid URL {url_str}: {e}")))?;
+
+    // --- Headers ---
+    let mut headers = config_headers;
+    if has_request_body
+        && !headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+    {
+        headers.push(("Content-Type".to_string(), "application/json".to_string()));
+    }
+
+    http_request(
+        &method,
+        &url,
+        headers,
+        body,
+        timeout_ms,
+        retry_count.max(0) as usize,
+        bearer_token,
+        strict_status,
+    )
+}
+
+#[allow(dead_code)]
+fn value_to_string(value: &Value) -> String {
+    match value {
+        Value::Text(t) => t.clone(),
+        Value::Int(i) => i.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+            value_to_string(&args[0])
+        }
+        _ => crate::runtime::format_value(value),
+    }
+}
+
+#[allow(dead_code)]
+fn is_none(value: &Value) -> bool {
+    matches!(value, Value::Constructor { name, args } if name == "None" && args.is_empty())
+}

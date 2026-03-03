@@ -1,0 +1,166 @@
+@no_prelude
+module integrationTests.runtime.regexBuiltins
+
+use aivi
+use aivi.testing
+use aivi.regex
+use aivi.result
+
+// --- Compile ---
+
+@test "regex compile valid"
+compileValid = do Effect {
+  result = compile "\\d+"
+  assertEq (isOk result) True
+}
+
+@test "regex compile invalid"
+compileInvalid = do Effect {
+  result = compile "[invalid"
+  assertEq (isErr result) True
+}
+
+// --- Test ---
+
+@test "regex test matches"
+testMatches = do Effect {
+  r = do Result {
+    rx <- compile "\\d+"
+    Ok rx
+  }
+  r match
+    | Ok rx => do Effect {
+      assertEq (test rx "hello 42 world") True
+      assertEq (test rx "no numbers here") False
+    }
+    | Err _ => fail "compile failed"
+}
+
+@test "regex test full text"
+testFullText = do Effect {
+  r = do Result {
+    rx <- compile "^hello$"
+    Ok rx
+  }
+  r match
+    | Ok rx => do Effect {
+      assertEq (test rx "hello") True
+      assertEq (test rx "hello world") False
+    }
+    | Err _ => fail "compile failed"
+}
+
+// --- Find ---
+
+@test "regex find"
+findTest = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = find rx "abc 123 def"
+      assertEq result (Some (4, 7))
+    }
+    | Err _ => fail "compile failed"
+}
+
+@test "regex find no match"
+findNoMatch = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = find rx "no digits"
+      assertEq result None
+    }
+    | Err _ => fail "compile failed"
+}
+
+// --- FindAll ---
+
+@test "regex findAll"
+findAllTest = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = findAll rx "12 and 34"
+      assertEq result [(0, 2), (7, 9)]
+    }
+    | Err _ => fail "compile failed"
+}
+
+// --- Split ---
+
+@test "regex split"
+splitTest = do Effect {
+  r = compile "\\s+"
+  r match
+    | Ok rx => do Effect {
+      result = split rx "a b  c"
+      assertEq result ["a", "b", "c"]
+    }
+    | Err _ => fail "compile failed"
+}
+
+@test "regex split no match"
+splitNoMatch = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = split rx "abc"
+      assertEq result ["abc"]
+    }
+    | Err _ => fail "compile failed"
+}
+
+// --- Replace ---
+
+@test "regex replace first"
+replaceFirst = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = replace rx "12 and 34" "XX"
+      assertEq result "XX and 34"
+    }
+    | Err _ => fail "compile failed"
+}
+
+@test "regex replaceAll"
+replaceAllTest = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = replaceAll rx "12 and 34" "XX"
+      assertEq result "XX and XX"
+    }
+    | Err _ => fail "compile failed"
+}
+
+// --- Match ---
+
+@test "regex match with groups"
+matchGroups = do Effect {
+  r = compile "(\\w+)@(\\w+)"
+  r match
+    | Ok rx => do Effect {
+      result = match rx "user@host"
+      result match
+        | Some m => do Effect {
+          assertEq m.full "user@host"
+          assertEq m.start 0
+          assertEq m.end 9
+        }
+        | None => fail "expected match"
+    }
+    | Err _ => fail "compile failed"
+}
+
+@test "regex match no match"
+matchNone = do Effect {
+  r = compile "\\d+"
+  r match
+    | Ok rx => do Effect {
+      result = match rx "no digits"
+      assertEq result None
+    }
+    | Err _ => fail "compile failed"
+}

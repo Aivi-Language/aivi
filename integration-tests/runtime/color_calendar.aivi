@@ -1,0 +1,186 @@
+@no_prelude
+module integrationTests.runtime.colorCalendar
+
+use aivi
+use aivi.testing
+use aivi.color
+use aivi.calendar
+
+// --- Color: toHex ---
+
+@test "toHex black"
+toHexBlack = do Effect {
+  result = toHex { r: 0, g: 0, b: 0 }
+  assertEq result "#000000"
+}
+
+@test "toHex white"
+toHexWhite = do Effect {
+  result = toHex { r: 255, g: 255, b: 255 }
+  assertEq result "#ffffff"
+}
+
+@test "toHex red"
+toHexRed = do Effect {
+  result = toHex { r: 255, g: 0, b: 0 }
+  assertEq result "#ff0000"
+}
+
+// --- Color: toHsl and toRgb round-trip ---
+
+@test "toHsl and back"
+toHslRoundTrip = do Effect {
+  original = { r: 128, g: 64, b: 32 }
+  hsl = toHsl original
+  back = toRgb hsl
+  assertEq back.r original.r
+  assertEq back.g original.g
+  assertEq back.b original.b
+}
+
+// --- Color: adjustLightness ---
+
+@test "adjustLightness brightens"
+adjustLightnessUp = do Effect {
+  original = { r: 128, g: 128, b: 128 }
+  brighter = adjustLightness original 10
+  assertEq (brighter.r > original.r) True
+}
+
+@test "adjustLightness darkens"
+adjustLightnessDown = do Effect {
+  original = { r: 128, g: 128, b: 128 }
+  darker = adjustLightness original (-10)
+  assertEq (darker.r < original.r) True
+}
+
+// --- Color: adjustSaturation ---
+
+@test "adjustSaturation"
+adjustSatTest = do Effect {
+  original = { r: 200, g: 100, b: 50 }
+  more = adjustSaturation original 10
+  less = adjustSaturation original (-10)
+  assert (more.r >= 0)
+  assert (less.r >= 0)
+}
+
+// --- Color: adjustHue ---
+
+@test "adjustHue"
+adjustHueTest = do Effect {
+  original = { r: 255, g: 0, b: 0 }
+  shifted = adjustHue original 120
+  assert (shifted.g > shifted.r)
+}
+
+// --- Calendar: isLeapYear ---
+
+@test "isLeapYear 2000"
+leapYear2000 = do Effect {
+  assertEq (isLeapYear { year: 2000, month: 1, day: 1 }) True
+}
+
+@test "isLeapYear 1900"
+leapYear1900 = do Effect {
+  assertEq (isLeapYear { year: 1900, month: 1, day: 1 }) False
+}
+
+@test "isLeapYear 2024"
+leapYear2024 = do Effect {
+  assertEq (isLeapYear { year: 2024, month: 1, day: 1 }) True
+}
+
+@test "isLeapYear 2023"
+leapYear2023 = do Effect {
+  assertEq (isLeapYear { year: 2023, month: 1, day: 1 }) False
+}
+
+// --- Calendar: daysInMonth ---
+
+@test "daysInMonth February leap"
+daysInMonthFebLeap = do Effect {
+  assertEq (daysInMonth { year: 2024, month: 2, day: 1 }) 29
+}
+
+@test "daysInMonth February non-leap"
+daysInMonthFebNonLeap = do Effect {
+  assertEq (daysInMonth { year: 2023, month: 2, day: 1 }) 28
+}
+
+@test "daysInMonth January"
+daysInMonthJan = do Effect {
+  assertEq (daysInMonth { year: 2024, month: 1, day: 1 }) 31
+}
+
+@test "daysInMonth April"
+daysInMonthApr = do Effect {
+  assertEq (daysInMonth { year: 2024, month: 4, day: 1 }) 30
+}
+
+// --- Calendar: endOfMonth ---
+
+@test "endOfMonth"
+endOfMonthTest = do Effect {
+  result = endOfMonth { year: 2024, month: 2, day: 15 }
+  assertEq result.day 29
+  assertEq result.month 2
+  assertEq result.year 2024
+}
+
+// --- Calendar: addDays ---
+
+@test "addDays basic"
+addDaysBasic = do Effect {
+  result = addDays { year: 2024, month: 1, day: 30 } 5
+  assertEq result.day 4
+  assertEq result.month 2
+}
+
+@test "addDays negative"
+addDaysNeg = do Effect {
+  result = addDays { year: 2024, month: 2, day: 5 } (-10)
+  assertEq result.month 1
+  assertEq result.day 26
+}
+
+// --- Calendar: addMonths ---
+
+@test "addMonths basic"
+addMonthsBasic = do Effect {
+  result = addMonths { year: 2024, month: 1, day: 15 } 3
+  assertEq result.month 4
+  assertEq result.year 2024
+}
+
+@test "addMonths year wrap"
+addMonthsWrap = do Effect {
+  result = addMonths { year: 2024, month: 11, day: 15 } 3
+  assertEq result.month 2
+  assertEq result.year 2025
+}
+
+@test "addMonths clamp day"
+addMonthsClampDay = do Effect {
+  result = addMonths { year: 2024, month: 1, day: 31 } 1
+  assertEq result.day 29
+  assertEq result.month 2
+}
+
+// --- Calendar: addYears ---
+
+@test "addYears basic"
+addYearsBasic = do Effect {
+  result = addYears { year: 2024, month: 6, day: 15 } 2
+  assertEq result.year 2026
+  assertEq result.month 6
+  assertEq result.day 15
+}
+
+@test "addYears leap to non-leap"
+addYearsLeapClamp = do Effect {
+  result = addYears { year: 2024, month: 2, day: 29 } 1
+  assertEq result.year 2025
+  assertEq result.month 2
+  assertEq result.day 28
+}

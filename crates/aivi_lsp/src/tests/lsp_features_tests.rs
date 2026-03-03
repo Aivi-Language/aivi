@@ -707,7 +707,7 @@ compute = x => x
         .filter(|s| s.name == "compute" && s.kind == SymbolKind::FUNCTION)
         .collect();
     // TypeSig and Def both produce FUNCTION symbols; there should be two.
-    assert!(sigs.len() >= 1, "TypeSig should produce a FUNCTION symbol");
+    assert!(!sigs.is_empty(), "TypeSig should produce a FUNCTION symbol");
 }
 
 // ─── hover (gap-filling) ─────────────────────────────────────────────────────

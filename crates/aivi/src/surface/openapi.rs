@@ -117,12 +117,11 @@ fn list(items: Vec<Expr>, span: &Span) -> Expr {
 // -- Spec -> Result (expr + synthesised types) --------------------------------
 
 fn spec_to_result(spec: &OpenAPI, span: &Span, binding_name: &str) -> OpenApiGenResult {
-    let mut fields = Vec::new();
-
-    // Add a __meta field with server info.
-    if let Some(server) = spec.servers.first() {
-        fields.push(record_field("__baseUrl", str_lit(&server.url, span), span));
-    }
+    let base_url = spec
+        .servers
+        .first()
+        .map(|s| s.url.clone())
+        .unwrap_or_default();
 
     // Collect operations from all paths.
     let mut ops: Vec<(String, &str, String, &Operation)> = Vec::new();
@@ -134,12 +133,24 @@ fn spec_to_result(spec: &OpenAPI, span: &Span, binding_name: &str) -> OpenApiGen
         collect_ops(path_str, item, &mut ops);
     }
 
+    // Build endpoint fields: each is a lambda `params => __openapi_call descriptor config params`
+    let config_ident = Expr::Ident(sn("__cfg__", span));
+    let mut endpoint_fields = Vec::new();
+
     for (path, method, op_id, operation) in &ops {
-        let func_expr = operation_to_expr(path, method, operation, spec, span);
-        fields.push(record_field(op_id, func_expr, span));
+        let descriptor = operation_to_descriptor(&base_url, path, method, operation, spec, span);
+        let endpoint_lambda = make_endpoint_lambda(&descriptor, &config_ident, span);
+        endpoint_fields.push(record_field(op_id, endpoint_lambda, span));
     }
 
-    let expr = record(fields, span);
+    let inner_record = record(endpoint_fields, span);
+
+    // Wrap in outer lambda: config => { endpoint1: ..., endpoint2: ... }
+    let expr = Expr::Lambda {
+        params: vec![Pattern::Ident(sn("__cfg__", span))],
+        body: Box::new(inner_record),
+        span: span.clone(),
+    };
 
     // -- Synthesise type items for LSP ----------------------------------------
     let mut items = Vec::new();
@@ -153,6 +164,21 @@ fn spec_to_result(spec: &OpenAPI, span: &Span, binding_name: &str) -> OpenApiGen
     items.push(ModuleItem::TypeSig(binding_sig));
 
     OpenApiGenResult { expr, items }
+}
+
+/// Build an endpoint lambda: `params => __openapi_call descriptor config params`
+fn make_endpoint_lambda(descriptor: &Expr, config_ident: &Expr, span: &Span) -> Expr {
+    let params_ident = Expr::Ident(sn("__prm__", span));
+    let call = Expr::Call {
+        func: Box::new(Expr::Ident(sn("__openapi_call", span))),
+        args: vec![descriptor.clone(), config_ident.clone(), params_ident],
+        span: span.clone(),
+    };
+    Expr::Lambda {
+        params: vec![Pattern::Ident(sn("__prm__", span))],
+        body: Box::new(call),
+        span: span.clone(),
+    }
 }
 
 fn collect_ops<'a>(
@@ -202,8 +228,9 @@ fn capitalize(s: &str) -> String {
     }
 }
 
-/// Build a record describing an endpoint descriptor for the runtime.
-fn operation_to_expr(
+/// Build a descriptor record for an endpoint (consumed by `__openapi_call` at runtime).
+fn operation_to_descriptor(
+    base_url: &str,
     path: &str,
     method: &str,
     op: &Operation,
@@ -213,6 +240,7 @@ fn operation_to_expr(
     let mut fields = Vec::new();
     fields.push(record_field("__method", str_lit(method, span), span));
     fields.push(record_field("__path", str_lit(path, span), span));
+    fields.push(record_field("__baseUrl", str_lit(base_url, span), span));
 
     let params = op
         .parameters
@@ -525,67 +553,204 @@ fn generate_binding_type_sig(
     binding_name: &str,
     ops: &[(String, &str, String, &Operation)],
 ) -> TypeSig {
-    // Build a type that mirrors the descriptor record produced by operation_to_expr.
-    let param_item_ty = TypeExpr::Record {
+    // Config type: { bearerToken: Option Text, headers: List { name: Text, value: Text }, ... }
+    let header_ty = TypeExpr::Record {
         fields: vec![
             (sn("name", span), TypeExpr::Name(sn("Text", span))),
-            (sn("in", span), TypeExpr::Name(sn("Text", span))),
-            (sn("required", span), TypeExpr::Name(sn("Bool", span))),
+            (sn("value", span), TypeExpr::Name(sn("Text", span))),
         ],
         span: span.clone(),
     };
-    let params_list_ty = TypeExpr::Apply {
+    let option_text = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("Option", span))),
+        args: vec![TypeExpr::Name(sn("Text", span))],
+        span: span.clone(),
+    };
+    let option_int = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("Option", span))),
+        args: vec![TypeExpr::Name(sn("Int", span))],
+        span: span.clone(),
+    };
+    let option_bool = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("Option", span))),
+        args: vec![TypeExpr::Name(sn("Bool", span))],
+        span: span.clone(),
+    };
+    let header_list_ty = TypeExpr::Apply {
         base: Box::new(TypeExpr::Name(sn("List", span))),
-        args: vec![param_item_ty],
+        args: vec![header_ty],
+        span: span.clone(),
+    };
+    let config_ty = TypeExpr::Record {
+        fields: vec![
+            (sn("bearerToken", span), option_text.clone()),
+            (sn("headers", span), header_list_ty),
+            (sn("timeoutMs", span), option_int.clone()),
+            (sn("retryCount", span), option_int),
+            (sn("strictStatus", span), option_bool),
+            (sn("baseUrl", span), option_text),
+        ],
         span: span.clone(),
     };
 
-    let mut record_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
+    // Response type placeholder (for all endpoints)
+    let response_ty = TypeExpr::Record {
+        fields: vec![
+            (sn("status", span), TypeExpr::Name(sn("Int", span))),
+            (
+                sn("headers", span),
+                TypeExpr::Apply {
+                    base: Box::new(TypeExpr::Name(sn("List", span))),
+                    args: vec![TypeExpr::Record {
+                        fields: vec![
+                            (sn("name", span), TypeExpr::Name(sn("Text", span))),
+                            (sn("value", span), TypeExpr::Name(sn("Text", span))),
+                        ],
+                        span: span.clone(),
+                    }],
+                    span: span.clone(),
+                },
+            ),
+            (sn("body", span), TypeExpr::Name(sn("Text", span))),
+        ],
+        span: span.clone(),
+    };
+    let error_ty = TypeExpr::Record {
+        fields: vec![(sn("message", span), TypeExpr::Name(sn("Text", span)))],
+        span: span.clone(),
+    };
+    let result_response_ty = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("Result", span))),
+        args: vec![error_ty, response_ty],
+        span: span.clone(),
+    };
+    let source_ty = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("Source", span))),
+        args: vec![TypeExpr::Name(sn("RestApi", span)), result_response_ty],
+        span: span.clone(),
+    };
 
-    if !spec.servers.is_empty() {
-        record_fields.push((sn("__baseUrl", span), TypeExpr::Name(sn("Text", span))));
-    }
+    // Build endpoint record: { endpoint: Params -> Source ... }
+    let mut endpoint_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
 
     for (_path, _method, op_id, operation) in ops {
-        let mut endpoint_fields: Vec<(SpannedName, TypeExpr)> = vec![
-            (sn("__method", span), TypeExpr::Name(sn("Text", span))),
-            (sn("__path", span), TypeExpr::Name(sn("Text", span))),
-            (sn("__params", span), params_list_ty.clone()),
-        ];
+        // Build params type from operation parameters + request body
+        let mut param_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
 
-        // __requestBody is present when there is a JSON request body
-        if let Some(ReferenceOr::Item(body)) = &operation.request_body {
-            if body.content.contains_key("application/json") {
-                endpoint_fields.push((sn("__requestBody", span), TypeExpr::Name(sn("Text", span))));
+        for param_ref in &operation.parameters {
+            if let ReferenceOr::Item(param) = param_ref {
+                let data = param.parameter_data_ref();
+                let param_ty = match &data.format {
+                    openapiv3::ParameterSchemaOrContent::Schema(schema) => {
+                        schema_ref_to_type_expr(schema, spec, span)
+                    }
+                    _ => TypeExpr::Name(sn("Text", span)),
+                };
+                let param_ty = if data.required {
+                    param_ty
+                } else {
+                    TypeExpr::Apply {
+                        base: Box::new(TypeExpr::Name(sn("Option", span))),
+                        args: vec![param_ty],
+                        span: span.clone(),
+                    }
+                };
+                param_fields.push((sn(&data.name, span), param_ty));
             }
         }
 
-        // __response is present when there is a 2xx JSON response
-        if response_type_name(operation, spec).is_some() {
-            endpoint_fields.push((sn("__response", span), TypeExpr::Name(sn("Text", span))));
+        // Add request body fields for POST/PUT/PATCH
+        if let Some(ReferenceOr::Item(body)) = &operation.request_body {
+            if let Some(mt) = body.content.get("application/json") {
+                if let Some(schema_ref) = &mt.schema {
+                    // If the body schema is an object, inline its fields
+                    match schema_ref {
+                        ReferenceOr::Item(schema) => {
+                            if let SchemaKind::Type(OaType::Object(obj)) = &schema.schema_kind {
+                                let required: std::collections::HashSet<&str> =
+                                    obj.required.iter().map(|s| s.as_str()).collect();
+                                for (name, prop_ref) in &obj.properties {
+                                    let ty = boxed_schema_ref_to_type_expr(prop_ref, spec, span);
+                                    let ty = if required.contains(name.as_str()) {
+                                        ty
+                                    } else {
+                                        TypeExpr::Apply {
+                                            base: Box::new(TypeExpr::Name(sn("Option", span))),
+                                            args: vec![ty],
+                                            span: span.clone(),
+                                        }
+                                    };
+                                    param_fields.push((sn(name, span), ty));
+                                }
+                            }
+                        }
+                        ReferenceOr::Reference { reference } => {
+                            // For $ref bodies, look up the schema in components
+                            let ref_name = ref_to_type_name(reference);
+                            if let Some(components) = &spec.components {
+                                if let Some(ReferenceOr::Item(schema)) =
+                                    components.schemas.get(&ref_name)
+                                {
+                                    if let SchemaKind::Type(OaType::Object(obj)) =
+                                        &schema.schema_kind
+                                    {
+                                        let required: std::collections::HashSet<&str> =
+                                            obj.required.iter().map(|s| s.as_str()).collect();
+                                        for (name, prop_ref) in &obj.properties {
+                                            let ty =
+                                                boxed_schema_ref_to_type_expr(prop_ref, spec, span);
+                                            let ty = if required.contains(name.as_str()) {
+                                                ty
+                                            } else {
+                                                TypeExpr::Apply {
+                                                    base: Box::new(TypeExpr::Name(sn(
+                                                        "Option", span,
+                                                    ))),
+                                                    args: vec![ty],
+                                                    span: span.clone(),
+                                                }
+                                            };
+                                            param_fields.push((sn(name, span), ty));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        // __description is present when the operation has a description
-        if operation.description.is_some() {
-            endpoint_fields.push((sn("__description", span), TypeExpr::Name(sn("Text", span))));
-        }
+        let params_ty = TypeExpr::Record {
+            fields: param_fields,
+            span: span.clone(),
+        };
 
-        record_fields.push((
-            sn(op_id, span),
-            TypeExpr::Record {
-                fields: endpoint_fields,
-                span: span.clone(),
-            },
-        ));
+        let endpoint_ty = TypeExpr::Func {
+            params: vec![params_ty],
+            result: Box::new(source_ty.clone()),
+            span: span.clone(),
+        };
+
+        endpoint_fields.push((sn(op_id, span), endpoint_ty));
     }
+
+    let endpoints_record_ty = TypeExpr::Record {
+        fields: endpoint_fields,
+        span: span.clone(),
+    };
+
+    // Final type: Config -> { endpoints... }
+    let binding_ty = TypeExpr::Func {
+        params: vec![config_ty],
+        result: Box::new(endpoints_record_ty),
+        span: span.clone(),
+    };
 
     TypeSig {
         decorators: Vec::new(),
         name: sn(binding_name, span),
-        ty: TypeExpr::Record {
-            fields: record_fields,
-            span: span.clone(),
-        },
+        ty: binding_ty,
         span: span.clone(),
     }
 }

@@ -175,3 +175,127 @@ pub fn bundled_specs_manifest() -> McpManifest {
         resources: resources_by_binding.into_values().collect(),
     }
 }
+
+pub fn bundled_specs_manifest_with_ui() -> McpManifest {
+    let mut manifest = bundled_specs_manifest();
+    manifest.tools.extend([
+        McpTool {
+            name: "aivi.gtk.discover".to_string(),
+            module: "gtk".to_string(),
+            binding: "discover".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.attach".to_string(),
+            module: "gtk".to_string(),
+            binding: "attach".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["socketPath", "token"],
+                "properties": {
+                    "socketPath": { "type": "string" },
+                    "token": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.launch".to_string(),
+            module: "gtk".to_string(),
+            binding: "launch".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["target"],
+                "properties": {
+                    "target": { "type": "string" },
+                    "release": { "type": "boolean", "default": false }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.hello".to_string(),
+            module: "gtk".to_string(),
+            binding: "hello".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.listWidgets".to_string(),
+            module: "gtk".to_string(),
+            binding: "listWidgets".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.dumpTree".to_string(),
+            module: "gtk".to_string(),
+            binding: "dumpTree".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "rootId": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.click".to_string(),
+            module: "gtk".to_string(),
+            binding: "click".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.type".to_string(),
+            module: "gtk".to_string(),
+            binding: "type".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "text"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "text": { "type": "string" }
+                }
+            }),
+            effectful: true,
+        },
+    ]);
+    manifest
+}

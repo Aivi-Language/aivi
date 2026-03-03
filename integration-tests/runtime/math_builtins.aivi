@@ -1,0 +1,438 @@
+@no_prelude
+module integrationTests.runtime.mathBuiltins
+
+use aivi
+use aivi.testing
+use aivi.math
+
+// --- Constants ---
+
+@test "pi constant"
+piConst = do Effect {
+  assert (pi > 3.14)
+  assert (pi < 3.15)
+}
+
+@test "e constant"
+eConst = do Effect {
+  assert (e > 2.71)
+  assert (e < 2.72)
+}
+
+@test "tau is 2*pi"
+tauConst = do Effect {
+  assert (tau > 6.28)
+  assert (tau < 6.29)
+}
+
+@test "phi golden ratio"
+phiConst = do Effect {
+  assert (phi > 1.618)
+  assert (phi < 1.619)
+}
+
+@test "sqrt2 constant"
+sqrt2Const = do Effect {
+  assert (sqrt2 > 1.414)
+  assert (sqrt2 < 1.415)
+}
+
+@test "ln2 constant"
+ln2Const = do Effect {
+  assert (ln2 > 0.693)
+  assert (ln2 < 0.694)
+}
+
+@test "ln10 constant"
+ln10Const = do Effect {
+  assert (ln10 > 2.302)
+  assert (ln10 < 2.303)
+}
+
+// --- Trig functions ---
+
+@test "sin of zero"
+sinZero = do Effect {
+  result = sin (radians 0.0)
+  assertEq result 0.0
+}
+
+@test "cos of zero"
+cosZero = do Effect {
+  result = cos (radians 0.0)
+  assertEq result 1.0
+}
+
+@test "tan of zero"
+tanZero = do Effect {
+  result = tan (radians 0.0)
+  assertEq result 0.0
+}
+
+@test "asin of zero"
+asinZero = do Effect {
+  result = asin 0.0
+  assertEq result.radians 0.0
+}
+
+@test "acos of one"
+acosOne = do Effect {
+  result = acos 1.0
+  assertEq result.radians 0.0
+}
+
+@test "atan of zero"
+atanZero = do Effect {
+  result = atan 0.0
+  assertEq result.radians 0.0
+}
+
+@test "atan2 basic"
+atan2Basic = do Effect {
+  result = atan2 1.0 1.0
+  diff = result.radians - (pi / 4.0)
+  assert (abs diff < 0.0001)
+}
+
+// --- Hyperbolic functions ---
+
+@test "sinh of zero"
+sinhZero = do Effect {
+  assertEq (sinh 0.0) 0.0
+}
+
+@test "cosh of zero"
+coshZero = do Effect {
+  assertEq (cosh 0.0) 1.0
+}
+
+@test "tanh of zero"
+tanhZero = do Effect {
+  assertEq (tanh 0.0) 0.0
+}
+
+// --- Power and root functions ---
+
+@test "sqrt of 4"
+sqrtFour = do Effect {
+  assertEq (sqrt 4.0) 2.0
+}
+
+@test "sqrt of zero"
+sqrtZero = do Effect {
+  assertEq (sqrt 0.0) 0.0
+}
+
+@test "cbrt of 27"
+cbrtTwentySeven = do Effect {
+  assertEq (cbrt 27.0) 3.0
+}
+
+@test "cbrt of negative"
+cbrtNeg = do Effect {
+  assertEq (cbrt (-8.0)) (-2.0)
+}
+
+@test "pow base cases"
+powBasic = do Effect {
+  assertEq (pow 2.0 3.0) 8.0
+  assertEq (pow 5.0 0.0) 1.0
+  assertEq (pow 10.0 2.0) 100.0
+}
+
+@test "hypot"
+hypotTest = do Effect {
+  assertEq (hypot 3.0 4.0) 5.0
+}
+
+// --- Exp and log functions ---
+
+@test "exp of zero"
+expZero = do Effect {
+  assertEq (exp 0.0) 1.0
+}
+
+@test "exp of one close to e"
+expOne = do Effect {
+  diff = (exp 1.0) - e
+  assert (abs diff < 0.0001)
+}
+
+@test "exp2"
+exp2Test = do Effect {
+  assertEq (exp2 3.0) 8.0
+}
+
+@test "expm1 of zero"
+expm1Zero = do Effect {
+  assertEq (expm1 0.0) 0.0
+}
+
+@test "log of one"
+logOne = do Effect {
+  assertEq (log 1.0) 0.0
+}
+
+@test "log of e"
+logE = do Effect {
+  diff = (log e) - 1.0
+  assert (abs diff < 0.0001)
+}
+
+@test "log2 of 8"
+log2Eight = do Effect {
+  assertEq (log2 8.0) 3.0
+}
+
+@test "log10 of 1000"
+log10k = do Effect {
+  assertEq (log10 1000.0) 3.0
+}
+
+@test "log1p of zero"
+log1pZero = do Effect {
+  assertEq (log1p 0.0) 0.0
+}
+
+// --- Rounding functions ---
+
+@test "floor basic"
+floorBasic = do Effect {
+  assertEq (floor 3.7) 3.0
+  assertEq (floor (-2.3)) (-3.0)
+  assertEq (floor 5.0) 5.0
+}
+
+@test "ceil basic"
+ceilBasic = do Effect {
+  assertEq (ceil 3.2) 4.0
+  assertEq (ceil (-2.7)) (-2.0)
+  assertEq (ceil 5.0) 5.0
+}
+
+@test "trunc basic"
+truncBasic = do Effect {
+  assertEq (trunc 3.9) 3.0
+  assertEq (trunc (-3.9)) (-3.0)
+}
+
+@test "round basic"
+roundBasic = do Effect {
+  assertEq (round 3.5) 4.0
+  assertEq (round 2.5) 2.0
+  assertEq (round 3.3) 3.0
+  assertEq (round 3.7) 4.0
+}
+
+@test "fract basic"
+fractBasic = do Effect {
+  diff = (fract 3.75) - 0.75
+  assert (abs diff < 0.0001)
+}
+
+@test "modf splits correctly"
+modfTest = do Effect {
+  result = modf 3.75
+  assertEq result (3.0, 0.75)
+}
+
+// --- Abs, sign, copysign ---
+
+@test "abs float"
+absFloat = do Effect {
+  assertEq (abs (-5.0)) 5.0
+  assertEq (abs 5.0) 5.0
+  assertEq (abs 0.0) 0.0
+}
+
+@test "abs int"
+absInt = do Effect {
+  assertEq (abs (-7)) 7
+  assertEq (abs 7) 7
+  assertEq (abs 0) 0
+}
+
+@test "sign positive"
+signPos = do Effect {
+  assertEq (sign 42.0) 1.0
+}
+
+@test "sign negative"
+signNeg = do Effect {
+  assertEq (sign (-42.0)) (-1.0)
+}
+
+@test "sign zero"
+signZero = do Effect {
+  assertEq (sign 0.0) 0.0
+}
+
+@test "copysign"
+copysignTest = do Effect {
+  assertEq (copysign 5.0 (-1.0)) (-5.0)
+  assertEq (copysign (-5.0) 1.0) 5.0
+}
+
+// --- Min, max, clamp ---
+
+@test "min"
+minTest = do Effect {
+  assertEq (min 3.0 5.0) 3.0
+  assertEq (min 5.0 3.0) 3.0
+}
+
+@test "max"
+maxTest = do Effect {
+  assertEq (max 3.0 5.0) 5.0
+  assertEq (max 5.0 3.0) 5.0
+}
+
+@test "clamp within bounds"
+clampWithin = do Effect {
+  assertEq (clamp 0.0 10.0 5.0) 5.0
+}
+
+@test "clamp below"
+clampBelow = do Effect {
+  assertEq (clamp 0.0 10.0 (-5.0)) 0.0
+}
+
+@test "clamp above"
+clampAbove = do Effect {
+  assertEq (clamp 0.0 10.0 15.0) 10.0
+}
+
+@test "minAll"
+minAllTest = do Effect {
+  assertEq (minAll [3.0, 1.0, 4.0, 1.0, 5.0]) (Some 1.0)
+  assertEq (minAll []) None
+}
+
+@test "maxAll"
+maxAllTest = do Effect {
+  assertEq (maxAll [3.0, 1.0, 4.0, 1.0, 5.0]) (Some 5.0)
+  assertEq (maxAll []) None
+}
+
+// --- Sum ---
+
+@test "sum floats"
+sumFloats = do Effect {
+  assertEq (sum [1.0, 2.0, 3.0]) 6.0
+  assertEq (sum []) 0.0
+}
+
+@test "sumInt"
+sumIntTest = do Effect {
+  assertEq (sumInt [1, 2, 3, 4]) 10
+  assertEq (sumInt []) 0
+}
+
+// --- Integer math ---
+
+@test "gcd"
+gcdTest = do Effect {
+  assertEq (gcd 12 8) 4
+  assertEq (gcd 7 13) 1
+  assertEq (gcd 0 5) 5
+}
+
+@test "lcm"
+lcmTest = do Effect {
+  assertEq (lcm 4 6) 12
+  assertEq (lcm 3 5) 15
+  assertEq (lcm 0 5) 0
+}
+
+@test "gcdAll"
+gcdAllTest = do Effect {
+  assertEq (gcdAll [12, 8, 4]) (Some 4)
+  assertEq (gcdAll []) None
+}
+
+@test "lcmAll"
+lcmAllTest = do Effect {
+  assertEq (lcmAll [2, 3, 4]) (Some 12)
+  assertEq (lcmAll []) None
+}
+
+@test "divmod positive"
+divmodPos = do Effect {
+  assertEq (divmod 7 3) (2, 1)
+}
+
+@test "divmod negative dividend"
+divmodNeg = do Effect {
+  result = divmod (-7) 3
+  assertEq result (-3, 2)
+}
+
+@test "modPow"
+modPowTest = do Effect {
+  assertEq (modPow 2 10 1000) 24
+  assertEq (modPow 3 0 5) 1
+}
+
+// --- Float classification ---
+
+@test "isFinite"
+isFiniteTest = do Effect {
+  assertEq (isFinite 1.0) True
+  assertEq (isFinite inf) False
+  assertEq (isFinite negInf) False
+}
+
+@test "isInf"
+isInfTest = do Effect {
+  assertEq (isInf inf) True
+  assertEq (isInf negInf) True
+  assertEq (isInf 1.0) False
+}
+
+@test "isNaN"
+isNaNTest = do Effect {
+  assertEq (isNaN nan) True
+  assertEq (isNaN 1.0) False
+}
+
+// --- Angle conversion ---
+
+@test "degrees to radians"
+degToRad = do Effect {
+  angle = degrees 180.0
+  diff = angle.radians - pi
+  assert (abs diff < 0.0001)
+}
+
+@test "radians to degrees"
+radToDeg = do Effect {
+  angle = radians pi
+  diff = (toDegrees angle) - 180.0
+  assert (abs diff < 0.0001)
+}
+
+// --- frexp / ldexp ---
+
+@test "frexp basic"
+frexpTest = do Effect {
+  result = frexp 8.0
+  assertEq result (0.5, 4)
+}
+
+@test "ldexp basic"
+ldexpTest = do Effect {
+  assertEq (ldexp 0.5 4) 8.0
+}
+
+// --- fmod / remainder ---
+
+@test "fmod"
+fmodTest = do Effect {
+  assertEq (fmod 7.0 3.0) 1.0
+}
+
+@test "remainder"
+remainderTest = do Effect {
+  diff = (remainder 7.0 3.0) - 1.0
+  assert (abs diff < 0.0001)
+}

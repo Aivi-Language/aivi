@@ -1,0 +1,449 @@
+@no_prelude
+module integrationTests.runtime.craneliftCoverage
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// --- Float arithmetic (triggers lower_lit_number float path, rt_box_float, rt_unbox_float) ---
+
+addFloats : Float -> Float -> Float
+addFloats = a b => a + b
+
+subFloats : Float -> Float -> Float
+subFloats = a b => a - b
+
+mulFloats : Float -> Float -> Float
+mulFloats = a b => a * b
+
+divFloats : Float -> Float -> Float
+divFloats = a b => a / b
+
+@test "float arithmetic operations"
+floatArith = do Effect {
+  assertEq (addFloats 1.5 2.5) 4.0
+  assertEq (subFloats 10.0 3.5) 6.5
+  assertEq (mulFloats 2.0 3.5) 7.0
+  assertEq (divFloats 10.0 2.0) 5.0
+}
+
+// --- Float comparisons (triggers try_native_float_op) ---
+
+@test "float comparisons"
+floatComparisons = do Effect {
+  assert (1.5 < 2.5)
+  assert (3.0 > 2.0)
+  assert (2.0 <= 2.0)
+  assert (2.0 >= 2.0)
+  assert (3.14 == 3.14)
+  assert (3.14 != 2.71)
+}
+
+// --- Int arithmetic operations (triggers try_native_int_op) ---
+
+@test "int arithmetic all ops"
+intArithAllOps = do Effect {
+  assertEq (10 + 5) 15
+  assertEq (10-3) 7
+  assertEq (6 * 7) 42
+  assertEq (20 / 4) 5
+  assertEq (17 % 5) 2
+}
+
+// --- Int comparisons (triggers try_native_int_op comparison paths) ---
+
+@test "int comparisons"
+intComparisons = do Effect {
+  assert (1 < 2)
+  assert (3 > 2)
+  assert (2 <= 2)
+  assert (2 >= 2)
+  assert (5 == 5)
+  assert (5 != 6)
+}
+
+// --- Boolean operations (triggers rt_box_bool, rt_unbox_bool, lower_lit_bool) ---
+
+@test "boolean operations"
+boolOps = do Effect {
+  assertEq True True
+  assertEq False False
+  assert (True != False)
+  assert (True == True)
+}
+
+// --- Tuple creation and access (triggers rt_alloc_tuple, lower_tuple) ---
+
+@test "tuple creation and matching"
+tupleCreation = do Effect {
+  t = (1, 2, 3)
+  (a, b, c) = t
+  assertEq a 1
+  assertEq b 2
+  assertEq c 3
+}
+
+@test "tuple pair"
+tuplePair = do Effect {
+  pair = (42, "hello")
+  (n, s) = pair
+  assertEq n 42
+  assertEq s "hello"
+}
+
+@test "nested tuple matching"
+nestedTuple = do Effect {
+  t = ((1, 2), (3, 4))
+  ((a, b), (c, d)) = t
+  assertEq (a + b + c + d) 10
+}
+
+// --- List operations (triggers rt_alloc_list, rt_list_len, rt_list_index, rt_list_tail, rt_list_concat) ---
+
+@test "list creation"
+listCreation = do Effect {
+  xs = [1, 2, 3, 4, 5]
+  assertEq xs [1, 2, 3, 4, 5]
+}
+
+@test "list spread construction"
+listSpread = do Effect {
+  xs = [1, 2, 3]
+  ys = [0, ...xs, 4]
+  assertEq ys [0, 1, 2, 3, 4]
+}
+
+@test "empty list"
+emptyList = do Effect {
+  xs = []
+  assertEq xs []
+}
+
+// --- String operations (triggers rt_alloc_string, lower_lit_string, rt_binary_op "++") ---
+
+@test "string equality"
+stringEquality = do Effect {
+  assertEq "hello" "hello"
+  assert ("hello" != "world")
+}
+
+@test "string concatenation"
+stringConcat = do Effect {
+  result = "hello" ++ " " ++ "world"
+  assertEq result "hello world"
+}
+
+// --- Text interpolation (triggers lower_text_interpolate) ---
+
+@test "text interpolation basic"
+textInterpolation = do Effect {
+  name = "world"
+  result = "hello {name}"
+  assertEq result "hello world"
+}
+
+@test "text interpolation with expression"
+textInterpolationExpr = do Effect {
+  x = 42
+  result = "the answer is {x}"
+  assertEq result "the answer is 42"
+}
+
+// --- Record creation, field access, patching (triggers rt_alloc_record, rt_record_field, rt_patch_record) ---
+
+@test "record with many fields"
+recordManyFields = do Effect {
+  r = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+  assertEq r.a 1
+  assertEq r.b 2
+  assertEq r.c 3
+  assertEq r.d 4
+  assertEq r.e 5
+}
+
+@test "record passed through function"
+recordThroughFunction = do Effect {
+  getX = r => r.x
+  getY = r => r.y
+  r = { x: 10, y: 20 }
+  assertEq (getX r) 10
+  assertEq (getY r) 20
+}
+
+@test "record patch multiple fields"
+recordPatchMultiple = do Effect {
+  r = { x: 1, y: 2, z: 3 }
+  r2 = r <| { x: 10, z: 30 }
+  assertEq r2.x 10
+  assertEq r2.y 2
+  assertEq r2.z 30
+}
+
+// --- ADT construction with multiple args (triggers rt_alloc_constructor, rt_constructor_arg) ---
+
+Result E A = Ok A | Err E
+Tree A = Leaf | Node (Tree A) A (Tree A)
+
+@test "result ok and err matching"
+resultMatching = do Effect {
+  ok = Ok 42
+  err = Err "fail"
+  v = ok match
+    | Ok x  => x
+    | Err _ => 0
+    assertEq v 42
+    e = err match
+      | Ok _  => "ok"
+      | Err s => s
+    assertEq e "fail"
+}
+
+@test "tree adt construction"
+treeAdt = do Effect {
+  t = Node (Node Leaf 1 Leaf) 2 (Node Leaf 3 Leaf)
+  v = t match
+    | Node _ x _ => x
+    | Leaf       => 0
+    assertEq v 2
+}
+
+// --- Nested pattern matching (triggers emit_pattern_test recursion) ---
+
+Option A = None | Some A
+Pair A B = MkPair A B
+
+@test "nested constructor matching"
+nestedConstructorMatch = do Effect {
+  x = Some (Some 42)
+  v = x match
+    | Some (Some n) => n
+    | Some None     => 0
+    | None          => -1
+    assertEq v 42
+}
+
+@test "pair matching"
+pairMatching = do Effect {
+  p = MkPair 10 20
+  (MkPair a b) = p
+  assertEq (a + b) 30
+}
+
+// --- List pattern matching (triggers rt_list_len, rt_list_tail, emit_pattern_test list) ---
+
+len : List A -> Int
+len = xs => xs match
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
+@test "list length via pattern"
+listLengthPattern = do Effect {
+  assertEq (len []) 0
+  assertEq (len [1]) 1
+  assertEq (len [1, 2, 3]) 3
+}
+
+@test "list head tail pattern"
+listHeadTail = do Effect {
+  ht = xs => xs match
+    | []           => (0, [])
+    | [x, ...rest] => (x, rest)
+    assertEq (ht [1, 2, 3]) (1, [2, 3])
+    assertEq (ht [42]) (42, [])
+}
+
+// --- Closure captures and higher-order (triggers rt_make_closure, compile_definition_body lambda paths) ---
+
+@test "closure captures multiple values"
+closureMultiCapture = do Effect {
+  a = 10
+  b = 20
+  f = x => a + b + x
+  assertEq (f 12) 42
+}
+
+@test "closure returned from function"
+closureFromFunc = do Effect {
+  makeScaler = factor offset => x => x * factor + offset
+  scale = makeScaler 3 5
+  assertEq (scale 10) 35
+  assertEq (scale 0) 5
+}
+
+@test "closure in list"
+closureInList = do Effect {
+  fns = [x => x + 1, x => x * 2, x => x - 3]
+  f0 = fns match | [a, ...] => a | _ => x => x
+  assertEq (f0 5) 6
+}
+
+// --- Higher-order functions with recursion (triggers compile/body.rs lambda + recursion) ---
+
+filter : (A -> Bool) -> List A -> List A
+filter = pred xs => xs match
+  | []           => []
+  | [x, ...rest] => if pred x then [x, ...(filter pred rest)] else filter pred rest
+
+@test "filter with predicate"
+filterWithPred = do Effect {
+  evens = filter (x => x % 2 == 0) [1, 2, 3, 4, 5, 6]
+  assertEq evens [2, 4, 6]
+}
+
+foldl : (B -> A -> B) -> B -> List A -> B
+foldl = f acc xs => xs match
+  | []           => acc
+  | [x, ...rest] => foldl f (f acc x) rest
+
+@test "foldl sum"
+foldlSum = do Effect {
+  result = foldl (acc x => acc + x) 0 [1, 2, 3, 4, 5]
+  assertEq result 15
+}
+
+// --- If/else with different result types (triggers lower_if) ---
+
+@test "if then else basic"
+ifThenElse = do Effect {
+  x = if True then 1 else 2
+  assertEq x 1
+  y = if False then 1 else 2
+  assertEq y 2
+}
+
+@test "nested if then else"
+nestedIf = do Effect {
+  classify = n => if n < 0 then "neg" else if n == 0 then "zero" else "pos"
+  assertEq (classify (-5)) "neg"
+  assertEq (classify 0) "zero"
+  assertEq (classify 5) "pos"
+}
+
+// --- Literal matching (triggers emit_literal_test for numbers, strings, bools) ---
+
+@test "literal pattern matching"
+literalPatternMatch = do Effect {
+  describe = x => x match
+    | 0 => "zero"
+    | 1 => "one"
+    | _ => "other"
+    assertEq (describe 0) "zero"
+    assertEq (describe 1) "one"
+    assertEq (describe 42) "other"
+}
+
+@test "string literal pattern"
+stringLiteralPattern = do Effect {
+  greet = name => name match
+    | "Alice" => "Hi Alice!"
+    | "Bob"   => "Hey Bob!"
+    | _       => "Hello stranger!"
+    assertEq (greet "Alice") "Hi Alice!"
+    assertEq (greet "Bob") "Hey Bob!"
+    assertEq (greet "Charlie") "Hello stranger!"
+}
+
+@test "bool literal pattern"
+boolLiteralPattern = do Effect {
+  describe = b => b match
+    | True  => "yes"
+    | False => "no"
+    assertEq (describe True) "yes"
+    assertEq (describe False) "no"
+}
+
+// --- Generator operations (triggers rt_gen_vec_*, rt_generator_to_list) ---
+
+@test "generator to list conversion"
+generatorToListConversion = do Effect {
+  g = generate {
+    yield 10
+    yield 20
+    yield 30
+  }
+  assertEq (toList g) [10, 20, 30]
+}
+
+@test "generator fold with multiply"
+generatorFoldMultiply = do Effect {
+  g = generate {
+    yield 2
+    yield 3
+    yield 4
+  }
+  result = g (acc x => acc * x) 1
+  assertEq result 24
+}
+
+// --- Effect chaining (triggers rt_bind_effect, rt_wrap_effect) ---
+
+@test "effect chaining multiple binds"
+effectChainMultiple = do Effect {
+  a <- pure 10
+  b <- pure 20
+  c <- pure 12
+  assertEq (a + b + c) 42
+}
+
+// --- Value equality for complex types (triggers rt_value_equals) ---
+
+@test "list equality"
+listEquality = do Effect {
+  assert ([1, 2, 3] == [1, 2, 3])
+  assert ([1, 2] != [1, 2, 3])
+  assert ([] == [])
+}
+
+@test "record equality"
+recordEquality = do Effect {
+  r1 = { x: 1, y: 2 }
+  r2 = { x: 1, y: 2 }
+  assert (r1 == r2)
+}
+
+@test "constructor equality"
+constructorEquality = do Effect {
+  assertEq (Some 42) (Some 42)
+  assert (Some 1 != Some 2)
+  assert (None != Some 1)
+  assertEq None None
+}
+
+// --- Many parameters function (triggers call_jit_function with higher arities) ---
+
+add4 : Int -> Int -> Int -> Int -> Int
+add4 = a b c d => a + b + c + d
+
+add5 : Int -> Int -> Int -> Int -> Int -> Int
+add5 = a b c d e => a + b + c + d + e
+
+@test "function with 4 params"
+fourParams = do Effect {
+  assertEq (add4 1 2 3 4) 10
+}
+
+@test "function with 5 params"
+fiveParams = do Effect {
+  assertEq (add5 1 2 3 4 5) 15
+}
+
+// --- Recursive ADT traversal (triggers multiple constructor/pattern helpers) ---
+
+treeSum : Tree Int -> Int
+treeSum = t => t match
+  | Leaf       => 0
+  | Node l v r => treeSum l + v + treeSum r
+
+@test "recursive tree sum"
+recursiveTreeSum = do Effect {
+  t = Node (Node Leaf 1 Leaf) 2 (Node Leaf 3 Leaf)
+  assertEq (treeSum t) 6
+}
+
+// --- Mixed type operations (triggers rt_binary_op fallback) ---
+
+@test "mixed text operations"
+mixedTextOps = do Effect {
+  result = "count: " ++ "3"
+  assertEq result "count: 3"
+}
