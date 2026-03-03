@@ -63,12 +63,29 @@ mod linux_impl {
 
     use super::{BuildResult, Gtk4Error, GtkNode, SignalEvent};
 
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct GdkRectangle {
+        pub x: c_int,
+        pub y: c_int,
+        pub width: c_int,
+        pub height: c_int,
+    }
+
     #[link(name = "gtk-4")]
     unsafe extern "C" {
         fn gtk_init();
         fn gtk_application_new(application_id: *const c_char, flags: c_int) -> *mut c_void;
         fn gtk_window_set_title(window: *mut c_void, title: *const c_char);
         fn gtk_window_set_default_size(window: *mut c_void, width: c_int, height: c_int);
+        fn gdk_display_get_default() -> *mut c_void;
+        fn gdk_display_get_monitors(display: *mut c_void) -> *mut c_void;
+        fn g_list_model_get_n_items(list: *mut c_void) -> c_uint;
+        fn g_list_model_get_item(list: *mut c_void, position: c_uint) -> *mut c_void;
+        fn gdk_monitor_get_geometry(monitor: *mut c_void, geometry: *mut GdkRectangle);
+        fn gtk_native_get_surface(native: *mut c_void) -> *mut c_void;
+        fn gtk_widget_get_width(widget: *mut c_void) -> c_int;
+        fn gtk_widget_get_height(widget: *mut c_void) -> c_int;
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
         fn gtk_window_new() -> *mut c_void;
         fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
@@ -1107,7 +1124,7 @@ mod linux_impl {
 
         #[zbus(property)]
         fn item_is_menu(&self) -> bool {
-            true
+            false
         }
 
         #[zbus(property)]

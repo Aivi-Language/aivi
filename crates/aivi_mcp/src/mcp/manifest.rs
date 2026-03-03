@@ -4,7 +4,7 @@ use std::path::Path;
 use include_dir::{include_dir, Dir};
 use serde::Serialize;
 
-use crate::AiviError;
+use aivi_driver::AiviError;
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct McpManifest {
@@ -15,6 +15,7 @@ pub struct McpManifest {
 #[derive(Debug, Clone, Serialize)]
 pub struct McpTool {
     pub name: String,
+    pub description: String,
     pub module: String,
     pub binding: String,
     pub input_schema: serde_json::Value,
@@ -35,7 +36,7 @@ pub struct McpPolicy {
 
 static SPECS_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../specs");
 
-pub(crate) fn specs_uri(binding: &str) -> String {
+pub fn specs_uri(binding: &str) -> String {
     format!("aivi://specs/{binding}")
 }
 
@@ -59,7 +60,7 @@ fn spec_binding_from_uri(uri: &str) -> Option<&str> {
         .filter(|rest| !rest.is_empty())
 }
 
-pub(crate) fn read_bundled_spec(uri: &str) -> Result<(String, String), AiviError> {
+pub fn read_bundled_spec(uri: &str) -> Result<(String, String), AiviError> {
     let binding = spec_binding_from_uri(uri)
         .ok_or_else(|| AiviError::InvalidCommand("invalid MCP resource uri".to_string()))?;
     let file = SPECS_DIR
@@ -100,6 +101,7 @@ pub fn bundled_specs_manifest() -> McpManifest {
         tools: vec![
             McpTool {
                 name: "aivi.parse".to_string(),
+                description: "Parse AIVI source files and return syntax diagnostics.".to_string(),
                 module: "aivi".to_string(),
                 binding: "parse".to_string(),
                 input_schema: serde_json::json!({
@@ -117,6 +119,7 @@ pub fn bundled_specs_manifest() -> McpManifest {
             },
             McpTool {
                 name: "aivi.check".to_string(),
+                description: "Type-check AIVI source files and return diagnostics.".to_string(),
                 module: "aivi".to_string(),
                 binding: "check".to_string(),
                 input_schema: serde_json::json!({
@@ -139,6 +142,7 @@ pub fn bundled_specs_manifest() -> McpManifest {
             },
             McpTool {
                 name: "aivi.fmt".to_string(),
+                description: "Format an AIVI source file and return the formatted output.".to_string(),
                 module: "aivi".to_string(),
                 binding: "fmt".to_string(),
                 input_schema: serde_json::json!({
@@ -156,6 +160,7 @@ pub fn bundled_specs_manifest() -> McpManifest {
             },
             McpTool {
                 name: "aivi.fmt.write".to_string(),
+                description: "Format AIVI source files in place.".to_string(),
                 module: "aivi".to_string(),
                 binding: "fmt.write".to_string(),
                 input_schema: serde_json::json!({
@@ -181,6 +186,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
     manifest.tools.extend([
         McpTool {
             name: "aivi.gtk.discover".to_string(),
+            description: "Discover running AIVI GTK application sessions.".to_string(),
             module: "gtk".to_string(),
             binding: "discover".to_string(),
             input_schema: serde_json::json!({
@@ -192,6 +198,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.attach".to_string(),
+            description: "Attach to a running AIVI GTK application session.".to_string(),
             module: "gtk".to_string(),
             binding: "attach".to_string(),
             input_schema: serde_json::json!({
@@ -207,6 +214,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.launch".to_string(),
+            description: "Launch an AIVI GTK application.".to_string(),
             module: "gtk".to_string(),
             binding: "launch".to_string(),
             input_schema: serde_json::json!({
@@ -222,6 +230,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.hello".to_string(),
+            description: "Ping an attached GTK session to verify connectivity.".to_string(),
             module: "gtk".to_string(),
             binding: "hello".to_string(),
             input_schema: serde_json::json!({
@@ -236,6 +245,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.listWidgets".to_string(),
+            description: "List all widgets in an attached GTK session.".to_string(),
             module: "gtk".to_string(),
             binding: "listWidgets".to_string(),
             input_schema: serde_json::json!({
@@ -250,6 +260,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.dumpTree".to_string(),
+            description: "Dump the widget tree of an attached GTK session.".to_string(),
             module: "gtk".to_string(),
             binding: "dumpTree".to_string(),
             input_schema: serde_json::json!({
@@ -265,6 +276,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.click".to_string(),
+            description: "Simulate a click on a widget in an attached GTK session.".to_string(),
             module: "gtk".to_string(),
             binding: "click".to_string(),
             input_schema: serde_json::json!({
@@ -281,6 +293,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.type".to_string(),
+            description: "Simulate typing text into a widget in an attached GTK session.".to_string(),
             module: "gtk".to_string(),
             binding: "type".to_string(),
             input_schema: serde_json::json!({
