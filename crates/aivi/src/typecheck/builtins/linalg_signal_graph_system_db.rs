@@ -1014,6 +1014,19 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "reconcileNode".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("GtkNode")),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("GtkNode")),
+                            Box::new(effect_text_unit.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
                 "signalPoll".to_string(),
                 Type::Func(
                     Box::new(Type::con("Unit")),

@@ -112,3 +112,41 @@ send_functional = do Effect {
     | Err _      => assert False
     close tx
 }
+
+@test "fold accumulates over channel"
+fold_functional = do Effect {
+  (tx, rx) <- make Unit
+  send tx 1
+  send tx 2
+  send tx 3
+  close tx
+  total <- fold 0 (acc => x => pure (acc + x)) rx
+  assertEq total 6
+}
+
+@test "fold returns init on empty channel"
+fold_empty = do Effect {
+  (tx, rx) <- make Unit
+  close tx
+  result <- fold 42 (acc => _ => pure (acc + 1)) rx
+  assertEq result 42
+}
+
+@test "forEach processes each element"
+forEach_functional = do Effect {
+  (tx, rx)       <- make Unit
+  (outTx, outRx) <- make Unit
+  send tx 10
+  send tx 20
+  close tx
+  forEach rx (x => send outTx x)
+  close outTx
+  first  <- recv outRx
+  second <- recv outRx
+  first match
+    | Ok v  => assertEq v 10
+    | Err _ => assert False
+    second match
+      | Ok v  => assertEq v 20
+      | Err _ => assert False
+}

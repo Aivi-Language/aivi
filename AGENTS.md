@@ -152,6 +152,14 @@ When writing GTK4 UI code, **prefer `gtkApp` for new apps** and **`signalStream`
 ```aivi
 Msg = Save | NameChanged Text
 
+myView : { name: Text } -> GtkNode
+myView = state => ~<gtk>
+  <GtkBox orientation="vertical" spacing="8">
+    <GtkEntry id="nameInput" placeholderText="Name" />
+    <GtkButton label="Save" />
+  </GtkBox>
+</gtk>
+
 toMsg : GtkSignalEvent -> Option Msg
 toMsg = event =>
   event match
@@ -159,7 +167,7 @@ toMsg = event =>
     | GtkInputChanged _ "nameInput" txt => Some (NameChanged txt)
     | _                                 => None
 
-update : Msg -> State -> Effect GtkError State
+update : Msg -> { name: Text } -> Effect GtkError { name: Text }
 update = msg => state =>
   msg match
     | Save            => do Effect { _ <- saveData state; pure state }
@@ -170,7 +178,7 @@ main = gtkApp {
   title:  "My App",
   size:   (800, 600),
   model:  { name: "" },
-  view:   myNode,
+  view:   myView,
   toMsg:  toMsg,
   update: update
 }
@@ -192,11 +200,12 @@ channel.fold initState (state => event =>
 **Rules for agents:**
 
 - **Prefer `gtkApp`** for standard single-window apps; use manual `signalStream` only when you need multi-window or custom lifecycle control.
+- `gtkApp` automatically reconciles the widget tree on state changes — no manual `buildFromNode`/`windowSetChild` needed.
+- `reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId` patches the live tree in place. Returns the (possibly new) root id.
 - Signal events carry both `WidgetId` and the widget's `id="..."` name (e.g., `GtkClicked widgetId "saveBtn"`). Match by name string instead of comparing integer IDs.
 - Call `signalStream {}` **once** per UI flow; pass the `rx` value down through the loop.
-- Re-fetch widget IDs with `widgetById "id"` after any `windowSetChild`/`dialogSetChild` call, since widget tree rebuilds produce new IDs.
+- For manual flows, use `reconcileNode` instead of `buildFromNode` → `windowSetChild` for state-driven re-renders.
 - Use `attempt (widgetById "id")` when a widget may not exist yet (e.g., dialog content not yet built).
-- For state-driven re-renders (sidebar toggle, tab switch, form validation), update state → `buildFromNode` → `windowSetChild`/`dialogSetChild` → re-fetch IDs → tail-recurse.
 - Prefer typed variants (`GtkClicked`, `GtkInputChanged`, `GtkToggled`, etc.) over `GtkUnknownSignal` wherever possible.
 - `signalPoll` is available for one-shot reads; `signalStream` is preferred for continuous loops.
 - `channel.fold` threads state over events; `channel.forEach` runs a stateless action per event.

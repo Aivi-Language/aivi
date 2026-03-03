@@ -48,11 +48,18 @@ mod linux {
         fn gtk_widget_set_name(widget: *mut c_void, name: *const c_char);
         fn gtk_widget_queue_draw(widget: *mut c_void);
         fn gtk_widget_set_opacity(widget: *mut c_void, opacity: f64);
+        fn gtk_widget_unparent(widget: *mut c_void);
         // Sets the AT-SPI accessible label (GTK_ACCESSIBLE_PROPERTY_LABEL = 5)
         fn gtk_accessible_update_property(accessible: *mut c_void, first_property: c_int, ...);
 
         fn gtk_box_new(orientation: c_int, spacing: c_int) -> *mut c_void;
         fn gtk_box_append(container: *mut c_void, child: *mut c_void);
+        fn gtk_box_remove(container: *mut c_void, child: *mut c_void);
+        fn gtk_box_insert_child_after(
+            container: *mut c_void,
+            child: *mut c_void,
+            sibling: *mut c_void,
+        );
         fn gtk_box_set_homogeneous(boxw: *mut c_void, homogeneous: c_int);
         fn gtk_header_bar_new() -> *mut c_void;
         fn gtk_header_bar_pack_start(header_bar: *mut c_void, child: *mut c_void);
@@ -65,6 +72,7 @@ mod linux {
         );
         fn gtk_list_box_new() -> *mut c_void;
         fn gtk_list_box_append(list_box: *mut c_void, child: *mut c_void);
+        fn gtk_list_box_remove(list_box: *mut c_void, child: *mut c_void);
 
         fn gtk_drawing_area_new() -> *mut c_void;
 
@@ -129,6 +137,7 @@ mod linux {
         fn gtk_overlay_new() -> *mut c_void;
         fn gtk_overlay_set_child(overlay: *mut c_void, child: *mut c_void);
         fn gtk_overlay_add_overlay(overlay: *mut c_void, widget: *mut c_void);
+        fn gtk_overlay_remove_overlay(overlay: *mut c_void, widget: *mut c_void);
 
         fn gtk_css_provider_new() -> *mut c_void;
         fn gtk_css_provider_load_from_string(provider: *mut c_void, css: *const c_char);
@@ -193,6 +202,7 @@ mod linux {
             destroy_data: *mut c_void,
             connect_flags: c_int,
         ) -> c_ulong;
+        fn g_signal_handler_disconnect(instance: *mut c_void, handler_id: c_ulong);
     }
 
     unsafe extern "C" fn activate_noop(_app: *mut c_void, _data: *mut c_void) {}
@@ -314,6 +324,25 @@ mod linux {
         });
     }
 
+    /// Mirrors the live GTK widget tree for reconciliation.
+    #[derive(Clone, Debug)]
+    struct LiveNode {
+        widget_id: i64,
+        class_name: String,
+        kind: CreatedWidgetKind,
+        node_id: Option<String>,
+        props: HashMap<String, String>,
+        signals: Vec<SignalBindingState>,
+        signal_handler_ids: Vec<c_ulong>,
+        children: Vec<LiveChild>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct LiveChild {
+        child_type: Option<String>,
+        node: LiveNode,
+    }
+
     #[derive(Default)]
     struct RealGtkState {
         next_id: i64,
@@ -344,6 +373,8 @@ mod linux {
         pending_icon_search_paths: Vec<String>,
         pending_css_texts: Vec<String>,
         resources_registered: bool,
+        /// Root widget id → LiveNode tree for reconciliation.
+        live_trees: HashMap<i64, LiveNode>,
     }
 
     struct SignalBoolBinding {
@@ -725,7 +756,7 @@ mod linux {
         last_button: i64,
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug, PartialEq)]
     struct SignalBindingState {
         signal: String,
         handler: String,
@@ -1764,7 +1795,7 @@ mod linux {
         state: &mut RealGtkState,
         node: &GtkBuilderNode,
         id_map: &mut HashMap<String, i64>,
-    ) -> Result<i64, RuntimeError> {
+    ) -> Result<(i64, LiveNode), RuntimeError> {
         let GtkBuilderNode::Element {
             tag,
             attrs,
@@ -1777,11 +1808,23 @@ mod linux {
             return Err(invalid("gtk4.buildFromNode root tag must be <object>"));
         }
         if let Some(ref_id) = node_attr(attrs, "idref").or_else(|| node_attr(attrs, "ref")) {
-            return id_map.get(ref_id).copied().ok_or_else(|| {
+            let wid = id_map.get(ref_id).copied().ok_or_else(|| {
                 RuntimeError::Error(Value::Text(format!(
                     "gtk4.buildFromNode unresolved object reference id '{ref_id}'"
                 )))
-            });
+            })?;
+            // Referenced nodes are aliases — return a minimal LiveNode (no children to reconcile).
+            let live = LiveNode {
+                widget_id: wid,
+                class_name: String::new(),
+                kind: CreatedWidgetKind::Other,
+                node_id: Some(ref_id.to_string()),
+                props: HashMap::new(),
+                signals: Vec::new(),
+                signal_handler_ids: Vec::new(),
+                children: Vec::new(),
+            };
+            return Ok((wid, live));
         }
         let class_name = node_attr(attrs, "class")
             .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
@@ -2037,13 +2080,16 @@ mod linux {
         }
 
         apply_widget_properties(raw, class_name, &props, state)?;
-        for binding in signal_bindings {
-            connect_widget_signal(raw, id, class_name, &binding)?;
+        let mut signal_handler_ids = Vec::new();
+        for binding in &signal_bindings {
+            let hid = connect_widget_signal(raw, id, class_name, binding)?;
+            signal_handler_ids.push(hid);
         }
 
         let mut child_objects = collect_child_objects(children);
         child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
         let mut overlay_root_set = false;
+        let mut live_children: Vec<LiveChild> = Vec::new();
         // For auto-wiring scroll fades inside GtkOverlay
         let mut scroll_fade_scrolled: *mut c_void = std::ptr::null_mut();
         let mut scroll_fade_top: *mut c_void = std::ptr::null_mut();
@@ -2062,7 +2108,7 @@ mod linux {
                 } else { String::new() }
             } else { String::new() };
 
-            let child_id = build_widget_from_node_real(state, child.node, id_map)?;
+            let (child_id, child_live) = build_widget_from_node_real(state, child.node, id_map)?;
             let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
 
             // Track for scroll-fade auto-wiring
@@ -2078,6 +2124,7 @@ mod linux {
                 if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
                     gesture.widget_id = id;
                 }
+                live_children.push(LiveChild { child_type: child.child_type.clone(), node: child_live });
                 continue;
             }
             match kind {
@@ -2140,6 +2187,7 @@ mod linux {
                     call_adw_fn_pp("adw_action_row_add_suffix", raw, child_raw);
                 }
             }
+            live_children.push(LiveChild { child_type: child.child_type.clone(), node: child_live });
         }
 
         // Auto-wire scroll fades for GtkOverlay containing a fading-scroll scrolled window.
@@ -2147,7 +2195,335 @@ mod linux {
             wire_scroll_fades(scroll_fade_scrolled, scroll_fade_top, scroll_fade_bottom);
         }
 
-        Ok(id)
+        let node_id = node_attr(attrs, "id").map(str::to_string);
+        let live = LiveNode {
+            widget_id: id,
+            class_name: class_name.to_string(),
+            kind,
+            node_id,
+            props,
+            signals: signal_bindings,
+            signal_handler_ids,
+            children: live_children,
+        };
+        Ok((id, live))
+    }
+
+    // ── Reconciliation ────────────────────────────────────────────────────────
+
+    /// Patch CSS classes: remove old-only, add new-only.
+    fn patch_css_classes(
+        widget: *mut c_void,
+        old_css: Option<&String>,
+        new_css: Option<&String>,
+    ) -> Result<(), RuntimeError> {
+        let old_set: std::collections::HashSet<&str> = old_css
+            .map(|s| s.split_whitespace().collect())
+            .unwrap_or_default();
+        let new_set: std::collections::HashSet<&str> = new_css
+            .map(|s| s.split_whitespace().collect())
+            .unwrap_or_default();
+        for cls in old_set.difference(&new_set) {
+            let c = c_text(cls, "reconcile css remove")?;
+            unsafe { gtk_widget_remove_css_class(widget, c.as_ptr()) };
+        }
+        for cls in new_set.difference(&old_set) {
+            let c = c_text(cls, "reconcile css add")?;
+            unsafe { gtk_widget_add_css_class(widget, c.as_ptr()) };
+        }
+        Ok(())
+    }
+
+    /// Patch properties on an existing widget. Reapplies all new props and diffs CSS classes.
+    fn patch_widget_properties(
+        widget: *mut c_void,
+        class_name: &str,
+        old_props: &HashMap<String, String>,
+        new_props: &HashMap<String, String>,
+        state: &RealGtkState,
+    ) -> Result<(), RuntimeError> {
+        // Diff CSS classes specially
+        patch_css_classes(widget, old_props.get("css-class"), new_props.get("css-class"))?;
+        // Apply the non-CSS properties unconditionally (cheap FFI calls, only changed props matter)
+        let mut props_no_css = new_props.clone();
+        props_no_css.remove("css-class");
+        apply_widget_properties(widget, class_name, &props_no_css, state)?;
+        Ok(())
+    }
+
+    /// Recursively clean up state entries for a widget and its children in the live tree.
+    fn cleanup_widget_state(state: &mut RealGtkState, live: &LiveNode) {
+        let id = live.widget_id;
+        state.widgets.remove(&id);
+        state.labels.remove(&id);
+        state.entries.remove(&id);
+        state.images.remove(&id);
+        state.draw_areas.remove(&id);
+        state.gesture_clicks.remove(&id);
+        state.separators.remove(&id);
+        if let Some(ref name) = live.node_id {
+            state.named_widgets.remove(name);
+        }
+        state.widget_id_to_name.remove(&id);
+        state.live_trees.remove(&id);
+        for child in &live.children {
+            cleanup_widget_state(state, &child.node);
+        }
+    }
+
+    /// Remove a child widget from its parent container and clean up state.
+    fn remove_child_from_parent(
+        state: &mut RealGtkState,
+        parent_id: i64,
+        parent_kind: CreatedWidgetKind,
+        child_id: i64,
+        child_type: Option<&str>,
+        child_live: Option<&LiveNode>,
+    ) -> Result<(), RuntimeError> {
+        let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
+        let child_raw = widget_ptr(state, child_id, "reconcile")?;
+        match parent_kind {
+            CreatedWidgetKind::Box => unsafe { gtk_box_remove(parent_raw, child_raw) },
+            CreatedWidgetKind::ListBox => unsafe { gtk_list_box_remove(parent_raw, child_raw) },
+            CreatedWidgetKind::Overlay => {
+                if child_type == Some("overlay") {
+                    unsafe { gtk_overlay_remove_overlay(parent_raw, child_raw) };
+                } else {
+                    unsafe { gtk_overlay_set_child(parent_raw, std::ptr::null_mut()) };
+                }
+            }
+            _ => unsafe { gtk_widget_unparent(child_raw) },
+        }
+        if let Some(live) = child_live {
+            let live_clone = live.clone();
+            cleanup_widget_state(state, &live_clone);
+        }
+        Ok(())
+    }
+
+    /// Add a child widget to a parent container (mirrors the build logic).
+    fn add_child_to_parent(
+        parent_raw: *mut c_void,
+        parent_kind: CreatedWidgetKind,
+        child_raw: *mut c_void,
+        child_type: Option<&str>,
+        overlay_index: usize,
+    ) {
+        match parent_kind {
+            CreatedWidgetKind::Box => unsafe { gtk_box_append(parent_raw, child_raw) },
+            CreatedWidgetKind::Button => unsafe { gtk_button_set_child(parent_raw, child_raw) },
+            CreatedWidgetKind::HeaderBar => match child_type {
+                Some("end") => unsafe { gtk_header_bar_pack_end(parent_raw, child_raw) },
+                Some("title") => unsafe {
+                    gtk_header_bar_set_title_widget(parent_raw, child_raw)
+                },
+                _ => unsafe { gtk_header_bar_pack_start(parent_raw, child_raw) },
+            },
+            CreatedWidgetKind::ScrolledWindow => {
+                if child_type != Some("overlay") {
+                    unsafe { gtk_scrolled_window_set_child(parent_raw, child_raw) };
+                }
+            }
+            CreatedWidgetKind::Overlay => {
+                if child_type == Some("overlay") || overlay_index > 0 {
+                    unsafe { gtk_overlay_add_overlay(parent_raw, child_raw) };
+                } else {
+                    unsafe { gtk_overlay_set_child(parent_raw, child_raw) };
+                }
+            }
+            CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(parent_raw, child_raw) },
+            CreatedWidgetKind::Revealer => unsafe {
+                gtk_revealer_set_child(parent_raw, child_raw)
+            },
+            CreatedWidgetKind::Stack => {
+                let page_name = child_type.unwrap_or("page");
+                if let Ok(name_c) = CString::new(page_name) {
+                    unsafe { gtk_stack_add_named(parent_raw, child_raw, name_c.as_ptr()) };
+                }
+            }
+            CreatedWidgetKind::SplitView => {
+                let prop_name = match child_type {
+                    Some("sidebar") => "sidebar",
+                    _ => "content",
+                };
+                let prop_c = CString::new(prop_name).unwrap();
+                unsafe {
+                    g_object_set(
+                        parent_raw,
+                        prop_c.as_ptr(),
+                        child_raw,
+                        std::ptr::null::<c_char>(),
+                    );
+                }
+            }
+            CreatedWidgetKind::PreferencesDialog => {
+                call_adw_fn_pp("adw_preferences_dialog_add", parent_raw, child_raw);
+            }
+            CreatedWidgetKind::PreferencesPage => {
+                call_adw_fn_pp("adw_preferences_page_add", parent_raw, child_raw);
+            }
+            CreatedWidgetKind::PreferencesGroup => {
+                call_adw_fn_pp("adw_preferences_group_add", parent_raw, child_raw);
+            }
+            CreatedWidgetKind::ActionRow => {
+                call_adw_fn_pp("adw_action_row_add_suffix", parent_raw, child_raw);
+            }
+            CreatedWidgetKind::Other => {}
+        }
+    }
+
+    /// Reconcile a single live node against a new GtkBuilderNode.
+    /// Returns the (possibly replaced) LiveNode.
+    fn reconcile_node(
+        state: &mut RealGtkState,
+        live: &mut LiveNode,
+        new_node: &GtkBuilderNode,
+        id_map: &mut HashMap<String, i64>,
+    ) -> Result<bool, RuntimeError> {
+        let GtkBuilderNode::Element {
+            tag,
+            attrs,
+            children,
+        } = new_node
+        else {
+            return Ok(false);
+        };
+        if tag != "object" {
+            return Ok(false);
+        }
+        let new_class = match node_attr(attrs, "class") {
+            Some(c) => c,
+            None => return Ok(false),
+        };
+        // Different widget class → cannot patch in-place
+        if live.class_name != new_class {
+            return Ok(false);
+        }
+        let new_props = collect_object_properties(attrs, children);
+        let new_signals = collect_object_signals(attrs, children);
+        let raw = widget_ptr(state, live.widget_id, "reconcile")?;
+
+        // Patch properties
+        patch_widget_properties(raw, new_class, &live.props, &new_props, state)?;
+        live.props = new_props;
+
+        // Patch signals: disconnect old, connect new if changed
+        if live.signals != new_signals {
+            for &hid in &live.signal_handler_ids {
+                if hid != 0 {
+                    unsafe { g_signal_handler_disconnect(raw, hid) };
+                }
+            }
+            let mut new_handler_ids = Vec::new();
+            for binding in &new_signals {
+                let hid = connect_widget_signal(raw, live.widget_id, new_class, binding)?;
+                new_handler_ids.push(hid);
+            }
+            live.signals = new_signals;
+            live.signal_handler_ids = new_handler_ids;
+        }
+
+        // Update node_id if it changed
+        let new_node_id = node_attr(attrs, "id").map(str::to_string);
+        if new_node_id != live.node_id {
+            if let Some(ref name) = new_node_id {
+                id_map.insert(name.clone(), live.widget_id);
+            }
+            live.node_id = new_node_id;
+        }
+
+        // Reconcile children
+        let mut new_child_objects = collect_child_objects(children);
+        new_child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
+        reconcile_children(state, live, &new_child_objects, id_map)?;
+
+        Ok(true)
+    }
+
+    /// Reconcile the children of a live node against new child specs.
+    fn reconcile_children(
+        state: &mut RealGtkState,
+        parent: &mut LiveNode,
+        new_children: &[ChildSpec<'_>],
+        id_map: &mut HashMap<String, i64>,
+    ) -> Result<(), RuntimeError> {
+        let parent_id = parent.widget_id;
+        let parent_kind = parent.kind;
+        let min_len = parent.children.len().min(new_children.len());
+
+        // Reconcile overlapping positions
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..min_len {
+            let patched = reconcile_node(
+                state,
+                &mut parent.children[i].node,
+                new_children[i].node,
+                id_map,
+            )?;
+            if !patched {
+                // Different type — remove old, build new, insert at same position
+                let old_wid = parent.children[i].node.widget_id;
+                let old_ct = parent.children[i].child_type.clone();
+                let old_live = parent.children[i].node.clone();
+                remove_child_from_parent(state, parent_id, parent_kind, old_wid, old_ct.as_deref(), Some(&old_live))?;
+                let (new_id, new_live) =
+                    build_widget_from_node_real(state, new_children[i].node, id_map)?;
+                let new_raw = widget_ptr(state, new_id, "reconcile")?;
+                let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
+                // For GtkBox, insert at position using the previous sibling
+                if matches!(parent_kind, CreatedWidgetKind::Box) && i > 0 {
+                    let prev_id = parent.children[i - 1].node.widget_id;
+                    if let Ok(prev_raw) = widget_ptr(state, prev_id, "reconcile") {
+                        unsafe { gtk_box_insert_child_after(parent_raw, new_raw, prev_raw) };
+                    } else {
+                        add_child_to_parent(parent_raw, parent_kind, new_raw, new_children[i].child_type.as_deref(), i);
+                    }
+                } else {
+                    add_child_to_parent(parent_raw, parent_kind, new_raw, new_children[i].child_type.as_deref(), i);
+                }
+                parent.children[i] = LiveChild {
+                    child_type: new_children[i].child_type.clone(),
+                    node: new_live,
+                };
+            } else {
+                parent.children[i].child_type = new_children[i].child_type.clone();
+            }
+        }
+
+        // Remove excess old children (iterate in reverse so indices stay valid)
+        for i in (min_len..parent.children.len()).rev() {
+            let old_wid = parent.children[i].node.widget_id;
+            let old_ct = parent.children[i].child_type.clone();
+            let old_live = parent.children[i].node.clone();
+            let _ = remove_child_from_parent(
+                state,
+                parent_id,
+                parent_kind,
+                old_wid,
+                old_ct.as_deref(),
+                Some(&old_live),
+            );
+        }
+        parent.children.truncate(min_len);
+
+        // Build and add new children
+        for (i, new_spec) in new_children.iter().enumerate().skip(min_len) {
+            let (new_id, new_live) = build_widget_from_node_real(state, new_spec.node, id_map)?;
+            let new_raw = widget_ptr(state, new_id, "reconcile")?;
+            let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
+            add_child_to_parent(
+                parent_raw,
+                parent_kind,
+                new_raw,
+                new_spec.child_type.as_deref(),
+                i,
+            );
+            parent.children.push(LiveChild {
+                child_type: new_spec.child_type.clone(),
+                node: new_live,
+            });
+        }
+        Ok(())
     }
 
     fn try_adw_init() {
@@ -2384,7 +2760,7 @@ mod linux {
         widget_id: i64,
         class_name: &str,
         binding: &SignalBindingState,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<c_ulong, RuntimeError> {
         let Some(payload_kind) = signal_payload_kind_for(class_name, &binding.signal) else {
             return Err(RuntimeError::Error(Value::Text(format!(
                 "gtk4.buildFromNode unsupported signal `{}` on class `{class_name}`",
@@ -2399,7 +2775,7 @@ mod linux {
             payload_kind,
         });
         let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
-        unsafe {
+        let handler_id = unsafe {
             g_signal_connect_data(
                 widget,
                 signal_c.as_ptr(),
@@ -2407,9 +2783,9 @@ mod linux {
                 callback_ptr,
                 null_mut(),
                 0,
-            );
-        }
-        Ok(())
+            )
+        };
+        Ok(handler_id)
     }
 
     pub(super) fn build_from_mock(mut fields: HashMap<String, Value>) -> HashMap<String, Value> {
@@ -4339,11 +4715,12 @@ mod linux {
                         let mut state = state.borrow_mut();
                         let mut id_map = HashMap::new();
                         let root = first_object_in_interface(&decoded)?;
-                        let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+                        let (id, live) = build_widget_from_node_real(&mut state, root, &mut id_map)?;
                         state.named_widgets.extend(id_map.clone());
                         for (name, wid) in &id_map {
                             state.widget_id_to_name.insert(*wid, name.clone());
                         }
+                        state.live_trees.insert(id, live);
                         Ok(id)
                     })?;
                     Ok(Value::Int(id))
@@ -4362,11 +4739,12 @@ mod linux {
                             let mut state = state.borrow_mut();
                             let mut id_map = HashMap::new();
                             let root = first_object_in_interface(&decoded)?;
-                            let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+                            let (id, live) = build_widget_from_node_real(&mut state, root, &mut id_map)?;
                             state.named_widgets.extend(id_map.clone());
                             for (name, wid) in &id_map {
                                 state.widget_id_to_name.insert(*wid, name.clone());
                             }
+                            state.live_trees.insert(id, live);
                             Ok((id, id_map))
                         })?;
                     let mut widgets_map = im::HashMap::new();
@@ -4380,6 +4758,49 @@ mod linux {
                     record.insert("root".to_string(), Value::Int(root_id));
                     record.insert("widgets".to_string(), Value::Map(Arc::new(widgets_map)));
                     Ok(Value::Record(Arc::new(record)))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "reconcileNode".to_string(),
+            builtin("gtk4.reconcileNode", 2, |mut args, _| {
+                let new_node_val = args.remove(1);
+                let root_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.reconcileNode expects Int root widget id")),
+                };
+                Ok(effect(move |_| {
+                    let new_decoded = decode_gtk_node(&new_node_val)?;
+                    let new_root = first_object_in_interface(&new_decoded)?;
+                    let result_id = GTK_STATE.with(|state| -> Result<i64, RuntimeError> {
+                        let mut state = state.borrow_mut();
+                        let mut id_map: HashMap<String, i64> = HashMap::new();
+                        let mut live = state.live_trees.remove(&root_id).ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.reconcileNode no live tree for root id {root_id}"
+                            )))
+                        })?;
+                        let patched = reconcile_node(&mut state, &mut live, new_root, &mut id_map)?;
+                        let final_id = if !patched {
+                            // Root widget type changed — rebuild entirely
+                            let old_live = live;
+                            cleanup_widget_state(&mut state, &old_live);
+                            let (new_id, new_live) =
+                                build_widget_from_node_real(&mut state, new_root, &mut id_map)?;
+                            state.live_trees.insert(new_id, new_live);
+                            new_id
+                        } else {
+                            state.live_trees.insert(root_id, live);
+                            root_id
+                        };
+                        state.named_widgets.extend(id_map.clone());
+                        for (name, wid) in &id_map {
+                            state.widget_id_to_name.insert(*wid, name.clone());
+                        }
+                        Ok(final_id)
+                    })?;
+                    Ok(Value::Int(result_id))
                 }))
             }),
         );

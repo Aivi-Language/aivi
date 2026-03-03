@@ -24,6 +24,8 @@ pub(super) fn build_gtk4_record() -> Value {
 fn build_gtk4_stubs() -> Value {
     let stubs: &[(&str, usize)] = &[
         ("buildFromNode", 1),
+        ("buildWithIds", 1),
+        ("reconcileNode", 2),
         ("signalPoll", 1),
         ("signalEmit", 4),
         ("signalStream", 1),

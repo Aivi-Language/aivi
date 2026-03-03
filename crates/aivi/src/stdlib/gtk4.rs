@@ -41,7 +41,7 @@ export notificationNew, notificationSetBody, appSendNotification, appWithdrawNot
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr, gtkSignalAttr
-export buildFromNode, buildWithIds
+export buildFromNode, buildWithIds, reconcileNode
 export signalPoll, signalEmit, signalStream
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 export signalBindDialogPresent, signalBindStackPage
@@ -111,6 +111,9 @@ buildFromNode = gtk4.buildFromNode
 
 buildWithIds : GtkNode -> Effect GtkError { root: WidgetId, widgets: Map Text WidgetId }
 buildWithIds = gtk4.buildWithIds
+
+reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId
+reconcileNode = gtk4.reconcileNode
 
 signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)
 signalPoll = gtk4.signalPoll
@@ -477,26 +480,31 @@ osSetBadgeCount = gtk4.osSetBadgeCount
 osThemePreference : Unit -> Effect GtkError Text
 osThemePreference = gtk4.osThemePreference
 
-gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, view: GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
+gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
 gtkApp = config => do Effect {
+  _ <- init Unit
   appId <- appNew config.id
   (w, h) = config.size
   win <- windowNew appId config.title w h
-  root <- buildFromNode config.view
+  initialView = config.view config.model
+  root <- buildFromNode initialView
   windowSetChild win root
   rx <- signalStream {}
   windowPresent win
   _ <- appRun appId
-  loop state = config.model => {
+  loop acc = { st: config.model, rootId: root } => {
     result <- channel.recv rx
     result match
       | Err _ => pure Unit
       | Ok event =>
           config.toMsg event match
-            | None     => recurse state
+            | None     => recurse acc
             | Some msg => do Effect {
-                next <- config.update msg state
-                recurse next
+                next <- config.update msg acc.st
+                newView = config.view next
+                newRoot <- reconcileNode acc.rootId newView
+                _ <- if newRoot == acc.rootId then pure Unit else windowSetChild win newRoot
+                recurse { st: next, rootId: newRoot }
               }
   }
 }
