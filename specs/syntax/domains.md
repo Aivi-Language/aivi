@@ -129,7 +129,7 @@ Some domains cover multiple types (e.g., `Vector` over `Vec2` and `Vec3`). In v0
 
 ## Interaction with Sigils
 
-Domains may define **sigils** (see [Sigils](sigils.md)) that produce domain-typed values. For example, the `Url` domain provides `~u(https://example.com)` and the `Path` domain provides `~path[/usr/local/bin]`. These sigils are validated at compile time and construct typed values, not raw strings.
+Domains may define **sigils** (see [Operators & Sigils](operators.md#118-sigils)) that produce domain-typed values. For example, the `Url` domain provides `~u(https://example.com)` and the `Path` domain provides `~path[/usr/local/bin]`. These sigils are validated at compile time and construct typed values, not raw strings.
 
 In v0.1, domains do not support defining custom sigils via the `domain` block. Sigils are compiler-provided for stdlib domains.
 

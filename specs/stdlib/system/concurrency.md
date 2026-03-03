@@ -68,3 +68,25 @@ Channels provide a mechanism for synchronization and communication between concu
 | Function | Explanation |
 | --- | --- |
 | **forEach** receiver fn<br><code>Receiver A -> (A -> Effect E Unit) -> Effect E Unit</code> | Consumes all values from the channel, running an effectful action on each. Returns `Unit` when the channel closes. |
+
+## Structural Concurrency Model
+
+Structural concurrency means: concurrent tasks are children of the scope that spawned them. When the scope ends, all children have either completed or been cancelled (with cleanup).
+
+- `scope` bounds task lifetime to a lexical scope.
+- Tasks spawned with `spawn` inside a scope are joined before `scope` returns.
+- Errors propagate: if any child fails, the scope fails.
+
+### Explicit Detachment
+
+When a task must outlive its creator (e.g., a background daemon), it must be explicitly detached from the structural tree.
+
+<<< ../../snippets/from_md/runtime/concurrency/explicit_detachment.aivi{aivi}
+
+## Non-Deterministic Selection (`select`)
+
+Selecting across multiple concurrent operations is essential for channel-based code.
+
+<<< ../../snippets/from_md/runtime/concurrency/non_deterministic_selection_select.aivi{aivi}
+
+The first operation to succeed is chosen; all other pending operations are cancelled.

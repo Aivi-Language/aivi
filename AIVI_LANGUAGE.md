@@ -35,9 +35,12 @@ apply: always
 | Char                                      | `'a'`                                                                                                                                                                           |
 | ISO instant                               | `2024-05-21T12:00:00Z`                                                                                                                                                          |
 | Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                         |
-| Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then use when with yield loop` |
+| Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then unless use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
+
+`effect { }` is a **deprecated** alias for `do Effect { }` (emits warning W1600); always write `do Effect { }`.
+`@` in patterns is **deprecated** in favour of `as` (emits warning W1603); write `name as pattern` instead of `name@pattern`.
 
 ---
 
@@ -278,6 +281,7 @@ Omit (isAdmin) User
 Optional (email) User
 Required (email) User
 Rename { createdAt: created_at } User
+Defaulted (email) User   // like Optional at type level; used for codec/default derivation
 
 // Type-level pipe:
 User |> Pick (id, name) |> Optional (name)
@@ -403,7 +407,7 @@ result = user <| p
 
 ## 9 Blocks
 
-AIVI has four block forms, each introduced by a keyword and delimited with `{ ... }`.
+AIVI has five block forms, each introduced by a keyword and delimited with `{ ... }`: `generate`, `do M`, `resource`, `machine`, and plain `{ ... }` (pure computation). The first four are described below; `resource` is covered in §11.
 
 ### `generate { ... }` - Pure sequences
 
@@ -475,6 +479,7 @@ Statements inside `do Effect { ... }`:
 - `x = expr` - pure local binding (`expr` must NOT be `Effect`)
 - `x <- resource` - acquire a `Resource`, released on scope exit
 - `when cond <- eff` - conditional (runs `eff` only when `cond` is true)
+- `unless cond <- eff` - negated conditional (runs `eff` only when `cond` is false)
 - `given cond or failExpr` - precondition guard
 - Final expression must be `Effect E A` (commonly `pure value`)
 - Statement expressions must be `Effect E Unit`; non-Unit results must be bound
@@ -655,6 +660,21 @@ main = do Effect {
 ```
 
 Desugars to: `_ <- if cond then eff else pure Unit`.
+
+### Negated conditional effects (`unless`)
+
+`unless cond <- eff` runs `eff` only when `cond` is **false**. It is the exact negation of `when`.
+
+```aivi
+main = do Effect {
+  cfg <- loadConfig
+  unless cfg.skipSetup <- runSetup cfg
+  unless cfg.quiet     <- print "done"
+  process cfg
+}
+```
+
+Desugars to: `_ <- if cond then pure Unit else eff`.
 
 ### Precondition guards (`given`)
 
@@ -848,6 +868,8 @@ Custom literals with `~tag` and a delimiter:
 ~d(2024-05-21)                 // Date
 ~t(12:00:00)                   // Time
 ~tz(Europe/Paris)              // TimeZone
+~k"app.button.save"            // i18n key (validated at parse time)
+~m"Hello, {name}!"             // i18n message template (validated at parse time)
 ~<html><div>{ "x" }</div></html> // Typed VDOM node
 ~<gtk><object class="GtkBox" /></gtk> // Typed GTK builder node
 ~<gtk><GtkBox spacing="24" /></gtk> // Shorthand widget syntax
@@ -915,7 +937,7 @@ Consume events via `signalStream` (preferred) or `signalPoll`:
 
 ```aivi
 events <- signalStream {}      // Recv GtkSignalEvent — push-based, no polling loop needed
-channel.forEach events (event =>
+concurrency.forEach events (event =>
   event match
     | GtkClicked _ _            => handleSave
     | GtkInputChanged _ _ txt   => handleInput txt
@@ -924,8 +946,9 @@ channel.forEach events (event =>
 )
 ```
 
-`channel.fold` threads state over a channel: `fold : s -> (s -> a -> Effect e s) -> Recv a -> Effect e s`.
-`channel.forEach` runs an action on each event: `forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit`.
+`concurrency.fold` threads state over a channel: `fold : s -> (s -> a -> Effect e s) -> Recv a -> Effect e s`.
+`concurrency.forEach` runs an action on each event: `forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit`.
+Both are exported from `aivi.concurrency`.
 
 `buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — avoids separate `widgetById` calls.
 
@@ -1172,14 +1195,16 @@ Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 4. `&&` (logical and)
 5. `==`, `!=` (equality)
 6. `<`, `<=`, `>`, `>=` (comparison)
-7. `|` (bitwise or)
-8. `^` (bitwise xor)
-9. `<<`, `>>` (shift)
-10. `+`, `-`, `++` (add, concat)
-11. `*`, `×`, `/`, `%` (multiply)
-12. `<|` (patch)
+7. `^` (bitwise xor)
+8. `<<`, `>>` (shift)
+9. `+`, `-`, `++` (add, concat)
+10. `*`, `×`, `/`, `%` (multiply)
+11. `<|` (patch)
 
-Unary prefix: `!` (not), `-` (negate), `~` (bitwise complement).
+Unary prefix: `!` (not), `-` (negate).
+
+> **Note:** `|` (bitwise or) is not available as an infix operator in v0.1 — it conflicts with the `|` arm separator in match expressions. Use explicit `Bool` helpers instead.
+> `~` is **not** a unary operator; it is exclusively a sigil prefix (e.g. `~u(...)`, `~r/.../`).
 
 ---
 

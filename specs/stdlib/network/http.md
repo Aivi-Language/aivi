@@ -64,3 +64,32 @@ Returned in the `Err` branch when a request fails.
 ```aivi
 Error = { message: Text }
 ```
+
+---
+
+## HTTPS Domain
+
+<!-- quick-info: {"kind":"module","name":"aivi.net.https"} -->
+`aivi.net.https` mirrors `aivi.net.http` but enforces TLS connections. Intended for production use where transport security is required.
+<!-- /quick-info -->
+<div class="import-badge">use aivi.net.https</div>
+
+`aivi.net.https` exports the same functions (`get`, `post`, `fetch`) and types (`Header`, `Body`, `Request`, `Response`, `Error`) as `aivi.net.http`. The only difference is that all connections are made over TLS.
+
+### Functions
+
+| Function | Explanation |
+| --- | --- |
+| **get** url<br><code>Url -> Effect Text (Result Error Response)</code> | Performs a secure GET request. |
+| **post** url body<br><code>Url -> Text -> Effect Text (Result Error Response)</code> | Performs a secure POST request with a text body. |
+| **fetch** request<br><code>Request -> Effect Text (Result Error Response)</code> | Performs a secure request with custom method, headers, and body. |
+
+### Types
+
+Same shapes as `aivi.net.http`. Import `aivi.net.https` to use them in a TLS context.
+
+```aivi
+Header = { name: Text, value: Text }
+Body   = Plain Text | Form (List Header) | Json JsonValue
+Error  = { message: Text }
+```
