@@ -520,3 +520,124 @@ fn is_constructor_name(name: &str) -> bool {
 fn resolve_builtin(name: &str) -> Option<BuiltinName> {
     crate::builtin_names::resolve_builtin(name)
 }
+
+#[cfg(test)]
+mod unbound_vars_tests {
+    use std::path::Path;
+    use crate::surface::parse_modules;
+    use crate::hir::desugar_modules;
+    use crate::rust_ir::lower_kernel;
+
+    fn parse_lower_to_rust_ir(src: &str) -> Result<crate::rust_ir::RustIrProgram, crate::AiviError> {
+        let (modules, _) = parse_modules(Path::new("test.aivi"), src);
+        let hir = desugar_modules(&modules);
+        let desugared = crate::desugar_blocks(hir);
+        lower_kernel(desugared)
+    }
+
+    #[test]
+    fn simple_function_lowers_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+f = x => x + 1
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn recursive_function_lowers_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+fact : Int -> Int
+fact = n => if n <= 0 then 1 else n * fact (n - 1)
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn match_expression_lowers_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+describe = x =>
+  x ?
+    | 0 => "zero"
+    | _ => "other"
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn let_binding_in_do_block_lowers_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+f = do Effect {
+  x = 42
+  pure x
+}
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn pattern_match_with_constructor_lowers() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+fromSome = Some x => x
+fromSome = None => 0
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn list_operations_lower_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+myList = [1, 2, 3]
+head = (x :: _) => x
+head = _ => 0
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn record_operations_lower_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+getName = { name } => name
+makePoint = x => y => { x: x, y: y }
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn binary_operations_lower_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+add = a => b => a + b
+cmp = a => b => a < b
+andOp = a => b => a && b
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn tuple_operations_lower_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+makePair = a => b => (a, b)
+fst = (a, _) => a
+snd = (_, b) => b
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+
+    #[test]
+    fn higher_order_functions_lower_without_error() {
+        let result = parse_lower_to_rust_ir(r#"
+module Test
+applyTwice = f => x => f (f x)
+compose = f => g => x => f (g x)
+"#);
+        assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    }
+}

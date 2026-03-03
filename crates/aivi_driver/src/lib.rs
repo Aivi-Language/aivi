@@ -308,3 +308,140 @@ pub fn format_target(target: &str) -> Result<String, AiviError> {
 pub fn resolve_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
     workspace::expand_target(target)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    fn workspace_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("workspace root")
+            .to_path_buf()
+    }
+
+    fn existing_aivi_file() -> PathBuf {
+        workspace_root().join("integration-tests/syntax/bindings/basic.aivi")
+    }
+
+    // -- AiviError display --
+
+    #[test]
+    fn error_invalid_path_display() {
+        let e = AiviError::InvalidPath("no/such/path".to_string());
+        assert!(e.to_string().contains("no/such/path"));
+    }
+
+    #[test]
+    fn error_diagnostics_display() {
+        let e = AiviError::Diagnostics;
+        assert!(!e.to_string().is_empty());
+    }
+
+    #[test]
+    fn error_invalid_command_display() {
+        let e = AiviError::InvalidCommand("bad cmd".to_string());
+        assert!(e.to_string().contains("bad cmd"));
+    }
+
+    #[test]
+    fn error_cargo_display() {
+        let e = AiviError::Cargo("oops".to_string());
+        assert!(e.to_string().contains("oops"));
+    }
+
+    #[test]
+    fn error_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let e: AiviError = io_err.into();
+        assert!(e.to_string().contains("IO error"));
+    }
+
+    // -- resolve_target --
+
+    #[test]
+    fn resolve_target_returns_existing_file() {
+        let path = existing_aivi_file();
+        let target = path.to_string_lossy().to_string();
+        let paths = resolve_target(&target).expect("resolve");
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0], path);
+    }
+
+    #[test]
+    fn resolve_target_nonexistent_errors() {
+        let result = resolve_target("/no/such/path/nowhere.aivi");
+        assert!(result.is_err());
+    }
+
+    // -- parse_target --
+
+    #[test]
+    fn parse_target_single_file() {
+        let path = existing_aivi_file();
+        let target = path.to_string_lossy().to_string();
+        let bundle = parse_target(&target).expect("parse_target");
+        assert!(!bundle.files.is_empty());
+    }
+
+    // -- parse_file --
+
+    #[test]
+    fn parse_file_reads_and_parses() {
+        let path = existing_aivi_file();
+        let cst_file = parse_file(&path).expect("parse_file");
+        assert!(cst_file.line_count > 0);
+        assert!(cst_file.byte_count > 0);
+    }
+
+    // -- format_target --
+
+    #[test]
+    fn format_target_returns_formatted_text() {
+        let path = existing_aivi_file();
+        let target = path.to_string_lossy().to_string();
+        let formatted = format_target(&target).expect("format_target");
+        assert!(!formatted.is_empty());
+    }
+
+    // -- load_modules / Pipeline --
+
+    #[test]
+    fn pipeline_from_paths_loads_modules() {
+        let path = existing_aivi_file();
+        let pipeline = Pipeline::from_paths(&[path]).expect("from_paths");
+        assert!(!pipeline.modules().is_empty());
+    }
+
+    #[test]
+    fn pipeline_has_parse_errors_false_for_valid_file() {
+        let path = existing_aivi_file();
+        let pipeline = Pipeline::from_paths(&[path]).expect("from_paths");
+        assert!(!pipeline.has_parse_errors());
+    }
+
+    #[test]
+    fn load_modules_from_paths_returns_modules() {
+        let path = existing_aivi_file();
+        let modules = load_modules_from_paths(&[path]).expect("load_modules");
+        assert!(!modules.is_empty());
+    }
+
+    #[test]
+    fn desugar_target_lenient_succeeds() {
+        let path = existing_aivi_file();
+        let target = path.to_string_lossy().to_string();
+        let _hir = desugar_target_lenient(&target).expect("desugar_lenient");
+    }
+
+    #[test]
+    fn load_module_diagnostics_for_valid_file() {
+        let path = existing_aivi_file();
+        let target = path.to_string_lossy().to_string();
+        let diags = load_module_diagnostics(&target).expect("diagnostics");
+        let _ = diags;
+    }
+}

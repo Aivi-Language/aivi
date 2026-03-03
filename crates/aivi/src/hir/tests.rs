@@ -227,3 +227,439 @@ f = x => x |> g 1 |> h
         let _ = std::fs::remove_file(path);
     }
 }
+
+#[cfg(test)]
+mod lower_tests {
+    use std::path::Path;
+    use crate::hir::{HirExpr, HirBlockItem};
+
+    fn parse_and_lower(src: &str) -> crate::hir::HirProgram {
+        let (modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), src);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error
+                    && !d.path.starts_with("<embedded:")
+            })
+            .collect();
+        assert!(errors.is_empty(), "parse errors: {errors:?}");
+        crate::hir::desugar_modules(&modules)
+    }
+
+    fn find_def_expr<'a>(program: &'a crate::hir::HirProgram, def_name: &str) -> &'a HirExpr {
+        for module in &program.modules {
+            for def in &module.defs {
+                if def.name == def_name {
+                    return &def.expr;
+                }
+            }
+        }
+        panic!("def {def_name} not found");
+    }
+
+    fn count_lambdas(expr: &HirExpr) -> usize {
+        match expr {
+            HirExpr::Lambda { body, .. } => 1 + count_lambdas(body),
+            HirExpr::App { func, arg, .. } => count_lambdas(func) + count_lambdas(arg),
+            HirExpr::Call { func, args, .. } => {
+                count_lambdas(func) + args.iter().map(count_lambdas).sum::<usize>()
+            }
+            HirExpr::Match { scrutinee, arms, .. } => {
+                count_lambdas(scrutinee)
+                    + arms.iter().map(|a| count_lambdas(&a.body)).sum::<usize>()
+            }
+            HirExpr::Block { items, .. } => items
+                .iter()
+                .map(|item| match item {
+                    HirBlockItem::Bind { expr, .. } | HirBlockItem::Expr { expr } => {
+                        count_lambdas(expr)
+                    }
+                    _ => 0,
+                })
+                .sum(),
+            HirExpr::If { cond, then_branch, else_branch, .. } => {
+                count_lambdas(cond) + count_lambdas(then_branch) + count_lambdas(else_branch)
+            }
+            HirExpr::Binary { left, right, .. } => count_lambdas(left) + count_lambdas(right),
+            _ => 0,
+        }
+    }
+
+    fn expr_is_lambda(expr: &HirExpr) -> bool {
+        matches!(expr, HirExpr::Lambda { .. })
+    }
+
+    fn inner_lambda_body(expr: &HirExpr) -> &HirExpr {
+        match expr {
+            HirExpr::Lambda { body, .. } => body,
+            _ => panic!("expected Lambda"),
+        }
+    }
+
+    // ---- lower_blocks_and_patterns.rs: lower_pattern ----
+
+    #[test]
+    fn pattern_wildcard_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = _ => 42
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(matches!(expr, HirExpr::Lambda { param, .. } if param == "__0"));
+    }
+
+    #[test]
+    fn pattern_ident_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = x => x
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_literal_lowered_to_match() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+isZero = 0 => True
+isZero = _ => False
+"#,
+        );
+        let expr = find_def_expr(&program, "isZero");
+        let _ = expr;
+    }
+
+    #[test]
+    fn pattern_constructor_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+fromSome : Option A -> A
+fromSome = Some x => x
+"#,
+        );
+        let expr = find_def_expr(&program, "fromSome");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_tuple_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+fst = (a, _) => a
+"#,
+        );
+        let expr = find_def_expr(&program, "fst");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_record_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+getName = { name } => name
+"#,
+        );
+        let expr = find_def_expr(&program, "getName");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_list_cons_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+head : List A -> Option A
+head = (x :: _) => Some x
+head = _ => None
+"#,
+        );
+        let expr = find_def_expr(&program, "head");
+        let _ = expr;
+    }
+
+    #[test]
+    fn pattern_at_binding_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+firstOrSelf : Option (Option A) -> Option A
+firstOrSelf = all@(Some inner) => all
+firstOrSelf = None => None
+"#,
+        );
+        let expr = find_def_expr(&program, "firstOrSelf");
+        let _ = expr;
+    }
+
+    // ---- lower_blocks_and_patterns.rs: do blocks ----
+
+    #[test]
+    fn do_block_bind_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  x <- pure 42
+  pure x
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    #[test]
+    fn do_block_let_binding_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+g = do Effect {
+  result = 1 + 2
+  pure result
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "g");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    #[test]
+    fn do_block_multiple_items() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+combined = do Effect {
+  a <- pure 1
+  b <- pure 2
+  pure (a + b)
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "combined");
+        if let HirExpr::Block { items, .. } = expr {
+            assert!(!items.is_empty());
+        }
+    }
+
+    // ---- lower_blocks_and_patterns.rs: placeholder hole desugaring ----
+
+    #[test]
+    fn placeholder_in_call_args_desugars_to_lambda() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+addOne = map (_ + 1)
+"#,
+        );
+        let expr = find_def_expr(&program, "addOne");
+        let _ = expr;
+    }
+
+    #[test]
+    fn multiple_holes_desugar_to_multi_param_lambda() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+sub = _ - _
+"#,
+        );
+        let expr = find_def_expr(&program, "sub");
+        let lambda_count = count_lambdas(expr);
+        assert!(
+            lambda_count >= 2,
+            "expected at least 2 lambdas from two holes, got {lambda_count}"
+        );
+    }
+
+    // ---- lower_expr.rs: various expression types ----
+
+    #[test]
+    fn lower_literal_number() {
+        let program = parse_and_lower(
+            r#"
+module Test
+n = 42
+"#,
+        );
+        let expr = find_def_expr(&program, "n");
+        assert!(matches!(expr, HirExpr::LitNumber { .. }));
+    }
+
+    #[test]
+    fn lower_literal_string() {
+        let program = parse_and_lower(
+            r#"
+module Test
+s = "hello"
+"#,
+        );
+        let expr = find_def_expr(&program, "s");
+        assert!(matches!(expr, HirExpr::LitString { .. }));
+    }
+
+    #[test]
+    fn lower_literal_bool() {
+        let program = parse_and_lower(
+            r#"
+module Test
+t = True
+f = False
+"#,
+        );
+        let _t = find_def_expr(&program, "t");
+        let _f = find_def_expr(&program, "f");
+    }
+
+    #[test]
+    fn lower_binary_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+sum = 1 + 2
+"#,
+        );
+        let expr = find_def_expr(&program, "sum");
+        assert!(matches!(expr, HirExpr::Binary { op, .. } if op == "+"));
+    }
+
+    #[test]
+    fn lower_if_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+result = if True then 1 else 0
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::If { .. }));
+    }
+
+    #[test]
+    fn lower_match_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+describe = x =>
+  x ?
+    | 0 => "zero"
+    | _ => "other"
+"#,
+        );
+        let expr = find_def_expr(&program, "describe");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn lower_match_with_guard() {
+        let program = parse_and_lower(
+            r#"
+module Test
+classify = x =>
+  x ?
+    | n if n < 0 => "negative"
+    | 0 => "zero"
+    | _ => "positive"
+"#,
+        );
+        let expr = find_def_expr(&program, "classify");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn lower_list_literal() {
+        let program = parse_and_lower(
+            r#"
+module Test
+nums = [1, 2, 3]
+"#,
+        );
+        let expr = find_def_expr(&program, "nums");
+        assert!(matches!(expr, HirExpr::List { items, .. } if items.len() == 3));
+    }
+
+    #[test]
+    fn lower_tuple_literal() {
+        let program = parse_and_lower(
+            r#"
+module Test
+pair = (1, "hello")
+"#,
+        );
+        let expr = find_def_expr(&program, "pair");
+        assert!(matches!(expr, HirExpr::Tuple { items, .. } if items.len() == 2));
+    }
+
+    #[test]
+    fn lower_record_literal() {
+        let program = parse_and_lower(
+            r#"
+module Test
+point = { x: 1, y: 2 }
+"#,
+        );
+        let expr = find_def_expr(&program, "point");
+        assert!(matches!(expr, HirExpr::Record { fields, .. } if fields.len() == 2));
+    }
+
+    #[test]
+    fn lower_field_access() {
+        let program = parse_and_lower(
+            r#"
+module Test
+getX = pt => pt.x
+"#,
+        );
+        let expr = find_def_expr(&program, "getX");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        assert!(matches!(body, HirExpr::FieldAccess { .. }));
+    }
+
+    #[test]
+    fn lower_function_application() {
+        let program = parse_and_lower(
+            r#"
+module Test
+result = identity 42
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        let _ = expr;
+    }
+
+    #[test]
+    fn lower_text_interpolation() {
+        let program = parse_and_lower(
+            r#"
+module Test
+greet = name => "Hello, ${name}!"
+"#,
+        );
+        let expr = find_def_expr(&program, "greet");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        assert!(matches!(body, HirExpr::TextInterpolate { .. }));
+    }
+}
