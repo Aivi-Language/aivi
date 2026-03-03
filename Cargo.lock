@@ -48,6 +48,7 @@ dependencies = [
  "aivi_database",
  "aivi_driver",
  "aivi_email",
+ "aivi_gtk4",
  "aivi_http_server",
  "chrono",
  "chrono-tz",
@@ -93,7 +94,6 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
- "zbus",
 ]
 
 [[package]]
@@ -171,6 +171,14 @@ dependencies = [
  "lettre",
  "mailparse",
  "thiserror",
+]
+
+[[package]]
+name = "aivi_gtk4"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "zbus",
 ]
 
 [[package]]
