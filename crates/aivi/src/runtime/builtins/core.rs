@@ -48,6 +48,8 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("Some".to_string(), builtin_constructor("Some", 1));
     env.set("Ok".to_string(), builtin_constructor("Ok", 1));
     env.set("Err".to_string(), builtin_constructor("Err", 1));
+    env.set("Valid".to_string(), builtin_constructor("Valid", 1));
+    env.set("Invalid".to_string(), builtin_constructor("Invalid", 1));
     env.set(
         "Closed".to_string(),
         Value::Constructor {
@@ -142,8 +144,21 @@ pub(crate) fn register_builtins(env: &Env) {
                         args,
                     })
                 }
+                Value::Constructor { name, args } if name == "Valid" && args.len() == 1 => {
+                    let mapped = runtime.apply(func, args[0].clone())?;
+                    Ok(Value::Constructor {
+                        name: "Valid".to_string(),
+                        args: vec![mapped],
+                    })
+                }
+                Value::Constructor { name, args } if name == "Invalid" && args.len() == 1 => {
+                    Ok(Value::Constructor {
+                        name: "Invalid".to_string(),
+                        args,
+                    })
+                }
                 other => Err(RuntimeError::Message(format!(
-                    "map expects List/Option/Result, got {}",
+                    "map expects List/Option/Result/Validation, got {}",
                     format_value(&other)
                 ))),
             }

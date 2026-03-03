@@ -19,6 +19,8 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "Some",
     "Ok",
     "Err",
+    "Valid",
+    "Invalid",
     "Closed",
     // Core functions
     "foldGen",

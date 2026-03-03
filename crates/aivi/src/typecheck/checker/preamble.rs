@@ -275,6 +275,12 @@ impl TypeChecker {
             arrow(star.clone(), arrow(star.clone(), star.clone())),
         );
 
+        // Validation: * -> * -> *
+        self.builtin_types.insert(
+            "Validation".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
+
         self.type_constructors = self.builtin_types.clone();
     }
 

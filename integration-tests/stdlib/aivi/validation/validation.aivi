@@ -1,0 +1,207 @@
+@no_prelude
+module integrationTests.stdlib.aivi.validation.tests
+
+use aivi
+use aivi.prelude
+use aivi.testing
+use aivi.validation
+use aivi.collections
+
+// -- Predicates --
+
+@test "isValid returns True for Valid"
+test_isValid_valid = do Effect {
+  assert (isValid (Valid 42))
+}
+
+@test "isValid returns False for Invalid"
+test_isValid_invalid = do Effect {
+  assert (isValid (Invalid "error") == False)
+}
+
+@test "isInvalid returns True for Invalid"
+test_isInvalid_invalid = do Effect {
+  assert (isInvalid (Invalid "error"))
+}
+
+@test "isInvalid returns False for Valid"
+test_isInvalid_valid = do Effect {
+  assert (isInvalid (Valid 42) == False)
+}
+
+// -- Constructors --
+
+@test "valid creates Valid"
+test_valid = do Effect {
+  assertEq (valid 42) (Valid 42)
+}
+
+@test "invalid creates Invalid"
+test_invalid = do Effect {
+  assertEq (invalid "oops") (Invalid "oops")
+}
+
+// -- Extracting Values --
+
+@test "getOrElse returns value for Valid"
+test_getOrElse_valid = do Effect {
+  result = getOrElse 0 (Valid 42)
+  assertEq result 42
+}
+
+@test "getOrElse returns default for Invalid"
+test_getOrElse_invalid = do Effect {
+  result = getOrElse 0 (Invalid ["error"])
+  assertEq result 0
+}
+
+// -- Fold --
+
+@test "fold applies onValid for Valid"
+test_fold_valid = do Effect {
+  result = fold (_ => "bad") (x => "got: " ++ text.toText x) (Valid 42)
+  assertEq result "got: 42"
+}
+
+@test "fold applies onInvalid for Invalid"
+test_fold_invalid = do Effect {
+  result = fold (e => "error: " ++ e) (_ => "ok") (Invalid "nope")
+  assertEq result "error: nope"
+}
+
+// -- Map --
+
+@test "map transforms Valid value"
+test_map_valid = do Effect {
+  result = Valid 5 |> map (_ * 2)
+  assertEq result (Valid 10)
+}
+
+@test "map preserves Invalid"
+test_map_invalid = do Effect {
+  result = Invalid "error" |> map (_ * 2)
+  assertEq result (Invalid "error")
+}
+
+// -- MapError --
+
+@test "mapError transforms Invalid value"
+test_mapError_invalid = do Effect {
+  result = mapError (e => "wrapped: " ++ e) (Invalid "original")
+  assertEq result (Invalid "wrapped: original")
+}
+
+@test "mapError preserves Valid"
+test_mapError_valid = do Effect {
+  result = mapError (e => "wrapped") (Valid 42)
+  assertEq result (Valid 42)
+}
+
+// -- Applicative (ap) with error accumulation --
+
+@test "ap applies function in Valid to Valid value"
+test_ap_valid_valid = do Effect {
+  result = ap (Valid (_ + 1)) (Valid 5)
+  assertEq result (Valid 6)
+}
+
+@test "ap preserves Invalid on left"
+test_ap_invalid_left = do Effect {
+  result = ap (Invalid ["bad func"]) (Valid 5)
+  assertEq result (Invalid ["bad func"])
+}
+
+@test "ap preserves Invalid on right"
+test_ap_invalid_right = do Effect {
+  result = ap (Valid (_ + 1)) (Invalid ["bad value"])
+  assertEq result (Invalid ["bad value"])
+}
+
+@test "ap accumulates errors from both sides"
+test_ap_both_invalid = do Effect {
+  result = ap (Invalid ["error1"]) (Invalid ["error2"])
+  assertEq result (Invalid ["error1", "error2"])
+}
+
+@test "ap accumulates multiple errors"
+test_ap_multi_error = do Effect {
+  result = ap (Invalid ["e1", "e2"]) (Invalid ["e3"])
+  assertEq result (Invalid ["e1", "e2", "e3"])
+}
+
+// -- Conversions --
+
+@test "fromResult converts Ok to Valid"
+test_fromResult_ok = do Effect {
+  result = fromResult (Ok 42)
+  assertEq result (Valid 42)
+}
+
+@test "fromResult converts Err to Invalid with list"
+test_fromResult_err = do Effect {
+  result = fromResult (Err "error")
+  assertEq result (Invalid ["error"])
+}
+
+@test "toResult converts Valid to Ok"
+test_toResult_valid = do Effect {
+  result = toResult (Valid 42)
+  assertEq result (Ok 42)
+}
+
+@test "toResult converts Invalid to Err"
+test_toResult_invalid = do Effect {
+  result = toResult (Invalid ["error"])
+  assertEq result (Err ["error"])
+}
+
+// -- DecodeError --
+
+@test "formatDecodeError formats path and message"
+test_formatDecodeError = do Effect {
+  err = { path: ["user", "preferences", "theme"], message: "Expected Text, got Int" }
+  result = formatDecodeError err
+  assertEq result "at $.user.preferences.theme: Expected Text, got Int"
+}
+
+@test "formatDecodeError with empty path"
+test_formatDecodeError_empty = do Effect {
+  err = { path: [], message: "unexpected type" }
+  result = formatDecodeError err
+  assertEq result "at $.: unexpected type"
+}
+
+// -- Real-world: form validation with error accumulation --
+
+validateName : Text -> Validation (List Text) Text
+validateName = name =>
+  if text.isEmpty name then Invalid ["Name is required"]
+  else if text.length name < 2 then Invalid ["Name must be at least 2 characters"]
+  else Valid name
+
+validateAge : Int -> Validation (List Text) Int
+validateAge = age =>
+  if age < 0 then Invalid ["Age must be non-negative"]
+  else if age > 150 then Invalid ["Age must be at most 150"]
+  else Valid age
+
+MkPerson : Text -> Int -> { name: Text, age: Int }
+MkPerson = name age => { name: name, age: age }
+
+@test "form validation: all valid"
+test_form_valid = do Effect {
+  result = ap (ap (Valid MkPerson) (validateName "Alice")) (validateAge 30)
+  assertEq result (Valid { name: "Alice", age: 30 })
+}
+
+@test "form validation: accumulates errors"
+test_form_errors = do Effect {
+  result = ap (ap (Valid MkPerson) (validateName "")) (validateAge (-1))
+  assertEq result (Invalid ["Name is required", "Age must be non-negative"])
+}
+
+@test "form validation: single error"
+test_form_single_error = do Effect {
+  result = ap (ap (Valid MkPerson) (validateName "Alice")) (validateAge 200)
+  assertEq result (Invalid ["Age must be at most 150"])
+}

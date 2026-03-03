@@ -13,7 +13,7 @@ apply: always
 
 - Statically typed, purely functional, expression-oriented.
 - Immutable bindings; **no mutation**, no loops, no null.
-- Use `Option A` / `Result E A` instead of null; recursion, folds, or generators instead of loops.
+- Use `Option A` / `Result E A` instead of null; `Validation E A` for error accumulation; recursion, folds, or generators instead of loops.
 - Pattern bindings with `=` must be **total**; refutable matches use `match`.
 - Records are structural and closed (no row polymorphism).
 - Effects are explicit: `Effect E A` (error type `E`, success type `A`).
@@ -23,18 +23,18 @@ apply: always
 
 ## 2 Lexical Basics
 
-| Element                                   | Syntax                                                                                                                                                                          |
-|:----------------------------------------- |:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Line comment                              | `//` to end of line                                                                                                                                                             |
-| Block comment                             | `/* ... */` — may span multiple lines; **does not nest**                                                                                                                        |
-| Value / function / field names            | `lowerCamelCase` (`lowerIdent`)                                                                                                                                                 |
-| Type / constructor / domain / class names | `UpperCamelCase` (`UpperIdent`)                                                                                                                                                 |
-| Module path segments / `.aivi` file names | `snake_case` (for example `myapp.daemon.command_queue` -> `myapp/daemon/command_queue.aivi`)                                                                                    |
-| Text literal                              | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                                              |
-| Int, Float                                | `42`, `3.14`                                                                                                                                                                    |
-| Char                                      | `'a'`                                                                                                                                                                           |
-| ISO instant                               | `2024-05-21T12:00:00Z`                                                                                                                                                          |
-| Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                         |
+| Element                                   | Syntax                                                                                                                                                                                 |
+|:----------------------------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Line comment                              | `//` to end of line                                                                                                                                                                    |
+| Block comment                             | `/* ... */` — may span multiple lines; **does not nest**                                                                                                                               |
+| Value / function / field names            | `lowerCamelCase` (`lowerIdent`)                                                                                                                                                        |
+| Type / constructor / domain / class names | `UpperCamelCase` (`UpperIdent`)                                                                                                                                                        |
+| Module path segments / `.aivi` file names | `snake_case` (for example `myapp.daemon.command_queue` -> `myapp/daemon/command_queue.aivi`)                                                                                           |
+| Text literal                              | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                                                     |
+| Int, Float                                | `42`, `3.14`                                                                                                                                                                           |
+| Char                                      | `'a'`                                                                                                                                                                                  |
+| ISO instant                               | `2024-05-21T12:00:00Z`                                                                                                                                                                 |
+| Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                                |
 | Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then unless use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
@@ -186,7 +186,7 @@ classify = n => n match
 
 ```aivi
 response match
-  | { data.user.profile as { name } } => name
+  | { data.user.profile as { name } }  => name
   | { data.guest: True }               => "Guest"
   | _                                  => "Unknown"
 ```
@@ -225,11 +225,12 @@ Duration  Instant  Date  Time  TimeZone  ZonedDateTime
 ```aivi
 Option A = None | Some A
 Result E A = Err E | Ok A
+Validation E A = Valid A | Invalid E
 Color = Red | Green | Blue
 Tree A = Leaf A | Node (Tree A) (Tree A)
 ```
 
-Create values by applying constructors: `Some 42`, `Err "nope"`, `Node (Leaf 1) (Leaf 2)`.
+Create values by applying constructors: `Some 42`, `Err "nope"`, `Valid "ok"`, `Node (Leaf 1) (Leaf 2)`.
 Nullary constructors (`None`, `True`, `Red`) are values directly.
 Use `constructorName value` and `constructorOrdinal value` to inspect an ADT value at runtime.
 `constructorOrdinal` is zero-based by constructor declaration order.
@@ -501,11 +502,11 @@ dijkstra = source graph => do Effect {
       | Some ((d, node), restPq)   => do Effect {
           currentDist = dists |> getOrElse node 999999.0
           if d > currentDist
-          then do Effect { recurse { dists: dists, pq: restPq } }
-          else do Effect {
-            edges = edgesFrom graph node
-            nextState <- processEdges dists d edges restPq
-            recurse nextState
+            then do Effect { recurse { dists: dists, pq: restPq } }
+            else do Effect {
+              edges = edgesFrom graph node
+              nextState <- processEdges dists d edges restPq
+              recurse nextState
           }
         }
   }
@@ -1195,16 +1196,14 @@ Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 4. `&&` (logical and)
 5. `==`, `!=` (equality)
 6. `<`, `<=`, `>`, `>=` (comparison)
-7. `^` (bitwise xor)
-8. `<<`, `>>` (shift)
-9. `+`, `-`, `++` (add, concat)
-10. `*`, `×`, `/`, `%` (multiply)
-11. `<|` (patch)
+7. `<<`, `>>` (shift)
+8. `+`, `-`, `++` (add, concat)
+9. `*`, `×`, `/`, `%` (multiply)
+10. `<|` (patch)
 
 Unary prefix: `!` (not), `-` (negate).
 
-> **Note:** `|` (bitwise or) is not available as an infix operator in v0.1 — it conflicts with the `|` arm separator in match expressions. Use explicit `Bool` helpers instead.
-> `~` is **not** a unary operator; it is exclusively a sigil prefix (e.g. `~u(...)`, `~r/.../`).
+> **Note:** `~` is **not** a unary operator; it is exclusively a sigil prefix (e.g. `~u(...)`, `~r/.../`).
 
 ---
 
@@ -1280,6 +1279,10 @@ topoSmoke = do Effect {
 | Check Result state           | `isOk res`, `isErr res`                                                 |
 | Transform Option             | `opt \|> map f \|> filter pred \|> flatMap g`                           |
 | Transform Result             | `res \|> map f \|> mapErr g \|> flatMap h`                              |
+| Accumulate errors            | `ap (ap (Valid f) v1) v2` (Validation applicative)                      |
+| Check Validation state       | `isValid v`, `isInvalid v`                                              |
+| Validation to Result         | `v \|> toResult`                                                        |
+| Result to Validation         | `r \|> fromResult`                                                      |
 | Option to Result             | `opt \|> toResult "error msg"`                                          |
 | Result to Option             | `res \|> toOption`                                                      |
 | Run fallback on effect error | `val <- riskyOp or default` (inside `do Effect`)                        |
