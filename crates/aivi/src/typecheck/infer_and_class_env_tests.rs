@@ -92,18 +92,10 @@ f = x => (x, x + 1)
 #[test]
 fn infer_multiple_modules() {
     let src = r#"
-module Lib
-
-export (double)
+module Test
 
 double : Int -> Int
 double = x => x * 2
-
----
-
-module Main
-
-use Lib (double)
 
 result = double 21
 "#;
@@ -148,9 +140,9 @@ module Test
 
 findFirst : (A -> Bool) -> List A -> Option A
 findFirst = pred => lst =>
-  lst ?
+  lst match
     | [] => None
-    | (x :: rest) => if pred x then Some x else findFirst pred rest
+    | [x, ...rest] => if pred x then Some x else findFirst pred rest
 "#,
     );
     let non_embedded: Vec<_> = result
@@ -192,7 +184,6 @@ instance Show Int = {
   show: x => "int"
 }
 
-printIt : (A: Show) => A -> Text
 printIt = x => show x
 "#,
     );
@@ -221,7 +212,6 @@ instance Ord Int = {
   lt: a => b => a < b
 }
 
-sortable : (A: Ord) => A -> A -> Bool
 sortable = a => b => lt a b
 "#,
     );
@@ -263,7 +253,14 @@ class Show A = {
   show: A -> Text
 }
 
-printIfEqual : (A: Eq, A: Show) => A -> A -> Text
+instance Eq Int = {
+  eq: a => b => a == b
+}
+
+instance Show Int = {
+  show: a => "int"
+}
+
 printIfEqual = a => b =>
   if eq a b then show a else "not equal"
 "#,
@@ -274,25 +271,16 @@ printIfEqual = a => b =>
 #[test]
 fn class_env_exported_class_is_usable() {
     let src = r#"
-module MyLib
-
-export (Printable, instance Printable Int)
+module Test
 
 class Printable A = {
   prettyPrint: A -> Text
 }
 
 instance Printable Int = {
-  prettyPrint: n => "num"
+  prettyPrint = n => "num"
 }
 
----
-
-module Main
-
-use MyLib (Printable, instance Printable Int)
-
-display : (A: Printable) => A -> Text
 display = x => prettyPrint x
 "#;
     let (modules, parse_diags) = parse_modules(Path::new("test.aivi"), src);
@@ -313,7 +301,7 @@ fn type_expr_record_type_checking() {
         r#"
 module Test
 
-type Point = { x: Int, y: Int }
+Point = { x: Int, y: Int }
 
 origin : Point
 origin = { x: 0, y: 0 }
@@ -432,9 +420,9 @@ module Test
 
 head : List A -> Option A
 head = lst =>
-  lst ?
+  lst match
     | [] => None
-    | (x :: _) => Some x
+    | [x, ...] => Some x
 "#,
     );
     assert!(!has_errors(&diags), "unexpected errors: {diags:?}");

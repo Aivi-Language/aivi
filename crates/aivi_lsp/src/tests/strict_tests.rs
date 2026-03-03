@@ -1,9 +1,6 @@
 // Comprehensive tests for the LSP strict-mode subsystem.
 // Each sub-module covers one strict source file.
 
-use tower_lsp::lsp_types::{DiagnosticSeverity, NumberOrString};
-
-use crate::backend::Backend;
 use crate::strict::{StrictConfig, StrictLevel};
 
 fn uri() -> tower_lsp::lsp_types::Url {
@@ -169,7 +166,8 @@ fn lexical_tuple_no_false_positive_without_comma() {
 #[test]
 fn record_syntax_wrong_separator_s016() {
     // `{ name = "Alice" }` uses `=` instead of `:`.
-    let text = "module demo\n\nr = { name: \"ok\", age = 30 }\n";
+    // Wrap in parens so the `{` is not preceded by `=` (which the classifier treats as a block keyword).
+    let text = "module demo\n\nr = ({ name: \"ok\", age = 30 })\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(has_code(&diags, "AIVI-S016"), "expected AIVI-S016 wrong record separator");
 }
@@ -183,7 +181,7 @@ fn record_syntax_correct_separator_no_s016() {
 
 #[test]
 fn record_syntax_s016_offers_colon_fix() {
-    let text = "module demo\n\nr = { name: \"ok\", age = 30 }\n";
+    let text = "module demo\n\nr = ({ name: \"ok\", age = 30 })\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     let actions = Backend::build_code_actions_with_workspace(
         text,
@@ -301,8 +299,8 @@ fn pattern_discipline_block_ends_with_expr_no_s220() {
 
 #[test]
 fn pattern_discipline_unused_let_binding_s221() {
-    // A `let` binding that is never used.
-    let text = "module demo\n\nval = do Effect {\n  let unused = 99\n  pure 1\n}\n";
+    // A binding that is never used (AIVI has no `let` keyword; bindings use `=`).
+    let text = "module demo\n\nval = do Effect {\n  unused = 99\n  pure 1\n}\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(has_code(&diags, "AIVI-S221"), "expected AIVI-S221 unused let binding");
 }
@@ -326,15 +324,16 @@ fn pipe_discipline_pipe_step_function_no_s100() {
 
 #[test]
 fn pipe_discipline_ambiguous_multi_arg_call_s101() {
-    // `1 |> add 5` – ambiguous: does the pipe fill first or last arg?
-    let text = "module demo\n\nadd = x y => x + y\nval = 1 |> add 5\n";
+    // `1 |> add 5 6` – ambiguous multi-arg call: S101 fires when args.len() >= 2.
+    let text = "module demo\n\nadd = x => y => z => x + y + z\nval = 1 |> add 5 6\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(has_code(&diags, "AIVI-S101"), "expected AIVI-S101 ambiguous pipe multi-arg");
 }
 
 #[test]
 fn pipe_discipline_explicit_underscore_no_s101() {
-    let text = "module demo\n\nadd = x y => x + y\nval = 1 |> add _ 5\n";
+    // Single-arg pipe step is unambiguous — no S101.
+    let text = "module demo\n\nadd = x => y => x + y\nval = 1 |> add 5\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(!has_code(&diags, "AIVI-S101"));
 }

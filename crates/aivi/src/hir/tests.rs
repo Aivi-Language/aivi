@@ -308,7 +308,7 @@ f = _ => 42
 "#,
         );
         let expr = find_def_expr(&program, "f");
-        assert!(matches!(expr, HirExpr::Lambda { param, .. } if param == "__0"));
+        assert!(matches!(expr, HirExpr::Lambda { param, .. } if param == "_arg0"));
     }
 
     #[test]
@@ -385,7 +385,7 @@ getName = { name } => name
 module Test
 
 head : List A -> Option A
-head = (x :: _) => Some x
+head = [x, ...] => Some x
 head = _ => None
 "#,
         );
@@ -400,7 +400,7 @@ head = _ => None
 module Test
 
 firstOrSelf : Option (Option A) -> Option A
-firstOrSelf = all@(Some inner) => all
+firstOrSelf = all as (Some inner) => all
 firstOrSelf = None => None
 "#,
         );
@@ -578,7 +578,7 @@ describe = x =>
 module Test
 classify = x =>
   x ?
-    | n if n < 0 => "negative"
+    | n when n < 0 => "negative"
     | 0 => "zero"
     | _ => "positive"
 "#,

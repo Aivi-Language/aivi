@@ -1323,5 +1323,6 @@ topoSmoke = do Effect {
 | `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
 | `a & b`, `a \| b`      | No bitwise operators             | `use aivi.bits; and a b`, `or a b`                  |
 | `a << 2`, `a >> 2`     | No shift operators               | `use aivi.bits; shiftLeft 2 a`, `shiftRight 2 a`   |
-| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a`                       |
+| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a` 
+| `"x" ++ "y"` (string concat)     | There is only text interpolation | `"{x}{y}"`                       |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
