@@ -98,8 +98,40 @@ internalApi = openapi.fromFile "./specs/internal-api.yaml"
 ### OpenAPI Source
 
 <!-- quick-info: {"kind":"topic","name":"openapi compile-time source"} -->
-`openapi.fromUrl` and `openapi.fromFile` parse an [OpenAPI 3.x](https://spec.openapis.org/oas/v3.1.1.html) spec at compile time and generate a fully typed AIVI module.
+`openapi.fromUrl` and `openapi.fromFile` parse an [OpenAPI 3.x](https://spec.openapis.org/oas/v3.1.1.html) spec at compile time and generate a typed, callable API client.
 <!-- /quick-info -->
+
+The generated value is a **factory function** that takes a configuration record and returns a record of callable endpoint functions:
+
+```aivi
+@static
+petStoreApi = openapi.fromFile "./petstore.json"
+
+// Create a client with config
+client = petStoreApi { bearerToken: Some "sk-...", baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
+
+// Call an endpoint — returns Source RestApi (Result Error Response)
+pets <- client.listPets { limit: Some 10 }
+
+// Destructuring also works
+{ listPets, createPets } = petStoreApi { bearerToken: None, baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
+result <- listPets {}
+```
+
+**Config Record Fields:**
+
+| Field          | Type            | Description                                          |
+|:-------------- |:--------------- |:---------------------------------------------------- |
+| `bearerToken`  | `Option Text`   | Bearer token for `Authorization` header              |
+| `headers`      | `Option (List (Text, Text))` | Additional HTTP headers (key-value pairs) |
+| `timeoutMs`    | `Option Int`    | Request timeout in milliseconds                      |
+| `retryCount`   | `Option Int`    | Number of retries on failure                         |
+| `strictStatus` | `Option Bool`   | Treat non-2xx responses as errors                    |
+| `baseUrl`      | `Option Text`   | Override the base URL from the spec                  |
+
+**Endpoint Parameters:**
+
+Each endpoint function takes a record of parameters. Parameters from the OpenAPI spec (path, query, header) are mapped by name. For `POST`/`PUT`/`PATCH` endpoints, any extra fields become the JSON request body. Required parameters are direct fields; optional parameters are `Option T`.
 
 **Type Mapping:**
 

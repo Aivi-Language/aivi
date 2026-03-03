@@ -1,0 +1,10 @@
+[package]
+name = "aivi_email"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imap = "3.0.0-alpha.15"
+lettre = { version = "0.11.19", default-features = false, features = ["tokio1", "tokio1-rustls-tls", "builder", "smtp-transport", "pool"] }
+mailparse = "0.16.1"
+thiserror = "2.0.18"

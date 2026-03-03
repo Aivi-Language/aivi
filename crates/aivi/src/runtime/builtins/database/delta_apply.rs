@@ -199,10 +199,10 @@ pub(super) fn build_database_record() -> Value {
                             let url = expect_text(url, "database.configure")?;
 
                             state
-                                .handle
-                                .request(|resp| DbRequest::Configure { driver, url, resp })
+                                .handle()
+                                .configure(driver, url)
                                 .map_err(RuntimeError::Message)?;
-                            state.configured.store(true, Ordering::SeqCst);
+                            state.set_configured();
                             Ok(Value::Unit)
                         }
                     }),
@@ -230,15 +230,12 @@ pub(super) fn build_database_record() -> Value {
                             let (name, _columns, _rows) =
                                 table_parts(table.clone(), "database.load")?;
                             let entry = state
-                                .handle
-                                .request(|resp| DbRequest::LoadTable {
-                                    name: name.clone(),
-                                    resp,
-                                })
+                                .handle()
+                                .load_table(name.clone())
                                 .map_err(RuntimeError::Message)?;
                             let rows_json = match entry {
                                 Some((_rev, _cols, rows_json)) => rows_json,
-                                None => EMPTY_ROWS_JSON.to_string(),
+                                None => aivi_database::EMPTY_ROWS_JSON.to_string(),
                             };
                             let rows_value = decode_json(&rows_json)?;
                             let Value::List(rows) = rows_value else {
@@ -277,21 +274,14 @@ pub(super) fn build_database_record() -> Value {
                             // Retry a few times if another writer updated the same table.
                             for _attempt in 0..3 {
                                 let entry = state
-                                    .handle
-                                    .request(|resp| DbRequest::LoadTable {
-                                        name: name.clone(),
-                                        resp,
-                                    })
+                                    .handle()
+                                    .load_table(name.clone())
                                     .map_err(RuntimeError::Message)?;
 
                                 if entry.is_none() {
                                     state
-                                        .handle
-                                        .request(|resp| DbRequest::MigrateTable {
-                                            name: name.clone(),
-                                            columns_json: columns_json.clone(),
-                                            resp,
-                                        })
+                                        .handle()
+                                        .migrate_table(name.clone(), columns_json.clone())
                                         .map_err(RuntimeError::Message)?;
                                     continue;
                                 }
@@ -311,13 +301,12 @@ pub(super) fn build_database_record() -> Value {
                                 let rows_json = encode_json(&list_value(new_rows.clone()))?;
 
                                 let saved =
-                                    state.handle.request(|resp| DbRequest::CompareAndSwapRows {
-                                        name: name.clone(),
-                                        expected_rev: rev,
-                                        columns_json: columns_json.clone(),
+                                    state.handle().compare_and_swap_rows(
+                                        name.clone(),
+                                        rev,
+                                        columns_json.clone(),
                                         rows_json,
-                                        resp,
-                                    });
+                                    );
                                 match saved {
                                     Ok(_new_rev) => {
                                         return Ok(make_table(
@@ -363,8 +352,8 @@ pub(super) fn build_database_record() -> Value {
                             let tables = expect_list(tables.clone(), "database.runMigrations")?;
 
                             state
-                                .handle
-                                .request(|resp| DbRequest::EnsureSchema { resp })
+                                .handle()
+                                .ensure_schema()
                                 .map_err(RuntimeError::Message)?;
 
                             for table in tables.iter() {
@@ -372,12 +361,8 @@ pub(super) fn build_database_record() -> Value {
                                     table_parts(table.clone(), "database.runMigrations")?;
                                 let columns_json = encode_json(&columns)?;
                                 state
-                                    .handle
-                                    .request(|resp| DbRequest::MigrateTable {
-                                        name,
-                                        columns_json,
-                                        resp,
-                                    })
+                                    .handle()
+                                    .migrate_table(name, columns_json)
                                     .map_err(RuntimeError::Message)?;
                             }
                             Ok(Value::Unit)
@@ -421,12 +406,8 @@ pub(super) fn build_database_record() -> Value {
                             let busy_timeout_ms =
                                 expect_int(busy_timeout, "database.configureSqlite")?;
                             state
-                                .handle
-                                .request(|resp| DbRequest::SqliteConfigure {
-                                    wal,
-                                    busy_timeout_ms,
-                                    resp,
-                                })
+                                .handle()
+                                .sqlite_configure(wal, busy_timeout_ms)
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
@@ -448,16 +429,16 @@ pub(super) fn build_database_record() -> Value {
                         move |_| {
                             match name {
                                 "beginTx" => state
-                                    .handle
-                                    .request(|resp| DbRequest::BeginTransaction { resp })
+                                    .handle()
+                                    .begin_transaction()
                                     .map_err(RuntimeError::Message)?,
                                 "commitTx" => state
-                                    .handle
-                                    .request(|resp| DbRequest::CommitTransaction { resp })
+                                    .handle()
+                                    .commit_transaction()
                                     .map_err(RuntimeError::Message)?,
                                 _ => state
-                                    .handle
-                                    .request(|resp| DbRequest::RollbackTransaction { resp })
+                                    .handle()
+                                    .rollback_transaction()
                                     .map_err(RuntimeError::Message)?,
                             };
                             Ok(Value::Unit)
@@ -485,8 +466,8 @@ pub(super) fn build_database_record() -> Value {
                                 "name",
                             )?;
                             state
-                                .handle
-                                .request(|resp| DbRequest::Savepoint { name, resp })
+                                .handle()
+                                .savepoint(name)
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
@@ -513,8 +494,8 @@ pub(super) fn build_database_record() -> Value {
                                 "name",
                             )?;
                             state
-                                .handle
-                                .request(|resp| DbRequest::ReleaseSavepoint { name, resp })
+                                .handle()
+                                .release_savepoint(name)
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
@@ -541,8 +522,8 @@ pub(super) fn build_database_record() -> Value {
                                 "name",
                             )?;
                             state
-                                .handle
-                                .request(|resp| DbRequest::RollbackToSavepoint { name, resp })
+                                .handle()
+                                .rollback_to_savepoint(name)
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
@@ -571,11 +552,8 @@ pub(super) fn build_database_record() -> Value {
                                     .push(expect_text(item.clone(), "database.runMigrationSql")?);
                             }
                             state
-                                .handle
-                                .request(|resp| DbRequest::RunMigrationSql {
-                                    statements: statements.clone(),
-                                    resp,
-                                })
+                                .handle()
+                                .run_migration_sql(statements.clone())
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }

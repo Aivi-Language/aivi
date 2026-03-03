@@ -1,0 +1,9 @@
+[package]
+name = "aivi_database"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rusqlite = { version = "0.38.0", features = ["bundled"] }
+postgres = "0.19.12"
+mysql = "27.0.0"

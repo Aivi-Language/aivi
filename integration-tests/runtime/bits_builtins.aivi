@@ -1,0 +1,236 @@
+@no_prelude
+module integrationTests.runtime.bitsBuiltins
+
+use aivi
+use aivi.testing
+use aivi.bits
+use aivi.result
+
+// --- fromInt / toInt ---
+
+@test "fromInt and toInt roundtrip"
+fromToInt = do Effect {
+  b = fromInt 255
+  assertEq (toInt b) 255
+}
+
+@test "fromInt zero"
+fromIntZero = do Effect {
+  b = fromInt 0
+  assertEq (toInt b) 0
+}
+
+@test "fromInt large"
+fromIntLarge = do Effect {
+  b = fromInt 65535
+  assertEq (toInt b) 65535
+}
+
+// --- fromBytes / toBytes ---
+
+@test "fromBytes and toBytes roundtrip"
+fromToBytes = do Effect {
+  b = fromInt 42
+  bytes = toBytes b
+  b2 = fromBytes bytes
+  assertEq (toInt b2) 42
+}
+
+// --- zero / ones ---
+
+@test "zero creates all-zero bits"
+zeroTest = do Effect {
+  b = zero 2
+  assertEq (length b) 16
+  assertEq (toInt b) 0
+}
+
+@test "ones creates all-one bits"
+onesTest = do Effect {
+  b = ones 1
+  assertEq (toInt b) 255
+}
+
+// --- and ---
+
+@test "and operation"
+andTest = do Effect {
+  a = fromInt 0b11110000
+  b = fromInt 0b10101010
+  result = and a b
+  assertEq (toInt result) 0b10100000
+}
+
+// --- or ---
+
+@test "or operation"
+orTest = do Effect {
+  a = fromInt 0b11110000
+  b = fromInt 0b00001111
+  result = or a b
+  assertEq (toInt result) 0b11111111
+}
+
+// --- xor ---
+
+@test "xor operation"
+xorTest = do Effect {
+  a = fromInt 0b11110000
+  b = fromInt 0b10101010
+  result = xor a b
+  assertEq (toInt result) 0b01011010
+}
+
+// --- complement ---
+
+@test "complement flips all bits"
+complementTest = do Effect {
+  b = fromInt 0
+  c = complement b
+  assertEq (toInt c) 255
+}
+
+// --- shiftLeft / shiftRight ---
+
+@test "shiftLeft"
+shiftLeftTest = do Effect {
+  b = fromInt 1
+  result = shiftLeft 3 b
+  assertEq (toInt result) 8
+}
+
+@test "shiftRight"
+shiftRightTest = do Effect {
+  b = fromInt 8
+  result = shiftRight 3 b
+  assertEq (toInt result) 1
+}
+
+// --- get / set / clear / toggle ---
+
+@test "get bit"
+getBitTest = do Effect {
+  b = fromInt 0b00000100
+  assertEq (get 2 b) True
+  assertEq (get 0 b) False
+}
+
+@test "set bit"
+setBitTest = do Effect {
+  b = fromInt 0
+  b2 = set 3 b
+  assertEq (get 3 b2) True
+}
+
+@test "clear bit"
+clearBitTest = do Effect {
+  b = fromInt 0b11111111
+  b2 = clear 0 b
+  assertEq (get 0 b2) False
+  assertEq (get 1 b2) True
+}
+
+@test "toggle bit"
+toggleBitTest = do Effect {
+  b = fromInt 0
+  b2 = toggle 5 b
+  assertEq (get 5 b2) True
+  b3 = toggle 5 b2
+  assertEq (get 5 b3) False
+}
+
+// --- length ---
+
+@test "length of bits"
+lengthTest = do Effect {
+  b = fromInt 255
+  assertEq (length b) 8
+}
+
+// --- slice ---
+
+@test "slice bits"
+sliceTest = do Effect {
+  b = fromInt 65535
+  s = slice 0 1 b
+  assertEq (toInt s) 255
+}
+
+// --- popCount ---
+
+@test "popCount"
+popCountTest = do Effect {
+  b = fromInt 0b10101010
+  assertEq (popCount b) 4
+}
+
+@test "popCount all zeros"
+popCountZero = do Effect {
+  b = fromInt 0
+  assertEq (popCount b) 0
+}
+
+@test "popCount all ones"
+popCountOnes = do Effect {
+  b = ones 1
+  assertEq (popCount b) 8
+}
+
+// --- BitStream ---
+
+@test "streamFromBits and streamRemaining"
+streamBasic = do Effect {
+  b = fromInt 65535
+  s = streamFromBits b
+  assertEq (streamRemaining s) 2
+}
+
+@test "streamRead success"
+streamReadOk = do Effect {
+  b = fromInt 65535
+  s = streamFromBits b
+  result = streamRead 1 s
+  assertEq (isOk result) True
+}
+
+@test "streamRead past end"
+streamReadPastEnd = do Effect {
+  b = fromInt 255
+  s = streamFromBits b
+  result = streamRead 10 s
+  assertEq (isErr result) True
+}
+
+@test "streamPeek does not advance"
+streamPeekNoAdvance = do Effect {
+  b = fromInt 65535
+  s = streamFromBits b
+  _ = streamPeek 1 s
+  assertEq (streamRemaining s) 2
+}
+
+@test "streamPeek past end"
+streamPeekPastEnd = do Effect {
+  b = fromInt 255
+  s = streamFromBits b
+  result = streamPeek 10 s
+  assertEq (isErr result) True
+}
+
+@test "streamSkip advances offset"
+streamSkipOk = do Effect {
+  b = fromInt 65535
+  s = streamFromBits b
+  result = streamSkip 1 s
+  result match
+    | Ok s2 => assertEq (streamRemaining s2) 1
+    | Err _ => fail "skip failed"
+}
+
+@test "streamSkip past end"
+streamSkipPastEnd = do Effect {
+  b = fromInt 255
+  s = streamFromBits b
+  result = streamSkip 10 s
+  assertEq (isErr result) True
+}

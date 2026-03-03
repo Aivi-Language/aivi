@@ -45,7 +45,9 @@ name = "aivi"
 version = "0.1.0"
 dependencies = [
  "aivi_core",
+ "aivi_database",
  "aivi_driver",
+ "aivi_email",
  "aivi_http_server",
  "chrono",
  "chrono-tz",
@@ -58,13 +60,9 @@ dependencies = [
  "getrandom 0.4.1",
  "im",
  "image",
- "imap",
  "include_dir",
  "insta",
- "lettre",
  "libc",
- "mailparse",
- "mysql",
  "notify",
  "notify-debouncer-mini",
  "num-bigint",
@@ -74,11 +72,9 @@ dependencies = [
  "ordered-float",
  "palette",
  "parking_lot",
- "postgres",
  "proptest",
  "rayon",
  "regex",
- "rusqlite",
  "rust_decimal",
  "rustfft",
  "serde",
@@ -151,10 +147,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "aivi_database"
+version = "0.1.0"
+dependencies = [
+ "mysql",
+ "postgres",
+ "rusqlite",
+]
+
+[[package]]
 name = "aivi_driver"
 version = "0.1.0"
 dependencies = [
  "aivi_core",
+ "thiserror",
+]
+
+[[package]]
+name = "aivi_email"
+version = "0.1.0"
+dependencies = [
+ "imap",
+ "lettre",
+ "mailparse",
  "thiserror",
 ]
 
