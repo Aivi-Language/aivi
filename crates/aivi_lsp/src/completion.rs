@@ -83,15 +83,18 @@ impl Backend {
             return items;
         }
 
-        if let Some((module_name, already_imported, member_prefix)) =
+        let use_ctx: Option<(String, HashSet<String>, String)> =
             Self::use_exports_context(&line_prefix)
-        {
-            if let Some(module) = module_map.get(module_name) {
+                .map(|(m, imp, pfx)| (m.to_string(), imp, pfx.to_string()))
+                .or_else(|| Self::use_exports_multiline_context(text, position));
+
+        if let Some((module_name, already_imported, member_prefix)) = use_ctx {
+            if let Some(module) = module_map.get(module_name.as_str()) {
                 for (label, kind, detail) in Self::module_export_completions(module) {
                     if already_imported.contains(&label) {
                         continue;
                     }
-                    if !member_prefix.is_empty() && !label.starts_with(member_prefix) {
+                    if !member_prefix.is_empty() && !label.starts_with(member_prefix.as_str()) {
                         continue;
                     }
                     push_item(CompletionItem {
@@ -372,6 +375,54 @@ impl Backend {
             }
         }
         let member_prefix = prefix_part.trim_start().trim();
+        Some((module_name, imported, member_prefix))
+    }
+
+    /// Handle multi-line use statements where the cursor is on a continuation line:
+    /// ```
+    /// use aivi.text (
+    ///   length
+    ///   |cursor
+    /// )
+    /// ```
+    fn use_exports_multiline_context(
+        text: &str,
+        position: Position,
+    ) -> Option<(String, HashSet<String>, String)> {
+        let cursor_offset = Self::offset_at(text, position).min(text.len());
+        // Scan backwards from cursor to find an unmatched `(`
+        let before_cursor = &text[..cursor_offset];
+        let open_paren = before_cursor.rfind('(')?;
+        // Check there's no closing `)` between `(` and cursor
+        if before_cursor[open_paren + 1..].contains(')') {
+            return None;
+        }
+        // The text before the `(` on the same logical line must start with `use `
+        let before_paren = &before_cursor[..open_paren];
+        let use_line_start = before_paren.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let use_line = before_paren[use_line_start..].trim_start();
+        let rest = use_line.strip_prefix("use ")?;
+        let module_name = rest.trim_end().to_string();
+        if module_name.is_empty() {
+            return None;
+        }
+        // Collect already-imported names from lines between `(` and cursor
+        let inside = &before_cursor[open_paren + 1..];
+        let mut imported = HashSet::new();
+        for part in inside.split(|c| c == ',' || c == '\n') {
+            let name = part.trim();
+            if name.is_empty() {
+                continue;
+            }
+            if name.chars().all(|ch| ch.is_alphanumeric() || ch == '_') {
+                imported.insert(name.to_string());
+            }
+        }
+        // The member prefix is whatever the user has typed on the current line
+        let line_start = before_cursor.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let member_prefix = before_cursor[line_start..].trim_start().to_string();
+        // Remove prefix from already_imported so it shows as a completion candidate
+        imported.remove(&member_prefix);
         Some((module_name, imported, member_prefix))
     }
 

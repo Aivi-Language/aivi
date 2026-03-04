@@ -447,6 +447,17 @@ pub fn run_cranelift_jit(
     monomorph_plan: HashMap<String, Vec<CgType>>,
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
+    // E1527: crate-native bindings require AOT build
+    let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
+    if !crate_natives.is_empty() {
+        let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
+        return Err(AiviError::Codegen(format!(
+            "E1527: crate-native binding(s) {} require `aivi build` (AOT). \
+             They cannot run in JIT mode (`aivi run`).",
+            names.join(", ")
+        )));
+    }
+
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     let t0 = if trace { Some(Instant::now()) } else { None };
     let mut runtime = build_runtime_from_program(&program)?;
@@ -477,6 +488,17 @@ pub(crate) fn run_cranelift_jit_cancellable(
     cancel: Arc<CancelToken>,
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
+    // E1527: crate-native bindings require AOT build
+    let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
+    if !crate_natives.is_empty() {
+        let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
+        return Err(AiviError::Codegen(format!(
+            "E1527: crate-native binding(s) {} require `aivi build` (AOT). \
+             They cannot run in JIT mode (`aivi run`).",
+            names.join(", ")
+        )));
+    }
+
     let mut runtime = build_runtime_from_program_with_cancel(&program, cancel)?;
     {
         let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);

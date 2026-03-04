@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.syntax.modules.useMultilineImports
+
+use aivi.text (
+  length
+  toUpper
+)
+use aivi.testing
+
+@test "multiline use without commas"
+multilineUseWorks = do Effect {
+  assertEq (length "hello") 5
+  assertEq (toUpper "hi") "HI"
+}

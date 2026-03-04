@@ -645,11 +645,13 @@ impl Parser {
                         alias,
                     });
                 }
+                let pos_before = self.pos;
                 self.consume_newlines();
-                if !self.consume_symbol(",") {
+                self.consume_symbol(",");
+                self.consume_newlines();
+                if self.pos == pos_before && !self.check_symbol(")") {
                     break;
                 }
-                self.consume_newlines();
             }
             self.expect_symbol(")", "expected ')' to close import list");
         }
@@ -793,5 +795,31 @@ impl Parser {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod use_separator_tests {
+    use super::*;
+    use crate::surface::parser::entrypoints::parse_modules;
+    use std::path::Path;
+
+    fn parse_use(src: &str) -> Vec<crate::surface::UseDecl> {
+        let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+        assert!(diags.iter().all(|d| d.severity != crate::DiagnosticSeverity::Error), "parse errors: {diags:?}");
+        modules.into_iter().flat_map(|m| m.uses).collect()
+    }
+
+    #[test]
+    fn newline_separator_no_commas() {
+        let uses = parse_use("module test\nuse aivi.text (\n  length\n  toUpper\n)\n");
+        assert_eq!(uses.len(), 1);
+        assert_eq!(uses[0].items.len(), 2);
+    }
+
+    #[test]
+    fn mixed_comma_and_newline_separators() {
+        let uses = parse_use("module test\nuse aivi.text (\n  length,\n  toUpper\n)\n");
+        assert_eq!(uses[0].items.len(), 2);
     }
 }

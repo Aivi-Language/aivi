@@ -154,13 +154,17 @@ Endpoint functions are named from `operationId` (lowerCamelCase); if absent, der
 
 ---
 
-## `@native` — Runtime Function Bindings
+## `@native` — Native Function Bindings
 
 <!-- quick-info: {"kind":"decorator","name":"@native"} -->
-`@native` binds an AIVI definition to a host-runtime function identified by a dotted path.
+`@native` binds an AIVI definition to a native function. Two forms exist: **runtime natives** (dot-path, resolved at runtime) and **crate natives** (double-colon path, auto-bridged at build time).
 <!-- /quick-info -->
 
-### Syntax
+### Runtime Natives (dot-path)
+
+Runtime natives bind to functions registered in the AIVI runtime's global environment.
+
+#### Syntax
 
 ```aivi
 @native "module.functionName"
@@ -168,11 +172,11 @@ binding : TypeSig
 binding = param1 param2 => dummyBody
 ```
 
-### Example
+#### Example
 
 <<< ../snippets/from_md/syntax/decorators/native_basic.aivi{aivi}
 
-### Rules
+#### Rules
 
 1. Must be **top-level**.
 2. Must have an **explicit type signature**.
@@ -181,11 +185,91 @@ binding = param1 param2 => dummyBody
 
 The `@native` string is a **runtime record path**. The first segment selects a module record registered in the global environment (see `register_builtins` in `core.rs`); subsequent segments are field accesses into it. The module name is chosen by the runtime and may differ from the Cargo crate name (e.g. crate `rusqlite` is exposed as `database`).
 
-### Adding a Native Binding
+#### Adding a Runtime Native Binding
 
 <<< ../snippets/from_md/syntax/decorators/native_walkthrough.aivi{aivi}
 
 Steps: create `crates/aivi/src/runtime/builtins/<mod>.rs` returning `Value::Record`, register via `env.set("mod", build_mod_record())` in `register_builtins`, add Cargo dependency.
+
+### Crate Natives (double-colon path)
+
+Crate natives bind directly to functions in Rust crates declared in the project's `Cargo.toml`. The compiler **auto-generates** a Rust bridge function that marshals AIVI `Value` types to and from Rust types based on the type signature.
+
+#### Syntax
+
+```aivi
+@native "crate_name::path::function"
+binding : TypeSig
+```
+
+No dummy body is required — the type signature is sufficient. The function name must be `lowerCamelCase` as with any AIVI function binding.
+
+#### Example
+
+<<< ../snippets/from_md/syntax/decorators/native_crate_basic.aivi{aivi}
+
+#### Rules
+
+1. Must be **top-level**.
+2. Must have an **explicit type signature**.
+3. The target path uses `::` (Rust path syntax): `"crate_name::module::function"`.
+4. The referenced crate must be declared in `Cargo.toml` under `[dependencies]`.
+5. **AOT-only** — crate natives require `aivi build`. Using them with `aivi run` (JIT) produces a compile error.
+6. No dummy body needed (type signature only).
+
+#### Type Mapping
+
+The compiler maps AIVI types to Rust types for the generated bridge:
+
+| AIVI Type             | Rust Type (argument) | Rust Type (return) |
+|:----------------------|:---------------------|:-------------------|
+| `Text`                | `&str`               | `String`           |
+| `Int`                 | `i64`                | `i64`              |
+| `Float`               | `f64`                | `f64`              |
+| `Bool`                | `bool`               | `bool`             |
+| `List T`              | `Vec<T>`             | `Vec<T>`           |
+| `Option T`            | `Option<T>`          | `Option<T>`        |
+| `Result E A`          | —                    | `Result<A, E>`     |
+| `{ a: T, b: U }`     | generated struct     | generated struct   |
+
+For `Result` return types, `Ok(v)` maps to `Ok v` and `Err(e)` maps to `Err (Text.show e)`.
+
+For `Option` return types, `Some(v)` maps to `Some v` and `None` maps to `None`.
+
+#### Cargo.toml Dependency
+
+Crate dependencies are declared directly in the project's `Cargo.toml`:
+
+```toml
+[dependencies]
+quick-xml = { version = "0.31", features = ["serialize"] }
+serde = { version = "1.0", features = ["derive"] }
+```
+
+The compiler validates during `aivi build` that every crate referenced by `@native "crate::..."` has a matching entry in `Cargo.toml`. A missing dependency produces:
+
+```
+error[E1528]: crate `quick-xml` referenced by @native binding but not found in Cargo.toml [dependencies]
+```
+
+#### Bridge Generation
+
+During `aivi build`, the compiler generates a Rust bridge module at `target/aivi-gen/src/native_bridge.rs`. Each crate-native binding produces a function that:
+
+1. Extracts arguments from AIVI `Value` types
+2. Converts to the corresponding Rust types
+3. Calls the target crate function
+4. Wraps the return value back into an AIVI `Value`
+
+The generated bridge is compiled as part of the AOT binary and registered as builtins at startup.
+
+#### Compile-Time Errors
+
+| Code  | Condition                                                          |
+|:------|:-------------------------------------------------------------------|
+| E1527 | Crate native used in JIT mode (`aivi run`)                         |
+| E1528 | Referenced crate not found in `Cargo.toml` `[dependencies]`        |
+| E1529 | Unsupported type in crate-native type signature                    |
 
 ---
 
