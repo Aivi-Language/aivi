@@ -68,11 +68,23 @@ export const sidebar = [
         ]
       },
       {
+        text: 'Decorators',
+        collapsed: true,
+        items: [
+          { text: 'Overview', link: '/syntax/decorators/' },
+          { text: '@static', link: '/syntax/decorators/static' },
+          { text: '@native', link: '/syntax/decorators/native' },
+          { text: '@deprecated', link: '/syntax/decorators/deprecated' },
+          { text: '@debug', link: '/syntax/decorators/debug' },
+          { text: '@test', link: '/syntax/decorators/test' },
+          { text: '@no_prelude', link: '/syntax/decorators/no_prelude' }
+        ]
+      },
+      {
         text: 'Notation',
         collapsed: true,
         items: [
           { text: 'Operators & Sigils', link: '/syntax/operators' },
-          { text: 'Decorators', link: '/syntax/decorators' },
           { text: 'Grammar', link: '/syntax/grammar' }
         ]
       }
@@ -198,7 +210,7 @@ export const sidebar = [
     collapsed: true,
     items: [
       { text: 'Testing Module', link: '/stdlib/core/testing' },
-      { text: '@test & Mocks', link: '/syntax/decorators#test-test-declarations' }
+      { text: '@test & Mocks', link: '/syntax/decorators/test' }
     ]
   },
   {

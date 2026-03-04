@@ -16,26 +16,51 @@ pub extern "C" fn rt_record_field(
     let value = unsafe { &*value_ptr };
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
+    // During operator dispatch, field mismatches must be hard failures so that
+    // wrong-domain clauses cannot "succeed" with garbage Unit values.
+    let dispatching = unsafe { (*ctx).runtime_mut() }.jit_binary_op_dispatching;
     match value {
         Value::Record(rec) => match rec.get(name) {
             Some(v) => abi::box_value(v.clone()),
             None => {
-                rt_warn(
-                    ctx,
-                    "missing record field",
-                    &format!("field `{name}` does not exist on this record"),
-                    &format!("check that the record type includes a `{name}` field and that it was correctly constructed"),
-                );
+                if dispatching {
+                    unsafe {
+                        set_pending_error(
+                            ctx,
+                            RuntimeError::Message(format!(
+                                "field `{name}` does not exist on this record"
+                            )),
+                        );
+                    }
+                } else {
+                    rt_warn(
+                        ctx,
+                        "missing record field",
+                        &format!("field `{name}` does not exist on this record"),
+                        &format!("check that the record type includes a `{name}` field and that it was correctly constructed"),
+                    );
+                }
                 abi::box_value(Value::Unit)
             }
         },
         other => {
-            rt_warn(
-                ctx,
-                "type mismatch",
-                &format!("tried to access field `{name}` on a non-record value: `{other:?}`"),
-                "this value should be a record — check that the expression producing it returns the correct type",
-            );
+            if dispatching {
+                unsafe {
+                    set_pending_error(
+                        ctx,
+                        RuntimeError::Message(format!(
+                            "tried to access field `{name}` on a non-record value: `{other:?}`"
+                        )),
+                    );
+                }
+            } else {
+                rt_warn(
+                    ctx,
+                    "type mismatch",
+                    &format!("tried to access field `{name}` on a non-record value: `{other:?}`"),
+                    "this value should be a record — check that the expression producing it returns the correct type",
+                );
+            }
             abi::box_value(Value::Unit)
         }
     }

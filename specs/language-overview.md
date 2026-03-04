@@ -348,11 +348,11 @@ Sources: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/
 
 ---
 
-## [Decorators](syntax/decorators)
+## [Decorators](syntax/decorators/)
 
 Decorators are compile-time metadata attached to definitions. Unknown decorators are compile errors. Decorators must not model domain semantics — that belongs in typed values and types.
 
-### [`@static`](syntax/decorators#static--compile-time-evaluation)
+### [`@static`](syntax/decorators/static)
 
 Evaluates a deterministic source read at compile time and embeds the result as a constant. Compilation fails early if the source cannot be read or decoded. The binding must be parameterless.
 
@@ -366,7 +366,7 @@ petStore = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
 
 Supported sources: `file.read`, `file.json`, `file.csv`, `env.get`, `openapi.fromUrl`, `openapi.fromFile`.
 
-### [`@native`](syntax/decorators#native--native-function-bindings)
+### [`@native`](syntax/decorators/native)
 
 Binds a top-level definition to a native function. An explicit type signature is required; no body is needed.
 
@@ -381,7 +381,7 @@ windowPresent : WidgetId -> Effect GtkError Unit
 parseXml : Text -> Result Text { name: Text, value: Text }
 ```
 
-### [`@deprecated`](syntax/decorators#deprecated--deprecation-warnings)
+### [`@deprecated`](syntax/decorators/deprecated)
 
 Marks a binding as deprecated. The compiler emits a warning with the provided hint at every call site.
 
@@ -390,7 +390,7 @@ Marks a binding as deprecated. The compiler emits a warning with the provided hi
 oldApi = ...
 ```
 
-### [`@debug`](syntax/decorators#debug--structured-debug-tracing)
+### [`@debug`](syntax/decorators/debug)
 
 Tooling pragma that emits structured JSONL trace events when compiled with `--debug-trace`. No semantic effect otherwise.
 
@@ -401,7 +401,7 @@ myFn = x => x + 1
 
 Parameters (`pipes`, `args`, `return`, `time`) are order-insensitive. `@debug` / `@debug()` defaults to timing only.
 
-### [`@test`](syntax/decorators#test--test-declarations)
+### [`@test`](syntax/decorators/test)
 
 Marks a definition as a test case (description mandatory) or a module as test-only. Tests are collected by `aivi test` and stripped from production builds.
 
@@ -412,7 +412,7 @@ testSum = assertEq (add 2 3) 5
 @test module Helpers
 ```
 
-### [`@no_prelude`](syntax/decorators#no_prelude--skip-prelude-import)
+### [`@no_prelude`](syntax/decorators/no_prelude)
 
 Opts a module out of the implicit `use aivi.prelude` import. Applied at the module declaration.
 
@@ -422,7 +422,7 @@ Opts a module out of the implicit `use aivi.prelude` import. Applied at the modu
 
 ---
 
-## [Mock Expressions](syntax/decorators#mock-expressions)
+## [Mock Expressions](syntax/decorators/test#mock-expressions)
 
 Scoped dependency substitution for tests — no production code changes needed:
 

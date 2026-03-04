@@ -764,6 +764,14 @@ fn check_def(
     allow_unknown: bool,
 ) {
     check_debug_decorators(def, diagnostics, module);
+    // @native defs have auto-generated bodies referencing internal names; skip the body check.
+    let is_native = def
+        .decorators
+        .iter()
+        .any(|d| d.name.name == "native");
+    if is_native {
+        return;
+    }
     let mut local_scope = scope.clone();
     collect_pattern_bindings(&def.params, &mut local_scope);
     check_expr(
