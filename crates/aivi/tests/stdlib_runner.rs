@@ -45,8 +45,8 @@ fn run_test_suite_with_timeout(
 }
 
 fn walk_aivi_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let entries = std::fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("read_dir({}): {e}", dir.display()));
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir({}): {e}", dir.display()));
     for entry in entries {
         let entry = entry.unwrap_or_else(|e| panic!("read_dir({}): {e}", dir.display()));
         let path = entry.path();

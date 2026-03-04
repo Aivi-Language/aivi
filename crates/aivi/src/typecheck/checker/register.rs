@@ -324,6 +324,17 @@ impl TypeChecker {
 
     fn insert_schemes(env: &mut TypeEnv, name: String, schemes: &[Scheme]) {
         if schemes.len() == 1 {
+            // For suffix template names (start with a digit, e.g. "1s", "1px"), accumulate
+            // instead of overwrite so that importing two domains that both define the same
+            // suffix template is detected as ambiguous at the use site.
+            if name.starts_with(|c: char| c.is_ascii_digit()) {
+                if let Some(existing) = env.get_all(&name) {
+                    let mut combined = existing.to_vec();
+                    combined.push(schemes[0].clone());
+                    env.insert_overloads(name, combined);
+                    return;
+                }
+            }
             env.insert(name, schemes[0].clone());
         } else {
             env.insert_overloads(name, schemes.to_vec());

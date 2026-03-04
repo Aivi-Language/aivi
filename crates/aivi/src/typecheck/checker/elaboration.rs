@@ -11,6 +11,16 @@ impl TypeChecker {
                             return Ok(self.fresh_var());
                         };
                         let template_name = format!("1{suffix}");
+                        if env.get_all(&template_name).is_some_and(|s| s.len() > 1) {
+                            return Err(TypeError {
+                                span: span.clone(),
+                                message: format!(
+                                    "ambiguous suffix literal '{text}': multiple domains define '{template_name}' — use a qualified form or import only one domain"
+                                ),
+                                expected: None,
+                                found: None,
+                            });
+                        }
                         let scheme = env.get(&template_name).cloned().ok_or_else(|| TypeError {
                             span: span.clone(),
                             message: format!(
@@ -69,6 +79,17 @@ impl TypeChecker {
             Expr::Suffixed { base, suffix, span } => {
                 let arg_ty = self.infer_expr(base, env)?;
                 let template_name = format!("1{}", suffix.name);
+                if env.get_all(&template_name).is_some_and(|s| s.len() > 1) {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "ambiguous suffix '{}': multiple domains define '{template_name}' — use a qualified form or import only one domain",
+                            suffix.name
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
                 let scheme = env.get(&template_name).cloned().ok_or_else(|| TypeError {
                     span: span.clone(),
                     message: format!(

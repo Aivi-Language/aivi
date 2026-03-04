@@ -370,7 +370,7 @@ TuplePat       := "(" Pattern "," Pattern { "," Pattern } ")"
 ListPat        := "[" [ Pattern { "," Pattern } [ "," "..." [ (lowerIdent | "_") ] ] ] "]"
 
 RecordPat      := "{" { RecordPatField } "}"
-RecordPatField := RecordPatKey [ (":" Pattern) | ("as" Pattern) | ("." "{" { RecordPatField } "}") ] [ FieldSep ]
+RecordPatField := RecordPatKey [ (":" Pattern) | ("as" Pattern) ] [ FieldSep ]
 RecordPatKey   := lowerIdent { "." lowerIdent }
 ```
 
