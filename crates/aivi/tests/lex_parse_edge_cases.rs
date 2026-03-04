@@ -43,7 +43,11 @@ fn subtraction_not_hyphenated_ident() {
     let toks = significant_tokens("x-1");
     let kinds: Vec<&str> = toks.iter().map(|t| t.kind.as_str()).collect();
     let texts: Vec<&str> = toks.iter().map(|t| t.text.as_str()).collect();
-    assert_eq!(kinds, ["ident", "symbol", "number"], "x-1 should be 3 tokens");
+    assert_eq!(
+        kinds,
+        ["ident", "symbol", "number"],
+        "x-1 should be 3 tokens"
+    );
     assert_eq!(texts, ["x", "-", "1"]);
 }
 
@@ -444,8 +448,7 @@ fn string_containing_arrow_has_no_errors() {
 fn line_comment_does_not_consume_next_line() {
     let src = "// a comment\nx = 1";
     let toks = significant_tokens(src);
-    let non_comment: Vec<&aivi::CstToken> =
-        toks.iter().filter(|t| t.kind != "comment").collect();
+    let non_comment: Vec<&aivi::CstToken> = toks.iter().filter(|t| t.kind != "comment").collect();
     assert!(
         non_comment.iter().any(|t| t.text == "x"),
         "x on next line should still be lexed: {toks:#?}"
@@ -471,7 +474,10 @@ fn block_comment_does_not_nest() {
     let (_, diags) = lex_cst(src);
     // No unclosed-comment error because the first `*/` closed it.
     let has_e1007 = diags.iter().any(|d| d.code == "E1007");
-    assert!(!has_e1007, "block comment should not nest; first */ closes it");
+    assert!(
+        !has_e1007,
+        "block comment should not nest; first */ closes it"
+    );
     // `x` and `1` should appear as tokens.
     let toks = significant_tokens(src);
     assert!(
