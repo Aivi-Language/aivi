@@ -11,8 +11,8 @@ This chapter is an index of AIVI's **operator tokens** (and a few pieces of punc
 | `=`         | binding | top-level, blocks | Define a value / function clause / type alias. |
 | `<-`        | binder | `do Effect {}`, `generate {}`, `resource {}` | Bind each produced value (generator) or run/bind effect/resource results. |
 | `->`        | guard | `generate {}` | Filter current generator element using predicate syntax (implicit `_`). |
-| `\|>`       | pipe | expressions | Left-to-right application: `x |> f` is `f x`. Chains for readable data transforms. |
-| `<\|`       | patch | expressions | Record update: `target <| { field: value }` applies a patch to a record value. |
+| `\|>`       | pipe | expressions | Left-to-right application: `x \|> f` is `f x`. Chains for readable data transforms. |
+| `<\|`       | patch | expressions | Record update: `target <\| { field: value }` applies a patch to a record value. |
 | `match`     | match / refutable | expressions | The `match` keyword marks refutable pattern matching. Introduces match arms after the scrutinee expression. |
 | `           |` | arm / union separator | `match` arms, `type` RHS | Separates match arms and sum-type constructors. |
 | `=>`        | arrow | lambdas, match arms, `loop` | Lambda body delimiter and match arm delimiter. |

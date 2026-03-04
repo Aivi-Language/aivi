@@ -350,16 +350,75 @@ Sources: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/
 
 ## [Decorators](syntax/decorators)
 
-| Decorator | Purpose |
-|:----------|:--------|
-| `@test "desc"` | Test case (mandatory description) |
-| `@static` | Embed source at compile time |
-| `@native "mod.fn"` | Bind to runtime/native function |
-| `@deprecated "hint"` | Emit warning on use |
-| `@debug` / `@debug(pipes, args, return, time)` | Tracing (requires `--debug-trace`) |
-| `@no_prelude` | Skip implicit `use aivi.prelude` |
+Decorators are compile-time metadata attached to definitions. Unknown decorators are compile errors. Decorators must not model domain semantics — that belongs in typed values and types.
 
-Unknown decorators are compile errors. `@native` requires a top-level explicit type signature.
+### [`@static`](syntax/decorators#static--compile-time-evaluation)
+
+Evaluates a deterministic source read at compile time and embeds the result as a constant. Compilation fails early if the source cannot be read or decoded. The binding must be parameterless.
+
+```aivi
+@static
+schema = file.json "schema.json"
+
+@static
+petStore = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
+```
+
+Supported sources: `file.read`, `file.json`, `file.csv`, `env.get`, `openapi.fromUrl`, `openapi.fromFile`.
+
+### [`@native`](syntax/decorators#native--native-function-bindings)
+
+Binds a top-level definition to a native function. An explicit type signature is required; no body is needed.
+
+- **Dot-path** (`"module.fn"`) — resolved via the runtime's global environment.
+- **Double-colon path** (`"crate::path::fn"`) — auto-bridged at AOT build time; AOT-only (`aivi build`).
+
+```aivi
+@native "gtk4.windowPresent"
+windowPresent : WidgetId -> Effect GtkError Unit
+
+@native "quick_xml::de::from_str"
+parseXml : Text -> Result Text { name: Text, value: Text }
+```
+
+### [`@deprecated`](syntax/decorators#deprecated--deprecation-warnings)
+
+Marks a binding as deprecated. The compiler emits a warning with the provided hint at every call site.
+
+```aivi
+@deprecated "use newApi instead"
+oldApi = ...
+```
+
+### [`@debug`](syntax/decorators#debug--structured-debug-tracing)
+
+Tooling pragma that emits structured JSONL trace events when compiled with `--debug-trace`. No semantic effect otherwise.
+
+```aivi
+@debug(pipes, args, return, time)
+myFn = x => x + 1
+```
+
+Parameters (`pipes`, `args`, `return`, `time`) are order-insensitive. `@debug` / `@debug()` defaults to timing only.
+
+### [`@test`](syntax/decorators#test--test-declarations)
+
+Marks a definition as a test case (description mandatory) or a module as test-only. Tests are collected by `aivi test` and stripped from production builds.
+
+```aivi
+@test "returns correct sum"
+testSum = assertEq (add 2 3) 5
+
+@test module Helpers
+```
+
+### [`@no_prelude`](syntax/decorators#no_prelude--skip-prelude-import)
+
+Opts a module out of the implicit `use aivi.prelude` import. Applied at the module declaration.
+
+```aivi
+@no_prelude module MyLowLevel
+```
 
 ---
 

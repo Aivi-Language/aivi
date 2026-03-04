@@ -433,6 +433,10 @@ pub extern "C" fn rt_binary_op(
     let lhs = unsafe { (*lhs_ptr).clone() };
     let rhs = unsafe { (*rhs_ptr).clone() };
 
+    if (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-" {
+        eprintln!("[DEBUG-ENTRY] rt_binary_op {op} {:?} {:?}", lhs, rhs);
+    }
+
     if op == "==" {
         // Equality logic...
         let eq = crate::runtime::values_equal(&lhs, &rhs);
@@ -455,37 +459,57 @@ pub extern "C" fn rt_binary_op(
             if !runtime.jit_binary_op_dispatching {
                 runtime.jit_binary_op_dispatching = true;
                 let mut fallback_result: Option<Value> = None;
-                let debug = matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_));
-                for (i, clause) in clauses.into_iter().enumerate() {
+                let debug_dt = (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-";
+                for (ci, clause) in clauses.into_iter().enumerate() {
                     let wc = runtime.jit_rt_warning_count;
-                    if let Ok(applied) = runtime.apply(clause.clone(), lhs.clone()) {
+                    // Save global state so each clause trial starts clean.
+                    let saved_pending = runtime.jit_pending_error.take();
+                    let saved_match_failed = runtime.jit_match_failed;
+                    runtime.jit_match_failed = false;
+                    let ok = if let Ok(applied) = runtime.apply(clause.clone(), lhs.clone()) {
                         if let Ok(result) = runtime.apply(applied, rhs.clone()) {
-                            if runtime.jit_rt_warning_count == wc {
+                            let warns = runtime.jit_rt_warning_count - wc;
+                            if debug_dt {
+                                eprintln!("[DEBUG] clause#{ci} {op} {:?} {:?} => {:?} (warns={warns}, match_failed={}, pending_err={})", lhs, rhs, result, runtime.jit_match_failed, runtime.jit_pending_error.is_some());
+                            }
+                            if warns == 0 && !runtime.jit_match_failed {
                                 // Clean match — no warnings produced
                                 runtime.jit_binary_op_dispatching = false;
-                                if debug {
-                                    let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
-                                    eprintln!("[DEBUG] clause {i} ({cn}) CLEAN for {op} => {:?}", result);
-                                }
+                                runtime.jit_pending_error = saved_pending;
+                                runtime.jit_match_failed = saved_match_failed;
                                 return abi::box_value(result);
                             }
                             // Produced warnings — reset counter and keep as fallback
-                            if debug {
-                                let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
-                                eprintln!("[DEBUG] clause {i} ({cn}) WARN for {op}");
-                            }
                             runtime.jit_rt_warning_count = wc;
-                            if fallback_result.is_none() {
+                            if fallback_result.is_none() && !runtime.jit_match_failed {
                                 fallback_result = Some(result);
                             }
-                        } else if debug {
-                            let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
-                            eprintln!("[DEBUG] clause {i} ({cn}) apply2 ERR for {op}");
+                            true
+                        } else {
+                            if debug_dt {
+                                let cname = match &clause {
+                                    Value::Builtin(b) => b.imp.name.clone(),
+                                    _ => format!("{:?}", clause),
+                                };
+                                eprintln!("[DEBUG] clause#{ci} {op} apply2 ERR (clause={cname})");
+                            }
+                            false
                         }
-                    } else if debug {
-                        let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
-                        eprintln!("[DEBUG] clause {i} ({cn}) apply1 ERR for {op}");
-                    }
+                    } else {
+                        if debug_dt {
+                            let cname = match &clause {
+                                Value::Builtin(b) => b.imp.name.clone(),
+                                _ => format!("{:?}", clause),
+                            };
+                            eprintln!("[DEBUG] clause#{ci} {op} apply1 ERR (clause={cname})");
+                        }
+                        false
+                    };
+                    let _ = ok;
+                    // Restore global state for next clause trial.
+                    runtime.jit_pending_error = saved_pending;
+                    runtime.jit_match_failed = saved_match_failed;
+                    runtime.jit_rt_warning_count = wc;
                 }
                 runtime.jit_binary_op_dispatching = false;
                 if let Some(result) = fallback_result {
