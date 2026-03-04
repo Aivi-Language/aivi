@@ -302,6 +302,10 @@ impl TypeChecker {
         def_count: usize,
         diagnostics: &mut Vec<FileDiagnostic>,
     ) {
+        // @native defs have auto-generated bodies; skip type-checking the body.
+        if def.decorators.iter().any(|d| d.name.name == "native") {
+            return;
+        }
         let name = def.name.name.clone();
         let expr = desugar_holes(def.expr.clone());
         if def_count > 1 && !sigs.contains_key(&name) {

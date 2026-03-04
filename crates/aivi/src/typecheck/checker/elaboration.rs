@@ -172,6 +172,10 @@ impl TypeChecker {
         sigs: &HashMap<String, Vec<Scheme>>,
         env: &TypeEnv,
     ) -> Result<(), TypeError> {
+        // @native defs have auto-generated bodies; skip elaboration to avoid false errors.
+        if def.decorators.iter().any(|d| d.name.name == "native") {
+            return Ok(());
+        }
         let base_subst = self.subst.clone();
         let result = (|| {
             let name = def.name.name.clone();
