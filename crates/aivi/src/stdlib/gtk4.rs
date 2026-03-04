@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.ui.gtk4";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui.gtk4
-export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
+export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
 export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
 export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal
 export init, appNew, appRun
@@ -24,7 +24,7 @@ export drawAreaNew, drawAreaSetContentSize, drawAreaQueueDraw
 export widgetSetCss, appSetCss
 export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource, imageNewFromIconName, imageSetPixelSize
 export iconThemeAddSearchPath
-export trayIconNew, trayIconSetTooltip, trayIconSetVisible, trayIconSetMenuItems
+export TrayIconId, trayIconNew, trayIconSetTooltip, trayIconSetVisible, trayIconSetMenuItems
 export dragSourceNew, dragSourceSetText
 export dropTargetNew, dropTargetLastText
 export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
@@ -42,9 +42,10 @@ export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr, gtkSignalAttr
 export buildFromNode, buildWithIds, reconcileNode
-export signalPoll, signalEmit, signalStream
+export signalPoll, signalEmit, signalStream, dbusServerStart
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 export signalBindDialogPresent, signalBindStackPage
+export trayNotifyPersonalEmail, traySetEmailSuggestions
 export gtkApp
 export gtkAppFull
 
@@ -59,7 +60,6 @@ LabelId = Int
 EntryId = Int
 ScrollAreaId = Int
 DrawAreaId = Int
-TrayIconId = Int
 DragSourceId = Int
 DropTargetId = Int
 MenuModelId = Int
@@ -121,6 +121,9 @@ signalPoll = gtk4.signalPoll
 
 signalStream : Unit -> Effect GtkError (Recv GtkSignalEvent)
 signalStream = gtk4.signalStream
+
+dbusServerStart : Unit -> Effect GtkError Unit
+dbusServerStart = gtk4.dbusServerStart
 
 signalEmit : WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 signalEmit = gtk4.signalEmit
@@ -314,6 +317,8 @@ widgetSetCss = gtk4.widgetSetCss
 appSetCss : AppId -> Text -> Effect GtkError Unit
 appSetCss = gtk4.appSetCss
 
+TrayIconId = Int
+
 trayIconNew : Text -> Text -> Effect GtkError TrayIconId
 trayIconNew = gtk4.trayIconNew
 
@@ -323,9 +328,7 @@ trayIconSetTooltip = gtk4.trayIconSetTooltip
 trayIconSetVisible : TrayIconId -> Bool -> Effect GtkError Unit
 trayIconSetVisible = gtk4.trayIconSetVisible
 
-TrayMenuItem = { label: Text, action: Text }
-
-trayIconSetMenuItems : TrayIconId -> List TrayMenuItem -> Effect GtkError Unit
+trayIconSetMenuItems : TrayIconId -> List { label: Text, action: Text } -> Effect GtkError Unit
 trayIconSetMenuItems = gtk4.trayIconSetMenuItems
 
 dragSourceNew : WidgetId -> Effect GtkError DragSourceId
@@ -480,6 +483,12 @@ osSetBadgeCount = gtk4.osSetBadgeCount
 
 osThemePreference : Unit -> Effect GtkError Text
 osThemePreference = gtk4.osThemePreference
+
+trayNotifyPersonalEmail : Text -> Text -> Text -> Text -> Effect GtkError Unit
+trayNotifyPersonalEmail = gtk4.trayNotifyPersonalEmail
+
+traySetEmailSuggestions : List Text -> Effect GtkError Unit
+traySetEmailSuggestions = gtk4.traySetEmailSuggestions
 
 gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
 gtkApp = config => do Effect {

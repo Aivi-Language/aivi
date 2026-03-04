@@ -29,6 +29,7 @@ fn build_gtk4_stubs() -> Value {
         ("signalPoll", 1),
         ("signalEmit", 4),
         ("signalStream", 1),
+        ("dbusServerStart", 1),
         ("init", 1),
         ("appNew", 1),
         ("appRun", 1),
@@ -84,9 +85,6 @@ fn build_gtk4_stubs() -> Value {
         ("drawAreaNew", 2),
         ("drawAreaSetContentSize", 3),
         ("drawAreaQueueDraw", 1),
-        ("trayIconNew", 2),
-        ("trayIconSetTooltip", 2),
-        ("trayIconSetVisible", 2),
         ("dragSourceNew", 1),
         ("dragSourceSetText", 2),
         ("dropTargetNew", 1),
@@ -146,6 +144,12 @@ fn build_gtk4_stubs() -> Value {
         ("dialogClose", 1),
         ("signalBindDialogPresent", 3),
         ("signalBindStackPage", 3),
+        ("trayIconNew", 2),
+        ("trayIconSetTooltip", 2),
+        ("trayIconSetVisible", 2),
+        ("trayIconSetMenuItems", 2),
+        ("trayNotifyPersonalEmail", 4),
+        ("traySetEmailSuggestions", 1),
     ];
 
     let mut fields = HashMap::new();

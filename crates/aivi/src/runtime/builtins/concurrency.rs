@@ -112,36 +112,52 @@ pub(super) fn build_channel_record() -> Value {
                 }
             };
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |runtime| loop {
-                    runtime.check_cancelled()?;
-                    // Pump GTK events first on every iteration so input events
-                    // (clicks, motion, key presses) are processed immediately
-                    // rather than waiting up to 25ms for the next timeout.
-                    super::gtk4_real::pump_gtk_events();
-                    let recv_guard = receiver
-                        .inner
-                        .receiver
-                        .lock()
-                        .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
-                    match recv_guard.recv_timeout(Duration::from_millis(1)) {
-                        Ok(value) => {
-                            return Ok(Value::Constructor {
-                                name: "Ok".to_string(),
-                                args: vec![value],
-                            });
+                func: Arc::new(move |runtime| {
+                    // Use a longer timeout when GTK is not active to avoid busy-waiting.
+                    // ~60fps is sufficient for responsive GTK event pumping; non-GTK
+                    // only needs periodic cancellation checks.
+                    let gtk_active = super::gtk4_real::is_gtk_pump_active();
+                    let timeout = if gtk_active {
+                        Duration::from_millis(16)
+                    } else {
+                        Duration::from_millis(100)
+                    };
+                    eprintln!("[channel.recv] entering poll loop, gtk_active={}, timeout={:?}", gtk_active, timeout);
+                    let mut iter_count = 0u64;
+                    loop {
+                        runtime.check_cancelled()?;
+                        iter_count += 1;
+                        if iter_count == 1 || iter_count == 100 || iter_count == 1000 {
+                            eprintln!("[channel.recv] iteration {}", iter_count);
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => {
-                            drop(recv_guard);
-                            continue;
+                        if gtk_active {
+                            super::gtk4_real::pump_gtk_events();
                         }
-                        Err(mpsc::RecvTimeoutError::Disconnected) => {
-                            return Ok(Value::Constructor {
-                                name: "Err".to_string(),
-                                args: vec![Value::Constructor {
-                                    name: "Closed".to_string(),
-                                    args: Vec::new(),
-                                }],
-                            })
+                        let recv_guard = receiver
+                            .inner
+                            .receiver
+                            .lock()
+                            .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
+                        match recv_guard.recv_timeout(timeout) {
+                            Ok(value) => {
+                                return Ok(Value::Constructor {
+                                    name: "Ok".to_string(),
+                                    args: vec![value],
+                                });
+                            }
+                            Err(mpsc::RecvTimeoutError::Timeout) => {
+                                drop(recv_guard);
+                                continue;
+                            }
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                return Ok(Value::Constructor {
+                                    name: "Err".to_string(),
+                                    args: vec![Value::Constructor {
+                                        name: "Closed".to_string(),
+                                        args: Vec::new(),
+                                    }],
+                                })
+                            }
                         }
                     }
                 }),

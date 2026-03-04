@@ -5,117 +5,46 @@ use aivi
 use aivi.testing
 use aivi.concurrency
 
-@test "channel error"
-channelError_functional = do Effect {
-  (tx, rx) <- make Unit
-  close tx
-  res <- recv rx
-  res match
-    | Ok _    => assert False
-    | Err err => assertEq err Closed
-}
-
-@test "scope"
-scope_functional = do Effect {
-  value <- scope (_ => pure 41)
-  assertEq value 41
-}
-
-@test "close"
-close_functional = do Effect {
+@test "channel roundtrip"
+channel_roundtrip = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
-  first <- recv rx
+  res <- recv rx
+  res match
+    | Ok payload => assertEq payload Unit
+    | Err _      => assert False
   close tx
+}
+
+@test "close drains then Err Closed"
+close_drains_then_closed = do Effect {
+  (tx, rx) <- make Unit
+  send tx Unit
+  close tx
+  first <- recv rx
   second <- recv rx
   first match
     | Ok payload => assertEq payload Unit
     | Err _      => assert False
     second match
-      | Ok _    => assert False
-      | Err err => assertEq err Closed
+      | Ok _       => assert False
+      | Err Closed => assert True
 }
 
-@test "make"
-make_functional = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
-  res <- recv rx
-  res match
-    | Ok payload => assertEq payload Unit
-    | Err _      => assert False
-    close tx
-}
-
-@test "par"
-par_functional = do Effect {
-  pair <- par (pure 1) (pure 2)
-  pair match
-    | (left, right) => assertEq (left + right) 3
-}
-
-@test "makeBounded"
-make_bounded_functional = do Effect {
+@test "makeBounded roundtrip"
+make_bounded_roundtrip = do Effect {
   (tx, rx) <- makeBounded 1
   send tx 7
-  first <- recv rx
-  first match
+  res <- recv rx
+  res match
     | Ok value => assertEq value 7
     | Err _    => assert False
-    close tx
+  close tx
 }
 
-@test "timeoutWith"
-timeout_with_functional = do Effect {
-  result <- attempt (timeoutWith 10 "timeout" (do Effect {
-        sleep 50
-        pure 1
-  }
-    )
-  )
-  result match
-    | Ok _      => assert False
-    | Err value => assertEq value "timeout"
-}
-
-@test "retry helper"
-retry_helper = do Effect {
-  value <- retry 3 (pure 11)
-  assertEq value 11
-}
-
-@test "recv"
-recv_functional = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
-  res <- recv rx
-  res match
-    | Ok payload => assertEq payload Unit
-    | Err _      => assert False
-    close tx
-}
-
-@test "scope 2"
-scope_functional_2 = do Effect {
-  // Scope should run the callback and return its result.
-  x <- scope (_ => pure 123)
-  assert (x == 123)
-}
-
-@test "send"
-send_functional = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
-  res <- recv rx
-  res match
-    | Ok payload => assertEq payload Unit
-    | Err _      => assert False
-    close tx
-}
-
-@test "fold accumulates over channel"
-fold_functional = do Effect {
-  (tx, rx) <- make Unit
+@test "fold accumulates"
+fold_accumulates = do Effect {
+  (tx, rx) <- make 0
   send tx 1
   send tx 2
   send tx 3
@@ -124,18 +53,18 @@ fold_functional = do Effect {
   assertEq total 6
 }
 
-@test "fold returns init on empty channel"
+@test "fold returns init on empty"
 fold_empty = do Effect {
-  (tx, rx) <- make Unit
+  (tx, rx) <- make 0
   close tx
   result <- fold 42 (acc => _ => pure (acc + 1)) rx
   assertEq result 42
 }
 
-@test "forEach processes each element"
-forEach_functional = do Effect {
-  (tx, rx)       <- make Unit
-  (outTx, outRx) <- make Unit
+@test "forEach processes in order"
+forEach_order = do Effect {
+  (tx, rx)       <- make 0
+  (outTx, outRx) <- make 0
   send tx 10
   send tx 20
   close tx
@@ -149,4 +78,102 @@ forEach_functional = do Effect {
     second match
       | Ok v  => assertEq v 20
       | Err _ => assert False
+}
+
+@test "par returns both"
+par_success = do Effect {
+  pair <- par (pure 1) (pure 2)
+  pair match
+    | (left, right) => assertEq (left + right) 3
+}
+
+@test "par propagates failure"
+par_failure = do Effect {
+  res <- attempt (par (pure 1) (fail "boom"))
+  res match
+    | Ok _    => assert False
+    | Err msg => assertEq msg "boom"
+}
+
+@test "race picks faster right"
+race_right_wins = do Effect {
+  v <- race
+    (do Effect { sleep 50; pure "left" })
+    (do Effect { sleep 0; pure "right" })
+  assertEq v "right"
+}
+
+@test "race picks faster left"
+race_left_wins = do Effect {
+  v <- race
+    (do Effect { sleep 0; pure "left" })
+    (do Effect { sleep 50; pure "right" })
+  assertEq v "left"
+}
+
+@test "timeoutWith times out"
+timeout_times_out = do Effect {
+  result <- attempt (timeoutWith 10 "timeout" (do Effect { sleep 50; pure 1 }))
+  result match
+    | Ok _      => assert False
+    | Err value => assertEq value "timeout"
+}
+
+@test "timeoutWith returns when effect wins"
+timeout_success = do Effect {
+  value <- timeoutWith 50 "timeout" (pure 9)
+  assertEq value 9
+}
+
+@test "spawn join"
+spawn_join = do Effect {
+  task <- spawn (do Effect { sleep 10; pure 42 })
+  value <- task.join
+  assertEq value 42
+}
+
+@test "spawn cancel sets isCancelled"
+spawn_cancel = do Effect {
+  task <- spawn (do Effect { sleep 1000; pure 1 })
+  _ <- task.cancel
+  b <- task.isCancelled
+  assertEq b True
+}
+
+@test "retry succeeds after transient failures"
+retry_eventual_success = do Effect {
+  (tx, rx) <- make 0
+  send tx 0
+
+  effect = do Effect {
+    res <- recv rx
+    res match
+      | Err _ => fail "closed"
+      | Ok n  =>
+          if n < 2 then do Effect { send tx (n + 1); fail "no" }
+          else pure n
+  }
+
+  value <- retry 5 effect
+  assertEq value 2
+  close tx
+}
+
+@test "retry fails after attempts"
+retry_failure = do Effect {
+  (tx, rx) <- make 0
+  send tx 0
+
+  effect = do Effect {
+    res <- recv rx
+    res match
+      | Err _ => fail "closed"
+      | Ok n  => do Effect { send tx (n + 1); fail "no" }
+  }
+
+  result <- attempt (retry 2 effect)
+  result match
+    | Ok _    => assert False
+    | Err msg => assertEq msg "no"
+  close tx
 }

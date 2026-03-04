@@ -1,0 +1,10 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.suffixLiteralCollisionImportedDomainsDurationAndChronosDuration
+
+use aivi
+use aivi.duration (domain Duration)
+use aivi.chronos.duration (domain Duration)
+
+// Both modules export a Duration domain with a 1s template, so 10s cannot be resolved.
+_bad = 10s

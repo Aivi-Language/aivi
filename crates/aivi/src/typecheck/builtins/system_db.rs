@@ -531,36 +531,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "trayIconNew".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_int.clone()),
-                    )),
-                ),
-            ),
-            (
-                "trayIconSetTooltip".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "trayIconSetVisible".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(Type::con("Bool")),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
                 "dragSourceNew".to_string(),
                 Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
             ),
@@ -933,6 +903,13 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         text_ty.clone(),
                         Type::con("Recv").app(vec![Type::con("GtkSignalEvent")]),
                     ])),
+                ),
+            ),
+            (
+                "dbusServerStart".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_unit.clone()),
                 ),
             ),
             (

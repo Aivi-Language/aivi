@@ -1,0 +1,9 @@
+// EXPECT-ERROR: suffix literals require a '1s' template in scope
+@no_prelude
+module integrationTests.compileFail.suffixLiteralSelectiveImportWithoutDomain
+
+use aivi
+use aivi.duration (Span)
+
+bad : Span
+bad = { millis: 0 } + 10s

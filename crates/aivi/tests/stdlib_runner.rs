@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -44,7 +44,41 @@ fn run_test_suite_with_timeout(
     handle.join().ok()
 }
 
-fn run_stdlib_file(path: &Path) -> (usize, usize) {
+fn walk_aivi_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("read_dir({}): {e}", dir.display()));
+    for entry in entries {
+        let entry = entry.unwrap_or_else(|e| panic!("read_dir({}): {e}", dir.display()));
+        let path = entry.path();
+        let ty = entry
+            .file_type()
+            .unwrap_or_else(|e| panic!("file_type({}): {e}", path.display()));
+        if ty.is_dir() {
+            walk_aivi_files(&path, out);
+            continue;
+        }
+        if path.extension().is_some_and(|ext| ext == "aivi") {
+            out.push(path);
+        }
+    }
+}
+
+fn file_contains_test(path: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    text.contains("@test")
+}
+
+fn should_skip_file(path: &Path) -> bool {
+    let p = path.to_string_lossy();
+    if p.contains("/integration-tests/stdlib/aivi/ui/gtk4/") {
+        return std::env::var_os("AIVI_RUN_GTK_TESTS").is_none();
+    }
+    false
+}
+
+fn run_stdlib_file_with_timeout(path: &Path, timeout_secs: u64) -> aivi::TestReport {
     let mut modules = load_modules_from_paths(&[path.to_path_buf()])
         .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
 
@@ -67,17 +101,18 @@ fn run_stdlib_file(path: &Path) -> (usize, usize) {
     );
 
     let program = desugar_modules(&modules);
-    let report = run_test_suite(program, &tests, &modules, false, None)
-        .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
-    (report.passed, report.failed)
+    let display = path.display().to_string();
+    let result = run_test_suite_with_timeout(program, &tests, &modules, &display, timeout_secs)
+        .unwrap_or_else(|| panic!("timeout running stdlib tests in {}", path.display()));
+    result.unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()))
 }
 
 #[test]
-fn stdlib_selected_modules_execute_without_failures() {
+fn stdlib_modules_execute_without_failures() {
     let result = std::thread::Builder::new()
-        .name("stdlib-selected".into())
+        .name("stdlib-all".into())
         .stack_size(256 * 1024 * 1024)
-        .spawn(stdlib_selected_modules_inner)
+        .spawn(stdlib_modules_execute_without_failures_inner)
         .expect("spawn test thread")
         .join();
     match result {
@@ -86,118 +121,37 @@ fn stdlib_selected_modules_execute_without_failures() {
     }
 }
 
-fn stdlib_selected_modules_inner() {
-    let root = test_support::workspace_root();
-    let files = [
-        root.join("integration-tests/stdlib/aivi/collections/collections.aivi"),
-        root.join("integration-tests/stdlib/aivi/text/text.aivi"),
-        root.join("integration-tests/stdlib/aivi/prelude/prelude.aivi"),
-        root.join("integration-tests/stdlib/aivi/probability/probability.aivi"),
-        root.join("integration-tests/stdlib/aivi/signal/signal.aivi"),
-        root.join("integration-tests/stdlib/aivi/log/log.aivi"),
-        root.join("integration-tests/stdlib/aivi/system/system.aivi"),
-        root.join("integration-tests/stdlib/aivi/testing/testing.aivi"),
-    ];
+fn stdlib_modules_execute_without_failures_inner() {
+    let root = test_support::workspace_root().join("integration-tests/stdlib/aivi");
+    let mut all_files = Vec::new();
+    walk_aivi_files(&root, &mut all_files);
+    all_files.sort();
+
+    let files: Vec<_> = all_files
+        .into_iter()
+        .filter(|p| file_contains_test(p))
+        .filter(|p| !should_skip_file(p))
+        .collect();
+
+    assert!(!files.is_empty(), "no stdlib @test files found");
 
     let mut total_passed = 0usize;
     let mut total_failed = 0usize;
+
     for path in files {
-        let (passed, failed) = run_stdlib_file(&path);
-        total_passed += passed;
-        total_failed += failed;
+        let report = run_stdlib_file_with_timeout(&path, 60);
+        total_passed += report.passed;
+        total_failed += report.failed;
+
+        if report.failed > 0 {
+            panic!(
+                "stdlib test failures in {}: {:#?}",
+                path.display(),
+                report.failures
+            );
+        }
     }
 
     assert_eq!(total_failed, 0, "stdlib tests reported failures");
-    assert!(total_passed > 0, "expected stdlib tests to execute");
-}
-
-#[test]
-fn stdlib_additional_modules_execute_without_failures() {
-    let result = std::thread::Builder::new()
-        .name("stdlib-additional".into())
-        .stack_size(256 * 1024 * 1024)
-        .spawn(stdlib_additional_modules_inner)
-        .expect("spawn test thread")
-        .join();
-    match result {
-        Ok(()) => {}
-        Err(payload) => std::panic::resume_unwind(payload),
-    }
-}
-
-fn stdlib_additional_modules_inner() {
-    let root = test_support::workspace_root();
-    let files = [
-        root.join("integration-tests/stdlib/aivi/email/email.aivi"),
-        root.join("integration-tests/stdlib/aivi/bits/bits.aivi"),
-        root.join("integration-tests/stdlib/aivi/geometry/geometry.aivi"),
-        root.join("integration-tests/stdlib/aivi/graph/graph.aivi"),
-        root.join("integration-tests/stdlib/aivi/i18n/i18n.aivi"),
-        root.join("integration-tests/stdlib/aivi/json/json.aivi"),
-        root.join("integration-tests/stdlib/aivi/list/list.aivi"),
-        root.join("integration-tests/stdlib/aivi/linalg/linalg.aivi"),
-        root.join("integration-tests/stdlib/aivi/linear_algebra/linear_algebra.aivi"),
-        root.join("integration-tests/stdlib/aivi/logic/logic.aivi"),
-        root.join("integration-tests/stdlib/aivi/map/map.aivi"),
-        root.join("integration-tests/stdlib/aivi/math/math.aivi"),
-        root.join("integration-tests/stdlib/aivi/matrix/matrix.aivi"),
-        root.join("integration-tests/stdlib/aivi/number/number.aivi"),
-        root.join("integration-tests/stdlib/aivi/path/path.aivi"),
-        root.join("integration-tests/stdlib/aivi/regex/regex.aivi"),
-        root.join("integration-tests/stdlib/aivi/rest/rest.aivi"),
-        root.join("integration-tests/stdlib/aivi/secrets/secrets.aivi"),
-        root.join("integration-tests/stdlib/aivi/tree/Tree.aivi"),
-        root.join("integration-tests/stdlib/aivi/ui/layout/domain_Layout/domain_Layout.aivi"),
-        root.join("integration-tests/stdlib/aivi/ui/layout/layout.aivi"),
-        root.join("integration-tests/stdlib/aivi/ui/ui.aivi"),
-        root.join("integration-tests/stdlib/aivi/units/units.aivi"),
-        root.join("integration-tests/stdlib/aivi/url/url.aivi"),
-        root.join("integration-tests/stdlib/aivi/validation/validation.aivi"),
-        root.join("integration-tests/stdlib/aivi/vector/vector.aivi"),
-    ];
-
-    let mut executed_files = 0usize;
-    let mut skipped_files = 0usize;
-    let mut total_passed = 0usize;
-    for path in files {
-        let mut modules = load_modules_from_paths(std::slice::from_ref(&path))
-            .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
-
-        let mut diags = check_modules(&modules);
-        if !file_diagnostics_have_errors(&diags) {
-            diags.extend(elaborate_expected_coercions(&mut modules));
-        }
-        diags.retain(|d| !d.path.starts_with("<embedded:"));
-        if file_diagnostics_have_errors(&diags) {
-            skipped_files += 1;
-            continue;
-        }
-
-        let tests = test_support::collect_test_entries(&modules);
-        if tests.is_empty() {
-            skipped_files += 1;
-            continue;
-        }
-
-        let program = desugar_modules(&modules);
-        let display = path.display().to_string();
-        let result = run_test_suite_with_timeout(program, &tests, &modules, &display, 30);
-        let Some(Ok(report)) = result else {
-            skipped_files += 1;
-            continue;
-        };
-        if report.failed > 0 {
-            skipped_files += 1;
-            continue;
-        }
-        executed_files += 1;
-        total_passed += report.passed;
-    }
-
-    assert!(
-        executed_files > 0,
-        "expected additional stdlib tests to execute"
-    );
-    eprintln!("skipped stdlib files in additional batch: {skipped_files}");
     assert!(total_passed > 0, "expected stdlib tests to execute");
 }

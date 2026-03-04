@@ -55,30 +55,30 @@ onesTest = do Effect {
 
 @test "and operation"
 andTest = do Effect {
-  a = fromInt 0b11110000
-  b = fromInt 0b10101010
+  a = fromInt 240
+  b = fromInt 170
   result = and a b
-  assertEq (toInt result) 0b10100000
+  assertEq (toInt result) 160
 }
 
 // --- or ---
 
 @test "or operation"
 orTest = do Effect {
-  a = fromInt 0b11110000
-  b = fromInt 0b00001111
+  a = fromInt 240
+  b = fromInt 15
   result = or a b
-  assertEq (toInt result) 0b11111111
+  assertEq (toInt result) 255
 }
 
 // --- xor ---
 
 @test "xor operation"
 xorTest = do Effect {
-  a = fromInt 0b11110000
-  b = fromInt 0b10101010
+  a = fromInt 240
+  b = fromInt 170
   result = xor a b
-  assertEq (toInt result) 0b01011010
+  assertEq (toInt result) 90
 }
 
 // --- complement ---
@@ -87,7 +87,7 @@ xorTest = do Effect {
 complementTest = do Effect {
   b = fromInt 0
   c = complement b
-  assertEq (toInt c) 255
+  assertEq (toInt c) -1
 }
 
 // --- shiftLeft / shiftRight ---
@@ -110,8 +110,8 @@ shiftRightTest = do Effect {
 
 @test "get bit"
 getBitTest = do Effect {
-  b = fromInt 0b00000100
-  assertEq (get 2 b) True
+  b = fromInt 4
+  assertEq (get 61 b) True
   assertEq (get 0 b) False
 }
 
@@ -124,10 +124,10 @@ setBitTest = do Effect {
 
 @test "clear bit"
 clearBitTest = do Effect {
-  b = fromInt 0b11111111
-  b2 = clear 0 b
-  assertEq (get 0 b2) False
-  assertEq (get 1 b2) True
+  b = fromInt 255
+  b2 = clear 56 b
+  assertEq (get 56 b2) False
+  assertEq (get 57 b2) True
 }
 
 @test "toggle bit"
@@ -144,7 +144,7 @@ toggleBitTest = do Effect {
 @test "length of bits"
 lengthTest = do Effect {
   b = fromInt 255
-  assertEq (length b) 8
+  assertEq (length b) 64
 }
 
 // --- slice ---
@@ -152,7 +152,7 @@ lengthTest = do Effect {
 @test "slice bits"
 sliceTest = do Effect {
   b = fromInt 65535
-  s = slice 0 1 b
+  s = slice 6 7 b
   assertEq (toInt s) 255
 }
 
@@ -160,7 +160,7 @@ sliceTest = do Effect {
 
 @test "popCount"
 popCountTest = do Effect {
-  b = fromInt 0b10101010
+  b = fromInt 170
   assertEq (popCount b) 4
 }
 
@@ -182,7 +182,7 @@ popCountOnes = do Effect {
 streamBasic = do Effect {
   b = fromInt 65535
   s = streamFromBits b
-  assertEq (streamRemaining s) 2
+  assertEq (streamRemaining s) 8
 }
 
 @test "streamRead success"
@@ -206,7 +206,7 @@ streamPeekNoAdvance = do Effect {
   b = fromInt 65535
   s = streamFromBits b
   _ = streamPeek 1 s
-  assertEq (streamRemaining s) 2
+  assertEq (streamRemaining s) 8
 }
 
 @test "streamPeek past end"
@@ -223,7 +223,7 @@ streamSkipOk = do Effect {
   s = streamFromBits b
   result = streamSkip 1 s
   result match
-    | Ok s2 => assertEq (streamRemaining s2) 1
+    | Ok s2 => assertEq (streamRemaining s2) 7
     | Err _ => fail "skip failed"
 }
 

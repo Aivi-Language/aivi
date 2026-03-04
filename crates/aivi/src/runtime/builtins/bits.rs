@@ -289,8 +289,8 @@ pub(super) fn build_bits_record() -> Value {
         "slice".to_string(),
         builtin("bits.slice", 3, |mut args, _| {
             let data = expect_bytes(args.pop().unwrap(), "bits.slice")?;
-            let start = expect_int(args.pop().unwrap(), "bits.slice")? as usize;
             let end = expect_int(args.pop().unwrap(), "bits.slice")? as usize;
+            let start = expect_int(args.pop().unwrap(), "bits.slice")? as usize;
             if start > data.len() || end > data.len() || start > end {
                 return Err(RuntimeError::Message(format!(
                     "bits.slice: range {start}..{end} out of bounds for {} bytes",
