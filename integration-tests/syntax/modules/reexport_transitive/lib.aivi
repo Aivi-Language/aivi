@@ -1,0 +1,7 @@
+// Library module: exports a pure function.
+module integrationTests.syntax.modules.reexportTransitive.lib
+
+export compute
+
+compute : Int -> Int
+compute = x => x * 3

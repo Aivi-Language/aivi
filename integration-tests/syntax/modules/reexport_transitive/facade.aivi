@@ -1,0 +1,5 @@
+// Facade module: re-exports compute from the library.
+module integrationTests.syntax.modules.reexportTransitive.facade
+export compute
+
+use integrationTests.syntax.modules.reexportTransitive.lib (compute)

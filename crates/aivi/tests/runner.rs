@@ -285,16 +285,19 @@ fn syntax_effects_selected_files_execute_without_failures() {
         "integration-tests/syntax/domains/rhs_typed_overload.aivi",
         "integration-tests/syntax/domains/suffix_application_expr.aivi",
         "integration-tests/syntax/effects/attempt_and_match.aivi",
+        "integration-tests/syntax/effects/attempt_converts_to_result.aivi",
         "integration-tests/syntax/effects/do_list_block.aivi",
         "integration-tests/syntax/effects/do_monad_block.aivi",
         "integration-tests/syntax/effects/do_option_block.aivi",
         "integration-tests/syntax/effects/do_result_block.aivi",
+        "integration-tests/syntax/effects/given_or_behavior.aivi",
         "integration-tests/syntax/effects/given_precondition.aivi",
         "integration-tests/syntax/effects/loop_recurse.aivi",
         "integration-tests/syntax/effects/machine_runtime.aivi",
         "integration-tests/syntax/effects/on_event.aivi",
         "integration-tests/syntax/effects/or_sugar.aivi",
         "integration-tests/syntax/effects/unless_conditional.aivi",
+        "integration-tests/syntax/effects/when_unless_desugar.aivi",
     ]
     .iter()
     .map(|p| root.join(p))
@@ -393,4 +396,150 @@ fn combinations_execute_without_failures() {
     );
     assert_eq!(total_failed, 0, "{total_failed} combination test(s) failed");
     eprintln!("combinations: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn scoping_tests_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/syntax/scoping/closure_loop_capture.aivi",
+        "integration-tests/syntax/scoping/closure_generator_capture.aivi",
+        "integration-tests/syntax/scoping/shadowing_all_binders.aivi",
+        "integration-tests/syntax/scoping/nested_lambda_capture.aivi",
+        "integration-tests/syntax/scoping/destructure_capture.aivi",
+        "integration-tests/syntax/scoping/closure_match_arm.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected scoping tests to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(total_failed, 0, "{total_failed} scoping test(s) failed");
+    eprintln!("scoping: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn runtime_numeric_boundary_tests_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/runtime/integer_overflow.aivi",
+        "integration-tests/runtime/float_extremes.aivi",
+        "integration-tests/runtime/equality_hash_consistency.aivi",
+        "integration-tests/runtime/ordering_laws.aivi",
+        "integration-tests/runtime/deep_recursion_list.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected numeric boundary tests to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(total_failed, 0, "{total_failed} numeric boundary test(s) failed");
+    eprintln!("numeric boundary: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn no_dup_eval_and_determinism_tests_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/runtime/no_dup_eval_match_scrutinee.aivi",
+        "integration-tests/runtime/no_dup_eval_guard.aivi",
+        "integration-tests/runtime/no_dup_eval_pipeline.aivi",
+        "integration-tests/runtime/no_dup_eval_record_spread.aivi",
+        "integration-tests/runtime/determinism_map_order.aivi",
+        "integration-tests/runtime/determinism_set_order.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected no-dup-eval / determinism tests to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(
+        total_failed,
+        0,
+        "{total_failed} no-dup-eval / determinism test(s) failed"
+    );
+    eprintln!("no-dup-eval / determinism: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn eval_order_and_tco_tests_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/runtime/eval_order_args.aivi",
+        "integration-tests/runtime/eval_order_record_fields.aivi",
+        "integration-tests/runtime/short_circuit_and_or.aivi",
+        "integration-tests/runtime/tco_deep_recursion.aivi",
+        "integration-tests/runtime/tco_mutual_recursion_deep.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected eval-order / TCO tests to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(
+        total_failed,
+        0,
+        "{total_failed} eval-order / TCO test(s) failed"
+    );
+    eprintln!("eval-order / TCO: {total_passed} passed, {skipped_files} file(s) skipped");
 }

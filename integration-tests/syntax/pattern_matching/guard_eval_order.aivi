@@ -1,0 +1,37 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.guardEvalOrder
+
+use aivi
+use aivi.testing
+
+// Guards are evaluated top-to-bottom.  Each arm below has a guard that
+// only fires for a specific number.  The first matching arm wins, so the
+// order of arms determines the result.
+classify : Int -> Text
+classify =
+  | n when n < 0   => "negative"
+  | n when n == 0  => "zero"
+  | n when n < 10  => "small"
+  | n when n < 100 => "medium"
+  | _              => "large"
+
+// Guards see all pattern bindings from their arm.
+describeOpt : Option Int -> Text
+describeOpt = v => v match
+  | Some n when n > 100 => "big"
+  | Some n when n > 0   => "positive"
+  | Some _              => "non-positive"
+  | None                => "absent"
+
+@test "guard evaluation order"
+guardEvalOrder = do Effect {
+  assertEq (classify (-5)) "negative"
+  assertEq (classify 0) "zero"
+  assertEq (classify 7) "small"
+  assertEq (classify 42) "medium"
+  assertEq (classify 999) "large"
+  assertEq (describeOpt (Some 200)) "big"
+  assertEq (describeOpt (Some 5)) "positive"
+  assertEq (describeOpt (Some 0)) "non-positive"
+  assertEq (describeOpt None) "absent"
+}

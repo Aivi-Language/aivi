@@ -1,0 +1,14 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.arityMismatchTooManyArgs
+
+use aivi
+
+// f : Int -> Int  accepts exactly one Int argument and returns an Int.
+// Calling  f 1 2  tries to apply the result (an Int) to the second argument 2.
+// Applying a non-function type (Int) to an argument is a type error.
+
+f : Int -> Int
+f = x => x + 1
+
+bad = f 1 2

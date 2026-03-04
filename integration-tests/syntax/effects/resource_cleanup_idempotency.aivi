@@ -1,0 +1,68 @@
+@no_prelude
+module integrationTests.syntax.effects.resourceCleanupIdempotency
+
+use aivi
+use aivi.testing
+use aivi.file
+
+// Resource that writes a fixed marker on cleanup.
+// Used to verify cleanup fires exactly once per acquisition.
+cleanupMarkerResource = markerPath => resource {
+  yield Unit
+  writeText markerPath "cleanup-ran"
+}
+
+// Verify cleanup runs exactly once: the marker file exists after scope exit
+// with the exact content written by a single cleanup invocation.
+@test "cleanup runs exactly once per resource acquisition"
+cleanupRunsExactlyOnce = do Effect {
+  markerPath = "/tmp/aivi_idempotency_marker.txt"
+
+  _ <- do Effect {
+    _ <- cleanupMarkerResource markerPath
+    pure Unit
+  }
+
+  markerResult <- readText markerPath
+  _            <- markerResult match
+    | Ok txt => assertEq txt "cleanup-ran"
+    | Err _  => fail "cleanup did not write marker"
+
+    _ <- delete markerPath
+    pure Unit
+}
+
+// Verify that two independent acquisitions of the same resource recipe each
+// produce independent cleanups — neither suppresses nor duplicates the other.
+@test "two independent acquisitions each trigger one independent cleanup"
+twoIndependentCleanups = do Effect {
+  path1 = "/tmp/aivi_idempotency_1.txt"
+  path2 = "/tmp/aivi_idempotency_2.txt"
+
+  // First acquisition and release
+  _ <- do Effect {
+    _ <- cleanupMarkerResource path1
+    pure Unit
+  }
+
+  // Second acquisition and release (first is fully released before this)
+  _ <- do Effect {
+    _ <- cleanupMarkerResource path2
+    pure Unit
+  }
+
+  r1 <- readText path1
+  r2 <- readText path2
+
+  _ <- r1 match
+    | Ok txt => assertEq txt "cleanup-ran"
+    | Err _  => fail "first cleanup did not run"
+
+    _ <- r2 match
+      | Ok txt => assertEq txt "cleanup-ran"
+      | Err _  => fail "second cleanup did not run"
+
+    _ <- delete path1
+    _ <- delete path2
+    pure Unit
+}

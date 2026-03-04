@@ -1,0 +1,26 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.nestedConstructorPattern
+
+use aivi
+use aivi.testing
+
+Option A = None | Some A
+Result E A = Err E | Ok A
+
+// Deep nested constructor patterns: Option (Result E A) with record payload.
+User = { name: Text, age: Int }
+
+describeResult : Option (Result Text User) -> Text
+describeResult = v => v match
+  | Some (Ok { name: "Alice", age }) => "Alice aged " < > (aivi.text.show age)
+  | Some (Ok { name, age })          => name < > " aged " < > (aivi.text.show age)
+  | Some (Err msg)                   => "error: " < > msg
+  | None                             => "absent"
+
+@test "nested constructor pattern"
+nestedConstructorPattern = do Effect {
+  assertEq (describeResult (Some (Ok { name: "Alice", age: 30 }))) "Alice aged 30"
+  assertEq (describeResult (Some (Ok { name: "Bob", age: 25 }))) "Bob aged 25"
+  assertEq (describeResult (Some (Err "not found"))) "error: not found"
+  assertEq (describeResult None) "absent"
+}

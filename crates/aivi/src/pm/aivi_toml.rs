@@ -9,11 +9,19 @@ pub enum ProjectKind {
     Lib,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AiviTomlScripts {
+    #[serde(default)]
+    pub pre_run: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AiviToml {
     pub project: AiviTomlProject,
     #[serde(default)]
     pub build: AiviTomlBuild,
+    #[serde(default)]
+    pub scripts: AiviTomlScripts,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,4 +79,20 @@ pub fn read_aivi_toml(path: &Path) -> Result<AiviToml, AiviError> {
     let text = std::fs::read_to_string(path)?;
     toml::from_str(&text)
         .map_err(|err| AiviError::Config(format!("failed to parse {}: {err}", path.display())))
+}
+
+pub fn run_pre_run_scripts(scripts: &AiviTomlScripts) -> Result<(), AiviError> {
+    for cmd in &scripts.pre_run {
+        let status = std::process::Command::new("sh")
+            .args(["-c", cmd])
+            .status()
+            .map_err(|e| AiviError::Config(format!("failed to run pre_run script `{cmd}`: {e}")))?;
+        if !status.success() {
+            return Err(AiviError::Config(format!(
+                "pre_run script `{cmd}` exited with {}",
+                status
+            )));
+        }
+    }
+    Ok(())
 }

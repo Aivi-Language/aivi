@@ -1,0 +1,74 @@
+@no_prelude
+module integrationTests.syntax.scoping.closureMatchArm
+
+use aivi
+use aivi.testing
+
+// Closures created in different match arms, each capturing the arm-specific
+// binding. Closures are called after the match completes.
+// Verifies that each arm closure is isolated from the others.
+
+Shape = Circle Int | Rectangle Int Int | Triangle Int Int Int
+
+// Returns a closure that, given a factor, computes scaled area.
+areaFn : Shape -> (Int -> Int)
+areaFn = shape => shape match
+  | Circle r       => factor => r * r * factor
+  | Rectangle w h  => factor => w * h * factor
+  | Triangle b h _ => factor => b * h / 2 * factor
+
+// Returns a closure that adds the shape's primary dimension to its argument.
+offsetFn : Shape -> (Int -> Int)
+offsetFn = shape => shape match
+  | Circle r       => x => x + r
+  | Rectangle w h  => x => x + w + h
+  | Triangle b h _ => x => x + b + h
+
+@test "match arm closures capture arm-specific integer bindings"
+matchArmIntCapture = do Effect {
+  circleFn = areaFn (Circle 5)
+  rectFn = areaFn (Rectangle 3 4)
+  triFn = areaFn (Triangle 6 8 10)
+  // Each closure independently captures its arm's bindings
+  assertEq (circleFn 1) 25
+  assertEq (circleFn 2) 50
+  assertEq (rectFn 1) 12
+  assertEq (rectFn 3) 36
+  assertEq (triFn 1) 24
+  assertEq (triFn 2) 48
+}
+
+@test "match arm closures using offset function capture arm-specific binding"
+matchArmOffsetCapture = do Effect {
+  circleOff = offsetFn (Circle 10)
+  rectOff = offsetFn (Rectangle 3 5)
+  triOff = offsetFn (Triangle 2 4 99)
+  assertEq (circleOff 0) 10
+  assertEq (rectOff 0) 8
+  assertEq (triOff 0) 6
+}
+
+@test "closures from different arms on the same input are independent"
+matchArmIsolation = do Effect {
+  fn1 = areaFn (Circle 3)
+  fn2 = areaFn (Rectangle 2 5)
+  fn3 = areaFn (Circle 10)
+  // fn1 and fn3 both come from Circle arm but capture different r
+  assertEq (fn1 1) 9
+  assertEq (fn3 1) 100
+  assertEq (fn2 1) 10
+  // Calling each closure again should return the same captured value
+  assertEq (fn1 1) 9
+  assertEq (fn3 1) 100
+}
+
+@test "match arm closure from nested match captures correct binding"
+nestedMatchArmCapture = do Effect {
+  outer = Rectangle 4 6
+  inner = Circle 3
+  outerFn = areaFn outer
+  innerFn = areaFn inner
+  // Each captures its own shape dimensions, independent of each other
+  assertEq (outerFn 2) 48
+  assertEq (innerFn 2) 18
+}

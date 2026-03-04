@@ -1,0 +1,10 @@
+// Consumer: imports compute through the facade (transitive re-export).
+@no_prelude
+module integrationTests.syntax.modules.reexportTransitive.consumer
+
+use integrationTests.syntax.modules.reexportTransitive.facade (compute)
+
+@test "transitive re-export: compute imported via facade resolves correctly"
+reexportTransitiveWorks = do Effect {
+  assertEq (compute 4) 12
+}

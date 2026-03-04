@@ -1,0 +1,56 @@
+@no_prelude
+module integrationTests.syntax.operators.chainedSamePrecedence
+
+use aivi
+use aivi.testing
+
+// Operators at the same precedence level are left-associative.
+// parse_binary uses (prec + 1) for the right side, so equal-precedence
+// operators chain to the left: a OP b OP c  =  (a OP b) OP c.
+
+// --- Addition: left-associative ---
+// 1 + 2 + 3  =  (1 + 2) + 3  =  6
+addLeft = 1 + 2 + 3
+
+@test "addition is left-associative"
+addLeftAssoc = do Effect {
+  assertEq addLeft 6
+}
+
+// --- Subtraction: left-associative (order matters!) ---
+// 10 - 3 - 2  =  (10 - 3) - 2  =  5
+// if right-associative it would be: 10 - (3 - 2) = 9
+subLeft = 10-3-2
+
+@test "subtraction is left-associative"
+subLeftAssoc = do Effect {
+  assertEq subLeft 5
+}
+
+// --- Multiplication: left-associative ---
+// 2 * 3 * 4  =  (2 * 3) * 4  =  24
+mulLeft = 2 * 3 * 4
+
+@test "multiplication is left-associative"
+mulLeftAssoc = do Effect {
+  assertEq mulLeft 24
+}
+
+// --- Division: left-associative (order matters!) ---
+// 24 / 4 / 2  =  (24 / 4) / 2  =  3
+// if right-associative: 24 / (4 / 2) = 12
+divLeft = 24 / 4 / 2
+
+@test "division is left-associative"
+divLeftAssoc = do Effect {
+  assertEq divLeft 3
+}
+
+// --- Mixed same-level operators (+/-) chain left ---
+// 10 - 3 + 2  =  (10 - 3) + 2  =  9
+mixedLeft = 10-3 + 2
+
+@test "mixed add/sub chain left"
+mixedAddSubLeft = do Effect {
+  assertEq mixedLeft 9
+}

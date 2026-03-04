@@ -1,0 +1,7 @@
+// EXPECT-ERROR: E2005
+module testTransitive.consumer
+
+use testTransitive.facadeA (process)
+use testTransitive.facadeB (process)
+
+result = process 10

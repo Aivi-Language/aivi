@@ -1,0 +1,86 @@
+@no_prelude
+module integrationTests.syntax.types.typeLevelTransforms
+
+use aivi
+use aivi.testing
+
+// ── Base record ───────────────────────────────────────────────────────────────
+
+User = { id: Int, name: Text, email: Text, admin: Bool }
+
+// ── Pick ──────────────────────────────────────────────────────────────────────
+
+// Pick a single field.
+IdOnly = Pick (id) User
+
+// Pick multiple fields.
+NameEmail = Pick (name, email) User
+
+// ── Omit ──────────────────────────────────────────────────────────────────────
+
+// Omit a single field leaves the rest.
+PublicUser = Omit (admin) User
+
+// ── Optional ──────────────────────────────────────────────────────────────────
+
+// Make selected fields optional.
+UserForm = Optional (email) User
+
+// ── Type-level pipe ───────────────────────────────────────────────────────────
+
+// Equivalent: Omit admin, then make email optional.
+UserDraft = User |> Omit (admin) |> Optional (email)
+
+// ── Helper functions ──────────────────────────────────────────────────────────
+
+toIdOnly : User -> IdOnly
+toIdOnly = u => { id: u.id }
+
+toNameEmail : User -> NameEmail
+toNameEmail = u => { name: u.name, email: u.email }
+
+toPublic : User -> PublicUser
+toPublic = u => { id: u.id, name: u.name, email: u.email }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+alice : User
+alice = { id: 1, name: "Alice", email: "alice@example.com", admin: False }
+
+@test "Pick single field"
+pickSingle = do Effect {
+  idVal = toIdOnly alice
+  assertEq idVal.id 1
+}
+
+@test "Pick multiple fields"
+pickMulti = do Effect {
+  ne = toNameEmail alice
+  assertEq ne.name "Alice"
+  assertEq ne.email "alice@example.com"
+}
+
+@test "Omit admin field"
+omitAdmin = do Effect {
+  pub = toPublic alice
+  assertEq pub.id 1
+  assertEq pub.name "Alice"
+}
+
+@test "Optional makes field Option type"
+optionalEmail = do Effect {
+  withEmail : UserForm
+  withEmail = { id: 1, name: "Bob", email: Some "bob@example.com", admin: True }
+  withoutEmail : UserForm
+  withoutEmail = { id: 2, name: "Eve", email: None, admin: False }
+  assertEq withEmail.id 1
+  assertEq withoutEmail.email None
+}
+
+@test "Type-level pipe composes transforms"
+typePipe = do Effect {
+  draft : UserDraft
+  draft = { id: 3, name: "Carol", email: None }
+  assertEq draft.id 3
+  assertEq draft.name "Carol"
+}

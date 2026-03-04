@@ -1,0 +1,112 @@
+@no_prelude
+module integrationTests.runtime.evalOrderRecordFields
+
+use aivi
+use aivi.testing
+
+// --- Record field evaluation order ---
+//
+// Record fields are evaluated in definition order.  These tests verify that
+// field expressions are bound to the correct field names and that
+// destructuring respects declaration order.
+
+// --- Basic field access ---
+
+@test "record fields accessible by name after creation"
+recordFieldAccess = do Effect {
+  r = { x: 1, y: 2, z: 3 }
+  assertEq r.x 1
+  assertEq r.y 2
+  assertEq r.z 3
+}
+
+@test "four-field record retains all values"
+fourFieldRecord = do Effect {
+  r = { a: 10, b: 20, c: 30, d: 40 }
+  assertEq r.a 10
+  assertEq r.b 20
+  assertEq r.c 30
+  assertEq r.d 40
+}
+
+// --- Computed field expressions ---
+
+@test "computed field expressions evaluate correctly"
+computedFields = do Effect {
+  base = 5
+  r = { first: base + 1, second: base * 2, third: base * 3 }
+  assertEq r.first 6
+  assertEq r.second 10
+  assertEq r.third 15
+}
+
+// --- Destructuring preserves field order ---
+
+@test "record destructure binds fields by name"
+recordDestructure = do Effect {
+  r = { x: 7, y: 8, z: 9 }
+  { x, y, z } = r
+  assertEq x 7
+  assertEq y 8
+  assertEq z 9
+}
+
+@test "destructured fields match their declared values"
+destructuredFieldValues = do Effect {
+  r = { a: 1, b: 2, c: 3 }
+  { a, b, c } = r
+  assertEq a 1
+  assertEq b 2
+  assertEq c 3
+}
+
+// --- Field expressions do not bleed into each other ---
+
+@test "field values are independent"
+fieldIndependence = do Effect {
+  r = { p: 100, q: 200, s: 300 }
+  assertEq r.p 100
+  assertEq r.q 200
+  assertEq r.s 300
+  // Verify no accidental swapping
+  assert (r.p != r.q)
+  assert (r.q != r.s)
+  assert (r.p != r.s)
+}
+
+// --- Record patch: updated field takes new value, others unchanged ---
+
+@test "record patch updates target field only"
+recordPatch = do Effect {
+  r = { a: 10, b: 20, c: 30 }
+  r2 = r <| { b: 99 }
+  assertEq r2.a 10
+  assertEq r2.b 99
+  assertEq r2.c 30
+}
+
+// --- Non-commutative field use: field order in expression matters ---
+
+@test "field subtraction depends on which field is lhs vs rhs"
+fieldSubtractionOrder = do Effect {
+  r = { big: 100, small: 1 }
+  assertEq (r.big - r.small) 99
+  assertEq (r.small - r.big) (-99)
+}
+
+// --- do Effect sequencing with record construction ---
+
+@test "record built from sequenced effect binds is consistent"
+recordFromEffects = do Effect {
+  a <- pure 10
+  b <- pure 20
+  c <- pure 30
+  r = { first: a, second: b, third: c }
+  assertEq r.first 10
+  assertEq r.second 20
+  assertEq r.third 30
+  { first, second, third } = r
+  assertEq first 10
+  assertEq second 20
+  assertEq third 30
+}

@@ -1,0 +1,8 @@
+// EXPECT-ERROR: E2001
+@no_prelude
+module integrationTests.compileFail.duplicateExport
+
+export compute, compute
+
+compute : Int -> Int
+compute = x => x * 2

@@ -1,0 +1,4 @@
+module testTransitive.facadeB
+export process
+
+use testTransitive.base (process)

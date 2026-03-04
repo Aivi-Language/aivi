@@ -1,0 +1,59 @@
+@no_prelude
+module integrationTests.runtime.tcoDeepRecursion
+
+use aivi
+use aivi.testing
+
+// --- Deep iteration via loop/recurse ---
+//
+// AIVI's `loop`/`recurse` construct provides explicit TCO-style iteration
+// inside do Effect blocks.  These tests verify that the runtime can complete
+// large numbers of iterations without error.
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+@test "loop/recurse countdown 10000 terminates and returns correct count"
+tcoCountdown = do Effect {
+  result <- do Effect {
+    loop state = (0, 10000) => {
+      (acc, n) = state
+      if n <= 0 then pure acc
+      else do Effect {
+        recurse (acc + 1, n - 1)
+      }
+    }
+  }
+  assertEq result 10000
+}
+
+@test "loop/recurse sum to 10000 equals arithmetic formula"
+tcoSumTo = do Effect {
+  n = 10000
+  result <- do Effect {
+    loop state = (0, n) => {
+      (acc, k) = state
+      if k <= 0 then pure acc
+      else do Effect {
+        recurse (acc + k, k - 1)
+      }
+    }
+  }
+  expected = (n * (n + 1)) / 2
+  assertEq result expected
+}
+
+@test "loop/recurse finds maximum in 1000-element range"
+tcoMaxFold = do Effect {
+  xs = [1..1000]
+  result <- do Effect {
+    loop state = (xs, 0) => {
+      (remaining, current) = state
+      remaining match
+        | []           => pure current
+        | [h, ...rest] => do Effect {
+            recurse (rest, if h > current then h else current)
+          }
+    }
+  }
+  assertEq result 1000
+}

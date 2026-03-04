@@ -1,0 +1,79 @@
+@no_prelude
+module integrationTests.syntax.scoping.shadowingAllBinders
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Shadow the same name `x` across multiple binder forms.
+// Verifies lexical scoping: each new binding hides the previous one
+// and the outer binding remains unchanged after the inner scope ends.
+
+x = 0 // module-level x
+
+// Function param x shadows module-level x
+addParam : Int -> Int
+addParam = x => x + 10
+
+@test "function param x shadows module-level x"
+paramShadow = do Effect {
+  assertEq (addParam 5) 15
+  assertEq x 0
+}
+
+@test "pattern binding x shadows outer x in do Effect"
+patternShadow = do Effect {
+  x = 99
+  (x, y) = (7, 8)
+  assertEq x 7
+  assertEq y 8
+}
+
+@test "do-block bind x shadows outer x"
+doBlockBindShadow = do Effect {
+  x = 100
+  x <- pure 42
+  assertEq x 42
+}
+
+@test "match arm binding x shadows outer x, outer unchanged after"
+matchArmShadow = do Effect {
+  x = 999
+  result = (Some 77) match
+    | Some x => x
+    | None   => 0
+    assertEq result 77
+    assertEq x 999
+}
+
+@test "generator bind x shadows outer x, outer unchanged after"
+generatorBindShadow = do Effect {
+  x = 5
+  g = generate {
+    x <- [1, 2, 3]
+    yield (x * 10)
+  }
+  assertEq (toList g) [10, 20, 30]
+  assertEq x 5
+}
+
+@test "loop state variable x shadows outer x, outer unchanged after"
+loopBindShadow = do Effect {
+  x = 0
+  result <- do Effect {
+    loop x = 1 => {
+      if x >= 4 then pure x
+      else recurse (x + 1)
+    }
+  }
+  assertEq result 4
+  assertEq x 0
+}
+
+@test "sequential shadowing: each new x binding hides previous"
+sequentialShadowing = do Effect {
+  x = 1
+  x = x + 10
+  x = x * 2
+  assertEq x 22
+}

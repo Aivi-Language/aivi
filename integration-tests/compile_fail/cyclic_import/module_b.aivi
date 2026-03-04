@@ -1,0 +1,8 @@
+module testCyclic.moduleB
+
+export helperB
+
+use testCyclic.moduleA (valueA)
+
+helperB : Int -> Int
+helperB = x => x + valueA

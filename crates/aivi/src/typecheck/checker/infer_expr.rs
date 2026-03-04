@@ -599,6 +599,8 @@ impl TypeChecker {
             let mut arm_env = env.clone();
             let pat_ty = self.infer_pattern(&arm.pattern, &mut arm_env)?;
             self.unify_with_span(pat_ty, scrutinee_ty.clone(), arm.span.clone())?;
+            self.check_pattern_linear(&arm.pattern);
+            self.check_record_pattern_extra_fields(&arm.pattern, &scrutinee_ty);
             if let Some(guard) = &arm.guard {
                 let guard_ty = self.infer_expr(guard, &mut arm_env)?;
                 self.unify_with_span(guard_ty, Type::con("Bool"), expr_span(guard))?;
@@ -615,6 +617,85 @@ impl TypeChecker {
             Ok(Type::Func(Box::new(scrutinee_ty), Box::new(result_ty)))
         } else {
             Ok(result_ty)
+        }
+    }
+
+    fn check_pattern_linear(&mut self, pattern: &Pattern) {
+        fn collect_names<'a>(p: &'a Pattern, out: &mut Vec<(&'a str, Span)>) {
+            match p {
+                Pattern::Ident(name) | Pattern::SubjectIdent(name) => {
+                    out.push((&name.name, name.span.clone()));
+                }
+                Pattern::At { name, pattern, .. } => {
+                    out.push((&name.name, name.span.clone()));
+                    collect_names(pattern, out);
+                }
+                Pattern::Constructor { args, .. } => {
+                    for arg in args {
+                        collect_names(arg, out);
+                    }
+                }
+                Pattern::Tuple { items, .. } => {
+                    for item in items {
+                        collect_names(item, out);
+                    }
+                }
+                Pattern::List { items, rest, .. } => {
+                    for item in items {
+                        collect_names(item, out);
+                    }
+                    if let Some(rest) = rest {
+                        collect_names(rest, out);
+                    }
+                }
+                Pattern::Record { fields, .. } => {
+                    for field in fields {
+                        collect_names(&field.pattern, out);
+                    }
+                }
+                Pattern::Wildcard(_) | Pattern::Literal(_) => {}
+            }
+        }
+
+        let mut names: Vec<(&str, Span)> = Vec::new();
+        collect_names(pattern, &mut names);
+
+        let mut seen: HashSet<&str> = HashSet::new();
+        for (name, span) in &names {
+            if !seen.insert(name) {
+                self.emit_extra_diag(
+                    "E3102",
+                    crate::diagnostics::DiagnosticSeverity::Error,
+                    format!("non-linear pattern: '{}' is bound more than once", name),
+                    span.clone(),
+                );
+            }
+        }
+    }
+
+    fn check_record_pattern_extra_fields(&mut self, pattern: &Pattern, scrutinee_ty: &Type) {
+        let expanded = self.expand_alias(scrutinee_ty.clone());
+        let resolved = self.apply(expanded);
+        let Type::Record { fields: scr_fields } = &resolved else {
+            return;
+        };
+        if scr_fields.is_empty() {
+            return;
+        }
+        let Pattern::Record { fields: pat_fields, .. } = pattern else {
+            return;
+        };
+        for field in pat_fields {
+            if let Some(first) = field.path.first() {
+                if !scr_fields.contains_key(&first.name) {
+                    self.emit_extra_diag(
+                        "E3000",
+                        crate::diagnostics::DiagnosticSeverity::Error,
+                        format!("record has no field '{}'", first.name),
+                        first.span.clone(),
+                    );
+                }
+            }
         }
     }
 

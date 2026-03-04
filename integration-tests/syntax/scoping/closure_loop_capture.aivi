@@ -1,0 +1,68 @@
+@no_prelude
+module integrationTests.syntax.scoping.closureLoopCapture
+
+use aivi
+use aivi.testing
+use aivi.list (map)
+
+// Closures created inside a loop/recurse, stored in a list, called after
+// the loop ends. Each closure must capture its own per-iteration value,
+// not the last value seen.
+
+@test "loop closures each capture their own iteration value"
+loopClosureCapture = do Effect {
+  fns <- do Effect {
+    loop state = { i: 1, fns: [] } => {
+      if state.i > 4 then pure state.fns
+      else do Effect {
+        n = state.i
+        f = x => x * n
+        recurse { i: state.i + 1, fns: [...state.fns, f] }
+      }
+    }
+  }
+  // fns = [f1, f2, f3, f4] where fi x = x * i
+  results = map (f => f 10) fns
+  assertEq results [10, 20, 30, 40]
+}
+
+@test "loop closures capture distinct additive offsets"
+loopClosureOffsets = do Effect {
+  fns <- do Effect {
+    loop state = { i: 0, fns: [] } => {
+      if state.i >= 3 then pure state.fns
+      else do Effect {
+        offset = state.i * 100
+        f = x => x + offset
+        recurse { i: state.i + 1, fns: [...state.fns, f] }
+      }
+    }
+  }
+  // fns = [f0, f1, f2]: f0 adds 0, f1 adds 100, f2 adds 200
+  results = map (f => f 5) fns
+  assertEq results [5, 105, 205]
+}
+
+@test "loop closures called multiple times still return correct per-iteration value"
+loopClosureMultiCall = do Effect {
+  fns <- do Effect {
+    loop state = { i: 1, fns: [] } => {
+      if state.i > 3 then pure state.fns
+      else do Effect {
+        n = state.i
+        f = x => x + n
+        recurse { i: state.i + 1, fns: [...state.fns, f] }
+      }
+    }
+  }
+  // Each closure should add its own n, regardless of how many times called
+  first = fns match | [f, ..._] => f | _ => _ => 0
+  second = fns match | [_, f, ..._] => f | _ => _ => 0
+  third = fns match | [_, _, f] => f | _ => _ => 0
+  assertEq (first 0) 1
+  assertEq (first 100) 101
+  assertEq (second 0) 2
+  assertEq (second 100) 102
+  assertEq (third 0) 3
+  assertEq (third 100) 103
+}

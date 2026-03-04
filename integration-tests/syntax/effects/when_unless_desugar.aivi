@@ -1,0 +1,58 @@
+@no_prelude
+module integrationTests.syntax.effects.whenUnlessDesugar
+
+use aivi
+use aivi.testing
+
+// `when cond <- action` is equivalent to `if cond then action else pure Unit`.
+// Both forms abort with the same error when the condition is True.
+
+@test "when true identical to if-then-else"
+whenTrueIdenticalToIfThenElse = do Effect {
+  r1        <- attempt (do Effect {
+      when True <- fail "triggered"
+      pure Unit
+  })
+  r2 <- attempt (do Effect {
+      if True then fail "triggered" else pure Unit
+  })
+  assertEq r1 r2
+}
+
+@test "when false identical to if-then-else"
+whenFalseIdenticalToIfThenElse = do Effect {
+  r1         <- attempt (do Effect {
+      when False <- fail "triggered"
+      pure Unit
+  })
+  r2 <- attempt (do Effect {
+      if False then fail "triggered" else pure Unit
+  })
+  assertEq r1 r2
+}
+
+// `unless cond <- action` is equivalent to `if cond then pure Unit else action`.
+
+@test "unless true identical to if-then-else"
+unlessTrueIdenticalToIfThenElse = do Effect {
+  r1          <- attempt (do Effect {
+      unless True <- fail "triggered"
+      pure Unit
+  })
+  r2 <- attempt (do Effect {
+      if True then pure Unit else fail "triggered"
+  })
+  assertEq r1 r2
+}
+
+@test "unless false identical to if-then-else"
+unlessFalseIdenticalToIfThenElse = do Effect {
+  r1           <- attempt (do Effect {
+      unless False <- fail "triggered"
+      pure Unit
+  })
+  r2 <- attempt (do Effect {
+      if False then pure Unit else fail "triggered"
+  })
+  assertEq r1 r2
+}

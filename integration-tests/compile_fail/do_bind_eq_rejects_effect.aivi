@@ -1,0 +1,12 @@
+// EXPECT-ERROR: use `<-` to run effects; `=` binds pure values
+@no_prelude
+module integrationTests.compileFail.doBindEqRejectsEffect
+
+use aivi
+
+// Inside a do Effect block, using `=` to bind an effectful value is a compile
+// error. The correct form is `x <- eff`.
+bad = do Effect {
+  x = pure 42
+  pure Unit
+}

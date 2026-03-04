@@ -1,0 +1,10 @@
+// EXPECT-ERROR: E3000
+module integrationTests.compileFail.typeLevelOmitNonexistent
+
+User = { id: Int, name: Text, email: Text }
+
+// Omitting a field that does not exist in User must be a type error.
+Bad = Omit (nonExistentField) User
+
+toSafe : User -> Bad
+toSafe = u => { id: u.id, name: u.name, email: u.email }

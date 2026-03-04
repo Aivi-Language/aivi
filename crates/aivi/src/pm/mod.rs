@@ -7,7 +7,7 @@ mod publish;
 mod scaffold;
 mod sources;
 
-pub use aivi_toml::{read_aivi_toml, AiviToml, ProjectKind};
+pub use aivi_toml::{read_aivi_toml, run_pre_run_scripts, AiviToml, ProjectKind};
 pub use cargo_edit::{edit_cargo_toml_dependencies, CargoManifestEdits};
 pub use cargo_metadata::AiviCargoMetadata;
 pub use dep_spec::{CargoDepSpec, CargoDepSpecParseError};

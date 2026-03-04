@@ -1,0 +1,94 @@
+@no_prelude
+module integrationTests.runtime.noDupEvalPipeline
+
+use aivi
+use aivi.testing
+
+// In a pipeline `expr |> f`, the expression `expr` must be evaluated
+// exactly once.  Even if the compiler inlines or shares the expression,
+// only one value must flow into `f`.
+
+machine PipeCounter =
+  {
+             -> PipeZero  : reset {}
+    PipeZero -> PipeOne   : tap {}
+    PipeOne  -> PipeTwo   : tap {}
+    PipeTwo  -> PipeThree : tap {}
+  }
+
+// --- Basic pipeline passes a single value ---
+
+@test "pipeline threads value once"
+pipelineOnce = do Effect {
+  double = x => x * 2
+  inc = x => x + 1
+
+  // `5` is evaluated once; the result flows through both functions.
+  result = 5 |> double |> inc
+  assertEq result 11
+}
+
+// --- Pipeline with complex left-hand expression ---
+//
+// When the left side of `|>` is a non-trivial expression, it must still
+// be evaluated once and only once before being passed to the function.
+
+@test "complex lhs expression evaluated once in pipeline"
+complexLhsOnce = do Effect {
+  double = x => x * 2
+  // A multi-step expression as the pipeline source.
+  result = (3 + 4) |> double
+  assertEq result 14
+}
+
+// --- Effectful result bound before pipelining ---
+//
+// Effects must be run with `<-` before pipelining.  Once bound, the
+// value flows through the pipeline exactly once.
+
+@test "effect result bound once then pipelined"
+effectBoundThenPiped = do Effect {
+  { tap, currentState } = PipeCounter
+
+  v <- tap {}
+
+  // Counter advanced once by the effect binding.
+  assertEq (constructorName (currentState Unit)) "PipeOne"
+
+  // Pipeline the bound value (pure) — no extra effects.
+  result = v |> (x => x)
+  assertEq result Unit
+
+  // Counter unchanged: pipeline didn't re-run the effect.
+  assertEq (constructorName (currentState Unit)) "PipeOne"
+}
+
+// --- Long pipeline chain ---
+//
+// In a chain `a |> f |> g |> h`, the initial value is computed once
+// and threaded through each stage in sequence.
+
+@test "chained pipeline correct result"
+chainedPipelineCorrect = do Effect {
+  add1 = x => x + 1
+  double = x => x * 2
+  sub3 = x => x - 3
+
+  // (((5 + 1) * 2) - 3) = 9
+  result = 5 |> add1 |> double |> sub3
+  assertEq result 9
+}
+
+// --- Pipeline with function result ---
+//
+// `f x |> g` must evaluate `f x` exactly once and pass it to `g`.
+
+@test "function application as pipeline source"
+functionAppAsSource = do Effect {
+  square = x => x * x
+  toText = x => if x > 10 then "big" else "small"
+
+  // square 4 = 16, 16 > 10, so "big"
+  result = square 4 |> toText
+  assertEq result "big"
+}

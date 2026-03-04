@@ -1,0 +1,33 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.patternArmBindingIsolation
+
+use aivi
+use aivi.testing
+
+Option A = None | Some A
+
+// Each match arm has its own isolated scope.
+// Bindings from one arm are not visible in any other arm.
+describeFirst : Option Int -> Text
+describeFirst = v => v match
+  | Some x => aivi.text.show x
+  | None   => "none"
+
+// A second function uses the same binding name 'x' in a different arm
+// to confirm arms are fully isolated from each other.
+sumTwo : (Option Int, Option Int) -> Int
+sumTwo = pair => pair match
+  | (Some x, Some y) => x + y
+  | (Some x, None)   => x
+  | (None, Some y)   => y
+  | (None, None)     => 0
+
+@test "pattern arm binding isolation"
+patternArmBindingIsolation = do Effect {
+  assertEq (describeFirst (Some 42)) "42"
+  assertEq (describeFirst None) "none"
+  assertEq (sumTwo (Some 3, Some 4)) 7
+  assertEq (sumTwo (Some 5, None)) 5
+  assertEq (sumTwo (None, Some 6)) 6
+  assertEq (sumTwo (None, None)) 0
+}

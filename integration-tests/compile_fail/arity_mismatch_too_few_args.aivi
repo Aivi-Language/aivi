@@ -1,0 +1,15 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.arityMismatchNonFunctionApplied
+
+use aivi
+
+// In a curried language partial application is always valid, so "too few args"
+// is never a type error on its own.  The error case is applying a non-function
+// value to an argument.  Here `x` has type Int; trying to call `x 5` treats an
+// Int as a function, which the type checker rejects.
+
+x : Int
+x = 42
+
+bad = x 5

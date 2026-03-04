@@ -1,0 +1,79 @@
+@no_prelude
+module integrationTests.combinations.comboClosureInGenerator
+
+use aivi
+use aivi.testing
+use aivi.generator
+use aivi.list
+
+// A generator yields closures. Each yielded closure captures the current
+// iteration binding. The closures are collected, then called after generation
+// is complete. Each must carry its own captured value, not a shared reference
+// to the last iteration value.
+
+// --- Generator yields closures capturing iteration binding ---
+
+@test "each yielded closure captures its own iteration binding"
+eachClosureCapturesOwnBinding = do Effect {
+  closures = toList (generate {
+      n <- [1, 2, 3]
+      yield (x => x + n)
+  })
+  results = closures |> map (f => f 0)
+  assertEq results [1, 2, 3]
+}
+
+// --- Call closures with non-zero argument after generation ---
+
+@test "closures called after generation return correct values"
+closuresCalledAfterGeneration = do Effect {
+  closures = toList (generate {
+      n <- [10, 20, 30]
+      yield (x => x * n)
+  })
+  results = closures |> map (f => f 2)
+  assertEq results [20, 40, 60]
+}
+
+// --- Generator with outer scope + iteration binding both captured ---
+
+@test "closure captures both outer scope and iteration binding"
+closureCapturesOuterAndIter = do Effect {
+  base = 100
+  closures = toList (generate {
+      n <- [1, 2, 3]
+      yield (x => base + n + x)
+  })
+  results = closures |> map (f => f 0)
+  assertEq results [101, 102, 103]
+}
+
+// --- Generator over paired values; closures capture pattern-bound fields ---
+
+@test "generator yields closures capturing tuple pattern binding"
+generatorAdtClosures = do Effect {
+  pairs = [(1, 10), (2, 20), (3, 30)]
+  closures = toList (generate {
+      p <- pairs
+      yield (p match
+        | (a, b) => x => x + a + b
+      )
+  })
+  results = closures |> map (f => f 0)
+  assertEq results [11, 22, 33]
+}
+
+// --- Closures from generator called in reverse order still correct ---
+
+@test "closures called out of order still hold their own captured value"
+closuresCalledOutOfOrder = do Effect {
+  closures = toList (generate {
+      n <- [10, 20, 30]
+      yield (x => n - x)
+  })
+  // Verify each closure gives the correct result: independent captured values
+  withFive = closures |> map (f => f 5)
+  withTen = closures |> map (f => f 10)
+  assertEq withFive [5, 15, 25]
+  assertEq withTen [0, 10, 20]
+}

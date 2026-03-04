@@ -1,0 +1,61 @@
+@no_prelude
+module integrationTests.syntax.scoping.nestedLambdaCapture
+
+use aivi
+use aivi.testing
+
+// Nested lambdas where inner and outer both have a parameter named `x`.
+// The inner lambda must capture and use its own `x`, not the outer one.
+
+// (makeDoubler outer_x) returns a lambda that doubles its OWN argument,
+// ignoring the outer_x entirely.
+makeDoubler : Int -> (Int -> Int)
+makeDoubler = x => (x => x * 2)
+
+// Apply the inner lambda immediately: inner x = (outer_x + 1), then double it.
+applyThenDouble : Int -> Int
+applyThenDouble = x => (x => x * 2) (x + 1)
+
+// Three levels of nesting: each x layer shadows the one above.
+tripleNest : Int -> (Int -> (Int -> Int))
+tripleNest = x => (x => (x => x + 1))
+
+@test "inner lambda x shadows outer lambda x"
+innerShadowsOuter = do Effect {
+  f = makeDoubler 99
+  // f 5 = 5 * 2 = 10, not 99 * 2 = 198
+  assertEq (f 5) 10
+  assertEq (f 7) 14
+  assertEq (f 0) 0
+}
+
+@test "outer x used in argument position, inner x used in body"
+outerUsedAsArg = do Effect {
+  // applyThenDouble 3 = (x => x*2) (3+1) = 4*2 = 8
+  assertEq (applyThenDouble 3) 8
+  // applyThenDouble 0 = (x => x*2) (0+1) = 1*2 = 2
+  assertEq (applyThenDouble 0) 2
+  // applyThenDouble 9 = (x => x*2) (9+1) = 10*2 = 20
+  assertEq (applyThenDouble 9) 20
+}
+
+@test "triple nested x: innermost x only sees its own argument"
+tripleNestShadow = do Effect {
+  f = tripleNest 100
+  g = f 200
+  // g n = n + 1, completely independent of 100 and 200
+  assertEq (g 0) 1
+  assertEq (g 5) 6
+  assertEq (g 99) 100
+}
+
+@test "closure inside do Effect with shadowed param"
+closureWithShadowedParam = do Effect {
+  x = 42
+  // This lambda introduces its own x, shadowing the do-block x = 42
+  double = x => x * 2
+  assertEq (double 3) 6
+  assertEq (double 10) 20
+  // The do-block x is still 42
+  assertEq x 42
+}

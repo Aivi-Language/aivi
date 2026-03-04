@@ -1,0 +1,13 @@
+// EXPECT-ERROR: E3100
+@no_prelude
+module integrationTests.compileFail.nonExhaustiveRecordPattern
+
+use aivi
+
+// Shape has two constructors that carry record payloads.
+// Matching only Circle is non-exhaustive — Rectangle is missing.
+Shape = Circle { radius: Float } | Rectangle { width: Float, height: Float }
+
+area : Shape -> Float
+area = s => s match
+  | Circle { radius } => 3.14 * radius * radius

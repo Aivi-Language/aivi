@@ -127,9 +127,10 @@ pub use aivi_mcp::{
 };
 pub use pm::{
     collect_aivi_sources, edit_cargo_toml_dependencies, ensure_aivi_dependency,
-    parse_aivi_cargo_metadata, read_aivi_toml, validate_publish_preflight, write_scaffold,
-    AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
-    CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
+    parse_aivi_cargo_metadata, read_aivi_toml, run_pre_run_scripts,
+    validate_publish_preflight, write_scaffold, AiviCargoMetadata, AiviToml, AiviTomlBuild,
+    AiviTomlProject, CargoDepSpec, CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget,
+    ProjectKind,
 };
 pub use runtime::{TestFailure, TestReport, TestSuccess};
 

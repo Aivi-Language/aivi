@@ -1,0 +1,10 @@
+// EXPECT-ERROR: E3000
+module integrationTests.compileFail.typeLevelPickEmpty
+
+User = { id: Int, name: Text }
+
+// Picking a field that does not exist in User must be a type error.
+Bad = Pick (missing) User
+
+getId : Bad -> Int
+getId = b => b.id

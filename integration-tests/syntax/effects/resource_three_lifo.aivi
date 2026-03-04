@@ -1,0 +1,50 @@
+@no_prelude
+module integrationTests.syntax.effects.resourceThreeLifo
+
+use aivi
+use aivi.testing
+use aivi.file
+
+// All three resources write to the same log file.
+// LIFO cleanup order for acquisition A → B → C is C → B → A.
+// Since each write overwrites the previous, the final content equals the
+// last writer's name.  A is acquired first so it cleans up last → log = "A".
+// Any non-LIFO order would leave a different final value.
+
+resC = logPath => resource {
+  yield Unit
+  writeText logPath "C"
+}
+
+resB = logPath => resource {
+  yield Unit
+  writeText logPath "B"
+}
+
+resA = logPath => resource {
+  yield Unit
+  writeText logPath "A"
+}
+
+@test "three resources are released in LIFO order (C then B then A)"
+resourceThreeLifo = do Effect {
+  logPath = "/tmp/aivi_three_lifo_log.txt"
+
+  // Acquire in order A, B, C — LIFO cleanup: C writes "C", B overwrites "B", A overwrites "A"
+  _ <- do Effect {
+    _ <- resA logPath
+    _ <- resB logPath
+    _ <- resC logPath
+    pure Unit
+  }
+
+  // A's cleanup ran last (first acquired), so final content is "A"
+  logResult <- readText logPath
+  _         <- logResult match
+    | Ok "A"   => pure Unit
+    | Ok other => fail "unexpected cleanup order, log contains: {other}"
+    | Err _    => fail "log file not written — no cleanup ran"
+
+    _ <- delete logPath
+    pure Unit
+}
