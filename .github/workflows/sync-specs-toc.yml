@@ -9,6 +9,9 @@ on:
       - 'specs/index.md'
       - 'specs/README.md'
 
+permissions:
+  contents: write
+
 jobs:
   sync_toc:
     runs-on: ubuntu-latest

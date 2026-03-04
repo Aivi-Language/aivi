@@ -10,27 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust (stable + nightly)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly
           components: llvm-tools-preview
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Install cargo-bolero
         run: cargo install cargo-bolero --locked
       - name: Fuzz parser (long)
-        run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer --time 300s --timeout 30s
+        run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer --test-time 300s --timeout 30s
       - name: Fuzz frontend (long)
-        run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer --time 300s --timeout 30s
+        run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer --test-time 300s --timeout 30s
       - name: Fuzz runtime (long)
-        run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer --time 300s --timeout 30s
+        run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer --test-time 300s --timeout 30s
       - name: Fuzz formatter (long)
-        run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer --time 300s --timeout 30s
+        run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer --test-time 300s --timeout 30s
       - name: Fuzz LSP pipeline (long)
-        run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer --time 300s --timeout 30s
+        run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer --test-time 300s --timeout 30s
       - name: Fuzz type inference (long)
-        run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer --time 300s --timeout 30s
+        run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer --test-time 300s --timeout 30s
       - name: Perf check (tighter)
         run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 1.25
       - name: Upload perf report
