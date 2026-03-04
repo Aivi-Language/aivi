@@ -433,10 +433,6 @@ pub extern "C" fn rt_binary_op(
     let lhs = unsafe { (*lhs_ptr).clone() };
     let rhs = unsafe { (*rhs_ptr).clone() };
 
-    if (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-" {
-        eprintln!("[DEBUG-ENTRY] rt_binary_op {op} {:?} {:?}", lhs, rhs);
-    }
-
     if op == "==" {
         // Equality logic...
         let eq = crate::runtime::values_equal(&lhs, &rhs);
@@ -453,59 +449,56 @@ pub extern "C" fn rt_binary_op(
     let op_name = format!("({})", op);
     if let Some(op_value) = runtime.ctx.globals.get(&op_name) {
         // For MultiClause operators (multiple domains defining the same op),
-        // try each clause individually and prefer the one that succeeds without
-        // producing runtime warnings (e.g. field-access on wrong record type).
+        // try each clause individually and use the first one that succeeds without
+        // a hard error or non-exhaustive match.  Wrong-domain clauses now fail
+        // hard (via rt_record_field strict mode) instead of silently returning Unit.
         if let Value::MultiClause(clauses) = op_value {
             if !runtime.jit_binary_op_dispatching {
                 runtime.jit_binary_op_dispatching = true;
                 let mut fallback_result: Option<Value> = None;
-                let debug_dt = (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-";
-                for (ci, clause) in clauses.into_iter().enumerate() {
+                for clause in clauses.into_iter() {
                     let wc = runtime.jit_rt_warning_count;
                     // Save global state so each clause trial starts clean.
                     let saved_pending = runtime.jit_pending_error.take();
                     let saved_match_failed = runtime.jit_match_failed;
                     runtime.jit_match_failed = false;
-                    let ok = if let Ok(applied) = runtime.apply(clause.clone(), lhs.clone()) {
-                        if let Ok(result) = runtime.apply(applied, rhs.clone()) {
-                            let warns = runtime.jit_rt_warning_count - wc;
-                            if debug_dt {
-                                eprintln!("[DEBUG] clause#{ci} {op} {:?} {:?} => {:?} (warns={warns}, match_failed={}, pending_err={})", lhs, rhs, result, runtime.jit_match_failed, runtime.jit_pending_error.is_some());
+                    let clean = if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
+                        match runtime.apply(applied, rhs.clone()) {
+                            Ok(result) => {
+                                let warns = runtime.jit_rt_warning_count - wc;
+                                let is_dt = (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-";
+                                if is_dt {
+                                    eprintln!("[DISP] Ok warns={warns} match_failed={} pending={}", runtime.jit_match_failed, runtime.jit_pending_error.is_some());
+                                }
+                                if warns == 0 && !runtime.jit_match_failed {
+                                    // Clean match — no warnings produced, restore and return.
+                                    if is_dt {
+                                        eprintln!("[DISP] CLEAN WIN: {:?} {op} {:?} => {:?}", lhs, rhs, result);
+                                    }
+                                    runtime.jit_binary_op_dispatching = false;
+                                    runtime.jit_pending_error = saved_pending;
+                                    runtime.jit_match_failed = saved_match_failed;
+                                    return abi::box_value(result);
+                                }
+                                // Produced warnings — keep as fallback.
+                                if fallback_result.is_none() && !runtime.jit_match_failed {
+                                    fallback_result = Some(result);
+                                }
+                                false
                             }
-                            if warns == 0 && !runtime.jit_match_failed {
-                                // Clean match — no warnings produced
-                                runtime.jit_binary_op_dispatching = false;
-                                runtime.jit_pending_error = saved_pending;
-                                runtime.jit_match_failed = saved_match_failed;
-                                return abi::box_value(result);
+                            Err(e) => {
+                                let is_dt = (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-";
+                                if is_dt {
+                                    let msg = match &e { RuntimeError::Message(m) => m.clone(), _ => "other".to_string() };
+                                    eprintln!("[DISP] Err: {msg}");
+                                }
+                                false
                             }
-                            // Produced warnings — reset counter and keep as fallback
-                            runtime.jit_rt_warning_count = wc;
-                            if fallback_result.is_none() && !runtime.jit_match_failed {
-                                fallback_result = Some(result);
-                            }
-                            true
-                        } else {
-                            if debug_dt {
-                                let cname = match &clause {
-                                    Value::Builtin(b) => b.imp.name.clone(),
-                                    _ => format!("{:?}", clause),
-                                };
-                                eprintln!("[DEBUG] clause#{ci} {op} apply2 ERR (clause={cname})");
-                            }
-                            false
                         }
                     } else {
-                        if debug_dt {
-                            let cname = match &clause {
-                                Value::Builtin(b) => b.imp.name.clone(),
-                                _ => format!("{:?}", clause),
-                            };
-                            eprintln!("[DEBUG] clause#{ci} {op} apply1 ERR (clause={cname})");
-                        }
                         false
                     };
-                    let _ = ok;
+                    let _ = clean;
                     // Restore global state for next clause trial.
                     runtime.jit_pending_error = saved_pending;
                     runtime.jit_match_failed = saved_match_failed;
@@ -525,7 +518,15 @@ pub extern "C" fn rt_binary_op(
         }
     }
     if runtime.jit_binary_op_dispatching {
-        // Nested inside MultiClause dispatch — silently signal failure via warning counter
+        // Nested inside MultiClause dispatch: allow primitive integer negation
+        // since unary `-x` is desugared to `0 - x` in HIR.
+        if op == "-" {
+            if let (Value::Int(0), Value::Int(n)) = (&lhs, &rhs) {
+                return abi::box_value(Value::Int(0i64.wrapping_sub(*n)));
+            }
+        }
+        // For any other nested op we cannot resolve: signal failure via warning
+        // counter so the outer dispatch loop discards this clause trial.
         runtime.jit_rt_warning_count += 1;
         return abi::box_value(Value::Unit);
     }
