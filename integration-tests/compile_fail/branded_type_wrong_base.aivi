@@ -1,0 +1,17 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.brandedTypeWrongBase
+
+use aivi
+
+// Email is a branded Text; it must not be accepted where plain Text is expected.
+Email = Text!
+
+idText : Text -> Text
+idText = t => t
+
+email : Email
+email = "a@b.com"
+
+// Passing a branded Email where Text is required is a type error.
+bad = idText email

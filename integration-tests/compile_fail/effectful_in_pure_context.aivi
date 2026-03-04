@@ -1,0 +1,15 @@
+// EXPECT-ERROR: type mismatch
+@no_prelude
+module integrationTests.compileFail.effectfulInPureContext
+
+use aivi
+
+getNum : Effect Text Int
+getNum = pure 42
+
+addOne : Int -> Int
+addOne = n => n + 1
+
+// Passing an `Effect Text Int` value where a plain `Int` is expected is a
+// static type error — effects must be run inside a do-block with `<-`.
+bad = addOne getNum

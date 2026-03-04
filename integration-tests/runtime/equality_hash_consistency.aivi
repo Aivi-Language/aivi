@@ -1,0 +1,144 @@
+@no_prelude
+module integrationTests.runtime.equalityHashConsistency
+
+use aivi
+use aivi.testing
+
+// AIVI does not expose a user-level hash function; equality is structural and
+// driven by values_equal in the runtime. These tests verify the basic laws:
+//   reflexivity  : x == x
+//   symmetry     : x == y  =>  y == x
+//   consistency  : equal values must compare equal on every call
+
+// ---- Reflexivity ----
+
+@test "integer reflexivity"
+intRefl = do Effect {
+  x = 42
+  assert (x == x)
+}
+
+@test "float reflexivity for finite values"
+floatRefl = do Effect {
+  x = 3.14
+  assert (x == x)
+}
+
+@test "text reflexivity"
+textRefl = do Effect {
+  s = "hello"
+  assert (s == s)
+}
+
+@test "list reflexivity"
+listRefl = do Effect {
+  xs = [1, 2, 3]
+  assert (xs == xs)
+}
+
+@test "record reflexivity"
+recordRefl = do Effect {
+  r = { name: "alice", age: 30 }
+  assert (r == r)
+}
+
+@test "ADT reflexivity"
+adtRefl = do Effect {
+  v = Some 99
+  assert (v == v)
+}
+
+// ---- Structural equality (same value, different binding) ----
+
+@test "equal integers are equal"
+intEq = do Effect {
+  assert (7 == 7)
+  assert (0 == 0)
+  assert ((-1) == (-1))
+}
+
+@test "equal texts are equal"
+textEq = do Effect {
+  assert ("world" == "world")
+  assert ("" == "")
+}
+
+@test "equal lists are equal"
+listEq = do Effect {
+  assert ([10, 20, 30] == [10, 20, 30])
+  assert ([] == [])
+}
+
+@test "equal records are equal"
+recordEq = do Effect {
+  assert ({ x: 1, y: 2 } == { x: 1, y: 2 })
+}
+
+@test "equal ADT values are equal"
+adtEq = do Effect {
+  assert (Some "test" == Some "test")
+  assert (None == None)
+}
+
+// ---- Symmetry ----
+
+@test "equality is symmetric for integers"
+intSymmetry = do Effect {
+  // if a == b then b == a
+  a = 42
+  b = 42
+  aEqB = a == b
+  bEqA = b == a
+  assert aEqB
+  assert bEqA
+}
+
+@test "inequality is symmetric for integers"
+intIneqSymmetry = do Effect {
+  assert (1 != 2)
+  assert (2 != 1)
+}
+
+// ---- Inequality ----
+
+@test "different integers are not equal"
+intNeq = do Effect {
+  assert (1 != 2)
+  assert ((-1) != 1)
+}
+
+@test "different texts are not equal"
+textNeq = do Effect {
+  assert ("abc" != "def")
+  assert ("abc" != "ABC")
+}
+
+@test "different lists are not equal"
+listNeq = do Effect {
+  assert ([1, 2] != [1, 2, 3])
+  assert ([1, 2, 3] != [1, 2, 4])
+}
+
+@test "Some and None are not equal"
+someNoneNeq = do Effect {
+  assert (Some 1 != None)
+  assert (None != Some 1)
+}
+
+// ---- Empty containers ----
+
+@test "empty lists are equal"
+emptyListEq = do Effect {
+  assert ([] == [])
+}
+
+@test "nested list equality"
+nestedListEq = do Effect {
+  assert ([[1, 2], [3, 4]] == [[1, 2], [3, 4]])
+}
+
+@test "tuple equality"
+tupleEq = do Effect {
+  assert ((1, "hello") == (1, "hello"))
+  assert ((1, "hello") != (1, "world"))
+}

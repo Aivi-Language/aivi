@@ -1,0 +1,52 @@
+@no_prelude
+module integrationTests.runtime.tcoMutualRecursionDeep
+
+use aivi
+use aivi.testing
+
+// --- Deep mutual recursion ---
+//
+// even/odd alternate calls between two top-level functions.  These tests verify
+// that the runtime can handle thousands of alternating calls correctly.
+
+even: Int -> Bool
+odd: Int -> Bool
+
+even = n => if n == 0 then True else odd (n - 1)
+odd = n => if n == 0 then False else even (n - 1)
+
+// ─── Small-value correctness ──────────────────────────────────────────────────
+
+@test "even/odd correct for small values"
+evenOddSmall = do Effect {
+  assertEq (even 0) True
+  assertEq (even 2) True
+  assertEq (even 4) True
+  assertEq (odd 1) True
+  assertEq (odd 3) True
+  assertEq (even 1) False
+  assertEq (odd 0) False
+  assertEq (odd 2) False
+}
+
+// ─── Deep mutual recursion – many alternating calls ─────────────────────────
+
+@test "even 5000 terminates and returns True"
+tcoEven5k = do Effect {
+  assertEq (even 5000) True
+}
+
+@test "odd 5001 terminates and returns True"
+tcoOdd5k = do Effect {
+  assertEq (odd 5001) True
+}
+
+@test "even 4999 terminates and returns False"
+tcoEven4999 = do Effect {
+  assertEq (even 4999) False
+}
+
+@test "odd 5000 terminates and returns False"
+tcoOdd5kFalse = do Effect {
+  assertEq (odd 5000) False
+}

@@ -1,0 +1,80 @@
+@no_prelude
+module integrationTests.syntax.scoping.sugarHygiene
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Syntax sugar that desugars to internal bindings must not shadow user-defined
+// variables that happen to share a name with the compiler's intermediate bindings.
+//
+// Tested constructs:
+//   `when cond <- eff`   desugars to  `_ <- if cond then eff else pure Unit`
+//   `unless cond <- eff` desugars to  `_ <- if cond then pure Unit else eff`
+//   `loop n = init => {}`  introduces `n` only inside the loop body
+
+// --- `when` sugar: intermediate `_` does not shadow user bindings ---
+
+@test "when sugar does not affect user bindings"
+whenSugarNoShadow = do Effect {
+  x = 42
+  when True <- pure Unit
+  // `_` from desugar must not shadow or clobber `x`
+  assertEq x 42
+}
+
+// --- `unless` sugar: same hygiene requirement ---
+
+@test "unless sugar does not affect user bindings"
+unlessSugarNoShadow = do Effect {
+  count = 7
+  unless False <- pure Unit
+  assertEq count 7
+}
+
+// --- `loop` introduces its own binding that shadows outer only inside the loop ---
+
+@test "loop binding shadows outer n only inside loop body"
+loopBindingShadowsLocally = do Effect {
+  n = 100
+  result = generate {
+    loop n = 1 => {
+      yield n
+      if n >= 3 then {}
+      else recurse (n + 1)
+    }
+  }
+  // Inside the loop, n went 1..3; outside, outer n must still be 100
+  assertEq (toList result) [1, 2, 3]
+  assertEq n 100
+}
+
+// --- Multiple sugars in sequence: each desugar's internals stay isolated ---
+
+@test "multiple when/unless in sequence do not interfere with each other"
+multipleSugarsSequential = do Effect {
+  value = 55
+  flag1 = True
+  flag2 = False
+  when flag1   <- pure Unit
+  unless flag2 <- pure Unit
+  when flag1   <- pure Unit
+  // After three sugar expansions, value is unchanged
+  assertEq value 55
+}
+
+// --- `loop` with same name as outer binding; outer survives after generate ---
+
+@test "outer binding survives after loop with same name"
+outerSurvivesAfterLoop = do Effect {
+  i = 99
+  g = generate {
+    loop i = 0 => {
+      yield i
+      if i >= 2 then {}
+      else recurse (i + 1)
+    }
+  }
+  assertEq (toList g) [0, 1, 2]
+  assertEq i 99
+}

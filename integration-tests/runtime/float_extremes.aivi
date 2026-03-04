@@ -1,0 +1,101 @@
+@no_prelude
+module integrationTests.runtime.floatExtremes
+
+use aivi
+use aivi.testing
+use aivi.math
+
+// IEEE 754 edge cases — all backed by Cranelift fdiv/fadd/fmul which honour the
+// standard. Constants inf, negInf, nan are exposed directly from aivi.math.
+
+@test "positive infinity from division"
+infFromDiv = do Effect {
+  result = 1.0 / 0.0
+  assert (isInf result)
+  assertEq (isFinite result) False
+}
+
+@test "negative infinity from division"
+negInfFromDiv = do Effect {
+  result = (-1.0) / 0.0
+  assertEq (isInf result) True
+  assertEq (isFinite result) False
+  // Must be strictly less than zero
+  assert (result < 0.0)
+}
+
+@test "zero divided by zero produces NaN"
+nanFromZeroDiv = do Effect {
+  result = 0.0 / 0.0
+  assertEq (isNaN result) True
+}
+
+@test "NaN is not equal to itself (IEEE 754)"
+nanNotEqualToSelf = do Effect {
+  n = nan
+  assertEq (n == n) False
+}
+
+@test "NaN not-equal to itself is true (IEEE 754)"
+nanNeqSelf = do Effect {
+  n = nan
+  assertEq (n != n) True
+}
+
+@test "NaN is not equal to any other value"
+nanNotEqualOther = do Effect {
+  assertEq (nan == 0.0) False
+  assertEq (nan == 1.0) False
+  assertEq (nan == inf) False
+}
+
+@test "negative zero equals positive zero (IEEE 754)"
+negZeroEqPosZero = do Effect {
+  negZ = 0.0 * (-1.0)
+  assertEq (negZ == 0.0) True
+}
+
+@test "negative zero arithmetic"
+negZeroArith = do Effect {
+  negZ = 0.0 * (-1.0)
+  // Adding negative zero to a value leaves it unchanged
+  assertEq (1.0 + negZ) 1.0
+}
+
+@test "inf constant matches division result"
+infConstMatchesDiv = do Effect {
+  fromDiv = 1.0 / 0.0
+  diff = fromDiv - inf
+  // Both are +inf; inf - inf = NaN, not 0
+  assertEq (isNaN diff) True
+}
+
+@test "negInf constant matches negative division result"
+negInfConst = do Effect {
+  fromDiv = (-1.0) / 0.0
+  assertEq (isInf fromDiv) True
+  assert (fromDiv < 0.0)
+}
+
+@test "inf arithmetic stays infinite"
+infArith = do Effect {
+  assertEq (isInf (inf + 1.0)) True
+  assertEq (isInf (inf * 2.0)) True
+  assertEq (isFinite (inf - inf)) False
+  assertEq (isNaN (inf - inf)) True
+}
+
+@test "isFinite on finite values"
+isFiniteFinite = do Effect {
+  assertEq (isFinite 0.0) True
+  assertEq (isFinite 1.0) True
+  assertEq (isFinite (-42.5)) True
+}
+
+@test "isNaN propagates through arithmetic"
+nanPropagates = do Effect {
+  n = nan
+  assertEq (isNaN (n + 1.0)) True
+  assertEq (isNaN (n * 2.0)) True
+  assertEq (isNaN (n - n)) True
+}

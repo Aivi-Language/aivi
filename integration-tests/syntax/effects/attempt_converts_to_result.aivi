@@ -1,0 +1,44 @@
+@no_prelude
+module integrationTests.syntax.effects.attemptConvertsToResult
+
+use aivi
+use aivi.testing
+
+// `attempt expr` converts an effectful computation into a `Result`, making its
+// success or failure available as a pure value for pattern matching.
+
+@test "attempt wraps success in Ok"
+attemptWrapsSuccessInOk = do Effect {
+  res <- attempt (pure 42)
+  res match
+    | Ok v  => assertEq v 42
+    | Err _ => fail "expected Ok"
+}
+
+@test "attempt wraps failure in Err"
+attemptWrapsFailureInErr = do Effect {
+  res <- attempt (fail "something went wrong")
+  res match
+    | Err e => assertEq e "something went wrong"
+    | Ok _  => fail "expected Err"
+}
+
+@test "attempt allows recovery after failure"
+attemptAllowsRecovery = do Effect {
+  res <- attempt (fail "recoverable")
+  value = res match
+    | Ok v  => v
+    | Err _ => 0
+    assertEq value 0
+}
+
+@test "attempt on nested failure short-circuits inner block"
+attemptNestedShortCircuit = do Effect {
+  res <- attempt (do Effect {
+      _   <- fail "inner error"
+      pure 99
+  })
+  res match
+    | Err e => assertEq e "inner error"
+    | Ok _  => fail "expected Err"
+}

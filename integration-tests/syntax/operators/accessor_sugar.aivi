@@ -1,0 +1,69 @@
+@no_prelude
+module integrationTests.syntax.operators.accessorSugar
+
+use aivi
+use aivi.testing
+
+// .field  is accessor sugar: desugars to  x => x.field
+
+getName : { name: Text, age: Int } -> Text
+getName = .name
+
+@test ".field as standalone accessor function"
+dotFieldAccessor = do Effect {
+  person = { name: "Alice", age: 30 }
+  assertEq (getName person) "Alice"
+}
+
+// map .name is equivalent to map (x => x.name)
+people : List { name: Text, age: Int }
+people = [
+  { name: "Alice", age: 30 }
+  { name: "Bob",   age: 25 }
+  { name: "Carol", age: 40 }
+]
+
+names1 = map.name people
+names2 = map (x => x.name) people
+
+@test "map .name equals map (x => x.name)"
+mapDotName = do Effect {
+  assertEq names1 ["Alice", "Bob", "Carol"]
+  assertEq names1 names2
+}
+
+// .field works for Int fields too
+ages1 = map.age people
+ages2 = map (x => x.age) people
+
+@test "map .age equals map (x => x.age)"
+mapDotAge = do Effect {
+  assertEq ages1 [30, 25, 40]
+  assertEq ages1 ages2
+}
+
+// Predicate lifting: bare field name in predicate position becomes _.field
+// filter active items  →  filter (__pred => __pred.active) items
+items : List { label: Text, active: Bool }
+items = [
+  { label: "A", active: True }
+  { label: "B", active: False }
+  { label: "C", active: True }
+]
+
+activeItems = filter active items
+activeItemsExpl = filter (x => x.active) items
+
+@test "predicate lifting: bare bool field used as filter predicate"
+predicateLiftingBoolField = do Effect {
+  assertEq (length activeItems) 2
+  assertEq activeItems activeItemsExpl
+}
+
+// .field accessor in a pipeline
+labels = items |> filter active |> map.label
+
+@test "pipeline with filter+predicate and .field accessor"
+pipelineAccessor = do Effect {
+  assertEq labels ["A", "C"]
+}

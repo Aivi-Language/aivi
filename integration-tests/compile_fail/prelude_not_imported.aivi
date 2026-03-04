@@ -1,0 +1,6 @@
+// EXPECT-ERROR: unknown name
+@no_prelude
+module integrationTests.compileFail.preludeNotImported
+
+// length is provided by the prelude; @no_prelude removes it from scope
+bad = length "hello"

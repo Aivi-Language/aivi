@@ -1,0 +1,55 @@
+@no_prelude
+module integrationTests.syntax.effects.resourceCleanupOnPatternFail
+
+use aivi
+use aivi.testing
+use aivi.file
+
+managedTempFile = path content => resource {
+  _ <- writeText path content
+  yield path
+  delete path
+}
+
+// Acquire a resource, then fail via a pattern match catch-all branch.
+// Verify that cleanup still runs and the original error is preserved.
+@test "cleanup runs when block exits via pattern-match failure branch"
+cleanupOnPatternFail = do Effect {
+  path = "/tmp/aivi_pattern_fail_cleanup.txt"
+
+  result <- attempt (do Effect {
+      _      <- managedTempFile path "live"
+      x = 99
+      x match
+        | 1 => pure Unit
+        | _ => fail "pattern-branch-failure"
+  })
+
+  // Resource cleanup should have run despite the failure (file deleted)
+  afterExists <- exists path
+  _           <- assertEq afterExists False
+
+  // The failure error is still accessible via attempt
+  result match
+    | Err e => assertEq e "pattern-branch-failure"
+    | Ok _  => fail "expected pattern-branch-failure to propagate"
+}
+
+// Verify cleanup runs when a given-guard fires (early exit path).
+@test "cleanup runs when block exits via given-guard failure"
+cleanupOnGivenFail = do Effect {
+  path = "/tmp/aivi_given_fail_cleanup.txt"
+
+  result <- attempt (do Effect {
+      _      <- managedTempFile path "alive"
+      given False or fail "guard-fired"
+      pure Unit
+  })
+
+  afterExists <- exists path
+  _           <- assertEq afterExists False
+
+  result match
+    | Err e => assertEq e "guard-fired"
+    | Ok _  => fail "expected guard-fired to propagate"
+}

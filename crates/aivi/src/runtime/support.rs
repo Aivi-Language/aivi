@@ -16,9 +16,10 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
             }
             Some(Value::List(Arc::new(out)))
         }
-        ("+", Value::Int(a), Value::Int(b)) => Some(Value::Int(a + b)),
-        ("-", Value::Int(a), Value::Int(b)) => Some(Value::Int(a - b)),
-        ("*", Value::Int(a), Value::Int(b)) => Some(Value::Int(a * b)),
+        // Use wrapping arithmetic to match Cranelift's iadd/isub/imul semantics.
+        ("+", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_add(*b))),
+        ("-", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_sub(*b))),
+        ("*", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_mul(*b))),
         ("/", Value::Int(a), Value::Int(b)) => Some(Value::Int(a / b)),
         ("%", Value::Int(a), Value::Int(b)) => Some(Value::Int(a % b)),
         ("+", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a + &**b))),

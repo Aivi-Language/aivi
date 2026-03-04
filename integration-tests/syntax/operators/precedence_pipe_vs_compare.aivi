@@ -1,0 +1,37 @@
+@no_prelude
+module integrationTests.syntax.operators.precedencePipeVsCompare
+
+use aivi
+use aivi.testing
+
+// |> has precedence 2 (lowest infix), == has precedence 6 (higher).
+// Because == has HIGHER precedence, it binds its operands before |>.
+// So: a |> f == b  parses as  a |> (f == b),  NOT  (a |> f) == b.
+//
+// To compare the result of a pipe, use explicit parentheses: (a |> f) == b.
+
+identity : Int -> Int
+identity = x => x
+
+// (1 |> identity) == 1  →  True  (explicit parens needed)
+explicitParens = (1 |> identity) == 1
+
+@test "pipe result equality requires explicit parentheses"
+pipeResultEquality = do Effect {
+  assertEq explicitParens True
+}
+
+// Without parens: 1 |> identity == 1
+//   parses as: 1 |> (identity == 1)
+//   which would be a type error (Int -> Int cannot be compared to Int with ==)
+// We therefore always use explicit parens when equality-checking a piped result.
+
+double : Int -> Int
+double = x => x * 2
+
+chained1 = (10 |> double) == 20
+
+@test "pipe-then-compare with explicit parens"
+pipeThenCompare = do Effect {
+  assertEq chained1 True
+}

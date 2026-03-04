@@ -1,0 +1,154 @@
+@no_prelude
+module integrationTests.runtime.orderingLaws
+
+use aivi
+use aivi.testing
+
+// Verify that the ordering operators satisfy their algebraic laws for Int and Float.
+// Laws checked:
+//   Irreflexivity  : ¬ (a < a)
+//   Asymmetry      : a < b  =>  ¬ (b < a)
+//   Transitivity   : a < b ∧ b < c  =>  a < c
+//   Trichotomy     : exactly one of a < b, a == b, b < a holds
+
+// ---- Integer ordering ----
+
+@test "int strict order is irreflexive"
+intIrrefl = do Effect {
+  x = 5
+  assertEq (x < x) False
+  assertEq (x > x) False
+}
+
+@test "int strict order is asymmetric"
+intAsym = do Effect {
+  assertEq (1 < 2) True
+  assertEq (2 < 1) False
+}
+
+@test "int strict order is transitive"
+intTransitive = do Effect {
+  a = 1
+  b = 5
+  c = 10
+  // a < b and b < c implies a < c
+  assert (a < b)
+  assert (b < c)
+  assert (a < c)
+}
+
+@test "int trichotomy"
+intTrichotomy = do Effect {
+  a = 3
+  b = 7
+  // exactly one of the three holds
+  lessThan = a < b
+  equalTo = a == b
+  greaterThan = a > b
+  assertEq lessThan True
+  assertEq equalTo False
+  assertEq greaterThan False
+}
+
+@test "int equality is reflexive for ordering"
+intEqRefl = do Effect {
+  x = 42
+  assertEq (x <= x) True
+  assertEq (x >= x) True
+}
+
+@test "int non-strict order on equal values"
+intNonStrictEq = do Effect {
+  assertEq (5 <= 5) True
+  assertEq (5 >= 5) True
+}
+
+@test "int non-strict order transitivity"
+intLeqTransitive = do Effect {
+  a = 2
+  b = 2
+  c = 5
+  // a <= b and b <= c implies a <= c
+  assert (a <= b)
+  assert (b <= c)
+  assert (a <= c)
+}
+
+@test "int negative values order correctly"
+intNegOrder = do Effect {
+  assert ((-10) < (-5))
+  assert ((-5) < 0)
+  assert (0 < 5)
+  // transitive
+  assert ((-10) < 0)
+  assert ((-10) < 5)
+}
+
+// ---- Float ordering ----
+
+@test "float strict order is irreflexive"
+floatIrrefl = do Effect {
+  x = 2.5
+  assertEq (x < x) False
+  assertEq (x > x) False
+}
+
+@test "float strict order is asymmetric"
+floatAsym = do Effect {
+  assertEq (1.0 < 2.0) True
+  assertEq (2.0 < 1.0) False
+}
+
+@test "float strict order is transitive"
+floatTransitive = do Effect {
+  a = 0.1
+  b = 0.5
+  c = 0.9
+  assert (a < b)
+  assert (b < c)
+  assert (a < c)
+}
+
+@test "float trichotomy for finite values"
+floatTrichotomy = do Effect {
+  a = 1.5
+  b = 2.5
+  lessThan = a < b
+  equalTo = a == b
+  greaterThan = a > b
+  assertEq lessThan True
+  assertEq equalTo False
+  assertEq greaterThan False
+}
+
+@test "float non-strict order on equal values"
+floatNonStrictEq = do Effect {
+  assertEq (3.0 <= 3.0) True
+  assertEq (3.0 >= 3.0) True
+}
+
+@test "float negative values order correctly"
+floatNegOrder = do Effect {
+  assert ((-3.5) < (-1.0))
+  assert ((-1.0) < 0.0)
+  assert (0.0 < 1.0)
+  assert ((-3.5) < 1.0)
+}
+
+// ---- Mixed comparisons ----
+
+@test "larger range of int values order correctly"
+intLargeRange = do Effect {
+  vals = [(-100), (-50), 0, 50, 100]
+  a = (-100)
+  b = (-50)
+  c = 0
+  d = 50
+  e = 100
+  // spot-check full chain
+  assert (a < b)
+  assert (b < c)
+  assert (c < d)
+  assert (d < e)
+  assert (a < e)
+}

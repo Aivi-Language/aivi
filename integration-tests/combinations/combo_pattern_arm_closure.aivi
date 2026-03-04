@@ -1,0 +1,64 @@
+@no_prelude
+module integrationTests.combinations.comboPatternArmClosure
+
+use aivi
+use aivi.testing
+
+// Closure created inside a guarded match arm, capturing the arm's pattern binding.
+// After the match, the returned closure is called and verified to use the
+// correct binding from the arm that fired.
+
+Val = Low Int | Mid Int | High Int
+
+// --- Guarded arm returns closure capturing pattern binding ---
+
+@test "closure in guarded arm captures pattern binding"
+closureInGuardedArm = do Effect {
+  val = Mid 21
+  fn = val match
+    | Low n when n < 10  => x => x + n
+    | Mid n when n <= 50 => x => x * n
+    | High n             => x => x - n
+  // Mid arm fired: fn captured n = 21
+  assertEq (fn 2) 42
+}
+
+// --- Multiple possible arms; top-level helper avoids sequential-match ambiguity ---
+
+pickFn : Val -> (Int -> Int)
+pickFn = v => v match
+  | Low n  => x => n + x
+  | Mid n  => x => n * x
+  | High n => x => n - x
+
+@test "only the matching arm's binding is captured"
+onlyMatchingArmCaptured = do Effect {
+  fnA = pickFn (Low 3)
+  fnB = pickFn (High 7)
+  // fnA captured n=3 (Low arm), fnB captured n=7 (High arm)
+  assertEq (fnA 10) 13
+  assertEq (fnB 10) (-3)
+}
+
+// --- Closure captures pattern binding, ignores outer variable with same name ---
+
+@test "arm closure ignores outer n, uses pattern-bound n"
+armClosureUsesPatternN = do Effect {
+  n = 999
+  val = Some 5
+  fn = val match
+    | None   => x => x + n
+    | Some n => x => x + n
+  // Some arm fired: fn captures n=5 from the pattern, not outer n=999
+  assertEq (fn 10) 15
+}
+
+// --- Two closures from calls to top-level helper; each captures its own binding ---
+
+@test "two closures from different calls each capture their own binding"
+twoClosuresDifferentBindings = do Effect {
+  f1 = pickFn (Low 4)
+  f2 = pickFn (Mid 3)
+  assertEq (f1 6) 10
+  assertEq (f2 6) 18
+}

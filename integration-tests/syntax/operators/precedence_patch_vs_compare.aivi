@@ -1,0 +1,40 @@
+@no_prelude
+module integrationTests.syntax.operators.precedencePatchVsCompare
+
+use aivi
+use aivi.testing
+
+// <| has precedence 10 (highest infix), == has precedence 6.
+// So: base <| { a: 1 } == patched  parses as  (base <| { a: 1 }) == patched
+// NOT as: base <| ({ a: 1 } == patched)  — that would be a type error.
+
+base : { a: Int }
+base = { a: 0 }
+
+patched : { a: Int }
+patched = { a: 1 }
+
+// (base <| { a: 1 }) == patched  →  { a: 1 } == { a: 1 }  →  True
+result = base <| { a: 1 } == patched
+
+@test "patch binds tighter than equality"
+patchBindsTighterThanEquality = do Effect {
+  assertEq result True
+}
+
+// Also verify with < (comparison, precedence 7): patch still wins.
+lo : { n: Int }
+lo = { n: 5 }
+
+hi : { n: Int }
+hi = { n: 10 }
+
+// (lo <| { n: 7 }).n < hi.n  =  7 < 10  =  True
+// If parsed as lo <| ({ n: 7 } < hi) it would be a type error (Bool is not a record)
+// Here we compare the patched record's n field explicitly
+patchedN = (lo <| { n: 7 }).n
+
+@test "patch-then-compare via explicit parens"
+patchThenCompare = do Effect {
+  assertEq (patchedN < hi.n) True
+}

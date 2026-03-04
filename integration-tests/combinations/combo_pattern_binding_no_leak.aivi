@@ -1,0 +1,94 @@
+@no_prelude
+module integrationTests.combinations.comboPatternBindingNoLeak
+
+use aivi
+use aivi.testing
+use aivi.list
+
+// Verifies that pattern bindings in match arms are scoped to their arm only.
+// Each arm may introduce a binding with the same name; those bindings are
+// independent and do not affect other arms or the scope after the match.
+// The final value must be explicitly bound from the match result.
+
+Status = Active Int | Inactive | Pending Int
+
+// --- Same binding name in every arm: each arm uses its own ---
+
+@test "each arm's internal binding is independent"
+armBindingsIndependent = do Effect {
+  val = 2
+  out <- val match
+    | 1 => do Effect {
+        result = "arm-one"
+        pure result
+      }
+    | 2 => do Effect {
+        result = "arm-two"
+        pure result
+      }
+    | _ => do Effect {
+        result = "arm-other"
+        pure result
+      }
+      assertEq out "arm-two"
+}
+
+// --- Pattern-bound variable scoped to arm expression only ---
+
+@test "pattern binding from non-matching arm does not pollute result"
+patternBindingNotLeaking = do Effect {
+  s = Active 99
+  label = s match
+    | Inactive  => "off"
+    | Active n  => if n > 0 then "active-positive" else "active-zero"
+    | Pending n => if n > 0 then "pending-positive" else "pending-zero"
+  // n is not accessible here; label has the value from Active arm
+  assertEq label "active-positive"
+}
+
+// --- Three arms; only the matched arm's internal value reaches outside ---
+
+@test "only matched arm's value exits the match"
+onlyMatchedArmValueExits = do Effect {
+  s = Pending 7
+  out <- s match
+    | Inactive => pure 0
+    | Active n => do Effect {
+        computed = n * 2
+        pure computed
+      }
+    | Pending n => do Effect {
+        computed = n * 3
+        pure computed
+      }
+  // Pending arm fired: computed = 7*3 = 21
+  // Active arm's `computed` binding is not accessible, did not interfere
+  assertEq out 21
+}
+
+// --- Explicit rebinding after match is required to carry value out ---
+
+@test "result must be explicitly rebound after match to be used"
+explicitRebindAfterMatch = do Effect {
+  s = Active 5
+  score = s match
+    | Inactive  => 0
+    | Active n  => n * 10
+    | Pending n => n
+  // `n` is not accessible here; `score` is the explicit rebinding
+  assertEq score 50
+}
+
+// --- Mismatching arm with same name does not affect correct arm ---
+
+@test "multiple arms binding same name do not interfere"
+multipleArmsBindSameName = do Effect {
+  inputs = [Active 2, Inactive, Pending 5, Active 3]
+  sumActive = inputs |> foldl (acc => s => s match
+    | Active n  => acc + n
+    | Inactive  => acc
+    | Pending n => acc
+  ) 0
+  // Only Active arms contribute: 2 + 3 = 5
+  assertEq sumActive 5
+}

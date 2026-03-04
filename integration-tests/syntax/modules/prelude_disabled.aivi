@@ -1,0 +1,13 @@
+@no_prelude
+module integrationTests.syntax.modules.preludeDisabled
+
+// @no_prelude removes implicit 'use aivi.prelude'.
+// Explicitly importing what we need must still work.
+use aivi.text (length, toUpper)
+use aivi.testing
+
+@test "@no_prelude with explicit imports works correctly"
+preludeDisabledWorks = do Effect {
+  assertEq (length "hello") 5
+  assertEq (toUpper "world") "WORLD"
+}

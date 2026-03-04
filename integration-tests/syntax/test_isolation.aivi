@@ -1,0 +1,48 @@
+@no_prelude
+module integrationTests.syntax.testIsolation
+
+use aivi
+use aivi.testing
+
+// Two @test functions. The first uses a mock. The second must NOT see that mock.
+// Mock expressions are lexically scoped: the mock is bound only within the
+// `mock ... in` expression and does not escape to other test functions.
+
+sharedState = "original"
+
+// --- First test: uses mock, verifies the mock is active ---
+
+@test "first test sees its own mock"
+firstTestUsesMock =
+  mock sharedState = "mocked"
+in do Effect {
+  assertEq sharedState "mocked"
+}
+
+// --- Second test: must NOT see the mock from the first test ---
+
+@test "second test does not see first test's mock"
+secondTestNoMock = do Effect {
+  assertEq sharedState "original"
+}
+
+// --- Third test: its own independent mock does not affect others ---
+
+sharedTag = "alpha"
+
+applyTag = tag => tag
+
+@test "third test mock is scoped to itself"
+thirdTestOwnMock =
+  mock sharedTag = "beta"
+in do Effect {
+  assertEq (applyTag sharedTag) "beta"
+}
+
+// --- Fourth test: verifies sharedTag unchanged after third test's mock ---
+
+@test "fourth test sees original sharedTag"
+fourthTestSeesOriginal = do Effect {
+  assertEq sharedTag "alpha"
+  assertEq (applyTag sharedTag) "alpha"
+}

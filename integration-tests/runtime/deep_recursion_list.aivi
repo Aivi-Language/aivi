@@ -1,0 +1,104 @@
+@no_prelude
+module integrationTests.runtime.deepRecursionList
+
+use aivi
+use aivi.testing
+use aivi.list
+
+// Verify that AIVI handles large collections without exhausting the call stack.
+//
+// Building strategy:
+//   [0 .. N-1]  — the (..) range operator is evaluated iteratively in the
+//                 runtime (Rust loop), so it does NOT increment the JIT call
+//                 depth counter.
+//
+// Folding strategy:
+//   list.foldl  — iterative Rust loop over the list elements; each step
+//                 function call reaches at most depth 2 from the baseline.
+//
+// Note on the JIT call-depth guard: recursive AIVI functions go through
+// rt_check_call_depth and are limited to 1000 nested frames. For large N,
+// always prefer the (..) range + foldl combination used here.
+
+@test "range of 50000 elements folds correctly"
+rangeFold50k = do Effect {
+  xs = [0..49999]
+  // sum 0..49999 = 49999 * 50000 / 2 = 1249975000
+  total = foldl (acc => x => acc + x) 0 xs
+  assertEq total 1249975000
+}
+
+@test "range length is correct for 50000 elements"
+rangeLength50k = do Effect {
+  xs = [0..49999]
+  assertEq (length xs) 50000
+}
+
+@test "range fold with multiplication accumulator"
+rangeFoldMul = do Effect {
+  // product of 1..10 = 3628800 (10!)
+  xs = [1..10]
+  result = foldl (acc => x => acc * x) 1 xs
+  assertEq result 3628800
+}
+
+@test "range of 10000 elements sums correctly"
+rangeFold10k = do Effect {
+  xs = [1..10000]
+  // sum 1..10000 = 10000 * 10001 / 2 = 50005000
+  total = foldl (acc => x => acc + x) 0 xs
+  assertEq total 50005000
+}
+
+@test "fold counts elements"
+foldCount = do Effect {
+  xs = [0..9999]
+  count = foldl (acc => _ => acc + 1) 0 xs
+  assertEq count 10000
+}
+
+@test "fold finds maximum in large range"
+foldMax = do Effect {
+  xs = [0..999]
+  maxVal = foldl (acc => x => if x > acc then x else acc) 0 xs
+  assertEq maxVal 999
+}
+
+@test "nested fold over moderate list"
+nestedFold = do Effect {
+  // sum 0..11 = 11 * 12 / 2 = 66
+  xs = [0..11]
+  total = foldl (acc => x => acc + x) 0 xs
+  assertEq total 66
+}
+
+// --- Loop/recurse within the safe depth limit (< 1000 frames) ---
+//
+// Pure AIVI recursion via loop/recurse is limited to ~1000 frames by the JIT
+// call-depth guard. The tests below use a depth of 500 — comfortably within
+// that limit — to verify that loop/recurse itself works correctly.
+
+@test "loop recurse 500 iterations accumulates correctly"
+loopRecurse500 = do Effect {
+  total <- do Effect {
+    loop state = { i: 0, acc: 0 } => {
+      if state.i >= 500 then pure state.acc
+      else recurse { i: state.i + 1, acc: state.acc + state.i }
+    }
+  }
+  // sum 0..499 = 499 * 500 / 2 = 124750
+  assertEq total 124750
+}
+
+@test "loop recurse builds list of 100 elements"
+loopRecurseList100 = do Effect {
+  xs <- do Effect {
+    loop state = { i: 0, acc: [] } => {
+      if state.i >= 100 then pure state.acc
+      else recurse { i: state.i + 1, acc: [...state.acc, state.i] }
+    }
+  }
+  assertEq (length xs) 100
+  total = foldl (acc => x => acc + x) 0 xs
+  assertEq total 4950
+}

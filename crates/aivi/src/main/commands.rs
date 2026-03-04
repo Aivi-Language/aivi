@@ -485,6 +485,7 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
             .to_path_buf();
         return watch::run_watch(target, &watch_dir);
     }
+    aivi::run_pre_run_scripts(&cfg.scripts)?;
     let (program, cg_types, monomorph_plan, surface_modules) = aivi::desugar_target_with_cg_types_and_surface(target)?;
     aivi::run_cranelift_jit(program, cg_types, monomorph_plan, &surface_modules)
 }

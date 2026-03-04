@@ -1,0 +1,6 @@
+// EXPECT-ERROR: E2004
+module testCyclic.moduleA
+
+use testCyclic.moduleB (helperB)
+
+valueA = helperB 1

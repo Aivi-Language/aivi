@@ -1,0 +1,86 @@
+@no_prelude
+module integrationTests.combinations.comboShadowNestedLambda
+
+use aivi
+use aivi.testing
+
+// Outer function has a parameter `x`. An inner pattern match rebinds `x` in an arm.
+// A nested lambda defined inside that arm uses `x`. The lambda must capture the
+// innermost `x` (the pattern binding) rather than the outer function parameter.
+
+// --- Nested lambda captures pattern-bound x, not outer param x ---
+
+makeAdder = x => (Some 10) match
+  | None   => z => z + x
+  | Some x => z => z + x
+
+@test "nested lambda uses pattern-bound x not outer param x"
+nestedLambdaUsesPatternX = do Effect {
+  fn = makeAdder 100
+  // If lambda captured outer x=100: fn 5 = 5 + 100 = 105
+  // If lambda captured pattern x=10: fn 5 = 5 + 10 = 15
+  assertEq (fn 5) 15
+}
+
+// --- Three-level shadowing: module, param, pattern ---
+
+globalX = 1000
+
+process = x => v => v match
+  | Some x => z => globalX + x + z
+  | None   => z => globalX + x + z
+
+@test "three-level shadowing: lambda uses closest x"
+threeLevelShadowing = do Effect {
+  fnSome = process 200 (Some 30)
+  fnNone = process 200 None
+  // Some arm: lambda uses pattern x=30, not param x=200, not globalX=1000
+  // None arm: lambda uses param x=200 (no pattern x in this arm)
+  assertEq (fnSome 0) 1030
+  assertEq (fnNone 0) 1200
+}
+
+// --- Shadowing inside do Effect block within match arm ---
+
+@test "lambda in do block inside arm uses arm-scoped x"
+lambdaInDoInsideArm = do Effect {
+  x = 50
+  fn <- (Some 7) match
+    | None   => pure (z => z + x)
+    | Some x => do Effect {
+        pure (z => z + x)
+      }
+  // Arm Some bound x=7; lambda captures that x
+  assertEq (fn 0) 7
+  // Outer x=50 is unchanged
+  assertEq x 50
+}
+
+// --- Pattern binding shadows outer param when same name ---
+
+// `pickValue x opt`: Some arm re-binds x from pattern, shadowing param x
+pickValue : Int -> Option Int -> Int
+pickValue = x => opt => opt match
+  | Some x => x
+  | None   => x
+
+@test "pattern binding shadows outer param"
+patternShadowsOuterParam = do Effect {
+  // Some arm fires: pattern x=5 shadows param x=100
+  assertEq (pickValue 100 (Some 5)) 5
+  // None arm fires: param x=100 is used (no pattern binding in this arm)
+  assertEq (pickValue 100 None) 100
+}
+
+@test "shadow in nested match: innermost binding wins"
+nestedMatchShadow = do Effect {
+  x = 1
+  // nestedResult rebinds x twice; each rebinding shadows the previous
+  innerResult = (Some 3) match
+    | Some x => x
+    | None   => 0
+  // innerResult = 3 (from pattern x=3), not 1 (from outer x)
+  assertEq innerResult 3
+  // outer x is unchanged
+  assertEq x 1
+}

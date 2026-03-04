@@ -1,0 +1,23 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.suffixLiteralCollision
+
+use aivi
+
+// Two inline domain declarations in the same module both define the `1kg`
+// suffix template.  The compiler sees two bindings named `1kg` in the same
+// scope and cannot pick one, so using the suffix is a type error.
+
+Kg1 = { grams: Int }
+Kg2 = { kilos: Int }
+
+domain Weight1 over Kg1 = {
+  1kg = Kg1
+}
+
+domain Weight2 over Kg2 = {
+  1kg = Kg2
+}
+
+// Ambiguous: two `1kg` definitions are in scope.
+bad = 10kg

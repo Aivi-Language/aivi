@@ -1,0 +1,25 @@
+// EXPECT-ERROR: type mismatch
+@no_prelude
+module integrationTests.compileFail.desugarSpanAccuracy
+
+use aivi
+
+// This test verifies that when a type error occurs inside a desugared
+// sugar construct, the error span points to the *original* source
+// location, not to an internal AST node generated during desugaring.
+//
+// `attempt expr` desugars to a `bind` form that wraps the inner effect
+// in a `Result`.  The `Ok v` arm below passes `v : Text` to `addOne`
+// which expects `Int` — the type mismatch must be reported at the `v`
+// usage site (the original source line), not at any synthetic position.
+
+addOne : Int -> Int
+addOne = n => n + 1
+
+bad : Effect Text Unit
+bad = do Effect {
+  res <- attempt (pure "hello")
+  res match
+    | Ok v  => pure (addOne v)
+    | Err _ => pure 0
+}

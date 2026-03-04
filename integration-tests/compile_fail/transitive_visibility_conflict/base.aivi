@@ -1,0 +1,6 @@
+module testTransitive.base
+
+export process
+
+process : Int -> Int
+process = x => x + 1

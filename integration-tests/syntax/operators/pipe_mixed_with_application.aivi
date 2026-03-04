@@ -1,0 +1,63 @@
+@no_prelude
+module integrationTests.syntax.operators.pipeMixedWithApplication
+
+use aivi
+use aivi.testing
+
+// Function application binds tighter than any infix operator.
+// x |> f a  means  x |> (f a)  =  (f a) x  =  f a x
+//   (pipe x as the last argument to the partially-applied (f a))
+
+add : Int -> Int -> Int
+add = a b => a + b
+
+// 5 |> add 3  =  (add 3) 5  =  add 3 5  =  8
+pipe1 = 5 |> add 3
+
+@test "pipe passes value as last arg to partial application"
+pipeLastArg = do Effect {
+  assertEq pipe1 8
+}
+
+// Chained pipes:
+// 5 |> add 3 |> add 2
+// = ((5 |> add 3) |> add 2)   — |> is left-associative (prec 2)
+// = (add 3 5) |> add 2
+// = 8 |> add 2
+// = add 2 8  = 10
+pipe2 = 5 |> add 3 |> add 2
+
+@test "chained pipes are left-associative"
+pipeChained = do Effect {
+  assertEq pipe2 10
+}
+
+// Three-level pipe
+// 1 |> add 1 |> add 1 |> add 1  = 4
+pipe3 = 1 |> add 1 |> add 1 |> add 1
+
+@test "three-level pipe chain"
+pipeThreeLevel = do Effect {
+  assertEq pipe3 4
+}
+
+// Pipe with a two-argument function used as transformer
+multiply : Int -> Int -> Int
+multiply = a b => a * b
+
+// 3 |> multiply 4  =  multiply 4 3  =  12
+pipe4 = 3 |> multiply 4
+
+@test "pipe with multiply"
+pipeMultiply = do Effect {
+  assertEq pipe4 12
+}
+
+// Mixed: add then multiply
+// 2 |> add 3 |> multiply 5  =  (add 3 2) |> multiply 5  =  5 |> multiply 5  =  25
+pipe5 = 2 |> add 3 |> multiply 5
+
+@test "pipe add then multiply"
+pipeAddThenMultiply = do Effect {
+  assertEq pipe5 25
+}

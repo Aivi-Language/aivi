@@ -1,0 +1,12 @@
+// EXPECT-ERROR: E3102
+@no_prelude
+module integrationTests.compileFail.patternDuplicateVar
+
+use aivi
+
+// Using the same variable name twice in a tuple pattern is non-linear:
+// the compiler rejects it because each name must be bound exactly once.
+f : (Int, Int) -> Int
+f = pair => pair match
+  | (x, x) => x
+  | _      => 0
