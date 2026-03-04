@@ -16,6 +16,8 @@ pub extern "C" fn rt_constructor_name_eq(
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     match value {
         Value::Constructor { name: n, .. } => i64::from(n == name),
+        // Bool values are stored as Value::Bool but matched as constructors True/False
+        Value::Bool(b) => i64::from((*b && name == "True") || (!*b && name == "False")),
         _ => 0,
     }
 }

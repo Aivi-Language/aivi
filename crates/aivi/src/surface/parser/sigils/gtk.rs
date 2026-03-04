@@ -681,14 +681,7 @@ impl Parser {
                                             expr
                                         }
                                     }
-                                    _ => {
-                                        this.emit_diag(
-                                            "E1613",
-                                            "props field value is not a compile-time literal",
-                                            span.clone(),
-                                        );
-                                        expr
-                                    }
+                                    _ => expr,
                                 },
                                 GtkAttrValue::Bare => mk_string("true"),
                             };
@@ -899,14 +892,7 @@ impl Parser {
                                                     field.value
                                                 }
                                             }
-                                            _ => {
-                                                this.emit_diag(
-                                                    "E1613",
-                                                    "props field value is not a compile-time literal",
-                                                    field.span.clone(),
-                                                );
-                                                field.value
-                                            }
+                                            _ => field.value
                                         };
                                         lowered_attrs.push(call2(
                                             "gtkAttr",
