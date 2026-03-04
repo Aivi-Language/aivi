@@ -463,7 +463,10 @@ fn runtime_numeric_boundary_tests_execute_without_failures() {
         total_passed > 0,
         "expected numeric boundary tests to execute (skipped: {skipped_files})"
     );
-    assert_eq!(total_failed, 0, "{total_failed} numeric boundary test(s) failed");
+    assert_eq!(
+        total_failed, 0,
+        "{total_failed} numeric boundary test(s) failed"
+    );
     eprintln!("numeric boundary: {total_passed} passed, {skipped_files} file(s) skipped");
 }
 
@@ -499,8 +502,7 @@ fn no_dup_eval_and_determinism_tests_execute_without_failures() {
         "expected no-dup-eval / determinism tests to execute (skipped: {skipped_files})"
     );
     assert_eq!(
-        total_failed,
-        0,
+        total_failed, 0,
         "{total_failed} no-dup-eval / determinism test(s) failed"
     );
     eprintln!("no-dup-eval / determinism: {total_passed} passed, {skipped_files} file(s) skipped");
@@ -537,8 +539,7 @@ fn eval_order_and_tco_tests_execute_without_failures() {
         "expected eval-order / TCO tests to execute (skipped: {skipped_files})"
     );
     assert_eq!(
-        total_failed,
-        0,
+        total_failed, 0,
         "{total_failed} eval-order / TCO test(s) failed"
     );
     eprintln!("eval-order / TCO: {total_passed} passed, {skipped_files} file(s) skipped");
