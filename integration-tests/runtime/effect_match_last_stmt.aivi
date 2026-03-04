@@ -1,0 +1,35 @@
+@no_prelude
+module integrationTests.runtime.effectMatchLastStmt
+
+use aivi
+use aivi.testing
+
+// Minimal reproduction: match-as-last-statement in do-block
+// where arms return Effects should work correctly.
+
+@test "match returning Effect as last do-block statement"
+test_match_last_effect = do Effect {
+  x = Ok 42
+  x match
+    | Ok v  => assertEq v 42
+    | Err _ => assert False
+}
+
+@test "match returning Effect as last with prior bind"
+test_match_last_with_bind = do Effect {
+  _ <- pure Unit
+  x = Ok 99
+  x match
+    | Ok v  => assertEq v 99
+    | Err _ => assert False
+}
+
+@test "match returning Effect as last after multiple binds"
+test_match_last_multi_bind = do Effect {
+  a <- pure 10
+  b <- pure 20
+  result = Ok (a + b)
+  result match
+    | Ok v  => assertEq v 30
+    | Err _ => assert False
+}

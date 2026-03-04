@@ -13,7 +13,7 @@ channel_roundtrip = do Effect {
   res match
     | Ok payload => assertEq payload Unit
     | Err _      => assert False
-  close tx
+    close tx
 }
 
 @test "close drains then Err Closed"
@@ -21,7 +21,7 @@ close_drains_then_closed = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
   close tx
-  first <- recv rx
+  first  <- recv rx
   second <- recv rx
   first match
     | Ok payload => assertEq payload Unit
@@ -39,7 +39,7 @@ make_bounded_roundtrip = do Effect {
   res match
     | Ok value => assertEq value 7
     | Err _    => assert False
-  close tx
+    close tx
 }
 
 @test "fold accumulates"
@@ -97,23 +97,39 @@ par_failure = do Effect {
 
 @test "race picks faster right"
 race_right_wins = do Effect {
-  v <- race
-    (do Effect { sleep 50; pure "left" })
-    (do Effect { sleep 0; pure "right" })
+  slow = do Effect {
+    sleep 50
+    pure "left"
+  }
+  fast = do Effect {
+    sleep 0
+    pure "right"
+  }
+  v <- race slow fast
   assertEq v "right"
 }
 
 @test "race picks faster left"
 race_left_wins = do Effect {
-  v <- race
-    (do Effect { sleep 0; pure "left" })
-    (do Effect { sleep 50; pure "right" })
+  fast = do Effect {
+    sleep 0
+    pure "left"
+  }
+  slow = do Effect {
+    sleep 50
+    pure "right"
+  }
+  v <- race fast slow
   assertEq v "left"
 }
 
 @test "timeoutWith times out"
 timeout_times_out = do Effect {
-  result <- attempt (timeoutWith 10 "timeout" (do Effect { sleep 50; pure 1 }))
+  inner = do Effect {
+    sleep 50
+    pure 1
+  }
+  result <- attempt (timeoutWith 10 "timeout" inner)
   result match
     | Ok _      => assert False
     | Err value => assertEq value "timeout"
@@ -127,16 +143,24 @@ timeout_success = do Effect {
 
 @test "spawn join"
 spawn_join = do Effect {
-  task <- spawn (do Effect { sleep 10; pure 42 })
+  delayed = do Effect {
+    sleep 10
+    pure 42
+  }
+  task  <- spawn delayed
   value <- task.join
   assertEq value 42
 }
 
 @test "spawn cancel sets isCancelled"
 spawn_cancel = do Effect {
-  task <- spawn (do Effect { sleep 1000; pure 1 })
-  _ <- task.cancel
-  b <- task.isCancelled
+  longRunning = do Effect {
+    sleep 1000
+    pure 1
+  }
+  task <- spawn longRunning
+  _    <- task.cancel
+  b    <- task.isCancelled
   assertEq b True
 }
 
@@ -145,18 +169,21 @@ retry_eventual_success = do Effect {
   (tx, rx) <- make 0
   send tx 0
 
-  effect = do Effect {
+  step = do Effect {
     res <- recv rx
     res match
       | Err _ => fail "closed"
       | Ok n  =>
-          if n < 2 then do Effect { send tx (n + 1); fail "no" }
-          else pure n
+        if n < 2 then do Effect {
+          send tx (n + 1)
+          fail "no"
+        }
+        else pure n
   }
 
-  value <- retry 5 effect
-  assertEq value 2
-  close tx
+    value <- retry 5 step
+    assertEq value 2
+    close tx
 }
 
 @test "retry fails after attempts"
@@ -164,16 +191,19 @@ retry_failure = do Effect {
   (tx, rx) <- make 0
   send tx 0
 
-  effect = do Effect {
+  step = do Effect {
     res <- recv rx
     res match
       | Err _ => fail "closed"
-      | Ok n  => do Effect { send tx (n + 1); fail "no" }
+      | Ok n  => do Effect {
+          send tx (n + 1)
+          fail "no"
+        }
   }
 
-  result <- attempt (retry 2 effect)
+  result <- attempt (retry 2 step)
   result match
     | Ok _    => assert False
     | Err msg => assertEq msg "no"
-  close tx
+    close tx
 }

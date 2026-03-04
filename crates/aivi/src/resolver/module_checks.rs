@@ -33,6 +33,7 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
         check_defs(module, &module_map, &mut diagnostics);
         check_unused_imports_and_bindings(module, &mut diagnostics);
         check_import_conflicts(module, &mut diagnostics);
+        check_multi_clause_sigs(module, &mut diagnostics);
     }
 
     let cycle_nodes = detect_cycles(&module_map);
@@ -889,6 +890,42 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                     ));
                 }
                 seen.insert(name, source);
+            }
+        }
+    }
+}
+
+fn check_multi_clause_sigs(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
+    let sigs: HashSet<&str> = module
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let ModuleItem::TypeSig(sig) = item {
+                Some(sig.name.name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for item in &module.items {
+        if let ModuleItem::Def(def) = item {
+            if matches!(&def.expr, Expr::Match { scrutinee: None, .. })
+                && !sigs.contains(def.name.name.as_str())
+            {
+                diagnostics.push(file_diag(
+                    module,
+                    Diagnostic {
+                        code: "E2006".to_string(),
+                        severity: DiagnosticSeverity::Error,
+                        message: format!(
+                            "multi-clause function '{}' requires a type signature",
+                            def.name.name
+                        ),
+                        span: def.name.span.clone(),
+                        labels: Vec::new(),
+                    },
+                ));
             }
         }
     }

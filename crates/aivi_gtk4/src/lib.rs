@@ -59,7 +59,7 @@ mod linux_impl {
     use std::ffi::{CStr, CString};
     use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
     use std::ptr::null_mut;
-    use std::sync::{mpsc, Arc, Mutex, OnceLock};
+    use std::sync::{mpsc, Mutex, OnceLock};
 
     use super::{BuildResult, Gtk4Error, GtkNode, SignalEvent};
 
@@ -980,7 +980,10 @@ mod linux_impl {
                         }
                     };
                     let mailfox_dbus = MailfoxDesktopObject;
-                    eprintln!("[dbus-server] connected, unique_name={:?}", conn.unique_name());
+                    eprintln!(
+                        "[dbus-server] connected, unique_name={:?}",
+                        conn.unique_name()
+                    );
                     if let Err(e) = conn
                         .object_server()
                         .at("/com/mailfox/desktop", mailfox_dbus)
@@ -1045,8 +1048,7 @@ mod linux_impl {
     }
 
     pub(super) fn dbus_server_start() -> Result<(), Gtk4Error> {
-        spawn_dbus_server()
-            .map_err(|e| Gtk4Error::new(format!("gtk4.dbusServerStart: {e}")))
+        spawn_dbus_server().map_err(|e| Gtk4Error::new(format!("gtk4.dbusServerStart: {e}")))
     }
 
     struct MailfoxDesktopObject;
@@ -2744,20 +2746,20 @@ mod linux_impl {
 
     pub(super) fn pump_gtk_events() {
         GTK_PUMP_ACTIVE.with(|active| {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static PUMP_COUNT: AtomicU64 = AtomicU64::new(0);
-        let count = PUMP_COUNT.fetch_add(1, Ordering::Relaxed);
-        if count == 0 {
-            GTK_PUMP_ACTIVE.with(|active| {
-                eprintln!("[pump] first call, GTK_PUMP_ACTIVE={}", *active.borrow());
-            });
-        } else if count == 100 {
-        } else if count == 1000 {
-            eprintln!("[pump] reached 1000 iterations");
-        } else if count == 5000 {
-            eprintln!("[pump] reached 5000 iterations");
-            eprintln!("[pump] reached 10000 iterations");
-        }
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static PUMP_COUNT: AtomicU64 = AtomicU64::new(0);
+            let count = PUMP_COUNT.fetch_add(1, Ordering::Relaxed);
+            if count == 0 {
+                GTK_PUMP_ACTIVE.with(|active| {
+                    eprintln!("[pump] first call, GTK_PUMP_ACTIVE={}", *active.borrow());
+                });
+            } else if count == 100 {
+            } else if count == 1000 {
+                eprintln!("[pump] reached 1000 iterations");
+            } else if count == 5000 {
+                eprintln!("[pump] reached 5000 iterations");
+                eprintln!("[pump] reached 10000 iterations");
+            }
             if *active.borrow() {
                 unsafe {
                     let ctx = g_main_context_default();

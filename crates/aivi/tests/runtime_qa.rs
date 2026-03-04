@@ -809,6 +809,7 @@ module app.main
 use aivi
 use aivi.testing
 
+classify : Int -> Text
 classify =
   | n when n < 0   => "negative"
   | 0              => "zero"

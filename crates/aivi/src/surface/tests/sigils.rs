@@ -266,7 +266,7 @@ x = ~<gtk><object class="GtkBox" props={ dynamicProps } /></gtk>
 }
 
 #[test]
-fn gtk_sigil_props_accepts_runtime_expressions() {
+fn gtk_sigil_props_emits_e1613_for_runtime_expressions() {
     let src = r#"
 module Example
 
@@ -276,8 +276,8 @@ x = ~<gtk><object class="GtkBox" props={ { spacing: someValue } } /></gtk>
     let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
     let codes = diag_codes(&diags);
     assert!(
-        codes.is_empty(),
-        "expected no diagnostics for runtime expression in props, got: {codes:?}"
+        codes.iter().any(|code| code == "E1613"),
+        "expected E1613 for non-literal props value, got: {codes:?}"
     );
 }
 

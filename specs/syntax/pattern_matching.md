@@ -99,22 +99,12 @@ In nested position:
 
 Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
 
-### `.{ }`   Destructuring only (no whole-value binding)
-
-`field.{ pat }` destructures the field but does **not** bind the field itself. Only the contents of the nested pattern are in scope:
-
-<<< ../snippets/from_md/syntax/pattern_matching/destructuring_only_no_whole_value_binding.aivi{aivi}
-
-
-Here `name` and `age` are in scope, but `profile` is **not**   it is only used as a path to reach the nested fields.
-
 ### Summary
 
 | Syntax | `field` in scope? | `pat` contents in scope? | Use case |
 | :--- | :---: | :---: | :--- |
 | `{ field: pat }` | no (renamed) | yes | Match/rename a field |
 | `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
-| `{ field.{ pat } }` | no | yes | Destructure only, discard field |
 | `{ field }` | yes |   | Shorthand, binds field by name |
 
 ## 8.6 Guards
