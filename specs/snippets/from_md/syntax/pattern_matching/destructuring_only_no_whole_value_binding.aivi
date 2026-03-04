@@ -1,0 +1,4 @@
+// Nested constructor pattern: match Err carrying a NotFound value
+msg = res match
+  | Err (NotFound m) => m
+  | _                => "no-msg"

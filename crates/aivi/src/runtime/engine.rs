@@ -99,6 +99,13 @@ pub(crate) struct Runtime {
     /// Source location of the most recently instrumented expression, set by
     /// `rt_set_location` before potentially-failing operations.
     pub(crate) jit_current_loc: Option<Box<str>>,
+    /// Warning counter incremented by `rt_warn`. Used by `rt_binary_op` to
+    /// detect when a MultiClause operator clause produced warnings (e.g. wrong
+    /// field access) so the next clause can be tried instead.
+    pub(crate) jit_rt_warning_count: u64,
+    /// Guard to prevent recursive MultiClause dispatch in `rt_binary_op`.
+    /// When true, nested binary ops use the first matching clause directly.
+    pub(crate) jit_binary_op_dispatching: bool,
     /// Whether `--update-snapshots` was passed. When true, `assertSnapshot`
     /// writes new snapshots and `mock snapshot` records real calls.
     pub(crate) update_snapshots: bool,

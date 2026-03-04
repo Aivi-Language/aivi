@@ -425,8 +425,8 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             );
             return;
         };
-        // For crate natives, params are derived from type sig — no dummy body needed.
-        // For runtime natives, params come from the existing def body.
+        // Params come from the existing def body (if present) or from the auto-generated def.
+        // Both crate natives (`::`) and runtime natives (`.`) auto-generate defs from the type sig.
         let params: Vec<Pattern> = if !def.params.is_empty() {
             def.params.clone()
         } else if let Expr::Lambda { params, .. } = def.expr.clone() {
@@ -502,13 +502,10 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             })
             .collect();
 
-        // Auto-generate defs for crate-native type sigs that lack a corresponding def.
-        // For crate natives, no dummy body is required — only the type sig.
+        // Auto-generate defs for @native type sigs that lack a corresponding def.
+        // Neither crate natives (`::`) nor runtime natives (`.`) need a dummy body.
         let mut auto_defs: Vec<ModuleItem> = Vec::new();
         for (sig_name, target_path) in &native_sig_targets {
-            if !is_crate_native_path(target_path) {
-                continue;
-            }
             if existing_def_names.contains(sig_name) {
                 continue;
             }
@@ -530,11 +527,9 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                     })
                 })
                 .collect();
-            let global_name = crate_native_global_name(target_path);
-            let target_expr = Expr::Ident(SpannedName {
-                name: global_name,
-                span: span.clone(),
-            });
+            let Some(target_expr) = native_target_expr(target_path, &span) else {
+                continue;
+            };
             let args: Vec<Expr> = params
                 .iter()
                 .map(|p| match p {
