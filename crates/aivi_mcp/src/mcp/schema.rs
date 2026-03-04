@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::{Mutex, OnceLock};
 
+use crate::mcp::manifest::{read_bundled_spec, specs_uri, McpManifest, McpPolicy};
 use aivi_driver::AiviError;
-use crate::mcp::manifest::{McpManifest, McpPolicy, specs_uri, read_bundled_spec};
 
 #[cfg(unix)]
 use std::io::BufReader;
@@ -152,9 +152,10 @@ fn handle_request(
             let Some(name) = params.get("name").and_then(|value| value.as_str()) else {
                 return Some(jsonrpc_error(id, -32602, "missing params.name"));
             };
-            let tool = manifest.tools.iter().find(|tool| {
-                tool.name == name || is_mangled_tool_name(&tool.name, name)
-            });
+            let tool = manifest
+                .tools
+                .iter()
+                .find(|tool| tool.name == name || is_mangled_tool_name(&tool.name, name));
             let Some(tool) = tool else {
                 return Some(jsonrpc_error(id, -32602, "unknown tool"));
             };
@@ -465,10 +466,15 @@ fn gtk_ui_call(
     ))
 }
 
-fn gtk_widget_params(args: &serde_json::Map<String, serde_json::Value>) -> Result<serde_json::Value, AiviError> {
+fn gtk_widget_params(
+    args: &serde_json::Map<String, serde_json::Value>,
+) -> Result<serde_json::Value, AiviError> {
     let mut params = serde_json::Map::new();
     if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
-        params.insert("name".to_string(), serde_json::Value::String(name.to_string()));
+        params.insert(
+            "name".to_string(),
+            serde_json::Value::String(name.to_string()),
+        );
     }
     if let Some(id) = args.get("id").and_then(|v| v.as_i64()) {
         params.insert("id".to_string(), serde_json::Value::Number(id.into()));
@@ -481,7 +487,9 @@ fn gtk_widget_params(args: &serde_json::Map<String, serde_json::Value>) -> Resul
     Ok(serde_json::Value::Object(params))
 }
 
-fn execute_gtk_discover_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+fn execute_gtk_discover_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
     let _args = parse_tool_args(arguments, &[])?;
 
     #[cfg(unix)]
@@ -555,11 +563,7 @@ fn execute_gtk_launch_tool(arguments: &serde_json::Value) -> Result<serde_json::
     {
         let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
         let token = uuid::Uuid::new_v4().to_string();
-        let socket_path = format!(
-            "{}/aivi-ui-mcp-{}.sock",
-            runtime_dir,
-            uuid::Uuid::new_v4()
-        );
+        let socket_path = format!("{}/aivi-ui-mcp-{}.sock", runtime_dir, uuid::Uuid::new_v4());
 
         let exe = std::env::current_exe()?;
         let mut cmd = std::process::Command::new(exe);
@@ -635,7 +639,9 @@ fn execute_gtk_hello_tool(arguments: &serde_json::Value) -> Result<serde_json::V
     }))
 }
 
-fn execute_gtk_list_widgets_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+fn execute_gtk_list_widgets_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["sessionId"])?;
     let session_id = get_required_string(args, "sessionId")?;
     let session = gtk_get_session(session_id)?;
@@ -650,14 +656,19 @@ fn execute_gtk_list_widgets_tool(arguments: &serde_json::Value) -> Result<serde_
     }))
 }
 
-fn execute_gtk_dump_tree_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+fn execute_gtk_dump_tree_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["sessionId", "rootId"])?;
     let session_id = get_required_string(args, "sessionId")?;
     let session = gtk_get_session(session_id)?;
 
     let mut params = serde_json::Map::new();
     if let Some(root_id) = args.get("rootId").and_then(|v| v.as_i64()) {
-        params.insert("rootId".to_string(), serde_json::Value::Number(root_id.into()));
+        params.insert(
+            "rootId".to_string(),
+            serde_json::Value::Number(root_id.into()),
+        );
     }
     let result = gtk_ui_call(&session, "dumpLiveTree", serde_json::Value::Object(params))?;
     Ok(serde_json::json!({
@@ -695,7 +706,10 @@ fn execute_gtk_type_tool(arguments: &serde_json::Value) -> Result<serde_json::Va
         serde_json::Value::Object(map) => map,
         _ => serde_json::Map::new(),
     };
-    params.insert("text".to_string(), serde_json::Value::String(text.to_string()));
+    params.insert(
+        "text".to_string(),
+        serde_json::Value::String(text.to_string()),
+    );
 
     let result = gtk_ui_call(&session, "type", serde_json::Value::Object(params))?;
     Ok(serde_json::json!({
@@ -930,8 +944,8 @@ pub fn serve_mcp_stdio_with_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use crate::mcp::manifest::{bundled_specs_manifest, bundled_specs_manifest_with_ui};
+    use tempfile::tempdir;
 
     #[test]
     fn bundled_specs_manifest_lists_resources() {
@@ -947,7 +961,10 @@ mod tests {
         );
         // Verify resource structure: each resource should have a non-empty binding and URI
         for res in &manifest.resources {
-            assert!(!res.binding.is_empty(), "resource binding must not be empty");
+            assert!(
+                !res.binding.is_empty(),
+                "resource binding must not be empty"
+            );
         }
     }
 
@@ -957,7 +974,11 @@ mod tests {
         let (mime_type, text) = read_bundled_spec(uri).expect("read bundled spec");
         assert_eq!(mime_type, "text/markdown");
         assert!(text.contains("# Decorators"), "should contain heading");
-        assert!(text.len() > 100, "spec content should be non-trivial, got {} bytes", text.len());
+        assert!(
+            text.len() > 100,
+            "spec content should be non-trivial, got {} bytes",
+            text.len()
+        );
     }
 
     #[test]
@@ -1109,7 +1130,10 @@ mod tests {
     #[test]
     fn test_is_mangled_tool_name() {
         assert!(is_mangled_tool_name("aivi.gtk.launch", "aivi.gtk.launch"));
-        assert!(is_mangled_tool_name("aivi.gtk.launch", "Aivi-aivi_gtk_launch"));
+        assert!(is_mangled_tool_name(
+            "aivi.gtk.launch",
+            "Aivi-aivi_gtk_launch"
+        ));
         assert!(is_mangled_tool_name("aivi.gtk.launch", "aivi_gtk_launch"));
 
         assert!(!is_mangled_tool_name("aivi.gtk.launch", "other.tool"));
@@ -1147,9 +1171,12 @@ mod tests {
         }
         // If it returns a result (even an error result inside structuredContent), it means it found the tool.
         if let Some(result) = response.get("result") {
-            let _ = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
-             // It might be an error because execution fails (dummy target), but that's fine.
-             // We just care that it dispatched.
+            let _ = result
+                .get("isError")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            // It might be an error because execution fails (dummy target), but that's fine.
+            // We just care that it dispatched.
         }
     }
 }

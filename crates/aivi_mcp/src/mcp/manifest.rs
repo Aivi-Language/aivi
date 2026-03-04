@@ -142,7 +142,8 @@ pub fn bundled_specs_manifest() -> McpManifest {
             },
             McpTool {
                 name: "aivi.fmt".to_string(),
-                description: "Format an AIVI source file and return the formatted output.".to_string(),
+                description: "Format an AIVI source file and return the formatted output."
+                    .to_string(),
                 module: "aivi".to_string(),
                 binding: "fmt".to_string(),
                 input_schema: serde_json::json!({
@@ -293,7 +294,8 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.type".to_string(),
-            description: "Simulate typing text into a widget in an attached GTK session.".to_string(),
+            description: "Simulate typing text into a widget in an attached GTK session."
+                .to_string(),
             module: "gtk".to_string(),
             binding: "type".to_string(),
             input_schema: serde_json::json!({

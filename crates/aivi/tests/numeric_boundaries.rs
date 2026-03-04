@@ -44,7 +44,11 @@ fn lex_max_i64_literal() {
 #[test]
 fn lex_overflow_i64_literal_preserved_as_token() {
     let toks = non_trivia("9223372036854775808");
-    assert_eq!(toks.len(), 1, "expected a single number token for out-of-range literal");
+    assert_eq!(
+        toks.len(),
+        1,
+        "expected a single number token for out-of-range literal"
+    );
     assert_eq!(toks[0].0, "number");
     assert_eq!(toks[0].1, "9223372036854775808");
 }
@@ -89,7 +93,10 @@ fn lex_number_emits_no_diagnostics() {
 fn lex_out_of_range_integer_emits_no_diagnostics() {
     // The lexer does not validate numeric range; that is deferred to evaluation.
     let (_, diags) = lex_cst("9223372036854775808");
-    assert!(diags.is_empty(), "unexpected lexer diagnostics for out-of-range literal: {diags:?}");
+    assert!(
+        diags.is_empty(),
+        "unexpected lexer diagnostics for out-of-range literal: {diags:?}"
+    );
 }
 
 // ---- Parser tests ----

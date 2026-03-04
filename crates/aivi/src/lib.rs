@@ -113,6 +113,10 @@ pub use aivi_core::{
 pub use aivi_core::{format_text, format_text_with_options, BraceStyle, FormatOptions};
 pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
+pub use aivi_mcp::{
+    bundled_specs_manifest, bundled_specs_manifest_with_ui, serve_mcp_stdio,
+    serve_mcp_stdio_with_policy, McpManifest, McpPolicy, McpResource, McpTool,
+};
 use cranelift_backend::run_cranelift_jit_cancellable;
 pub use cranelift_backend::{
     compile_to_object, destroy_aot_runtime, init_aot_runtime, init_aot_runtime_base,
@@ -121,16 +125,11 @@ pub use cranelift_backend::{
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
 };
-pub use aivi_mcp::{
-    bundled_specs_manifest, bundled_specs_manifest_with_ui, serve_mcp_stdio,
-    serve_mcp_stdio_with_policy, McpManifest, McpPolicy, McpResource, McpTool,
-};
 pub use pm::{
     collect_aivi_sources, edit_cargo_toml_dependencies, ensure_aivi_dependency,
-    parse_aivi_cargo_metadata, read_aivi_toml, run_pre_run_scripts,
-    validate_publish_preflight, write_scaffold, AiviCargoMetadata, AiviToml, AiviTomlBuild,
-    AiviTomlProject, CargoDepSpec, CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget,
-    ProjectKind,
+    parse_aivi_cargo_metadata, read_aivi_toml, run_pre_run_scripts, validate_publish_preflight,
+    write_scaffold, AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
+    CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
 pub use runtime::{TestFailure, TestReport, TestSuccess};
 
