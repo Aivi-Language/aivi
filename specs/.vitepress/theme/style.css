@@ -2,7 +2,10 @@
   --vp-font-family-mono: 'Fira Code', monospace;
 }
 
-code, kbd, samp, pre {
+code,
+kbd,
+samp,
+pre {
   font-family: var(--vp-font-family-mono) !important;
   font-variant-ligatures: contextual;
 }
@@ -39,12 +42,14 @@ code, kbd, samp, pre {
 
 .vp-doc table th,
 .vp-doc table td {
-  max-width: 50%;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 
 @media (max-width: 768px) {
+  .vp-doc table {
+    width: 100%;
+  }
+
   .vp-doc table thead {
     display: none;
   }

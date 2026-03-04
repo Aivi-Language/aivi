@@ -380,7 +380,6 @@ hr {
 
 /* Long type signatures that may need to wrap */
 .type-sig {
-  overflow-wrap: break-word;
   word-break: normal;
   white-space: normal;
 }
@@ -388,5 +387,4 @@ hr {
 .type-sig code {
   white-space: normal;
   word-break: keep-all;
-  overflow-wrap: break-word;
 }
