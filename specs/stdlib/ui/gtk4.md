@@ -36,9 +36,6 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `entryText` | `gtk4.entryText` |
 | `scrollAreaNew` | `gtk4.scrollAreaNew` |
 | `scrollAreaSetChild` | `gtk4.scrollAreaSetChild` |
-| `trayIconNew` | `gtk4.trayIconNew` |
-| `trayIconSetTooltip` | `gtk4.trayIconSetTooltip` |
-| `trayIconSetVisible` | `gtk4.trayIconSetVisible` |
 | `dragSourceNew` | `gtk4.dragSourceNew` |
 | `dragSourceSetText` | `gtk4.dragSourceSetText` |
 | `dropTargetNew` | `gtk4.dropTargetNew` |

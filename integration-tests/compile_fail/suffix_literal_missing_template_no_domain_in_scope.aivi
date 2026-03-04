@@ -1,0 +1,7 @@
+// EXPECT-ERROR: suffix literals require a '1s' template in scope
+@no_prelude
+module integrationTests.compileFail.suffixLiteralMissingTemplateNoDomainInScope
+
+use aivi
+
+bad = 10s

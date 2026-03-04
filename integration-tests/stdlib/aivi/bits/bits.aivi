@@ -42,23 +42,23 @@ test_ones = do Effect {
 
 @test "and masks correctly"
 test_and = do Effect {
-  a = fromInt 0xFF
-  b = fromInt 0x0F
-  assertEq (and a b |> toInt) 0x0F
+  a = fromInt 255
+  b = fromInt 15
+  assertEq (and a b |> toInt) 15
 }
 
 @test "or combines bits"
 test_or = do Effect {
-  a = fromInt 0xF0
-  b = fromInt 0x0F
-  assertEq (or a b |> toInt) 0xFF
+  a = fromInt 240
+  b = fromInt 15
+  assertEq (or a b |> toInt) 255
 }
 
 @test "xor flips differing bits"
 test_xor = do Effect {
-  a = fromInt 0xFF
-  b = fromInt 0x0F
-  assertEq (xor a b |> toInt) 0xF0
+  a = fromInt 255
+  b = fromInt 15
+  assertEq (xor a b |> toInt) 240
 }
 
 @test "complement inverts all bits"
@@ -135,7 +135,7 @@ test_popCount = do Effect {
 
 @test "slice extracts sub-range"
 test_slice = do Effect {
-  b = fromInt 0x0102030405060708
+  b = fromInt 72623859790382856
   first = slice 0 1 b
   assertEq (toInt first) 1
 }
@@ -144,7 +144,7 @@ test_slice = do Effect {
 
 @test "streamRead reads sequentially"
 test_streamRead = do Effect {
-  b = fromInt 0x0102030405060708
+  b = fromInt 72623859790382856
   s = streamFromBits b
   r1 = streamRead 2 s
   r1 match
@@ -156,7 +156,7 @@ test_streamRead = do Effect {
 
 @test "streamPeek does not advance"
 test_streamPeek = do Effect {
-  b = fromInt 0x0102030405060708
+  b = fromInt 72623859790382856
   s = streamFromBits b
   r = streamPeek 2 s
   assertEq (streamRemaining s) 8
@@ -164,7 +164,7 @@ test_streamPeek = do Effect {
 
 @test "streamSkip advances position"
 test_streamSkip = do Effect {
-  b = fromInt 0x0102030405060708
+  b = fromInt 72623859790382856
   s = streamFromBits b
   r = streamSkip 4 s
   r match

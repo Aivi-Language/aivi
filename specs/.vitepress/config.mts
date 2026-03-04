@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { sidebar } from '../nav.mjs'
+import { tableDataColumnPlugin } from './plugins/tableDataColumn.mjs'
 
 const ebnfGrammar = JSON.parse(
   readFileSync(new URL('../../vscode/syntaxes/ebnf.tmLanguage.json', import.meta.url), 'utf-8')
@@ -105,6 +106,9 @@ export default defineConfig({
     sidebar
   },
   markdown: {
-    languages: [ebnfLanguage, aiviLanguage]
+    languages: [ebnfLanguage, aiviLanguage],
+    config: (md) => {
+      md.use(tableDataColumnPlugin)
+    }
   }
 })

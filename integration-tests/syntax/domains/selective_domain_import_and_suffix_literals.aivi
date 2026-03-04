@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.syntax.domains.selectiveDomainImportAndSuffixLiterals
+
+use aivi
+use aivi.testing
+use aivi.duration (Span, domain Duration)
+
+span0 : Span
+span0 = { millis: 0 }
+span1 = span0 + 30s
+span2 = span0 + 1min
+
+@test "selective domain import enables suffix literals"
+selectiveDomainImportEnablesSuffixLiterals = do Effect {
+  assertEq span1.millis 30000
+  assertEq span2.millis 60000
+}

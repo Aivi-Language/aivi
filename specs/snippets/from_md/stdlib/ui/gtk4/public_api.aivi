@@ -7,7 +7,6 @@ LabelId = Int
 EntryId = Int
 ScrollAreaId = Int
 DrawAreaId = Int
-TrayIconId = Int
 DragSourceId = Int
 DropTargetId = Int
 MenuModelId = Int
@@ -65,10 +64,6 @@ entryText: EntryId -> Effect GtkError Text
 
 scrollAreaNew: Unit -> Effect GtkError ScrollAreaId
 scrollAreaSetChild: ScrollAreaId -> WidgetId -> Effect GtkError Unit
-
-trayIconNew: Text -> Text -> Effect GtkError TrayIconId
-trayIconSetTooltip: TrayIconId -> Text -> Effect GtkError Unit
-trayIconSetVisible: TrayIconId -> Bool -> Effect GtkError Unit
 
 dragSourceNew: WidgetId -> Effect GtkError DragSourceId
 dragSourceSetText: DragSourceId -> Text -> Effect GtkError Unit

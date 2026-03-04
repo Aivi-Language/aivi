@@ -43,3 +43,44 @@ code, kbd, samp, pre {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+
+@media (max-width: 768px) {
+  .vp-doc table thead {
+    display: none;
+  }
+
+  .vp-doc table tr {
+    display: block;
+    margin-bottom: 1.25rem;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .vp-doc table tr:nth-child(even) {
+    background: transparent;
+  }
+
+  .vp-doc table td {
+    display: block;
+    max-width: 100%;
+    padding: 4px 12px;
+    border: none;
+    border-bottom: 1px solid var(--vp-c-divider);
+  }
+
+  .vp-doc table tr td:last-child {
+    border-bottom: none;
+  }
+
+  .vp-doc table td::before {
+    content: attr(data-column);
+    display: block;
+    font-weight: 700;
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--vp-c-text-2);
+    margin-bottom: 2px;
+  }
+}

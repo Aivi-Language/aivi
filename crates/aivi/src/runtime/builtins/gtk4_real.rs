@@ -457,40 +457,6 @@ mod bridge {
         }));
         bridge_int_t!("layoutManagerNew", aivi_gtk4::layout_manager_new);
 
-        // ── Tray icon ──
-        fields.insert("trayIconNew".to_string(), builtin("gtk4.trayIconNew", 2, |mut args, _| {
-            let tooltip = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let icon = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::tray_icon_new(&icon, &tooltip).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_it!("trayIconSetTooltip", aivi_gtk4::tray_icon_set_tooltip);
-        fields.insert("trayIconSetVisible".to_string(), builtin("gtk4.trayIconSetVisible", 2, |mut args, _| {
-            let visible = match args.remove(1) { Value::Bool(v) => v, Value::Constructor { ref name, .. } => name == "True", _ => return Err(invalid("expects Bool")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::tray_icon_set_visible(id, visible).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        fields.insert("trayIconSetMenuItems".to_string(), builtin("gtk4.trayIconSetMenuItems", 2, |mut args, _| {
-            let items_val = args.remove(1);
-            let tray_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let mut items: Vec<(String, String)> = Vec::new();
-            let mut list = items_val;
-            loop {
-                match list {
-                    Value::Constructor { name, mut args } if name == "Cons" => {
-                        let head = args.remove(0); list = args.remove(0);
-                        if let Value::Record(fields) = head {
-                            let label = fields.get("label").and_then(|v| if let Value::Text(t) = v { Some(t.clone()) } else { None }).unwrap_or_default();
-                            let action = fields.get("action").and_then(|v| if let Value::Text(t) = v { Some(t.clone()) } else { None }).unwrap_or_default();
-                            items.push((label, action));
-                        }
-                    }
-                    Value::Constructor { name, .. } if name == "Nil" || name == "Empty" => break,
-                    _ => break,
-                }
-            }
-            Ok(effect(move |_| { aivi_gtk4::tray_icon_set_menu_items(tray_id, items.clone()).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-
         // ── Drag/drop stubs ──
         fields.insert("dragSourceNew".to_string(), builtin("gtk4.dragSourceNew", 1, |mut args, _| {
             let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
@@ -581,30 +547,6 @@ mod bridge {
             Ok(effect(move |_| { let r = aivi_gtk4::os_theme_preference().map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
         }));
 
-        fields.insert("trayNotifyPersonalEmail".to_string(), builtin("gtk4.trayNotifyPersonalEmail", 4, |mut args, _| {
-            let markdown_body = match args.remove(3) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let subject = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let from = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let id = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::tray_notify_personal_email(&id, &from, &subject, &markdown_body).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-
-        fields.insert("traySetEmailSuggestions".to_string(), builtin("gtk4.traySetEmailSuggestions", 1, |mut args, _| {
-            let list_val = args.remove(0);
-            let mut suggestions: Vec<String> = Vec::new();
-            let mut list = list_val;
-            loop {
-                match list {
-                    Value::Constructor { name, mut args } if name == "Cons" => {
-                        let head = args.remove(0); list = args.remove(0);
-                        if let Value::Text(t) = head { suggestions.push(t); }
-                    }
-                    _ => break,
-                }
-            }
-            Ok(effect(move |_| { aivi_gtk4::tray_set_email_suggestions(suggestions.clone()).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-
         // ── Build / reconcile ──
         fields.insert("buildFromNode".to_string(), builtin("gtk4.buildFromNode", 1, |mut args, _| {
             let node = args.remove(0);
@@ -661,13 +603,27 @@ mod bridge {
                 let receiver = aivi_gtk4::signal_stream().map_err(gtk4_err_to_runtime)?;
                 // Convert SignalEvent receiver to Value receiver
                 let (value_sender, value_receiver) = mpsc::sync_channel(512);
+                eprintln!("[signalStream] creating bridge thread");
                 std::thread::Builder::new()
                     .name("gtk4-signal-bridge".to_string())
                     .spawn(move || {
-                        while let Ok(event) = receiver.recv() {
-                            let value = make_signal_event_value(event);
-                            if value_sender.send(value).is_err() { break; }
+                        eprintln!("[bridge] thread started");
+                        loop {
+                            match receiver.recv() {
+                                Ok(event) => {
+                                    let value = make_signal_event_value(event);
+                                    if value_sender.send(value).is_err() {
+                                        eprintln!("[bridge] value_sender.send FAILED, exiting");
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("[bridge] receiver.recv error: {:?}, exiting", e);
+                                    break;
+                                }
+                            }
                         }
+                        eprintln!("[bridge] thread exiting");
                     })
                     .ok();
                 let inner = Arc::new(ChannelInner {
@@ -679,6 +635,15 @@ mod bridge {
             }))
         }));
 
+
+        // dbusServerStart : Unit -> Effect GtkError Unit
+        fields.insert("dbusServerStart".to_string(), builtin("gtk4.dbusServerStart", 1, |mut args, _| {
+            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
+            Ok(effect(move |_| {
+                aivi_gtk4::dbus_server_start().map_err(gtk4_err_to_runtime)?;
+                Ok(Value::Unit)
+            }))
+        }));
         fields.insert("signalEmit".to_string(), builtin("gtk4.signalEmit", 4, |mut args, _| {
             let payload = match args.remove(3) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
             let handler = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
@@ -749,6 +714,17 @@ pub(super) fn pump_gtk_events() {
 
 #[cfg(not(all(feature = "gtk4-libadwaita", target_os = "linux")))]
 pub(super) fn pump_gtk_events() {}
+
+/// Returns true when a GTK application is active and events need pumping.
+#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+pub(super) fn is_gtk_pump_active() -> bool {
+    aivi_gtk4::is_pump_active()
+}
+
+#[cfg(not(all(feature = "gtk4-libadwaita", target_os = "linux")))]
+pub(super) fn is_gtk_pump_active() -> bool {
+    false
+}
 
 pub(super) fn build_gtk4_record_real(build_mock: fn() -> Value) -> Option<Value> {
     #[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
