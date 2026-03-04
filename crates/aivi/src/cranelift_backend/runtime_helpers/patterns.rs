@@ -448,11 +448,62 @@ pub extern "C" fn rt_binary_op(
     let runtime = unsafe { (*ctx).runtime_mut() };
     let op_name = format!("({})", op);
     if let Some(op_value) = runtime.ctx.globals.get(&op_name) {
-        if let Ok(applied) = runtime.apply(op_value, lhs.clone()) {
+        // For MultiClause operators (multiple domains defining the same op),
+        // try each clause individually and prefer the one that succeeds without
+        // producing runtime warnings (e.g. field-access on wrong record type).
+        if let Value::MultiClause(clauses) = op_value {
+            if !runtime.jit_binary_op_dispatching {
+                runtime.jit_binary_op_dispatching = true;
+                let mut fallback_result: Option<Value> = None;
+                let debug = matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_));
+                for (i, clause) in clauses.into_iter().enumerate() {
+                    let wc = runtime.jit_rt_warning_count;
+                    if let Ok(applied) = runtime.apply(clause.clone(), lhs.clone()) {
+                        if let Ok(result) = runtime.apply(applied, rhs.clone()) {
+                            if runtime.jit_rt_warning_count == wc {
+                                // Clean match — no warnings produced
+                                runtime.jit_binary_op_dispatching = false;
+                                if debug {
+                                    let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
+                                    eprintln!("[DEBUG] clause {i} ({cn}) CLEAN for {op} => {:?}", result);
+                                }
+                                return abi::box_value(result);
+                            }
+                            // Produced warnings — reset counter and keep as fallback
+                            if debug {
+                                let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
+                                eprintln!("[DEBUG] clause {i} ({cn}) WARN for {op}");
+                            }
+                            runtime.jit_rt_warning_count = wc;
+                            if fallback_result.is_none() {
+                                fallback_result = Some(result);
+                            }
+                        } else if debug {
+                            let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
+                            eprintln!("[DEBUG] clause {i} ({cn}) apply2 ERR for {op}");
+                        }
+                    } else if debug {
+                        let cn = match &clause { Value::Builtin(b) => b.imp.name.clone(), _ => format!("{i}") };
+                        eprintln!("[DEBUG] clause {i} ({cn}) apply1 ERR for {op}");
+                    }
+                }
+                runtime.jit_binary_op_dispatching = false;
+                if let Some(result) = fallback_result {
+                    return abi::box_value(result);
+                }
+            }
+            // When already dispatching (nested call), skip MultiClause to avoid
+            // cascading trial-and-error. Fall through to the error below.
+        } else if let Ok(applied) = runtime.apply(op_value.clone(), lhs.clone()) {
             if let Ok(result) = runtime.apply(applied, rhs.clone()) {
                 return abi::box_value(result);
             }
         }
+    }
+    if runtime.jit_binary_op_dispatching {
+        // Nested inside MultiClause dispatch — silently signal failure via warning counter
+        runtime.jit_rt_warning_count += 1;
+        return abi::box_value(Value::Unit);
     }
     eprintln!(
         "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}operator error{RT_RESET}: binary operator `{op}` could not be applied to the given operand types"

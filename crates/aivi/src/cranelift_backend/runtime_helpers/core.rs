@@ -10,8 +10,10 @@ const RT_BOLD: &str = "\x1b[1m";
 
 /// Print a formatted runtime warning to stderr.
 fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
-    let (fn_ctx, loc_ctx) = unsafe {
+    let (fn_ctx, loc_ctx, suppress) = unsafe {
         let runtime = (*ctx).runtime_mut();
+        runtime.jit_rt_warning_count += 1;
+        let suppress = runtime.jit_binary_op_dispatching;
         let fn_part = runtime
             .jit_current_fn
             .as_deref()
@@ -22,8 +24,11 @@ fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
             .as_deref()
             .map(|s| format!(" {RT_GRAY}at {s}{RT_RESET}"))
             .unwrap_or_default();
-        (fn_part, loc_part)
+        (fn_part, loc_part, suppress)
     };
+    if suppress {
+        return;
+    }
     eprintln!("{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx}{loc_ctx} {RT_BOLD}{category}{RT_RESET}: {message}");
     if !hint.is_empty() {
         eprintln!("  {RT_CYAN}hint{RT_RESET}: {hint}");

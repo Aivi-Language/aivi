@@ -17,6 +17,8 @@ impl Runtime {
             jit_pending_error: None,
             jit_current_fn: None,
             jit_current_loc: None,
+            jit_rt_warning_count: 0,
+            jit_binary_op_dispatching: false,
             update_snapshots: false,
             current_test_name: None,
             project_root: None,

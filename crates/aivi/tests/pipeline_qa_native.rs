@@ -724,3 +724,168 @@ quick_xml = "0.31"
     let result = aivi::native_bridge::validate_crate_deps(&cargo_toml, &bindings);
     assert!(result.is_ok(), "should pass when dep exists: {:?}", result);
 }
+
+// ---------------------------------------------------------------------------
+// CRATE_NATIVE_11: serde struct generation for record return types
+// ---------------------------------------------------------------------------
+#[test]
+fn crate_native_serde_record_codegen() {
+    use aivi::native_bridge::{AiviType, CrateNativeBinding};
+
+    let bindings = vec![CrateNativeBinding {
+        aivi_name: "parseXml".to_string(),
+        rust_path: "quick_xml::de::from_str".to_string(),
+        crate_name: "quick_xml".to_string(),
+        global_name: "__crate_native__quick_xml__de__from_str".to_string(),
+        param_types: vec![AiviType::Text],
+        return_type: AiviType::Result(
+            Box::new(AiviType::Text),
+            Box::new(AiviType::Record(vec![
+                ("imapHost".to_string(), AiviType::Text),
+                ("imapPort".to_string(), AiviType::Int),
+                ("useSsl".to_string(), AiviType::Bool),
+            ])),
+        ),
+    }];
+
+    let source = aivi::native_bridge::generate_native_bridge_source(&bindings);
+
+    // Should generate serde imports
+    assert!(
+        source.contains("use serde::"),
+        "should import serde when records are present"
+    );
+
+    // Should generate a #[derive(Deserialize, Serialize)] struct
+    assert!(
+        source.contains("#[derive(Deserialize, Serialize)]"),
+        "should derive serde traits on generated struct"
+    );
+
+    // Should generate snake_case fields with serde rename
+    assert!(
+        source.contains("#[serde(rename = \"imapHost\")]"),
+        "should add serde rename for camelCase fields"
+    );
+    assert!(
+        source.contains("imap_host: String"),
+        "should have snake_case field name with correct Rust type"
+    );
+    assert!(
+        source.contains("imap_port: i64"),
+        "should map Int -> i64"
+    );
+    assert!(
+        source.contains("use_ssl: bool"),
+        "should map Bool -> bool"
+    );
+
+    // Should use turbofish to specify the struct type
+    assert!(
+        source.contains("from_str::<__NativeStruct0>"),
+        "should use turbofish with generated struct name. Source:\n{source}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// CRATE_NATIVE_12: serde struct NOT generated for simple return types
+// ---------------------------------------------------------------------------
+#[test]
+fn crate_native_no_serde_for_simple_types() {
+    use aivi::native_bridge::{AiviType, CrateNativeBinding};
+
+    let bindings = vec![CrateNativeBinding {
+        aivi_name: "add".to_string(),
+        rust_path: "my_crate::add".to_string(),
+        crate_name: "my_crate".to_string(),
+        global_name: "__crate_native__my_crate__add".to_string(),
+        param_types: vec![AiviType::Int, AiviType::Int],
+        return_type: AiviType::Int,
+    }];
+
+    let source = aivi::native_bridge::generate_native_bridge_source(&bindings);
+    assert!(
+        !source.contains("serde"),
+        "should not import serde for simple types"
+    );
+    assert!(
+        !source.contains("#[derive"),
+        "should not generate derive for simple types"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// NATIVE_13: Runtime native (dot-path) auto-generates def without dummy body
+// ---------------------------------------------------------------------------
+#[test]
+fn native_runtime_no_dummy_body() {
+    let src = r#"
+module native.noDummyBody
+
+@native "gtk4.windowPresent"
+windowPresent : Int -> Effect Text Unit
+
+@native "gtk4.windowSetTitle"
+windowSetTitle : Int -> Text -> Effect Text Unit
+
+@native "config.defaultTimeout"
+defaultTimeout : Int
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+    let module = modules.first().expect("module");
+
+    // windowPresent: auto-generated def calls gtk4.windowPresent __arg0
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "windowPresent" => Some(def),
+            _ => None,
+        })
+        .expect("windowPresent def");
+    match &def.expr {
+        Expr::Call { func, args, .. } => {
+            assert_eq!(args.len(), 1);
+            assert!(matches!(args.first(), Some(Expr::Ident(n)) if n.name == "__arg0"));
+            match func.as_ref() {
+                Expr::FieldAccess { field, .. } => assert_eq!(field.name, "windowPresent"),
+                other => panic!("expected FieldAccess, got {other:?}"),
+            }
+        }
+        other => panic!("expected Call, got {other:?}"),
+    }
+
+    // windowSetTitle: two params
+    let def2 = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "windowSetTitle" => Some(def),
+            _ => None,
+        })
+        .expect("windowSetTitle def");
+    match &def2.expr {
+        Expr::Call { args, .. } => assert_eq!(args.len(), 2),
+        other => panic!("expected Call, got {other:?}"),
+    }
+
+    // defaultTimeout: zero-arity — bare FieldAccess
+    let def3 = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "defaultTimeout" => Some(def),
+            _ => None,
+        })
+        .expect("defaultTimeout def");
+    assert!(
+        matches!(&def3.expr, Expr::FieldAccess { field, .. } if field.name == "defaultTimeout"),
+        "expected bare FieldAccess for zero-arity, got {:?}",
+        def3.expr
+    );
+}

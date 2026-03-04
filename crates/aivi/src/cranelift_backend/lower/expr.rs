@@ -974,7 +974,13 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             builder.seal_block(arm_next_block);
         }
 
-        // Fallthrough: non-exhaustive match → return unit
+        // Fallthrough: non-exhaustive match → signal failure so
+        // make_jit_builtin / apply_multi_clause can try the next clause.
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_signal_match_fail, &[self.ctx_param]);
+        let fail_val = builder.inst_results(call)[0];
+        builder.def_var(result_var, fail_val);
         builder.ins().jump(merge_block, &[]);
 
         builder.switch_to_block(merge_block);

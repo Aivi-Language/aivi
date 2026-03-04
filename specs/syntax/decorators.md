@@ -30,10 +30,11 @@ Decorators appear before the binding they annotate.
 
 ## Desugaring
 
-| Surface                        | Desugared                                                    |
-|:------------------------------ |:------------------------------------------------------------ |
-| `@static x = file.read ...`    | Compile-time evaluation                                      |
-| `@native "mod.fn" f x y = ...` | Rewritten to `f x y = mod.fn x y` (type signature required) |
+| Surface                                    | Desugared                                                                   |
+|:------------------------------------------ |:--------------------------------------------------------------------------- |
+| `@static x = file.read ...`               | Compile-time evaluation                                                     |
+| `@native "mod.fn"\nf : A -> B`            | Auto-generates `f __arg0 = mod.fn __arg0` (type signature required)        |
+| `@native "crate::fn"\nf : A -> B`         | Auto-generates bridge fn; AOT-only                                          |
 
 ---
 
@@ -169,8 +170,9 @@ Runtime natives bind to functions registered in the AIVI runtime's global enviro
 ```aivi
 @native "module.functionName"
 binding : TypeSig
-binding = param1 param2 => dummyBody
 ```
+
+No dummy body is required — the type signature is sufficient. If a def body is provided, it is replaced by the native binding.
 
 #### Example
 
@@ -181,7 +183,6 @@ binding = param1 param2 => dummyBody
 1. Must be **top-level**.
 2. Must have an **explicit type signature**.
 3. The target path must be a **valid dotted identifier** (e.g. `"gtk4.windowPresent"`).
-4. Parameter names in the dummy body must be **simple identifiers** (no destructuring).
 
 The `@native` string is a **runtime record path**. The first segment selects a module record registered in the global environment (see `register_builtins` in `core.rs`); subsequent segments are field accesses into it. The module name is chosen by the runtime and may differ from the Cargo crate name (e.g. crate `rusqlite` is exposed as `database`).
 
@@ -215,7 +216,6 @@ No dummy body is required — the type signature is sufficient. The function nam
 3. The target path uses `::` (Rust path syntax): `"crate_name::module::function"`.
 4. The referenced crate must be declared in `Cargo.toml` under `[dependencies]`.
 5. **AOT-only** — crate natives require `aivi build`. Using them with `aivi run` (JIT) produces a compile error.
-6. No dummy body needed (type signature only).
 
 #### Type Mapping
 
@@ -262,6 +262,49 @@ During `aivi build`, the compiler generates a Rust bridge module at `target/aivi
 4. Wraps the return value back into an AIVI `CrateNativeValue`
 
 The generated bridge is compiled as part of the AOT binary and registered as builtins at startup via `register_crate_natives_on_ctx`.
+
+#### Serde Auto-Mapping for Records
+
+When a crate-native binding's type signature contains **record types** (e.g., `{ name: Text, age: Int }`), the compiler automatically generates `#[derive(Deserialize, Serialize)]` Rust structs in the bridge module. This enables direct binding to serde-based crate APIs like `quick_xml::de::from_str` or `serde_json::from_str` without writing wrapper code.
+
+**How it works:**
+
+1. The compiler scans all crate-native type signatures for record types (including nested records inside `Result`, `Option`, `List`).
+2. For each unique record shape (deduplicated by field names and types), it generates a Rust struct with `#[derive(Deserialize, Serialize)]` and `#[serde(rename_all = "camelCase")]`.
+3. AIVI `camelCase` field names are converted to Rust `snake_case` in the struct definition.
+4. When a binding's return type contains a generated struct, the compiler adds a turbofish type annotation (e.g., `from_str::<MyStruct>(...)`) so Rust can infer the generic parameter.
+5. When `serde` is needed, the bridge module adds `use serde::{Deserialize, Serialize};` — you must include `serde` in your `Cargo.toml`.
+
+**Example:**
+
+```aivi
+@native "serde_json::from_str"
+parseJson : Text -> Result Text { name: Text, age: Int }
+```
+
+Generates:
+
+```rust
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AiviRecord0 {
+    name: String,
+    age: i64,
+}
+
+fn __crate_native__serde_json__from_str(mut args: Vec<CrateNativeValue>) -> Result<CrateNativeValue, String> {
+    let a0 = /* extract Text from args */;
+    let result = serde_json::from_str::<AiviRecord0>(&a0);
+    /* wrap result back to CrateNativeValue */
+}
+```
+
+**Required `Cargo.toml` entry when using records:**
+
+```toml
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+```
 
 #### Compile-Time Errors
 

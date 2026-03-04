@@ -1019,6 +1019,7 @@ Compile-time metadata only. No user-defined decorators.
 | `@test "desc"`                                 | Mark as test case (mandatory description) |
 | `@static`                                      | Embed at compile time                     |
 | `@native "mod.fn"`                             | Bind typed def to runtime/native path     |
+| `@native "crate::path::fn"`                    | Bridge to Rust crate function (AOT only)  |
 | `@deprecated`                                  | Emit warning on use                       |
 | `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
 | `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
@@ -1026,7 +1027,7 @@ Compile-time metadata only. No user-defined decorators.
 `@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable.
 
 Unknown decorators are compile errors.
-`@native` is only valid on top-level definitions and requires an explicit type signature.
+`@native` is only valid on top-level definitions and requires an explicit type signature. No dummy body is needed — the compiler auto-generates the def from the type signature. Runtime natives use `.` paths (`"mod.fn"`); crate natives use `::` paths (`"crate::fn"`) and require `aivi build`.
 
 ---
 
