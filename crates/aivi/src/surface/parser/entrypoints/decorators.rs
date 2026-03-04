@@ -470,7 +470,9 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
     /// e.g. `Text -> Int -> Bool` has arity 2, `Text` has arity 0.
     fn count_function_arity(ty: &TypeExpr) -> usize {
         match ty {
-            TypeExpr::Func { params, .. } => params.len(),
+            TypeExpr::Func { params, result, .. } => {
+                params.len() + count_function_arity(result)
+            }
             _ => 0,
         }
     }
