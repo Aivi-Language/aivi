@@ -2,6 +2,172 @@ use crate::rust_ir::{RustIrExpr, RustIrPattern, RustIrRecordField, RustIrTextPar
 
 use super::transform::{set_expr_id, IdGen};
 
+/// Replace all occurrences of multiple params simultaneously.
+/// This avoids variable capture when an argument expression contains a variable
+/// that shares a name with another parameter being substituted.
+pub(super) fn substitute_many(expr: &mut RustIrExpr, bindings: &[(&str, &RustIrExpr)]) {
+    if bindings.is_empty() {
+        return;
+    }
+    if bindings.len() == 1 {
+        substitute(expr, bindings[0].0, bindings[0].1);
+        return;
+    }
+    match expr {
+        RustIrExpr::Local { name, .. } => {
+            for &(param, arg) in bindings {
+                if name.as_str() == param {
+                    *expr = arg.clone();
+                    return;
+                }
+            }
+        }
+
+        // Leaves
+        RustIrExpr::Global { .. }
+        | RustIrExpr::Builtin { .. }
+        | RustIrExpr::ConstructorValue { .. }
+        | RustIrExpr::LitNumber { .. }
+        | RustIrExpr::LitString { .. }
+        | RustIrExpr::LitBool { .. }
+        | RustIrExpr::LitDateTime { .. }
+        | RustIrExpr::LitSigil { .. }
+        | RustIrExpr::Raw { .. } => {}
+
+        RustIrExpr::TextInterpolate { parts, .. } => {
+            for p in parts {
+                if let RustIrTextPart::Expr { expr } = p {
+                    substitute_many(expr, bindings);
+                }
+            }
+        }
+
+        RustIrExpr::Lambda {
+            param: lam_param,
+            body,
+            ..
+        } => {
+            // Filter out any bindings shadowed by this lambda param
+            let filtered: Vec<_> = bindings
+                .iter()
+                .filter(|&&(p, _)| p != lam_param.as_str())
+                .copied()
+                .collect();
+            substitute_many(body, &filtered);
+        }
+
+        RustIrExpr::App { func, arg: a, .. } | RustIrExpr::Pipe { func, arg: a, .. } => {
+            substitute_many(func, bindings);
+            substitute_many(a, bindings);
+        }
+
+        RustIrExpr::Call { func, args, .. } => {
+            substitute_many(func, bindings);
+            for a in args {
+                substitute_many(a, bindings);
+            }
+        }
+
+        RustIrExpr::DebugFn { body, .. } => {
+            substitute_many(body, bindings);
+        }
+
+        RustIrExpr::List { items, .. } => {
+            for item in items {
+                substitute_many(&mut item.expr, bindings);
+            }
+        }
+
+        RustIrExpr::Tuple { items, .. } => {
+            for item in items {
+                substitute_many(item, bindings);
+            }
+        }
+
+        RustIrExpr::Record { fields, .. } => {
+            substitute_many_in_record_fields(fields, bindings);
+        }
+
+        RustIrExpr::Patch { target, fields, .. } => {
+            substitute_many(target, bindings);
+            substitute_many_in_record_fields(fields, bindings);
+        }
+
+        RustIrExpr::FieldAccess { base, .. } => {
+            substitute_many(base, bindings);
+        }
+
+        RustIrExpr::Index { base, index, .. } => {
+            substitute_many(base, bindings);
+            substitute_many(index, bindings);
+        }
+
+        RustIrExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            substitute_many(scrutinee, bindings);
+            for arm in arms {
+                let filtered: Vec<_> = bindings
+                    .iter()
+                    .filter(|&&(p, _)| !pattern_binds(&arm.pattern, p))
+                    .copied()
+                    .collect();
+                if let Some(g) = &mut arm.guard {
+                    substitute_many(g, &filtered);
+                }
+                substitute_many(&mut arm.body, &filtered);
+            }
+        }
+
+        RustIrExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            substitute_many(cond, bindings);
+            substitute_many(then_branch, bindings);
+            substitute_many(else_branch, bindings);
+        }
+
+        RustIrExpr::Binary { left, right, .. } => {
+            substitute_many(left, bindings);
+            substitute_many(right, bindings);
+        }
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            for sub in substitutions {
+                if let Some(v) = &mut sub.value {
+                    substitute_many(v, bindings);
+                }
+            }
+            substitute_many(body, bindings);
+        }
+    }
+}
+
+fn substitute_many_in_record_fields(
+    fields: &mut [RustIrRecordField],
+    bindings: &[(&str, &RustIrExpr)],
+) {
+    for f in fields {
+        substitute_many(&mut f.value, bindings);
+        for seg in &mut f.path {
+            match seg {
+                crate::rust_ir::RustIrPathSegment::IndexValue(e)
+                | crate::rust_ir::RustIrPathSegment::IndexPredicate(e) => {
+                    substitute_many(e, bindings);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Replace all occurrences of `Local { name == param }` with a clone of `arg`.
 pub(super) fn substitute(expr: &mut RustIrExpr, param: &str, arg: &RustIrExpr) {
     match expr {

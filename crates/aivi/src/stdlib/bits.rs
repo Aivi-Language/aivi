@@ -33,11 +33,11 @@ zero = byteCount => bits.zero byteCount
 ones : Int -> Bits
 ones = byteCount => bits.ones byteCount
 
-and : Bits -> Bits -> Bits
-and = a b => bits.and a b
-
 or : Bits -> Bits -> Bits
 or = a b => bits.or a b
+
+and : Bits -> Bits -> Bits
+and = a b => bits.and a b
 
 xor : Bits -> Bits -> Bits
 xor = a b => bits.xor a b

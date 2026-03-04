@@ -53,6 +53,16 @@ impl Parser {
         loop {
             let checkpoint = self.pos;
             self.consume_newlines();
+            // Don't scan across top-level definition boundaries for `or`.
+            // A token at column 1 on a later line is a new definition, not
+            // a result-fallback continuation.
+            if let Some(next_span) = self.peek_span() {
+                let expr_line = expr_span(&expr).end.line;
+                if next_span.start.line > expr_line && next_span.start.column == 1 {
+                    self.pos = checkpoint;
+                    break;
+                }
+            }
             if !self.match_keyword("or") {
                 self.pos = checkpoint;
                 break;

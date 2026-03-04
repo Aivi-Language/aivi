@@ -5,7 +5,7 @@ use crate::rust_ir::{
     RustIrRecordField, RustIrTextPart,
 };
 
-use super::substitute::{freshen_ids, substitute};
+use super::substitute::{freshen_ids, substitute, substitute_many};
 use super::InlineCandidate;
 use super::MAX_INLINE_DEPTH;
 
@@ -232,9 +232,16 @@ pub(super) fn inline_expr(
                     if candidate.params.len() == args.len() {
                         let mut body = candidate.body.clone();
                         freshen_ids(&mut body, id_gen);
-                        for (param, arg) in candidate.params.iter().zip(args.iter()) {
-                            substitute(&mut body, param, arg);
-                        }
+                        // Use simultaneous substitution to avoid variable capture
+                        // when an argument expression contains a variable that
+                        // shares a name with another parameter.
+                        let bindings: Vec<(&str, &RustIrExpr)> = candidate
+                            .params
+                            .iter()
+                            .zip(args.iter())
+                            .map(|(p, a)| (p.as_str(), a))
+                            .collect();
+                        substitute_many(&mut body, &bindings);
                         return inline_expr(body, candidates, id_gen, depth + 1);
                     }
                 }

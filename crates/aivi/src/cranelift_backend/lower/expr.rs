@@ -333,8 +333,8 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                         }
                         return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                     }
-                    let args_vec = vec![arg.clone()];
-                    return self.emit_direct_call(builder, &info, &args_vec);
+                    let arg_tv = self.lower_expr(builder, arg);
+                    return self.emit_direct_call_typed(builder, &info, &[arg_tv]);
                 }
             }
         }
@@ -375,7 +375,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                         // No matching specialization; use the args we already lowered
                         return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                     }
-                    return self.emit_direct_call(builder, &info, args);
+                    let arg_tvs: Vec<TypedValue> =
+                        args.iter().map(|a| self.lower_expr(builder, a)).collect();
+                    return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                 }
             }
         }
@@ -422,35 +424,8 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     }
 
     /// Emit a direct Cranelift `call` to a JIT-compiled function, bypassing
-    /// `rt_get_global` + `rt_apply`. Arguments are boxed at the call site
-    /// since the callee's ABI is still all-`PTR`.
-    fn emit_direct_call(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        info: &JitFuncInfo,
-        args: &[RustIrExpr],
-    ) -> TypedValue {
-        let mut call_args = vec![self.ctx_param];
-        for arg_expr in args.iter() {
-            let arg_tv = self.lower_expr(builder, arg_expr);
-            // Always box for the all-PTR ABI
-            call_args.push(self.ensure_boxed(builder, arg_tv));
-        }
-        let call = builder.ins().call(info.func_ref, &call_args);
-        let raw = builder.inst_results(call)[0];
-        match &info.return_type {
-            Some(ret_ty) => {
-                // Callee returned a boxed value; we know the type so unbox it
-                self.try_unbox(builder, raw, ret_ty)
-                    .unwrap_or_else(|| TypedValue::boxed(raw))
-            }
-            None => TypedValue::boxed(raw),
-        }
-    }
-
-    /// Like `emit_direct_call` but takes pre-lowered TypedValues instead of
-    /// unevaluated expressions. Used for specialization routing where args
-    /// are already lowered to determine their types.
+    /// `rt_get_global` + `rt_apply`. Arguments must be pre-lowered to avoid
+    /// SSA value ordering issues when nested calls appear as arguments.
     fn emit_direct_call_typed(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
