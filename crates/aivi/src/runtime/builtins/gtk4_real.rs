@@ -581,6 +581,30 @@ mod bridge {
             Ok(effect(move |_| { let r = aivi_gtk4::os_theme_preference().map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
         }));
 
+        fields.insert("trayNotifyPersonalEmail".to_string(), builtin("gtk4.trayNotifyPersonalEmail", 4, |mut args, _| {
+            let markdown_body = match args.remove(3) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
+            let subject = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
+            let from = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
+            let id = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
+            Ok(effect(move |_| { aivi_gtk4::tray_notify_personal_email(&id, &from, &subject, &markdown_body).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
+        }));
+
+        fields.insert("traySetEmailSuggestions".to_string(), builtin("gtk4.traySetEmailSuggestions", 1, |mut args, _| {
+            let list_val = args.remove(0);
+            let mut suggestions: Vec<String> = Vec::new();
+            let mut list = list_val;
+            loop {
+                match list {
+                    Value::Constructor { name, mut args } if name == "Cons" => {
+                        let head = args.remove(0); list = args.remove(0);
+                        if let Value::Text(t) = head { suggestions.push(t); }
+                    }
+                    _ => break,
+                }
+            }
+            Ok(effect(move |_| { aivi_gtk4::tray_set_email_suggestions(suggestions.clone()).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
+        }));
+
         // ── Build / reconcile ──
         fields.insert("buildFromNode".to_string(), builtin("gtk4.buildFromNode", 1, |mut args, _| {
             let node = args.remove(0);
