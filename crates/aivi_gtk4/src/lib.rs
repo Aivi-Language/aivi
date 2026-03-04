@@ -356,7 +356,7 @@ mod linux_impl {
         separators: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
         signal_events: VecDeque<SignalEventState>,
-        signal_senders: Vec<mpsc::SyncSender<SignalEvent>>,
+        signal_senders: Vec<mpsc::Sender<SignalEvent>>,
         signal_bool_bindings: HashMap<String, Vec<SignalBoolBinding>>,
         signal_css_bindings: HashMap<String, Vec<SignalCssBinding>>,
         signal_toggle_bool_bindings: HashMap<String, Vec<SignalToggleBoolBinding>>,
@@ -812,7 +812,7 @@ mod linux_impl {
             let typed_event = make_signal_event(event.clone(), widget_name);
             state
                 .signal_senders
-                .retain(|s| s.try_send(typed_event.clone()).is_ok());
+                .retain(|s| s.send(typed_event.clone()).is_ok());
             state.signal_events.push_back(event);
             // Apply any registered property bindings for this handler
             if let Some(bindings) = state.signal_bool_bindings.get(&binding.handler) {
@@ -3093,7 +3093,7 @@ mod linux_impl {
                         let mut state = state.borrow_mut();
                         state
                             .signal_senders
-                            .retain(|s| s.try_send(typed_event.clone()).is_ok());
+                            .retain(|s| s.send(typed_event.clone()).is_ok());
                         state.signal_events.push_back(event);
                     });
                 }
@@ -3278,7 +3278,7 @@ mod linux_impl {
                 let typed_event = make_signal_event(event.clone(), signal_name.clone());
                 state
                     .signal_senders
-                    .retain(|s| s.try_send(typed_event.clone()).is_ok());
+                    .retain(|s| s.send(typed_event.clone()).is_ok());
                 state.signal_events.push_back(event);
             });
             0
@@ -4342,7 +4342,7 @@ mod linux_impl {
     pub(super) fn signal_stream() -> Result<std::sync::mpsc::Receiver<SignalEvent>, Gtk4Error> {
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
-            let (sender, receiver) = mpsc::sync_channel(512);
+            let (sender, receiver) = mpsc::channel();
             state.signal_senders.push(sender);
             Ok(receiver)
         })
