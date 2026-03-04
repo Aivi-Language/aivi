@@ -256,12 +256,12 @@ error[E1528]: crate `quick-xml` referenced by @native binding but not found in C
 
 During `aivi build`, the compiler generates a Rust bridge module at `target/aivi-gen/src/native_bridge.rs`. Each crate-native binding produces a function that:
 
-1. Extracts arguments from AIVI `Value` types
+1. Extracts arguments from AIVI `CrateNativeValue` types
 2. Converts to the corresponding Rust types
 3. Calls the target crate function
-4. Wraps the return value back into an AIVI `Value`
+4. Wraps the return value back into an AIVI `CrateNativeValue`
 
-The generated bridge is compiled as part of the AOT binary and registered as builtins at startup.
+The generated bridge is compiled as part of the AOT binary and registered as builtins at startup via `register_crate_natives_on_ctx`.
 
 #### Compile-Time Errors
 
