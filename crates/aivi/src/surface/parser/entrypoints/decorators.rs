@@ -298,7 +298,28 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
         });
     }
 
+    /// Returns true if the `@native` path uses `::` (crate native) rather than `.` (runtime native).
+    fn is_crate_native_path(path: &str) -> bool {
+        path.contains("::")
+    }
+
+    /// Convert a crate-native path like `"quick_xml::de::from_str"` to
+    /// a unique global name `"__crate_native__quick_xml__de__from_str"`.
+    fn crate_native_global_name(path: &str) -> String {
+        let sanitized = path.replace("::", "__").replace('-', "_");
+        format!("__crate_native__{sanitized}")
+    }
+
     fn native_target_expr(path: &str, span: &Span) -> Option<Expr> {
+        // Crate native: `"crate::path::fn"` → single Ident with unique global name
+        if is_crate_native_path(path) {
+            let global_name = crate_native_global_name(path);
+            return Some(Expr::Ident(SpannedName {
+                name: global_name,
+                span: span.clone(),
+            }));
+        }
+        // Runtime native: `"module.function"` → field-access chain
         let mut segments = path.split('.').filter(|seg| !seg.is_empty());
         let first = segments.next()?;
         if !is_valid_ident(first) {
@@ -331,6 +352,20 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
         };
         (first.is_ascii_alphabetic() || first == '_')
             && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    }
+
+    /// Validate that each `::` segment in a crate-native path is a valid Rust identifier.
+    fn is_valid_crate_native_path(path: &str) -> bool {
+        path.split("::").all(|seg| {
+            !seg.is_empty()
+                && seg
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+                && seg
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_ascii_alphabetic() || c == '_')
+        })
     }
 
     fn apply_native_to_def(
@@ -367,16 +402,31 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             );
             return;
         }
+        // Validate path syntax
+        if is_crate_native_path(&path) {
+            if !is_valid_crate_native_path(&path) {
+                emit_diag(
+                    module_path,
+                    out,
+                    "E1526",
+                    format!("`@native` crate path must be valid Rust identifiers separated by `::`, got `{path}`"),
+                    def.span.clone(),
+                );
+                return;
+            }
+        }
         let Some(target_expr) = native_target_expr(&path, &def.span) else {
             emit_diag(
                 module_path,
                 out,
                 "E1526",
-                format!("`@native` target must be a dotted identifier path, got `{path}`"),
+                format!("`@native` target must be a dotted identifier path or crate::path, got `{path}`"),
                 def.span.clone(),
             );
             return;
         };
+        // For crate natives, params are derived from type sig — no dummy body needed.
+        // For runtime natives, params come from the existing def body.
         let params: Vec<Pattern> = if !def.params.is_empty() {
             def.params.clone()
         } else if let Expr::Lambda { params, .. } = def.expr.clone() {
@@ -416,6 +466,15 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
         };
     }
 
+    /// Count the number of parameters in a function type signature.
+    /// e.g. `Text -> Int -> Bool` has arity 2, `Text` has arity 0.
+    fn count_function_arity(ty: &TypeExpr) -> usize {
+        match ty {
+            TypeExpr::Func { params, .. } => params.len(),
+            _ => 0,
+        }
+    }
+
     let mut diags = Vec::new();
     for module in modules {
         let module_path = module.path.clone();
@@ -430,6 +489,89 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 native_sig_targets.insert(sig.name.name.clone(), path);
             }
         }
+
+        // Collect names of existing defs so we know which crate-native sigs need auto-generated defs
+        let existing_def_names: std::collections::HashSet<String> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::Def(def) => Some(def.name.name.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // Auto-generate defs for crate-native type sigs that lack a corresponding def.
+        // For crate natives, no dummy body is required — only the type sig.
+        let mut auto_defs: Vec<ModuleItem> = Vec::new();
+        for (sig_name, target_path) in &native_sig_targets {
+            if !is_crate_native_path(target_path) {
+                continue;
+            }
+            if existing_def_names.contains(sig_name) {
+                continue;
+            }
+            // Find the type sig to get its span and compute arity from the type
+            let sig_item = module.items.iter().find(|item| {
+                matches!(item, ModuleItem::TypeSig(sig) if sig.name.name == *sig_name)
+            });
+            let Some(ModuleItem::TypeSig(sig)) = sig_item else {
+                continue;
+            };
+            let arity = count_function_arity(&sig.ty);
+            let span = sig.span.clone();
+            // Generate synthetic parameter names: __arg0, __arg1, ...
+            let params: Vec<Pattern> = (0..arity)
+                .map(|i| {
+                    Pattern::Ident(SpannedName {
+                        name: format!("__arg{i}"),
+                        span: span.clone(),
+                    })
+                })
+                .collect();
+            let global_name = crate_native_global_name(target_path);
+            let target_expr = Expr::Ident(SpannedName {
+                name: global_name,
+                span: span.clone(),
+            });
+            let args: Vec<Expr> = params
+                .iter()
+                .map(|p| match p {
+                    Pattern::Ident(name) => Expr::Ident(name.clone()),
+                    _ => unreachable!(),
+                })
+                .collect();
+            let body = if args.is_empty() {
+                target_expr
+            } else {
+                Expr::Call {
+                    func: Box::new(target_expr),
+                    args,
+                    span: span.clone(),
+                }
+            };
+            auto_defs.push(ModuleItem::Def(Def {
+                decorators: vec![Decorator {
+                    name: SpannedName {
+                        name: "native".to_string(),
+                        span: span.clone(),
+                    },
+                    arg: Some(Expr::Literal(Literal::String {
+                        text: target_path.clone(),
+                        span: span.clone(),
+                    })),
+                    span: span.clone(),
+                }],
+                name: SpannedName {
+                    name: sig_name.clone(),
+                    span: span.clone(),
+                },
+                params,
+                expr: body,
+                span,
+            }));
+        }
+        module.items.extend(auto_defs);
+
         for item in &mut module.items {
             match item {
                 ModuleItem::Def(def) => {

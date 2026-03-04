@@ -3,6 +3,7 @@ mod cargo_edit;
 mod cargo_metadata;
 mod dep_spec;
 mod ensure_dep;
+pub mod native_bridge;
 mod publish;
 mod scaffold;
 mod sources;

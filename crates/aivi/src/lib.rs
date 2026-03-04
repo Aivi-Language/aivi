@@ -120,7 +120,8 @@ pub use aivi_mcp::{
 use cranelift_backend::run_cranelift_jit_cancellable;
 pub use cranelift_backend::{
     compile_to_object, destroy_aot_runtime, init_aot_runtime, init_aot_runtime_base,
-    run_cranelift_jit, run_test_suite_jit,
+    register_crate_natives_on_ctx, run_cranelift_jit, run_test_suite_jit, CrateNativeRegistrar,
+    CrateNativeValue,
 };
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
@@ -131,6 +132,11 @@ pub use pm::{
     write_scaffold, AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
     CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
+
+/// Re-export the native bridge module for AOT build pipeline.
+pub mod native_bridge {
+    pub use crate::pm::native_bridge::*;
+}
 pub use runtime::{TestFailure, TestReport, TestSuccess};
 
 /// Opaque handle for cancelling a running AIVI program from another thread.
