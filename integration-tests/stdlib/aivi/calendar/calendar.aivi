@@ -67,14 +67,14 @@ isLeapYear_functional = do Effect {
 @test "negate delta"
 negateDelta_functional = do Effect {
   useDate = { year: 2024, month: 2, day: 10 }
-  d1 <- 1d
-  m1 <- 1m
-  y1 <- 1y
+  d1 = 1d
+  m1 = 1m
+  y1 = 1y
 
   assertEq ((useDate + d1) + (negateDelta d1)) useDate
   assertEq ((useDate + m1) + (negateDelta m1)) useDate
   assertEq ((useDate + y1) + (negateDelta y1)) useDate
-  e <- eom
+  e = eom
   assertEq (negateDelta e) e
 }
 

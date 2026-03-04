@@ -147,10 +147,9 @@ test_streamRead = do Effect {
   b = fromInt 72623859790382856
   s = streamFromBits b
   r1 = streamRead 2 s
-  remaining = r1 match
-    | Ok (_, s2) => streamRemaining s2
-    | Err _      => -1
-    assertEq remaining 6
+  r1 match
+    | Ok (_, s2) => assertEq (streamRemaining s2) 6
+    | Err _      => assert False
 }
 
 @test "streamPeek does not advance"
@@ -166,8 +165,7 @@ test_streamSkip = do Effect {
   b = fromInt 72623859790382856
   s = streamFromBits b
   r = streamSkip 4 s
-  remaining = r match
-    | Ok s2 => streamRemaining s2
-    | Err _ => -1
-    assertEq remaining 4
+  r match
+    | Ok s2 => assertEq (streamRemaining s2) 4
+    | Err _ => assert False
 }
