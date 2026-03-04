@@ -304,8 +304,11 @@ pub(crate) fn register_machines_for_jit(
                     event_name.clone(),
                 );
                 machine_fields.insert(event_name.clone(), transition_value.clone());
-                // Short name in globals (JIT uses rt_get_global with short names)
-                globals.set(event_name.clone(), transition_value.clone());
+                // Only set bare global if it doesn't already exist (avoid clobbering
+                // stdlib bindings like `init`)
+                if globals.get(&event_name).is_none() {
+                    globals.set(event_name.clone(), transition_value.clone());
+                }
                 let qualified_transition = format!("{module_name}.{event_name}");
                 if globals.get(&qualified_transition).is_none() {
                     globals.set(qualified_transition, transition_value);

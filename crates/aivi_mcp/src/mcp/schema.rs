@@ -54,6 +54,20 @@ fn jsonrpc_result(id: serde_json::Value, result: serde_json::Value) -> serde_jso
     })
 }
 
+fn is_mangled_tool_name(canonical: &str, received: &str) -> bool {
+    if canonical == received {
+        return true;
+    }
+    // Check if received is mangled version of canonical (e.g. "Aivi-aivi_gtk_launch" or "aivi_gtk_launch").
+    let received_core = if received.len() > 5 && received[..5].eq_ignore_ascii_case("aivi-") {
+        &received[5..]
+    } else {
+        received
+    };
+    let canonical_mangled = canonical.replace('.', "_");
+    canonical_mangled == received_core
+}
+
 fn handle_request(
     manifest: &McpManifest,
     policy: McpPolicy,
@@ -138,7 +152,10 @@ fn handle_request(
             let Some(name) = params.get("name").and_then(|value| value.as_str()) else {
                 return Some(jsonrpc_error(id, -32602, "missing params.name"));
             };
-            let Some(tool) = manifest.tools.iter().find(|tool| tool.name == name) else {
+            let tool = manifest.tools.iter().find(|tool| {
+                tool.name == name || is_mangled_tool_name(&tool.name, name)
+            });
+            let Some(tool) = tool else {
                 return Some(jsonrpc_error(id, -32602, "unknown tool"));
             };
             if tool.effectful && !policy.allow_effectful_tools {
@@ -160,13 +177,13 @@ fn handle_request(
                 ));
             }
 
-            match execute_tool(name, &arguments) {
+            match execute_tool(&tool.name, &arguments) {
                 Ok(structured_content) => jsonrpc_result(
                     id,
                     serde_json::json!({
                         "content": [{
                             "type": "text",
-                            "text": format!("{} executed", name)
+                            "text": format!("{} executed", tool.name)
                         }],
                         "structuredContent": structured_content,
                         "isError": false
@@ -181,7 +198,7 @@ fn handle_request(
                         }],
                         "structuredContent": {
                             "ok": false,
-                            "tool": name,
+                            "tool": tool.name,
                             "error": {
                                 "code": aivi_error_code(&err),
                                 "message": err.to_string()
@@ -914,6 +931,7 @@ pub fn serve_mcp_stdio_with_policy(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+    use crate::mcp::manifest::{bundled_specs_manifest, bundled_specs_manifest_with_ui};
 
     #[test]
     fn bundled_specs_manifest_lists_resources() {
@@ -1086,5 +1104,52 @@ mod tests {
         );
         let updated = std::fs::read_to_string(&source_path).expect("read updated source");
         assert!(updated.contains("x = 1"));
+    }
+
+    #[test]
+    fn test_is_mangled_tool_name() {
+        assert!(is_mangled_tool_name("aivi.gtk.launch", "aivi.gtk.launch"));
+        assert!(is_mangled_tool_name("aivi.gtk.launch", "Aivi-aivi_gtk_launch"));
+        assert!(is_mangled_tool_name("aivi.gtk.launch", "aivi_gtk_launch"));
+
+        assert!(!is_mangled_tool_name("aivi.gtk.launch", "other.tool"));
+        assert!(!is_mangled_tool_name("aivi.gtk.launch", "Aivi-other_tool"));
+    }
+
+    #[test]
+    fn test_handle_mangled_tool_name() {
+        let manifest = bundled_specs_manifest_with_ui();
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "Aivi-aivi_gtk_launch",
+                "arguments": {
+                    "target": "dummy"
+                }
+            }
+        });
+
+        let response = handle_request(
+            &manifest,
+            McpPolicy {
+                allow_effectful_tools: true,
+            },
+            &request,
+        )
+        .expect("response");
+
+        if let Some(error) = response.get("error") {
+            let msg = error.get("message").unwrap().as_str().unwrap();
+            // It should NOT be "unknown tool"
+            assert_ne!(msg, "unknown tool", "Should recognize mangled tool name");
+        }
+        // If it returns a result (even an error result inside structuredContent), it means it found the tool.
+        if let Some(result) = response.get("result") {
+            let _ = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
+             // It might be an error because execution fails (dummy target), but that's fine.
+             // We just care that it dispatched.
+        }
     }
 }

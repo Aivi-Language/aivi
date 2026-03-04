@@ -936,6 +936,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             // Arm body block
             builder.switch_to_block(arm_body_block);
             builder.seal_block(arm_body_block);
+
+            // Save outer scope so pattern bindings don't leak between arms
+            // or into code after the match.
+            let saved_locals = self.locals.clone();
+
             // Bind pattern variables
             self.bind_pattern(builder, &arm.pattern, scrut_val);
 
@@ -984,6 +989,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             self.reuse_token = None;
             builder.def_var(result_var, body_boxed);
             builder.ins().jump(merge_block, &[]);
+
+            // Restore outer scope: pattern bindings must not leak into the
+            // next arm or into code following the match expression.
+            self.locals = saved_locals;
 
             // Next arm block
             builder.switch_to_block(arm_next_block);

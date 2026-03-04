@@ -289,6 +289,28 @@ mod linux_impl {
         PENDING_LAYOUT_UPDATE.get_or_init(|| Mutex::new(false))
     }
 
+    static PENDING_BADGE_UPDATES: OnceLock<Mutex<VecDeque<i64>>> = OnceLock::new();
+    fn pending_badge_updates() -> &'static Mutex<VecDeque<i64>> {
+        PENDING_BADGE_UPDATES.get_or_init(|| Mutex::new(VecDeque::new()))
+    }
+
+    struct PersonalEmailNotif {
+        id: String,
+        from: String,
+        subject: String,
+        markdown_body: String,
+    }
+
+    static PENDING_PERSONAL_EMAILS: OnceLock<Mutex<VecDeque<PersonalEmailNotif>>> = OnceLock::new();
+    fn pending_personal_emails() -> &'static Mutex<VecDeque<PersonalEmailNotif>> {
+        PENDING_PERSONAL_EMAILS.get_or_init(|| Mutex::new(VecDeque::new()))
+    }
+
+    static EMAIL_SUGGESTIONS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+    fn email_suggestions() -> &'static Mutex<Vec<String>> {
+        EMAIL_SUGGESTIONS.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
     // ── Types ──
     struct ScrollFadeData {
         scrolled: *mut c_void,
@@ -1059,6 +1081,50 @@ mod linux_impl {
                             }
                         }
                     });
+                    // Emit BadgeUpdate and NewPersonalEmail D-Bus signals
+                    let conn_dbus_sigs = conn.clone();
+                    tokio::spawn(async move {
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            let badge_updates: Vec<i64> = pending_badge_updates()
+                                .lock()
+                                .map(|mut q| q.drain(..).collect())
+                                .unwrap_or_default();
+                            for count in badge_updates {
+                                if let Ok(iface_ref) = conn_dbus_sigs
+                                    .object_server()
+                                    .interface::<_, MailfoxDesktopObject>("/com/mailfox/desktop")
+                                    .await
+                                {
+                                    let _ = MailfoxDesktopObject::badge_update(
+                                        iface_ref.signal_emitter(),
+                                        count as i32,
+                                    )
+                                    .await;
+                                }
+                            }
+                            let emails: Vec<PersonalEmailNotif> = pending_personal_emails()
+                                .lock()
+                                .map(|mut q| q.drain(..).collect())
+                                .unwrap_or_default();
+                            for email in emails {
+                                if let Ok(iface_ref) = conn_dbus_sigs
+                                    .object_server()
+                                    .interface::<_, MailfoxDesktopObject>("/com/mailfox/desktop")
+                                    .await
+                                {
+                                    let _ = MailfoxDesktopObject::new_personal_email(
+                                        iface_ref.signal_emitter(),
+                                        &email.id,
+                                        &email.from,
+                                        &email.subject,
+                                        &email.markdown_body,
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                    });
                     // Keep alive
                     std::future::pending::<()>().await;
                 });
@@ -1123,7 +1189,7 @@ mod linux_impl {
 
         #[zbus(property)]
         fn item_is_menu(&self) -> bool {
-            false
+            true
         }
 
         #[zbus(property)]
@@ -1138,7 +1204,12 @@ mod linux_impl {
                 q.push_back(format!("left_click:{x}:{y}"));
             }
         }
-        fn secondary_activate(&self, _x: i32, _y: i32) {}
+        fn secondary_activate(&self, x: i32, y: i32) {
+            eprintln!("sni-tray: SecondaryActivate({x}, {y}) called");
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back(format!("middle_click:{x}:{y}"));
+            }
+        }
         fn context_menu(&self, x: i32, y: i32) {
             eprintln!("sni-tray: ContextMenu({x}, {y}) called");
             if let Ok(mut q) = pending_tray_actions().lock() {
@@ -1158,6 +1229,52 @@ mod linux_impl {
                 q.push_back(action);
             }
         }
+
+        fn send_reply(&self, email_id: String, body: String) {
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back(format!("send_reply:{email_id}:{body}"));
+            }
+        }
+
+        fn send_compose(&self, to: String, subject: String, body: String) {
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back(format!("send_compose:{to}:{subject}:{body}"));
+            }
+        }
+
+        fn open_email(&self, email_id: String) {
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back(format!("open_email:{email_id}"));
+            }
+        }
+
+        fn get_email_suggestions(&self, prefix: String) -> Vec<String> {
+            email_suggestions()
+                .lock()
+                .map(|sug| {
+                    let lc = prefix.to_lowercase();
+                    sug.iter()
+                        .filter(|s| s.to_lowercase().contains(&lc))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        #[zbus(signal)]
+        async fn badge_update(
+            emitter: &zbus::object_server::SignalEmitter<'_>,
+            count: i32,
+        ) -> zbus::Result<()>;
+
+        #[zbus(signal)]
+        async fn new_personal_email(
+            emitter: &zbus::object_server::SignalEmitter<'_>,
+            id: &str,
+            from: &str,
+            subject: &str,
+            markdown_body: &str,
+        ) -> zbus::Result<()>;
     }
 
     // ── DBusMenu (com.canonical.dbusmenu) ─────────────────────────────────────
@@ -4172,11 +4289,38 @@ mod linux_impl {
                 };
             }
         }
+        if let Ok(mut q) = pending_badge_updates().lock() {
+            q.push_back(count);
+        }
         Ok(())
     }
 
     pub(super) fn os_theme_preference() -> Result<String, Gtk4Error> {
         Ok("default".to_string())
+    }
+
+    pub(super) fn tray_notify_personal_email(
+        id: &str,
+        from: &str,
+        subject: &str,
+        markdown_body: &str,
+    ) -> Result<(), Gtk4Error> {
+        if let Ok(mut q) = pending_personal_emails().lock() {
+            q.push_back(PersonalEmailNotif {
+                id: id.to_string(),
+                from: from.to_string(),
+                subject: subject.to_string(),
+                markdown_body: markdown_body.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    pub(super) fn tray_set_email_suggestions(suggestions: Vec<String>) -> Result<(), Gtk4Error> {
+        if let Ok(mut s) = email_suggestions().lock() {
+            *s = suggestions;
+        }
+        Ok(())
     }
 
     pub(super) fn signal_poll() -> Result<Option<SignalEvent>, Gtk4Error> {
@@ -4552,6 +4696,8 @@ delegate!(os_open_uri(app_id: i64, uri: &str) -> Result<(), Gtk4Error>);
 delegate!(os_show_in_file_manager(path: &str) -> Result<(), Gtk4Error>);
 delegate!(os_set_badge_count(app_id: i64, count: i64) -> Result<(), Gtk4Error>);
 delegate!(os_theme_preference() -> Result<String, Gtk4Error>);
+delegate!(tray_notify_personal_email(id: &str, from: &str, subject: &str, markdown_body: &str) -> Result<(), Gtk4Error>);
+delegate!(tray_set_email_suggestions(suggestions: Vec<String>) -> Result<(), Gtk4Error>);
 delegate!(signal_poll() -> Result<Option<SignalEvent>, Gtk4Error>);
 delegate!(signal_stream() -> Result<std::sync::mpsc::Receiver<SignalEvent>, Gtk4Error>);
 delegate!(signal_emit(widget_id: i64, signal: &str, handler: &str, payload: &str) -> Result<(), Gtk4Error>);

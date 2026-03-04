@@ -46,6 +46,7 @@ export signalPoll, signalEmit, signalStream
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 export signalBindDialogPresent, signalBindStackPage
 export gtkApp
+export gtkAppFull
 
 use aivi
 
@@ -491,7 +492,6 @@ gtkApp = config => do Effect {
   windowSetChild win root
   rx <- signalStream {}
   windowPresent win
-  _ <- appRun appId
   loop acc = { st: config.model, rootId: root } => {
     result <- channel.recv rx
     result match
@@ -501,6 +501,37 @@ gtkApp = config => do Effect {
             | None     => recurse acc
             | Some msg => do Effect {
                 next <- config.update msg acc.st
+                newView = config.view next
+                newRoot <- reconcileNode acc.rootId newView
+                _ <- if newRoot == acc.rootId then pure Unit else windowSetChild win newRoot
+                recurse { st: next, rootId: newRoot }
+              }
+  }
+}
+
+gtkAppFull : { id: Text, title: Text, size: (Int, Int), decorated: Bool, hideOnClose: Bool, model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: AppId -> WindowId -> msg -> s -> Effect GtkError s, onStart: AppId -> WindowId -> Effect GtkError Unit } -> Effect GtkError Unit
+gtkAppFull = config => do Effect {
+  _ <- init Unit
+  appId <- appNew config.id
+  (w, h) = config.size
+  win <- windowNew appId config.title w h
+  _ <- windowSetDecorated win config.decorated
+  _ <- windowSetHideOnClose win config.hideOnClose
+  _ <- config.onStart appId win
+  initialView = config.view config.model
+  root <- buildFromNode initialView
+  windowSetChild win root
+  rx <- signalStream {}
+  windowPresent win
+  loop acc = { st: config.model, rootId: root } => {
+    result <- channel.recv rx
+    result match
+      | Err _ => pure Unit
+      | Ok event =>
+          config.toMsg event match
+            | None     => recurse acc
+            | Some msg => do Effect {
+                next <- config.update appId win msg acc.st
                 newView = config.view next
                 newRoot <- reconcileNode acc.rootId newView
                 _ <- if newRoot == acc.rootId then pure Unit else windowSetChild win newRoot
