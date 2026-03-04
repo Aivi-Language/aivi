@@ -39,7 +39,8 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Effects](syntax/effects)
 - [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
-- [Machines](syntax/machines_runtime)
+- [Machines](syntax/machines)
+- [Machine Runtime](syntax/machines_runtime)
 #### Modules & Interop
 - [Modules](syntax/modules)
 - [External Sources](syntax/external_sources)
@@ -49,9 +50,16 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [IMAP Email Sources](syntax/external_sources/imap_email)
 - [Image Sources](syntax/external_sources/image)
 - [Compile-Time Sources](syntax/external_sources/compile_time)
+#### Decorators
+- [Overview](syntax/decorators/)
+- [@static](syntax/decorators/static)
+- [@native](syntax/decorators/native)
+- [@deprecated](syntax/decorators/deprecated)
+- [@debug](syntax/decorators/debug)
+- [@test](syntax/decorators/test)
+- [@no_prelude](syntax/decorators/no_prelude)
 #### Notation
 - [Operators & Sigils](syntax/operators)
-- [Decorators](syntax/decorators)
 - [Grammar](syntax/grammar)
 
 ### Standard Library
@@ -68,6 +76,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [I18n](stdlib/core/i18n)
 - [Units](stdlib/core/units)
 #### Data
+- [Bits](stdlib/data/bits)
 - [JSON](stdlib/data/json)
 #### Math & Science
 - [Math](stdlib/math/math)
@@ -116,7 +125,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 
 ### Testing
 - [Testing Module](stdlib/core/testing)
-- [@test & Mocks](syntax/decorators#test-test-declarations)
+- [@test & Mocks](syntax/decorators/test)
 
 ### Tooling
 - [CLI](tools/cli)

@@ -33,7 +33,8 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Effects](syntax/effects.md)
 - [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
-- [Machines](syntax/machines_runtime.md)
+- [Machines](syntax/machines.md)
+- [Machine Runtime](syntax/machines_runtime.md)
 #### Modules & Interop
 - [Modules](syntax/modules.md)
 - [External Sources](syntax/external_sources.md)
@@ -43,9 +44,16 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [IMAP Email Sources](syntax/external_sources/imap_email.md)
 - [Image Sources](syntax/external_sources/image.md)
 - [Compile-Time Sources](syntax/external_sources/compile_time.md)
+#### Decorators
+- [Overview](syntax/decorators/.md)
+- [@static](syntax/decorators/static.md)
+- [@native](syntax/decorators/native.md)
+- [@deprecated](syntax/decorators/deprecated.md)
+- [@debug](syntax/decorators/debug.md)
+- [@test](syntax/decorators/test.md)
+- [@no_prelude](syntax/decorators/no_prelude.md)
 #### Notation
 - [Operators & Sigils](syntax/operators.md)
-- [Decorators](syntax/decorators.md)
 - [Grammar](syntax/grammar.md)
 
 ### Standard Library
@@ -62,6 +70,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [I18n](stdlib/core/i18n.md)
 - [Units](stdlib/core/units.md)
 #### Data
+- [Bits](stdlib/data/bits.md)
 - [JSON](stdlib/data/json.md)
 #### Math & Science
 - [Math](stdlib/math/math.md)
@@ -110,7 +119,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 ### Testing
 - [Testing Module](stdlib/core/testing.md)
-- [@test & Mocks](syntax/decorators.md#test-test-declarations)
+- [@test & Mocks](syntax/decorators/test.md)
 
 ### Tooling
 - [CLI](tools/cli.md)
