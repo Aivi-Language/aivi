@@ -137,8 +137,7 @@ DeltaLitBinding:= SuffixedNumberLit "=" Expr Sep
 
 ClassDef       := "class" UpperIdent ClassParams "=" ClassRhs Sep
 ClassParams    := ClassParam { ClassParam }
-ClassParam     := UpperIdent
-               | "(" UpperIdent "*" { "*" } ")"
+ClassParam     := TypeAtom
 
 (* Classes are records of methods ("dictionaries") with optional superclass composition.
    A class may also declare constraints on the type variables used in its member signatures. *)
@@ -350,8 +349,7 @@ TypeAtom       := UpperIdent
 
 TupleType      := "(" Type "," Type { "," Type } ")"
 RecordType     := "{" { RecordTypeField } "}"
-RecordTypeField:= lowerIdent ":" Type { FieldDecorator } [ FieldSep ]
-FieldDecorator := "@" lowerIdent [ DecoratorArg ]
+RecordTypeField:= lowerIdent ":" Type [ FieldSep ]
 ```
 
 ## 0.7 Patterns
