@@ -307,6 +307,7 @@ impl TypeChecker {
             return;
         }
         let name = def.name.name.clone();
+        self.current_def_name = name.clone();
         let expr = desugar_holes(def.expr.clone());
         if def_count > 1 && !sigs.contains_key(&name) {
             if !self.checked_defs.contains(&name) {

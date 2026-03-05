@@ -8,17 +8,19 @@ use aivi.url
 @test "parse"
 parse_functional = do Effect {
   res = parse "https://example.com:8080/path?q=v#hash"
-  r <- res match
+  r <- (res match
     | Ok re => do Effect { pure re }
     | Err _ => do Effect { fail "parse failed" }
-    assert (r.protocol == "https")
-    assert (r.host == "example.com")
-    assert (r.port == Some 8080)
+  )
+  assert (protocol r == "https")
+  assert (host r == "example.com")
+  assert (port r == Some 8080)
 }
 
 @test "to string"
 toString_functional = do Effect {
-  u = { protocol: "http", host: "example.com", port: None, path: "/", query: [], hash: None }
-  s = toString u
-  assert (text.startsWith s "http://example.com")
+  res = parse "http://example.com/"
+  res match
+    | Ok u  => assert (text.startsWith (toString u) "http://example.com")
+    | Err _ => fail "parse failed"
 }

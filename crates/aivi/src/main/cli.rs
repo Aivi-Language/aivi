@@ -497,7 +497,7 @@ fn run() -> Result<(), AiviError> {
                         return watch::run_watch(&opts.input, &watch_dir);
                     }
                     let (program, cg_types, monomorph_plan, surface_modules) = aivi::desugar_target_with_cg_types_and_surface(&opts.input)?;
-                    aivi::run_cranelift_jit(program, cg_types, monomorph_plan, &surface_modules)
+                    aivi::run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
                 }
             }
             _ => Ok(()),

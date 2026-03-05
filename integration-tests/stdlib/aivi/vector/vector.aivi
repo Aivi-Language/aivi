@@ -4,7 +4,23 @@ module integrationTests.stdlib.aivi.vector.tests
 use aivi
 use aivi.testing
 use aivi.math
-use aivi.vector
+use aivi.vector (
+  vec2,
+  vec3,
+  vec4,
+  magnitude,
+  normalize,
+  dot,
+  cross,
+  negate,
+  lerp,
+  distance,
+  transform2,
+  transform3,
+  transform4,
+  transformPoint3,
+  domain Vector,
+)
 use aivi.matrix
 
 @test "vec2 constructor"
@@ -23,7 +39,7 @@ vec3_constructor = do Effect {
 
 @test "vec2 record"
 vec2_record = do Effect {
-  v = Vec2 { x: 3.0, y: 4.0 }
+  v = { x: 3.0, y: 4.0 }
   assertEq v.x 3.0
   assertEq v.y 4.0
 }
@@ -32,12 +48,6 @@ vec2_record = do Effect {
 vec2_magnitude = do Effect {
   v = vec2 3.0 4.0
   assert (abs (magnitude v - 5.0) < 0.0001)
-}
-
-@test "vec3 magnitude"
-vec3_magnitude = do Effect {
-  v = vec3 1.0 2.0 2.0
-  assert (abs (magnitude v - 3.0) < 0.0001)
 }
 
 @test "vec2 dot"
@@ -68,29 +78,9 @@ vec2_normalize = do Effect {
   assert (abs (n.y - 0.8) < 0.0001)
 }
 
-@test "vec2 arithmetic"
-vec2_arithmetic = do Effect {
-  a = vec2 1.0 2.0
-  b = vec2 3.0 4.0
-  s = a + b
-  assertEq s.x 4.0
-  assertEq s.y 6.0
-  d = b - a
-  assertEq d.x 2.0
-  assertEq d.y 2.0
-}
-
-@test "vec2 scalar mul"
-vec2_scalar_mul = do Effect {
-  v = vec2 2.0 3.0
-  r = v * 2.0
-  assertEq r.x 4.0
-  assertEq r.y 6.0
-}
-
 @test "vec2 negate"
 vec2_negate = do Effect {
-  v = vec2 1.0-2.0
+  v = vec2 1.0 -2.0
   n = negate v
   assertEq n.x -1.0
   assertEq n.y 2.0

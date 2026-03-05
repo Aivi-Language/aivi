@@ -19,6 +19,7 @@ use crate::runtime::{
     collect_surface_constructor_ordinals, register_machines_for_jit, run_main_effect, CancelToken,
     Runtime, RuntimeError,
 };
+use crate::runtime::json_schema::cg_type_to_json_schema;
 use crate::rust_ir::{
     RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
     RustIrTextPart,
@@ -47,6 +48,7 @@ fn jit_compile_into_runtime(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
     runtime: &mut Runtime,
 ) -> Result<cranelift_jit::JITModule, AiviError> {
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
@@ -89,6 +91,11 @@ fn jit_compile_into_runtime(
                 }
             }
         }
+    });
+
+    // Inject JSON validation schemas at `load` call sites
+    timed!("inject source schemas", {
+        inject_source_schemas(&mut rust_program.modules, &source_schemas);
     });
 
     // Monomorphize
@@ -447,6 +454,7 @@ pub fn run_cranelift_jit(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
     // E1527: crate-native bindings require AOT build
@@ -469,7 +477,7 @@ pub fn run_cranelift_jit(
             ctx.merge_constructor_ordinals(surface_ordinals);
         }
     }
-    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
+    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, source_schemas, &mut runtime)?;
     register_machines_for_jit(&runtime, surface_modules);
     if let Some(t0) = t0 {
         eprintln!(
@@ -487,6 +495,7 @@ pub(crate) fn run_cranelift_jit_cancellable(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
     cancel: Arc<CancelToken>,
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
@@ -508,7 +517,7 @@ pub(crate) fn run_cranelift_jit_cancellable(
             ctx.merge_constructor_ordinals(surface_ordinals);
         }
     }
-    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
+    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, source_schemas, &mut runtime)?;
     register_machines_for_jit(&runtime, surface_modules);
     run_main_effect(&mut runtime)
 }
@@ -543,6 +552,7 @@ pub fn run_test_suite_jit(
         program,
         infer_result.cg_types,
         infer_result.monomorph_plan,
+        infer_result.source_schemas,
         &mut runtime,
     )?;
     register_machines_for_jit(&runtime, surface_modules);
@@ -648,6 +658,151 @@ pub fn run_test_suite_jit(
     }
 
     Ok(report)
+}
+
+/// Walk all RustIR modules and wrap `load(source)` calls with
+/// `__set_source_schema(schema_json, load(source))` when the typechecker
+/// recorded a concrete inner type for that load site.
+fn inject_source_schemas(
+    modules: &mut [rust_ir::RustIrModule],
+    source_schemas: &HashMap<String, Vec<CgType>>,
+) {
+    use crate::rust_ir::RustIrModule;
+
+    for module in modules.iter_mut() {
+        for def in &mut module.defs {
+            let key = format!("{}.{}", module.name, def.name);
+            if let Some(schemas) = source_schemas.get(&key) {
+                let mut schema_idx = 0;
+                inject_in_expr(&mut def.expr, schemas, &mut schema_idx);
+            }
+        }
+    }
+}
+
+/// Recursively walk a RustIR expression. When we find `App(Global("load"), arg)`
+/// or `Call(Global("load"), [arg])`, wrap the whole thing:
+///   `Call(Global("__set_source_schema"), [LitString(schema_json), <original>])`
+fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
+    // First recurse into children so inner load calls are found in order
+    match expr {
+        RustIrExpr::Lambda { body, .. } => inject_in_expr(body, schemas, idx),
+        RustIrExpr::App { func, arg, .. } => {
+            inject_in_expr(func, schemas, idx);
+            inject_in_expr(arg, schemas, idx);
+        }
+        RustIrExpr::Call { func, args, .. } => {
+            inject_in_expr(func, schemas, idx);
+            for a in args.iter_mut() {
+                inject_in_expr(a, schemas, idx);
+            }
+        }
+        RustIrExpr::List { items, .. } => {
+            for item in items {
+                inject_in_expr(&mut item.expr, schemas, idx);
+            }
+        }
+        RustIrExpr::Tuple { items, .. } => {
+            for item in items {
+                inject_in_expr(item, schemas, idx);
+            }
+        }
+        RustIrExpr::Record { fields, .. } => {
+            for field in fields {
+                inject_in_expr(&mut field.value, schemas, idx);
+            }
+        }
+        RustIrExpr::Patch { target, fields, .. } => {
+            inject_in_expr(target, schemas, idx);
+            for field in fields {
+                inject_in_expr(&mut field.value, schemas, idx);
+            }
+        }
+        RustIrExpr::Match { scrutinee, arms, .. } => {
+            inject_in_expr(scrutinee, schemas, idx);
+            for arm in arms {
+                inject_in_expr(&mut arm.body, schemas, idx);
+            }
+        }
+        RustIrExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            inject_in_expr(cond, schemas, idx);
+            inject_in_expr(then_branch, schemas, idx);
+            inject_in_expr(else_branch, schemas, idx);
+        }
+        RustIrExpr::Binary { left, right, .. } => {
+            inject_in_expr(left, schemas, idx);
+            inject_in_expr(right, schemas, idx);
+        }
+        RustIrExpr::TextInterpolate { parts, .. } => {
+            for part in parts {
+                if let RustIrTextPart::Expr { expr: e } = part {
+                    inject_in_expr(e, schemas, idx);
+                }
+            }
+        }
+        RustIrExpr::DebugFn { body, .. } => inject_in_expr(body, schemas, idx),
+        RustIrExpr::Pipe { func, arg, .. } => {
+            inject_in_expr(func, schemas, idx);
+            inject_in_expr(arg, schemas, idx);
+        }
+        RustIrExpr::FieldAccess { base, .. } | RustIrExpr::Index { base, .. } => {
+            inject_in_expr(base, schemas, idx);
+        }
+        RustIrExpr::Mock { body, .. } => inject_in_expr(body, schemas, idx),
+        // Leaves: Local, Global, Builtin, ConstructorValue, Lit*, Raw, etc.
+        _ => {}
+    }
+
+    // After recursing, check if this node is a `load` application
+    let is_load_app = match expr {
+        RustIrExpr::App { func, .. } => matches!(
+            func.as_ref(),
+            RustIrExpr::Global { name, .. } | RustIrExpr::Builtin { builtin: name, .. }
+                if name == "load"
+        ),
+        RustIrExpr::Call { func, args, .. } if args.len() == 1 => matches!(
+            func.as_ref(),
+            RustIrExpr::Global { name, .. } | RustIrExpr::Builtin { builtin: name, .. }
+                if name == "load"
+        ),
+        _ => false,
+    };
+
+    if is_load_app {
+        if let Some(cg_type) = schemas.get(*idx) {
+            let schema = cg_type_to_json_schema(cg_type);
+            if let Ok(schema_json) = serde_json::to_string(&schema) {
+                // Replace: `load(source)` → `__set_source_schema(schema_json, load(source))`
+                let original = std::mem::replace(
+                    expr,
+                    RustIrExpr::LitBool {
+                        id: 0,
+                        value: false,
+                    },
+                );
+                *expr = RustIrExpr::Call {
+                    id: 0,
+                    func: Box::new(RustIrExpr::Global {
+                        id: 0,
+                        name: "__set_source_schema".to_string(),
+                    }),
+                    args: vec![
+                        RustIrExpr::LitString {
+                            id: 0,
+                            text: schema_json,
+                        },
+                        original,
+                    ],
+                };
+            }
+        }
+        *idx += 1;
+    }
 }
 
 include!("compile/support.rs");

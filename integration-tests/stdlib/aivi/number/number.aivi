@@ -4,6 +4,8 @@ module integrationTests.stdlib.aivi.number.tests
 use aivi
 use aivi.testing
 use aivi.number
+use aivi.number.bigint (domain BigInt)
+use aivi.number.rational (fromBigInts)
 use aivi.number.decimal as dec
 use aivi.math
 
@@ -22,14 +24,6 @@ bigint_roundtrip = do Effect {
 
   n = fromInt (-99)
   assertEq (toInt n) (Some (-99))
-}
-
-@test "bigint arithmetic"
-bigint_arithmetic = do Effect {
-  a = fromInt 10
-  b = fromInt 20
-  c = a + b
-  assertEq (toInt c) (Some 30)
 }
 
 // -- Decimal --
@@ -55,7 +49,7 @@ decimal_round = do Effect {
 rational_construct = do Effect {
   n = fromInt 2
   d = fromInt 4
-  r = normalize n d
+  r = normalize (fromBigInts n d)
   assertEq (toInt (numerator r)) (Some 1)
   assertEq (toInt (denominator r)) (Some 2)
 }

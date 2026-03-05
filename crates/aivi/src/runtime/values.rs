@@ -18,10 +18,28 @@ pub(crate) type BuiltinFunc =
     dyn Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync;
 pub(crate) type ThunkFunc = dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> + Send + Sync;
 
+use super::json_schema::JsonSchema;
+
 #[derive(Clone)]
 pub(crate) struct SourceValue {
     pub(crate) kind: String,
     pub(crate) effect: Arc<EffectValue>,
+    /// Optional type schema for validating JSON at the source boundary.
+    /// Set by the codegen backend when the expected type is statically known.
+    pub(crate) schema: Arc<Mutex<Option<JsonSchema>>>,
+    /// Raw source text (JSON/CSV) stored by the thunk for error rendering.
+    pub(crate) raw_text: Arc<Mutex<Option<String>>>,
+}
+
+impl SourceValue {
+    pub(crate) fn new(kind: impl Into<String>, effect: Arc<EffectValue>) -> Self {
+        Self {
+            kind: kind.into(),
+            effect,
+            schema: Arc::new(Mutex::new(None)),
+            raw_text: Arc::new(Mutex::new(None)),
+        }
+    }
 }
 
 /// Transitional compact scalar container for future NaN-tagged values.

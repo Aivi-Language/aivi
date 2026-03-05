@@ -64,6 +64,11 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
         ("<=", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a <= b)),
         (">", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a > b)),
         (">=", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a >= b)),
+        ("++", Value::Text(a), Value::Text(b)) => {
+            let mut result = a.clone();
+            result.push_str(b);
+            Some(Value::Text(result))
+        }
         ("&&", Value::Bool(a), Value::Bool(b)) => Some(Value::Bool(*a && *b)),
         ("||", Value::Bool(a), Value::Bool(b)) => Some(Value::Bool(*a || *b)),
         ("??", Value::Constructor { name, args }, _rhs) if name == "Some" && args.len() == 1 => {

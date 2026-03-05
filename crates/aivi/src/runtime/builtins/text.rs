@@ -412,6 +412,21 @@ pub(super) fn build_text_record() -> Value {
             }
         }),
     );
+    fields.insert(
+        "join".to_string(),
+        builtin("text.join", 2, |mut args, _| {
+            let sep = expect_text(args.remove(0), "text.join")?;
+            let list = expect_list(args.remove(0), "text.join")?;
+            let mut out = String::new();
+            for (i, item) in list.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(&sep);
+                }
+                out.push_str(&expect_text(item.clone(), "text.join")?);
+            }
+            Ok(Value::Text(out))
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
 

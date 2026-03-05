@@ -53,6 +53,12 @@ pub(super) struct TypeChecker {
     /// This prevents quadratic blow-up from accumulating dead type variables across defs.
     /// Only safe when span_types are not needed (i.e. `aivi run`, not LSP).
     pub(super) compact_subst_between_defs: bool,
+    /// Name of the definition currently being type-checked (for source schema tracking).
+    pub(super) current_def_name: String,
+    /// Records `(module, def_name, inner_cg_type)` for each `load` call site where
+    /// the inner type `A` of `Source K A` is concrete. Used to inject JSON validation
+    /// schemas at source boundaries.
+    load_source_schemas: Vec<(String, String, CgType)>,
 }
 
 impl TypeChecker {
@@ -85,6 +91,8 @@ impl TypeChecker {
             poly_instantiations: Vec::new(),
             span_types: Vec::new(),
             compact_subst_between_defs: false,
+            current_def_name: String::new(),
+            load_source_schemas: Vec::new(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -207,6 +215,11 @@ impl TypeChecker {
     /// Drain the recorded polymorphic call-site instantiations for the current module.
     pub(super) fn take_poly_instantiations(&mut self) -> Vec<(String, Type)> {
         std::mem::take(&mut self.poly_instantiations)
+    }
+
+    /// Drain `load` call-site source schemas for the current module.
+    pub(super) fn take_load_source_schemas(&mut self) -> Vec<(String, String, CgType)> {
+        std::mem::take(&mut self.load_source_schemas)
     }
 
     /// Drain the recorded span→type pairs for the current module, applying final substitutions

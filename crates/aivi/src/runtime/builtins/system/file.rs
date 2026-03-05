@@ -29,16 +29,18 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "File".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("File".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(
         "json".to_string(),
         builtin("file.json", 1, |mut args, _| {
             let path = expect_text(args.remove(0), "file.json")?;
+            let schema_slot: Arc<Mutex<Option<crate::runtime::json_schema::JsonSchema>>> =
+                Arc::new(Mutex::new(None));
+            let raw_text_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let schema_ref = schema_slot.clone();
+            let raw_ref = raw_text_slot.clone();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let raw = std::fs::read_to_string(&path).map_err(|err| {
@@ -60,13 +62,34 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                             &format!("failed to parse file {path}"),
                         )))
                     })?;
+
+                    // Validate against schema if set
+                    if let Ok(guard) = schema_ref.lock() {
+                        if let Some(ref schema) = *guard {
+                            let mut errors = Vec::new();
+                            crate::runtime::json_schema::validate_json(
+                                &parsed, schema, "$", &mut errors,
+                            );
+                            if !errors.is_empty() {
+                                let msg = crate::runtime::json_schema::format_json_validation_errors(
+                                    &raw, "File", &errors,
+                                );
+                                return Err(RuntimeError::Error(Value::Text(msg)));
+                            }
+                        }
+                    }
+                    // Store raw text for potential later error rendering
+                    if let Ok(mut guard) = raw_ref.lock() {
+                        *guard = Some(raw.clone());
+                    }
+
                     Ok(json_to_runtime(&parsed))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "File".to_string(),
-                effect: Arc::new(effect),
-            })))
+            let mut source = SourceValue::new("File".to_string(), Arc::new(effect));
+            source.schema = schema_slot;
+            source.raw_text = raw_text_slot;
+            Ok(Value::Source(Arc::new(source)))
         }),
     );
     fields.insert(
@@ -129,10 +152,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Ok(Value::List(Arc::new(rows)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "File".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("File".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(
@@ -183,10 +203,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Ok(Value::Record(Arc::new(meta)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Image".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Image".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(
@@ -239,10 +256,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Ok(Value::Record(Arc::new(image)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Image".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Image".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(

@@ -178,6 +178,7 @@ pub fn run_cranelift_jit_with_handle(
         program,
         cg_types,
         monomorph_plan,
+        std::collections::HashMap::new(),
         handle.token.clone(),
         surface_modules,
     )

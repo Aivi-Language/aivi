@@ -27,6 +27,9 @@ pub struct InferResult {
     pub monomorph_plan: HashMap<String, Vec<CgType>>,
     /// Module → list of (span, rendered type) for LSP hover / quick info.
     pub span_types: HashMap<String, Vec<(Span, String)>>,
+    /// `"module.def"` → ordered list of inner CgTypes for `load` calls in that def.
+    /// Used to inject JSON validation schemas at source boundaries.
+    pub source_schemas: HashMap<String, Vec<CgType>>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -73,6 +76,7 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
     let mut cg_types: HashMap<String, HashMap<String, CgType>> = HashMap::new();
     let mut monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
     let mut all_span_types: HashMap<String, Vec<(Span, String)>> = HashMap::new();
+    let mut all_source_schemas: HashMap<String, Vec<CgType>> = HashMap::new();
 
     // Per-step cumulative timing (only when tracing).
     let mut t_reset = 0u128;
@@ -189,6 +193,12 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
                         entry.push(cg);
                     }
                 }
+            }
+
+            // Extract load-call source schemas for JSON validation.
+            for (mod_name, def_name, inner_cg) in checker.take_load_source_schemas() {
+                let key = format!("{}.{}", mod_name, def_name);
+                all_source_schemas.entry(key).or_default().push(inner_cg);
             }
 
             // Extract span→type pairs recorded during type checking (for LSP hover).
@@ -371,5 +381,6 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
         cg_types,
         monomorph_plan,
         span_types: all_span_types,
+        source_schemas: all_source_schemas,
     }
 }
