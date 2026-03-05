@@ -4,17 +4,36 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.url
 export domain Url
-export parse, toString
+export Url
+export parse, toString, protocol, host, port, path, query, hash
 
 use aivi
 
-Url = { protocol: Text, host: Text, port: Option Int, path: Text, query: List (Text, Text), hash: Option Text }
+opaque Url = { protocol: Text, host: Text, port: Option Int, path: Text, query: List (Text, Text), hash: Option Text }
 
 parse : Text -> Result Text Url
 parse = value => url.parse value
 
 toString : Url -> Text
 toString = value => url.toString value
+
+protocol : Url -> Text
+protocol = value => value.protocol
+
+host : Url -> Text
+host = value => value.host
+
+port : Url -> Option Int
+port = value => value.port
+
+path : Url -> Text
+path = value => value.path
+
+query : Url -> List (Text, Text)
+query = value => value.query
+
+hash : Url -> Option Text
+hash = value => value.hash
 
 filter : (A -> Bool) -> List A -> List A
 filter = predicate items => items match

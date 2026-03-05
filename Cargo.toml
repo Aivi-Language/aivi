@@ -24,3 +24,6 @@ inherits = "dev"
 opt-level = 1
 debug = true
 overflow-checks = false
+
+[profile.test]
+opt-level = 1
