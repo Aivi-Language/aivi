@@ -502,7 +502,11 @@ add : Int -> Int -> Int
     // Should have 2 args forwarded
     match &def.expr {
         Expr::Call { args, .. } => {
-            assert_eq!(args.len(), 2, "expected 2 args forwarded for binary function");
+            assert_eq!(
+                args.len(),
+                2,
+                "expected 2 args forwarded for binary function"
+            );
         }
         other => panic!("expected Call with 2 args, got {other:?}"),
     }
@@ -771,14 +775,8 @@ fn crate_native_serde_record_codegen() {
         source.contains("imap_host: String"),
         "should have snake_case field name with correct Rust type"
     );
-    assert!(
-        source.contains("imap_port: i64"),
-        "should map Int -> i64"
-    );
-    assert!(
-        source.contains("use_ssl: bool"),
-        "should map Bool -> bool"
-    );
+    assert!(source.contains("imap_port: i64"), "should map Int -> i64");
+    assert!(source.contains("use_ssl: bool"), "should map Bool -> bool");
 
     // Should use turbofish to specify the struct type
     assert!(

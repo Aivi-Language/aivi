@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{Datelike, NaiveDate, TimeZone as ChronoTimeZone, Timelike};
+use chrono::{Datelike, NaiveDate, TimeZone as ChronoTimeZone};
 use regex::RegexBuilder;
 use url::Url;
 

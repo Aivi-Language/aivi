@@ -566,6 +566,46 @@ impl TypeChecker {
                         Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::con("Unit")])),
                     ),
                 ),
+                (
+                    "fork".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        Box::new(Type::con("Effect").app(vec![
+                            Type::Var(e),
+                            Type::Record {
+                                fields: vec![
+                                    (
+                                        "join".to_string(),
+                                        Type::con("Effect")
+                                            .app(vec![Type::Var(e), Type::Var(a)]),
+                                    ),
+                                    (
+                                        "cancel".to_string(),
+                                        Type::con("Effect")
+                                            .app(vec![Type::Var(e), Type::con("Unit")]),
+                                    ),
+                                    (
+                                        "isCancelled".to_string(),
+                                        Type::con("Effect")
+                                            .app(vec![Type::Var(e), Type::con("Bool")]),
+                                    ),
+                                ]
+                                .into_iter()
+                                .collect(),
+                            },
+                        ])),
+                    ),
+                ),
+                (
+                    "retry".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Int")),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                            Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        )),
+                    ),
+                ),
             ]
             .into_iter()
             .collect(),

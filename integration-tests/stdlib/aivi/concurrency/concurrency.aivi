@@ -2,29 +2,30 @@
 module integrationTests.stdlib.aivi.concurrency.tests
 
 use aivi
+use aivi.prelude
 use aivi.testing
 use aivi.concurrency
 
 @test "channel roundtrip"
 channel_roundtrip = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
+  (tx, rx) <- make True
+  send tx True
   res <- recv rx
   res match
-    | Ok payload => assertEq payload Unit
+    | Ok payload => assertEq payload True
     | Err _      => assert False
     close tx
 }
 
 @test "close drains then Err Closed"
 close_drains_then_closed = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
+  (tx, rx) <- make True
+  send tx True
   close tx
   first  <- recv rx
   second <- recv rx
   first match
-    | Ok payload => assertEq payload Unit
+    | Ok payload => assertEq payload True
     | Err _      => assert False
     second match
       | Ok _       => assert False
@@ -97,39 +98,39 @@ par_failure = do Effect {
 
 @test "race picks faster right"
 race_right_wins = do Effect {
-  slow = do Effect {
+  slow = _ => do Effect {
     sleep 50
     pure "left"
   }
-  fast = do Effect {
+  fast = _ => do Effect {
     sleep 0
     pure "right"
   }
-  v <- race slow fast
+  v <- race (slow Unit) (fast Unit)
   assertEq v "right"
 }
 
 @test "race picks faster left"
 race_left_wins = do Effect {
-  fast = do Effect {
+  fast = _ => do Effect {
     sleep 0
     pure "left"
   }
-  slow = do Effect {
+  slow = _ => do Effect {
     sleep 50
     pure "right"
   }
-  v <- race fast slow
+  v <- race (fast Unit) (slow Unit)
   assertEq v "left"
 }
 
 @test "timeoutWith times out"
 timeout_times_out = do Effect {
-  inner = do Effect {
+  inner = _ => do Effect {
     sleep 50
     pure 1
   }
-  result <- attempt (timeoutWith 10 "timeout" inner)
+  result <- attempt (timeoutWith 10 "timeout" (inner Unit))
   result match
     | Ok _      => assert False
     | Err value => assertEq value "timeout"
@@ -143,22 +144,22 @@ timeout_success = do Effect {
 
 @test "spawn join"
 spawn_join = do Effect {
-  delayed = do Effect {
+  delayed = _ => do Effect {
     sleep 10
     pure 42
   }
-  task  <- spawn delayed
+  task  <- spawn (delayed Unit)
   value <- task.join
   assertEq value 42
 }
 
 @test "spawn cancel sets isCancelled"
 spawn_cancel = do Effect {
-  longRunning = do Effect {
+  longRunning = _ => do Effect {
     sleep 1000
     pure 1
   }
-  task <- spawn longRunning
+  task <- spawn (longRunning Unit)
   _    <- task.cancel
   b    <- task.isCancelled
   assertEq b True
@@ -169,7 +170,7 @@ retry_eventual_success = do Effect {
   (tx, rx) <- make 0
   send tx 0
 
-  step = do Effect {
+  step = _ => do Effect {
     res <- recv rx
     res match
       | Err _ => fail "closed"
@@ -181,7 +182,7 @@ retry_eventual_success = do Effect {
         else pure n
   }
 
-    value <- retry 5 step
+    value <- retry 5 (step Unit)
     assertEq value 2
     close tx
 }
@@ -191,7 +192,7 @@ retry_failure = do Effect {
   (tx, rx) <- make 0
   send tx 0
 
-  step = do Effect {
+  step = _ => do Effect {
     res <- recv rx
     res match
       | Err _ => fail "closed"
@@ -201,7 +202,7 @@ retry_failure = do Effect {
         }
   }
 
-  result <- attempt (retry 2 step)
+  result <- attempt (retry 2 (step Unit))
   result match
     | Ok _    => assert False
     | Err msg => assertEq msg "no"

@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.concurrency
 export Scope, ChannelError
-export par, race, scope
+export par, race, scope, spawn
 export make, makeBounded, send, recv, close
 export fold, forEach
 export sleep, timeoutWith, retry
@@ -22,6 +22,9 @@ race = left right => concurrent.race left right
 
 scope : (Scope -> Effect e a) -> Effect e a
 scope = run => concurrent.scope (run Unit)
+
+spawn : Effect Text a -> Effect Text { join : Effect Text a, cancel : Effect Text Unit, isCancelled : Effect Text Bool }
+spawn = eff => concurrent.fork eff
 
 sleep : Int -> Effect Text Unit
 sleep = concurrent.sleep
@@ -41,7 +44,7 @@ makeBounded = capacity => channel.makeBounded capacity
 send : Sender a -> a -> Effect e Unit
 send = sender value => channel.send sender value
 
-recv : Receiver a -> Effect e (Result a ChannelError)
+recv : Receiver a -> Effect e (Result ChannelError a)
 recv = receiver => channel.recv receiver
 
 close : Sender a -> Effect e Unit

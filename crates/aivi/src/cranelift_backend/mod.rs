@@ -36,10 +36,7 @@ pub fn destroy_aot_runtime(ctx: usize) {
 ///
 /// This is used by the auto-generated AOT harness to install crate-native
 /// bindings before `__aivi_main` runs.
-pub fn register_crate_natives_on_ctx(
-    ctx: usize,
-    register_fn: fn(&mut CrateNativeRegistrar),
-) {
+pub fn register_crate_natives_on_ctx(ctx: usize, register_fn: fn(&mut CrateNativeRegistrar)) {
     if ctx == 0 {
         return;
     }
@@ -65,10 +62,7 @@ impl<'a> CrateNativeRegistrar<'a> {
         &mut self,
         name: &str,
         arity: usize,
-        func: impl Fn(Vec<CrateNativeValue>) -> Result<CrateNativeValue, String>
-            + Send
-            + Sync
-            + 'static,
+        func: impl Fn(Vec<CrateNativeValue>) -> Result<CrateNativeValue, String> + Send + Sync + 'static,
     ) {
         use crate::runtime::values::{BuiltinImpl, BuiltinValue, Value};
         use std::sync::Arc;
@@ -77,8 +71,10 @@ impl<'a> CrateNativeRegistrar<'a> {
                 name: name.to_string(),
                 arity,
                 func: Arc::new(move |args: Vec<Value>, _rt: &mut crate::runtime::Runtime| {
-                    let native_args: Vec<CrateNativeValue> =
-                        args.into_iter().map(CrateNativeValue::from_runtime).collect();
+                    let native_args: Vec<CrateNativeValue> = args
+                        .into_iter()
+                        .map(CrateNativeValue::from_runtime)
+                        .collect();
                     match func(native_args) {
                         Ok(result) => Ok(result.into_runtime()),
                         Err(msg) => Err(crate::runtime::RuntimeError::Message(msg)),

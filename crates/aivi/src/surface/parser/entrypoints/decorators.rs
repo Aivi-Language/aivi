@@ -364,7 +364,7 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 && seg
                     .chars()
                     .next()
-                    .map_or(false, |c| c.is_ascii_alphabetic() || c == '_')
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         })
     }
 
@@ -403,17 +403,15 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             return;
         }
         // Validate path syntax
-        if is_crate_native_path(&path) {
-            if !is_valid_crate_native_path(&path) {
-                emit_diag(
-                    module_path,
-                    out,
-                    "E1526",
-                    format!("`@native` crate path must be valid Rust identifiers separated by `::`, got `{path}`"),
-                    def.span.clone(),
-                );
-                return;
-            }
+        if is_crate_native_path(&path) && !is_valid_crate_native_path(&path) {
+            emit_diag(
+                module_path,
+                out,
+                "E1526",
+                format!("`@native` crate path must be valid Rust identifiers separated by `::`, got `{path}`"),
+                def.span.clone(),
+            );
+            return;
         }
         let Some(target_expr) = native_target_expr(&path, &def.span) else {
             emit_diag(

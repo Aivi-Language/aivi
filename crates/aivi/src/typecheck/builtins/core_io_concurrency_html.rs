@@ -421,7 +421,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "fork".to_string(),
                 Type::Func(
                     Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::Var(a)])),
-                    Box::new(task_ty),
+                    Box::new(Type::con("Effect").app(vec![Type::con("Text"), task_ty])),
                 ),
             ),
             (
@@ -445,6 +445,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                                 Type::con("Effect").app(vec![Type::Var(timeout_err), Type::Var(a)]),
                             ),
                         )),
+                    )),
+                ),
+            ),
+            (
+                "retry".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
                     )),
                 ),
             ),

@@ -445,9 +445,15 @@ pub(crate) fn build_concurrent_record() -> Value {
         "fork".to_string(),
         builtin("concurrent.fork", 1, |mut args, runtime| {
             let effect_value = args.pop().unwrap();
+            let ctx = runtime.ctx.clone();
             let parent = runtime.cancel.clone();
-            let task = spawn_task(effect_value, runtime.ctx.clone(), parent);
-            Ok(task)
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let task = spawn_task(effect_value.clone(), ctx.clone(), parent.clone());
+                    Ok(task)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
         }),
     );
     fields.insert(
@@ -546,6 +552,30 @@ pub(crate) fn build_concurrent_record() -> Value {
                     let (tx, _rx) = mpsc::channel();
                     spawn_effect(0, effect_value.clone(), ctx.clone(), cancel, tx);
                     Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "retry".to_string(),
+        builtin("concurrent.retry", 2, |mut args, runtime| {
+            let effect_value = args.pop().unwrap();
+            let max_attempts = expect_int(args.pop().unwrap(), "concurrent.retry")?;
+            let ctx = runtime.ctx.clone();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    let mut last_err = RuntimeError::Message("retry: no attempts".to_string());
+                    for _ in 0..max_attempts {
+                        runtime.check_cancelled()?;
+                        let mut rt = Runtime::new(ctx.clone(), runtime.cancel.clone());
+                        match rt.run_effect_value(effect_value.clone()) {
+                            Ok(v) => return Ok(v),
+                            Err(RuntimeError::Cancelled) => return Err(RuntimeError::Cancelled),
+                            Err(e) => last_err = e,
+                        }
+                    }
+                    Err(last_err)
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
