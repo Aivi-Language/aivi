@@ -418,6 +418,7 @@ mod linux_impl {
         EditableText,
         ToggleActive,
         FloatValue,
+        NotifyBool,
     }
 
     struct SignalCallbackData {
@@ -841,6 +842,19 @@ mod linux_impl {
                 let val = unsafe { gtk_range_get_value(instance) };
                 val.to_string()
             }
+            SignalPayloadKind::NotifyBool => {
+                // `notify::PROPERTY` signal — extract the property name and read it.
+                let prop_name = binding
+                    .signal_name
+                    .strip_prefix("notify::")
+                    .unwrap_or("show-sidebar");
+                if let Ok(prop_c) = CString::new(prop_name) {
+                    let val = unsafe { gobject_get_bool(instance, &prop_c) };
+                    if val != 0 { "true" } else { "false" }.to_string()
+                } else {
+                    String::new()
+                }
+            }
         };
         // Collect all deferred GTK mutations while holding the borrow,
         // then execute them after releasing it.  GTK C calls (g_object_set,
@@ -1026,6 +1040,43 @@ mod linux_impl {
         }
     }
 
+    /// Callback for GObject `notify::` property-change signals.
+    /// These have a 3-argument C signature: (instance, pspec, user_data).
+    unsafe extern "C" fn gtk_notify_callback(
+        instance: *mut c_void,
+        _pspec: *mut c_void,
+        data: *mut c_void,
+    ) {
+        if data.is_null() {
+            return;
+        }
+        let binding = unsafe { &*(data as *const SignalCallbackData) };
+        let property_name = binding.signal_name.strip_prefix("notify::").unwrap_or("");
+        let payload = CString::new(property_name)
+            .map(|prop_c| {
+                let val = unsafe { gobject_get_bool(instance, &prop_c) };
+                if val != 0 { "true".to_string() } else { "false".to_string() }
+            })
+            .unwrap_or_default();
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let event = SignalEventState {
+                widget_id: binding.widget_id,
+                signal: binding.signal_name.clone(),
+                handler: binding.handler.clone(),
+                payload,
+            };
+            let widget_name = state
+                .widget_id_to_name
+                .get(&binding.widget_id)
+                .cloned()
+                .unwrap_or_default();
+            let typed_event = make_signal_event(event.clone(), widget_name);
+            state.signal_senders.retain(|s| s.send(typed_event.clone()).is_ok());
+            state.signal_events.push_back(event);
+        });
+    }
+
     fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
         match (class_name, signal_name) {
             ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
@@ -1039,6 +1090,7 @@ mod linux_impl {
             ("GtkRange", "value-changed") | ("GtkScale", "value-changed") => {
                 Some(SignalPayloadKind::FloatValue)
             }
+            ("AdwOverlaySplitView", "notify::show-sidebar") => Some(SignalPayloadKind::NotifyBool),
             _ => None,
         }
     }
@@ -1063,11 +1115,13 @@ mod linux_impl {
             payload_kind,
         });
         let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+        let is_notify = binding.signal.starts_with("notify::");
+        let callback_fn = if is_notify { gtk_notify_callback as *const c_void } else { gtk_signal_callback as *const c_void };
         let handler_id = unsafe {
             g_signal_connect_data(
                 widget,
                 signal_c.as_ptr(),
-                gtk_signal_callback as *const c_void,
+                callback_fn,
                 callback_ptr,
                 null_mut(),
                 0,

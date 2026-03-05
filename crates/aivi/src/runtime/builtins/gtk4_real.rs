@@ -137,6 +137,13 @@ mod bridge {
             }
             "focus-enter" => Value::Constructor { name: "GtkFocusIn".to_string(), args: vec![wid, name] },
             "focus-leave" => Value::Constructor { name: "GtkFocusOut".to_string(), args: vec![wid, name] },
+            "notify::show-sidebar" => {
+                let (cname, _) = parse_constructor_handler(&event.handler);
+                Value::Constructor {
+                    name: "GtkUnknownSignal".to_string(),
+                    args: vec![wid, name, Value::Text(cname), Value::Text(event.payload), Value::Text(String::new())],
+                }
+            }
             _ => Value::Constructor {
                 name: "GtkUnknownSignal".to_string(),
                 args: vec![wid, name, Value::Text(event.signal), Value::Text(event.handler), Value::Text(event.payload)],

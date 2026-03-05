@@ -415,6 +415,14 @@ impl TypeChecker {
             arg_tys.push(self.infer_arg_with_predicate_fallback(arg, env)?);
         }
 
+        let debug = std::env::var("AIVI_DEBUG_METHOD").is_ok_and(|v| v == method.name);
+        if debug {
+            let arg_strs: Vec<String> = arg_tys.iter().map(|t| self.type_to_string(t)).collect();
+            eprintln!("[METHOD_DEBUG] infer_method_call({}) args=[{}] expected={:?}",
+                method.name, arg_strs.join(", "),
+                expected_result.as_ref().map(|t| self.type_to_string(t)));
+        }
+
         let Some(classes) = self.method_to_classes.get(&method.name).cloned() else {
             return Err(TypeError {
                 span: method.span.clone(),
@@ -449,13 +457,22 @@ impl TypeChecker {
 
                 self.subst = base_subst.clone();
 
-                let mut ctx = TypeContext::new(&self.type_constructors);
+                // Use separate TypeContexts for class params and instance params.
+                // Sharing a single context causes occurs-check failures for non-HKT
+                // classes (e.g. `Semigroup A` with instance `Semigroup (List A)`):
+                // the class-param var `a` would be unified with `Con("List", [Var(a)])`,
+                // triggering an occurs check. By keeping distinct vars per side, we
+                // unify `Var(a_class)` with `Con("List", [Var(a_inst)])` cleanly.
+                // The member-type context is built from the class-param vars so that
+                // substituting after unification yields the correct specialised type.
+                let mut ctx_class = TypeContext::new(&self.type_constructors);
+                let mut ctx_inst = TypeContext::new(&self.type_constructors);
                 let mut ok = true;
                 for (class_param, inst_param) in
                     class_info.params.iter().zip(instance.params.iter())
                 {
-                    let class_ty = self.type_from_expr(class_param, &mut ctx);
-                    let inst_ty = self.type_from_expr(inst_param, &mut ctx);
+                    let class_ty = self.type_from_expr(class_param, &mut ctx_class);
+                    let inst_ty = self.type_from_expr(inst_param, &mut ctx_inst);
                     if self
                         .unify_with_span(class_ty, inst_ty, method.span.clone())
                         .is_err()
@@ -468,7 +485,7 @@ impl TypeChecker {
                     continue;
                 }
 
-                let member_ty = self.type_from_expr(&member_ty_expr, &mut ctx);
+                let member_ty = self.type_from_expr(&member_ty_expr, &mut ctx_class);
                 let result_ty = self.fresh_var();
                 let mut expected = result_ty.clone();
                 for arg_ty in arg_tys.iter().rev() {

@@ -27,7 +27,7 @@ export const sidebar = [
           { text: 'Algebraic Data Types', link: '/syntax/types/algebraic_data_types' },
           { text: 'Closed Records', link: '/syntax/types/closed_records' },
           { text: 'Record Row Transforms', link: '/syntax/types/record_row_transforms' },
-          { text: 'Classes & HKTs', link: '/syntax/types/classes_and_hkts' },
+          { text: 'Higher Kinded Types', link: '/syntax/types/classes_and_hkts' },
           { text: 'Expected-Type Coercions', link: '/syntax/types/expected_type_coercions' },
           { text: 'Opaque Types', link: '/syntax/types/opaque_types' }
         ]

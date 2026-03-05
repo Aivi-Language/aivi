@@ -5,6 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.generator
 export Generator
 export toList, fromList, range
+export Functor, Filterable, Foldable
 
 use aivi
 use aivi.logic
