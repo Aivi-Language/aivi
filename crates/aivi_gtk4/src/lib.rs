@@ -1094,10 +1094,6 @@ mod linux_impl {
                         }
                     };
                     let mailfox_dbus = MailfoxDesktopObject;
-                    eprintln!(
-                        "[dbus-server] connected, unique_name={:?}",
-                        conn.unique_name()
-                    );
                     if let Err(e) = conn
                         .object_server()
                         .at("/com/mailfox/desktop", mailfox_dbus)
@@ -1105,11 +1101,9 @@ mod linux_impl {
                     {
                         eprintln!("mailfox-dbus: register error: {e}");
                     }
-                    eprintln!("[dbus-server] requesting name com.mailfox.desktop.tray...");
                     if let Err(e) = conn.request_name("com.mailfox.desktop.tray").await {
                         eprintln!("mailfox-dbus: request_name error: {e}");
                     }
-                    eprintln!("[dbus-server] request_name succeeded");
                     // Emit BadgeUpdate and NewPersonalEmail D-Bus signals
                     let conn_dbus_sigs = conn.clone();
                     tokio::spawn(async move {
@@ -2599,20 +2593,6 @@ mod linux_impl {
 
     pub(super) fn pump_gtk_events() {
         GTK_PUMP_ACTIVE.with(|active| {
-            use std::sync::atomic::{AtomicU64, Ordering};
-            static PUMP_COUNT: AtomicU64 = AtomicU64::new(0);
-            let count = PUMP_COUNT.fetch_add(1, Ordering::Relaxed);
-            if count == 0 {
-                GTK_PUMP_ACTIVE.with(|active| {
-                    eprintln!("[pump] first call, GTK_PUMP_ACTIVE={}", *active.borrow());
-                });
-            } else if count == 100 {
-            } else if count == 1000 {
-                eprintln!("[pump] reached 1000 iterations");
-            } else if count == 5000 {
-                eprintln!("[pump] reached 5000 iterations");
-                eprintln!("[pump] reached 10000 iterations");
-            }
             if *active.borrow() {
                 unsafe {
                     let ctx = g_main_context_default();

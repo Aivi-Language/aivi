@@ -7,6 +7,20 @@ impl TypeChecker {
         env: &mut TypeEnv,
     ) -> Result<Type, TypeError> {
         if op == "|>" {
+            // Special case: if the RHS is a partially-applied class method call, collect all
+            // arguments including the piped LHS value so instance dispatch sees the full picture.
+            // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
+            if let Expr::Call { func, args: partial_args, .. } = right {
+                if let Expr::Ident(name) = func.as_ref() {
+                    if env.get(&name.name).is_none()
+                        && self.method_to_classes.contains_key(&name.name)
+                    {
+                        let mut all_args: Vec<Expr> = partial_args.to_vec();
+                        all_args.push(left.clone());
+                        return self.infer_method_call(name, &all_args, None, env);
+                    }
+                }
+            }
             let arg_ty = self.infer_expr(left, env)?;
             let func_ty = self.infer_expr(right, env)?;
             let result_ty = self.fresh_var();

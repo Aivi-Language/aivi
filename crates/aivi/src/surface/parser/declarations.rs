@@ -427,6 +427,25 @@ impl Parser {
             }
         }
 
+        // Parse optional superclass names that appear AFTER the `given` clause
+        // e.g. `class X = given (A: Any), Super1, Super2 { ... }`.
+        // The superclass loop above only ran before `given`; consume the rest now.
+        self.consume_newlines();
+        while !self.check_symbol("{") && self.pos < self.tokens.len() {
+            if !self.consume_symbol(",") {
+                break;
+            }
+            self.consume_newlines();
+            if self.check_symbol("{") {
+                break;
+            }
+            let Some(name) = self.consume_ident() else {
+                break;
+            };
+            raw_supers.push(TypeExpr::Name(name));
+            self.consume_newlines();
+        }
+
         // Parse optional member record (`{ ... }`).
         let mut members = Vec::new();
         self.consume_newlines();

@@ -752,6 +752,7 @@ x = 30s
         let source = r#"
 module test.predicate_calls
 use aivi.list
+use aivi.logic
 use aivi.database
 use aivi.database (domain Database)
 

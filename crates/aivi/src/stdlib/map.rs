@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.map
 export empty, size, has, get, insert, update, remove
-export map, mapWithKey, keys, values, entries
+export mapWithKey, keys, values, entries
 export fromList, toList, union, getOrElse
 export alter, mergeWith, filterWithKey, foldWithKey
 
@@ -30,9 +30,6 @@ update = k f m => Map.update k f m
 
 remove : K -> Map K V -> Map K V
 remove = k m => Map.remove k m
-
-map : (V -> V2) -> Map K V -> Map K V2
-map = f m => Map.map f m
 
 mapWithKey : (K -> V -> V2) -> Map K V -> Map K V2
 mapWithKey = f m => Map.mapWithKey f m

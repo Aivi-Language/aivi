@@ -603,11 +603,9 @@ mod bridge {
                 let receiver = aivi_gtk4::signal_stream().map_err(gtk4_err_to_runtime)?;
                 // Convert SignalEvent receiver to Value receiver
                 let (value_sender, value_receiver) = mpsc::sync_channel(512);
-                eprintln!("[signalStream] creating bridge thread");
                 std::thread::Builder::new()
                     .name("gtk4-signal-bridge".to_string())
                     .spawn(move || {
-                        eprintln!("[bridge] thread started");
                         loop {
                             match receiver.recv() {
                                 Ok(event) => {
@@ -623,7 +621,7 @@ mod bridge {
                                 }
                             }
                         }
-                        eprintln!("[bridge] thread exiting");
+
                     })
                     .ok();
                 let inner = Arc::new(ChannelInner {

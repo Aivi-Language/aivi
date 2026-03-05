@@ -11,7 +11,7 @@ export Calendar
 export Duration
 export Color
 export Vector
-export panic, not, any, each
+export panic, not, any
 
 use aivi
 use aivi.text
@@ -39,9 +39,4 @@ any = pred xs => xs match
   | []         => False
   | [x, ...rest] => pred x match
     | True  => True
-    | False => any pred rest
-
-each : (A -> B) -> List A -> List B
-each = f xs => xs match
-  | []            => []
-  | [x, ...rest]  => [f x, ...each f rest]"#;
+    | False => any pred rest"#;

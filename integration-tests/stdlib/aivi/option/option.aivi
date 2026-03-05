@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.option.tests
 use aivi
 use aivi.prelude
 use aivi.testing
+use aivi.logic
 use aivi.option
 
 // -- Predicates --
@@ -74,21 +75,21 @@ test_map_none = do Effect {
   assertEq result None
 }
 
-@test "flatMap chains Some values"
+@test "chain chains Some values"
 test_flatMap_some = do Effect {
-  result = flatMap (x => Some (x + 1)) (Some 5)
+  result = chain (x => Some (x + 1)) (Some 5)
   assertEq result (Some 6)
 }
 
-@test "flatMap short-circuits on None"
+@test "chain short-circuits on None"
 test_flatMap_none = do Effect {
-  result = flatMap (x => Some (x + 1)) None
+  result = chain (x => Some (x + 1)) None
   assertEq result None
 }
 
-@test "flatMap propagates None from function"
+@test "chain propagates None from function"
 test_flatMap_returns_none = do Effect {
-  result = flatMap (_ => None) (Some 5)
+  result = chain (_ => None) (Some 5)
   assertEq result None
 }
 
@@ -140,37 +141,37 @@ test_toResult_none = do Effect {
 
 @test "flatten removes nesting from Some Some"
 test_flatten_some_some = do Effect {
-  result = flatten (Some (Some 42))
+  result = chain (x => x) (Some (Some 42))
   assertEq result (Some 42)
 }
 
 @test "flatten returns None for Some None"
 test_flatten_some_none = do Effect {
-  result = flatten (Some None)
+  result = chain (x => x) (Some None)
   assertEq result None
 }
 
 @test "flatten returns None for None"
 test_flatten_none = do Effect {
-  result = flatten None
+  result = chain (x => x) None
   assertEq result None
 }
 
-@test "orElse returns first Some"
+@test "alt returns first Some"
 test_orElse_first_some = do Effect {
-  result = Some 1 |> orElse (Some 2)
+  result = Some 1 |> alt (Some 2)
   assertEq result (Some 1)
 }
 
-@test "orElse returns fallback for None"
+@test "alt returns fallback for None"
 test_orElse_fallback = do Effect {
-  result = None |> orElse (Some 2)
+  result = None |> alt (Some 2)
   assertEq result (Some 2)
 }
 
-@test "orElse returns None when both None"
+@test "alt returns None when both None"
 test_orElse_both_none = do Effect {
-  result = None |> orElse None
+  result = None |> alt None
   assertEq result None
 }
 

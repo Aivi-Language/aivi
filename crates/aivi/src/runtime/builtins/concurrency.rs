@@ -122,14 +122,8 @@ pub(super) fn build_channel_record() -> Value {
                     } else {
                         Duration::from_millis(100)
                     };
-                    eprintln!("[channel.recv] entering poll loop, gtk_active={}, timeout={:?}", gtk_active, timeout);
-                    let mut iter_count = 0u64;
                     loop {
                         runtime.check_cancelled()?;
-                        iter_count += 1;
-                        if iter_count == 1 || iter_count == 100 || iter_count == 1000 {
-                            eprintln!("[channel.recv] iteration {}", iter_count);
-                        }
                         if gtk_active {
                             super::gtk4_real::pump_gtk_events();
                         }

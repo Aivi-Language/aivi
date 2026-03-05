@@ -3,6 +3,7 @@ module integrationTests.runtime.advancedPatterns
 
 use aivi
 use aivi.testing
+use aivi.logic
 use aivi.list
 
 // --- Nested pattern matching ---
@@ -69,18 +70,18 @@ chainedMapFilter = do Effect {
     assertEq result [30, 40, 50, 60]
 }
 
-@test "foldl with pipe"
+@test "reduce with pipe"
 foldlPipe = do Effect {
   result = [1, 2, 3, 4, 5]
-    |> foldl (acc => x => acc + x) 0
+    |> reduce (acc => x => acc + x) 0
     assertEq result 15
 }
 
-@test "map then foldl"
+@test "map then reduce"
 mapThenFold = do Effect {
   result = [1, 2, 3]
     |> map (x => x * x)
-    |> foldl (acc => x => acc + x) 0
+    |> reduce (acc => x => acc + x) 0
     assertEq result 14
 }
 
