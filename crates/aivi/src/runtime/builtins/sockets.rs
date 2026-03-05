@@ -110,10 +110,10 @@ pub(super) fn build_sockets_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let listener = listener_lock.lock().map_err(|_| {
-                        RuntimeError::Message("listener lock poisoned".to_string())
+                        RuntimeError::IOError { context: "sockets.accept".to_string(), cause: "listener lock poisoned".to_string() }
                     })?;
                     let listener = listener.as_ref().ok_or_else(|| {
-                        RuntimeError::Message("listener closed".to_string())
+                        RuntimeError::IOError { context: "sockets.accept".to_string(), cause: "listener closed".to_string() }
                     })?;
                     let (stream, _) = listener
                         .accept()
@@ -148,7 +148,7 @@ pub(super) fn build_sockets_record() -> Value {
                 func: Arc::new(move |_| {
                     let mut stream = conn
                         .lock()
-                        .map_err(|_| RuntimeError::Message("connection poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "sockets.send".to_string(), cause: "connection poisoned".to_string() })?;
                     stream
                         .write_all(&bytes)
                         .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
@@ -166,7 +166,7 @@ pub(super) fn build_sockets_record() -> Value {
                 func: Arc::new(move |_| {
                     let mut stream = conn
                         .lock()
-                        .map_err(|_| RuntimeError::Message("connection poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "sockets.recv".to_string(), cause: "connection poisoned".to_string() })?;
                     let mut buffer = vec![0u8; DEFAULT_RECV_CHUNK];
                     let count = stream
                         .read(&mut buffer)
@@ -190,7 +190,7 @@ pub(super) fn build_sockets_record() -> Value {
                 func: Arc::new(move |_| {
                     let stream = conn
                         .lock()
-                        .map_err(|_| RuntimeError::Message("connection poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "sockets.close".to_string(), cause: "connection poisoned".to_string() })?;
                     let _ = stream.shutdown(Shutdown::Both);
                     Ok(Value::Unit)
                 }),
@@ -205,7 +205,7 @@ pub(super) fn build_sockets_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let mut listener = listener_lock.lock().map_err(|_| {
-                        RuntimeError::Message("listener lock poisoned".to_string())
+                        RuntimeError::IOError { context: "sockets.closeListener".to_string(), cause: "listener lock poisoned".to_string() }
                     })?;
                     *listener = None;
                     Ok(Value::Unit)

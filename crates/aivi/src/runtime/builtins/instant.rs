@@ -139,13 +139,19 @@ fn nanos_to_rfc3339(nanos: i128, ctx: &str) -> Result<String, RuntimeError> {
     let dt = Utc
         .timestamp_opt(seconds, subsec)
         .single()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} out of range")))?;
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "out of range".to_string(),
+        })?;
     Ok(dt.to_rfc3339_opts(SecondsFormat::Nanos, true))
 }
 
 fn i128_to_i64(value: i128, ctx: &str) -> Result<i64, RuntimeError> {
     if value > i64::MAX as i128 || value < i64::MIN as i128 {
-        return Err(RuntimeError::Message(format!("{ctx} out of range")));
+        return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "out of range".to_string(),
+        });
     }
     Ok(value as i64)
 }

@@ -169,6 +169,12 @@ pub(crate) enum RuntimeError {
     },
 }
 
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", format_runtime_error(self.clone()))
+    }
+}
+
 pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     let main = runtime
         .ctx
