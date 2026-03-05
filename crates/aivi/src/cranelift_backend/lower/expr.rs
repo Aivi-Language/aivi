@@ -83,8 +83,8 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 ..
             } => self.lower_if(builder, cond, then_branch, else_branch),
             RustIrExpr::Match {
-                scrutinee, arms, ..
-            } => self.lower_match(builder, scrutinee, arms),
+                scrutinee, arms, location, ..
+            } => self.lower_match(builder, scrutinee, arms, location.as_deref()),
             RustIrExpr::Binary {
                 op, left, right, ..
             } => self.lower_binary(builder, op, left, right),
@@ -865,7 +865,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         scrutinee: &RustIrExpr,
         arms: &[RustIrMatchArm],
+        location: Option<&str>,
     ) -> TypedValue {
+        if let Some(loc) = location {
+            self.emit_set_location(builder, loc);
+        }
         // Perceus: check if the scrutinee is a last-used local variable.
         // If so, we can reuse its box allocation for the arm body's result.
         let scrut_is_last_use = self.is_last_use_local(scrutinee);

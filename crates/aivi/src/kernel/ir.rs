@@ -181,6 +181,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             id,
             scrutinee,
             arms,
+            location,
         } => HirExpr::Match {
             id,
             scrutinee: Box::new(desugar_expr(*scrutinee, id_gen)),
@@ -192,6 +193,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
                     body: desugar_expr(a.body, id_gen),
                 })
                 .collect(),
+            location,
         },
         HirExpr::If {
             id,
@@ -321,6 +323,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         guard: None,
                         body: next,
                     }],
+                    location: None,
                 };
                 let func = HirExpr::Lambda {
                     id: id_gen.next(),
@@ -347,6 +350,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         guard: None,
                         body: next,
                     }],
+                    location: None,
                 };
 
                 let value = if is_recursive_loop {
@@ -737,6 +741,7 @@ fn wrap_pattern_match(
                 guard: None,
                 body,
             }],
+            location: None,
         },
     }
 }

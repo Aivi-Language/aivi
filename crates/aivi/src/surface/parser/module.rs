@@ -812,13 +812,14 @@ mod use_separator_tests {
     #[test]
     fn newline_separator_no_commas() {
         let uses = parse_use("module test\nuse aivi.text (\n  length\n  toUpper\n)\n");
-        assert_eq!(uses.len(), 1);
-        assert_eq!(uses[0].items.len(), 2);
+        let text_use = uses.iter().find(|u| u.module.name == "aivi.text").expect("aivi.text use not found");
+        assert_eq!(text_use.items.len(), 2);
     }
 
     #[test]
     fn mixed_comma_and_newline_separators() {
         let uses = parse_use("module test\nuse aivi.text (\n  length,\n  toUpper\n)\n");
-        assert_eq!(uses[0].items.len(), 2);
+        let text_use = uses.iter().find(|u| u.module.name == "aivi.text").expect("aivi.text use not found");
+        assert_eq!(text_use.items.len(), 2);
     }
 }

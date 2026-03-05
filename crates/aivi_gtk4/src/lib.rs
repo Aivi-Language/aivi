@@ -2598,25 +2598,28 @@ mod linux_impl {
         let new_signals = collect_object_signals(attrs, children);
         let raw = widget_ptr(state, live.widget_id, "reconcile")?;
 
-        // Patch properties
+        // Disconnect old signals BEFORE patching properties to prevent
+        // re-entrant GTK_STATE borrows: property changes (e.g. setting text)
+        // can fire signals synchronously, which would try to borrow_mut the
+        // already-borrowed state.
+        for &hid in &live.signal_handler_ids {
+            if hid != 0 {
+                unsafe { g_signal_handler_disconnect(raw, hid) };
+            }
+        }
+
+        // Patch properties (safe now — no signals connected)
         patch_widget_properties(raw, new_class, &live.props, &new_props, state)?;
         live.props = new_props;
 
-        // Patch signals: disconnect old, connect new if changed
-        if live.signals != new_signals {
-            for &hid in &live.signal_handler_ids {
-                if hid != 0 {
-                    unsafe { g_signal_handler_disconnect(raw, hid) };
-                }
-            }
-            let mut new_handler_ids = Vec::new();
-            for binding in &new_signals {
-                let hid = connect_widget_signal(raw, live.widget_id, new_class, binding)?;
-                new_handler_ids.push(hid);
-            }
-            live.signals = new_signals;
-            live.signal_handler_ids = new_handler_ids;
+        // Reconnect signals
+        let mut new_handler_ids = Vec::new();
+        for binding in &new_signals {
+            let hid = connect_widget_signal(raw, live.widget_id, new_class, binding)?;
+            new_handler_ids.push(hid);
         }
+        live.signals = new_signals;
+        live.signal_handler_ids = new_handler_ids;
 
         // Update node_id if it changed
         let new_node_id = node_attr(attrs, "id").map(str::to_string);

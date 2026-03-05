@@ -333,6 +333,7 @@ fn rewrite_implicit_field_vars(
             id,
             scrutinee,
             arms,
+            location,
         } => HirExpr::Match {
             id,
             scrutinee: Box::new(rewrite_implicit_field_vars(
@@ -350,6 +351,7 @@ fn rewrite_implicit_field_vars(
                     body: rewrite_implicit_field_vars(arm.body, implicit_param, unbound),
                 })
                 .collect(),
+            location,
         },
         HirExpr::If {
             id,

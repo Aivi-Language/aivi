@@ -8,14 +8,10 @@ use aivi.email
 @test "mime parsing helpers"
 mime_parsing_helpers = do Effect {
   raw = "Subject: hi\nContent-Type: text/plain\n\nhello"
-  partsResult = mimeParts raw
-  partsResult match
-    | Ok parts => do Effect {
-        assertEq (List.length parts >= 1) True
-        combined = flattenBodies parts
-        assert (text.contains "hello" combined)
-      }
-    | Err _ => assert False
+  parts = mimeParts raw
+  assertEq (List.length parts >= 1) True
+  combined = flattenBodies parts
+  assert (text.contains "hello" combined)
 }
 
 @test "smtp surface"

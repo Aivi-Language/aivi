@@ -410,6 +410,7 @@ fn inline_children(
             id,
             scrutinee,
             arms,
+            location,
         } => RustIrExpr::Match {
             id,
             scrutinee: Box::new(inline_expr(*scrutinee, candidates, id_gen, depth)),
@@ -421,6 +422,7 @@ fn inline_children(
                     body: inline_expr(a.body, candidates, id_gen, depth),
                 })
                 .collect(),
+            location,
         },
 
         RustIrExpr::If {

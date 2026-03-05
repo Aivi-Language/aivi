@@ -793,6 +793,17 @@ impl TypeChecker {
         };
 
         let Some(expected_ctors) = expected_ctors else {
+            // Non-enum scrutinee (e.g. Text, Int) with pattern arms but no catch-all:
+            // this match will fail at runtime for any unmatched value.
+            if !arms.is_empty() {
+                self.emit_extra_diag(
+                    "W3102",
+                    crate::diagnostics::DiagnosticSeverity::Warning,
+                    "match without catch-all `_` arm on a non-enum type may fail at runtime"
+                        .to_string(),
+                    match_span.clone(),
+                );
+            }
             return;
         };
 

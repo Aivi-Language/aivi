@@ -148,11 +148,14 @@ chunkDeltas : Int -> List (Delta A) -> List (List (Delta A))
 chunkDeltas = size deltas =>
   if size <= 0 then [deltas] else chunkDeltasGo size deltas [] []
 
+chunkFinalize : List (Delta A) -> List (List (Delta A)) -> List (List (Delta A))
+chunkFinalize = current acc => current match
+  | [] => reverse acc
+  | _  => reverse [reverse current, ...acc]
+
 chunkDeltasGo : Int -> List (Delta A) -> List (Delta A) -> List (List (Delta A)) -> List (List (Delta A))
 chunkDeltasGo = size remaining current acc => remaining match
-  | [] => current match
-    | [] => reverse acc
-    | _ => reverse [reverse current, ...acc]
+  | [] => chunkFinalize current acc
   | [d, ...rest] =>
       if length current >= size
       then chunkDeltasGo size remaining [] [reverse current, ...acc]

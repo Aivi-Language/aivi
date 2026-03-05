@@ -248,8 +248,11 @@ fn lower_expr_inner_ctx(
             lower_lambda_hir(params, body, id_gen)
         }
         Expr::Match {
-            scrutinee, arms, ..
+            scrutinee, arms, span,
         } => {
+            let location = ctx
+                .source_path
+                .map(|path| format!("{}:{}:{}", path, span.start.line, span.start.column));
             let scrutinee = if let Some(scrutinee) = scrutinee {
                 lower_expr_ctx(*scrutinee, id_gen, ctx, false)
             } else {
@@ -271,6 +274,7 @@ fn lower_expr_inner_ctx(
                             body: lower_expr_ctx(arm.body, id_gen, ctx, false),
                         })
                         .collect(),
+                    location: location.clone(),
                 };
                 return HirExpr::Lambda {
                     id: id_gen.next(),
@@ -291,6 +295,7 @@ fn lower_expr_inner_ctx(
                         body: lower_expr_ctx(arm.body, id_gen, ctx, false),
                     })
                     .collect(),
+                location,
             }
         }
         Expr::If {
@@ -625,6 +630,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                         guard: None,
                         body: acc,
                     }],
+                    location: None,
                 };
                 acc = HirExpr::Lambda {
                     id: id_gen.next(),
@@ -833,6 +839,7 @@ fn make_pattern_lambda(
                     guard: None,
                     body,
                 }],
+                location: None,
             };
             HirExpr::Lambda {
                 id: id_gen.next(),

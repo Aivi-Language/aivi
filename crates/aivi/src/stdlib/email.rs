@@ -39,11 +39,8 @@ imap = config => load (email.imap config)
 smtpSend : SmtpConfig -> Effect Text Unit
 smtpSend = config => email.smtpSend config
 
-mimeParts : Text -> Result Text (List MimePart)
-mimeParts = raw =>
-  attempt (email.mimeParts raw) match
-    | Ok value => Ok value
-    | Err err  => Err err
+mimeParts : Text -> List MimePart
+mimeParts = raw => email.mimeParts raw
 
 flattenBodies : List MimePart -> Text
 flattenBodies = parts => parts match

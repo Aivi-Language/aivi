@@ -956,8 +956,8 @@ mod tests {
             manifest
                 .resources
                 .iter()
-                .any(|res| res.binding == "syntax/decorators.md"),
-            "expected syntax/decorators.md to be bundled"
+                .any(|res| res.binding == "syntax/decorators/index.md"),
+            "expected syntax/decorators/index.md to be bundled"
         );
         // Verify resource structure: each resource should have a non-empty binding and URI
         for res in &manifest.resources {
@@ -970,7 +970,7 @@ mod tests {
 
     #[test]
     fn resources_read_returns_markdown_text() {
-        let uri = "aivi://specs/syntax/decorators.md";
+        let uri = "aivi://specs/syntax/decorators/index.md";
         let (mime_type, text) = read_bundled_spec(uri).expect("read bundled spec");
         assert_eq!(mime_type, "text/markdown");
         assert!(text.contains("# Decorators"), "should contain heading");

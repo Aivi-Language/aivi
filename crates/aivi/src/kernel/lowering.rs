@@ -195,6 +195,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             id,
             scrutinee,
             arms,
+            ..
         } => {
             if *id > *max {
                 *max = *id;
