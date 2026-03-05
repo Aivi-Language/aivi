@@ -153,11 +153,11 @@ impl Parser {
                     return Some(build_pattern_predicate(pat, Some(guard), span));
                 }
                 // Constructor-only predicate like `(Some _)` — only if it has wildcard args.
-                if matches!(pat, Pattern::Constructor { ref args, .. } if args.iter().any(|a| matches!(a, Pattern::Wildcard(_)))) {
-                    if self.consume_symbol(")") {
-                        let span = merge_span(open_span, self.previous_span());
-                        return Some(build_pattern_predicate(pat, None, span));
-                    }
+                if matches!(pat, Pattern::Constructor { ref args, .. } if args.iter().any(|a| matches!(a, Pattern::Wildcard(_))))
+                    && self.consume_symbol(")")
+                {
+                    let span = merge_span(open_span, self.previous_span());
+                    return Some(build_pattern_predicate(pat, None, span));
                 }
             }
             self.pos = paren_start;
