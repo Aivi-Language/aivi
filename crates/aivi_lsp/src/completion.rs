@@ -971,6 +971,7 @@ impl Backend {
                         ("onValueChanged", "value-changed"),
                         ("onFocusIn", "focus-enter"),
                         ("onFocusOut", "focus-leave"),
+                        ("onShowSidebarChanged", "notify::show-sidebar"),
                     ];
                     for (sugar, signal_name) in &signal_sugar {
                         if !prefix.is_empty() && !sugar.starts_with(prefix.as_str()) {

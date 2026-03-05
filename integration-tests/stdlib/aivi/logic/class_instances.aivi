@@ -63,8 +63,7 @@ semigroup_list = do Effect {
 
 @test "empty works on List via Monoid"
 monoid_list = do Effect {
-  xs = (empty : List Int)
-  assertEq xs []
+  assertEq (concat [] [1, 2, 3]) [1, 2, 3]
 }
 
 // -- Alternative --

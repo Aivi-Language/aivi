@@ -635,6 +635,7 @@ impl Parser {
                                 "onValueChanged" => Some("value-changed"),
                                 "onFocusIn" => Some("focus-enter"),
                                 "onFocusOut" => Some("focus-leave"),
+                                "onShowSidebarChanged" => Some("notify::show-sidebar"),
                                 _ => None,
                             };
                             if let Some(signal_name) = signal_name_opt {
@@ -919,6 +920,7 @@ impl Parser {
                             "onValueChanged" => Some("value-changed"),
                             "onFocusIn" => Some("focus-enter"),
                             "onFocusOut" => Some("focus-leave"),
+                            "onShowSidebarChanged" => Some("notify::show-sidebar"),
                             _ => None,
                         };
                         if let Some(signal_name) = signal_name_opt {
