@@ -146,7 +146,7 @@ fn is_callable(value: &Value) -> bool {
 }
 
 fn is_match_failure_message(message: &str) -> bool {
-    message == "non-exhaustive match"
+    message == "non-exhaustive match" || message.starts_with("non-exhaustive match ")
 }
 
 

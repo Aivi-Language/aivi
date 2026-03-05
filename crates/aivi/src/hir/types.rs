@@ -140,6 +140,8 @@ pub enum HirExpr {
         id: u32,
         scrutinee: Box<HirExpr>,
         arms: Vec<HirMatchArm>,
+        #[serde(skip)]
+        location: Option<String>,
     },
     If {
         id: u32,

@@ -154,6 +154,8 @@ pub enum RustIrExpr {
         id: u32,
         scrutinee: Box<RustIrExpr>,
         arms: Vec<RustIrMatchArm>,
+        #[serde(skip)]
+        location: Option<String>,
     },
     If {
         id: u32,
@@ -478,6 +480,7 @@ fn lower_expr(
             id,
             scrutinee,
             arms,
+            location,
         } => RustIrExpr::Match {
             id,
             scrutinee: Box::new(lower_expr(*scrutinee, globals, locals)?),
@@ -485,6 +488,7 @@ fn lower_expr(
                 .into_iter()
                 .map(|arm| lower_match_arm(arm, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
+            location,
         },
         HirExpr::If {
             id,

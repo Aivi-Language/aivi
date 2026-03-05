@@ -463,6 +463,17 @@ impl TypeChecker {
                 self.unify_with_span(right_ty, Type::con("Int"), expr_span(right))?;
                 Ok(Type::con("List").app(vec![Type::con("Int")]))
             }
+            "??" => {
+                // lhs ?? rhs  ⟹  lhs : Option A, rhs : A, result : A
+                let inner = self.fresh_var();
+                self.unify_with_span(
+                    left_ty,
+                    Type::con("Option").app(vec![inner.clone()]),
+                    expr_span(left),
+                )?;
+                self.unify_with_span(right_ty, inner.clone(), expr_span(right))?;
+                Ok(inner)
+            }
             _ => Ok(self.fresh_var()),
         }
     }
