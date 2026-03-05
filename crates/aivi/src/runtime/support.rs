@@ -145,6 +145,9 @@ fn is_callable(value: &Value) -> bool {
     )
 }
 
+/// Legacy check for string-based match failure messages. Kept for backward
+/// compatibility with any `RuntimeError::Message` sites not yet migrated to
+/// `RuntimeError::NonExhaustiveMatch`.
 fn is_match_failure_message(message: &str) -> bool {
     message == "non-exhaustive match" || message.starts_with("non-exhaustive match ")
 }

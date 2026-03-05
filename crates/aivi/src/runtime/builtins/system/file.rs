@@ -297,7 +297,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 func: Arc::new(move |_| {
                     let mut file = handle
                         .lock()
-                        .map_err(|_| RuntimeError::Message("file handle poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "file.readAll".to_string(), cause: "file handle poisoned".to_string() })?;
                     let _ = std::io::Seek::seek(&mut *file, std::io::SeekFrom::Start(0));
                     let mut buffer = String::new();
                     std::io::Read::read_to_string(&mut *file, &mut buffer)
