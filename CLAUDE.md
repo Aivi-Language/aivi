@@ -98,6 +98,9 @@ crates/aivi (gen_vscode_syntax)  →  vscode/syntaxes/  (generated, do not hand-
 
 **No dead code.** When replacing a feature: delete all old Rust code, integration tests, and spec pages. After the change, `git grep` for the old construct should return zero results.
 
+**Do not check if problems are pre-existing** if you you find problems, fix them in
+the same session.
+
 **New features must fully propagate** in this order:
 1. `specs/` — write/update spec first
 2. `crates/aivi_core` — parser, typechecker, formatter
