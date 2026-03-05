@@ -667,8 +667,6 @@ fn inject_source_schemas(
     modules: &mut [rust_ir::RustIrModule],
     source_schemas: &HashMap<String, Vec<CgType>>,
 ) {
-    use crate::rust_ir::RustIrModule;
-
     for module in modules.iter_mut() {
         for def in &mut module.defs {
             let key = format!("{}.{}", module.name, def.name);
