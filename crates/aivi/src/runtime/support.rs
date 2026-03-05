@@ -429,17 +429,8 @@ pub(crate) fn eval_sigil_literal(
             let offset_millis =
                 i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc()) * 1000;
 
-            let mut dt_map = HashMap::new();
-            dt_map.insert("year".to_string(), Value::Int(zdt.year() as i64));
-            dt_map.insert("month".to_string(), Value::Int(zdt.month() as i64));
-            dt_map.insert("day".to_string(), Value::Int(zdt.day() as i64));
-            dt_map.insert("hour".to_string(), Value::Int(zdt.hour() as i64));
-            dt_map.insert("minute".to_string(), Value::Int(zdt.minute() as i64));
-            dt_map.insert("second".to_string(), Value::Int(zdt.second() as i64));
-            dt_map.insert(
-                "millisecond".to_string(),
-                Value::Int(zdt.timestamp_subsec_millis() as i64),
-            );
+            let local_naive = zdt.naive_local();
+            let dt_str = format!("{}Z", local_naive.format("%Y-%m-%dT%H:%M:%S"));
 
             let mut zone_map = HashMap::new();
             zone_map.insert("id".to_string(), Value::Text(zone_id.to_string()));
@@ -448,7 +439,7 @@ pub(crate) fn eval_sigil_literal(
             offset_map.insert("millis".to_string(), Value::Int(offset_millis));
 
             let mut map = HashMap::new();
-            map.insert("dateTime".to_string(), Value::Record(Arc::new(dt_map)));
+            map.insert("dateTime".to_string(), Value::DateTime(dt_str));
             map.insert("zone".to_string(), Value::Record(Arc::new(zone_map)));
             map.insert("offset".to_string(), Value::Record(Arc::new(offset_map)));
             Ok(Value::Record(Arc::new(map)))

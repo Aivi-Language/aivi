@@ -427,8 +427,10 @@ fn jit_compile_into_runtime(
         // (e.g. `aivi.database.load`) coexist — they are looked up explicitly
         // when import resolution has rewritten a bare name to its qualified form.
         if !name.contains('.') {
-            if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
-                continue;
+            if let Some(existing) = runtime.ctx.globals.get(&name) {
+                if matches!(existing, Value::Builtin(_) | Value::Record(_)) {
+                    continue;
+                }
             }
         }
         runtime.ctx.globals.set(name, value);

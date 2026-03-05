@@ -272,12 +272,12 @@ renewLease : Lease -> Timestamp -> Lease
 renewLease = lease heartbeatAt => heartbeatLease lease heartbeatAt
 
 planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun
-planRetryRun = run state jitterSeed => {
-  ...run
-  attempt: run.attempt + 1
-  scheduledAt: retryAt state.now state.retryPolicy (run.attempt + 1) jitterSeed
-  status: Planned
-}
+planRetryRun = run state jitterSeed =>
+  run <| {
+    attempt: run.attempt + 1
+    scheduledAt: retryAt state.now state.retryPolicy (run.attempt + 1) jitterSeed
+    status: Planned
+  }
 
 chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision
 chooseWorkerAction = run state jitterSeed =>
@@ -304,6 +304,6 @@ domain Scheduler over PlannedRun = {
   keyText = run => planKeyText run.key
 
   withStatus : PlannedRun -> JobStatus -> PlannedRun
-  withStatus = run status => { ...run, status: status }
+  withStatus = run status => run <| { status: status }
 }
 "#;

@@ -461,20 +461,17 @@ pub extern "C" fn rt_binary_op(
                     // Save global state so each clause trial starts clean.
                     let saved_pending = runtime.jit_pending_error.take();
                     let saved_match_failed = runtime.jit_match_failed;
+                    let saved_fn = runtime.jit_current_fn.clone();
                     runtime.jit_match_failed = false;
-                    let clean = if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
+                    if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
                         match runtime.apply(applied, rhs.clone()) {
                             Ok(result) => {
                                 let warns = runtime.jit_rt_warning_count - wc;
-                                let is_dt = (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-";
-                                if is_dt {
-                                    eprintln!("[DISP] Ok warns={warns} match_failed={} pending={}", runtime.jit_match_failed, runtime.jit_pending_error.is_some());
-                                }
-                                if warns == 0 && !runtime.jit_match_failed {
-                                    // Clean match — no warnings produced, restore and return.
-                                    if is_dt {
-                                        eprintln!("[DISP] CLEAN WIN: {:?} {op} {:?} => {:?}", lhs, rhs, result);
-                                    }
+                                if warns == 0
+                                    && !runtime.jit_match_failed
+                                    && runtime.jit_pending_error.is_none()
+                                {
+                                    // Clean match — no warnings or errors.
                                     runtime.jit_binary_op_dispatching = false;
                                     runtime.jit_pending_error = saved_pending;
                                     runtime.jit_match_failed = saved_match_failed;
@@ -484,24 +481,14 @@ pub extern "C" fn rt_binary_op(
                                 if fallback_result.is_none() && !runtime.jit_match_failed {
                                     fallback_result = Some(result);
                                 }
-                                false
                             }
-                            Err(e) => {
-                                let is_dt = (matches!(lhs, Value::DateTime(_)) || matches!(rhs, Value::DateTime(_))) && op == "-";
-                                if is_dt {
-                                    let msg = match &e { RuntimeError::Message(m) => m.clone(), _ => "other".to_string() };
-                                    eprintln!("[DISP] Err: {msg}");
-                                }
-                                false
-                            }
+                            Err(_) => {}
                         }
-                    } else {
-                        false
-                    };
-                    let _ = clean;
+                    }
                     // Restore global state for next clause trial.
                     runtime.jit_pending_error = saved_pending;
                     runtime.jit_match_failed = saved_match_failed;
+                    runtime.jit_current_fn = saved_fn;
                     runtime.jit_rt_warning_count = wc;
                 }
                 runtime.jit_binary_op_dispatching = false;
