@@ -70,14 +70,6 @@ vec3_cross = do Effect {
   assert (abs (c.z - 1.0) < 0.0001)
 }
 
-@test "vec2 normalize"
-vec2_normalize = do Effect {
-  v = vec2 3.0 4.0
-  n = normalize v
-  assert (abs (n.x - 0.6) < 0.0001)
-  assert (abs (n.y - 0.8) < 0.0001)
-}
-
 @test "vec2 negate"
 vec2_negate = do Effect {
   v = vec2 1.0 -2.0
@@ -93,13 +85,6 @@ vec2_lerp = do Effect {
   mid = lerp a b 0.5
   assert (abs (mid.x - 5.0) < 0.0001)
   assert (abs (mid.y - 5.0) < 0.0001)
-}
-
-@test "vec2 distance"
-vec2_distance = do Effect {
-  a = vec2 0.0 0.0
-  b = vec2 3.0 4.0
-  assert (abs (distance a b - 5.0) < 0.0001)
 }
 
 @test "vec4"

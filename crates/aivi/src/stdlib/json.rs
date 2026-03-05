@@ -45,9 +45,9 @@ jsonToText = value => value match
   | JsonBool b     => b match | True => "true" | False => "false"
   | JsonInt n      => text.toText n
   | JsonFloat f    => text.toText f
-  | JsonString s   => "\"" ++ jsonEscapeText s ++ "\""
-  | JsonArray items  => "[" ++ joinJsonValues items ++ "]"
-  | JsonObject pairs => "\{" ++ joinJsonPairs pairs ++ "\}"
+  | JsonString s   => "\"{jsonEscapeText s}\""
+  | JsonArray items  => "[{joinJsonValues items}]"
+  | JsonObject pairs => "\{{joinJsonPairs pairs}\}"
 
 jsonEscapeText : Text -> Text
 jsonEscapeText = s =>
@@ -62,13 +62,13 @@ joinJsonValues : List JsonValue -> Text
 joinJsonValues = items => items match
   | []         => ""
   | [x]        => jsonToText x
-  | [x, ...xs] => jsonToText x ++ "," ++ joinJsonValues xs
+  | [x, ...xs] => "{jsonToText x},{joinJsonValues xs}"
 
 joinJsonPairs : List (Text, JsonValue) -> Text
 joinJsonPairs = pairs => pairs match
   | []              => ""
-  | [(k, v)]        => "\"" ++ jsonEscapeText k ++ "\":" ++ jsonToText v
-  | [(k, v), ...ps] => "\"" ++ jsonEscapeText k ++ "\":" ++ jsonToText v ++ "," ++ joinJsonPairs ps
+  | [(k, v)]        => "\"{jsonEscapeText k}\":{jsonToText v}"
+  | [(k, v), ...ps] => "\"{jsonEscapeText k}\":{jsonToText v},{joinJsonPairs ps}"
 
 encodeText : Text -> JsonValue
 encodeText = t => JsonString t
@@ -119,7 +119,7 @@ requiredField = name obj => decodeField name obj
 
 findField : Text -> List (Text, JsonValue) -> Result JsonError JsonValue
 findField = name entries => entries match
-  | []              => Err { message: "missing field: " ++ name }
+  | []              => Err { message: "missing field: {name}" }
   | [(k, v), ...es] => k == name match
     | True  => Ok v
     | False => findField name es
@@ -187,9 +187,9 @@ migrateObject = patchFn value => value match
 //   1. at $.user.age — expected Int, got String
 renderSchemaIssue : Int -> SchemaIssue -> Text
 renderSchemaIssue = index issue => {
-  num  = console.color Yellow (text.toText index ++ ".")
+  num  = console.color Yellow "{text.toText index}."
   path = console.color Cyan issue.path
-  "  " ++ num ++ " at " ++ path ++ " — " ++ issue.message
+  "  {num} at {path} — {issue.message}"
 }
 
 renderSchemaIssueLines : List SchemaIssue -> Int -> List Text -> List Text
@@ -201,7 +201,7 @@ joinLinesJson : List Text -> Text
 joinLinesJson = lines => lines match
   | []         => ""
   | [x]        => x
-  | [x, ...xs] => x ++ "\n" ++ joinLinesJson xs
+  | [x, ...xs] => "{x}\n{joinLinesJson xs}"
 
 // Renders a list of SchemaIssues as a compiler-style error block with ANSI colour.
 //
@@ -212,7 +212,7 @@ renderSchemaIssues : List SchemaIssue -> Text
 renderSchemaIssues = issues => {
   count  = length issues
   label  = console.color Yellow "error[decode]"
-  header = label ++ ": " ++ text.toText count ++ " issue(s) found"
+  header = "{label}: {text.toText count} issue(s) found"
   lines  = renderSchemaIssueLines issues 1 []
   joinLinesJson [header, ...lines]
 }
@@ -224,7 +224,7 @@ renderJsonError : Text -> JsonError -> Text
 renderJsonError = context err => {
   label = console.color Yellow "error[decode]"
   path  = console.color Cyan context
-  label ++ " at " ++ path ++ " — " ++ err.message
+  "{label} at {path} — {err.message}"
 }
 
 // Logs all SchemaIssues to stderr with ANSI colour.
