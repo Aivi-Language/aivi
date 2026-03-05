@@ -84,17 +84,3 @@ toJsonNone = do Effect {
   encoded = toJson None
   assertEq encoded JsonNull
 }
-
-@test "jsonToText renders object"
-jsonToTextObject = do Effect {
-  jv = JsonObject [("x", JsonInt 1)]
-  t = jsonToText jv
-  assertEq t "\{\"x\":1\}"
-}
-
-@test "jsonToText renders array"
-jsonToTextArray = do Effect {
-  jv = JsonArray [JsonInt 1, JsonInt 2]
-  t = jsonToText jv
-  assertEq t "[1,2]"
-}

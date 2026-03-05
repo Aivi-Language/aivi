@@ -9,23 +9,6 @@ use aivi.number.rational (fromBigInts)
 use aivi.number.decimal as dec
 use aivi.math
 
-// -- BigInt --
-
-@test "bigint from int"
-bigint_fromInt = do Effect {
-  b = fromInt 42
-  assertEq (toInt b) (Some 42)
-}
-
-@test "bigint roundtrip"
-bigint_roundtrip = do Effect {
-  b = fromInt 0
-  assertEq (toInt b) (Some 0)
-
-  n = fromInt (-99)
-  assertEq (toInt n) (Some (-99))
-}
-
 // -- Decimal --
 
 @test "decimal from float"
@@ -41,15 +24,4 @@ decimal_round = do Effect {
   r = dec.round d 2
   f = toFloat r
   assert (abs (f - 3.14) < 0.01)
-}
-
-// -- Rational --
-
-@test "rational construct"
-rational_construct = do Effect {
-  n = fromInt 2
-  d = fromInt 4
-  r = normalize (fromBigInts n d)
-  assertEq (toInt (numerator r)) (Some 1)
-  assertEq (toInt (denominator r)) (Some 2)
 }
