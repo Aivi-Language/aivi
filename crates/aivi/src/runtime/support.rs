@@ -20,8 +20,20 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
         ("+", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_add(*b))),
         ("-", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_sub(*b))),
         ("*", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_mul(*b))),
-        ("/", Value::Int(a), Value::Int(b)) => Some(Value::Int(a / b)),
-        ("%", Value::Int(a), Value::Int(b)) => Some(Value::Int(a % b)),
+        ("/", Value::Int(a), Value::Int(b)) => {
+            if *b == 0 {
+                None
+            } else {
+                Some(Value::Int(a.wrapping_div(*b)))
+            }
+        }
+        ("%", Value::Int(a), Value::Int(b)) => {
+            if *b == 0 {
+                None
+            } else {
+                Some(Value::Int(a.wrapping_rem(*b)))
+            }
+        }
         ("+", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a + &**b))),
         ("-", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a - &**b))),
         ("*", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a * &**b))),

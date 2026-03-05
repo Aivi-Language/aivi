@@ -129,6 +129,7 @@ pub(crate) struct Runtime {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) enum RuntimeError {
     Error(Value),
     Cancelled,
