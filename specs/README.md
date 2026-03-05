@@ -21,7 +21,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Algebraic Data Types](syntax/types/algebraic_data_types.md)
 - [Closed Records](syntax/types/closed_records.md)
 - [Record Row Transforms](syntax/types/record_row_transforms.md)
-- [Classes & HKTs](syntax/types/classes_and_hkts.md)
+- [Higher Kinded Types](syntax/types/classes_and_hkts.md)
 - [Expected-Type Coercions](syntax/types/expected_type_coercions.md)
 - [Opaque Types](syntax/types/opaque_types.md)
 #### Data & Patterns
