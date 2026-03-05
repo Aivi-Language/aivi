@@ -33,6 +33,10 @@ pub(super) struct TypeChecker {
     current_module_name: String,
     extra_diagnostics: Vec<FileDiagnostic>,
     adt_constructors: HashMap<String, Vec<String>>,
+    /// Maps opaque type names to the module that defined them.
+    /// Used to reject construction/access from outside the defining module.
+    opaque_types: HashMap<String, String>,
+    global_opaque_types: HashMap<String, String>,
     enabled_record_default_types: HashSet<String>,
     /// Set to `true` while elaborating a function call argument, so that
     /// `elab_record` can enforce field completeness for call-site records.
@@ -72,6 +76,8 @@ impl TypeChecker {
             current_module_name: String::new(),
             extra_diagnostics: Vec::new(),
             adt_constructors: HashMap::new(),
+            opaque_types: HashMap::new(),
+            global_opaque_types: HashMap::new(),
             enabled_record_default_types: HashSet::new(),
             in_call_arg: false,
             constraints: ConstraintState::default(),
@@ -90,9 +96,11 @@ impl TypeChecker {
         &mut self,
         type_constructors: HashMap<String, Kind>,
         aliases: HashMap<String, AliasInfo>,
+        opaque_types: HashMap<String, String>,
     ) {
         self.global_type_constructors = type_constructors;
         self.global_aliases = aliases;
+        self.global_opaque_types = opaque_types;
     }
 
     pub(super) fn reset_module_context(&mut self, _module: &Module) {
@@ -111,6 +119,7 @@ impl TypeChecker {
         self.assumed_class_constraints.clear();
         self.extra_diagnostics.clear();
         self.adt_constructors.clear();
+        self.opaque_types = self.global_opaque_types.clone();
         self.enabled_record_default_types = Self::collect_enabled_record_default_types(_module);
         self.current_module_path = _module.path.clone();
         self.current_module_name = _module.name.name.clone();
@@ -153,6 +162,46 @@ impl TypeChecker {
 
     fn record_default_enabled(&self, marker: &str) -> bool {
         self.enabled_record_default_types.contains(marker)
+    }
+
+    /// Returns `Some(defining_module)` if `type_name` is opaque and the current module
+    /// is **not** the defining module. Returns `None` if the type is not opaque or if
+    /// the current module *is* the defining module (transparent access).
+    pub(super) fn is_opaque_from_here(&self, type_name: &str) -> Option<&String> {
+        self.opaque_types.get(type_name).filter(|defining_module| {
+            *defining_module != &self.current_module_name
+        })
+    }
+
+    /// Extract the top-level type constructor name from a (possibly applied) type,
+    /// following type variables through substitution.
+    pub(super) fn opaque_con_name(&self, ty: &Type) -> Option<String> {
+        match ty {
+            Type::Con(name, _) => Some(name.clone()),
+            Type::Var(id) => {
+                if let Some(resolved) = self.subst.get(id) {
+                    self.opaque_con_name(resolved)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns true if the pattern attempts to destructure the value's internal structure
+    /// (record fields, constructor args, tuple elements, list elements).
+    /// Wildcards and plain ident binders are non-destructuring.
+    pub(super) fn pattern_destructures(&self, pat: &Pattern) -> bool {
+        match pat {
+            Pattern::Wildcard(_) | Pattern::Ident(_) | Pattern::SubjectIdent(_) => false,
+            Pattern::Literal(_) => false,
+            Pattern::At { pattern, .. } => self.pattern_destructures(pattern),
+            Pattern::Constructor { .. }
+            | Pattern::Tuple { .. }
+            | Pattern::List { .. }
+            | Pattern::Record { .. } => true,
+        }
     }
 
     /// Drain the recorded polymorphic call-site instantiations for the current module.
@@ -202,6 +251,8 @@ impl TypeChecker {
                 message,
                 span,
                 labels: Vec::new(),
+                hints: Vec::new(),
+                suggestion: None,
             },
         });
     }

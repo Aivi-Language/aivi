@@ -1,0 +1,10 @@
+// EXPECT-ERROR: cannot access field
+@no_prelude
+module testOpaque.consumer
+
+use aivi
+
+use testOpaque.definer (Wrapper, make)
+
+w = make 42
+bad = w.inner

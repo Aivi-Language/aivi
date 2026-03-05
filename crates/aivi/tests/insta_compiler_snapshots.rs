@@ -35,6 +35,7 @@ fn diagnostics_snapshot(diags: &[FileDiagnostic]) -> String {
                 match diag.diagnostic.severity {
                     aivi::DiagnosticSeverity::Error => "error",
                     aivi::DiagnosticSeverity::Warning => "warning",
+                    aivi::DiagnosticSeverity::Hint => "hint",
                 },
                 diag.diagnostic.message
             )

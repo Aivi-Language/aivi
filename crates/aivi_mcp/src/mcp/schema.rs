@@ -252,6 +252,7 @@ fn execute_parse_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
                 match diag.severity {
                     aivi_core::DiagnosticSeverity::Error => file_error_count += 1,
                     aivi_core::DiagnosticSeverity::Warning => file_warning_count += 1,
+                    aivi_core::DiagnosticSeverity::Hint => {}
                 }
                 diagnostic_to_json(diag)
             })
@@ -311,6 +312,7 @@ fn execute_check_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
             match diag.diagnostic.severity {
                 aivi_core::DiagnosticSeverity::Error => error_count += 1,
                 aivi_core::DiagnosticSeverity::Warning => warning_count += 1,
+                aivi_core::DiagnosticSeverity::Hint => {}
             }
             file_diagnostic_to_json(diag)
         })
@@ -785,6 +787,7 @@ fn diagnostic_to_json(diagnostic: &aivi_core::Diagnostic) -> serde_json::Value {
     let severity = match diagnostic.severity {
         aivi_core::DiagnosticSeverity::Error => "error",
         aivi_core::DiagnosticSeverity::Warning => "warning",
+        aivi_core::DiagnosticSeverity::Hint => "hint",
     };
     serde_json::json!({
         "code": diagnostic.code.clone(),

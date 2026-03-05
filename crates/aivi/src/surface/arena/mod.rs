@@ -367,6 +367,7 @@ pub struct ArenaTypeDecl {
     pub name: SpannedSymbol,
     pub params: Vec<SpannedSymbol>,
     pub constructors: Vec<ArenaTypeCtor>,
+    pub opaque: bool,
     pub span: Span,
 }
 
@@ -376,6 +377,7 @@ pub struct ArenaTypeAlias {
     pub name: SpannedSymbol,
     pub params: Vec<SpannedSymbol>,
     pub aliased: TypeExprId,
+    pub opaque: bool,
     pub span: Span,
 }
 

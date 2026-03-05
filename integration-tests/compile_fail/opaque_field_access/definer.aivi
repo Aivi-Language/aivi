@@ -1,0 +1,11 @@
+@no_prelude
+module testOpaque.definer
+
+use aivi
+
+export Wrapper, make
+
+opaque Wrapper = { inner: Int }
+
+make : Int -> Wrapper
+make = n => { inner: n }

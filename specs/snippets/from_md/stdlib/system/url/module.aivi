@@ -1,4 +1,4 @@
 module aivi.url
 export domain Url
 export Url
-export parse, toString
+export parse, toString, protocol, host, port, path, query, hash

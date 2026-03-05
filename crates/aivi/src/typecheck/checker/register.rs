@@ -9,6 +9,12 @@ impl TypeChecker {
                     }
                     self.type_constructors
                         .insert(type_decl.name.name.clone(), kind);
+                    if type_decl.opaque {
+                        self.opaque_types.insert(
+                            type_decl.name.name.clone(),
+                            module.name.name.clone(),
+                        );
+                    }
                 }
                 ModuleItem::TypeAlias(alias) => {
                     let mut kind = Kind::Star;
@@ -18,6 +24,10 @@ impl TypeChecker {
                     self.type_constructors.insert(alias.name.name.clone(), kind);
                     let alias_info = self.alias_info(alias);
                     self.aliases.insert(alias.name.name.clone(), alias_info);
+                    if alias.opaque {
+                        self.opaque_types
+                            .insert(alias.name.name.clone(), module.name.name.clone());
+                    }
                 }
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
@@ -151,6 +161,12 @@ impl TypeChecker {
                                 .map(|ctor| ctor.name.name.clone())
                                 .collect(),
                         );
+                    }
+                    // Skip registering constructors for opaque ADTs outside their module.
+                    if type_decl.opaque
+                        && self.is_opaque_from_here(&type_decl.name.name).is_some()
+                    {
+                        continue;
                     }
                     self.register_adt_constructors(type_decl, env);
                 }

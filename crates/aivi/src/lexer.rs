@@ -102,6 +102,8 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                         message: "block comment started here".to_string(),
                         span: span_single(start_line, start_col, 2),
                     }],
+                    hints: Vec::new(),
+                    suggestion: None,
                 });
             }
             continue;
@@ -162,6 +164,8 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                         message: "string literal started here".to_string(),
                         span: span_single(line, start_col, 1),
                     }],
+                    hints: Vec::new(),
+                    suggestion: None,
                 });
             }
             continue;
@@ -189,6 +193,8 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                             message: "sigil literal started here".to_string(),
                             span: span_single(line, col, 1),
                         }],
+                        hints: Vec::new(),
+                        suggestion: None,
                     });
                 }
                 index += len_chars;
@@ -254,6 +260,8 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                     message: "remove this ';'".to_string(),
                     span: span_single(line, col, 1),
                 }],
+                hints: Vec::new(),
+                suggestion: None,
             });
             tokens.push(CstToken {
                 kind: "symbol".to_string(),
@@ -282,6 +290,8 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
             message: format!("unexpected character '{ch}'"),
             span: span_single(line, col, 1),
             labels: Vec::new(),
+            hints: Vec::new(),
+            suggestion: None,
         });
         tokens.push(CstToken {
             kind: "unknown".to_string(),
@@ -633,6 +643,8 @@ fn check_braces(tokens: &[CstToken]) -> Vec<Diagnostic> {
                         message: format!("unmatched closing '{}'", token.text),
                         span: token.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     });
                     continue;
                 };
@@ -646,6 +658,8 @@ fn check_braces(tokens: &[CstToken]) -> Vec<Diagnostic> {
                             message: "opening here".to_string(),
                             span: open_span,
                         }],
+                        hints: Vec::new(),
+                        suggestion: None,
                     });
                 }
             }
@@ -660,6 +674,8 @@ fn check_braces(tokens: &[CstToken]) -> Vec<Diagnostic> {
             message: format!("unclosed '{}'", open),
             span,
             labels: Vec::new(),
+            hints: Vec::new(),
+            suggestion: None,
         });
     }
 

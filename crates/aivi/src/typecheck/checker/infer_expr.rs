@@ -128,6 +128,20 @@ impl TypeChecker {
         env: &mut TypeEnv,
     ) -> Result<Type, TypeError> {
         let base_ty = self.infer_expr(base, env)?;
+        let resolved = self.apply(base_ty.clone());
+        if let Some(type_name) = self.opaque_con_name(&resolved) {
+            if let Some(defining_module) = self.is_opaque_from_here(&type_name).cloned() {
+                return Err(TypeError {
+                    span: field.span.clone(),
+                    message: format!(
+                        "cannot access field `{}` on opaque type `{}` outside module `{}`",
+                        field.name, type_name, defining_module
+                    ),
+                    expected: None,
+                    found: None,
+                });
+            }
+        }
         self.record_field_type(
             base_ty,
             &[PathSegment::Field(field.clone())],
@@ -594,6 +608,25 @@ impl TypeChecker {
         } else {
             self.fresh_var()
         };
+        // Check for opaque type pattern matching violations.
+        let resolved_scrutinee = self.apply(scrutinee_ty.clone());
+        if let Some(type_name) = self.opaque_con_name(&resolved_scrutinee) {
+            if let Some(defining_module) = self.is_opaque_from_here(&type_name).cloned() {
+                for arm in arms {
+                    if self.pattern_destructures(&arm.pattern) {
+                        return Err(TypeError {
+                            span: arm.span.clone(),
+                            message: format!(
+                                "cannot pattern match on opaque type `{}` outside module `{}`",
+                                type_name, defining_module
+                            ),
+                            expected: None,
+                            found: None,
+                        });
+                    }
+                }
+            }
+        }
         let result_ty = self.fresh_var();
         for arm in arms {
             let mut arm_env = env.clone();

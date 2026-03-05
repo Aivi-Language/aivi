@@ -74,6 +74,7 @@ fn severity_str(sev: DiagnosticSeverity) -> &'static str {
     match sev {
         DiagnosticSeverity::Error => "error",
         DiagnosticSeverity::Warning => "warning",
+        DiagnosticSeverity::Hint => "hint",
     }
 }
 

@@ -25,7 +25,7 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 
 ```text
 as class do domain effect else export generate given hiding if in
-instance machine match mock module on or over patch recurse resource snapshot then unless use when with yield loop
+instance machine match mock module on opaque or over patch recurse resource snapshot then unless use when with yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, `Err` are ordinary constructors, not keywords.)
@@ -90,10 +90,10 @@ Definition     := ValueSig
 ValueSig       := lowerIdent ":" Type Sep
 ValueBinding   := Pattern "=" Expr Sep
 
-BrandedType    := UpperIdent [ TypeParams ] "=" Type "!" Sep
-TypeAlias      := UpperIdent [ TypeParams ] "=" TypeRhs Sep
+BrandedType    := [ "opaque" ] UpperIdent [ TypeParams ] "=" Type "!" Sep
+TypeAlias      := [ "opaque" ] UpperIdent [ TypeParams ] "=" TypeRhs Sep
 OpaqueType     := UpperIdent [ TypeParams ] Sep
-TypeDef        := UpperIdent [ TypeParams ] "=" TypeRhs Sep
+TypeDef        := [ "opaque" ] UpperIdent [ TypeParams ] "=" TypeRhs Sep
 TypeParams     := UpperIdent { UpperIdent }
 TypeRhs        := Type
                | RecordType

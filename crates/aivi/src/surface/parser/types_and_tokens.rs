@@ -451,6 +451,8 @@ impl Parser {
                             ),
                         })
                         .collect(),
+                    hints: diag.hints,
+                    suggestion: diag.suggestion,
                 },
             });
         }
@@ -618,6 +620,8 @@ impl Parser {
                 message: message.to_string(),
                 span,
                 labels: Vec::new(),
+                hints: Vec::new(),
+                suggestion: None,
             },
         });
     }

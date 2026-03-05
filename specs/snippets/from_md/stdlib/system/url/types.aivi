@@ -1,4 +1,4 @@
-Url = {
+opaque Url = {
   protocol: Text
   host: Text
   port: Option Int

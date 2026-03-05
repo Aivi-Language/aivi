@@ -508,6 +508,8 @@ impl TypeChecker {
                 message,
                 span,
                 labels: Vec::new(),
+                hints: Vec::new(),
+                suggestion: None,
             },
         }
     }

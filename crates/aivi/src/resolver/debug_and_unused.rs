@@ -44,6 +44,8 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
                 message: "`@debug` can only be applied to function definitions".to_string(),
                 span: def.name.span.clone(),
                 labels: Vec::new(),
+                hints: Vec::new(),
+                suggestion: None,
             },
         ));
     }
@@ -66,6 +68,8 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
                                         "`@debug` expects a list of parameter names (e.g. `@debug(pipes, args, return, time)`)".to_string(),
                                     span: expr_span(other),
                                     labels: Vec::new(),
+                                    hints: Vec::new(),
+                                    suggestion: None,
                                 },
                             ));
                         }
@@ -84,6 +88,8 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
                                 .to_string(),
                         span: expr_span(other),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
                 continue;
@@ -103,6 +109,8 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
                         ),
                         span: param.span,
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
             }
@@ -153,6 +161,8 @@ fn check_expr(
                         message: format!("use of deprecated name '{}': {}", name.name, message),
                         span: name.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
             }
@@ -167,6 +177,8 @@ fn check_expr(
                         message,
                         span: name.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
             }

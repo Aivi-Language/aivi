@@ -117,6 +117,7 @@ impl ArenaBuilder {
                 .iter()
                 .map(|c| self.lower_type_ctor(c))
                 .collect(),
+            opaque: ty.opaque,
             span: ty.span.clone(),
         }
     }
@@ -131,6 +132,7 @@ impl ArenaBuilder {
             name: SpannedSymbol::from(&alias.name),
             params: alias.params.iter().map(SpannedSymbol::from).collect(),
             aliased: self.lower_type_expr(&alias.aliased),
+            opaque: alias.opaque,
             span: alias.span.clone(),
         }
     }

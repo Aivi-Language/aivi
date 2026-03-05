@@ -19,6 +19,20 @@ impl TypeChecker {
         }
         if op == "<|" {
             let target_ty = self.infer_expr(left, env)?;
+            let resolved = self.apply(target_ty.clone());
+            if let Some(type_name) = self.opaque_con_name(&resolved) {
+                if let Some(defining_module) = self.is_opaque_from_here(&type_name).cloned() {
+                    return Err(TypeError {
+                        span: expr_span(right),
+                        message: format!(
+                            "cannot update opaque type `{}` outside module `{}`",
+                            type_name, defining_module
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+            }
             if let Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } = right {
                 return self.infer_patch(target_ty, fields, env);
             }

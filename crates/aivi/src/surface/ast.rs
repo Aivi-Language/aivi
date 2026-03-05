@@ -71,6 +71,7 @@ pub struct TypeDecl {
     pub name: SpannedName,
     pub params: Vec<SpannedName>,
     pub constructors: Vec<TypeCtor>,
+    pub opaque: bool,
     pub span: Span,
 }
 
@@ -80,6 +81,7 @@ pub struct TypeAlias {
     pub name: SpannedName,
     pub params: Vec<SpannedName>,
     pub aliased: TypeExpr,
+    pub opaque: bool,
     pub span: Span,
 }
 

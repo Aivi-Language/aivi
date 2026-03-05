@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.syntax.types.opaqueTypes.definer
+
+use aivi
+
+export Wrapper, make, value
+
+opaque Wrapper = { inner: Int }
+
+make : Int -> Wrapper
+make = n => { inner: n }
+
+value : Wrapper -> Int
+value = w => w.inner

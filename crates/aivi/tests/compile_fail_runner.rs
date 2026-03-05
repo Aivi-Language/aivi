@@ -190,6 +190,7 @@ fn run_test_group(
             let kind_str = match exp.kind {
                 DiagnosticSeverity::Error => "ERROR",
                 DiagnosticSeverity::Warning => "WARN",
+                DiagnosticSeverity::Hint => "HINT",
             };
             let actual: Vec<String> = diags
                 .iter()

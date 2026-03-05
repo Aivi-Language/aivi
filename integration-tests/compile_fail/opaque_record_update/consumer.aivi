@@ -1,0 +1,10 @@
+// EXPECT-ERROR: cannot update opaque type
+@no_prelude
+module testOpaqueUpdate.consumer
+
+use aivi
+
+use testOpaqueUpdate.definer (Wrapper, make)
+
+w = make 42
+bad = w <| { inner: 99 }

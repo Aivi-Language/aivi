@@ -489,6 +489,7 @@ fn generate_schema_type_aliases(spec: &OpenAPI, span: &Span) -> Vec<ModuleItem> 
                     name: sn(name, span),
                     params: Vec::new(),
                     constructors,
+                    opaque: false,
                     span: span.clone(),
                 }));
             }
@@ -509,6 +510,7 @@ fn generate_schema_type_aliases(spec: &OpenAPI, span: &Span) -> Vec<ModuleItem> 
                     name: sn(name, span),
                     params: Vec::new(),
                     constructors,
+                    opaque: false,
                     span: span.clone(),
                 }));
             }
@@ -529,6 +531,7 @@ fn generate_schema_type_aliases(spec: &OpenAPI, span: &Span) -> Vec<ModuleItem> 
                     name: sn(name, span),
                     params: Vec::new(),
                     constructors,
+                    opaque: false,
                     span: span.clone(),
                 }));
             }
@@ -539,6 +542,7 @@ fn generate_schema_type_aliases(spec: &OpenAPI, span: &Span) -> Vec<ModuleItem> 
                     name: sn(name, span),
                     params: Vec::new(),
                     aliased,
+                    opaque: false,
                     span: span.clone(),
                 }));
             }

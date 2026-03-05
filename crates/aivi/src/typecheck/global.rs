@@ -8,8 +8,13 @@ use super::types::{AliasInfo, Kind};
 pub(super) fn collect_global_type_info(
     checker: &mut TypeChecker,
     modules: &[Module],
-) -> (HashMap<String, Kind>, HashMap<String, AliasInfo>) {
+) -> (
+    HashMap<String, Kind>,
+    HashMap<String, AliasInfo>,
+    HashMap<String, String>,
+) {
     let mut type_constructors = checker.builtin_type_constructors();
+    let mut opaque_types: HashMap<String, String> = HashMap::new();
 
     let kind_for_params = |params_len: usize| {
         let mut kind = Kind::Star;
@@ -27,10 +32,20 @@ pub(super) fn collect_global_type_info(
                         type_decl.name.name.clone(),
                         kind_for_params(type_decl.params.len()),
                     );
+                    if type_decl.opaque {
+                        opaque_types.insert(
+                            type_decl.name.name.clone(),
+                            module.name.name.clone(),
+                        );
+                    }
                 }
                 ModuleItem::TypeAlias(alias) => {
                     type_constructors
                         .insert(alias.name.name.clone(), kind_for_params(alias.params.len()));
+                    if alias.opaque {
+                        opaque_types
+                            .insert(alias.name.name.clone(), module.name.name.clone());
+                    }
                 }
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
@@ -61,5 +76,5 @@ pub(super) fn collect_global_type_info(
     }
     checker.type_constructors = prev_constructors;
 
-    (type_constructors, aliases)
+    (type_constructors, aliases, opaque_types)
 }
