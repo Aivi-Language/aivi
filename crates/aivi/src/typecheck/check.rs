@@ -40,7 +40,11 @@ pub fn check_types_stdlib_checkpoint(stdlib_modules: &[Module]) -> CheckTypesChe
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, stdlib_modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
+    checker.set_global_type_info(
+        global_type_constructors,
+        global_aliases,
+        global_opaque_types,
+    );
 
     let mut discarded = Vec::new();
     for module in ordered_modules(stdlib_modules) {
@@ -91,7 +95,11 @@ pub fn check_types_with_checkpoint(
     // so user-defined types are visible alongside stdlib types.
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
+    checker.set_global_type_info(
+        global_type_constructors,
+        global_aliases,
+        global_opaque_types,
+    );
 
     for module in ordered_modules(modules) {
         if module.path.starts_with("<embedded:") {
@@ -134,7 +142,11 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
+    checker.set_global_type_info(
+        global_type_constructors,
+        global_aliases,
+        global_opaque_types,
+    );
 
     for module in ordered_modules(modules) {
         let setup = setup_module(
