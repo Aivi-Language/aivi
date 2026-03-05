@@ -292,10 +292,11 @@ pub(super) fn build_bits_record() -> Value {
             let end = expect_int(args.pop().unwrap(), "bits.slice")? as usize;
             let start = expect_int(args.pop().unwrap(), "bits.slice")? as usize;
             if start > data.len() || end > data.len() || start > end {
-                return Err(RuntimeError::Message(format!(
-                    "bits.slice: range {start}..{end} out of bounds for {} bytes",
-                    data.len()
-                )));
+                return Err(RuntimeError::IndexOutOfBounds {
+                    context: "bits.slice".to_string(),
+                    index: start as i64,
+                    length: data.len(),
+                });
             }
             Ok(Value::Bytes(Arc::new(data[start..end].to_vec())))
         }),

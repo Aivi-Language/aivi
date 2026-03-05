@@ -3,9 +3,9 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use super::sockets::connection_from_value;
-use super::util::{builtin, expect_int, expect_list, list_value};
+use super::util::{builtin, expect_int, expect_list, list_value, value_type_name};
 use crate::runtime::values::{EffectValue, StreamHandle, StreamState};
-use crate::runtime::{format_value, Runtime, RuntimeError, Value};
+use crate::runtime::{Runtime, RuntimeError, Value};
 
 const DEFAULT_STREAM_CHUNK: usize = 4096;
 
@@ -18,24 +18,33 @@ fn stream_error_value(message: impl Into<String>) -> Value {
 pub(super) fn stream_from_value(value: Value, ctx: &str) -> Result<Arc<StreamHandle>, RuntimeError> {
     match value {
         Value::Stream(handle) => Ok(handle),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects a stream"))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Stream".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 fn expect_callable(value: Value, ctx: &str) -> Result<Value, RuntimeError> {
     match value {
         Value::Builtin(_) | Value::MultiClause(_) | Value::Thunk(_) => Ok(value),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects a function"))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Function".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 fn expect_bool(value: Value, ctx: &str) -> Result<bool, RuntimeError> {
     match value {
         Value::Bool(b) => Ok(b),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx} expects Bool, got {}",
-            format_value(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Bool".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
@@ -52,12 +61,16 @@ fn value_to_bytes(value: Value, ctx: &str) -> Result<Vec<u8>, RuntimeError> {
         .iter()
         .map(|v| match v {
             Value::Int(i) => u8::try_from(*i).map_err(|_| {
-                RuntimeError::Message(format!("{ctx}: byte value {i} out of range 0-255"))
+                RuntimeError::InvalidArgument {
+                    context: ctx.to_string(),
+                    reason: format!("byte value {i} out of range 0-255"),
+                }
             }),
-            other => Err(RuntimeError::Message(format!(
-                "{ctx}: expected List Int (byte list), got {}",
-                format_value(other)
-            ))),
+            other => Err(RuntimeError::TypeError {
+                context: ctx.to_string(),
+                expected: "Int".to_string(),
+                got: value_type_name(other).to_string(),
+            }),
         })
         .collect()
 }
@@ -68,12 +81,12 @@ fn next_chunk(handle: &Arc<StreamHandle>) -> Result<Option<Vec<u8>>, RuntimeErro
     let mut guard = handle
         .state
         .lock()
-        .map_err(|_| RuntimeError::Message("stream poisoned".to_string()))?;
+        .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "stream poisoned".to_string() })?;
     match &mut *guard {
         StreamState::Socket { stream, chunk_size } => {
             let mut stream = stream
                 .lock()
-                .map_err(|_| RuntimeError::Message("connection poisoned".to_string()))?;
+                .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "connection poisoned".to_string() })?;
             let mut buffer = vec![0u8; *chunk_size];
             let count = stream
                 .read(&mut buffer)
@@ -105,9 +118,10 @@ fn next_chunk(handle: &Arc<StreamHandle>) -> Result<Option<Vec<u8>>, RuntimeErro
                 }
             }
         },
-        _ => Err(RuntimeError::Message(
-            "next_chunk called on non-byte stream".to_string(),
-        )),
+        _ => Err(RuntimeError::InvalidArgument {
+            context: "next_chunk".to_string(),
+            reason: "called on non-byte stream".to_string(),
+        }),
     }
 }
 
@@ -136,7 +150,7 @@ pub(super) fn next_value(
         let mut guard = handle
             .state
             .lock()
-            .map_err(|_| RuntimeError::Message("stream poisoned".to_string()))?;
+            .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "stream poisoned".to_string() })?;
         match &mut *guard {
             StreamState::Socket { .. } | StreamState::Chunks { .. } => Action::Bytes,
             StreamState::Values { items } => {
@@ -188,7 +202,7 @@ pub(super) fn next_value(
                     let guard = handle
                         .state
                         .lock()
-                        .map_err(|_| RuntimeError::Message("stream poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "stream poisoned".to_string() })?;
                     match &*guard {
                         StreamState::Drop { to_skip, .. } => *to_skip,
                         _ => 0,
@@ -203,7 +217,7 @@ pub(super) fn next_value(
                         let mut guard = handle
                             .state
                             .lock()
-                            .map_err(|_| RuntimeError::Message("stream poisoned".to_string()))?;
+                            .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "stream poisoned".to_string() })?;
                         if let StreamState::Drop { to_skip: ref mut n, .. } = *guard {
                             if *n > 0 {
                                 *n -= 1;
@@ -240,7 +254,7 @@ fn next_value_flatmap(
                     let mut guard = handle
                         .state
                         .lock()
-                        .map_err(|_| RuntimeError::Message("stream poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "stream poisoned".to_string() })?;
                     if let StreamState::FlatMap { inner, .. } = &mut *guard {
                         *inner = None;
                     }
@@ -261,7 +275,7 @@ fn next_value_flatmap(
                     let mut guard = handle
                         .state
                         .lock()
-                        .map_err(|_| RuntimeError::Message("stream poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "stream poisoned".to_string() })?;
                     if let StreamState::FlatMap { inner, .. } = &mut *guard {
                         *inner = Some(inner_handle.clone());
                     }
@@ -301,7 +315,7 @@ pub(super) fn build_streams_record() -> Value {
                 func: Arc::new(move |runtime| {
                     let mut socket = conn
                         .lock()
-                        .map_err(|_| RuntimeError::Message("connection poisoned".to_string()))?;
+                        .map_err(|_| RuntimeError::IOError { context: "stream".to_string(), cause: "connection poisoned".to_string() })?;
                     while let Some(item) = next_value(&stream, runtime)? {
                         let bytes = value_to_bytes(item, "streams.toSocket")?;
                         socket.write_all(&bytes).map_err(|err| {
@@ -321,12 +335,13 @@ pub(super) fn build_streams_record() -> Value {
             let stream = stream_from_value(args.pop().unwrap(), "streams.chunks")?;
             let size = expect_int(args.pop().unwrap(), "streams.chunks")?;
             let size = usize::try_from(size).map_err(|_| {
-                RuntimeError::Message("streams.chunks expects positive size".to_string())
+                RuntimeError::InvalidArgument { context: "streams.chunks".to_string(), reason: "size must be positive".to_string() }
             })?;
             if size == 0 {
-                return Err(RuntimeError::Message(
-                    "streams.chunks expects positive size".to_string(),
-                ));
+                return Err(RuntimeError::InvalidArgument {
+                    context: "streams.chunks".to_string(),
+                    reason: "size must be positive".to_string(),
+                });
             }
             Ok(make_stream(StreamState::Chunks {
                 source: stream,
@@ -368,7 +383,7 @@ pub(super) fn build_streams_record() -> Value {
             let stream = stream_from_value(args.pop().unwrap(), "streams.take")?;
             let n = expect_int(args.pop().unwrap(), "streams.take")?;
             let remaining = usize::try_from(n).map_err(|_| {
-                RuntimeError::Message("streams.take expects non-negative count".to_string())
+                RuntimeError::InvalidArgument { context: "streams.take".to_string(), reason: "count must be non-negative".to_string() }
             })?;
             Ok(make_stream(StreamState::Take {
                 source: stream,
@@ -383,7 +398,7 @@ pub(super) fn build_streams_record() -> Value {
             let stream = stream_from_value(args.pop().unwrap(), "streams.drop")?;
             let n = expect_int(args.pop().unwrap(), "streams.drop")?;
             let to_skip = usize::try_from(n).map_err(|_| {
-                RuntimeError::Message("streams.drop expects non-negative count".to_string())
+                RuntimeError::InvalidArgument { context: "streams.drop".to_string(), reason: "count must be non-negative".to_string() }
             })?;
             Ok(make_stream(StreamState::Drop {
                 source: stream,

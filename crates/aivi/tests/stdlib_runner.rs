@@ -7,6 +7,7 @@ use aivi::{
     check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
     load_modules_from_paths, run_test_suite,
 };
+use rayon::prelude::*;
 
 #[path = "test_support.rs"]
 mod test_support;
@@ -135,36 +136,21 @@ fn stdlib_modules_execute_without_failures_inner() {
 
     assert!(!files.is_empty(), "no stdlib @test files found");
 
-    // Run all files concurrently — each independently loads/typechecks/JITs its own modules.
-    let results: Vec<_> = std::thread::scope(|s| {
-        let handles: Vec<_> = files
-            .iter()
-            .map(|path| {
-                let path = path.clone();
-                s.spawn(move || (path.clone(), run_stdlib_file_with_timeout(&path, 60)))
-            })
-            .collect();
-        handles.into_iter().map(|h| h.join()).collect()
-    });
+    // Run files in parallel — rayon caps concurrency at num_cpus, preventing memory/CPU thrash.
+    let results: Vec<_> = files
+        .par_iter()
+        .map(|path| (path.clone(), run_stdlib_file_with_timeout(path, 60)))
+        .collect();
 
     let mut total_passed = 0usize;
     let mut total_failed = 0usize;
     let mut failures = Vec::new();
 
-    for result in results {
-        match result {
-            Ok((path, report)) => {
-                total_passed += report.passed;
-                total_failed += report.failed;
-                if report.failed > 0 {
-                    failures.push(format!(
-                        "{}: {:#?}",
-                        path.display(),
-                        report.failures
-                    ));
-                }
-            }
-            Err(payload) => std::panic::resume_unwind(payload),
+    for (path, report) in results {
+        total_passed += report.passed;
+        total_failed += report.failed;
+        if report.failed > 0 {
+            failures.push(format!("{}: {:#?}", path.display(), report.failures));
         }
     }
 
