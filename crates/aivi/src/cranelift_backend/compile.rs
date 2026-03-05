@@ -413,19 +413,48 @@ fn jit_compile_into_runtime(
         }
     }
 
-    // Pass B: register short-name aliases. All names are merged so that HKT
-    // class method instances (e.g. `filter` from Filterable List/Option/Map)
-    // accumulate into a MultiClause rather than last-writer overwriting the
-    // previous instance. A seen-set avoids duplicating the same MultiClause
-    // contents when multiple pending defs share a qualified name (e.g. all
-    // logic.rs Filterable instances emit pd.qualified = "aivi.logic.filter").
+    // Pass B: register short-name (bare) aliases.
+    //
+    // Three categories of bare names require different treatment:
+    //
+    //  • Domain operators — names like `(+)` that appear in multiple domains
+    //    (calendar, duration, color, …) use `insert_or_merge` so each domain's
+    //    implementation accumulates into a single MultiClause.
+    //
+    //  • HKT instance methods — MultiClauses from `aivi.logic.*` already
+    //    contain all per-type clauses (List/Option/Result/Map).  They REPLACE
+    //    whatever is currently at the bare name, and later non-HKT defs must
+    //    not overwrite them.  Zero-arity HKT methods (e.g. `empty`) are
+    //    skipped: they cannot dispatch on arguments, so users must qualify
+    //    (List.empty, Map.empty).
+    //
+    //  • Everything else — last-writer-wins (plain insert), which is the
+    //    historical default.
     let mut seen_qualified: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut hkt_bare_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     for pd in &pending {
         if !seen_qualified.insert(pd.qualified.clone()) {
             continue;
         }
         if let Some(value) = compiled_globals.get(&pd.qualified).cloned() {
-            insert_or_merge(&mut compiled_globals, pd.name.clone(), value);
+            let is_hkt_bundle =
+                pd.qualified.starts_with("aivi.logic.") && matches!(&value, Value::MultiClause(_));
+            let is_operator = pd.name.starts_with('(') && pd.name.ends_with(')');
+            if is_hkt_bundle {
+                if pd.arity == 0 {
+                    // Zero-arg HKT methods can't dispatch — skip bare name.
+                    continue;
+                }
+                compiled_globals.insert(pd.name.clone(), value);
+                hkt_bare_names.insert(pd.name.clone());
+            } else if hkt_bare_names.contains(&pd.name) {
+                // Bare name owned by HKT bundle — don't pollute it.
+                continue;
+            } else if is_operator {
+                insert_or_merge(&mut compiled_globals, pd.name.clone(), value);
+            } else {
+                compiled_globals.insert(pd.name.clone(), value);
+            }
         }
     }
 
