@@ -1,2 +1,12 @@
 [profile.default]
 test-threads = "num-cpus"
+
+# Heavy runner tests JIT-compile many .aivi files with per-file timeouts.
+# Running them all in parallel causes CPU contention → timeouts → spurious failures.
+# Serialize them so only one runs at a time.
+[test-groups.runner-jit]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = 'binary_id(aivi::runner)'
+test-group = 'runner-jit'

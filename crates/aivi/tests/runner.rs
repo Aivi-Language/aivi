@@ -95,7 +95,7 @@ fn process_test_file(
 
     let program = desugar_modules(&modules);
     let display = path.display().to_string();
-    let result = run_test_suite_with_timeout(program, &tests, &modules, &display, 30);
+    let result = run_test_suite_with_timeout(program, &tests, &modules, &display, 60);
     let Some(Ok(report)) = result else {
         return FileResult::Skipped;
     };

@@ -21,6 +21,7 @@ export ins, upd, del, ups
 export domain Database
 
 use aivi
+use aivi.list (length, reverse, filter)
 
 DbError = Text
 
@@ -84,7 +85,7 @@ load = value => database.load value
 query : Table A -> (A -> Bool) -> Effect DbError (List A)
 query = tbl pred => do Effect {
   rows <- load tbl
-  pure (List.filter pred rows)
+  pure (filter pred rows)
 }
 
 applyDelta : Table A -> Delta A -> Effect DbError (Table A)
@@ -111,13 +112,13 @@ runMigrationSql = steps =>
   database.runMigrationSql (collectSql steps)
 
 beginTx : Effect DbError Unit
-beginTx = database.beginTx
+beginTx = database.beginTx Unit
 
 commitTx : Effect DbError Unit
-commitTx = database.commitTx
+commitTx = database.commitTx Unit
 
 rollbackTx : Effect DbError Unit
-rollbackTx = database.rollbackTx
+rollbackTx = database.rollbackTx Unit
 
 inTransaction : Effect DbError A -> Effect DbError A
 inTransaction = action => do Effect {
@@ -150,11 +151,11 @@ chunkDeltas = size deltas =>
 chunkDeltasGo : Int -> List (Delta A) -> List (Delta A) -> List (List (Delta A)) -> List (List (Delta A))
 chunkDeltasGo = size remaining current acc => remaining match
   | [] => current match
-    | [] => List.reverse acc
-    | _ => List.reverse [List.reverse current, ...acc]
+    | [] => reverse acc
+    | _ => reverse [reverse current, ...acc]
   | [d, ...rest] =>
-      if List.length current >= size
-      then chunkDeltasGo size remaining [] [List.reverse current, ...acc]
+      if length current >= size
+      then chunkDeltasGo size remaining [] [reverse current, ...acc]
       else chunkDeltasGo size rest [d, ...current] acc
 
 ftsDoc : Text -> List Text -> FtsDoc

@@ -27,7 +27,7 @@ serde_yml = "0.0.12"
 openapiv3 = "2.0.0"
 csv = "1.4.0"
 image = { version = "0.25.9", default-features = true }
-sha2 = "0.10.9"
+sha2 = "0.10"
 getrandom = "0.4.1"
 uuid = { version = "1.21.0", features = ["v4"] }
 thiserror = "2.0.18"
@@ -54,6 +54,10 @@ rayon = "1.11.0"
 aivi_gtk4 = { path = "../aivi_gtk4", optional = true }
 proptest = { version = "1", optional = true }
 insta = { version = "1", features = ["json"], optional = true }
+hmac = "0.12"
+bcrypt = "0.17"
+hex = "0.4"
+subtle = "2"
 
 [features]
 default = ["gtk4-libadwaita"]

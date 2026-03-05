@@ -431,5 +431,15 @@ pub(super) fn build_list_record() -> Value {
         }),
     );
 
+    fields.insert(
+        "reverse".to_string(),
+        builtin("list.reverse", 1, |mut args, _| {
+            let items = expect_list(args.pop().unwrap(), "List.reverse")?;
+            let mut reversed: Vec<Value> = items.iter().cloned().collect();
+            reversed.reverse();
+            Ok(list_value(reversed))
+        }),
+    );
+
     Value::Record(Arc::new(fields))
 }

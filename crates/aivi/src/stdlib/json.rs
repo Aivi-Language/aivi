@@ -17,6 +17,7 @@ export logSchemaIssues, logJsonError
 
 use aivi
 use aivi.text
+use aivi.list (reverse, length)
 use aivi.console
 
 JsonValue =
@@ -130,7 +131,7 @@ decodeList = decoder arr => arr match
 
 decodeListLoop : (JsonValue -> Result JsonError A) -> List JsonValue -> List A -> Result JsonError (List A)
 decodeListLoop = decoder items acc => items match
-  | []         => Ok (List.reverse acc)
+  | []         => Ok (reverse acc)
   | [x, ...xs] => decoder x match
     | Ok v  => decodeListLoop decoder xs [v, ...acc]
     | Err e => Err e
@@ -169,7 +170,7 @@ validateSchema = schema value =>
 
 validateRequired : List Text -> List (Text, JsonValue) -> List SchemaIssue -> List SchemaIssue
 validateRequired = keys entries acc => keys match
-  | [] => List.reverse acc
+  | [] => reverse acc
   | [k, ...rest] =>
       if hasKey k entries
       then validateRequired rest entries acc
@@ -193,7 +194,7 @@ renderSchemaIssue = index issue => {
 
 renderSchemaIssueLines : List SchemaIssue -> Int -> List Text -> List Text
 renderSchemaIssueLines = issues index acc => issues match
-  | []           => List.reverse acc
+  | []           => reverse acc
   | [x, ...rest] => renderSchemaIssueLines rest (index + 1) [renderSchemaIssue index x, ...acc]
 
 joinLinesJson : List Text -> Text
@@ -209,7 +210,7 @@ joinLinesJson = lines => lines match
 //     2. at $.user.email — missing required field
 renderSchemaIssues : List SchemaIssue -> Text
 renderSchemaIssues = issues => {
-  count  = List.length issues
+  count  = length issues
   label  = console.color Yellow "error[decode]"
   header = label ++ ": " ++ text.toText count ++ " issue(s) found"
   lines  = renderSchemaIssueLines issues 1 []
