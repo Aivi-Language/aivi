@@ -52,20 +52,19 @@ The `++` operator is provided as concatenation for `List`, right-biased merge fo
 
 While `List` is a built-in type, AIVI provides a standard `List` API for pipeline-friendly functional programming.
 
+**Class instances** (via `use aivi.logic`): `Functor` · `Filterable` · `Foldable` · `Traversable` · `Apply` · `Applicative` · `Chain` · `Monad` · `Semigroup` · `Monoid` · `Alternative` · `Plus`
+
+The class methods `map`, `filter`, `reduce`, `traverse`, `chain`, `concat`, `empty`, `alt`, `zero` are all available when you `use aivi.logic`. The functions below are List-specific operations not covered by any class.
+
 <<< ../../snippets/from_md/stdlib/core/collections/aivi_list.aivi{aivi}
 
 
 | Function | Explanation |
 | --- | --- |
-| **empty**<br><code>List a</code> | The empty list `[]`. |
 | **isEmpty** list<br><code>List a -> Bool</code> | Returns `true` when the list has zero length. |
 | **length** list<br><code>List a -> Int</code> | Returns the number of elements. |
-| **map** f list<br><code>(a -> b) -> List a -> List b</code> | Transforms all elements. |
-| **filter** pred list<br><code>(a -> Bool) -> List a -> List a</code> | Keeps only elements where `pred` returns `true`. |
-| **flatMap** f list<br><code>(a -> List b) -> List a -> List b</code> | Maps and concatenates (List monad bind). |
-| **foldl** f init list<br><code>(b -> a -> b) -> b -> List a -> b</code> | Left fold. |
 | **foldr** f init list<br><code>(a -> b -> b) -> b -> List a -> b</code> | Right fold. |
-| **scanl** f init list<br><code>(b -> a -> b) -> b -> List a -> List b</code> | Like `foldl`, but returns all intermediate accumulators (including `init`). |
+| **scanl** f init list<br><code>(b -> a -> b) -> b -> List a -> List b</code> | Like `reduce`, but returns all intermediate accumulators (including `init`). |
 | **take** n list<br><code>Int -> List a -> List a</code> | Takes up to `n` elements. For `n <= 0`, returns `[]`. |
 | **drop** n list<br><code>Int -> List a -> List a</code> | Drops up to `n` elements. For `n <= 0`, returns the original list. |
 | **takeWhile** pred list<br><code>(a -> Bool) -> List a -> List a</code> | Takes the longest prefix where `pred` holds. |
@@ -82,17 +81,19 @@ While `List` is a built-in type, AIVI provides a standard `List` API for pipelin
 | **chunk** size list<br><code>Int -> List a -> List (List a)</code> | Chunks into sublists of length `size`. For `size <= 0`, returns `[]`. |
 | **dedup** list<br><code>List a -> List a</code> | Stable consecutive de-duplication (`[a,a,b,b,a] -> [a,b,a]`). |
 | **uniqueBy** key list<br><code>(a -> k) -> List a -> List a</code> | Stable uniqueness by key (keeps first occurrence). Key must be hashable. |
-| **traverse** f list<br><code>(a -> Effect e b) -> List a -> Effect e (List b)</code> | Runs effectful mapping left-to-right, collecting results. |
 | **traverse_** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Runs effectful mapping left-to-right and discards results. |
-| **sequence** list<br><code>List (Effect e a) -> Effect e (List a)</code> | Executes a list of effects left-to-right and collects results. |
 | **sequence_** list<br><code>List (Effect e a) -> Effect e Unit</code> | Executes a list of effects left-to-right and discards results. |
-| **mapM** f list<br><code>(a -> Effect e b) -> List a -> Effect e (List b)</code> | Alias of `traverse`. |
+| **mapM** f list<br><code>(a -> Effect e b) -> List a -> Effect e (List b)</code> | Alias of `traverse` (class method). |
 | **mapM_** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Alias of `traverse_`. |
 | **forM** list f<br><code>List a -> (a -> Effect e b) -> Effect e (List b)</code> | Flipped-argument alias of `traverse`. |
 | **forM_** list f<br><code>List a -> (a -> Effect e b) -> Effect e Unit</code> | Flipped-argument alias of `traverse_`. |
 | **forEachEffect** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Alias of `mapM_` for side-effecting iteration. |
 
 ## `aivi.map`
+
+**Class instances** (via `use aivi.logic`): `Functor` · `Filterable` · `Foldable` · `Semigroup` · `Monoid`
+
+The class methods `map` (maps values), `filter` (filters by value predicate), `reduce` (folds over values), `concat` (union), and `empty` are available via `aivi.logic`. The functions below are Map-specific operations not covered by any class.
 
 <<< ../../snippets/from_md/stdlib/core/collections/aivi_map.aivi{aivi}
 
@@ -106,7 +107,6 @@ While `List` is a built-in type, AIVI provides a standard `List` API for pipelin
 | **insert** key value map<br><code>k -> v -> Map k v -> Map k v</code> | Returns a new map with the entry inserted. |
 | **update** key f map<br><code>k -> (v -> v) -> Map k v -> Map k v</code> | Applies `f` when `key` exists; otherwise no-op. |
 | **remove** key map<br><code>k -> Map k v -> Map k v</code> | Returns a new map without `key`. |
-| **map** f m<br><code>(v -> v2) -> Map k v -> Map k v2</code> | Transforms all values with `f`. |
 | **mapWithKey** f m<br><code>(k -> v -> v2) -> Map k v -> Map k v2</code> | Transforms values with access to keys. |
 | **keys** m<br><code>Map k v -> List k</code> | Returns all keys as a list. |
 | **values** m<br><code>Map k v -> List v</code> | Returns all values as a list. |

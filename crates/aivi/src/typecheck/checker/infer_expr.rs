@@ -510,12 +510,18 @@ impl TypeChecker {
                         }
                         resolved_result = self.apply(expected_ty);
                     }
+                    if debug {
+                        eprintln!("[METHOD_DEBUG]   CANDIDATE from instance {:?} result={}", instance.params.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>(), self.type_to_string(&resolved_result));
+                    }
                     candidates.push((self.subst.clone(), resolved_result));
                 }
             }
         }
 
         self.subst = base_subst;
+        if debug {
+            eprintln!("[METHOD_DEBUG] candidates.len()={}", candidates.len());
+        }
         if candidates.len() == 1 {
             let (subst, result) = candidates.remove(0);
             self.subst = subst;

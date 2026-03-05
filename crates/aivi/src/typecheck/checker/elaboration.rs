@@ -176,6 +176,10 @@ impl TypeChecker {
         if def.decorators.iter().any(|d| d.name.name == "native") {
             return Ok(());
         }
+        let debug_elab = std::env::var("AIVI_DEBUG_ELAB").is_ok_and(|v| v == "1");
+        if debug_elab {
+            eprintln!("[ELAB_DEBUG] elaborate_def_expr: {}", def.name.name);
+        }
         let base_subst = self.subst.clone();
         let result = (|| {
             let name = def.name.name.clone();

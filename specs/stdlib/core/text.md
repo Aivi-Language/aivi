@@ -47,8 +47,17 @@ sentinel values like `-1`.
 | **count** needle haystack<br><code>Text -> Text -> Int</code> | Returns the number of non-overlapping occurrences. |
 | **compare** a b<br><code>Text -> Text -> Int</code> | Returns `-1`, `0`, or `1` in Unicode codepoint order (not locale-aware). |
 
+The comparison operators `<`, `<=`, `>`, `>=` are built-in for `Text` and use Unicode codepoint (lexicographic) order, identical to `compare`:
+
+```aivi
+"apple" < "banana"   // True
+"z" > "a"            // True
+"abc" <= "abc"       // True
+```
+
 Notes:
 - `indexOf` and `lastIndexOf` return `None` when not found.
+- `<`, `<=`, `>`, `>=` on `Text` are not locale-aware; use `compare` and an i18n library for locale-sensitive sorting.
 
 ### Slicing and splitting
 

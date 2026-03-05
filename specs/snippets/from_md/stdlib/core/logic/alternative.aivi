@@ -1,0 +1,13 @@
+use aivi.logic
+
+class Alternative (F A) = given (A: Any), Applicative {
+  alt: F A -> F A
+}
+
+// Example: alt on Option — use the first non-empty value
+result = alt (Some 2) None    // Some 2
+first  = alt None (Some 1)    // Some 1
+
+// Example: alt on List — use the first non-empty list
+xs = alt [3, 4] []            // [3, 4]
+ys = alt [] [1, 2]            // [1, 2]

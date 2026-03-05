@@ -322,17 +322,59 @@ class Apply (F A) = given (A: Any), Functor {
   ap : F (A -> B) -> F B
 }
 
+class Chain (M A) = given (A: Any), Apply {
+  chain : (A -> M B) -> M A -> M B
+}
+
+class Applicative (M A) = given (A: Any), Apply {
+  of : A -> M A
+}
+
+class Monad (M A) = given (A: Any), Applicative, Chain {}
+
+class Foldable (F A) = given (A: Any) {
+  reduce : (B -> A -> B) -> B -> F A -> B
+}
+
+class Traversable (F A) = given (A: Any), Functor, Foldable {
+  traverse : (A -> Effect E B) -> F A -> Effect E (F B)
+}
+
+class Filterable (F A) = given (A: Any), Functor {
+  filter : (A -> Bool) -> F A
+}
+
+class Alternative (F A) = given (A: Any), Applicative {
+  alt : F A -> F A
+}
+
+class Plus (F A) = given (A: Any), Alternative {
+  zero : F A
+}
+
 instance Monad (Option A) = given (A: Any) { ... }
 instance Monad (Result E A) = given (A: Any) { ... }
+instance Monad (List A) = given (A: Any) { ... }
 ```
 
 `given (A: Any)` declares universally quantified type variables for higher-kinded types.
 HKT class member signatures use **abbreviated form**: the container type is omitted and
-added internally by the compiler as the last argument. Class members such as `map` are
-**only accessible via pipe**: `fa |> map f` — the compiler resolves `map` from the
-appropriate typeclass instance (e.g. `Functor`) based on the type of `fa`. The form
-`map f fa` is not valid for typeclass methods.
-`A with B` in types is record/type composition (intersection).
+added internally by the compiler as the last argument.
+
+All class methods from `aivi.logic` support both direct application and pipe syntax:
+`map f xs` and `xs |> map f` are equivalent. `use aivi.logic` brings all class methods
+into scope.
+
+### Type class instance table
+
+| Type | Functor | Filterable | Foldable | Traversable | Monad | Semigroup | Monoid | Alternative | Plus |
+|------|:-------:|:----------:|:--------:|:-----------:|:-----:|:---------:|:------:|:-----------:|:----:|
+| `List A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Option A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Result E A` | ✓ | — | ✓ | ✓ | ✓ | — | — | ✓ | — |
+| `Map K V` | ✓ | ✓ | ✓ | — | — | ✓ | ✓ | — | — |
+| `Generator A` | ✓ | ✓ | ✓ | — | — | — | — | — | — |
+| `Tree A` | ✓ | ✓ | ✓ | — | — | — | — | — | — |
 
 ### Type variable constraints
 
@@ -1210,7 +1252,8 @@ export domain Color over Rgb = { ... }         // inline exported domain declara
 
 ### Built-in vs domain-resolved operators
 
-Domain-resolved (when non-`Int`): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`.
+Domain-resolved (when non-`Int`): `+`, `-`, `*`, `×`, `/`, `%`.
+Built-in for `Int`, `Float`, `BigInt`, `Decimal`, and `Text`: `<`, `<=`, `>`, `>=` (lexicographic / Unicode codepoint order for `Text`).
 Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 
 **Domains are not implicit casts.** They supply operator semantics and literal templates only. No global coercions are introduced by importing a domain.

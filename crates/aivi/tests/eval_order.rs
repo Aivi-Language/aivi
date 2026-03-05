@@ -20,7 +20,14 @@ fn run_jit(source: &str) {
             let source_path_str = write_aivi_source(dir.path(), "main.aivi", &source);
             let (program, cg_types, monomorph_plan) =
                 desugar_target_with_cg_types(&source_path_str).expect("desugar");
-            run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &[]).expect("cranelift jit");
+            run_cranelift_jit(
+                program,
+                cg_types,
+                monomorph_plan,
+                std::collections::HashMap::new(),
+                &[],
+            )
+            .expect("cranelift jit");
         })
         .expect("spawn test thread")
         .join();
@@ -41,7 +48,14 @@ fn run_jit_deep(source: &str) {
             let source_path_str = write_aivi_source(dir.path(), "main.aivi", &source);
             let (program, cg_types, monomorph_plan) =
                 desugar_target_with_cg_types(&source_path_str).expect("desugar");
-            run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &[]).expect("cranelift jit");
+            run_cranelift_jit(
+                program,
+                cg_types,
+                monomorph_plan,
+                std::collections::HashMap::new(),
+                &[],
+            )
+            .expect("cranelift jit");
         })
         .expect("spawn test thread")
         .join();

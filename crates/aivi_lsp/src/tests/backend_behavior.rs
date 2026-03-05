@@ -238,7 +238,7 @@ fn diagnostics_prefer_embedded_stdlib_over_workspace_shadow() {
     let text = r#"module demo
 use aivi.list
 
-main = [1, 2, 3] |> filter (x => x > 1)
+main = [1, 2, 3] |> take 2
 "#;
     let uri = sample_uri();
 
@@ -277,7 +277,7 @@ find = pred xs => xs
     assert!(
         !diagnostics
             .iter()
-            .any(|diag| diag.message.contains("unknown name 'filter'")),
+            .any(|diag| diag.message.contains("unknown name 'take'")),
         "embedded stdlib should win over workspace shadow for aivi.list"
     );
 }

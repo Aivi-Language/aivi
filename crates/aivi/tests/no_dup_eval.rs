@@ -23,8 +23,14 @@ fn run_jit(source: &str) {
             let source_path_str = write_aivi_source(dir.path(), "main.aivi", &source);
             let (program, cg_types, monomorph_plan, surface_modules) =
                 desugar_target_with_cg_types_and_surface(&source_path_str).expect("desugar");
-            run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
-                .expect("cranelift jit");
+            run_cranelift_jit(
+                program,
+                cg_types,
+                monomorph_plan,
+                std::collections::HashMap::new(),
+                &surface_modules,
+            )
+            .expect("cranelift jit");
         })
         .expect("spawn test thread")
         .join();
