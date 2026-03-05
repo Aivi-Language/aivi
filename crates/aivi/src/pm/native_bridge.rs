@@ -80,7 +80,7 @@ pub fn collect_crate_natives(modules: &[Module]) -> Vec<CrateNativeBinding> {
 }
 
 /// Extract the `@native` path from decorators, but only if it's a crate-native (contains `::`)
-fn native_crate_target<'a>(decorators: &'a [Decorator]) -> Option<&'a str> {
+fn native_crate_target(decorators: &[Decorator]) -> Option<&str> {
     decorators.iter().find_map(|dec| {
         if dec.name.name != "native" {
             return None;
@@ -105,9 +105,7 @@ fn decompose_type(ty: &TypeExpr) -> (Vec<AiviType>, AiviType) {
     fn collect_params(ty: &TypeExpr, params: &mut Vec<AiviType>) -> AiviType {
         match ty {
             TypeExpr::Func {
-                params: ps,
-                result,
-                ..
+                params: ps, result, ..
             } => {
                 for p in ps {
                     params.push(type_expr_to_aivi_type(p));
@@ -144,7 +142,7 @@ fn type_expr_to_aivi_type(ty: &TypeExpr) -> AiviType {
                         Box::new(type_expr_to_aivi_type(err)),
                         Box::new(type_expr_to_aivi_type(ok)),
                     ),
-                    _ => AiviType::Opaque(format!("{}", name.name)),
+                    _ => AiviType::Opaque(name.name.to_string()),
                 }
             } else {
                 AiviType::Opaque("unknown".to_string())
@@ -181,9 +179,9 @@ pub fn generate_native_bridge_source(bindings: &[CrateNativeBinding]) -> String 
     src.push_str("use aivi::CrateNativeValue;\n");
 
     // Check if any binding uses record types — emit serde import if so
-    let needs_serde = bindings
-        .iter()
-        .any(|b| type_contains_record(&b.return_type) || b.param_types.iter().any(type_contains_record));
+    let needs_serde = bindings.iter().any(|b| {
+        type_contains_record(&b.return_type) || b.param_types.iter().any(type_contains_record)
+    });
     if needs_serde {
         src.push_str("use serde::{Deserialize, Serialize};\n");
     }
@@ -206,9 +204,7 @@ pub fn generate_native_bridge_source(bindings: &[CrateNativeBinding]) -> String 
 
     // Generate registration function
     src.push_str("/// Register all crate-native bridge functions as builtins.\n");
-    src.push_str(
-        "pub fn register_crate_natives(reg: &mut aivi::CrateNativeRegistrar) {\n",
-    );
+    src.push_str("pub fn register_crate_natives(reg: &mut aivi::CrateNativeRegistrar) {\n");
     for binding in bindings {
         let fn_name = &binding.global_name;
         let arity = binding.param_types.len();
@@ -231,10 +227,12 @@ fn type_contains_record(ty: &AiviType) -> bool {
     }
 }
 
+type StructEntry = (String, Vec<(String, AiviType)>, &'static str);
+
 /// Collector for serde struct definitions. Deduplicates by field signature.
 struct StructCollector {
     /// Map from struct name → (fields, derives)
-    structs: Vec<(String, Vec<(String, AiviType)>, &'static str)>,
+    structs: Vec<StructEntry>,
     /// Dedup key → struct name
     seen: std::collections::HashMap<String, String>,
     counter: usize,
@@ -292,9 +290,7 @@ impl StructCollector {
             for (field_name, field_ty) in fields {
                 let rust_field = to_snake_case(field_name);
                 if rust_field != *field_name {
-                    out.push_str(&format!(
-                        "    #[serde(rename = \"{field_name}\")]\n"
-                    ));
+                    out.push_str(&format!("    #[serde(rename = \"{field_name}\")]\n"));
                 }
                 let rust_type = aivi_type_to_rust_type(field_ty, self);
                 out.push_str(&format!("    {rust_field}: {rust_type},\n"));
@@ -353,11 +349,9 @@ fn aivi_type_to_rust_type(ty: &AiviType, collector: &StructCollector) -> String 
                 aivi_type_to_rust_type(e, collector)
             )
         }
-        AiviType::Record(fields) => {
-            collector
-                .struct_name_for(fields)
-                .unwrap_or_else(|| "String".to_string())
-        }
+        AiviType::Record(fields) => collector
+            .struct_name_for(fields)
+            .unwrap_or_else(|| "String".to_string()),
         AiviType::Opaque(name) => name.clone(),
     }
 }
@@ -384,7 +378,9 @@ fn generate_bridge_function(
         for i in (0..arity).rev() {
             let var_name = format!("arg{i}");
             let conversion = value_to_rust_conversion(&binding.param_types[i], &var_name);
-            src.push_str(&format!("    let __raw_{var_name} = args.pop().unwrap();\n"));
+            src.push_str(&format!(
+                "    let __raw_{var_name} = args.pop().unwrap();\n"
+            ));
             src.push_str(&format!("    {conversion}\n"));
         }
     }
@@ -456,6 +452,7 @@ fn value_to_rust_conversion(ty: &AiviType, var_name: &str) -> String {
 }
 
 /// Generate code to convert a Rust value back to a `CrateNativeValue`.
+#[allow(clippy::only_used_in_recursion)]
 fn rust_to_value_conversion(ty: &AiviType, expr: &str, collector: &StructCollector) -> String {
     match ty {
         AiviType::Text => format!("Ok(CrateNativeValue::Text({expr}.to_string()))"),
@@ -497,9 +494,9 @@ fn rust_to_value_conversion(ty: &AiviType, expr: &str, collector: &StructCollect
                 "{{ let mut __fields: Vec<(String, CrateNativeValue)> = Vec::new();\n{field_lines}    Ok(CrateNativeValue::Record(__fields)) }}"
             )
         }
-        AiviType::Opaque(name) => format!(
-            "Ok(CrateNativeValue::Text(format!(\"{{:?}}\", {expr}))) // opaque type {name}"
-        ),
+        AiviType::Opaque(name) => {
+            format!("Ok(CrateNativeValue::Text(format!(\"{{:?}}\", {expr}))) // opaque type {name}")
+        }
     }
 }
 

@@ -464,25 +464,22 @@ pub extern "C" fn rt_binary_op(
                     let saved_fn = runtime.jit_current_fn.clone();
                     runtime.jit_match_failed = false;
                     if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
-                        match runtime.apply(applied, rhs.clone()) {
-                            Ok(result) => {
-                                let warns = runtime.jit_rt_warning_count - wc;
-                                if warns == 0
-                                    && !runtime.jit_match_failed
-                                    && runtime.jit_pending_error.is_none()
-                                {
-                                    // Clean match — no warnings or errors.
-                                    runtime.jit_binary_op_dispatching = false;
-                                    runtime.jit_pending_error = saved_pending;
-                                    runtime.jit_match_failed = saved_match_failed;
-                                    return abi::box_value(result);
-                                }
-                                // Produced warnings — keep as fallback.
-                                if fallback_result.is_none() && !runtime.jit_match_failed {
-                                    fallback_result = Some(result);
-                                }
+                        if let Ok(result) = runtime.apply(applied, rhs.clone()) {
+                            let warns = runtime.jit_rt_warning_count - wc;
+                            if warns == 0
+                                && !runtime.jit_match_failed
+                                && runtime.jit_pending_error.is_none()
+                            {
+                                // Clean match — no warnings or errors.
+                                runtime.jit_binary_op_dispatching = false;
+                                runtime.jit_pending_error = saved_pending;
+                                runtime.jit_match_failed = saved_match_failed;
+                                return abi::box_value(result);
                             }
-                            Err(_) => {}
+                            // Produced warnings — keep as fallback.
+                            if fallback_result.is_none() && !runtime.jit_match_failed {
+                                fallback_result = Some(result);
+                            }
                         }
                     }
                     // Restore global state for next clause trial.

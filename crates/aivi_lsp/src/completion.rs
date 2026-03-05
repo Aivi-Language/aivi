@@ -409,7 +409,7 @@ impl Backend {
         // Collect already-imported names from lines between `(` and cursor
         let inside = &before_cursor[open_paren + 1..];
         let mut imported = HashSet::new();
-        for part in inside.split(|c| c == ',' || c == '\n') {
+        for part in inside.split([',', '\n']) {
             let name = part.trim();
             if name.is_empty() {
                 continue;

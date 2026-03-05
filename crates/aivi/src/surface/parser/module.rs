@@ -800,13 +800,12 @@ impl Parser {
 
 #[cfg(test)]
 mod use_separator_tests {
-    use super::*;
-    use crate::surface::parser::entrypoints::parse_modules;
+    use crate::surface::parse_modules;
     use std::path::Path;
 
     fn parse_use(src: &str) -> Vec<crate::surface::UseDecl> {
         let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-        assert!(diags.iter().all(|d| d.severity != crate::DiagnosticSeverity::Error), "parse errors: {diags:?}");
+        assert!(diags.iter().all(|d| d.diagnostic.severity != crate::DiagnosticSeverity::Error), "parse errors: {diags:?}");
         modules.into_iter().flat_map(|m| m.uses).collect()
     }
 
