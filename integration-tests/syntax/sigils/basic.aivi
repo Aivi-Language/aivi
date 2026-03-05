@@ -12,5 +12,5 @@ endpoint = ~u(https://api.example.com)
 @test "sigils work"
 sigilsWork = do Effect {
   assert (regex.test pattern "a@b.com")
-  assertEq endpoint.protocol "https"
+  assertEq (protocol endpoint) "https"
 }

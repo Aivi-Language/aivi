@@ -3,12 +3,12 @@ pub const MODULE_NAME: &str = "aivi.regex";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.regex
-export Regex, RegexError, Match
+export Regex, RegexError, Match, InvalidPattern
 export compile, test, match, matches, find, findAll, split, replace, replaceAll
 
 use aivi
 
-RegexError = InvalidPattern Text
+RegexError = | InvalidPattern Text
 Match = { full: Text, groups: List (Option Text), start: Int, end: Int }
 
 compile : Text -> Result RegexError Regex

@@ -146,10 +146,7 @@ fn build_env_record() -> Value {
                     )))),
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Env".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(
@@ -185,10 +182,7 @@ fn build_env_record() -> Value {
                     Ok(Value::Record(Arc::new(map)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Env".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(
@@ -235,10 +229,7 @@ pub(super) fn build_env_source_record() -> Value {
                     )))),
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Env".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(
@@ -274,10 +265,7 @@ pub(super) fn build_env_source_record() -> Value {
                     Ok(Value::Record(Arc::new(map)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Env".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(

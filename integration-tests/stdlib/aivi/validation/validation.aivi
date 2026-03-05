@@ -59,13 +59,13 @@ test_getOrElse_invalid = do Effect {
 
 @test "fold applies onValid for Valid"
 test_fold_valid = do Effect {
-  result = fold (_ => "bad") (x => "got: " ++ text.toText x) (Valid 42)
+  result = fold (_ => "bad") (x => text.concat ["got: ", text.toText x]) (Valid 42)
   assertEq result "got: 42"
 }
 
 @test "fold applies onInvalid for Invalid"
 test_fold_invalid = do Effect {
-  result = fold (e => "error: " ++ e) (_ => "ok") (Invalid "nope")
+  result = fold (e => text.concat ["error: ", e]) (_ => "ok") (Invalid "nope")
   assertEq result "error: nope"
 }
 
@@ -87,7 +87,7 @@ test_map_invalid = do Effect {
 
 @test "mapError transforms Invalid value"
 test_mapError_invalid = do Effect {
-  result = mapError (e => "wrapped: " ++ e) (Invalid "original")
+  result = mapError (e => text.concat ["wrapped: ", e]) (Invalid "original")
   assertEq result (Invalid "wrapped: original")
 }
 

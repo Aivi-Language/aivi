@@ -173,10 +173,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     http_request("GET", &url, Vec::new(), None, None, 0, None, false)
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: kind_get.clone(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new(kind_get.clone(), Arc::new(effect)))))
         }),
     );
     let kind_post = kind.clone();
@@ -193,10 +190,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     http_request("POST", &url, Vec::new(), Some(body), None, 0, None, false)
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: kind_post.clone(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new(kind_post.clone(), Arc::new(effect)))))
         }),
     );
     let kind_fetch = kind.clone();
@@ -260,10 +254,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     )
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: kind_fetch.clone(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new(kind_fetch.clone(), Arc::new(effect)))))
         }),
     );
     Value::Record(Arc::new(fields))
@@ -596,10 +587,7 @@ pub(super) fn build_openapi_call_builtin() -> Value {
                 openapi_call_impl(descriptor.clone(), config.clone(), params.clone())
             }),
         };
-        Ok(Value::Source(Arc::new(SourceValue {
-            kind: "RestApi".to_string(),
-            effect: Arc::new(effect),
-        })))
+        Ok(Value::Source(Arc::new(SourceValue::new("RestApi".to_string(), Arc::new(effect)))))
     })
 }
 

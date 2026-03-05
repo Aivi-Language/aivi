@@ -50,10 +50,7 @@ pub(super) fn build_email_record() -> Value {
                     Ok(Value::List(Arc::new(out)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue {
-                kind: "Imap".to_string(),
-                effect: Arc::new(effect),
-            })))
+            Ok(Value::Source(Arc::new(SourceValue::new("Imap".to_string(), Arc::new(effect)))))
         }),
     );
     fields.insert(

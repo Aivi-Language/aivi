@@ -10,7 +10,7 @@ export length, isEmpty, isDigit, isAlpha, isAlnum, isSpace, isUpper, isLower
 export contains, startsWith, endsWith, indexOf, lastIndexOf, count, compare
 export slice, split, splitLines, chunk
 export trim, trimStart, trimEnd, padStart, padEnd
-export replace, replaceAll, remove, repeat, reverse, concat
+export replace, replaceAll, remove, repeat, reverse, concat, join
 export toLower, toUpper, capitalize, titleCase, caseFold
 export normalizeNFC, normalizeNFD, normalizeNFKC, normalizeNFKD
 export toBytes, fromBytes, debugText, parseInt, parseFloat
@@ -168,4 +168,10 @@ parseInt = value => text.parseInt value
 
 parseFloat : Text -> Option Float
 parseFloat = value => text.parseFloat value
+
+join : Text -> List Text -> Text
+join = sep xs => xs match
+  | []            => ""
+  | [x]           => x
+  | [x, ...rest]  => text.concat [x, sep, join sep rest]
 "#;

@@ -31,7 +31,7 @@ use super::url_http::{
     build_http_client_record, build_openapi_call_builtin, build_rest_api_record, build_url_record,
     HttpClientMode,
 };
-use super::util::{builtin, builtin_constructor};
+use super::util::{builtin, builtin_constructor, expect_text};
 use super::{database::build_database_record, log::build_log_record};
 use crate::runtime::http::build_http_server_record;
 use crate::runtime::{format_value, BuiltinImpl, BuiltinValue, EffectValue, Env, Runtime, RuntimeError, Value};
@@ -362,6 +362,27 @@ pub(crate) fn register_builtins(env: &Env) {
                     expected: "Source".to_string(),
                     got: "other".to_string(),
                 }),
+            }
+        }),
+    );
+
+    // Internal builtin: set a JSON validation schema on a Source value.
+    // Called by the compiler to inject type-derived schemas at source boundaries.
+    env.set(
+        "__set_source_schema".to_string(),
+        builtin("__set_source_schema", 2, |mut args, _runtime| {
+            let schema_json = expect_text(args.remove(0), "__set_source_schema")?;
+            let source_val = args.remove(0);
+            match source_val {
+                Value::Source(ref source) => {
+                    if let Ok(schema) =
+                        serde_json::from_str::<crate::runtime::json_schema::JsonSchema>(&schema_json)
+                    {
+                        *source.schema.lock().unwrap() = Some(schema);
+                    }
+                    Ok(source_val)
+                }
+                _ => Ok(source_val),
             }
         }),
     );

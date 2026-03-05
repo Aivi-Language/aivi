@@ -15,6 +15,7 @@ mod builtins;
 mod constructors;
 pub(crate) mod environment;
 mod http;
+pub(crate) mod json_schema;
 mod machines;
 pub(crate) mod snapshot;
 pub(crate) mod values;

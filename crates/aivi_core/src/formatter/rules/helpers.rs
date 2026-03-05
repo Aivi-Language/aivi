@@ -154,13 +154,15 @@ fn wants_space_between(
         return prev_text != "{";
     }
 
-    // Date/Time fragments: no space around '-' or ':' if surrounded by numbers.
-    if prev_kind == "number" && curr_text == "-" {
+    // Date/Time fragments: no space around '-' or ':' if surrounded by numbers
+    // and adjacent in the source (e.g. `2023-01-01`). When there is a space in
+    // the source (e.g. `3.0 - 8.0`), treat `-` as a binary operator.
+    if adjacent_in_input && prev_kind == "number" && curr_text == "-" {
         return false;
     }
     if prev_text == "-" && curr_kind == "number" {
         // Date fragments: `YYYY-MM` (no spaces) but keep binary minus spacing (`x - 1`).
-        if prevprev.is_some_and(|(k, _)| k == "number") {
+        if adjacent_in_input && prevprev.is_some_and(|(k, _)| k == "number") {
             return false;
         }
     }

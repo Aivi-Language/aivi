@@ -354,7 +354,28 @@ impl TypeChecker {
             func_ty = result_ty;
         }
         if let (Some(qname), Some(orig_ty)) = (poly_call_info, original_func_ty) {
-            let resolved = self.apply(orig_ty);
+            let resolved = self.apply(orig_ty.clone());
+            // Record source schemas for `load` calls: extract the inner type `A`
+            // from `Source K A → Effect (SourceError K) A`.
+            if let Expr::Ident(ref ident) = func {
+                if ident.name == "load" {
+                    if let Type::Func(ref param, _) = resolved {
+                        if let Type::Con(ref name, ref sargs) = **param {
+                            if name == "Source" && sargs.len() == 2 {
+                                let env_ref: &crate::typecheck::types::TypeEnv = env;
+                                let inner_cg = self.type_to_cg_type(&sargs[1], env_ref);
+                                if inner_cg != CgType::Dynamic && inner_cg.is_closed() {
+                                    self.load_source_schemas.push((
+                                        self.current_module_name.clone(),
+                                        self.current_def_name.clone(),
+                                        inner_cg,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             self.poly_instantiations.push((qname, resolved));
         }
         Ok(func_ty)
