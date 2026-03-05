@@ -23,6 +23,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Record Row Transforms](syntax/types/record_row_transforms.md)
 - [Classes & HKTs](syntax/types/classes_and_hkts.md)
 - [Expected-Type Coercions](syntax/types/expected_type_coercions.md)
+- [Opaque Types](syntax/types/opaque_types.md)
 #### Data & Patterns
 - [Pattern Matching](syntax/pattern_matching.md)
 - [Predicates](syntax/predicates.md)
