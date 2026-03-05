@@ -95,7 +95,6 @@ const CYAN: &str = "\x1b[1;36m";
 const GREEN: &str = "\x1b[1;32m";
 const DARK_GRAY: &str = "\x1b[90m";
 const WHITE: &str = "\x1b[97m";
-const ORANGE: &str = "\x1b[38;5;208m";
 const RESET: &str = "\x1b[0m";
 
 pub fn file_diagnostics_have_errors(diagnostics: &[FileDiagnostic]) -> bool {
@@ -160,14 +159,6 @@ fn severity_color(severity: DiagnosticSeverity) -> &'static str {
 fn caret_color(severity: DiagnosticSeverity) -> &'static str {
     match severity {
         DiagnosticSeverity::Error => RED,
-        DiagnosticSeverity::Warning => YELLOW,
-        DiagnosticSeverity::Hint => CYAN,
-    }
-}
-
-fn caret_message_color(severity: DiagnosticSeverity) -> &'static str {
-    match severity {
-        DiagnosticSeverity::Error => ORANGE,
         DiagnosticSeverity::Warning => YELLOW,
         DiagnosticSeverity::Hint => CYAN,
     }
@@ -238,10 +229,7 @@ fn render_diagnostic_with_source(
             ));
         } else {
             output.push_str(&format!("note: {}\n", label.message));
-            output.push_str(&format!(
-                "  -->  {}:{}:{}\n",
-                path, pos.line, pos.column
-            ));
+            output.push_str(&format!("  -->  {}:{}:{}\n", path, pos.line, pos.column));
         }
         if let Some(source) = source {
             output.push_str(&render_source_frame(
@@ -265,11 +253,7 @@ fn render_diagnostic_with_source(
             output.push_str(&format!("help: {}\n", suggestion.message));
         }
         if let Some(source) = source {
-            output.push_str(&render_suggestion_frame(
-                source,
-                suggestion,
-                use_color,
-            ));
+            output.push_str(&render_suggestion_frame(source, suggestion, use_color));
         }
     }
 
@@ -299,11 +283,7 @@ fn render_source_frame(
     let end_line = span.end.line;
 
     // Determine the range of lines to show (1 context line before, span lines)
-    let first_display = if start_line > 1 {
-        start_line - 1
-    } else {
-        start_line
-    };
+    let first_display = start_line.saturating_sub(1).max(1);
     let last_display = end_line.min(lines.len());
 
     // Width for line-number gutter
@@ -318,11 +298,10 @@ fn render_source_frame(
         }
     };
 
-    let gutter_line = |out: &mut String, line_no: usize, content: &str, is_span: bool| {
+    let gutter_line = |out: &mut String, line_no: usize, content: &str, _is_span: bool| {
         if use_color {
-            let marker = if is_span { "│" } else { "│" };
             out.push_str(&format!(
-                "{DARK_GRAY}{line_no:>width$} {marker}{RESET} {content}\n"
+                "{DARK_GRAY}{line_no:>width$} │{RESET} {content}\n"
             ));
         } else {
             out.push_str(&format!("{line_no:>width$} │ {content}\n"));
@@ -333,7 +312,7 @@ fn render_source_frame(
 
     // Display lines
     for line_no in first_display..=last_display {
-        let idx = line_no.checked_sub(1).unwrap_or(0);
+        let idx = line_no.saturating_sub(1);
         if idx >= lines.len() {
             break;
         }
@@ -398,13 +377,13 @@ fn render_source_frame(
 fn render_suggestion_frame(source: &str, suggestion: &Suggestion, use_color: bool) -> String {
     let lines: Vec<&str> = source.lines().collect();
     let line_no = suggestion.span.start.line;
-    let idx = line_no.checked_sub(1).unwrap_or(0);
+    let idx = line_no.saturating_sub(1);
     if idx >= lines.len() {
         return String::new();
     }
 
     let original = lines[idx];
-    let col_start = suggestion.span.start.column.max(1) - 1;
+    let col_start = suggestion.span.start.column.saturating_sub(1);
     let col_end = if suggestion.span.start.line == suggestion.span.end.line {
         suggestion.span.end.column.min(original.len())
     } else {

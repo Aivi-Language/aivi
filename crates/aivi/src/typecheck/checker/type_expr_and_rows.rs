@@ -491,27 +491,90 @@ impl TypeChecker {
             expected,
             found,
         } = err;
-        let message = match (expected.as_deref(), found.as_deref()) {
-            (Some(expected), Some(found)) => format!(
-                "{} (expected {}, found {})",
-                message,
-                self.type_to_string(expected),
-                self.type_to_string(found)
-            ),
-            _ => message,
+        let (expected_str, found_str) = match (expected.as_deref(), found.as_deref()) {
+            (Some(e), Some(f)) => (Some(self.type_to_string(e)), Some(self.type_to_string(f))),
+            _ => (None, None),
         };
+        let full_message = match (&expected_str, &found_str) {
+            (Some(e), Some(f)) => format!("{message} (expected `{e}`, found `{f}`)"),
+            _ => message.clone(),
+        };
+        let hints = Self::type_error_hints(
+            &message,
+            expected_str.as_deref(),
+            found_str.as_deref(),
+        );
         FileDiagnostic {
             path: module.path.clone(),
             diagnostic: Diagnostic {
                 code: "E3000".to_string(),
                 severity: crate::diagnostics::DiagnosticSeverity::Error,
-                message,
+                message: full_message,
                 span,
                 labels: Vec::new(),
-                hints: Vec::new(),
+                hints,
                 suggestion: None,
             },
         }
+    }
+
+    /// Generate context-sensitive hints for type errors.
+    fn type_error_hints(
+        message: &str,
+        expected: Option<&str>,
+        found: Option<&str>,
+    ) -> Vec<String> {
+        let mut hints = Vec::new();
+        if let (Some(exp), Some(fnd)) = (expected, found) {
+            // Int vs Float confusion
+            if (exp == "Int" && fnd == "Float") || (exp == "Float" && fnd == "Int") {
+                hints.push(format!(
+                    "use `toFloat` to convert Int to Float, or `round`/`truncate` for Float to Int"
+                ));
+            }
+            // String vs Int/Float
+            if exp == "String" && (fnd == "Int" || fnd == "Float") {
+                hints.push("use `show` to convert a number to String".to_string());
+            }
+            if (exp == "Int" || exp == "Float") && fnd == "String" {
+                hints.push(format!(
+                    "use `parse` to convert a String to {exp}: `parse @{exp} value`"
+                ));
+            }
+            // Option wrapping
+            if exp.starts_with("Option ") && !fnd.starts_with("Option ") {
+                let inner = &exp["Option ".len()..];
+                if inner == fnd {
+                    hints.push(format!("wrap the value with `Some`: `Some {fnd}`"));
+                }
+            }
+            if !exp.starts_with("Option ") && fnd.starts_with("Option ") {
+                hints.push(
+                    "unwrap the Option with pattern matching or `withDefault`".to_string(),
+                );
+            }
+            // List vs single element
+            if exp.starts_with("List ") && !fnd.starts_with("List ") {
+                let inner = &exp["List ".len()..];
+                if inner == fnd {
+                    hints.push(format!("wrap the value in a list: `[{fnd}]`"));
+                }
+            }
+        }
+        // Missing record field
+        if message.contains("missing record field") || message.contains("does not exist on") {
+            hints.push(
+                "check that the record type includes this field and that it was correctly constructed".to_string(),
+            );
+        }
+        // Non-exhaustive match
+        if message.contains("non-exhaustive") {
+            hints.push(
+                "add the missing match arms, or use a wildcard `_` to catch remaining cases"
+                    .to_string(),
+            );
+        }
+        hints
     }
 
     pub(super) fn type_to_string(&mut self, ty: &Type) -> String {

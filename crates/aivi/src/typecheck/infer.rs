@@ -88,7 +88,11 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
+    checker.set_global_type_info(
+        global_type_constructors,
+        global_aliases,
+        global_opaque_types,
+    );
 
     for module in ordered_modules(modules) {
         let is_embedded = module.path.starts_with("<embedded:");

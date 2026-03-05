@@ -256,12 +256,13 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                 severity: DiagnosticSeverity::Error,
                 message: "semicolons are not part of AIVI syntax; use newlines".to_string(),
                 span: span_single(line, col, 1),
-                labels: vec![DiagnosticLabel {
-                    message: "remove this ';'".to_string(),
-                    span: span_single(line, col, 1),
-                }],
+                labels: Vec::new(),
                 hints: Vec::new(),
-                suggestion: None,
+                suggestion: Some(Suggestion {
+                    message: "remove the semicolon".to_string(),
+                    replacement: String::new(),
+                    span: span_single(line, col, 1),
+                }),
             });
             tokens.push(CstToken {
                 kind: "symbol".to_string(),

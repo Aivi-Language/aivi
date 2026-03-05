@@ -33,18 +33,14 @@ pub(super) fn collect_global_type_info(
                         kind_for_params(type_decl.params.len()),
                     );
                     if type_decl.opaque {
-                        opaque_types.insert(
-                            type_decl.name.name.clone(),
-                            module.name.name.clone(),
-                        );
+                        opaque_types.insert(type_decl.name.name.clone(), module.name.name.clone());
                     }
                 }
                 ModuleItem::TypeAlias(alias) => {
                     type_constructors
                         .insert(alias.name.name.clone(), kind_for_params(alias.params.len()));
                     if alias.opaque {
-                        opaque_types
-                            .insert(alias.name.name.clone(), module.name.name.clone());
+                        opaque_types.insert(alias.name.name.clone(), module.name.name.clone());
                     }
                 }
                 ModuleItem::DomainDecl(domain) => {
