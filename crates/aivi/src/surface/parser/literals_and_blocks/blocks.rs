@@ -325,10 +325,35 @@ impl Parser {
                     continue;
                 }
                 if self.consume_symbol("->") {
-                    let expr = self.parse_expr().unwrap_or(Expr::Raw {
-                        text: String::new(),
-                        span: pattern_span(&pattern),
-                    });
+                    let guard_start = self.pos;
+                    // Try pattern predicate: Pat (when Guard)?
+                    let expr = if let Some(pat) = self.parse_pattern() {
+                        if self.match_keyword("when") {
+                            let guard = self.parse_expr().unwrap_or(Expr::Raw {
+                                text: String::new(),
+                                span: pattern_span(&pat),
+                            });
+                            let span = merge_span(pattern_span(&pat), expr_span(&guard));
+                            build_pattern_predicate(pat, Some(guard), span)
+                        } else if matches!(pat, Pattern::Constructor { .. }) {
+                            // Bare constructor pattern predicate (e.g. `x -> Some _`)
+                            let span = pattern_span(&pat);
+                            build_pattern_predicate(pat, None, span)
+                        } else {
+                            // Not a pattern predicate — backtrack and parse as expr
+                            self.pos = guard_start;
+                            self.parse_expr().unwrap_or(Expr::Raw {
+                                text: String::new(),
+                                span: pattern_span(&pattern),
+                            })
+                        }
+                    } else {
+                        self.pos = guard_start;
+                        self.parse_expr().unwrap_or(Expr::Raw {
+                            text: String::new(),
+                            span: pattern_span(&pattern),
+                        })
+                    };
                     let span = merge_span(pattern_span(&pattern), expr_span(&expr));
                     items.push(BlockItem::Filter { expr, span });
                     continue;

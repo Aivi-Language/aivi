@@ -329,9 +329,16 @@ impl TypeChecker {
             // suffix template is detected as ambiguous at the use site.
             if name.starts_with(|c: char| c.is_ascii_digit()) {
                 if let Some(existing) = env.get_all(&name) {
-                    let mut combined = existing.to_vec();
-                    combined.push(schemes[0].clone());
-                    env.insert_overloads(name, combined);
+                    // Skip if the same origin is already present (avoids double-registration
+                    // when elaboration adds domain members to module_exports and the wildcard
+                    // domain import loop also tries to insert them).
+                    let new_origin = &schemes[0].origin;
+                    let already_present = existing.iter().any(|s| s.origin == *new_origin);
+                    if !already_present {
+                        let mut combined = existing.to_vec();
+                        combined.push(schemes[0].clone());
+                        env.insert_overloads(name, combined);
+                    }
                     return;
                 }
             }
