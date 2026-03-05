@@ -1,0 +1,23 @@
+@no_prelude
+module integrationTests.syntax.predicates.patternPredicates
+
+use aivi
+use aivi.testing
+
+// Pattern predicate: (Ok { value } when value > 10) desugars to a lambda match.
+results = [Ok 5, Ok 15, Err "bad", Ok 20]
+passing = results |> filter (Ok { value } when value > 10)
+
+// Constructor-only predicate: (Some _) matches all Some values.
+options = [None, Some 1, None, Some 2]
+someOnly = options |> filter (Some _)
+
+@test "pattern predicate with guard"
+patternPredicateWithGuard = do Effect {
+  assertEq passing [Ok 15, Ok 20]
+}
+
+@test "constructor predicate without guard"
+constructorPredicate = do Effect {
+  assertEq someOnly [Some 1, Some 2]
+}

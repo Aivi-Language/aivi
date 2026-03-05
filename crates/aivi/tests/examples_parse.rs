@@ -22,6 +22,10 @@ fn examples_parse_without_diagnostics() {
         entries.sort();
         for path in entries {
             if path.is_dir() {
+                // Skip compile_fail/ — those are expected to have diagnostics.
+                if path.file_name().and_then(|n| n.to_str()) == Some("compile_fail") {
+                    continue;
+                }
                 collect_aivi_files(&path, out);
                 continue;
             }
