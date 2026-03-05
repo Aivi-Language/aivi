@@ -27,7 +27,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Algebraic Data Types](syntax/types/algebraic_data_types)
 - [Closed Records](syntax/types/closed_records)
 - [Record Row Transforms](syntax/types/record_row_transforms)
-- [Classes & HKTs](syntax/types/classes_and_hkts)
+- [Higher Kinded Types](syntax/types/classes_and_hkts)
 - [Expected-Type Coercions](syntax/types/expected_type_coercions)
 - [Opaque Types](syntax/types/opaque_types)
 #### Data & Patterns
