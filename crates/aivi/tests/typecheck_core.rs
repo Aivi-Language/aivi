@@ -856,7 +856,7 @@ main = 1.0
         mismatch_diag
             .diagnostic
             .message
-            .contains("expected Int, found Float"),
+            .contains("expected `Int`, found `Float`"),
         "mismatch diagnostic message has wrong order: {}",
         mismatch_diag.diagnostic.message
     );

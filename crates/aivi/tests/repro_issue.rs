@@ -35,7 +35,7 @@ main = 1.0
         mismatch_diag
             .diagnostic
             .message
-            .contains("expected Int, found Float"),
+            .contains("expected `Int`, found `Float`"),
         "Message was: {}",
         mismatch_diag.diagnostic.message
     );
@@ -69,7 +69,7 @@ main = 1
         mismatch_diag
             .diagnostic
             .message
-            .contains("expected Float, found Int"),
+            .contains("expected `Float`, found `Int`"),
         "Message was: {}",
         mismatch_diag.diagnostic.message
     );

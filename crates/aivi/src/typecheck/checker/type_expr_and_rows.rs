@@ -528,9 +528,10 @@ impl TypeChecker {
         if let (Some(exp), Some(fnd)) = (expected, found) {
             // Int vs Float confusion
             if (exp == "Int" && fnd == "Float") || (exp == "Float" && fnd == "Int") {
-                hints.push(format!(
+                hints.push(
                     "use `toFloat` to convert Int to Float, or `round`/`truncate` for Float to Int"
-                ));
+                        .to_string(),
+                );
             }
             // String vs Int/Float
             if exp == "String" && (fnd == "Int" || fnd == "Float") {

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::diagnostics::{Diagnostic, DiagnosticSeverity, FileDiagnostic};
+use crate::diagnostics::{fuzzy_suggest, Diagnostic, DiagnosticSeverity, FileDiagnostic};
 use crate::surface::{
     BlockItem, Decorator, Def, DomainItem, Expr, Literal, Module, ModuleItem, Pattern,
     ScopeItemKind, TextPart, TypeAlias, TypeDecl, TypeExpr, TypeSig,
@@ -96,7 +96,7 @@ fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<File
                         message: format!("unused import '{}'", local.name),
                         span: local.span.clone(),
                         labels: Vec::new(),
-                        hints: Vec::new(),
+                        hints: vec!["remove this import or prefix with `_` to suppress this warning".to_string()],
                         suggestion: None,
                     },
                 ));
@@ -432,6 +432,13 @@ fn check_uses(
             if use_decl.module.name.starts_with("aivi.") {
                 continue;
             }
+            let mut hints = Vec::new();
+            if let Some(hint) = fuzzy_suggest(
+                &use_decl.module.name,
+                module_map.keys().map(|s| s.as_str()),
+            ) {
+                hints.push(hint);
+            }
             diagnostics.push(file_diag(
                 module,
                 Diagnostic {
@@ -440,7 +447,7 @@ fn check_uses(
                     message: format!("unknown module '{}'", use_decl.module.name),
                     span: use_decl.module.span.clone(),
                     labels: Vec::new(),
-                    hints: Vec::new(),
+                    hints,
                     suggestion: None,
                 },
             ));
@@ -459,6 +466,12 @@ fn check_uses(
             .collect();
         for item in &use_decl.items {
             if !exports.contains(item.name.name.as_str()) {
+                let mut hints = Vec::new();
+                if let Some(hint) =
+                    fuzzy_suggest(&item.name.name, exports.iter().copied())
+                {
+                    hints.push(hint);
+                }
                 diagnostics.push(file_diag(
                     module,
                     Diagnostic {
@@ -470,7 +483,7 @@ fn check_uses(
                         ),
                         span: item.name.span.clone(),
                         labels: Vec::new(),
-                        hints: Vec::new(),
+                        hints,
                         suggestion: None,
                     },
                 ));
@@ -954,7 +967,10 @@ fn check_multi_clause_sigs(module: &Module, diagnostics: &mut Vec<FileDiagnostic
                         ),
                         span: def.name.span.clone(),
                         labels: Vec::new(),
-                        hints: Vec::new(),
+                        hints: vec![format!(
+                            "add a type signature above the definition: `{} : ...`",
+                            def.name.name
+                        )],
                         suggestion: None,
                     },
                 ));

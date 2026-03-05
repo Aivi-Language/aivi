@@ -1,5 +1,7 @@
 use crate::cst::CstToken;
-use crate::diagnostics::{Diagnostic, DiagnosticLabel, DiagnosticSeverity, Position, Span};
+use crate::diagnostics::{
+    Diagnostic, DiagnosticLabel, DiagnosticSeverity, Position, Span, Suggestion,
+};
 use crate::syntax;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
