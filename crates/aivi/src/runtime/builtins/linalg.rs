@@ -79,11 +79,17 @@ fn vec_from_value(value: Value, ctx: &str) -> Result<(i64, Vec<f64>), RuntimeErr
     let record = expect_record(value, ctx)?;
     let size = match record.get("size") {
         Some(value) => expect_int(value.clone(), ctx)?,
-        None => return Err(RuntimeError::Message(format!("{ctx} expects Vec.size"))),
+        None => return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'size' on Vec".to_string(),
+        }),
     };
     let data_list = match record.get("data") {
         Some(value) => expect_list(value.clone(), ctx)?,
-        None => return Err(RuntimeError::Message(format!("{ctx} expects Vec.data"))),
+        None => return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'data' on Vec".to_string(),
+        }),
     };
     let data = list_floats(&data_list, ctx)?;
     if size < 0 || data.len() != size as usize {
@@ -104,15 +110,24 @@ fn mat_from_value(value: Value, ctx: &str) -> Result<(i64, i64, Vec<f64>), Runti
     let record = expect_record(value, ctx)?;
     let rows = match record.get("rows") {
         Some(value) => expect_int(value.clone(), ctx)?,
-        None => return Err(RuntimeError::Message(format!("{ctx} expects Mat.rows"))),
+        None => return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'rows' on Mat".to_string(),
+        }),
     };
     let cols = match record.get("cols") {
         Some(value) => expect_int(value.clone(), ctx)?,
-        None => return Err(RuntimeError::Message(format!("{ctx} expects Mat.cols"))),
+        None => return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'cols' on Mat".to_string(),
+        }),
     };
     let data_list = match record.get("data") {
         Some(value) => expect_list(value.clone(), ctx)?,
-        None => return Err(RuntimeError::Message(format!("{ctx} expects Mat.data"))),
+        None => return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'data' on Mat".to_string(),
+        }),
     };
     let data = list_floats(&data_list, ctx)?;
     if rows < 0 || cols < 0 || data.len() != (rows * cols) as usize {

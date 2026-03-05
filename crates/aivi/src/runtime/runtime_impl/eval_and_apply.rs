@@ -11,7 +11,10 @@ impl Runtime {
             let a = arg.clone();
             match self.apply(clause, a) {
                 Ok(value) => results.push(value),
-                Err(RuntimeError::Message(message)) if is_match_failure_message(&message) => {
+                Err(RuntimeError::NonExhaustiveMatch { .. }) => {
+                    match_failures += 1;
+                }
+                Err(RuntimeError::Message(ref message)) if is_match_failure_message(message) => {
                     match_failures += 1;
                 }
                 Err(err) => {
@@ -34,9 +37,13 @@ impl Runtime {
             return Ok(results.remove(0));
         }
         if match_failures > 0 && last_error.is_none() {
-            return Err(RuntimeError::Message("non-exhaustive match".to_string()));
+            return Err(RuntimeError::NonExhaustiveMatch {
+                scrutinee: None,
+            });
         }
-        Err(last_error.unwrap_or_else(|| RuntimeError::Message("no matching clause".to_string())))
+        Err(last_error.unwrap_or_else(|| RuntimeError::NonExhaustiveMatch {
+            scrutinee: None,
+        }))
     }
 
     pub(crate) fn generator_to_list(&mut self, gen: Value) -> Result<Vec<Value>, RuntimeError> {
@@ -92,10 +99,11 @@ impl Runtime {
                     Value::Effect(e) => e.clone(),
                     Value::Source(s) => s.effect.clone(),
                     _ => {
-                        return Err(RuntimeError::Message(format!(
-                            "expected Effect, got {}",
-                            format_value(&value)
-                        )))
+                        return Err(RuntimeError::TypeError {
+                            context: "effect execution".to_string(),
+                            expected: "Effect".to_string(),
+                            got: format_value(&value),
+                        })
                     }
                 };
                 match effect.as_ref() {

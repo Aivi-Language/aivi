@@ -103,95 +103,92 @@ impl Runtime {
                 args.push(arg);
                 Ok(Value::Constructor { name, args })
             }
-            other => Err(RuntimeError::Message(format!(
-                "attempted to call a non-function: {}",
-                format_value(&other)
-            ))),
+            other => Err(RuntimeError::TypeError {
+                context: "function application".to_string(),
+                expected: "Function".to_string(),
+                got: format_value(&other),
+            }),
         }
     }
 }
 
 fn parse_zdt_parts(text: &str) -> Result<(&str, &str), RuntimeError> {
     let (dt_text, zone_part) = text.rsplit_once('[').ok_or_else(|| {
-        RuntimeError::Message("invalid zoned datetime literal: missing [Zone]".to_string())
+        RuntimeError::ParseError {
+            context: "zoned datetime literal".to_string(),
+            input: "missing [Zone]".to_string(),
+        }
     })?;
     let zone_id = zone_part.strip_suffix(']').ok_or_else(|| {
-        RuntimeError::Message("invalid zoned datetime literal: missing closing ]".to_string())
+        RuntimeError::ParseError {
+            context: "zoned datetime literal".to_string(),
+            input: "missing closing ]".to_string(),
+        }
     })?;
     let dt_text = dt_text.trim();
     let zone_id = zone_id.trim();
     if dt_text.is_empty() || zone_id.is_empty() {
-        return Err(RuntimeError::Message(
-            "invalid zoned datetime literal".to_string(),
-        ));
+        return Err(RuntimeError::ParseError {
+            context: "zoned datetime literal".to_string(),
+            input: text.to_string(),
+        });
     }
     Ok((dt_text, zone_id))
 }
 
+fn zdt_parse_error(input: &str) -> RuntimeError {
+    RuntimeError::ParseError {
+        context: "zoned datetime literal".to_string(),
+        input: input.to_string(),
+    }
+}
+
 fn parse_naive_datetime(text: &str) -> Result<chrono::NaiveDateTime, RuntimeError> {
-    let (date_part, time_part) = text.split_once('T').ok_or_else(|| {
-        RuntimeError::Message("invalid zoned datetime literal".to_string())
-    })?;
+    let (date_part, time_part) = text.split_once('T').ok_or_else(|| zdt_parse_error(text))?;
 
     let mut date_iter = date_part.splitn(3, '-');
-    let year = parse_i32(date_iter.next())?;
-    let month = parse_u32(date_iter.next())?;
-    let day = parse_u32(date_iter.next())?;
+    let year = parse_i32(date_iter.next(), text)?;
+    let month = parse_u32(date_iter.next(), text)?;
+    let day = parse_u32(date_iter.next(), text)?;
     if date_iter.next().is_some() {
-        return Err(RuntimeError::Message(
-            "invalid zoned datetime literal".to_string(),
-        ));
+        return Err(zdt_parse_error(text));
     }
 
     let (time_main, frac_part) = time_part.split_once('.').unwrap_or((time_part, ""));
     let time_main = time_main.strip_suffix('Z').unwrap_or(time_main);
     let mut time_iter = time_main.splitn(3, ':');
-    let hour = parse_u32(time_iter.next())?;
-    let minute = parse_u32(time_iter.next())?;
-    let second = parse_u32(time_iter.next())?;
+    let hour = parse_u32(time_iter.next(), text)?;
+    let minute = parse_u32(time_iter.next(), text)?;
+    let second = parse_u32(time_iter.next(), text)?;
     if time_iter.next().is_some() {
-        return Err(RuntimeError::Message(
-            "invalid zoned datetime literal".to_string(),
-        ));
+        return Err(zdt_parse_error(text));
     }
 
-    let millis = parse_millis(frac_part)?;
+    let millis = parse_millis(frac_part, text)?;
     chrono::NaiveDate::from_ymd_opt(year, month, day)
         .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millis))
-        .ok_or_else(|| RuntimeError::Message("invalid zoned datetime literal".to_string()))
+        .ok_or_else(|| zdt_parse_error(text))
 }
 
-fn parse_i32(value: Option<&str>) -> Result<i32, RuntimeError> {
-    let value = value.ok_or_else(|| {
-        RuntimeError::Message("invalid zoned datetime literal".to_string())
-    })?;
-    value.parse::<i32>().map_err(|_| {
-        RuntimeError::Message("invalid zoned datetime literal".to_string())
-    })
+fn parse_i32(value: Option<&str>, input: &str) -> Result<i32, RuntimeError> {
+    let value = value.ok_or_else(|| zdt_parse_error(input))?;
+    value.parse::<i32>().map_err(|_| zdt_parse_error(input))
 }
 
-fn parse_u32(value: Option<&str>) -> Result<u32, RuntimeError> {
-    let value = value.ok_or_else(|| {
-        RuntimeError::Message("invalid zoned datetime literal".to_string())
-    })?;
-    value.parse::<u32>().map_err(|_| {
-        RuntimeError::Message("invalid zoned datetime literal".to_string())
-    })
+fn parse_u32(value: Option<&str>, input: &str) -> Result<u32, RuntimeError> {
+    let value = value.ok_or_else(|| zdt_parse_error(input))?;
+    value.parse::<u32>().map_err(|_| zdt_parse_error(input))
 }
 
-fn parse_millis(text: &str) -> Result<u32, RuntimeError> {
+fn parse_millis(text: &str, input: &str) -> Result<u32, RuntimeError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Ok(0);
     }
     if !trimmed.chars().all(|ch| ch.is_ascii_digit()) || trimmed.len() > 3 {
-        return Err(RuntimeError::Message(
-            "invalid zoned datetime literal".to_string(),
-        ));
+        return Err(zdt_parse_error(input));
     }
-    let value: u32 = trimmed.parse().map_err(|_| {
-        RuntimeError::Message("invalid zoned datetime literal".to_string())
-    })?;
+    let value: u32 = trimmed.parse().map_err(|_| zdt_parse_error(input))?;
     let scale = 10u32.pow((3 - trimmed.len()) as u32);
     Ok(value.saturating_mul(scale))
 }

@@ -8,7 +8,10 @@ use aivi_http_server::{
 };
 
 use super::builtins::builtin;
-use super::{format_value, CancelToken, EffectValue, Runtime, RuntimeContext, RuntimeError, Value};
+use super::{
+    format_runtime_error, format_value, CancelToken, EffectValue, Runtime, RuntimeContext,
+    RuntimeError, Value,
+};
 
 pub(super) fn build_http_server_record() -> Value {
     let mut fields = HashMap::new();
@@ -383,7 +386,11 @@ fn value_to_ws_message(value: Value) -> Result<AiviWsMessage, RuntimeError> {
             }
             match args.pop().unwrap() {
                 Value::Text(text) => Ok(AiviWsMessage::TextMsg(text)),
-                _ => Err(RuntimeError::Message("TextMsg expects Text".to_string())),
+                _ => Err(RuntimeError::TypeError {
+                    context: "TextMsg".to_string(),
+                    expected: "Text".to_string(),
+                    got: "other".to_string(),
+                }),
             }
         }
         Value::Constructor { name, mut args } if name == "BinaryMsg" => {
@@ -445,5 +452,8 @@ fn runtime_error_to_http_error(err: RuntimeError) -> AiviHttpError {
             message: "cancelled".to_string(),
         },
         RuntimeError::Message(message) => AiviHttpError { message },
+        other => AiviHttpError {
+            message: format_runtime_error(other),
+        },
     }
 }

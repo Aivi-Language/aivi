@@ -339,22 +339,29 @@ pub(crate) fn eval_sigil_literal(
                 }
             }
             let regex = builder.build().map_err(|err| {
-                RuntimeError::Message(format!("invalid regex literal: {err}"))
+                RuntimeError::ParseError {
+                    context: "regex literal".to_string(),
+                    input: format!("{err}"),
+                }
             })?;
             Ok(Value::Regex(Arc::new(regex)))
         }
         "u" | "url" => {
             let parsed = Url::parse(body).map_err(|err| {
-                RuntimeError::Message(format!("invalid url literal: {err}"))
+                RuntimeError::ParseError {
+                    context: "url literal".to_string(),
+                    input: format!("{err}"),
+                }
             })?;
             Ok(Value::Record(Arc::new(url_to_record(&parsed))))
         }
         "p" | "path" => {
             let cleaned = body.trim().replace('\\', "/");
             if cleaned.contains('\0') {
-                return Err(RuntimeError::Message(
-                    "invalid path literal: contains NUL byte".to_string(),
-                ));
+                return Err(RuntimeError::ParseError {
+                    context: "path literal".to_string(),
+                    input: "contains NUL byte".to_string(),
+                });
             }
             let absolute = cleaned.starts_with('/');
             let mut segments: Vec<String> = Vec::new();
@@ -389,20 +396,29 @@ pub(crate) fn eval_sigil_literal(
         }
         "d" => {
             let date = NaiveDate::parse_from_str(body, "%Y-%m-%d").map_err(|err| {
-                RuntimeError::Message(format!("invalid date literal: {err}"))
+                RuntimeError::ParseError {
+                    context: "date literal".to_string(),
+                    input: format!("{err}"),
+                }
             })?;
             Ok(Value::Record(Arc::new(date_to_record(date))))
         }
         "t" | "dt" => {
             let _ = chrono::DateTime::parse_from_rfc3339(body).map_err(|err| {
-                RuntimeError::Message(format!("invalid datetime literal: {err}"))
+                RuntimeError::ParseError {
+                    context: "datetime literal".to_string(),
+                    input: format!("{err}"),
+                }
             })?;
             Ok(Value::DateTime(body.to_string()))
         }
         "tz" => {
             let zone_id = body.trim();
             let _: chrono_tz::Tz = zone_id.parse().map_err(|_| {
-                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+                RuntimeError::ParseError {
+                    context: "timezone literal".to_string(),
+                    input: zone_id.to_string(),
+                }
             })?;
             let mut map = HashMap::new();
             map.insert("id".to_string(), Value::Text(zone_id.to_string()));
@@ -412,7 +428,10 @@ pub(crate) fn eval_sigil_literal(
             let text = body.trim();
             let (dt_text, zone_id) = parse_zdt_parts(text)?;
             let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| {
-                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+                RuntimeError::ParseError {
+                    context: "timezone literal".to_string(),
+                    input: zone_id.to_string(),
+                }
             })?;
 
             let zdt = if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt_text) {
@@ -422,7 +441,10 @@ pub(crate) fn eval_sigil_literal(
                 tz.from_local_datetime(&naive)
                     .single()
                     .ok_or_else(|| {
-                        RuntimeError::Message("ambiguous or invalid local time".to_string())
+                        RuntimeError::ParseError {
+                            context: "zoned datetime literal".to_string(),
+                            input: "ambiguous or invalid local time".to_string(),
+                        }
                     })?
             };
 
@@ -446,7 +468,10 @@ pub(crate) fn eval_sigil_literal(
         }
         "k" => {
             validate_key_text(body).map_err(|msg| {
-                RuntimeError::Message(format!("invalid i18n key literal: {msg}"))
+                RuntimeError::ParseError {
+                    context: "i18n key literal".to_string(),
+                    input: msg,
+                }
             })?;
             let mut map = HashMap::new();
             map.insert("tag".to_string(), Value::Text(tag.to_string()));
@@ -456,7 +481,10 @@ pub(crate) fn eval_sigil_literal(
         }
         "m" => {
             let parsed = parse_message_template(body).map_err(|msg| {
-                RuntimeError::Message(format!("invalid i18n message literal: {msg}"))
+                RuntimeError::ParseError {
+                    context: "i18n message literal".to_string(),
+                    input: msg,
+                }
             })?;
             let mut map = HashMap::new();
             map.insert("tag".to_string(), Value::Text(tag.to_string()));

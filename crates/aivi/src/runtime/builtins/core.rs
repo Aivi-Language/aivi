@@ -357,7 +357,11 @@ pub(crate) fn register_builtins(env: &Env) {
                 Value::Source(source) => Ok(Value::Effect(source.effect.clone())),
                 // Back-compat: older code treated `load` as an `Effect`-identity.
                 Value::Effect(_) => Ok(value),
-                _ => Err(RuntimeError::Message("load expects a Source".to_string())),
+                _ => Err(RuntimeError::TypeError {
+                    context: "load".to_string(),
+                    expected: "Source".to_string(),
+                    got: "other".to_string(),
+                }),
             }
         }),
     );

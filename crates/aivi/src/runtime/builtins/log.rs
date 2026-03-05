@@ -10,7 +10,11 @@ fn level_name(value: Value, ctx: &str) -> Result<String, RuntimeError> {
     match value {
         Value::Constructor { name, args } if args.is_empty() => Ok(name),
         Value::Text(text) => Ok(text),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Level"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Level".to_string(),
+            got: "other".to_string(),
+        }),
     }
 }
 
