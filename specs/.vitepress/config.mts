@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { sidebar } from '../nav.mjs'

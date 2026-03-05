@@ -12,10 +12,13 @@ A purely functional programming language that compiles to native binaries via Ru
 ```bash
 cargo fmt --all -- --check                              # format check
 cargo clippy --workspace --all-targets -- -D warnings  # lint
-cargo test --workspace                                  # all tests (Rust + AIVI integration)
-cargo test --workspace -- --nocapture 2>&1 | grep -A 20 "FAILED\|panicked"  # debug failures
+cargo nextest run --workspace                           # all tests in parallel (preferred)
+cargo t                                                 # alias for cargo nextest run --workspace
+cargo nextest run --workspace --no-capture 2>&1 | grep -A 20 "FAILED\|panicked"  # debug failures
 cargo build --workspace
 ```
+
+Install nextest once with: `cargo install cargo-nextest --locked`
 
 ### Filtering noisy output
 ```bash
@@ -132,4 +135,4 @@ Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1.
 - [ ] Integration test(s) added
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
-- [ ] `cargo test --workspace` is fully green
+- [ ] `cargo nextest run --workspace` passes
