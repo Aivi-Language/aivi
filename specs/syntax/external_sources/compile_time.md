@@ -10,8 +10,8 @@
 - `@static x = file.json "..."`
 - `@static x = file.csv "..."`
 - `@static x = env.get "..."`
-- `@static x = openapi.fromUrl ~url(...)` — see [OpenAPI Source](/syntax/decorators#openapi-source)
-- `@static x = openapi.fromFile "..."` — see [OpenAPI Source](/syntax/decorators#openapi-source)
+- `@static x = openapi.fromUrl ~url(...)` — see [OpenAPI Source](/syntax/decorators/static#openapi-source)
+- `@static x = openapi.fromFile "..."` — see [OpenAPI Source](/syntax/decorators/static#openapi-source)
 
 ## Example
 
@@ -25,4 +25,4 @@ buildEnv = env.get "AIVI_BUILD_ENV"
 
 Compilation fails early if a static source cannot be read or decoded.
 
-See the full [`@static` decorator reference](/syntax/decorators#static-compile-time-evaluation) for details.
+See the full [`@static` decorator reference](/syntax/decorators/static#static-compile-time-evaluation) for details.

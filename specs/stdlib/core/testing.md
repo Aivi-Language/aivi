@@ -10,7 +10,7 @@ The `Testing` module is built right into the language because reliability should
 
 <<< ../../snippets/from_md/stdlib/core/testing/overview.aivi{aivi}
 
-Tests are ordinary bindings annotated with the `@test` [decorator](../../syntax/decorators.md). The `@test` decorator requires a mandatory description string that names the test case (e.g. `@test "adds two numbers"`). The test runner discovers all `@test` bindings and executes them, printing the description for each success and failure. A test passes when it completes without raising an assertion error.
+Tests are ordinary bindings annotated with the `@test` [decorator](../../syntax/decorators/). The `@test` decorator requires a mandatory description string that names the test case (e.g. `@test "adds two numbers"`). The test runner discovers all `@test` bindings and executes them, printing the description for each success and failure. A test passes when it completes without raising an assertion error.
 
 ## Core API (v0.1)
 
@@ -40,7 +40,7 @@ The runner prints a summary of passed / failed tests and returns a non-zero exit
 
 ### Mocking REST/HTTP requests in tests
 
-For request-heavy code, use [`mock ... in` expressions](/syntax/decorators#mock-expressions) to replace external dependencies without restructuring your production code:
+For request-heavy code, use [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) to replace external dependencies without restructuring your production code:
 
 ```aivi
 use aivi.testing
@@ -64,7 +64,7 @@ fetchUsersWithMock =
 
 Mock expressions provide **deep scoping** — any function called within the body that
 internally references the mocked binding will see the mock value. See the
-[Mock Expressions](/syntax/decorators#mock-expressions) spec for full details including
+[Mock Expressions](/syntax/decorators/test#mock-expressions) spec for full details including
 snapshot mocks and multiple mock bindings.
 
 ### Snapshot assertions

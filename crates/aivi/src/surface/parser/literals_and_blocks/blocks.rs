@@ -136,10 +136,10 @@ impl Parser {
             // `when cond <- eff` — conditional effect (Change 6)
             if self.match_keyword("when") {
                 let when_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Do { .. }) {
+                if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1540",
-                        "`when` is only allowed inside `do Monad { ... }` blocks",
+                        "`when` is only allowed inside `do Effect { ... }` blocks",
                         when_kw.clone(),
                     );
                 }
@@ -159,7 +159,7 @@ impl Parser {
             // `unless cond <- eff` — negated conditional effect
             if self.match_keyword("unless") {
                 let unless_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Do { .. }) {
+                if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1543",
                         "`unless` is only valid inside a `do Effect { … }` block",
@@ -182,10 +182,10 @@ impl Parser {
             // `given cond or failExpr` — precondition guard (Change 8)
             if self.match_keyword("given") {
                 let given_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Do { .. }) {
+                if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1541",
-                        "`given` is only allowed inside `do Monad { ... }` blocks",
+                        "`given` is only allowed inside `do Effect { ... }` blocks",
                         given_kw.clone(),
                     );
                 }
@@ -241,10 +241,10 @@ impl Parser {
             // `on Transition => effect` — transition event wiring (Change 7)
             if self.match_keyword("on") {
                 let on_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Do { .. }) {
+                if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1542",
-                        "`on` is only allowed inside `do Monad { ... }` blocks",
+                        "`on` is only allowed inside `do Effect { ... }` blocks",
                         on_kw.clone(),
                     );
                 }
