@@ -129,8 +129,6 @@ export const sidebar = [
           { text: 'Vector', link: '/stdlib/math/vector' },
           { text: 'Matrix', link: '/stdlib/math/matrix' },
           { text: 'Linear Algebra', link: '/stdlib/math/linear_algebra' },
-          { text: 'Probability', link: '/stdlib/math/probability' },
-          { text: 'FFT & Signal', link: '/stdlib/math/signal' },
           { text: 'Geometry', link: '/stdlib/math/geometry' },
           { text: 'Graph', link: '/stdlib/math/graph' },
           { text: 'Tree', link: '/stdlib/math/tree' }

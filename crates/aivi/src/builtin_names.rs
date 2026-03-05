@@ -60,7 +60,6 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "calendar",
     "color",
     "linalg",
-    "signal",
     "graph",
     "bigint",
     "rational",

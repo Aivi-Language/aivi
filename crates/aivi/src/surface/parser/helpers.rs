@@ -256,6 +256,17 @@ fn parse_sigil_text(text: &str) -> Option<(String, String, String)> {
     if iter.next()? != '~' {
         return None;
     }
+
+    // Backtick raw-text sigil: ~`...`
+    let mut peekable = iter.peekable();
+    if peekable.peek() == Some(&'`') {
+        peekable.next(); // consume opening backtick
+        let rest: String = peekable.collect();
+        let body = rest.strip_suffix('`').unwrap_or(&rest).to_string();
+        return Some(("raw".to_string(), body, String::new()));
+    }
+    let mut iter = peekable;
+
     let mut tag = String::new();
     let mut open = None;
     for ch in iter.by_ref() {

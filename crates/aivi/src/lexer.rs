@@ -487,6 +487,33 @@ fn lex_sigil_multiline(
         return None;
     }
     let mut index = start + 1;
+
+    // Backtick raw-text sigil: ~`...` (multiline, no interpolation).
+    if chars.get(index) == Some(&'`') {
+        index += 1; // consume opening backtick
+        let mut line = start_line;
+        let mut col = start_col + (index - start);
+        let mut closed = false;
+        while index < chars.len() {
+            let ch = chars[index];
+            if ch == '\n' {
+                line += 1;
+                col = 1;
+            } else {
+                col += 1;
+            }
+            if ch == '`' {
+                index += 1;
+                closed = true;
+                break;
+            }
+            index += 1;
+        }
+        let text: String = chars[start..index.min(chars.len())].iter().collect();
+        let end_col = col.saturating_sub(1).max(1);
+        return Some((text, line, end_col, closed));
+    }
+
     let tag_start = *chars.get(index)?;
     if !is_ident_start(tag_start) {
         return None;

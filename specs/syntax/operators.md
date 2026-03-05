@@ -138,6 +138,19 @@ Domains define sigils to validate and construct types at compile time. Some sigi
 - `~mat[...]` → matrix literals (`aivi.matrix.Mat2`, `Mat3`, `Mat4`)
 - `~d(2024-05-21)` → `Date`, `~t(12:00:00)` → `Time`, `~tz(Europe/Paris)` → `TimeZone`
 
+### Raw text sigil
+
+`` ~`...` `` produces a `Text` value verbatim — no `{ }` interpolation, supports multiple lines:
+
+```aivi
+json  = ~`{"id": 1, "name": "Alice"}`
+query = ~`SELECT *
+          FROM users
+          WHERE id = 1`
+```
+
+Use this when the content contains `{`, `}`, or backslashes that would need escaping in a regular `"..."` string literal.
+
 ### Structured sigils
 
 Some domains parse sigils as **AIVI expressions** rather than raw text. The `Collections` domain defines:

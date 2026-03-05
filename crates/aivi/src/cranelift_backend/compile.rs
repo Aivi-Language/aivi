@@ -413,18 +413,19 @@ fn jit_compile_into_runtime(
         }
     }
 
-    // Pass B: register short-name aliases. For domain operators (names like
-    // "(+)" that appear in multiple domains), merge clauses so the runtime can
-    // try each domain's implementation in order.  For regular defs the last
-    // writer wins (no spurious MultiClause wrapping).
+    // Pass B: register short-name aliases. All names are merged so that HKT
+    // class method instances (e.g. `filter` from Filterable List/Option/Map)
+    // accumulate into a MultiClause rather than last-writer overwriting the
+    // previous instance. A seen-set avoids duplicating the same MultiClause
+    // contents when multiple pending defs share a qualified name (e.g. all
+    // logic.rs Filterable instances emit pd.qualified = "aivi.logic.filter").
+    let mut seen_qualified: std::collections::HashSet<String> = std::collections::HashSet::new();
     for pd in &pending {
+        if !seen_qualified.insert(pd.qualified.clone()) {
+            continue;
+        }
         if let Some(value) = compiled_globals.get(&pd.qualified).cloned() {
-            let is_operator = pd.name.starts_with('(') && pd.name.ends_with(')');
-            if is_operator {
-                insert_or_merge(&mut compiled_globals, pd.name.clone(), value);
-            } else {
-                compiled_globals.insert(pd.name.clone(), value);
-            }
+            insert_or_merge(&mut compiled_globals, pd.name.clone(), value);
         }
     }
 

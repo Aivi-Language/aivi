@@ -79,8 +79,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Vector](stdlib/math/vector.md)
 - [Matrix](stdlib/math/matrix.md)
 - [Linear Algebra](stdlib/math/linear_algebra.md)
-- [Probability](stdlib/math/probability.md)
-- [FFT & Signal](stdlib/math/signal.md)
 - [Geometry](stdlib/math/geometry.md)
 - [Graph](stdlib/math/graph.md)
 - [Tree](stdlib/math/tree.md)

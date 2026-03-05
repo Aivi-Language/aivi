@@ -50,14 +50,12 @@ mod number_facade;
 mod option;
 mod path;
 mod prelude;
-mod probability;
 mod quaternion;
 mod rational;
 mod regex;
 mod rest;
 mod result;
 mod secrets;
-mod signal;
 mod system;
 mod testing;
 mod text;
@@ -178,14 +176,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: linalg_facade::MODULE_NAME,
         source: linalg_facade::SOURCE,
-    },
-    EmbeddedModule {
-        name: probability::MODULE_NAME,
-        source: probability::SOURCE,
-    },
-    EmbeddedModule {
-        name: signal::MODULE_NAME,
-        source: signal::SOURCE,
     },
     EmbeddedModule {
         name: geometry::MODULE_NAME,

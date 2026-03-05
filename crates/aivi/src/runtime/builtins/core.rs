@@ -18,7 +18,6 @@ use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
 use super::regex::build_regex_record;
 use super::secrets::build_secrets_record;
-use super::signal::build_signal_record;
 use super::system::{
     build_clock_record, build_console_record, build_env_source_record, build_file_record,
     build_random_record, build_system_record,
@@ -414,7 +413,6 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("timezone".to_string(), build_timezone_record());
     env.set("color".to_string(), build_color_record());
     env.set("linalg".to_string(), build_linalg_record());
-    env.set("signal".to_string(), build_signal_record());
     env.set("graph".to_string(), build_graph_record());
     env.set("bigint".to_string(), build_bigint_record());
     env.set("rational".to_string(), build_rational_record());

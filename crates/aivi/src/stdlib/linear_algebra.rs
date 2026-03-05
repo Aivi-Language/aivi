@@ -13,9 +13,7 @@ Vec = { size: Int, data: List Float }
 Mat = { rows: Int, cols: Int, data: List Float }
 
 map : (A -> B) -> List A -> List B
-map = f items => items match
-  | [] => []
-  | [x, ...xs] => [f x, ...map f xs]
+map = f items => List.map f items
 
 zipWith : (A -> B -> C) -> List A -> List B -> List C
 zipWith = f left right => (left, right) match
