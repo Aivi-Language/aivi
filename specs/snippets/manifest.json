@@ -1882,62 +1882,6 @@
       ]
     },
     {
-      "path": "specs/snippets/from_md/stdlib/math/probability/overview.aivi",
-      "module": "docs.snippets.stdlib.math.probability.overview",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/probability/features.aivi",
-      "module": "docs.snippets.stdlib.math.probability.features",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/probability/domain_definition.aivi",
-      "module": "docs.snippets.stdlib.math.probability.domain_definition",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/probability/usage_examples.aivi",
-      "module": "docs.snippets.stdlib.math.probability.usage_examples",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/signal/overview.aivi",
-      "module": "docs.snippets.stdlib.math.signal.overview",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/signal/features.aivi",
-      "module": "docs.snippets.stdlib.math.signal.features",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/signal/domain_definition.aivi",
-      "module": "docs.snippets.stdlib.math.signal.domain_definition",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/stdlib/math/signal/usage_examples.aivi",
-      "module": "docs.snippets.stdlib.math.signal.usage_examples",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
       "path": "specs/snippets/from_md/stdlib/math/geometry/overview.aivi",
       "module": "docs.snippets.stdlib.math.geometry.overview",
       "verify": [

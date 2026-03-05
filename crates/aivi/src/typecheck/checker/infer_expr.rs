@@ -45,6 +45,7 @@ impl TypeChecker {
                 "zdt" => Type::con("ZonedDateTime"),
                 "k" => Type::con("Key"),
                 "m" => Type::con("Message"),
+                "raw" => Type::con("Text"),
                 _ => Type::con("Text"),
             },
             Literal::Bool { .. } => Type::con("Bool"),

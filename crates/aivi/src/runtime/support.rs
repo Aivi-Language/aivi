@@ -517,6 +517,7 @@ pub(crate) fn eval_sigil_literal(
             map.insert("parts".to_string(), i18n_message_parts_value(&parsed.parts));
             Ok(Value::Record(Arc::new(map)))
         }
+        "raw" => Ok(Value::Text(body.to_string())),
         _ => {
             let mut map = HashMap::new();
             map.insert("tag".to_string(), Value::Text(tag.to_string()));

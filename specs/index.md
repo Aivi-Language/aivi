@@ -85,8 +85,6 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Vector](stdlib/math/vector)
 - [Matrix](stdlib/math/matrix)
 - [Linear Algebra](stdlib/math/linear_algebra)
-- [Probability](stdlib/math/probability)
-- [FFT & Signal](stdlib/math/signal)
 - [Geometry](stdlib/math/geometry)
 - [Graph](stdlib/math/graph)
 - [Tree](stdlib/math/tree)

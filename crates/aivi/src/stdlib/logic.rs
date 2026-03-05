@@ -216,9 +216,9 @@ instance Monoid (List A) = given (A: Any) {
 }
 
 instance Alternative (List A) = given (A: Any) {
-  alt: xs ys => xs match
-    | [] => ys
-    | _  => xs
+  alt: ys xs => xs match
+    | []           => ys
+    | [_, ...rest] => xs
 }
 
 instance Plus (List A) = given (A: Any) {

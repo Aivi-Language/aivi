@@ -863,7 +863,7 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 `prelude` (implicit), `text`, `logic`, `units`, `regex`, `testing`, `collections` (re-exports `list`, `map`, `set`, `queue`, `heap`), `i18n`, `generator`, `json`, `defaults`
 
 **Math & Science** (`aivi.*`):
-`math`, `vector`, `matrix`, `number`, `probability`, `signal`, `geometry`, `graph`, `linear_algebra`, `tree`
+`math`, `vector`, `matrix`, `number`, `geometry`, `graph`, `linear_algebra`, `tree`
 
 **Time** (`aivi.chronos.*`):
 `instant`, `calendar`, `duration`, `timezone`, `scheduler`
@@ -941,12 +941,22 @@ Custom literals with `~tag` and a delimiter:
 ~tz(Europe/Paris)              // TimeZone
 ~k"app.button.save"            // i18n key (validated at parse time)
 ~m"Hello, {name}!"             // i18n message template (validated at parse time)
+~`raw text, no interpolation`  // Raw Text — multiline, no { } interpolation
 ~<html><div>{ "x" }</div></html> // Typed VDOM node
 ~<gtk><object class="GtkBox" /></gtk> // Typed GTK builder node
 ~<gtk><GtkBox spacing="24" /></gtk> // Shorthand widget syntax
 ```
 
 `~map{...}`, `~set[...]`, `~mat[...]`, `~<html>...</html>`, and `~<gtk>...</gtk>` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
+
+The backtick sigil `` ~`...` `` produces a `Text` value with the verbatim content between the backticks. It supports multiple lines and no `{ }` interpolation occurs:
+
+```aivi
+json   = ~`{"id": 1, "name": "Alice"}`
+query  = ~`SELECT *
+           FROM users
+           WHERE id = 1`
+```
 
 GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="...">` where attributes become props automatically:
 

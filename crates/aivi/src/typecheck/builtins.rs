@@ -6,7 +6,6 @@ mod core_io_concurrency_html;
 mod decimal_and_networking;
 mod linalg;
 mod math_calendar_numbers;
-mod signal_graph;
 mod system_db;
 mod text_and_regex;
 
@@ -65,8 +64,6 @@ impl TypeChecker {
             "Heap",
             "Vec",
             "Mat",
-            "Signal",
-            "Spectrum",
             "Graph",
             "Edge",
             "Generator",
@@ -146,7 +143,6 @@ impl TypeChecker {
         decimal_and_networking::register(self, &mut env);
         collections::register(self, &mut env);
         linalg::register(self, &mut env);
-        signal_graph::register(self, &mut env);
         system_db::register(self, &mut env);
         self.builtins = env;
     }

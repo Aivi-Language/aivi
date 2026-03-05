@@ -4,13 +4,24 @@ impl Runtime {
         clauses: Vec<Value>,
         arg: Value,
     ) -> Result<Value, RuntimeError> {
-        let mut results = Vec::new();
+        let mut callables = Vec::new();
         let mut match_failures = 0;
         let mut last_error = None;
         for clause in clauses.into_iter() {
             let a = arg.clone();
             match self.apply(clause, a) {
-                Ok(value) => results.push(value),
+                Ok(value) => {
+                    if is_callable(&value) {
+                        // Callable (partial application): collect but keep trying.
+                        callables.push(value);
+                    } else {
+                        // First concrete (non-callable) result wins immediately.
+                        // This ensures HKT dispatch is correct: e.g. `filter pred
+                        // list` returns the filtered list rather than a generator
+                        // closure produced by the Generator Filterable instance.
+                        return Ok(value);
+                    }
+                }
                 Err(RuntimeError::NonExhaustiveMatch { .. }) => {
                     match_failures += 1;
                 }
@@ -22,19 +33,13 @@ impl Runtime {
                 }
             }
         }
-        if !results.is_empty() {
-            let mut callable = results
-                .iter()
-                .filter(|value| is_callable(value))
-                .cloned()
-                .collect::<Vec<_>>();
-            if !callable.is_empty() {
-                if callable.len() == 1 {
-                    return Ok(callable.remove(0));
-                }
-                return Ok(Value::MultiClause(callable));
+        // No concrete result found. If there are callables (partial applications),
+        // return them so the caller can continue applying arguments.
+        if !callables.is_empty() {
+            if callables.len() == 1 {
+                return Ok(callables.remove(0));
             }
-            return Ok(results.remove(0));
+            return Ok(Value::MultiClause(callables));
         }
         if match_failures > 0 && last_error.is_none() {
             return Err(RuntimeError::NonExhaustiveMatch {

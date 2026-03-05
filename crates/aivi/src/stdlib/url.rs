@@ -35,27 +35,17 @@ query = value => value.query
 hash : Url -> Option Text
 hash = value => value.hash
 
-filter : (A -> Bool) -> List A -> List A
-filter = predicate items => items match
-  | [] => []
-  | [x, ...xs] => if predicate x then [x, ...filter predicate xs] else filter predicate xs
-
-append : List A -> List A -> List A
-append = left right => left match
-  | [] => right
-  | [x, ...xs] => [x, ...append xs right]
-
 filterKey : Text -> (Text, Text) -> Bool
 filterKey = key pair => pair match
   | (k, _) => k != key
 
 domain Url over Url = {
   (+) : Url -> (Text, Text) -> Url
-  (+) = value (key, v) => { ...value, query: append value.query [(key, v)] }
+  (+) = value (key, v) => { ...value, query: [...value.query, (key, v)] }
 
   (-) : Url -> Text -> Url
   (-) = value key => {
     ...value,
-    query: filter (filterKey key) value.query
+    query: List.filter (filterKey key) value.query
   }
 }"#;
