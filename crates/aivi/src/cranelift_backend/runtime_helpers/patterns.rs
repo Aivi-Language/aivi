@@ -415,6 +415,32 @@ pub extern "C" fn rt_make_closure(
 
 /// Evaluate a binary operation on two `Value`s, returning a new boxed `Value`.
 ///
+/// Extract the set of field names from a record value, or None for non-records.
+fn record_key_set(value: &Value) -> Option<std::collections::HashSet<String>> {
+    match value {
+        Value::Record(fields) => Some(fields.keys().cloned().collect()),
+        _ => None,
+    }
+}
+
+/// Returns true if `result` is a record whose fields are a **strict subset**
+/// of `input_keys` (i.e., every result field exists in the input, but the
+/// result has fewer fields).  This detects structural sub-type matches like
+/// `Point2.(+)` returning `{x,y}` when the input was a `Point3` `{x,y,z}`.
+fn is_strict_record_subset(
+    result: &Value,
+    input_keys: &Option<std::collections::HashSet<String>>,
+) -> bool {
+    let Some(input_ks) = input_keys else {
+        return false;
+    };
+    let Value::Record(result_fields) = result else {
+        return false;
+    };
+    let rlen = result_fields.len();
+    rlen > 0 && rlen < input_ks.len() && result_fields.keys().all(|k| input_ks.contains(k))
+}
+
 /// Uses the built-in evaluation first, then falls back to looking up the
 /// operator in globals if not found.
 ///
@@ -455,6 +481,8 @@ pub extern "C" fn rt_binary_op(
         if let Value::MultiClause(clauses) = op_value {
             if !runtime.jit_binary_op_dispatching {
                 runtime.jit_binary_op_dispatching = true;
+                let input_keys = record_key_set(&lhs);
+                let mut subset_fallback: Option<Value> = None;
                 let mut fallback_result: Option<Value> = None;
                 for clause in clauses.into_iter() {
                     let wc = runtime.jit_rt_warning_count;
@@ -470,14 +498,25 @@ pub extern "C" fn rt_binary_op(
                                 && !runtime.jit_match_failed
                                 && runtime.jit_pending_error.is_none()
                             {
-                                // Clean match — no warnings or errors.
-                                runtime.jit_binary_op_dispatching = false;
-                                runtime.jit_pending_error = saved_pending;
-                                runtime.jit_match_failed = saved_match_failed;
-                                return abi::box_value(result);
-                            }
-                            // Produced warnings — keep as fallback.
-                            if fallback_result.is_none() && !runtime.jit_match_failed {
+                                // If the result is a record with strictly fewer
+                                // fields that are all a subset of the input record's
+                                // fields, this is a sub-type match (e.g. Point2.(+)
+                                // on Point3 args). Skip it in favor of a more
+                                // specific clause, but keep as fallback.
+                                if is_strict_record_subset(&result, &input_keys) {
+                                    eprintln!("[SUBSET_SKIP] op={op} input_keys={input_keys:?} result_keys={:?}", record_key_set(&result));
+                                    if subset_fallback.is_none() {
+                                        subset_fallback = Some(result);
+                                    }
+                                } else {
+                                    // Clean match — accept.
+                                    runtime.jit_binary_op_dispatching = false;
+                                    runtime.jit_pending_error = saved_pending;
+                                    runtime.jit_match_failed = saved_match_failed;
+                                    return abi::box_value(result);
+                                }
+                            } else if fallback_result.is_none() && !runtime.jit_match_failed {
+                                // Produced warnings — keep as fallback.
                                 fallback_result = Some(result);
                             }
                         }
@@ -489,6 +528,9 @@ pub extern "C" fn rt_binary_op(
                     runtime.jit_rt_warning_count = wc;
                 }
                 runtime.jit_binary_op_dispatching = false;
+                if let Some(result) = subset_fallback {
+                    return abi::box_value(result);
+                }
                 if let Some(result) = fallback_result {
                     return abi::box_value(result);
                 }
