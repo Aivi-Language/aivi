@@ -10,9 +10,9 @@ use aivi.json
 renderSingleIssue = do Effect {
   issues = [{ path: "$.user.age", message: "expected Int, got String" }]
   rendered = renderSchemaIssues issues
-  assert (text.contains rendered "$.user.age")
-  assert (text.contains rendered "expected Int, got String")
-  assert (text.contains rendered "error[decode]")
+  assert (text.contains "$.user.age" rendered)
+  assert (text.contains "expected Int, got String" rendered)
+  assert (text.contains "error[decode]" rendered)
 }
 
 @test "render multiple schema issues lists all paths"
@@ -21,9 +21,9 @@ renderMultipleIssues = do Effect {
   payload = encodeObject [("id", encodeInt 42)]
   issues = validateSchema schema payload
   rendered = renderSchemaIssues issues
-  assert (text.contains rendered "error[decode]")
-  assert (text.contains rendered "$.name")
-  assert (text.contains rendered "$.email")
+  assert (text.contains "error[decode]" rendered)
+  assert (text.contains "$.name" rendered)
+  assert (text.contains "$.email" rendered)
   assertEq (List.length issues) 2
 }
 
@@ -31,9 +31,9 @@ renderMultipleIssues = do Effect {
 renderSingleError = do Effect {
   err = { message: "expected Int" }
   rendered = renderJsonError "$.user.id" err
-  assert (text.contains rendered "$.user.id")
-  assert (text.contains rendered "expected Int")
-  assert (text.contains rendered "error[decode]")
+  assert (text.contains "$.user.id" rendered)
+  assert (text.contains "expected Int" rendered)
+  assert (text.contains "error[decode]" rendered)
 }
 
 @test "log schema issues to stderr"
@@ -60,12 +60,12 @@ renderIssueCount = do Effect {
     { path: "$.c", message: "missing required field" }
   ]
   rendered = renderSchemaIssues issues
-  assert (text.contains rendered "3 issue(s) found")
+  assert (text.contains "3 issue(s) found" rendered)
 }
 
 @test "render single schema issue shows index"
 renderIssueIndex = do Effect {
   issues = [{ path: "$.x", message: "expected Text" }]
   rendered = renderSchemaIssues issues
-  assert (text.contains rendered "1.")
+  assert (text.contains "1." rendered)
 }
