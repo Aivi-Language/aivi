@@ -139,10 +139,12 @@ impl Parser {
             // Only commit if a `when` follows the pattern, or the pattern contains
             // a wildcard/unresolvable expression (e.g. `Some _`).
             let paren_start = self.pos;
+            let diag_checkpoint = self.diagnostics.len();
             if let Some(pat) = self.parse_pattern() {
                 if self.match_keyword("when") {
                     let guard = self.parse_expr().or_else(|| {
                         self.pos = paren_start;
+                        self.diagnostics.truncate(diag_checkpoint);
                         None
                     })?;
                     let end = self.expect_symbol(")", "expected ')' to close pattern predicate");
@@ -159,6 +161,7 @@ impl Parser {
                 }
             }
             self.pos = paren_start;
+            self.diagnostics.truncate(diag_checkpoint);
             let expr = self.parse_expr()?;
             // Newlines are allowed as whitespace; tolerate `(expr\n)` and `(expr\n, ...)`.
             self.consume_newlines();
