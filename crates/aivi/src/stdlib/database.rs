@@ -21,7 +21,7 @@ export ins, upd, del, ups
 export domain Database
 
 use aivi
-use aivi.list (length, reverse, filter)
+use aivi.list (length, reverse)
 
 DbError = Text
 
@@ -85,7 +85,7 @@ load = value => database.load value
 query : Table A -> (A -> Bool) -> Effect DbError (List A)
 query = tbl pred => do Effect {
   rows <- load tbl
-  pure (filter pred rows)
+  pure (List.filter pred rows)
 }
 
 applyDelta : Table A -> Delta A -> Effect DbError (Table A)

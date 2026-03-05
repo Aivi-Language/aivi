@@ -3,6 +3,7 @@ module integrationTests.stdlib.aivi.generator.tests
 
 use aivi
 use aivi.testing
+use aivi.logic
 use aivi.generator
 
 len = xs => xs match
@@ -48,16 +49,16 @@ filter_functional = do Effect {
   assertEq xs [2, 4]
 }
 
-@test "foldl sum"
+@test "reduce sum"
 foldl_sum = do Effect {
   g = range 1 4
-  total = foldl (acc x => acc + x) 0 g
+  total = reduce (acc x => acc + x) 0 g
   assertEq total 6
 }
 
-@test "foldl empty"
+@test "reduce empty"
 foldl_empty = do Effect {
   g = range 0 0
-  total = foldl (acc x => acc + x) 42 g
+  total = reduce (acc x => acc + x) 42 g
   assertEq total 42
 }

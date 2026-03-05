@@ -9,6 +9,7 @@ export dfsPreorder, dfsPostorder, bfs
 export fromListBy
 
 use aivi
+use aivi.logic
 use aivi.collections (Queue, Map)
 
 Tree A =
@@ -152,4 +153,22 @@ buildForest = idFn items childrenMap accRev => items match
     childTree = buildTree idFn id x childrenMap
     buildForest idFn rest childrenMap [childTree, ...accRev]
   }
+
+instance Functor (Tree A) = given (A: Any) {
+  map: f tree => tree match
+    | Node x children => Node (f x) (List.map (map f) children)
+}
+
+instance Filterable (Tree A) = given (A: Any) {
+  filter: pred tree => tree match
+    | Node x children => {
+      filtered = List.filter (child => child match | Node y _ => pred y) children
+      Node x (List.map (filter pred) filtered)
+    }
+}
+
+instance Foldable (Tree A) = given (A: Any) {
+  reduce: f init tree => tree match
+    | Node x children => List.foldl (acc child => reduce f acc child) (f init x) children
+}
 "#;

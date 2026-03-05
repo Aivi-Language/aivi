@@ -4,10 +4,10 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.list
 export empty, isEmpty, length, reverse
-export map, filter, flatMap, foldl, foldr, scanl
+export foldr, scanl
 export take, drop, takeWhile, dropWhile, partition, find, findMap
 export at, indexOf, zip, zipWith, unzip, intersperse, chunk, dedup, uniqueBy
-export traverse, traverse_, sequence, sequence_, mapM, mapM_, forM, forM_, forEachEffect
+export traverse_, sequence_, mapM, mapM_, forM, forM_, forEachEffect
 
 use aivi
 
@@ -22,18 +22,6 @@ length = xs => List.length xs
 
 reverse : List A -> List A
 reverse = xs => List.reverse xs
-
-map : (A -> B) -> List A -> List B
-map = f xs => List.map f xs
-
-filter : (A -> Bool) -> List A -> List A
-filter = pred xs => List.filter pred xs
-
-flatMap : (A -> List B) -> List A -> List B
-flatMap = f xs => List.flatMap f xs
-
-foldl : (B -> A -> B) -> B -> List A -> B
-foldl = f init xs => List.foldl f init xs
 
 foldr : (A -> B -> B) -> B -> List A -> B
 foldr = f init xs => List.foldr f init xs
@@ -89,15 +77,6 @@ dedup = xs => List.dedup xs
 uniqueBy : (A -> B) -> List A -> List A
 uniqueBy = f xs => List.uniqueBy f xs
 
-traverse : (A -> Effect E B) -> List A -> Effect E (List B)
-traverse = f xs => xs match
-  | []           => pure []
-  | [x, ...rest] => do Effect {
-    y <- f x
-    ys <- traverse f rest
-    pure [y, ...ys]
-  }
-
 traverse_ : (A -> Effect E B) -> List A -> Effect E Unit
 traverse_ = f xs => xs match
   | []           => pure Unit
@@ -106,20 +85,23 @@ traverse_ = f xs => xs match
     traverse_ f rest
   }
 
-sequence : List (Effect E A) -> Effect E (List A)
-sequence = xs => traverse (x => x) xs
-
 sequence_ : List (Effect E A) -> Effect E Unit
 sequence_ = xs => traverse_ (x => x) xs
 
 mapM : (A -> Effect E B) -> List A -> Effect E (List B)
-mapM = traverse
+mapM = f xs => xs match
+  | []           => pure []
+  | [x, ...rest] => do Effect {
+    y <- f x
+    ys <- mapM f rest
+    pure [y, ...ys]
+  }
 
 mapM_ : (A -> Effect E B) -> List A -> Effect E Unit
 mapM_ = traverse_
 
 forM : List A -> (A -> Effect E B) -> Effect E (List B)
-forM = xs f => traverse f xs
+forM = xs f => mapM f xs
 
 forM_ : List A -> (A -> Effect E B) -> Effect E Unit
 forM_ = xs f => traverse_ f xs

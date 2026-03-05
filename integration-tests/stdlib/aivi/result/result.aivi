@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.result.tests
 use aivi
 use aivi.prelude
 use aivi.testing
+use aivi.logic
 use aivi.result
 
 // -- Predicates --
@@ -86,21 +87,21 @@ test_mapErr_ok = do Effect {
   assertEq result (Ok 42)
 }
 
-@test "flatMap chains Ok values"
+@test "chain chains Ok values"
 test_flatMap_ok = do Effect {
-  result = flatMap (x => Ok (x + 1)) (Ok 5)
+  result = chain (x => Ok (x + 1)) (Ok 5)
   assertEq result (Ok 6)
 }
 
-@test "flatMap short-circuits on Err"
+@test "chain short-circuits on Err"
 test_flatMap_err = do Effect {
-  result = flatMap (x => Ok (x + 1)) (Err "error")
+  result = chain (x => Ok (x + 1)) (Err "error")
   assertEq result (Err "error")
 }
 
-@test "flatMap propagates Err from function"
+@test "chain propagates Err from function"
 test_flatMap_returns_err = do Effect {
-  result = flatMap (_ => Err "inner error") (Ok 5)
+  result = chain (_ => Err "inner error") (Ok 5)
   assertEq result (Err "inner error")
 }
 
@@ -134,37 +135,37 @@ test_fromOption_none = do Effect {
 
 @test "flatten removes nesting from Ok Ok"
 test_flatten_ok_ok = do Effect {
-  result = flatten (Ok (Ok 42))
+  result = chain (x => x) (Ok (Ok 42))
   assertEq result (Ok 42)
 }
 
 @test "flatten returns Err for Ok Err"
 test_flatten_ok_err = do Effect {
-  result = flatten (Ok (Err "inner"))
+  result = chain (x => x) (Ok (Err "inner"))
   assertEq result (Err "inner")
 }
 
 @test "flatten returns Err for Err"
 test_flatten_err = do Effect {
-  result = flatten (Err "outer")
+  result = chain (x => x) (Err "outer")
   assertEq result (Err "outer")
 }
 
-@test "orElse returns first Ok"
+@test "alt returns first Ok"
 test_orElse_first_ok = do Effect {
-  result = Ok 1 |> orElse (Ok 2)
+  result = Ok 1 |> alt (Ok 2)
   assertEq result (Ok 1)
 }
 
-@test "orElse returns fallback for Err"
+@test "alt returns fallback for Err"
 test_orElse_fallback = do Effect {
-  result = Err "error" |> orElse (Ok 2)
+  result = Err "error" |> alt (Ok 2)
   assertEq result (Ok 2)
 }
 
-@test "orElse returns Err when both Err"
+@test "alt returns Err when both Err"
 test_orElse_both_err = do Effect {
-  result = Err "first" |> orElse (Err "second")
+  result = Err "first" |> alt (Err "second")
   assertEq result (Err "second")
 }
 
@@ -175,6 +176,6 @@ checkValue = x => if x > 5 then Ok x else Err "too small"
 
 @test "result pipeline"
 test_pipeline = do Effect {
-  result = Ok 5 |> map (_ * 2) |> flatMap checkValue |> getOrElse 0
+  result = Ok 5 |> map (_ * 2) |> chain checkValue |> getOrElse 0
   assertEq result 10
 }

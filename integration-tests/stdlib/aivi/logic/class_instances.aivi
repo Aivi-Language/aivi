@@ -1,0 +1,103 @@
+@no_prelude
+module integrationTests.stdlib.aivi.logic.classInstances
+
+use aivi
+use aivi.prelude
+use aivi.testing
+use aivi.logic
+use aivi.list
+use aivi.option
+
+// -- Functor --
+
+@test "map works on List via Functor"
+functor_list = do Effect {
+  assertEq (map (x => x * 2) [1, 2, 3]) [2, 4, 6]
+}
+
+@test "map works on Option via Functor"
+functor_option = do Effect {
+  assertEq (map (x => x + 1) (Some 5)) (Some 6)
+  assertEq (map (x => x + 1) None) None
+}
+
+@test "map works on Result via Functor"
+functor_result = do Effect {
+  assertEq (map (x => x * 2) (Ok 5)) (Ok 10)
+  assertEq (map (x => x * 2) (Err "e")) (Err "e")
+}
+
+// -- Filterable --
+
+@test "filter works on List via Filterable"
+filterable_list = do Effect {
+  assertEq (filter (x => x > 2) [1, 2, 3, 4]) [3, 4]
+}
+
+@test "filter works on Option via Filterable"
+filterable_option = do Effect {
+  assertEq (filter (x => x > 3) (Some 5)) (Some 5)
+  assertEq (filter (x => x > 3) (Some 1)) None
+  assertEq (filter (x => x > 3) None) None
+}
+
+// -- Foldable --
+
+@test "reduce works on List via Foldable"
+foldable_list = do Effect {
+  assertEq (reduce (acc x => acc + x) 0 [1, 2, 3]) 6
+}
+
+@test "reduce works on Option via Foldable"
+foldable_option = do Effect {
+  assertEq (reduce (acc x => acc + x) 0 (Some 5)) 5
+  assertEq (reduce (acc x => acc + x) 0 None) 0
+}
+
+// -- Semigroup / Monoid --
+
+@test "concat works on List via Semigroup"
+semigroup_list = do Effect {
+  assertEq (concat [1, 2] [3, 4]) [1, 2, 3, 4]
+}
+
+@test "empty works on List via Monoid"
+monoid_list = do Effect {
+  xs = (empty : List Int)
+  assertEq xs []
+}
+
+// -- Alternative --
+
+@test "alt works on Option via Alternative"
+alternative_option = do Effect {
+  assertEq (alt (Some 2) (Some 1)) (Some 1)
+  assertEq (alt (Some 2) None) (Some 2)
+}
+
+@test "alt works on List via Alternative"
+alternative_list = do Effect {
+  assertEq (alt [4, 5] [1, 2, 3]) [1, 2, 3]
+  assertEq (alt [4, 5] []) [4, 5]
+}
+
+// -- Polymorphic --
+
+@test "map is polymorphic across containers"
+polymorphic_map = do Effect {
+  double = x => x * 2
+  assertEq (map double [1, 2, 3]) [2, 4, 6]
+  assertEq (map double (Some 5)) (Some 10)
+  assertEq (map double (Ok 5)) (Ok 10)
+}
+
+// -- Pipe syntax --
+
+@test "class methods work with pipes"
+pipe_class_methods = do Effect {
+  result = [1, 2, 3, 4, 5]
+    |> filter (x => x > 2)
+    |> map (x => x * 10)
+    |> reduce (acc x => acc + x) 0
+  assertEq result 120
+}
