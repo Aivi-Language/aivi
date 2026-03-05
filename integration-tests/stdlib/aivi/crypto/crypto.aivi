@@ -44,7 +44,7 @@ hmacSha256_functional = do Effect {
       | Ok b  => b
       | Err _ => panic "bad hex"
     tag = hmacSha256 key msg
-    assert (length tag > 0)
+    assert (length (toHex tag) > 0)
 }
 
 @test "hmac sha512"
@@ -56,7 +56,7 @@ hmacSha512_functional = do Effect {
       | Ok b  => b
       | Err _ => panic "bad hex"
     tag = hmacSha512 key msg
-    assert (length tag > 0)
+    assert (length (toHex tag) > 0)
 }
 
 @test "hmac verify roundtrip"
@@ -93,7 +93,7 @@ verifyPassword_wrong = do Effect {
 @test "random bytes length"
 randomBytes_length = do Effect {
   b <- randomBytes 32
-  assert (length b == 32)
+  assert (length (toHex b) == 64)
 }
 
 @test "random uuid format"

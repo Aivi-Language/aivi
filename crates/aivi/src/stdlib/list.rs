@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.list";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.list
-export empty, isEmpty, length
+export empty, isEmpty, length, reverse
 export map, filter, flatMap, foldl, foldr, scanl
 export take, drop, takeWhile, dropWhile, partition, find, findMap
 export at, indexOf, zip, zipWith, unzip, intersperse, chunk, dedup, uniqueBy
@@ -19,6 +19,9 @@ isEmpty = xs => List.isEmpty xs
 
 length : List A -> Int
 length = xs => List.length xs
+
+reverse : List A -> List A
+reverse = xs => List.reverse xs
 
 map : (A -> B) -> List A -> List B
 map = f xs => List.map f xs

@@ -422,7 +422,7 @@ pub(super) fn build_database_record() -> Value {
         let state = state.clone();
         fields.insert(
             name.to_string(),
-            builtin(&format!("database.{name}"), 0, move |_, _| {
+            builtin(&format!("database.{name}"), 1, move |_, _| {
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
