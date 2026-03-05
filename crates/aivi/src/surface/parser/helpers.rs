@@ -459,3 +459,39 @@ fn path_span(path: &[PathSegment]) -> Span {
 fn is_adjacent(left: &Span, right: &Span) -> bool {
     left.end.line == right.start.line && left.end.column + 1 == right.start.column
 }
+
+/// Desugar a pattern predicate `Pat (when Guard)?` to a lambda:
+/// `__pred => __pred match | Pat (when Guard)? => True | _ => False`
+fn build_pattern_predicate(
+    pattern: Pattern,
+    guard: Option<Expr>,
+    span: Span,
+) -> Expr {
+    let param = SpannedName {
+        name: "__pred".to_string(),
+        span: span.clone(),
+    };
+    let scrutinee = Expr::Ident(param.clone());
+    let true_arm = MatchArm {
+        pattern,
+        guard,
+        body: Expr::Literal(Literal::Bool { value: true, span: span.clone() }),
+        span: span.clone(),
+    };
+    let false_arm = MatchArm {
+        pattern: Pattern::Wildcard(span.clone()),
+        guard: None,
+        body: Expr::Literal(Literal::Bool { value: false, span: span.clone() }),
+        span: span.clone(),
+    };
+    let match_expr = Expr::Match {
+        scrutinee: Some(Box::new(scrutinee)),
+        arms: vec![true_arm, false_arm],
+        span: span.clone(),
+    };
+    Expr::Lambda {
+        params: vec![Pattern::Ident(param)],
+        body: Box::new(match_expr),
+        span,
+    }
+}

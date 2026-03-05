@@ -135,6 +135,30 @@ impl Parser {
                     span,
                 });
             }
+            // Try pattern predicate: `(Pat when Guard)` or `(Constructor _)`.
+            // Only commit if a `when` follows the pattern, or the pattern contains
+            // a wildcard/unresolvable expression (e.g. `Some _`).
+            let paren_start = self.pos;
+            if let Some(pat) = self.parse_pattern() {
+                if self.match_keyword("when") {
+                    let guard = self.parse_expr().or_else(|| {
+                        self.pos = paren_start;
+                        None
+                    })?;
+                    let end = self.expect_symbol(")", "expected ')' to close pattern predicate");
+                    let span =
+                        merge_span(open_span, end.unwrap_or_else(|| expr_span(&guard)));
+                    return Some(build_pattern_predicate(pat, Some(guard), span));
+                }
+                // Constructor-only predicate like `(Some _)` — only if it has wildcard args.
+                if matches!(pat, Pattern::Constructor { ref args, .. } if args.iter().any(|a| matches!(a, Pattern::Wildcard(_)))) {
+                    if self.consume_symbol(")") {
+                        let span = merge_span(open_span, self.previous_span());
+                        return Some(build_pattern_predicate(pat, None, span));
+                    }
+                }
+            }
+            self.pos = paren_start;
             let expr = self.parse_expr()?;
             // Newlines are allowed as whitespace; tolerate `(expr\n)` and `(expr\n, ...)`.
             self.consume_newlines();
