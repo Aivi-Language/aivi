@@ -13,7 +13,7 @@ fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
     let (fn_ctx, loc_ctx, suppress) = unsafe {
         let runtime = (*ctx).runtime_mut();
         runtime.jit_rt_warning_count += 1;
-        let suppress = runtime.jit_binary_op_dispatching;
+        let suppress = runtime.jit_binary_op_dispatching || runtime.jit_suppress_warnings;
         let fn_part = runtime
             .jit_current_fn
             .as_deref()
