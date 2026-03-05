@@ -20,6 +20,8 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
                     message: format!("duplicate module '{}'", module.name.name),
                     span: module.name.span.clone(),
                     labels: Vec::new(),
+                    hints: Vec::new(),
+                    suggestion: None,
                 },
             ));
         } else {
@@ -47,6 +49,8 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
                     message: "cyclic module dependency".to_string(),
                     span: module.name.span.clone(),
                     labels: Vec::new(),
+                    hints: Vec::new(),
+                    suggestion: None,
                 },
             ));
         }
@@ -92,6 +96,8 @@ fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<File
                         message: format!("unused import '{}'", local.name),
                         span: local.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
             }
@@ -120,6 +126,8 @@ fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<File
                     message: format!("unused binding '{}'", def.name.name),
                     span: def.name.span.clone(),
                     labels: Vec::new(),
+                    hints: Vec::new(),
+                    suggestion: None,
                 },
             ));
         }
@@ -405,6 +413,8 @@ fn check_duplicate_exports(module: &Module, diagnostics: &mut Vec<FileDiagnostic
                     message: format!("duplicate export '{}'", export.name.name),
                     span: export.name.span.clone(),
                     labels: Vec::new(),
+                    hints: Vec::new(),
+                    suggestion: None,
                 },
             ));
         }
@@ -430,6 +440,8 @@ fn check_uses(
                     message: format!("unknown module '{}'", use_decl.module.name),
                     span: use_decl.module.span.clone(),
                     labels: Vec::new(),
+                    hints: Vec::new(),
+                    suggestion: None,
                 },
             ));
             continue;
@@ -458,6 +470,8 @@ fn check_uses(
                         ),
                         span: item.name.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
             }
@@ -846,6 +860,8 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                         ),
                         span: local_ref.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
                 continue;
@@ -864,6 +880,8 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                             ),
                             span: local_ref.span.clone(),
                             labels: Vec::new(),
+                            hints: Vec::new(),
+                            suggestion: None,
                         },
                     ));
                 } else {
@@ -878,6 +896,8 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                             ),
                             span: local_ref.span.clone(),
                             labels: Vec::new(),
+                            hints: Vec::new(),
+                            suggestion: None,
                         },
                     ));
                 }
@@ -894,6 +914,8 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                             ),
                             span: local_ref.span.clone(),
                             labels: Vec::new(),
+                            hints: Vec::new(),
+                            suggestion: None,
                         },
                     ));
                 }
@@ -932,6 +954,8 @@ fn check_multi_clause_sigs(module: &Module, diagnostics: &mut Vec<FileDiagnostic
                         ),
                         span: def.name.span.clone(),
                         labels: Vec::new(),
+                        hints: Vec::new(),
+                        suggestion: None,
                     },
                 ));
             }

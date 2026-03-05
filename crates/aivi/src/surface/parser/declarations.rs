@@ -100,15 +100,24 @@ impl Parser {
     }
 
     fn parse_type_decl_or_alias(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
+        self.parse_type_decl_or_alias_inner(decorators, false)
+    }
+
+    fn parse_type_decl_or_alias_opaque(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
+        self.parse_type_decl_or_alias_inner(decorators, true)
+    }
+
+    fn parse_type_decl_or_alias_inner(&mut self, decorators: Vec<Decorator>, opaque: bool) -> Option<ModuleItem> {
         let checkpoint = self.pos;
         let diag_checkpoint = self.diagnostics.len();
-        if let Some(decl) = self.parse_type_decl(decorators.clone()) {
+        if let Some(mut decl) = self.parse_type_decl(decorators.clone()) {
             if !decl.constructors.is_empty() {
+                decl.opaque = opaque;
                 return Some(ModuleItem::TypeDecl(decl));
             }
         }
         self.pos = checkpoint;
-        if let Some(alias) = self.parse_type_alias(decorators.clone()) {
+        if let Some(mut alias) = self.parse_type_alias(decorators.clone()) {
             if self.check_symbol("=>") {
                 self.pos = checkpoint;
                 self.diagnostics.truncate(diag_checkpoint);
@@ -130,14 +139,17 @@ impl Parser {
                     name: alias.name,
                     params: alias.params,
                     constructors: vec![constructor],
+                    opaque,
                     span: alias.span,
                 }));
             }
+            alias.opaque = opaque;
             return Some(ModuleItem::TypeAlias(alias));
         }
         self.pos = checkpoint;
-        if let Some(opaque) = self.parse_opaque_type_decl(decorators) {
-            return Some(ModuleItem::TypeDecl(opaque));
+        if let Some(mut opaque_decl) = self.parse_opaque_type_decl(decorators) {
+            opaque_decl.opaque = opaque_decl.opaque || opaque;
+            return Some(ModuleItem::TypeDecl(opaque_decl));
         }
         self.diagnostics.truncate(diag_checkpoint);
         None
@@ -169,6 +181,7 @@ impl Parser {
             name,
             params,
             constructors: Vec::new(),
+            opaque: false,
             span,
         })
     }
@@ -281,6 +294,7 @@ impl Parser {
             name,
             params,
             constructors: ctors,
+            opaque: false,
             span,
         })
     }
@@ -318,6 +332,7 @@ impl Parser {
             name,
             params,
             aliased,
+            opaque: false,
             span,
         })
     }

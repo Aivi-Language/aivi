@@ -201,6 +201,7 @@ impl Backend {
             severity: Some(match file_diag.diagnostic.severity {
                 aivi::DiagnosticSeverity::Error => DiagnosticSeverity::ERROR,
                 aivi::DiagnosticSeverity::Warning => DiagnosticSeverity::WARNING,
+                aivi::DiagnosticSeverity::Hint => DiagnosticSeverity::HINT,
             }),
             code: Some(NumberOrString::String(code.clone())),
             code_description: None,

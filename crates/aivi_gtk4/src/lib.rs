@@ -352,12 +352,7 @@ mod linux_impl {
         gesture_clicks: HashMap<i64, GestureClickState>,
         signal_events: VecDeque<SignalEventState>,
         signal_senders: Vec<mpsc::Sender<SignalEvent>>,
-        signal_bool_bindings: HashMap<String, Vec<SignalBoolBinding>>,
-        signal_css_bindings: HashMap<String, Vec<SignalCssBinding>>,
-        signal_toggle_bool_bindings: HashMap<String, Vec<SignalToggleBoolBinding>>,
-        signal_toggle_css_bindings: HashMap<String, Vec<SignalToggleCssBinding>>,
-        signal_dialog_bindings: HashMap<String, Vec<SignalDialogBinding>>,
-        signal_stack_page_bindings: HashMap<String, Vec<SignalStackPageBinding>>,
+        signal_action_bindings: HashMap<String, Vec<SignalAction>>,
         named_widgets: HashMap<String, i64>,
         widget_id_to_name: HashMap<i64, String>,
         pending_icon_search_paths: Vec<String>,
@@ -367,36 +362,33 @@ mod linux_impl {
         live_trees: HashMap<i64, LiveNode>,
     }
 
-    struct SignalBoolBinding {
-        widget_id: i64,
-        property: String,
-        value: bool,
-    }
-
-    struct SignalCssBinding {
-        widget_id: i64,
-        class_name: String,
-        add: bool,
-    }
-
-    struct SignalToggleBoolBinding {
-        widget_id: i64,
-        property: String,
-    }
-
-    struct SignalToggleCssBinding {
-        widget_id: i64,
-        class_name: String,
-    }
-
-    struct SignalDialogBinding {
-        dialog_id: i64,
-        parent_id: i64,
-    }
-
-    struct SignalStackPageBinding {
-        stack_id: i64,
-        page_name: String,
+    enum SignalAction {
+        SetBool {
+            widget_id: i64,
+            property: String,
+            value: bool,
+        },
+        CssClass {
+            widget_id: i64,
+            class_name: String,
+            add: bool,
+        },
+        ToggleBool {
+            widget_id: i64,
+            property: String,
+        },
+        ToggleCssClass {
+            widget_id: i64,
+            class_name: String,
+        },
+        PresentDialog {
+            dialog_id: i64,
+            parent_id: i64,
+        },
+        SetStackPage {
+            stack_id: i64,
+            page_name: String,
+        },
     }
 
     struct GestureClickState {
@@ -477,7 +469,11 @@ mod linux_impl {
     }
 
     fn bool_to_c(val: bool) -> c_int {
-        if val { 1 } else { 0 }
+        if val {
+            1
+        } else {
+            0
+        }
     }
 
     /// Set a GObject boolean (c_int) property.
@@ -525,7 +521,10 @@ mod linux_impl {
         class_hint: &str,
     ) -> Result<(), Gtk4Error> {
         if let Some(value) = props.get(key) {
-            let text_c = c_text(value, &format!("gtk4.buildFromNode invalid {class_hint} {key}"))?;
+            let text_c = c_text(
+                value,
+                &format!("gtk4.buildFromNode invalid {class_hint} {key}"),
+            )?;
             let prop_c = CString::new(key).unwrap();
             unsafe { gobject_set_str(widget, &prop_c, &text_c) };
         }
@@ -899,79 +898,88 @@ mod linux_impl {
 
             let mut mutations = Vec::new();
 
-            // Collect property bindings
-            if let Some(bindings) = state.signal_bool_bindings.get(&binding.handler) {
-                for b in bindings {
-                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
-                        if let Ok(prop_c) = CString::new(b.property.as_str()) {
-                            mutations.push(DeferredMutation::SetBool {
-                                widget,
-                                property: prop_c,
-                                value: if b.value { 1 } else { 0 },
-                            });
+            // Collect all signal action bindings for this handler
+            if let Some(actions) = state.signal_action_bindings.get(&binding.handler) {
+                for action in actions {
+                    match action {
+                        SignalAction::SetBool {
+                            widget_id,
+                            property,
+                            value,
+                        } => {
+                            if let Some(&widget) = state.widgets.get(widget_id) {
+                                if let Ok(prop_c) = CString::new(property.as_str()) {
+                                    mutations.push(DeferredMutation::SetBool {
+                                        widget,
+                                        property: prop_c,
+                                        value: bool_to_c(*value),
+                                    });
+                                }
+                            }
                         }
-                    }
-                }
-            }
-            // Collect CSS class bindings
-            if let Some(bindings) = state.signal_css_bindings.get(&binding.handler) {
-                for b in bindings {
-                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
-                        if let Ok(class_c) = CString::new(b.class_name.as_str()) {
-                            mutations.push(DeferredMutation::CssClass {
-                                widget,
-                                class: class_c,
-                                add: b.add,
-                            });
+                        SignalAction::CssClass {
+                            widget_id,
+                            class_name,
+                            add,
+                        } => {
+                            if let Some(&widget) = state.widgets.get(widget_id) {
+                                if let Ok(class_c) = CString::new(class_name.as_str()) {
+                                    mutations.push(DeferredMutation::CssClass {
+                                        widget,
+                                        class: class_c,
+                                        add: *add,
+                                    });
+                                }
+                            }
                         }
-                    }
-                }
-            }
-            // Collect toggle bool property bindings
-            if let Some(bindings) = state.signal_toggle_bool_bindings.get(&binding.handler) {
-                for b in bindings {
-                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
-                        if let Ok(prop_c) = CString::new(b.property.as_str()) {
-                            mutations.push(DeferredMutation::ToggleBool {
-                                widget,
-                                property: prop_c,
-                            });
+                        SignalAction::ToggleBool {
+                            widget_id,
+                            property,
+                        } => {
+                            if let Some(&widget) = state.widgets.get(widget_id) {
+                                if let Ok(prop_c) = CString::new(property.as_str()) {
+                                    mutations.push(DeferredMutation::ToggleBool {
+                                        widget,
+                                        property: prop_c,
+                                    });
+                                }
+                            }
                         }
-                    }
-                }
-            }
-            // Collect toggle CSS class bindings
-            if let Some(bindings) = state.signal_toggle_css_bindings.get(&binding.handler) {
-                for b in bindings {
-                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
-                        if let Ok(class_c) = CString::new(b.class_name.as_str()) {
-                            mutations.push(DeferredMutation::ToggleCssClass {
-                                widget,
-                                class: class_c,
-                            });
+                        SignalAction::ToggleCssClass {
+                            widget_id,
+                            class_name,
+                        } => {
+                            if let Some(&widget) = state.widgets.get(widget_id) {
+                                if let Ok(class_c) = CString::new(class_name.as_str()) {
+                                    mutations.push(DeferredMutation::ToggleCssClass {
+                                        widget,
+                                        class: class_c,
+                                    });
+                                }
+                            }
                         }
-                    }
-                }
-            }
-            // Collect dialog present bindings
-            if let Some(bindings) = state.signal_dialog_bindings.get(&binding.handler) {
-                for b in bindings {
-                    if let (Some(&dialog), Some(&parent)) =
-                        (state.widgets.get(&b.dialog_id), state.widgets.get(&b.parent_id))
-                    {
-                        mutations.push(DeferredMutation::PresentDialog { dialog, parent });
-                    }
-                }
-            }
-            // Collect stack page bindings
-            if let Some(bindings) = state.signal_stack_page_bindings.get(&binding.handler) {
-                for b in bindings {
-                    if let Some(&stack) = state.widgets.get(&b.stack_id) {
-                        if let Ok(page_c) = CString::new(b.page_name.as_str()) {
-                            mutations.push(DeferredMutation::SetStackPage {
-                                stack,
-                                page: page_c,
-                            });
+                        SignalAction::PresentDialog {
+                            dialog_id,
+                            parent_id,
+                        } => {
+                            if let (Some(&dialog), Some(&parent)) =
+                                (state.widgets.get(dialog_id), state.widgets.get(parent_id))
+                            {
+                                mutations.push(DeferredMutation::PresentDialog { dialog, parent });
+                            }
+                        }
+                        SignalAction::SetStackPage {
+                            stack_id,
+                            page_name,
+                        } => {
+                            if let Some(&stack) = state.widgets.get(stack_id) {
+                                if let Ok(page_c) = CString::new(page_name.as_str()) {
+                                    mutations.push(DeferredMutation::SetStackPage {
+                                        stack,
+                                        page: page_c,
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -1556,10 +1564,10 @@ mod linux_impl {
             unsafe { gtk_widget_set_margin_bottom(widget, value) };
         }
         if let Some(value) = props.get("hexpand").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_hexpand(widget, if value { 1 } else { 0 }) };
+            unsafe { gtk_widget_set_hexpand(widget, bool_to_c(value)) };
         }
         if let Some(value) = props.get("vexpand").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_vexpand(widget, if value { 1 } else { 0 }) };
+            unsafe { gtk_widget_set_vexpand(widget, bool_to_c(value)) };
         }
         if let Some(value) = props.get("halign").and_then(|v| parse_align_text(v)) {
             unsafe { gtk_widget_set_halign(widget, value) };
@@ -1581,10 +1589,10 @@ mod linux_impl {
             unsafe { gtk_widget_set_opacity(widget, value) };
         }
         if let Some(value) = props.get("visible").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_visible(widget, if value { 1 } else { 0 }) };
+            unsafe { gtk_widget_set_visible(widget, bool_to_c(value)) };
         }
         if let Some(value) = props.get("sensitive").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_sensitive(widget, if value { 1 } else { 0 }) };
+            unsafe { gtk_widget_set_sensitive(widget, bool_to_c(value)) };
         }
         if let Some(value) = props.get("css-class") {
             for class_name in value.split_whitespace() {
@@ -1600,7 +1608,7 @@ mod linux_impl {
                     unsafe { gtk_label_set_text(widget, text_c.as_ptr()) };
                 }
                 if let Some(value) = props.get("wrap").and_then(|v| parse_bool_text(v)) {
-                    unsafe { gtk_label_set_wrap(widget, if value { 1 } else { 0 }) };
+                    unsafe { gtk_label_set_wrap(widget, bool_to_c(value)) };
                 }
                 if let Some(value) = props.get("ellipsize").and_then(|v| parse_ellipsize_text(v)) {
                     unsafe { gtk_label_set_ellipsize(widget, value) };
@@ -1623,14 +1631,12 @@ mod linux_impl {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid GtkEntry text")?;
                     unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
                 }
-                set_obj_str(widget, &props, "placeholder-text", "GtkEntry")?;
+                set_obj_str(widget, props, "placeholder-text", "GtkEntry")?;
                 if class_name == "GtkPasswordEntry" {
                     if let Some(value) =
                         props.get("show-peek-icon").and_then(|v| parse_bool_text(v))
                     {
-                        unsafe {
-                            gtk_password_entry_set_show_peek_icon(widget, bool_to_c(value))
-                        };
+                        unsafe { gtk_password_entry_set_show_peek_icon(widget, bool_to_c(value)) };
                     }
                 }
             }
@@ -1723,41 +1729,15 @@ mod linux_impl {
                     let prop_c = CString::new("sidebar-position").unwrap();
                     unsafe { gobject_set_bool(widget, &prop_c, pos) };
                 }
-                set_obj_bool(widget, &props, "collapsed");
-                set_obj_bool(widget, &props, "show-sidebar");
-                set_obj_f64(widget, &props, "max-sidebar-width");
-                set_obj_f64(widget, &props, "min-sidebar-width");
-                set_obj_f64(widget, &props, "sidebar-width-fraction");
+                set_obj_bool(widget, props, "collapsed");
+                set_obj_bool(widget, props, "show-sidebar");
+                set_obj_f64(widget, props, "max-sidebar-width");
+                set_obj_f64(widget, props, "min-sidebar-width");
+                set_obj_f64(widget, props, "sidebar-width-fraction");
             }
             "AdwButtonContent" => {
-                if let Some(value) = props.get("label") {
-                    let text_c =
-                        c_text(value, "gtk4.buildFromNode invalid AdwButtonContent label")?;
-                    let prop_c = CString::new("label").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("icon-name") {
-                    let text_c = c_text(
-                        value,
-                        "gtk4.buildFromNode invalid AdwButtonContent icon-name",
-                    )?;
-                    let prop_c = CString::new("icon-name").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "label", "AdwButtonContent")?;
+                set_obj_str(widget, props, "icon-name", "AdwButtonContent")?;
             }
             "GtkRevealer" => {
                 if let Some(value) = props.get("transition-type") {
@@ -1783,217 +1763,48 @@ mod linux_impl {
                     unsafe { gtk_revealer_set_transition_duration(widget, value) };
                 }
                 if let Some(value) = props.get("reveal-child").and_then(|v| parse_bool_text(v)) {
-                    unsafe { gtk_revealer_set_reveal_child(widget, if value { 1 } else { 0 }) };
+                    unsafe { gtk_revealer_set_reveal_child(widget, bool_to_c(value)) };
                 }
             }
             "GtkMenuButton" => {
-                if let Some(value) = props.get("label") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkMenuButton label")?;
-                    let prop_c = CString::new("label").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("icon-name") {
-                    let text_c =
-                        c_text(value, "gtk4.buildFromNode invalid GtkMenuButton icon-name")?;
-                    let prop_c = CString::new("icon-name").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "label", "GtkMenuButton")?;
+                set_obj_str(widget, props, "icon-name", "GtkMenuButton")?;
                 if let Some(id_str) = props.get("menu-model") {
                     if let Ok(id) = id_str.parse::<i64>() {
                         if let Some(&menu_raw) = state.widgets.get(&id) {
                             let prop_c = CString::new("menu-model").unwrap();
-                            unsafe {
-                                g_object_set(
-                                    widget,
-                                    prop_c.as_ptr(),
-                                    menu_raw,
-                                    std::ptr::null::<c_char>(),
-                                )
-                            };
+                            unsafe { gobject_set_ptr(widget, &prop_c, menu_raw) };
                         }
                     }
                 }
             }
             "AdwPreferencesDialog" => {
-                if let Some(value) = props.get("title") {
-                    let text_c = c_text(
-                        value,
-                        "gtk4.buildFromNode invalid AdwPreferencesDialog title",
-                    )?;
-                    let prop_c = CString::new("title").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "title", "AdwPreferencesDialog")?;
             }
             "AdwPreferencesPage" => {
-                if let Some(value) = props.get("title") {
-                    let text_c =
-                        c_text(value, "gtk4.buildFromNode invalid AdwPreferencesPage title")?;
-                    let prop_c = CString::new("title").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("icon-name") {
-                    let text_c = c_text(
-                        value,
-                        "gtk4.buildFromNode invalid AdwPreferencesPage icon-name",
-                    )?;
-                    let prop_c = CString::new("icon-name").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("name") {
-                    let text_c =
-                        c_text(value, "gtk4.buildFromNode invalid AdwPreferencesPage name")?;
-                    let prop_c = CString::new("name").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "title", "AdwPreferencesPage")?;
+                set_obj_str(widget, props, "icon-name", "AdwPreferencesPage")?;
+                set_obj_str(widget, props, "name", "AdwPreferencesPage")?;
             }
             "AdwPreferencesGroup" => {
-                if let Some(value) = props.get("title") {
-                    let text_c = c_text(
-                        value,
-                        "gtk4.buildFromNode invalid AdwPreferencesGroup title",
-                    )?;
-                    let prop_c = CString::new("title").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("description") {
-                    let text_c = c_text(
-                        value,
-                        "gtk4.buildFromNode invalid AdwPreferencesGroup description",
-                    )?;
-                    let prop_c = CString::new("description").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "title", "AdwPreferencesGroup")?;
+                set_obj_str(widget, props, "description", "AdwPreferencesGroup")?;
             }
             "AdwActionRow" | "AdwExpanderRow" | "AdwPreferencesRow" | "AdwSpinRow" => {
-                if let Some(value) = props.get("title") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwActionRow title")?;
-                    let prop_c = CString::new("title").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("subtitle") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwActionRow subtitle")?;
-                    let prop_c = CString::new("subtitle").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "title", "AdwActionRow")?;
+                set_obj_str(widget, props, "subtitle", "AdwActionRow")?;
             }
             "AdwEntryRow" | "AdwPasswordEntryRow" => {
-                if let Some(value) = props.get("title") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwEntryRow title")?;
-                    let prop_c = CString::new("title").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, props, "title", "AdwEntryRow")?;
                 if let Some(value) = props.get("text") {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid AdwEntryRow text")?;
                     unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
                 }
             }
             "AdwSwitchRow" => {
-                if let Some(value) = props.get("title") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwSwitchRow title")?;
-                    let prop_c = CString::new("title").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("subtitle") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwSwitchRow subtitle")?;
-                    let prop_c = CString::new("subtitle").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
-                if let Some(value) = props.get("active").and_then(|v| parse_bool_text(v)) {
-                    let prop_c = CString::new("active").unwrap();
-                    let v: c_int = if value { 1 } else { 0 };
-                    unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
-                }
+                set_obj_str(widget, props, "title", "AdwSwitchRow")?;
+                set_obj_str(widget, props, "subtitle", "AdwSwitchRow")?;
+                set_obj_bool(widget, props, "active");
             }
             _ => {}
         }
@@ -2244,12 +2055,7 @@ mod linux_impl {
                     // GTK_ACCESSIBLE_ROLE_GROUP = 18
                     if matches!(class_name, "GtkBox") {
                         if let Ok(role_prop) = CString::new("accessible-role") {
-                            g_object_set(
-                                raw,
-                                role_prop.as_ptr(),
-                                18i32,
-                                std::ptr::null::<c_char>(),
-                            );
+                            gobject_set_bool(raw, &role_prop, 18);
                         }
                     }
                     // Set the AT-SPI accessible label so AT-SPI clients can find
@@ -2411,9 +2217,7 @@ mod linux_impl {
                         _ => "content",
                     };
                     let prop_c = CString::new(prop_name).unwrap();
-                    unsafe {
-                        g_object_set(raw, prop_c.as_ptr(), child_raw, std::ptr::null::<c_char>());
-                    }
+                    unsafe { gobject_set_ptr(raw, &prop_c, child_raw) };
                 }
                 CreatedWidgetKind::Other => {}
                 CreatedWidgetKind::PreferencesDialog => {
@@ -2595,14 +2399,7 @@ mod linux_impl {
                     _ => "content",
                 };
                 let prop_c = CString::new(prop_name).unwrap();
-                unsafe {
-                    g_object_set(
-                        parent_raw,
-                        prop_c.as_ptr(),
-                        child_raw,
-                        std::ptr::null::<c_char>(),
-                    );
-                }
+                unsafe { gobject_set_ptr(parent_raw, &prop_c, child_raw) };
             }
             CreatedWidgetKind::PreferencesDialog => {
                 call_adw_fn_pp("adw_preferences_dialog_add", parent_raw, child_raw);
@@ -3064,7 +2861,7 @@ mod linux_impl {
                     "gtk4.windowSetHideOnClose unknown window id {win_id}"
                 ))
             })?;
-            unsafe { gtk_window_set_hide_on_close(window, if hide { 1 } else { 0 }) };
+            unsafe { gtk_window_set_hide_on_close(window, bool_to_c(hide)) };
             Ok(())
         })
     }
@@ -3077,7 +2874,7 @@ mod linux_impl {
                     "gtk4.windowSetDecorated unknown window id {win_id}"
                 ))
             })?;
-            unsafe { gtk_window_set_decorated(window, if decorated { 1 } else { 0 }) };
+            unsafe { gtk_window_set_decorated(window, bool_to_c(decorated)) };
             Ok(())
         })
     }
@@ -3109,8 +2906,7 @@ mod linux_impl {
         GTK_STATE.with(|state| {
             let state = state.borrow();
             let widget = widget_ptr(&state, id, "widgetSetBoolProperty")?;
-            let v: c_int = if value { 1 } else { 0 };
-            unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
+            unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
             Ok(())
         })
     }
@@ -3128,7 +2924,7 @@ mod linux_impl {
         GTK_STATE.with(|state| {
             let state = state.borrow();
             let widget = widget_ptr(&state, id, "widgetSetHexpand")?;
-            unsafe { gtk_widget_set_hexpand(widget, if expand { 1 } else { 0 }) };
+            unsafe { gtk_widget_set_hexpand(widget, bool_to_c(expand)) };
             Ok(())
         })
     }
@@ -3137,7 +2933,7 @@ mod linux_impl {
         GTK_STATE.with(|state| {
             let state = state.borrow();
             let widget = widget_ptr(&state, id, "widgetSetVexpand")?;
-            unsafe { gtk_widget_set_vexpand(widget, if expand { 1 } else { 0 }) };
+            unsafe { gtk_widget_set_vexpand(widget, bool_to_c(expand)) };
             Ok(())
         })
     }
@@ -3309,7 +3105,7 @@ mod linux_impl {
             let boxw = state.boxes.get(&box_id).copied().ok_or_else(|| {
                 Gtk4Error::new(format!("gtk4.boxSetHomogeneous unknown box id {box_id}"))
             })?;
-            unsafe { gtk_box_set_homogeneous(boxw, if homogeneous { 1 } else { 0 }) };
+            unsafe { gtk_box_set_homogeneous(boxw, bool_to_c(homogeneous)) };
             Ok(())
         })
     }
@@ -3399,7 +3195,7 @@ mod linux_impl {
                 .get(&id)
                 .copied()
                 .ok_or_else(|| Gtk4Error::new(format!("unknown label id {id}")))?;
-            unsafe { gtk_label_set_wrap(l, if wrap { 1 } else { 0 }) };
+            unsafe { gtk_label_set_wrap(l, bool_to_c(wrap)) };
             Ok(())
         })
     }
@@ -4028,26 +3824,42 @@ mod linux_impl {
         })
     }
 
+    fn push_signal_action(
+        handler: &str,
+        action: SignalAction,
+        validate_ids: &[i64],
+        fn_name: &str,
+    ) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            for &id in validate_ids {
+                let _ = widget_ptr(&state, id, fn_name)?;
+            }
+            state
+                .signal_action_bindings
+                .entry(handler.to_string())
+                .or_default()
+                .push(action);
+            Ok(())
+        })
+    }
+
     pub(super) fn signal_bind_bool_property(
         handler: &str,
         widget_id: i64,
         prop: &str,
         value: bool,
     ) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let _ = widget_ptr(&state, widget_id, "signalBindBoolProperty")?;
-            state
-                .signal_bool_bindings
-                .entry(handler.to_string())
-                .or_default()
-                .push(SignalBoolBinding {
-                    widget_id,
-                    property: prop.to_string(),
-                    value,
-                });
-            Ok(())
-        })
+        push_signal_action(
+            handler,
+            SignalAction::SetBool {
+                widget_id,
+                property: prop.to_string(),
+                value,
+            },
+            &[widget_id],
+            "signalBindBoolProperty",
+        )
     }
 
     pub(super) fn signal_bind_css_class(
@@ -4056,20 +3868,16 @@ mod linux_impl {
         class: &str,
         add: bool,
     ) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let _ = widget_ptr(&state, widget_id, "signalBindCssClass")?;
-            state
-                .signal_css_bindings
-                .entry(handler.to_string())
-                .or_default()
-                .push(SignalCssBinding {
-                    widget_id,
-                    class_name: class.to_string(),
-                    add,
-                });
-            Ok(())
-        })
+        push_signal_action(
+            handler,
+            SignalAction::CssClass {
+                widget_id,
+                class_name: class.to_string(),
+                add,
+            },
+            &[widget_id],
+            "signalBindCssClass",
+        )
     }
 
     pub(super) fn signal_bind_toggle_bool_property(
@@ -4077,19 +3885,15 @@ mod linux_impl {
         widget_id: i64,
         prop: &str,
     ) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let _ = widget_ptr(&state, widget_id, "signalBindToggleBoolProperty")?;
-            state
-                .signal_toggle_bool_bindings
-                .entry(handler.to_string())
-                .or_default()
-                .push(SignalToggleBoolBinding {
-                    widget_id,
-                    property: prop.to_string(),
-                });
-            Ok(())
-        })
+        push_signal_action(
+            handler,
+            SignalAction::ToggleBool {
+                widget_id,
+                property: prop.to_string(),
+            },
+            &[widget_id],
+            "signalBindToggleBoolProperty",
+        )
     }
 
     pub(super) fn signal_toggle_css_class(
@@ -4097,19 +3901,15 @@ mod linux_impl {
         widget_id: i64,
         class: &str,
     ) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let _ = widget_ptr(&state, widget_id, "signalToggleCssClass")?;
-            state
-                .signal_toggle_css_bindings
-                .entry(handler.to_string())
-                .or_default()
-                .push(SignalToggleCssBinding {
-                    widget_id,
-                    class_name: class.to_string(),
-                });
-            Ok(())
-        })
+        push_signal_action(
+            handler,
+            SignalAction::ToggleCssClass {
+                widget_id,
+                class_name: class.to_string(),
+            },
+            &[widget_id],
+            "signalToggleCssClass",
+        )
     }
 
     pub(super) fn signal_bind_dialog_present(
@@ -4117,20 +3917,15 @@ mod linux_impl {
         dialog_id: i64,
         parent_id: i64,
     ) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let _ = widget_ptr(&state, dialog_id, "signalBindDialogPresent")?;
-            let _ = widget_ptr(&state, parent_id, "signalBindDialogPresent")?;
-            state
-                .signal_dialog_bindings
-                .entry(handler.to_string())
-                .or_default()
-                .push(SignalDialogBinding {
-                    dialog_id,
-                    parent_id,
-                });
-            Ok(())
-        })
+        push_signal_action(
+            handler,
+            SignalAction::PresentDialog {
+                dialog_id,
+                parent_id,
+            },
+            &[dialog_id, parent_id],
+            "signalBindDialogPresent",
+        )
     }
 
     pub(super) fn signal_bind_stack_page(
@@ -4138,19 +3933,15 @@ mod linux_impl {
         stack_id: i64,
         page_name: &str,
     ) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let _ = widget_ptr(&state, stack_id, "signalBindStackPage")?;
-            state
-                .signal_stack_page_bindings
-                .entry(handler.to_string())
-                .or_default()
-                .push(SignalStackPageBinding {
-                    stack_id,
-                    page_name: page_name.to_string(),
-                });
-            Ok(())
-        })
+        push_signal_action(
+            handler,
+            SignalAction::SetStackPage {
+                stack_id,
+                page_name: page_name.to_string(),
+            },
+            &[stack_id],
+            "signalBindStackPage",
+        )
     }
 
     pub(super) fn build_from_node(node: &super::GtkNode) -> Result<i64, Gtk4Error> {

@@ -342,6 +342,7 @@ impl Parser {
             name,
             params,
             constructors: ctors,
+            opaque: false,
             span,
         })
     }

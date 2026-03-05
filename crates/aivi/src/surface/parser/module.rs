@@ -277,6 +277,13 @@ impl Parser {
                 continue;
             }
 
+            if self.match_keyword("opaque") {
+                if let Some(item) = self.parse_type_decl_or_alias_opaque(decorators) {
+                    items.push(item);
+                }
+                continue;
+            }
+
             if self.peek_keyword("type")
                 && self.tokens.get(self.pos + 1).is_some_and(|tok| {
                     tok.kind == TokenKind::Ident
@@ -367,6 +374,8 @@ impl Parser {
         } else if self.match_keyword("machine") {
             self.parse_machine_decl(decorators.clone())
                 .map(ModuleItem::MachineDecl)
+        } else if self.match_keyword("opaque") {
+            self.parse_type_decl_or_alias_opaque(decorators.clone())
         } else if self.peek_keyword("type")
             && self.tokens.get(self.pos + 1).is_some_and(|tok| {
                 tok.kind == TokenKind::Ident

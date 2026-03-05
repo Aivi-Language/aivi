@@ -20,6 +20,8 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 message,
                 span,
                 labels: Vec::new(),
+                hints: Vec::new(),
+                suggestion: None,
             },
         });
     }
@@ -294,6 +296,8 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 message,
                 span,
                 labels: Vec::new(),
+                hints: Vec::new(),
+                suggestion: None,
             },
         });
     }

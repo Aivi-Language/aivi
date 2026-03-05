@@ -35,7 +35,7 @@ apply: always
 | Char                                      | `'a'`                                                                                                                                                                                  |
 | ISO instant                               | `2024-05-21T12:00:00Z`                                                                                                                                                                 |
 | Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                                |
-| Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then unless use when with yield loop` |
+| Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on opaque or over patch recurse resource snapshot then unless use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -247,6 +247,21 @@ mkEmail = text => Email text
 `T = U!` creates a nominal type `T` (distinct from `U`) using a single constructor named `T`.
 Instances for the base type are auto-forwarded to the branded type when available; explicit
 instances for the branded type take precedence.
+
+### Opaque types
+
+```aivi
+opaque Url = {
+  protocol: Text, host: Text, port: Option Int,
+  path: Text, query: List (Text, Text), hash: Option Text
+}
+```
+
+The `opaque` keyword hides the type's internal structure outside its defining module:
+- **Inside the module**: fully transparent — construct, access fields, pattern match, update freely.
+- **Outside the module**: opaque — no record literals, no field access, no `<|` update, no structural pattern matching.
+- Domain operators and exported functions still work from outside.
+- Works for records, ADTs (`opaque Color = Red | Green | Blue`), branded types, and plain aliases.
 
 ### Closed records
 

@@ -22,9 +22,9 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
     > = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
 
-    let (global_type_constructors, global_aliases) =
+    let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases);
+    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
 
     elaborate_modules(
         modules,
@@ -59,9 +59,9 @@ pub fn elaborate_stdlib_checkpoint(stdlib_modules: &mut [Module]) -> Elaboration
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
 
-    let (global_type_constructors, global_aliases) =
+    let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, stdlib_modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases);
+    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
 
     let mut diagnostics = Vec::new();
     elaborate_modules(
@@ -97,9 +97,9 @@ pub fn elaborate_with_checkpoint(
     let mut module_class_exports = checkpoint.module_class_exports.clone();
     let mut module_instance_exports = checkpoint.module_instance_exports.clone();
 
-    let (global_type_constructors, global_aliases) =
+    let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, modules);
-    checker.set_global_type_info(global_type_constructors, global_aliases);
+    checker.set_global_type_info(global_type_constructors, global_aliases, global_opaque_types);
 
     elaborate_modules(
         modules,

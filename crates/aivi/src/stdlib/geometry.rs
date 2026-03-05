@@ -33,20 +33,20 @@ segment2 = sx sy ex ey => { start: { x: sx, y: sy }, end: { x: ex, y: ey } }
 ray3 : Float -> Float -> Float -> Float -> Float -> Float -> Ray3
 ray3 = ox oy oz dx dy dz => { origin: { x: ox, y: oy, z: oz }, dir: { x: dx, y: dy, z: dz } }
 
-domain Geometry over Point2 = {
-  (+) : Point2 -> Point2 -> Point2
-  (+) = a b => { x: a.x + b.x, y: a.y + b.y }
-
-  (-) : Point2 -> Point2 -> Point2
-  (-) = a b => { x: a.x - b.x, y: a.y - b.y }
-}
-
 domain Geometry over Point3 = {
   (+) : Point3 -> Point3 -> Point3
   (+) = a b => { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
 
   (-) : Point3 -> Point3 -> Point3
   (-) = a b => { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
+}
+
+domain Geometry over Point2 = {
+  (+) : Point2 -> Point2 -> Point2
+  (+) = a b => { x: a.x + b.x, y: a.y + b.y }
+
+  (-) : Point2 -> Point2 -> Point2
+  (-) = a b => { x: a.x - b.x, y: a.y - b.y }
 }
 
 distance : Point2 -> Point2 -> Float

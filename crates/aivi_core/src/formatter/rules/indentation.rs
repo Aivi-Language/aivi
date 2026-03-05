@@ -685,7 +685,7 @@
         let first = tokens[first_idx].text.as_str();
         if matches!(
             first,
-            "module" | "use" | "export" | "type" | "class" | "instance" | "domain"
+            "module" | "use" | "export" | "type" | "class" | "instance" | "domain" | "opaque"
         ) {
             return true;
         }

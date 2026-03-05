@@ -430,6 +430,11 @@ impl TypeChecker {
                     return Type::Con(name, args);
                 };
 
+                // Don't expand opaque aliases outside their defining module.
+                if self.is_opaque_from_here(&name).is_some() {
+                    return Type::Con(name, args);
+                }
+
                 if visiting.contains(&name) {
                     // Recursive reference; stop expanding and treat as nominal.
                     return Type::Con(name, args);
