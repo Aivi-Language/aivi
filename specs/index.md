@@ -29,6 +29,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Record Row Transforms](syntax/types/record_row_transforms)
 - [Classes & HKTs](syntax/types/classes_and_hkts)
 - [Expected-Type Coercions](syntax/types/expected_type_coercions)
+- [Opaque Types](syntax/types/opaque_types)
 #### Data & Patterns
 - [Pattern Matching](syntax/pattern_matching)
 - [Predicates](syntax/predicates)
