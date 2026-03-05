@@ -108,30 +108,33 @@ pub(super) fn list_value(items: Vec<Value>) -> Value {
 pub(super) fn expect_text(value: Value, ctx: &str) -> Result<String, RuntimeError> {
     match value {
         Value::Text(text) => Ok(text),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Text, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Text".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 pub(super) fn expect_int(value: Value, ctx: &str) -> Result<i64, RuntimeError> {
     match value {
         Value::Int(value) => Ok(value),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Int, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Int".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 pub(super) fn expect_float(value: Value, ctx: &str) -> Result<f64, RuntimeError> {
     match value {
         Value::Float(value) => Ok(value),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Float, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Float".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
@@ -140,20 +143,24 @@ pub(super) fn expect_char(value: Value, ctx: &str) -> Result<char, RuntimeError>
     let mut chars = text.chars();
     match (chars.next(), chars.next()) {
         (Some(ch), None) => Ok(ch),
-        _ => Err(RuntimeError::Message(format!(
-            "{ctx}: expected a single character, but received a string of length {}",
-            text.len()
-        ))),
+        _ => Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: format!(
+                "expected a single character, got string of length {}",
+                text.len()
+            ),
+        }),
     }
 }
 
 pub(super) fn expect_list(value: Value, ctx: &str) -> Result<Arc<Vec<Value>>, RuntimeError> {
     match value {
         Value::List(items) => Ok(items),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected List, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "List".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
@@ -163,10 +170,11 @@ pub(super) fn expect_record(
 ) -> Result<Arc<std::collections::HashMap<String, Value>>, RuntimeError> {
     match value {
         Value::Record(fields) => Ok(fields),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Record, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Record".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
@@ -176,10 +184,11 @@ pub(super) fn list_floats(values: &[Value], ctx: &str) -> Result<Vec<f64>, Runti
         match value {
             Value::Float(value) => out.push(*value),
             other => {
-                return Err(RuntimeError::Message(format!(
-                    "{ctx}: expected List Float, but element is {}",
-                    value_type_name(other)
-                )))
+                return Err(RuntimeError::TypeError {
+                    context: ctx.to_string(),
+                    expected: "Float".to_string(),
+                    got: value_type_name(other).to_string(),
+                })
             }
         }
     }
@@ -192,10 +201,11 @@ pub(super) fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, Runtime
         match value {
             Value::Int(value) => out.push(*value),
             other => {
-                return Err(RuntimeError::Message(format!(
-                    "{ctx}: expected List Int, but element is {}",
-                    value_type_name(other)
-                )))
+                return Err(RuntimeError::TypeError {
+                    context: ctx.to_string(),
+                    expected: "Int".to_string(),
+                    got: value_type_name(other).to_string(),
+                })
             }
         }
     }
@@ -205,49 +215,54 @@ pub(super) fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, Runtime
 pub(super) fn expect_bytes(value: Value, ctx: &str) -> Result<Arc<Vec<u8>>, RuntimeError> {
     match value {
         Value::Bytes(bytes) => Ok(bytes),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Bytes, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Bytes".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 pub(super) fn expect_regex(value: Value, ctx: &str) -> Result<Arc<Regex>, RuntimeError> {
     match value {
         Value::Regex(regex) => Ok(regex),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Regex, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Regex".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 pub(super) fn expect_bigint(value: Value, ctx: &str) -> Result<Arc<BigInt>, RuntimeError> {
     match value {
         Value::BigInt(value) => Ok(value),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected BigInt, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "BigInt".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 pub(super) fn expect_rational(value: Value, ctx: &str) -> Result<Arc<BigRational>, RuntimeError> {
     match value {
         Value::Rational(value) => Ok(value),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Rational, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Rational".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }
 
 pub(super) fn expect_decimal(value: Value, ctx: &str) -> Result<Decimal, RuntimeError> {
     match value {
         Value::Decimal(value) => Ok(value),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx}: expected Decimal, but received {}",
-            value_type_name(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Decimal".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
     }
 }

@@ -82,14 +82,18 @@ fn signal_from_value(value: Value, ctx: &str) -> Result<(Vec<f64>, f64), Runtime
     let record = expect_record(value, ctx)?;
     let rate = match record.get("rate") {
         Some(value) => expect_float(value.clone(), ctx)?,
-        None => return Err(RuntimeError::Message(format!("{ctx} expects Signal.rate"))),
+        None => return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'rate' on Signal".to_string(),
+        }),
     };
     let samples_list = match record.get("samples") {
         Some(value) => expect_list(value.clone(), ctx)?,
         None => {
-            return Err(RuntimeError::Message(format!(
-                "{ctx} expects Signal.samples"
-            )))
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'samples' on Signal".to_string(),
+            })
         }
     };
     let samples = list_floats(&samples_list, ctx)?;
@@ -112,17 +116,19 @@ fn spectrum_from_value(
     let rate = match record.get("rate") {
         Some(value) => expect_float(value.clone(), ctx)?,
         None => {
-            return Err(RuntimeError::Message(format!(
-                "{ctx} expects Spectrum.rate"
-            )))
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'rate' on Spectrum".to_string(),
+            })
         }
     };
     let bins_list = match record.get("bins") {
         Some(value) => expect_list(value.clone(), ctx)?,
         None => {
-            return Err(RuntimeError::Message(format!(
-                "{ctx} expects Spectrum.bins"
-            )))
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'bins' on Spectrum".to_string(),
+            })
         }
     };
     let mut bins = Vec::with_capacity(bins_list.len());
@@ -130,11 +136,17 @@ fn spectrum_from_value(
         let record = expect_record(item.clone(), ctx)?;
         let re = match record.get("re") {
             Some(value) => expect_float(value.clone(), ctx)?,
-            None => return Err(RuntimeError::Message(format!("{ctx} expects Complex.re"))),
+            None => return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 're' on Complex".to_string(),
+            }),
         };
         let im = match record.get("im") {
             Some(value) => expect_float(value.clone(), ctx)?,
-            None => return Err(RuntimeError::Message(format!("{ctx} expects Complex.im"))),
+            None => return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'im' on Complex".to_string(),
+            }),
         };
         bins.push(FftComplex::new(re, im));
     }

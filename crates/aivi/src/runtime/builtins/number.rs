@@ -144,7 +144,10 @@ pub(super) fn build_decimal_record() -> Value {
         builtin("decimal.fromFloat", 1, |mut args, _| {
             let value = expect_float(args.pop().unwrap(), "decimal.fromFloat")?;
             let decimal = Decimal::from_f64(value).ok_or_else(|| {
-                RuntimeError::Message("decimal.fromFloat expects finite Float".to_string())
+                RuntimeError::InvalidArgument {
+                    context: "decimal.fromFloat".to_string(),
+                    reason: "value must be finite".to_string(),
+                }
             })?;
             Ok(Value::Decimal(decimal))
         }),
@@ -155,7 +158,7 @@ pub(super) fn build_decimal_record() -> Value {
             let value = expect_decimal(args.pop().unwrap(), "decimal.toFloat")?;
             let out = value
                 .to_f64()
-                .ok_or_else(|| RuntimeError::Message("decimal.toFloat overflow".to_string()))?;
+                .ok_or_else(|| RuntimeError::Overflow { context: "decimal.toFloat".to_string() })?;
             Ok(Value::Float(out))
         }),
     );

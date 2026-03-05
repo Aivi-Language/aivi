@@ -19,24 +19,32 @@ fn address_from_value(value: Value, ctx: &str) -> Result<SocketAddr, RuntimeErro
     let host = match record.get("host") {
         Some(Value::Text(text)) => text.clone(),
         _ => {
-            return Err(RuntimeError::Message(format!(
-                "{ctx} expects Address.host Text"
-            )))
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'host' (Text) on Address".to_string(),
+            })
         }
     };
     let port = match record.get("port") {
         Some(Value::Int(value)) => *value,
         _ => {
-            return Err(RuntimeError::Message(format!(
-                "{ctx} expects Address.port Int"
-            )))
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'port' (Int) on Address".to_string(),
+            })
         }
     };
     let port = u16::try_from(port)
-        .map_err(|_| RuntimeError::Message(format!("{ctx} expects Address.port in 0..65535")))?;
+        .map_err(|_| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "Address.port must be in 0..65535".to_string(),
+        })?;
     let addr = format!("{host}:{port}");
     addr.parse()
-        .map_err(|_| RuntimeError::Message(format!("{ctx} invalid address")))
+        .map_err(|_| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "invalid address".to_string(),
+        })
 }
 
 pub(super) fn connection_from_value(
@@ -45,14 +53,22 @@ pub(super) fn connection_from_value(
 ) -> Result<Arc<Mutex<TcpStream>>, RuntimeError> {
     match value {
         Value::Connection(handle) => Ok(handle),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects a connection"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Connection".to_string(),
+            got: "other".to_string(),
+        }),
     }
 }
 
 fn listener_from_value(value: Value, ctx: &str) -> Result<Arc<Mutex<Option<TcpListener>>>, RuntimeError> {
     match value {
         Value::Listener(handle) => Ok(handle),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects a listener"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Listener".to_string(),
+            got: "other".to_string(),
+        }),
     }
 }
 
@@ -62,7 +78,10 @@ fn list_int_to_bytes(value: Value, ctx: &str) -> Result<Vec<u8>, RuntimeError> {
     for item in items.iter() {
         let value = expect_int(item.clone(), ctx)?;
         let byte = u8::try_from(value)
-            .map_err(|_| RuntimeError::Message(format!("{ctx} expects bytes in 0..255")))?;
+            .map_err(|_| RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "byte value must be in 0..255".to_string(),
+            })?;
         out.push(byte);
     }
     Ok(out)

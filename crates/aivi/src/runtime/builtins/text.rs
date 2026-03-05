@@ -359,7 +359,11 @@ pub(super) fn build_text_record() -> Value {
             let value = expect_text(args.pop().unwrap(), "text.toBytes")?;
             let encoding = args.pop().unwrap();
             let encoding = encoding_kind(&encoding)
-                .ok_or_else(|| RuntimeError::Message("text expects Encoding".to_string()))?;
+                .ok_or_else(|| RuntimeError::TypeError {
+                    context: "text.toBytes".to_string(),
+                    expected: "Encoding".to_string(),
+                    got: "other".to_string(),
+                })?;
             let bytes = encode_text(encoding, &value);
             Ok(Value::Bytes(Arc::new(bytes)))
         }),
@@ -370,7 +374,11 @@ pub(super) fn build_text_record() -> Value {
             let bytes = expect_bytes(args.pop().unwrap(), "text.fromBytes")?;
             let encoding = args.pop().unwrap();
             let encoding = encoding_kind(&encoding)
-                .ok_or_else(|| RuntimeError::Message("text expects Encoding".to_string()))?;
+                .ok_or_else(|| RuntimeError::TypeError {
+                    context: "text.fromBytes".to_string(),
+                    expected: "Encoding".to_string(),
+                    got: "other".to_string(),
+                })?;
             match decode_bytes(encoding, &bytes) {
                 Ok(text) => Ok(make_ok(Value::Text(text))),
                 Err(_) => Ok(make_err(Value::Text("InvalidEncoding".to_string()))),

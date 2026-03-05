@@ -561,36 +561,53 @@ pub(super) fn build_heap_record() -> Value {
 
 fn key_from_value(value: &Value, ctx: &str) -> Result<KeyValue, RuntimeError> {
     KeyValue::try_from_value(value)
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects a hashable key")))
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "value is not hashable".to_string(),
+        })
 }
 
 fn expect_map(value: Value, ctx: &str) -> Result<Arc<ImHashMap<KeyValue, Value>>, RuntimeError> {
     match value {
         Value::Map(entries) => Ok(entries),
-        _ => Err(RuntimeError::Message(format!(
-            "{ctx} expects Map, got {value:?}",
-        ))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Map".to_string(),
+            got: format!("{value:?}"),
+        }),
     }
 }
 
 fn expect_set(value: Value, ctx: &str) -> Result<Arc<ImHashSet<KeyValue>>, RuntimeError> {
     match value {
         Value::Set(entries) => Ok(entries),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Set, got {value:?}"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Set".to_string(),
+            got: format!("{value:?}"),
+        }),
     }
 }
 
 fn expect_queue(value: Value, ctx: &str) -> Result<Arc<ImVector<Value>>, RuntimeError> {
     match value {
         Value::Queue(items) => Ok(items),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Queue"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Queue".to_string(),
+            got: "other".to_string(),
+        }),
     }
 }
 
 fn expect_deque(value: Value, ctx: &str) -> Result<Arc<ImVector<Value>>, RuntimeError> {
     match value {
         Value::Deque(items) => Ok(items),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Deque"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Deque".to_string(),
+            got: "other".to_string(),
+        }),
     }
 }
 
@@ -600,6 +617,10 @@ fn expect_heap(
 ) -> Result<Arc<BinaryHeap<Reverse<KeyValue>>>, RuntimeError> {
     match value {
         Value::Heap(items) => Ok(items),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Heap"))),
+        _ => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Heap".to_string(),
+            got: "other".to_string(),
+        }),
     }
 }

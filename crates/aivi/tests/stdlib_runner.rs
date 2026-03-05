@@ -135,23 +135,42 @@ fn stdlib_modules_execute_without_failures_inner() {
 
     assert!(!files.is_empty(), "no stdlib @test files found");
 
+    // Run all files concurrently — each independently loads/typechecks/JITs its own modules.
+    let results: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = files
+            .iter()
+            .map(|path| {
+                let path = path.clone();
+                s.spawn(move || (path.clone(), run_stdlib_file_with_timeout(&path, 60)))
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join()).collect()
+    });
+
     let mut total_passed = 0usize;
     let mut total_failed = 0usize;
+    let mut failures = Vec::new();
 
-    for path in files {
-        let report = run_stdlib_file_with_timeout(&path, 60);
-        total_passed += report.passed;
-        total_failed += report.failed;
-
-        if report.failed > 0 {
-            panic!(
-                "stdlib test failures in {}: {:#?}",
-                path.display(),
-                report.failures
-            );
+    for result in results {
+        match result {
+            Ok((path, report)) => {
+                total_passed += report.passed;
+                total_failed += report.failed;
+                if report.failed > 0 {
+                    failures.push(format!(
+                        "{}: {:#?}",
+                        path.display(),
+                        report.failures
+                    ));
+                }
+            }
+            Err(payload) => std::panic::resume_unwind(payload),
         }
     }
 
+    if !failures.is_empty() {
+        panic!("stdlib test failures:\n{}", failures.join("\n"));
+    }
     assert_eq!(total_failed, 0, "stdlib tests reported failures");
     assert!(total_passed > 0, "expected stdlib tests to execute");
 }

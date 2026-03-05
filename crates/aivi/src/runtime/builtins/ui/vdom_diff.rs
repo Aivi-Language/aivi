@@ -246,6 +246,7 @@ fn runtime_error_to_text(err: RuntimeError) -> String {
         RuntimeError::Message(message) => message,
         RuntimeError::Cancelled => "cancelled".to_string(),
         RuntimeError::Error(value) => crate::runtime::format_value(&value),
+        other => crate::runtime::format_runtime_error(other),
     }
 }
 

@@ -41,7 +41,7 @@ pub(super) fn build_calendar_record() -> Value {
             let date = date_from_value(args.pop().unwrap(), "calendar.addDays")?;
             let next = date
                 .checked_add_signed(ChronoDuration::days(days))
-                .ok_or_else(|| RuntimeError::Message("calendar.addDays overflow".to_string()))?;
+                .ok_or_else(|| RuntimeError::Overflow { context: "calendar.addDays".to_string() })?;
             Ok(date_to_value(next))
         }),
     );
@@ -62,7 +62,10 @@ pub(super) fn build_calendar_record() -> Value {
             let max_day = days_in_month(year, date.month());
             let day = date.day().min(max_day);
             let next = NaiveDate::from_ymd_opt(year, date.month(), day).ok_or_else(|| {
-                RuntimeError::Message("calendar.addYears invalid date".to_string())
+                RuntimeError::InvalidArgument {
+                    context: "calendar.addYears".to_string(),
+                    reason: "resulting date is invalid".to_string(),
+                }
             })?;
             Ok(date_to_value(next))
         }),
@@ -71,25 +74,41 @@ pub(super) fn build_calendar_record() -> Value {
 }
 fn date_from_value(value: Value, ctx: &str) -> Result<NaiveDate, RuntimeError> {
     let Value::Record(fields) = value else {
-        return Err(RuntimeError::Message(format!("{ctx} expects Date")));
+        return Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Date".to_string(),
+            got: "other".to_string(),
+        });
     };
     let year = fields
         .get("year")
         .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Date.year")))?;
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'year' on Date".to_string(),
+        })?;
     let month = fields
         .get("month")
         .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Date.month")))?;
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'month' on Date".to_string(),
+        })?;
     let day = fields
         .get("day")
         .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Date.day")))?;
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'day' on Date".to_string(),
+        })?;
     let year = expect_int(year, ctx)? as i32;
     let month = expect_int(month, ctx)? as u32;
     let day = expect_int(day, ctx)? as u32;
     NaiveDate::from_ymd_opt(year, month, day)
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects valid Date")))
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "invalid Date (year/month/day combination)".to_string(),
+        })
 }
 fn date_to_value(date: NaiveDate) -> Value {
     let mut map = HashMap::new();

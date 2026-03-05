@@ -74,7 +74,10 @@ fn span_millis(value: Value, ctx: &str) -> Result<i64, RuntimeError> {
     let fields = expect_record(value, ctx)?;
     let millis = fields
         .get("millis")
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Span.millis")))?;
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: "missing field 'millis' on Span".to_string(),
+        })?;
     expect_int(millis.clone(), ctx)
 }
 
@@ -84,10 +87,11 @@ fn option_span_millis(value: Value, ctx: &str) -> Result<Option<i64>, RuntimeErr
         Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
             span_millis(args[0].clone(), ctx).map(Some)
         }
-        other => Err(RuntimeError::Message(format!(
-            "{ctx} expects Option Span, got {}",
-            crate::runtime::format_value(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Option Span".to_string(),
+            got: crate::runtime::format_value(&other),
+        }),
     }
 }
 
@@ -101,10 +105,16 @@ fn backoff_policy(value: Value, ctx: &str) -> Result<BackoffPolicy, RuntimeError
             let rec = expect_record(args[0].clone(), ctx)?;
             let base = rec
                 .get("base")
-                .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Exponential.base")))?;
+                .ok_or_else(|| RuntimeError::InvalidArgument {
+                    context: ctx.to_string(),
+                    reason: "missing field 'base' on Exponential".to_string(),
+                })?;
             let max = rec
                 .get("max")
-                .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Exponential.max")))?;
+                .ok_or_else(|| RuntimeError::InvalidArgument {
+                    context: ctx.to_string(),
+                    reason: "missing field 'max' on Exponential".to_string(),
+                })?;
             let base_ms = span_millis(base.clone(), ctx)?;
             let max_ms = span_millis(max.clone(), ctx)?;
             Ok(BackoffPolicy::Exponential {
@@ -112,10 +122,11 @@ fn backoff_policy(value: Value, ctx: &str) -> Result<BackoffPolicy, RuntimeError
                 max: Duration::from_millis(max_ms.max(0) as u64),
             })
         }
-        other => Err(RuntimeError::Message(format!(
-            "{ctx} expects BackoffPolicy (Fixed|Exponential), got {}",
-            crate::runtime::format_value(&other)
-        ))),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "BackoffPolicy (Fixed|Exponential)".to_string(),
+            got: crate::runtime::format_value(&other),
+        }),
     }
 }
 
@@ -642,45 +653,75 @@ pub(super) fn build_database_pool_record() -> Value {
 
                     let max_size = cfg
                         .get("maxSize")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects maxSize".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'maxSize'".to_string(),
+                        })?
                         .clone();
                     let min_idle = cfg
                         .get("minIdle")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects minIdle".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'minIdle'".to_string(),
+                        })?
                         .clone();
                     let acquire_timeout = cfg
                         .get("acquireTimeout")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects acquireTimeout".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'acquireTimeout'".to_string(),
+                        })?
                         .clone();
 
                     let idle_timeout = cfg
                         .get("idleTimeout")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects idleTimeout".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'idleTimeout'".to_string(),
+                        })?
                         .clone();
                     let health_interval = cfg
                         .get("healthCheckInterval")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects healthCheckInterval".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'healthCheckInterval'".to_string(),
+                        })?
                         .clone();
                     let backoff = cfg
                         .get("backoffPolicy")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects backoffPolicy".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'backoffPolicy'".to_string(),
+                        })?
                         .clone();
                     let queue = cfg
                         .get("queuePolicy")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects queuePolicy".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'queuePolicy'".to_string(),
+                        })?
                         .clone();
 
                     let acquire_fn = cfg
                         .get("acquire")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects acquire".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'acquire'".to_string(),
+                        })?
                         .clone();
                     let release_fn = cfg
                         .get("release")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects release".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'release'".to_string(),
+                        })?
                         .clone();
                     let health_fn = cfg
                         .get("healthCheck")
-                        .ok_or_else(|| RuntimeError::Message("pool.create expects healthCheck".to_string()))?
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            context: "pool.create".to_string(),
+                            reason: "missing field 'healthCheck'".to_string(),
+                        })?
                         .clone();
 
                     let max_size = expect_int(max_size, "pool.create.maxSize")?;

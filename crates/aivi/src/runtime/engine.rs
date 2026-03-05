@@ -133,6 +133,40 @@ pub(crate) enum RuntimeError {
     Error(Value),
     Cancelled,
     Message(String),
+    TypeError {
+        context: String,
+        expected: String,
+        got: String,
+    },
+    DivisionByZero {
+        context: String,
+    },
+    Overflow {
+        context: String,
+    },
+    IndexOutOfBounds {
+        context: String,
+        index: i64,
+        length: usize,
+    },
+    NonExhaustiveMatch {
+        scrutinee: Option<String>,
+    },
+    StackOverflow {
+        depth: u32,
+    },
+    IOError {
+        context: String,
+        cause: String,
+    },
+    InvalidArgument {
+        context: String,
+        reason: String,
+    },
+    ParseError {
+        context: String,
+        input: String,
+    },
 }
 
 pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
@@ -547,6 +581,38 @@ pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
         RuntimeError::Cancelled => "execution cancelled".to_string(),
         RuntimeError::Message(message) => message,
         RuntimeError::Error(value) => format!("runtime error: {}", format_value(&value)),
+        RuntimeError::TypeError {
+            context,
+            expected,
+            got,
+        } => format!("{context}: expected {expected}, got {got}"),
+        RuntimeError::DivisionByZero { context } => {
+            format!("{context}: division by zero")
+        }
+        RuntimeError::Overflow { context } => {
+            format!("{context}: arithmetic overflow")
+        }
+        RuntimeError::IndexOutOfBounds {
+            context,
+            index,
+            length,
+        } => format!("{context}: index {index} out of bounds (length {length})"),
+        RuntimeError::NonExhaustiveMatch { scrutinee } => match scrutinee {
+            Some(val) => format!("non-exhaustive match: no pattern matched {val}"),
+            None => "non-exhaustive match".to_string(),
+        },
+        RuntimeError::StackOverflow { depth } => {
+            format!("stack overflow: exceeded maximum call depth of {depth}")
+        }
+        RuntimeError::IOError { context, cause } => {
+            format!("{context}: {cause}")
+        }
+        RuntimeError::InvalidArgument { context, reason } => {
+            format!("{context}: {reason}")
+        }
+        RuntimeError::ParseError { context, input } => {
+            format!("{context}: failed to parse \"{input}\"")
+        }
     }
 }
 

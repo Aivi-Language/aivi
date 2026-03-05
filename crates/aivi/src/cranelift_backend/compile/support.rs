@@ -382,14 +382,19 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                             drop(Box::from_raw(result_ptr as *mut Value));
                         }
                     }
-                    let mut msg = "non-exhaustive match".to_string();
+                    let mut scrutinee_parts = Vec::new();
                     if let Some(ref loc) = runtime.jit_current_loc {
-                        msg.push_str(&format!(" at {loc}"));
+                        scrutinee_parts.push(format!("at {loc}"));
                     }
                     if let Some(ref fn_name) = runtime.jit_current_fn {
-                        msg.push_str(&format!(" in `{fn_name}`"));
+                        scrutinee_parts.push(format!("in `{fn_name}`"));
                     }
-                    return Err(RuntimeError::Message(msg));
+                    let scrutinee = if scrutinee_parts.is_empty() {
+                        None
+                    } else {
+                        Some(scrutinee_parts.join(" "))
+                    };
+                    return Err(RuntimeError::NonExhaustiveMatch { scrutinee });
                 }
 
                 // Clone the result from the pointer (don't take ownership — the
