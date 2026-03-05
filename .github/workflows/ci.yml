@@ -42,13 +42,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - task: check
+          - task: fmt
             toolchain: "1.90.0"
-            components: "rustfmt,clippy"
+            components: "rustfmt"
+          - task: clippy
+            toolchain: "1.90.0"
+            components: "clippy"
+          - task: test
+            toolchain: "1.90.0"
+            components: ""
           - task: perf
             toolchain: "1.90.0"
             components: ""
-          - task: fuzz
+          - task: fuzz-parser
+            toolchain: nightly
+            components: "llvm-tools-preview"
+          - task: fuzz-frontend
+            toolchain: nightly
+            components: "llvm-tools-preview"
+          - task: fuzz-runtime
+            toolchain: nightly
+            components: "llvm-tools-preview"
+          - task: fuzz-formatter
+            toolchain: nightly
+            components: "llvm-tools-preview"
+          - task: fuzz-lsp
+            toolchain: nightly
+            components: "llvm-tools-preview"
+          - task: fuzz-type-inference
             toolchain: nightly
             components: "llvm-tools-preview"
     steps:
@@ -62,41 +83,44 @@ jobs:
           components: ${{ matrix.components }}
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+      - name: Install cargo-nextest
+        if: matrix.task == 'test'
+        uses: taiki-e/install-action@nextest
       - name: Install cargo-bolero
-        if: matrix.task == 'fuzz'
+        if: startsWith(matrix.task, 'fuzz')
         run: cargo install cargo-bolero --locked
 
       - name: Check formatting
-        if: matrix.task == 'check'
+        if: matrix.task == 'fmt'
         run: cargo fmt --all -- --check
       - name: Run clippy
-        if: matrix.task == 'check'
+        if: matrix.task == 'clippy'
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run tests
-        if: matrix.task == 'check'
-        run: cargo test --workspace
+        if: matrix.task == 'test'
+        run: cargo nextest run --workspace
 
       - name: Perf check
         if: matrix.task == 'perf'
         run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 2.0
 
       - name: Fuzz parser
-        if: matrix.task == 'fuzz'
+        if: matrix.task == 'fuzz-parser'
         run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer -T 30s -t 10s
       - name: Fuzz frontend
-        if: matrix.task == 'fuzz'
+        if: matrix.task == 'fuzz-frontend'
         run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer -T 30s -t 10s
       - name: Fuzz runtime
-        if: matrix.task == 'fuzz'
+        if: matrix.task == 'fuzz-runtime'
         run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer -T 30s -t 10s
       - name: Fuzz formatter
-        if: matrix.task == 'fuzz'
+        if: matrix.task == 'fuzz-formatter'
         run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer -T 30s -t 10s
       - name: Fuzz LSP pipeline
-        if: matrix.task == 'fuzz'
+        if: matrix.task == 'fuzz-lsp'
         run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -T 30s -t 10s
       - name: Fuzz type inference
-        if: matrix.task == 'fuzz'
+        if: matrix.task == 'fuzz-type-inference'
         run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer -T 30s -t 10s
 
   docs:

@@ -264,10 +264,10 @@ Each source doc must include: current v0.1 API surface, one realistic example, a
 
 | Test kind         | Location                        | Command                                              |
 |:----------------- |:------------------------------- |:---------------------------------------------------- |
-| Rust unit tests   | `#[test]` in source or `tests/` | `cargo test --workspace`                             |
-| AIVI integration  | `integration-tests/`            | Exercised by `cargo test --workspace` (runner tests) |
-| LSP tests         | `crates/aivi_lsp/src/tests/`    | `cargo test --workspace`                             |
-| Snapshot tests    | `crates/aivi/tests/` (insta)    | `cargo test --workspace`                             |
+| Rust unit tests   | `#[test]` in source or `tests/` | `cargo nextest run --workspace`                             |
+| AIVI integration  | `integration-tests/`            | Exercised by `cargo nextest run --workspace` (runner tests) |
+| LSP tests         | `crates/aivi_lsp/src/tests/`    | `cargo nextest run --workspace`                             |
+| Snapshot tests    | `crates/aivi/tests/` (insta)    | `cargo nextest run --workspace`                             |
 | VSCode unit tests | `vscode/src/test/`              | `cd vscode && pnpm test:unit`                        |
 | Fuzz (CI)         | `fuzz/fuzz_targets/`            | `cargo bolero test ...` (see CI workflow)            |
 
@@ -285,7 +285,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -E "^error|^warning"
 
 # 3. Rust + AIVI integration tests
-cargo test --workspace 2>&1 | tail -20
+cargo nextest run --workspace 2>&1 | tail -20
 
 # 4. VSCode extension (only needed when vscode/ or aivi_lsp/ changed)
 cd vscode && pnpm install --frozen-lockfile && pnpm compile && cd ..
@@ -297,7 +297,7 @@ cd specs && pnpm install --frozen-lockfile && pnpm docs:build 2>&1 | grep -E "de
 On test failure, get full output with:
 
 ```bash
-cargo test --workspace -- --nocapture 2>&1 | grep -A 20 "FAILED\|panicked"
+cargo nextest run --workspace --no-capture 2>&1 | grep -A 20 "FAILED\|panicked"
 ```
 
 Both Rust tests and AIVI integration tests must be green before any task is considered complete.
@@ -327,7 +327,7 @@ Before finishing any change:
 - [ ] No dead links in `specs/` (`pnpm docs:build` in `specs/` reports none)
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
-- [ ] `cargo test --workspace` is fully green (Rust + AIVI tests)
+- [ ] `cargo nextest run --workspace` is fully green (Rust + AIVI tests)
 - [ ] VSCode extension compiles (`pnpm compile` in `vscode/`) if LSP or grammar changed
 - [ ] Aivi builds without warnings (also pre-existing ones).
  
