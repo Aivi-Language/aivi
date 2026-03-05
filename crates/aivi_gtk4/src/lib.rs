@@ -476,6 +476,78 @@ mod linux_impl {
         CString::new(text.as_bytes()).map_err(|_| Gtk4Error::new(what))
     }
 
+    fn bool_to_c(val: bool) -> c_int {
+        if val { 1 } else { 0 }
+    }
+
+    /// Set a GObject boolean (c_int) property.
+    unsafe fn gobject_set_bool(widget: *mut c_void, prop: &CStr, val: c_int) {
+        g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
+    }
+
+    /// Set a GObject string property.
+    unsafe fn gobject_set_str(widget: *mut c_void, prop: &CStr, val: &CStr) {
+        g_object_set(
+            widget,
+            prop.as_ptr(),
+            val.as_ptr(),
+            std::ptr::null::<c_char>(),
+        );
+    }
+
+    /// Set a GObject f64 property.
+    unsafe fn gobject_set_f64(widget: *mut c_void, prop: &CStr, val: f64) {
+        g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
+    }
+
+    /// Set a GObject pointer property.
+    unsafe fn gobject_set_ptr(widget: *mut c_void, prop: &CStr, val: *mut c_void) {
+        g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
+    }
+
+    /// Get a GObject boolean (c_int) property.
+    unsafe fn gobject_get_bool(widget: *mut c_void, prop: &CStr) -> c_int {
+        let mut val: c_int = 0;
+        g_object_get(
+            widget,
+            prop.as_ptr(),
+            &mut val as *mut c_int,
+            std::ptr::null::<c_char>(),
+        );
+        val
+    }
+
+    /// Set a GObject string property from a props map entry.
+    fn set_obj_str(
+        widget: *mut c_void,
+        props: &HashMap<String, String>,
+        key: &str,
+        class_hint: &str,
+    ) -> Result<(), Gtk4Error> {
+        if let Some(value) = props.get(key) {
+            let text_c = c_text(value, &format!("gtk4.buildFromNode invalid {class_hint} {key}"))?;
+            let prop_c = CString::new(key).unwrap();
+            unsafe { gobject_set_str(widget, &prop_c, &text_c) };
+        }
+        Ok(())
+    }
+
+    /// Set a GObject boolean property from a props map entry.
+    fn set_obj_bool(widget: *mut c_void, props: &HashMap<String, String>, key: &str) {
+        if let Some(value) = props.get(key).and_then(|v| parse_bool_text(v)) {
+            let prop_c = CString::new(key).unwrap();
+            unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
+        }
+    }
+
+    /// Set a GObject f64 property from a props map entry.
+    fn set_obj_f64(widget: *mut c_void, props: &HashMap<String, String>, key: &str) {
+        if let Some(value) = props.get(key).and_then(|v| parse_f64_text(v)) {
+            let prop_c = CString::new(key).unwrap();
+            unsafe { gobject_set_f64(widget, &prop_c, value) };
+        }
+    }
+
     fn apply_pending_display_customizations(state: &mut RealGtkState) -> Result<(), Gtk4Error> {
         let display = unsafe { gdk_display_get_default() };
         if display.is_null() {
@@ -771,7 +843,41 @@ mod linux_impl {
                 val.to_string()
             }
         };
-        GTK_STATE.with(|state| {
+        // Collect all deferred GTK mutations while holding the borrow,
+        // then execute them after releasing it.  GTK C calls (g_object_set,
+        // gtk_widget_add_css_class, …) can re-enter this callback via
+        // signal emissions, so the RefCell must NOT be borrowed during those
+        // calls.
+        enum DeferredMutation {
+            SetBool {
+                widget: *mut c_void,
+                property: CString,
+                value: c_int,
+            },
+            ToggleBool {
+                widget: *mut c_void,
+                property: CString,
+            },
+            CssClass {
+                widget: *mut c_void,
+                class: CString,
+                add: bool,
+            },
+            ToggleCssClass {
+                widget: *mut c_void,
+                class: CString,
+            },
+            PresentDialog {
+                dialog: *mut c_void,
+                parent: *mut c_void,
+            },
+            SetStackPage {
+                stack: *mut c_void,
+                page: CString,
+            },
+        }
+
+        let deferred: Vec<DeferredMutation> = GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let event = SignalEventState {
                 widget_id: binding.widget_id,
@@ -790,126 +896,126 @@ mod linux_impl {
                 .signal_senders
                 .retain(|s| s.send(typed_event.clone()).is_ok());
             state.signal_events.push_back(event);
-            // Apply any registered property bindings for this handler
+
+            let mut mutations = Vec::new();
+
+            // Collect property bindings
             if let Some(bindings) = state.signal_bool_bindings.get(&binding.handler) {
-                let mutations: Vec<_> = bindings
-                    .iter()
-                    .map(|b| (b.widget_id, b.property.clone(), b.value))
-                    .collect();
-                for (wid, prop, val) in mutations {
-                    if let Some(&widget) = state.widgets.get(&wid) {
-                        let v: c_int = if val { 1 } else { 0 };
-                        if let Ok(prop_c) = CString::new(prop.as_str()) {
-                            unsafe {
-                                g_object_set(
-                                    widget,
-                                    prop_c.as_ptr(),
-                                    v,
-                                    std::ptr::null::<c_char>(),
-                                );
-                            }
+                for b in bindings {
+                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
+                        if let Ok(prop_c) = CString::new(b.property.as_str()) {
+                            mutations.push(DeferredMutation::SetBool {
+                                widget,
+                                property: prop_c,
+                                value: if b.value { 1 } else { 0 },
+                            });
                         }
                     }
                 }
             }
-            // Apply any registered CSS class bindings for this handler
+            // Collect CSS class bindings
             if let Some(bindings) = state.signal_css_bindings.get(&binding.handler) {
-                let mutations: Vec<_> = bindings
-                    .iter()
-                    .map(|b| (b.widget_id, b.class_name.clone(), b.add))
-                    .collect();
-                for (wid, class_name, add) in mutations {
-                    if let Some(&widget) = state.widgets.get(&wid) {
-                        if let Ok(class_c) = CString::new(class_name.as_str()) {
-                            unsafe {
-                                if add {
-                                    gtk_widget_add_css_class(widget, class_c.as_ptr());
-                                } else {
-                                    gtk_widget_remove_css_class(widget, class_c.as_ptr());
-                                }
-                            }
+                for b in bindings {
+                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
+                        if let Ok(class_c) = CString::new(b.class_name.as_str()) {
+                            mutations.push(DeferredMutation::CssClass {
+                                widget,
+                                class: class_c,
+                                add: b.add,
+                            });
                         }
                     }
                 }
             }
-            // Apply any registered toggle bool property bindings for this handler
+            // Collect toggle bool property bindings
             if let Some(bindings) = state.signal_toggle_bool_bindings.get(&binding.handler) {
-                let mutations: Vec<_> = bindings
-                    .iter()
-                    .map(|b| (b.widget_id, b.property.clone()))
-                    .collect();
-                for (wid, prop) in mutations {
-                    if let Some(&widget) = state.widgets.get(&wid) {
-                        if let Ok(prop_c) = CString::new(prop.as_str()) {
-                            unsafe {
-                                let mut current: c_int = 0;
-                                g_object_get(
-                                    widget,
-                                    prop_c.as_ptr(),
-                                    &mut current as *mut c_int,
-                                    std::ptr::null::<c_char>(),
-                                );
-                                let toggled: c_int = if current != 0 { 0 } else { 1 };
-                                g_object_set(
-                                    widget,
-                                    prop_c.as_ptr(),
-                                    toggled,
-                                    std::ptr::null::<c_char>(),
-                                );
-                            }
+                for b in bindings {
+                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
+                        if let Ok(prop_c) = CString::new(b.property.as_str()) {
+                            mutations.push(DeferredMutation::ToggleBool {
+                                widget,
+                                property: prop_c,
+                            });
                         }
                     }
                 }
             }
-            // Apply any registered toggle CSS class bindings for this handler
+            // Collect toggle CSS class bindings
             if let Some(bindings) = state.signal_toggle_css_bindings.get(&binding.handler) {
-                let mutations: Vec<_> = bindings
-                    .iter()
-                    .map(|b| (b.widget_id, b.class_name.clone()))
-                    .collect();
-                for (wid, class_name) in mutations {
-                    if let Some(&widget) = state.widgets.get(&wid) {
-                        if let Ok(class_c) = CString::new(class_name.as_str()) {
-                            unsafe {
-                                if gtk_widget_has_css_class(widget, class_c.as_ptr()) != 0 {
-                                    gtk_widget_remove_css_class(widget, class_c.as_ptr());
-                                } else {
-                                    gtk_widget_add_css_class(widget, class_c.as_ptr());
-                                }
-                            }
+                for b in bindings {
+                    if let Some(&widget) = state.widgets.get(&b.widget_id) {
+                        if let Ok(class_c) = CString::new(b.class_name.as_str()) {
+                            mutations.push(DeferredMutation::ToggleCssClass {
+                                widget,
+                                class: class_c,
+                            });
                         }
                     }
                 }
             }
-            // Apply any registered dialog present bindings
+            // Collect dialog present bindings
             if let Some(bindings) = state.signal_dialog_bindings.get(&binding.handler) {
-                let mutations: Vec<_> = bindings
-                    .iter()
-                    .map(|b| (b.dialog_id, b.parent_id))
-                    .collect();
-                for (dialog_id, parent_id) in mutations {
+                for b in bindings {
                     if let (Some(&dialog), Some(&parent)) =
-                        (state.widgets.get(&dialog_id), state.widgets.get(&parent_id))
+                        (state.widgets.get(&b.dialog_id), state.widgets.get(&b.parent_id))
                     {
-                        call_adw_fn_pp("adw_dialog_present", dialog, parent);
+                        mutations.push(DeferredMutation::PresentDialog { dialog, parent });
                     }
                 }
             }
-            // Apply any registered stack page bindings
+            // Collect stack page bindings
             if let Some(bindings) = state.signal_stack_page_bindings.get(&binding.handler) {
-                let mutations: Vec<_> = bindings
-                    .iter()
-                    .map(|b| (b.stack_id, b.page_name.clone()))
-                    .collect();
-                for (stack_id, page_name) in mutations {
-                    if let Some(&stack) = state.widgets.get(&stack_id) {
-                        if let Ok(page_c) = CString::new(page_name.as_str()) {
-                            unsafe { gtk_stack_set_visible_child_name(stack, page_c.as_ptr()) };
+                for b in bindings {
+                    if let Some(&stack) = state.widgets.get(&b.stack_id) {
+                        if let Ok(page_c) = CString::new(b.page_name.as_str()) {
+                            mutations.push(DeferredMutation::SetStackPage {
+                                stack,
+                                page: page_c,
+                            });
                         }
                     }
                 }
             }
+
+            mutations
         });
+
+        // Now apply all deferred GTK mutations without holding the RefCell borrow.
+        for m in deferred {
+            match m {
+                DeferredMutation::SetBool {
+                    widget,
+                    property,
+                    value,
+                } => unsafe {
+                    gobject_set_bool(widget, &property, value);
+                },
+                DeferredMutation::ToggleBool { widget, property } => unsafe {
+                    let current = gobject_get_bool(widget, &property);
+                    gobject_set_bool(widget, &property, if current != 0 { 0 } else { 1 });
+                },
+                DeferredMutation::CssClass { widget, class, add } => unsafe {
+                    if add {
+                        gtk_widget_add_css_class(widget, class.as_ptr());
+                    } else {
+                        gtk_widget_remove_css_class(widget, class.as_ptr());
+                    }
+                },
+                DeferredMutation::ToggleCssClass { widget, class } => unsafe {
+                    if gtk_widget_has_css_class(widget, class.as_ptr()) != 0 {
+                        gtk_widget_remove_css_class(widget, class.as_ptr());
+                    } else {
+                        gtk_widget_add_css_class(widget, class.as_ptr());
+                    }
+                },
+                DeferredMutation::PresentDialog { dialog, parent } => {
+                    call_adw_fn_pp("adw_dialog_present", dialog, parent);
+                }
+                DeferredMutation::SetStackPage { stack, page } => unsafe {
+                    gtk_stack_set_visible_child_name(stack, page.as_ptr());
+                },
+            }
+        }
     }
 
     fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
@@ -1517,24 +1623,13 @@ mod linux_impl {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid GtkEntry text")?;
                     unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
                 }
-                if let Some(value) = props.get("placeholder-text") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid placeholder-text")?;
-                    let prop_c = CString::new("placeholder-text").unwrap();
-                    unsafe {
-                        g_object_set(
-                            widget,
-                            prop_c.as_ptr(),
-                            text_c.as_ptr(),
-                            std::ptr::null::<c_char>(),
-                        )
-                    };
-                }
+                set_obj_str(widget, &props, "placeholder-text", "GtkEntry")?;
                 if class_name == "GtkPasswordEntry" {
                     if let Some(value) =
                         props.get("show-peek-icon").and_then(|v| parse_bool_text(v))
                     {
                         unsafe {
-                            gtk_password_entry_set_show_peek_icon(widget, if value { 1 } else { 0 })
+                            gtk_password_entry_set_show_peek_icon(widget, bool_to_c(value))
                         };
                     }
                 }
@@ -1556,10 +1651,10 @@ mod linux_impl {
                     unsafe { gtk_text_view_set_right_margin(widget, value) };
                 }
                 if let Some(value) = props.get("editable").and_then(|v| parse_bool_text(v)) {
-                    unsafe { gtk_text_view_set_editable(widget, if value { 1 } else { 0 }) };
+                    unsafe { gtk_text_view_set_editable(widget, bool_to_c(value)) };
                 }
                 if let Some(value) = props.get("cursor-visible").and_then(|v| parse_bool_text(v)) {
-                    unsafe { gtk_text_view_set_cursor_visible(widget, if value { 1 } else { 0 }) };
+                    unsafe { gtk_text_view_set_cursor_visible(widget, bool_to_c(value)) };
                 }
             }
             "GtkImage" => {
@@ -1576,7 +1671,7 @@ mod linux_impl {
             }
             "GtkBox" | "AdwClamp" => {
                 if let Some(value) = props.get("homogeneous").and_then(|v| parse_bool_text(v)) {
-                    unsafe { gtk_box_set_homogeneous(widget, if value { 1 } else { 0 }) };
+                    unsafe { gtk_box_set_homogeneous(widget, bool_to_c(value)) };
                 }
             }
             "GtkHeaderBar" | "AdwHeaderBar" => {
@@ -1592,9 +1687,7 @@ mod linux_impl {
                     .or_else(|| props.get("show-end-title-buttons"))
                     .and_then(|v| parse_bool_text(v))
                 {
-                    unsafe {
-                        gtk_header_bar_set_show_title_buttons(widget, if value { 1 } else { 0 })
-                    };
+                    unsafe { gtk_header_bar_set_show_title_buttons(widget, bool_to_c(value)) };
                 }
             }
             "GtkScrolledWindow" => {
@@ -1612,10 +1705,7 @@ mod linux_impl {
                     .and_then(|v| parse_bool_text(v))
                 {
                     unsafe {
-                        gtk_scrolled_window_set_propagate_natural_height(
-                            widget,
-                            if value { 1 } else { 0 },
-                        )
+                        gtk_scrolled_window_set_propagate_natural_height(widget, bool_to_c(value))
                     };
                 }
                 if let Some(value) = props
@@ -1623,10 +1713,7 @@ mod linux_impl {
                     .and_then(|v| parse_bool_text(v))
                 {
                     unsafe {
-                        gtk_scrolled_window_set_propagate_natural_width(
-                            widget,
-                            if value { 1 } else { 0 },
-                        )
+                        gtk_scrolled_window_set_propagate_natural_width(widget, bool_to_c(value))
                     };
                 }
             }
@@ -1634,47 +1721,13 @@ mod linux_impl {
                 if let Some(value) = props.get("sidebar-position") {
                     let pos: c_int = if value == "end" { 1 } else { 0 };
                     let prop_c = CString::new("sidebar-position").unwrap();
-                    unsafe {
-                        g_object_set(widget, prop_c.as_ptr(), pos, std::ptr::null::<c_char>())
-                    };
+                    unsafe { gobject_set_bool(widget, &prop_c, pos) };
                 }
-                if let Some(value) = props.get("collapsed").and_then(|v| parse_bool_text(v)) {
-                    let prop_c = CString::new("collapsed").unwrap();
-                    let v: c_int = if value { 1 } else { 0 };
-                    unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
-                }
-                if let Some(value) = props.get("show-sidebar").and_then(|v| parse_bool_text(v)) {
-                    let prop_c = CString::new("show-sidebar").unwrap();
-                    let v: c_int = if value { 1 } else { 0 };
-                    unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
-                }
-                if let Some(value) = props
-                    .get("max-sidebar-width")
-                    .and_then(|v| parse_f64_text(v))
-                {
-                    let prop_c = CString::new("max-sidebar-width").unwrap();
-                    unsafe {
-                        g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>())
-                    };
-                }
-                if let Some(value) = props
-                    .get("min-sidebar-width")
-                    .and_then(|v| parse_f64_text(v))
-                {
-                    let prop_c = CString::new("min-sidebar-width").unwrap();
-                    unsafe {
-                        g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>())
-                    };
-                }
-                if let Some(value) = props
-                    .get("sidebar-width-fraction")
-                    .and_then(|v| parse_f64_text(v))
-                {
-                    let prop_c = CString::new("sidebar-width-fraction").unwrap();
-                    unsafe {
-                        g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>())
-                    };
-                }
+                set_obj_bool(widget, &props, "collapsed");
+                set_obj_bool(widget, &props, "show-sidebar");
+                set_obj_f64(widget, &props, "max-sidebar-width");
+                set_obj_f64(widget, &props, "min-sidebar-width");
+                set_obj_f64(widget, &props, "sidebar-width-fraction");
             }
             "AdwButtonContent" => {
                 if let Some(value) = props.get("label") {
