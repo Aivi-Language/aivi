@@ -6,12 +6,19 @@ impl TypeChecker {
         right: &Expr,
         env: &mut TypeEnv,
     ) -> Result<Type, TypeError> {
+        let debug_pipe = std::env::var("AIVI_DEBUG_PIPE").is_ok_and(|v| v == "1");
+        if debug_pipe {
+            eprintln!("[PIPE_DEBUG] infer_binary op={}", op);
+        }
         if op == "|>" {
             // Special case: if the RHS is a partially-applied class method call, collect all
             // arguments including the piped LHS value so instance dispatch sees the full picture.
             // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
             if let Expr::Call { func, args: partial_args, .. } = right {
                 if let Expr::Ident(name) = func.as_ref() {
+                    if debug_pipe {
+                        eprintln!("[PIPE_DEBUG] |> right=Call({}) in_env={} in_methods={}", name.name, env.get(&name.name).is_some(), self.method_to_classes.contains_key(&name.name));
+                    }
                     if env.get(&name.name).is_none()
                         && self.method_to_classes.contains_key(&name.name)
                     {
@@ -76,10 +83,17 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
                 let both_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let both_text = matches!(left_applied, Type::Con(ref name, _) if name == "Text")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "Text");
                 // Check if either operand is Float (the other might be a type variable)
                 let left_is_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float");
                 let right_is_float = matches!(right_applied, Type::Con(ref name, _) if name == "Float");
                 let either_float = left_is_float || right_is_float;
+
+                // Text comparison is built-in (lexicographic / Unicode codepoint order)
+                if both_text {
+                    return Ok(Type::con("Bool"));
+                }
 
                 // Float comparison is built-in like Int
                 if both_float {

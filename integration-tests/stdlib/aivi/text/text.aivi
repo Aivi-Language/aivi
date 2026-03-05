@@ -194,3 +194,17 @@ bytes_roundtrip = do Effect {
     | Ok s  => assertEq s original
     | Err _ => assert False
 }
+
+// -- Comparison operators --
+
+@test "text comparison operators"
+text_comparison_ops = do Effect {
+  assert ("apple" < "banana")
+  assert ("banana" > "apple")
+  assert ("abc" <= "abc")
+  assert ("abc" >= "abc")
+  assert ("abc" < "abd")
+  assert ("z" > "a")
+  assertEq ("apple" < "apple") False
+  assertEq ("banana" < "apple") False
+}

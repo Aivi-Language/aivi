@@ -217,6 +217,8 @@ mod linux_impl {
         fn gtk_stack_new() -> *mut c_void;
         fn gtk_stack_add_named(stack: *mut c_void, child: *mut c_void, name: *const c_char);
         fn gtk_stack_set_visible_child_name(stack: *mut c_void, name: *const c_char);
+        fn gtk_stack_set_transition_type(stack: *mut c_void, transition: c_int);
+        fn gtk_stack_set_transition_duration(stack: *mut c_void, duration: c_uint);
 
         fn gtk_menu_button_new() -> *mut c_void;
 
@@ -225,6 +227,9 @@ mod linux_impl {
         fn gtk_revealer_set_reveal_child(revealer: *mut c_void, reveal_child: c_int);
         fn gtk_revealer_set_transition_type(revealer: *mut c_void, transition: c_int);
         fn gtk_revealer_set_transition_duration(revealer: *mut c_void, duration: c_uint);
+
+        fn gtk_progress_bar_new() -> *mut c_void;
+        fn gtk_progress_bar_set_fraction(progress_bar: *mut c_void, fraction: f64);
 
     }
 
@@ -1055,7 +1060,11 @@ mod linux_impl {
         let payload = CString::new(property_name)
             .map(|prop_c| {
                 let val = unsafe { gobject_get_bool(instance, &prop_c) };
-                if val != 0 { "true".to_string() } else { "false".to_string() }
+                if val != 0 {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }
             })
             .unwrap_or_default();
         GTK_STATE.with(|state| {
@@ -1072,7 +1081,9 @@ mod linux_impl {
                 .cloned()
                 .unwrap_or_default();
             let typed_event = make_signal_event(event.clone(), widget_name);
-            state.signal_senders.retain(|s| s.send(typed_event.clone()).is_ok());
+            state
+                .signal_senders
+                .retain(|s| s.send(typed_event.clone()).is_ok());
             state.signal_events.push_back(event);
         });
     }
@@ -1116,7 +1127,11 @@ mod linux_impl {
         });
         let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
         let is_notify = binding.signal.starts_with("notify::");
-        let callback_fn = if is_notify { gtk_notify_callback as *const c_void } else { gtk_signal_callback as *const c_void };
+        let callback_fn = if is_notify {
+            gtk_notify_callback as *const c_void
+        } else {
+            gtk_signal_callback as *const c_void
+        };
         let handler_id = unsafe {
             g_signal_connect_data(
                 widget,
@@ -1787,6 +1802,20 @@ mod linux_impl {
                 set_obj_str(widget, props, "label", "AdwButtonContent")?;
                 set_obj_str(widget, props, "icon-name", "AdwButtonContent")?;
             }
+            "GtkProgressBar" => {
+                let processed = props
+                    .get("processed")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(0.0);
+                let total = props
+                    .get("total")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(0.0);
+                if total > 0.0 {
+                    let fraction = (processed / total).clamp(0.0, 1.0);
+                    unsafe { gtk_progress_bar_set_fraction(widget, fraction) };
+                }
+            }
             "GtkRevealer" => {
                 if let Some(value) = props.get("transition-type") {
                     let t: c_int = match value.as_str() {
@@ -1812,6 +1841,45 @@ mod linux_impl {
                 }
                 if let Some(value) = props.get("reveal-child").and_then(|v| parse_bool_text(v)) {
                     unsafe { gtk_revealer_set_reveal_child(widget, bool_to_c(value)) };
+                }
+            }
+            "GtkStack" => {
+                if let Some(value) = props.get("transition-type") {
+                    let t: c_int = match value.as_str() {
+                        "none" => 0,
+                        "crossfade" => 1,
+                        "slide-right" => 2,
+                        "slide-left" => 3,
+                        "slide-up" => 4,
+                        "slide-down" => 5,
+                        "slide-left-right" => 6,
+                        "slide-up-down" => 7,
+                        "over-up" => 8,
+                        "over-down" => 9,
+                        "over-left" => 10,
+                        "over-right" => 11,
+                        "under-up" => 12,
+                        "under-down" => 13,
+                        "under-left" => 14,
+                        "under-right" => 15,
+                        "over-up-down" => 16,
+                        "over-down-up" => 17,
+                        "over-left-right" => 18,
+                        "over-right-left" => 19,
+                        _ => 0,
+                    };
+                    unsafe { gtk_stack_set_transition_type(widget, t) };
+                }
+                if let Some(value) = props
+                    .get("transition-duration")
+                    .and_then(|v| v.parse::<u32>().ok())
+                {
+                    unsafe { gtk_stack_set_transition_duration(widget, value) };
+                }
+                if let Some(value) = props.get("visible-child-name") {
+                    if let Ok(name_c) = CString::new(value.as_str()) {
+                        unsafe { gtk_stack_set_visible_child_name(widget, name_c.as_ptr()) };
+                    }
                 }
             }
             "GtkMenuButton" => {
@@ -1995,6 +2063,7 @@ mod linux_impl {
             "GtkMenuButton" => (unsafe { gtk_menu_button_new() }, CreatedWidgetKind::Other),
             "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
             "GtkRevealer" => (unsafe { gtk_revealer_new() }, CreatedWidgetKind::Revealer),
+            "GtkProgressBar" => (unsafe { gtk_progress_bar_new() }, CreatedWidgetKind::Other),
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
             "AdwPreferencesDialog" => (
                 create_adw_widget(class_name)?,

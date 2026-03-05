@@ -1,0 +1,12 @@
+use aivi.logic
+
+class Plus (F A) = given (A: Any), Alternative {
+  zero: F A
+}
+
+// zero is the identity for alt
+z : Option Int
+z = zero    // None
+
+zs : List Int
+zs = zero   // []

@@ -5,10 +5,9 @@ pub const SOURCE: &str = r#"
 module aivi.generator
 export Generator
 export toList, fromList, range
-export Functor, Filterable, Foldable
+export map, filter, reduce
 
 use aivi
-use aivi.logic
 
 Generator A = (R -> A -> R) -> R -> R
 
@@ -36,15 +35,12 @@ range : Int -> Int -> Generator Int
 range = start end => k => z =>
   if start >= end then z else range (start + 1) end k (k z start)
 
-instance Functor (Generator A) = given (A: Any) {
-  map: f gen => k => z => gen (acc a => k acc (f a)) z
-}
+map : (A -> B) -> Generator A -> Generator B
+map = f gen => k => z => gen (acc a => k acc (f a)) z
 
-instance Filterable (Generator A) = given (A: Any) {
-  filter: pred gen => k => z => gen (acc a => if pred a then k acc a else acc) z
-}
+filter : (A -> Bool) -> Generator A -> Generator A
+filter = pred gen => k => z => gen (acc a => if pred a then k acc a else acc) z
 
-instance Foldable (Generator A) = given (A: Any) {
-  reduce: f init gen => gen f init
-}
+reduce : (B -> A -> B) -> B -> Generator A -> B
+reduce = f init gen => gen f init
 "#;

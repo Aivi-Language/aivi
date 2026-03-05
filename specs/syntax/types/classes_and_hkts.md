@@ -10,6 +10,8 @@
 
 <<< ../../snippets/from_md/syntax/types/classes_and_hkts_05.aivi{aivi}
 
+<<< ../../snippets/from_md/syntax/types/classes_and_hkts_06.aivi{aivi}
+
 ## Type Variable Constraints
 
 Class declarations may attach constraints to the **type variables used in member signatures**

@@ -13,13 +13,13 @@ use cranelift_module::{Linkage, Module};
 
 use crate::cg_type::CgType;
 use crate::hir::HirProgram;
+use crate::runtime::json_schema::cg_type_to_json_schema;
 use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel,
     collect_surface_constructor_ordinals, register_machines_for_jit, run_main_effect, CancelToken,
     Runtime, RuntimeError,
 };
-use crate::runtime::json_schema::cg_type_to_json_schema;
 use crate::rust_ir::{
     RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
     RustIrTextPart,
@@ -477,7 +477,13 @@ pub fn run_cranelift_jit(
             ctx.merge_constructor_ordinals(surface_ordinals);
         }
     }
-    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, source_schemas, &mut runtime)?;
+    let _module = jit_compile_into_runtime(
+        program,
+        cg_types,
+        monomorph_plan,
+        source_schemas,
+        &mut runtime,
+    )?;
     register_machines_for_jit(&runtime, surface_modules);
     if let Some(t0) = t0 {
         eprintln!(
@@ -517,7 +523,13 @@ pub(crate) fn run_cranelift_jit_cancellable(
             ctx.merge_constructor_ordinals(surface_ordinals);
         }
     }
-    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, source_schemas, &mut runtime)?;
+    let _module = jit_compile_into_runtime(
+        program,
+        cg_types,
+        monomorph_plan,
+        source_schemas,
+        &mut runtime,
+    )?;
     register_machines_for_jit(&runtime, surface_modules);
     run_main_effect(&mut runtime)
 }
@@ -716,7 +728,9 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
                 inject_in_expr(&mut field.value, schemas, idx);
             }
         }
-        RustIrExpr::Match { scrutinee, arms, .. } => {
+        RustIrExpr::Match {
+            scrutinee, arms, ..
+        } => {
             inject_in_expr(scrutinee, schemas, idx);
             for arm in arms {
                 inject_in_expr(&mut arm.body, schemas, idx);

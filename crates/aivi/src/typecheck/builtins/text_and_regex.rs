@@ -324,7 +324,10 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "join".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
-                    Box::new(Type::Func(Box::new(list_text_ty.clone()), Box::new(text_ty.clone()))),
+                    Box::new(Type::Func(
+                        Box::new(list_text_ty.clone()),
+                        Box::new(text_ty.clone()),
+                    )),
                 ),
             ),
         ]

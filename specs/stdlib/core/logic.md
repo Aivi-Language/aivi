@@ -86,6 +86,36 @@ A `Group` provides an `invert` operation.
 
 <<< ../../snippets/from_md/stdlib/core/logic/traversable.aivi{aivi}
 
+## 5b. Filtering
+
+### Filterable
+
+<!-- quick-info: {"kind":"class","name":"Filterable","module":"aivi.logic"} -->
+A `Filterable` can remove elements using a predicate. Requires `Functor`.
+`filter` expands from `(A -> Bool) -> F A` to `(A -> Bool) -> F A -> F A`.
+<!-- /quick-info -->
+
+<<< ../../snippets/from_md/stdlib/core/logic/filterable.aivi{aivi}
+
+## 5c. Alternatives
+
+### Alternative
+
+<!-- quick-info: {"kind":"class","name":"Alternative","module":"aivi.logic"} -->
+An `Alternative` provides a choice operator — `alt` picks the first successful/non-empty value. Requires `Applicative`.
+`alt` expands from `F A -> F A` to `F A -> F A -> F A`.
+<!-- /quick-info -->
+
+<<< ../../snippets/from_md/stdlib/core/logic/alternative.aivi{aivi}
+
+### Plus
+
+<!-- quick-info: {"kind":"class","name":"Plus","module":"aivi.logic"} -->
+A `Plus` provides the identity for `alt`. `zero` is the failing or empty case. Requires `Alternative`.
+<!-- /quick-info -->
+
+<<< ../../snippets/from_md/stdlib/core/logic/plus.aivi{aivi}
+
 ## 6. Higher-Order Mappings
 
 ### Bifunctor
@@ -115,3 +145,18 @@ A `Group` provides an `invert` operation.
 `do Effect { ... }` is surface syntax for repeated sequencing (see [Effects](../../syntax/effects.md)):
 
 <<< ../../snippets/from_md/stdlib/core/logic/effect_sequencing_is_chain_bind.aivi{aivi}
+
+## Instance Matrix
+
+Which types implement which classes. `use aivi.logic` brings all class methods into scope; `use aivi.{module}` brings type-specific functions.
+
+| Type | Setoid | Ord | Semigroup | Monoid | Functor | Filterable | Foldable | Traversable | Apply | Applicative | Chain | Monad | Bifunctor | Alternative | Plus |
+|------|:------:|:---:|:---------:|:------:|:-------:|:----------:|:--------:|:-----------:|:-----:|:-----------:|:-----:|:-----:|:---------:|:-----------:|:----:|
+| **List** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| **Option** | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| **Result E** | ✓ | — | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| **Map K** | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+| **Generator** | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+| **Tree** | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+
+> **Set, Queue, Deque, Heap** — Foldable/Filterable instances are deferred until builtin runtime operations are added for those types. Set and Heap cannot be Functors (mapping can violate structural invariants).

@@ -64,6 +64,10 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
         ("<=", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a <= b)),
         (">", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a > b)),
         (">=", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a >= b)),
+        ("<", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a < b)),
+        ("<=", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a <= b)),
+        (">", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a > b)),
+        (">=", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a >= b)),
         ("++", Value::Text(a), Value::Text(b)) => {
             let mut result = a.clone();
             result.push_str(b);
