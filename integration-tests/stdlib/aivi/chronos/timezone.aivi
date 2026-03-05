@@ -1,8 +1,9 @@
-@test
-module aivi.chronos.timezone.test
+@no_prelude
+module integrationTests.stdlib.aivi.chronos.timezone.tests
 
+use aivi
+use aivi.testing
 use aivi.chronos.timezone (getOffset, toInstant, atZone)
-use aivi.testing (assertEq)
 
 @test "timezone functional"
 timezone_functional = do Effect {
@@ -17,10 +18,7 @@ timezone_functional = do Effect {
 
   // Check fields
   assertEq zdt.zone.id "Europe/Paris"
-  assertEq zdt.dateTime.year 2024
-  assertEq zdt.dateTime.month 5
-  assertEq zdt.dateTime.day 21
-  assertEq zdt.dateTime.hour 12
+  assertEq zdt.dateTime 2024-05-21T12:00:00Z
 
   // Check offset (CEST is +2 hours = 7200000ms)
   assertEq zdt.offset.millis 7200000
@@ -28,12 +26,7 @@ timezone_functional = do Effect {
   // Test toInstant (should be UTC timestamp)
   // 2024-05-21T10:00:00Z
   ts = toInstant zdt
-  assertEq ts.year 2024
-  assertEq ts.month 5
-  assertEq ts.day 21
-  assertEq ts.hour 10
-  assertEq ts.minute 0
-  assertEq ts.second 0
+  assertEq ts 2024-05-21T10:00:00Z
 
   // Test getOffset
   offset = getOffset paris ts
@@ -46,18 +39,10 @@ timezone_functional = do Effect {
   zdtTokyo = atZone zdt tokyo
 
   assertEq zdtTokyo.zone.id "Asia/Tokyo"
-  assertEq zdtTokyo.dateTime.year 2024
-  assertEq zdtTokyo.dateTime.month 5
-  assertEq zdtTokyo.dateTime.day 21
-  assertEq zdtTokyo.dateTime.hour 19
+  assertEq zdtTokyo.dateTime 2024-05-21T19:00:00Z
   assertEq zdtTokyo.offset.millis 32400000 // 9 * 3600 * 1000
 
   // Verify instant is preserved
   tsTokyo = toInstant zdtTokyo
-  assertEq ts.year tsTokyo.year
-  assertEq ts.month tsTokyo.month
-  assertEq ts.day tsTokyo.day
-  assertEq ts.hour tsTokyo.hour
-  assertEq ts.minute tsTokyo.minute
-  assertEq ts.second tsTokyo.second
+  assertEq ts tsTokyo
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{offset::Offset as ChronoOffset, Datelike, TimeZone as ChronoTimeZone, Timelike, Utc};
+use chrono::{offset::Offset as ChronoOffset, TimeZone as ChronoTimeZone};
 use chrono_tz::Tz;
 
 use super::util::{builtin, expect_record, expect_text};
@@ -20,11 +20,8 @@ pub(super) fn build_timezone_record() -> Value {
                 .parse()
                 .map_err(|_| RuntimeError::Message(format!("invalid timezone id: {}", zone_id)))?;
 
-            let timestamp = get_timestamp(instant, "timezone.getOffset")?;
-            let dt = Utc
-                .timestamp_millis_opt(timestamp)
-                .single()
-                .ok_or_else(|| RuntimeError::Message("invalid timestamp".to_string()))?;
+            let naive = parse_datetime_value(&instant, "timezone.getOffset")?;
+            let dt = naive.and_utc();
 
             let offset = tz.offset_from_utc_datetime(&dt.naive_utc());
             let millis = i64::from(offset.fix().local_minus_utc()) * 1000;
@@ -52,27 +49,16 @@ pub(super) fn build_timezone_record() -> Value {
                 .parse()
                 .map_err(|_| RuntimeError::Message(format!("invalid timezone id: {}", zone_id)))?;
 
-            let dt_fields = expect_record(dt_val.clone(), "timezone.toInstant")?;
-            let year = get_int_field(&dt_fields, "year")? as i32;
-            let month = get_int_field(&dt_fields, "month")? as u32;
-            let day = get_int_field(&dt_fields, "day")? as u32;
-            let hour = get_int_field(&dt_fields, "hour")? as u32;
-            let minute = get_int_field(&dt_fields, "minute")? as u32;
-            let second = get_int_field(&dt_fields, "second")? as u32;
-            let millisecond = get_int_field(&dt_fields, "millisecond")? as u32;
-
-            let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)
-                .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millisecond))
-                .ok_or_else(|| RuntimeError::Message("invalid date time".to_string()))?;
+            let naive = parse_datetime_value(dt_val, "timezone.toInstant")?;
 
             let zdt = tz.from_local_datetime(&naive).single().ok_or_else(|| {
                 RuntimeError::Message("ambiguous or invalid local time".to_string())
             })?;
-            let timestamp = zdt.timestamp_millis();
 
             // Return Timestamp (DateTime) in UTC
-            let utc_dt = Utc.timestamp_millis_opt(timestamp).single().unwrap();
-            Ok(datetime_to_value(utc_dt))
+            let utc_naive = zdt.naive_utc();
+            let text = format!("{}Z", utc_naive.format("%Y-%m-%dT%H:%M:%S"));
+            Ok(Value::DateTime(text))
         }),
     );
     fields.insert(
@@ -95,18 +81,7 @@ pub(super) fn build_timezone_record() -> Value {
                 RuntimeError::Message(format!("invalid source timezone id: {}", source_zone_id))
             })?;
 
-            let dt_fields = expect_record(dt_val.clone(), "timezone.atZone")?;
-            let year = get_int_field(&dt_fields, "year")? as i32;
-            let month = get_int_field(&dt_fields, "month")? as u32;
-            let day = get_int_field(&dt_fields, "day")? as u32;
-            let hour = get_int_field(&dt_fields, "hour")? as u32;
-            let minute = get_int_field(&dt_fields, "minute")? as u32;
-            let second = get_int_field(&dt_fields, "second")? as u32;
-            let millisecond = get_int_field(&dt_fields, "millisecond")? as u32;
-
-            let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)
-                .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millisecond))
-                .ok_or_else(|| RuntimeError::Message("invalid date time".to_string()))?;
+            let naive = parse_datetime_value(dt_val, "timezone.atZone")?;
 
             let source_zdt = source_tz
                 .from_local_datetime(&naive)
@@ -146,47 +121,29 @@ fn get_zone_id(val: Value, ctx: &str) -> Result<String, RuntimeError> {
     expect_text(id_val.clone(), ctx)
 }
 
-fn get_timestamp(val: Value, ctx: &str) -> Result<i64, RuntimeError> {
-    // Timestamp is just DateTime (UTC)
-    let fields = expect_record(val, ctx)?;
-    let year = get_int_field(&fields, "year")? as i32;
-    let month = get_int_field(&fields, "month")? as u32;
-    let day = get_int_field(&fields, "day")? as u32;
-    let hour = get_int_field(&fields, "hour")? as u32;
-    let minute = get_int_field(&fields, "minute")? as u32;
-    let second = get_int_field(&fields, "second")? as u32;
-    let millisecond = get_int_field(&fields, "millisecond")? as u32;
-
-    let dt = chrono::NaiveDate::from_ymd_opt(year, month, day)
-        .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millisecond))
-        .ok_or_else(|| RuntimeError::Message("invalid timestamp".to_string()))?;
-    Ok(dt.and_utc().timestamp_millis())
-}
-
-fn get_int_field(fields: &HashMap<String, Value>, name: &str) -> Result<i64, RuntimeError> {
-    let val = fields
-        .get(name)
-        .ok_or_else(|| RuntimeError::Message(format!("missing field {}", name)))?;
+fn parse_datetime_value(
+    val: &Value,
+    ctx: &str,
+) -> Result<chrono::NaiveDateTime, RuntimeError> {
     match val {
-        Value::Int(i) => Ok(*i),
+        Value::DateTime(s) => {
+            // DateTime strings are stored as "YYYY-MM-DDTHH:MM:SSZ"
+            let trimmed = s.trim_end_matches('Z');
+            chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S").map_err(|e| {
+                RuntimeError::Message(format!("{ctx}: invalid DateTime string '{s}': {e}"))
+            })
+        }
         _ => Err(RuntimeError::Message(format!(
-            "field {} expected int",
-            name
+            "{ctx}: expected DateTime, got {:?}",
+            val
         ))),
     }
 }
 
-fn datetime_to_value<Tz: chrono::TimeZone>(dt: chrono::DateTime<Tz>) -> Value {
-    let mut map = HashMap::new();
-    map.insert("year".to_string(), Value::Int(dt.year() as i64));
-    map.insert("month".to_string(), Value::Int(dt.month() as i64));
-    map.insert("day".to_string(), Value::Int(dt.day() as i64));
-    map.insert("hour".to_string(), Value::Int(dt.hour() as i64));
-    map.insert("minute".to_string(), Value::Int(dt.minute() as i64));
-    map.insert("second".to_string(), Value::Int(dt.second() as i64));
-    map.insert(
-        "millisecond".to_string(),
-        Value::Int(dt.timestamp_subsec_millis() as i64),
-    );
-    Value::Record(Arc::new(map))
+fn datetime_to_value<Tz: chrono::TimeZone>(dt: chrono::DateTime<Tz>) -> Value
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let local_naive = dt.naive_local();
+    Value::DateTime(format!("{}Z", local_naive.format("%Y-%m-%dT%H:%M:%S")))
 }

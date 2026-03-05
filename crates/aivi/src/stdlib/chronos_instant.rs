@@ -34,7 +34,7 @@ domain Instant over Timestamp = {
   (+) = value span => addMillis value span.millis
 
   (-) : Timestamp -> Span -> Timestamp
-  (-) = value span => addMillis value (-span.millis)
+  (-) = value span => addMillis value (0 - span.millis)
 
   (-) : Timestamp -> Timestamp -> Span
   (-) = left right => { millis: diffMillis left right }
