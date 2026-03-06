@@ -33,6 +33,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 #### Effects & Control
 - [Effects](syntax/effects.md)
 - [Capabilities](syntax/capabilities.md)
+- [Effect Handlers](syntax/effect_handlers.md)
 - [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
 - [Machines](syntax/machines.md)
