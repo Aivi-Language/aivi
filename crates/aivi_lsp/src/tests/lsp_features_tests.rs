@@ -402,10 +402,7 @@ foo = x => x
     let indexed = make_indexed(text, "file:///test.aivi");
     let modules = vec![indexed];
     let symbols = Backend::build_workspace_symbols("", &modules);
-    assert!(
-        !symbols.is_empty(),
-        "empty query must return all symbols"
-    );
+    assert!(!symbols.is_empty(), "empty query must return all symbols");
 }
 
 #[test]
@@ -413,18 +410,23 @@ fn workspace_symbols_filtered_by_name() {
     let text = r#"@no_prelude
 module test.ws_filter
 add = x y => x + y
+addHelper = x y => add x y
+helperAdd = x y => x + y
 multiply = x y => x
 "#;
     let indexed = make_indexed(text, "file:///test.aivi");
     let modules = vec![indexed];
     let symbols = Backend::build_workspace_symbols("add", &modules);
-    assert!(
-        symbols.iter().any(|s| s.name == "add"),
-        "should find 'add'"
-    );
+    assert!(symbols.iter().any(|s| s.name == "add"), "should find 'add'");
     assert!(
         !symbols.iter().any(|s| s.name == "multiply"),
         "should not find 'multiply' when querying 'add'"
+    );
+    let names: Vec<_> = symbols.iter().map(|symbol| symbol.name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["add", "addHelper", "helperAdd"],
+        "workspace symbols should rank exact matches before prefix and substring matches"
     );
 }
 
@@ -453,7 +455,9 @@ Color =
     let symbols = Backend::build_workspace_symbols("Color", &modules);
     use tower_lsp::lsp_types::SymbolKind;
     assert!(
-        symbols.iter().any(|s| s.name == "Color" && s.kind == SymbolKind::ENUM),
+        symbols
+            .iter()
+            .any(|s| s.name == "Color" && s.kind == SymbolKind::ENUM),
         "TypeDecl should have ENUM kind"
     );
 }
@@ -558,6 +562,25 @@ FooBar = x => x
     );
 }
 
+#[test]
+fn workspace_symbols_empty_query_is_capped_at_1000_results() {
+    let mut text = String::from("@no_prelude\nmodule test.ws_limit\n");
+    for index in 0..1_205 {
+        text.push_str(&format!("symbol{index:04} = {index}\n"));
+    }
+    let indexed = make_indexed(&text, "file:///test-limit.aivi");
+    let symbols = Backend::build_workspace_symbols("", &[indexed]);
+    assert_eq!(symbols.len(), 1_000, "workspace symbols should be capped");
+    assert_eq!(
+        symbols.first().map(|symbol| symbol.name.as_str()),
+        Some("symbol0000")
+    );
+    assert_eq!(
+        symbols.last().map(|symbol| symbol.name.as_str()),
+        Some("symbol0999")
+    );
+}
+
 // ─── document symbols ───────────────────────────────────────────────────────
 
 #[test]
@@ -572,7 +595,9 @@ greet = "hello"
     assert!(!symbols.is_empty());
     let children = symbols[0].children.as_ref().expect("module has children");
     assert!(
-        children.iter().any(|s| s.name == "greet" && s.kind == SymbolKind::FUNCTION),
+        children
+            .iter()
+            .any(|s| s.name == "greet" && s.kind == SymbolKind::FUNCTION),
         "Def should produce FUNCTION symbol"
     );
 }
@@ -590,7 +615,9 @@ Fruit =
     use tower_lsp::lsp_types::SymbolKind;
     let children = symbols[0].children.as_ref().expect("module has children");
     assert!(
-        children.iter().any(|s| s.name == "Fruit" && s.kind == SymbolKind::STRUCT),
+        children
+            .iter()
+            .any(|s| s.name == "Fruit" && s.kind == SymbolKind::STRUCT),
         "TypeDecl should produce STRUCT symbol"
     );
 }
@@ -670,9 +697,7 @@ instance Show Int where
     use tower_lsp::lsp_types::SymbolKind;
     let children = symbols[0].children.as_ref().expect("module has children");
     assert!(
-        children
-            .iter()
-            .any(|s| s.kind == SymbolKind::OBJECT),
+        children.iter().any(|s| s.kind == SymbolKind::OBJECT),
         "InstanceDecl should produce OBJECT symbol"
     );
 }
