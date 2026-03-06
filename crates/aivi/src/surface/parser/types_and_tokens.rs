@@ -23,18 +23,48 @@ impl Parser {
     }
 
     fn parse_type_and(&mut self) -> Option<TypeExpr> {
-        let mut items = vec![self.parse_type_pipe()?];
-        while self.consume_ident_text("with").is_some() {
+        let mut lhs = self.parse_type_pipe()?;
+        let mut and_items: Vec<TypeExpr> = Vec::new();
+        loop {
+            let checkpoint = self.pos;
+            if self.consume_ident_text("with").is_none() {
+                break;
+            }
+            let after_with = self.pos;
+            if let Some(capabilities) = self.try_parse_capability_list() {
+                let end_span = capabilities
+                    .last()
+                    .map(|cap| cap.span.clone())
+                    .unwrap_or_else(|| self.previous_span());
+                let span = merge_span(type_span(&lhs), end_span);
+                lhs = TypeExpr::CapabilityClause {
+                    base: Box::new(lhs),
+                    capabilities,
+                    span,
+                };
+                continue;
+            }
+            self.pos = after_with;
             let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
-                span: type_span(items.last().expect("infallible")),
+                span: type_span(&lhs),
             });
-            items.push(rhs);
+            if and_items.is_empty() {
+                and_items.push(lhs);
+            }
+            and_items.push(rhs);
+            let span = merge_span(
+                type_span(and_items.first().expect("infallible")),
+                type_span(and_items.last().expect("infallible")),
+            );
+            lhs = TypeExpr::And {
+                items: and_items.clone(),
+                span,
+            };
+            if self.pos == checkpoint {
+                break;
+            }
         }
-        if items.len() == 1 {
-            return Some(items.remove(0));
-        }
-        let span = merge_span(type_span(&items[0]), type_span(items.last().expect("infallible")));
-        Some(TypeExpr::And { items, span })
+        Some(lhs)
     }
 
     fn parse_type_pipe(&mut self) -> Option<TypeExpr> {
@@ -153,6 +183,32 @@ impl Parser {
             return Some(TypeExpr::Name(name));
         }
         None
+    }
+
+    fn try_parse_capability_list(&mut self) -> Option<Vec<SpannedName>> {
+        let checkpoint = self.pos;
+        self.consume_newlines();
+        if !self.consume_symbol("{") {
+            return None;
+        }
+        self.consume_newlines();
+        let mut capabilities = Vec::new();
+        while !self.check_symbol("}") && self.pos < self.tokens.len() {
+            let capability = self.parse_dotted_name()?;
+            capabilities.push(capability);
+            self.consume_newlines();
+            if self.consume_symbol(",") {
+                self.consume_newlines();
+                continue;
+            }
+            if self.check_symbol("}") {
+                break;
+            }
+            self.pos = checkpoint;
+            return None;
+        }
+        self.expect_symbol("}", "expected '}' to close capability clause")?;
+        Some(capabilities)
     }
 
     fn try_parse_datetime(&mut self, head: Token) -> Option<Literal> {

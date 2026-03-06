@@ -8,7 +8,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 
 <div class="import-badge">use aivi.ui.gtk4</div>
 
-Single-window GTK applications should follow the [official app architecture](./app_architecture.md). This page documents the raw GTK bindings plus the `gtkApp` entry point that hosts that architecture.
+Single-window GTK applications should follow the [official app architecture](/stdlib/ui/app_architecture). This page documents the raw GTK bindings plus the `gtkApp` entry point that hosts that architecture.
 
 ## Capability mapping (Phase 1 surface)
 
@@ -20,7 +20,7 @@ GTK runtime operations use the `ui` capability family:
 - desktop notification helpers → `ui.notification`
 - `gtkApp` is the coarse-grained `ui` entry point and may be annotated with the broader `ui` family shorthand
 
-This milestone only defines the capability surface; it does **not** change the blessed GTK architecture or introduce handler syntax yet.
+This milestone defines the capability surface and the shared handler vocabulary for GTK-related effects. It does **not** change the blessed GTK architecture.
 
 ## Public API
 
@@ -378,7 +378,7 @@ runLoop = do Effect {
 
 ### `gtkApp` — Elm-architecture combinator
 
-`gtkApp` is the single blessed entry point for GTK applications in AIVI. The user provides a configuration record and `gtkApp` handles init, startup, window creation, event ingestion, and reconciliation:
+`gtkApp` is the single blessed entry point for GTK applications in AIVI. The user provides a configuration record and `gtkApp` handles init, startup, window creation, event ingestion, and reconciliation. The runtime currently implements the core `Model` / `View` / `Msg` / `Update` subset shown below; the full command/subscription design is specified in [GTK App Architecture](/stdlib/ui/app_architecture):
 
 ```aivi
 gtkApp : {
@@ -393,9 +393,9 @@ gtkApp : {
 } -> Effect GtkError Unit
 ```
 
-Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → event loop using `channel.recv` with `toMsg`/`update`. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
+Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → event loop using `channel.recv` with `toMsg`/`update`. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window. When the command/subscription extension lands, it will layer on this host rather than introduce a second app runner.
 
-`onStart` is the blessed place for one-time startup work such as app CSS, timers, or action registration. Steady-state application behavior still flows through `Msg` and `update`.
+`onStart` is the blessed place for one-time startup work such as app CSS or action registration. Repeating timers, background work, and external feeds belong to the command/subscription model defined in [GTK App Architecture](/stdlib/ui/app_architecture); steady-state application behavior still flows through `Msg` and `update`.
 
 `gtkAppFull` remains exported as a deprecated compatibility shim for uncommon window flags (`decorated`, `hideOnClose`) and legacy code that still needs `AppId`/`WindowId` inside `update`. It is not the public path for new applications.
 

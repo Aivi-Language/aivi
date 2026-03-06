@@ -38,6 +38,25 @@ aivi test path/to/directory       # run all tests in a directory
 
 The runner prints a summary of passed / failed tests and returns a non-zero exit code when any test fails.
 
+### Capability handlers in tests
+
+Capability-oriented code should usually be tested by installing scoped interpreters with [`with { capability = handler } in`](/syntax/effect_handlers):
+
+```aivi
+@test "read config from fixtures"
+readConfigFromFixtures =
+  with {
+    file.read = fixtureFiles,
+    process.env.read = fixtureEnv
+  } in do Effect {
+    cfg <- readConfig
+    _ <- assertEq cfg.mode "test"
+    pure Unit
+  }
+```
+
+This keeps the production logic unchanged while swapping only the capability interpreters used in the test scope.
+
 ### Mocking REST/HTTP requests in tests
 
 For request-heavy code, use [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) to replace external dependencies without restructuring your production code:
@@ -66,6 +85,8 @@ Mock expressions provide **deep scoping** — any function called within the bod
 internally references the mocked binding will see the mock value. See the
 [Mock Expressions](/syntax/decorators/test#mock-expressions) spec for full details including
 snapshot mocks and multiple mock bindings.
+
+Prefer capability handlers over `mock ... in` when the code under test already exposes capability requirements. Keep mocks for binding-level substitution, snapshot capture, and APIs that have not yet migrated to capability signatures.
 
 ### Snapshot assertions
 

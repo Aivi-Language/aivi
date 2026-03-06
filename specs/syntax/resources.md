@@ -26,6 +26,17 @@ openStore : DbConfig -> Resource DbError DbConn with { db.connect }
 
 The clause covers acquisition and cleanup as well as any helper effects used inside the resource block. Resource safety itself does not need extra user syntax: cleanup remains cancellation-protected automatically. See [Capabilities](capabilities.md) for the shared vocabulary.
 
+Scoped interpreters use the same lexical form as capability narrowing:
+
+```aivi
+with {
+  db.connect = localDb,
+  db.query = localDb
+} in openStore config
+```
+
+See [Effect Handlers](effect_handlers.md) for the binding rules and precedence model.
+
 ## 15.2 Defining Resources
 
 Resources are defined using `resource` blocks. The syntax is analogous to generators: you perform setup, `yield` the resource, and then perform cleanup.
@@ -83,3 +94,21 @@ Resources compose naturally:
 - A `resource` block can acquire other resources internally. Inner resources are released before the outer resource's cleanup runs.
 - Resources can be returned from functions and passed as values   they are inert descriptions until acquired with `<-`.
 - You can build higher-level resources from lower-level ones by combining acquisition and cleanup steps.
+
+## 15.7 Handlers and cleanup scope
+
+Effect handlers apply to all three phases of a resource:
+
+- acquisition before `yield`
+- use after `<-`
+- cleanup after `yield`
+
+When a resource is acquired, the runtime captures the active handler environment for that acquisition site. The post-`yield` cleanup later runs with that captured environment, even if nested scopes shadow the same capability before the enclosing effect exits.
+
+This preserves the normal resource guarantees:
+
+- acquisition and release use a matching interpreter
+- cleanup still runs in reverse acquisition order
+- cancellation still cannot interrupt ordinary finalizers
+
+If a handler value needs teardown of its own, create it with `resource` or another outer lifecycle construct and then install the resulting value into the handler scope. A `with { capability = handler } in` block by itself does not own or release external state.

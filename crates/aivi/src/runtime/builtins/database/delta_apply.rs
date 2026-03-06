@@ -805,3 +805,37 @@ pub(super) fn build_database_record() -> Value {
     fields.insert("pool".to_string(), build_database_pool_record());
     Value::Record(Arc::new(fields))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn require_sql_identifier_accepts_alphanumeric_and_underscore() {
+        let name = match require_sql_identifier(
+            Value::Text("savepoint_1".to_string()),
+            "database.savepointOn",
+            "name",
+        ) {
+            Ok(name) => name,
+            Err(_) => panic!("valid identifier should succeed"),
+        };
+        assert_eq!(name, "savepoint_1");
+    }
+
+    #[test]
+    fn require_sql_identifier_rejects_non_identifier_text() {
+        let err = require_sql_identifier(
+            Value::Text("not-ok!".to_string()),
+            "database.savepointOn",
+            "name",
+        )
+        .expect_err("invalid identifier should fail");
+        match err {
+            RuntimeError::Message(message) => {
+                assert!(message.contains("SQL identifier"));
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
+}

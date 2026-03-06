@@ -149,6 +149,7 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                     collect_type_expr(item, out);
                 }
             }
+            TypeExpr::CapabilityClause { base, .. } => collect_type_expr(base, out),
             TypeExpr::Apply { base, args, .. } => {
                 collect_type_expr(base, out);
                 for arg in args {

@@ -1187,17 +1187,24 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(
                     Box::new(Type::con("DbConfig")),
                     Box::new(
-                        Type::con("Effect").app(vec![db_error_ty.clone(), db_connection_ty.clone()]),
+                        Type::con("Effect")
+                            .app(vec![db_error_ty.clone(), db_connection_ty.clone()]),
                     ),
                 ),
             ),
             (
                 "close".to_string(),
-                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
             ),
             (
                 "load".to_string(),
-                Type::Func(Box::new(table_ty.clone()), Box::new(db_effect_rows_ty.clone())),
+                Type::Func(
+                    Box::new(table_ty.clone()),
+                    Box::new(db_effect_rows_ty.clone()),
+                ),
             ),
             (
                 "loadOn".to_string(),
@@ -1275,15 +1282,24 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ("rollbackTx".to_string(), db_effect_unit_ty.clone()),
             (
                 "beginTxOn".to_string(),
-                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
             ),
             (
                 "commitTxOn".to_string(),
-                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
             ),
             (
                 "rollbackTxOn".to_string(),
-                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
             ),
             (
                 "savepoint".to_string(),

@@ -36,6 +36,22 @@ Code reference: `crates/aivi/src/stdlib/concurrency.rs` — `aivi.concurrency` e
 - `timeoutWith` → `clock.sleep` + `cancellation.propagate`
 - ordinary resource cleanup remains cancellation-protected without requiring an explicit `cancellation.mask` clause
 
+## GTK app architecture alignment
+
+The blessed GTK command/subscription model is intentionally layered on this concurrency domain rather than inventing a UI-only scheduler:
+
+- `Command.startTask` is a structured child task hosted by `gtkApp`,
+- `Command.cancel` and subscription replacement/removal reuse ordinary task cancellation,
+- `Subscription.source` is the declarative UI wrapper over a `Resource` that yields a `Receiver`,
+- typed progress reporting is modeled by sending app-defined values over a channel and mapping them back into `Msg`.
+
+This means the same guarantees apply in UI code:
+
+- cancellation is cooperative at effect bind points,
+- finalizers still run on task/subscription shutdown,
+- progress ordering is preserved per producer channel,
+- shutting down the host scope cancels all child work.
+
 ## Channels
 
 Channels provide a mechanism for synchronization and communication between concurrent fibers.

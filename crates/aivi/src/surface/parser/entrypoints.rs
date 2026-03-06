@@ -175,6 +175,15 @@ fn expand_module_aliases(modules: &mut [Module]) {
                     .collect(),
                 span,
             },
+            TypeExpr::CapabilityClause {
+                base,
+                capabilities,
+                span,
+            } => TypeExpr::CapabilityClause {
+                base: Box::new(rewrite_type_expr(*base, aliases)),
+                capabilities,
+                span,
+            },
             TypeExpr::Apply { base, args, span } => TypeExpr::Apply {
                 base: Box::new(rewrite_type_expr(*base, aliases)),
                 args: args

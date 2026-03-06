@@ -200,6 +200,11 @@ pub enum TypeExpr {
         items: Vec<TypeExpr>,
         span: Span,
     },
+    CapabilityClause {
+        base: Box<TypeExpr>,
+        capabilities: Vec<SpannedName>,
+        span: Span,
+    },
     Apply {
         base: Box<TypeExpr>,
         args: Vec<TypeExpr>,
@@ -338,6 +343,11 @@ pub enum Expr {
         op: String,
         left: Box<Expr>,
         right: Box<Expr>,
+        span: Span,
+    },
+    CapabilityScope {
+        capabilities: Vec<SpannedName>,
+        body: Box<Expr>,
         span: Span,
     },
     Block {

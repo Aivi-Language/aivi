@@ -36,7 +36,7 @@ loadConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.
 - the capability clause is checked statically and is **not** part of `E`
 - callers may run an effect in any larger capability scope
 - lexical narrowing uses `with { ... } in expr`
-- handler / interpreter binding is specified in a later milestone; see [Capabilities](capabilities.md) for the vocabulary and migration rules
+- handler / interpreter binding uses the same lexical scope form via `with { capability = handler } in expr`; see [Capabilities](capabilities.md) and [Effect Handlers](effect_handlers.md)
 
 ### Examples (core operations)
 

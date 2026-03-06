@@ -64,6 +64,8 @@ in <body>
 | **Restore** | Original binding is restored after `body` completes (even on error) |
 | **Qualified only** | Only qualified imported names can be mocked |
 
+Capability handlers in [Effect Handlers](/syntax/effect_handlers) solve a different problem: they install interpreters for capability scopes via `with { capability = handler } in`. Prefer handlers for capability-polymorphic business logic; keep `mock ... in` for binding-level substitution and snapshot capture.
+
 ### Snapshot Mocks
 
 The `mock snapshot` variant **records real responses** on first run and **replays from snapshot files** on subsequent runs:

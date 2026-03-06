@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::diagnostics::Span;
 
@@ -35,10 +35,13 @@ pub(super) enum Type {
     Record { fields: BTreeMap<String, Type> },
 }
 
+pub(super) type CapabilitySet = BTreeSet<String>;
+
 #[derive(Clone, Debug)]
 pub(super) struct Scheme {
     pub(super) vars: Vec<TypeVarId>,
     pub(super) ty: Type,
+    pub(super) capabilities: CapabilitySet,
     pub(super) origin: Option<SchemeOrigin>,
 }
 
@@ -219,6 +222,7 @@ impl Scheme {
         Scheme {
             vars: Vec::new(),
             ty,
+            capabilities: CapabilitySet::default(),
             origin: None,
         }
     }
