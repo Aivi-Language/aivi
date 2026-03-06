@@ -21,6 +21,7 @@ binding = source.call "argument"
 | `env.get "KEY"`                | `Text`            | Embed environment variable value                   |
 | `openapi.fromUrl url`          | typed module      | Generate typed API client from an OpenAPI spec URL |
 | `openapi.fromFile "path"`      | typed module      | Generate typed API client from a local spec file   |
+| `type.jsonSchema TypeName`     | `Text`            | Generate OpenAI-compatible JSON Schema from a type |
 
 ## Examples
 
@@ -55,6 +56,8 @@ internalApi = openapi.fromFile "./specs/internal-api.yaml"
 | E1518 | OpenAPI spec fetch/read failure                |
 | E1519 | OpenAPI spec parse failure (invalid schema)    |
 | E1520 | Unsupported OpenAPI feature in type mapping    |
+| E1554 | `type.jsonSchema` missing or invalid type name |
+| E1555 | `type.jsonSchema` type not found in module     |
 
 ## OpenAPI Source
 
@@ -112,3 +115,63 @@ Each endpoint function takes a record of parameters. Parameters from the OpenAPI
 | `string` with `format: date-time` | `DateTime`    |
 
 Endpoint functions are named from `operationId` (lowerCamelCase); if absent, derived from method + path. Cached in `.aivi-cache/openapi/`; pass `--refresh-static` to force re-fetch. Accepts `.json`, `.yaml`, `.yml`, and Swagger 2.0 (auto-converted).
+
+## JSON Schema Generation
+
+<!-- quick-info: {"kind":"topic","name":"type.jsonSchema compile-time source"} -->
+`type.jsonSchema` converts an AIVI type alias into an [OpenAI-compatible JSON Schema](https://platform.openai.com/docs/guides/structured-outputs) at compile time. The result is a `Text` value containing the JSON schema string.
+<!-- /quick-info -->
+
+### Syntax
+
+```aivi
+@static
+schemaBinding = type.jsonSchema TypeName
+```
+
+`TypeName` must be a type alias defined in the same module. The type is converted to a JSON Schema wrapped in the OpenAI structured-output format:
+
+```json
+{
+  "format": {
+    "type": "json_schema",
+    "name": "TypeName",
+    "schema": { ... },
+    "strict": true
+  }
+}
+```
+
+### Example
+
+```aivi
+ExtractionResult = {
+  title:    Text,
+  summary:  Text,
+  tags:     List Text,
+  score:    Option Float
+}
+
+@static
+extractionSchema = type.jsonSchema ExtractionResult
+```
+
+`extractionSchema` becomes a `Text` constant at compile time containing the full JSON schema. This is useful for passing to LLM APIs that require a response format specification.
+
+### Type Mapping
+
+| AIVI Type              | JSON Schema                                  |
+|:---------------------- |:-------------------------------------------- |
+| `Text`                 | `{"type": "string"}`                         |
+| `Int`                  | `{"type": "integer"}`                        |
+| `Float`                | `{"type": "number"}`                         |
+| `Bool`                 | `{"type": "boolean"}`                        |
+| `List T`               | `{"type": "array", "items": ...}`            |
+| `{ field: T, ... }`    | `{"type": "object", "properties": ...}`      |
+| `Option T`             | inner schema with `"nullable": true`         |
+| `(A, B, C)`            | `{"type": "array", "prefixItems": [...]}`    |
+| ADT (all-name union)   | `{"type": "string", "enum": [...]}`          |
+| ADT (mixed)            | `{"anyOf": [...]}`                           |
+| Unresolved / function  | `{"type": "string"}` (fallback)              |
+
+Records set `"additionalProperties": false` and list all non-optional fields in `"required"`.

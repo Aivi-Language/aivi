@@ -325,6 +325,47 @@ impl Backend {
         ))
     }
 
+    /// Hover documentation for compile-time `@static` source names.
+    pub(super) fn hover_contents_for_static_source(token: &str) -> Option<String> {
+        let (sig, doc) = match token {
+            "type.jsonSchema" => (
+                "type.jsonSchema TypeName : Text",
+                "Generate an OpenAI-compatible JSON Schema from a type alias at compile time.\n\n\
+                 The result is a `Text` constant containing the JSON schema wrapped in \
+                 `{ \"format\": { \"type\": \"json_schema\", ... } }`.",
+            ),
+            "file.read" => (
+                "file.read \"path\" : Text",
+                "Embed file contents as a `Text` constant at compile time.",
+            ),
+            "file.json" => (
+                "file.json \"path\" : inferred",
+                "Parse a JSON file and embed as a typed value at compile time.",
+            ),
+            "file.csv" => (
+                "file.csv \"path\" : List { ... }",
+                "Parse a CSV file and embed as a list of records at compile time.",
+            ),
+            "env.get" => (
+                "env.get \"KEY\" : Text",
+                "Embed an environment variable value as a `Text` constant at compile time.",
+            ),
+            "openapi.fromUrl" => (
+                "openapi.fromUrl ~url(...) : Config -> { endpoints... }",
+                "Generate a typed API client from an OpenAPI spec URL at compile time.",
+            ),
+            "openapi.fromFile" => (
+                "openapi.fromFile \"path\" : Config -> { endpoints... }",
+                "Generate a typed API client from a local OpenAPI spec file at compile time.",
+            ),
+            _ => return None,
+        };
+        Some(Self::hover_badge_markdown(
+            "@static source",
+            format!("```aivi\n{sig}\n```\n\n{doc}"),
+        ))
+    }
+
     /// Fallback hover: find the smallest span in `span_types` that contains the
     /// cursor position and return the recorded type.
     pub(super) fn hover_from_span_types(

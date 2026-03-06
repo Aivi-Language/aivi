@@ -1,0 +1,8 @@
+// EXPECT-ERROR: E1555
+@no_prelude
+module integrationTests.compileFail.staticJsonSchemaUnknownType
+
+use aivi
+
+@static
+badSchema = type.jsonSchema NoSuchType

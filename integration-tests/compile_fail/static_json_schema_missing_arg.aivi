@@ -1,0 +1,8 @@
+// EXPECT-ERROR: E1554
+@no_prelude
+module integrationTests.compileFail.staticJsonSchemaMissingArg
+
+use aivi
+
+@static
+badSchema = type.jsonSchema

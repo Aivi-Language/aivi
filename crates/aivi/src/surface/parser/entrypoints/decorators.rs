@@ -207,7 +207,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                         emit_diag(
                             module_path,
                             out,
-                            "E1520",
+                            "E1554",
                             "`@static type.jsonSchema` expects a type name as argument".to_string(),
                             original_span.clone(),
                         );
@@ -220,7 +220,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                         emit_diag(
                             module_path,
                             out,
-                            "E1521",
+                            "E1555",
                             format!("`@static type.jsonSchema`: type `{type_name}` not found in this module"),
                             original_span.clone(),
                         );
@@ -228,11 +228,21 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                     }
                 };
                 let schema = type_expr_to_openai_json_schema(&type_name, &type_expr, type_aliases);
-                def.expr = Expr::Literal(Literal::String {
-                    text: schema,
-                    span: original_span,
-                });
-                return;
+                // Parse the JSON schema string into an AST record expression
+                let json_val: serde_json::Value = match serde_json::from_str(&schema) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        emit_diag(
+                            module_path,
+                            out,
+                            "E1556",
+                            format!("`@static type.jsonSchema` internal error: {err}"),
+                            original_span.clone(),
+                        );
+                        return;
+                    }
+                };
+                def.expr = json_to_expr(&json_val, &original_span);
             }
         }
     }
@@ -876,13 +886,13 @@ fn type_expr_to_openai_json_schema(
                 // Union type — use anyOf
                 let schemas: Vec<_> = items.iter().map(|i| te_to_schema(i, aliases, seen)).collect();
                 if schemas.len() == 1 {
-                    schemas.into_iter().next().unwrap()
+                    schemas.into_iter().next().expect("non-empty vec")
                 } else {
                     // Check if all items are just names (enum-like ADT)
                     let all_names = items.iter().all(|i| matches!(i, TypeExpr::Name(_)));
                     if all_names {
                         let enum_vals: Vec<_> = items.iter().filter_map(|i| {
-                            if let TypeExpr::Name(n) = i { Some(json!(n.name)) } else { None }
+                            if let TypeExpr::Name(n) = i { Some(json!(camel_to_snake(&n.name))) } else { None }
                         }).collect();
                         json!({"type": "string", "enum": enum_vals})
                     } else {
@@ -921,10 +931,10 @@ fn type_expr_to_openai_json_schema(
     let mut seen = std::collections::HashSet::new();
     let schema = te_to_schema(type_expr, type_aliases, &mut seen);
 
-    // Wrap in OpenAI json_schema format
+    // Wrap in OpenAI /chat/completions response_format structure
     let wrapper = serde_json::json!({
-        "format": {
-            "type": "json_schema",
+        "type": "json_schema",
+        "json_schema": {
             "name": root_name,
             "schema": schema,
             "strict": true
@@ -932,4 +942,29 @@ fn type_expr_to_openai_json_schema(
     });
 
     serde_json::to_string(&wrapper).unwrap_or_default()
+}
+
+/// Convert PascalCase/CamelCase to snake_case.
+/// Handles acronyms: "USD" → "usd", "TwoFactorCode" → "two_factor_code"
+fn camel_to_snake(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut result = String::new();
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch.is_uppercase() {
+            if i > 0 {
+                let prev = chars[i - 1];
+                let next_is_lower = chars.get(i + 1).map_or(false, |c| c.is_lowercase());
+                // Insert underscore before:
+                // - an uppercase letter following a lowercase letter (camelCase boundary)
+                // - an uppercase letter followed by lowercase when previous was also uppercase (acronym end)
+                if prev.is_lowercase() || (prev.is_uppercase() && next_is_lower) {
+                    result.push('_');
+                }
+            }
+            result.push(ch.to_lowercase().next().unwrap_or(ch));
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
