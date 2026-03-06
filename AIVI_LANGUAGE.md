@@ -897,6 +897,37 @@ appCfg <- load (env.decode "AIVI_APP")
 
 Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/decode`, `email.imap`.
 
+### Email Module (`aivi.email`)
+
+**Auth**: `EmailAuth = Password Text | OAuth2 Text` — supports XOAUTH2 for Gmail/Outlook.
+
+**One-shot**: `imap : ImapConfig -> Effect Text (List A)` — connect, fetch, disconnect.
+**SMTP**: `smtpSend : SmtpConfig -> Effect Text Unit` — multi-recipient with CC/BCC.
+**MIME**: `mimeParts : Text -> List MimePart`, `flattenBodies : List MimePart -> Text`.
+
+**Session API** (persistent connection via `Resource`):
+```
+imapOpen      : ImapConfig -> Resource Text ImapSession
+imapSelect    : Text -> ImapSession -> Effect Text MailboxInfo
+imapExamine   : Text -> ImapSession -> Effect Text MailboxInfo
+imapSearch    : Text -> ImapSession -> Effect Text (List Int)
+imapFetch     : List Int -> ImapSession -> Effect Text (List A)
+imapSetFlags  : List Int -> List Text -> ImapSession -> Effect Text Unit
+imapAddFlags  : List Int -> List Text -> ImapSession -> Effect Text Unit
+imapRemoveFlags : List Int -> List Text -> ImapSession -> Effect Text Unit
+imapExpunge   : ImapSession -> Effect Text Unit
+imapCopy      : List Int -> Text -> ImapSession -> Effect Text Unit
+imapMove      : List Int -> Text -> ImapSession -> Effect Text Unit
+imapListMailboxes   : ImapSession -> Effect Text (List MailboxInfo)
+imapCreateMailbox   : Text -> ImapSession -> Effect Text Unit
+imapDeleteMailbox   : Text -> ImapSession -> Effect Text Unit
+imapRenameMailbox   : Text -> Text -> ImapSession -> Effect Text Unit
+imapAppend    : Text -> Text -> ImapSession -> Effect Text Unit
+imapIdle      : Int -> ImapSession -> Effect Text IdleResult
+```
+
+Types: `MailboxInfo = { name: Text, separator: Option Text, attributes: List Text }`, `IdleResult = TimedOut | MailboxChanged`.
+
 `@static` embeds sources at compile time: `@static schema = file.json "schema.json"` or `@static envName = env.get "AIVI_BUILD_ENV"`.
 
 `@static` can also generate typed, callable API clients from OpenAPI specs:
