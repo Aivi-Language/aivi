@@ -87,27 +87,35 @@ placeFood = seed snake => {
 
 step : Direction -> State -> State
 step = newDir state => {
-  dir  = if newDir == opposite state.dir then state.dir else newDir
+  dir = if newDir == opposite state.dir then state.dir else newDir
+
   pair = state.snake match
     | []           => ((0, 0), [])
     | [h, ...rest] => (h, rest)
+
     (head, body) = pair
     (hx, hy)     = head
     (dx, dy)     = delta dir
-    nx           = hx + dx
-    ny           = hy + dy
-    dead         = nx < 0 || nx >= gridW || ny < 0 || ny >= gridH || contains (nx, ny) body
+
+    nx   = hx + dx
+    ny   = hy + dy
+    dead = nx < 0 || nx >= gridW || ny < 0 || ny >= gridH || contains (nx, ny) body
+
     if dead
       then state <| { gameOver: True }
       else {
-        ateFood  = (nx, ny) == state.food
+        ateFood = (nx, ny) == state.food
+
         newSnake = if ateFood
           then [(nx, ny), ...state.snake]
           else [(nx, ny), ...dropLast state.snake]
+
         foodResult = if ateFood
           then placeFood (state.seed + state.score * 7 + nx * 13 + ny) newSnake
           else (state.food, state.seed)
+
         (newFood, newSeed) = foodResult
+
         {
           snake: newSnake
           food: newFood
