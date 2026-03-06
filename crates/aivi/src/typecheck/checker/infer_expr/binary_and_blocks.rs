@@ -549,7 +549,9 @@ impl TypeChecker {
                 BlockItem::Bind { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Let { pattern, expr, .. } => {
                     // Compiler-generated let bindings (e.g. __loop from
@@ -561,7 +563,9 @@ impl TypeChecker {
                     }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Filter { expr, .. }
                 | BlockItem::Yield { expr, .. }

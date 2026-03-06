@@ -4,6 +4,7 @@ use std::sync::Arc;
 use url::Url;
 
 use super::json::json_value_to_text;
+use super::system::json_to_runtime;
 use super::util::{
     builtin, expect_int, expect_list, expect_record, expect_text, list_value, make_err, make_none,
     make_ok, make_some,
@@ -742,7 +743,7 @@ fn openapi_call_impl(
         headers.push(("Content-Type".to_string(), "application/json".to_string()));
     }
 
-    http_request(
+    let raw_result = http_request(
         &method,
         &url,
         headers,
@@ -751,7 +752,30 @@ fn openapi_call_impl(
         retry_count.max(0) as usize,
         bearer_token,
         strict_status,
-    )
+    )?;
+
+    // For OpenAPI calls, automatically parse the JSON response body into typed
+    // runtime values so callers get `{ id, choices, model, ... }` instead of
+    // `{ status, headers, body: "<raw json>" }`.
+    match &raw_result {
+        Value::Constructor { name, args } if name == "Ok" && args.len() == 1 => {
+            if let Value::Record(fields) = &args[0] {
+                let status = match fields.get("status") {
+                    Some(Value::Int(s)) => *s,
+                    _ => 0,
+                };
+                if (200..300).contains(&status) {
+                    if let Some(Value::Text(body_text)) = fields.get("body") {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(body_text) {
+                            return Ok(make_ok(json_to_runtime(&parsed)));
+                        }
+                    }
+                }
+            }
+            Ok(raw_result)
+        }
+        _ => Ok(raw_result),
+    }
 }
 
 #[allow(dead_code)]

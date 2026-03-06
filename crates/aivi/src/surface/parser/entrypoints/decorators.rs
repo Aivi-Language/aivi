@@ -33,6 +33,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
         def: &mut Def,
         out: &mut Vec<FileDiagnostic>,
         extra_items: &mut Vec<ModuleItem>,
+        type_aliases: &std::collections::HashMap<String, TypeExpr>,
     ) {
         if !is_static {
             return;
@@ -157,7 +158,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                     Some("read") => {
                         def.expr = Expr::Literal(Literal::String {
                             text: contents,
-                            span: original_span,
+                            span: original_span.clone(),
                         });
                     }
                     Some("json") => {
@@ -173,7 +174,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                                         full_path.display(),
                                         err
                                     ),
-                                    original_span,
+                                    original_span.clone(),
                                 );
                                 return;
                             }
@@ -192,12 +193,46 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                                     full_path.display(),
                                     err
                                 ),
-                                original_span,
+                                original_span.clone(),
                             );
                         }
                     },
                     _ => {}
                 }
+            }
+            if base_name == Some("type") && field_name == Some("jsonSchema") {
+                let type_name = match args.first() {
+                    Some(Expr::Ident(name)) => name.name.clone(),
+                    _ => {
+                        emit_diag(
+                            module_path,
+                            out,
+                            "E1520",
+                            "`@static type.jsonSchema` expects a type name as argument".to_string(),
+                            original_span.clone(),
+                        );
+                        return;
+                    }
+                };
+                let type_expr = match type_aliases.get(&type_name) {
+                    Some(te) => te.clone(),
+                    None => {
+                        emit_diag(
+                            module_path,
+                            out,
+                            "E1521",
+                            format!("`@static type.jsonSchema`: type `{type_name}` not found in this module"),
+                            original_span.clone(),
+                        );
+                        return;
+                    }
+                };
+                let schema = type_expr_to_openai_json_schema(&type_name, &type_expr, type_aliases);
+                def.expr = Expr::Literal(Literal::String {
+                    text: schema,
+                    span: original_span,
+                });
+                return;
             }
         }
     }
@@ -211,12 +246,51 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             .to_path_buf();
 
         let mut static_sigs = std::collections::HashSet::<String>::new();
+        let mut type_aliases = std::collections::HashMap::<String, TypeExpr>::new();
         for item in &module.items {
-            let ModuleItem::TypeSig(sig) = item else {
-                continue;
-            };
-            if has_decorator(&sig.decorators, "static") {
-                static_sigs.insert(sig.name.name.clone());
+            match item {
+                ModuleItem::TypeSig(sig) => {
+                    if has_decorator(&sig.decorators, "static") {
+                        static_sigs.insert(sig.name.name.clone());
+                    }
+                }
+                ModuleItem::TypeAlias(ta) => {
+                    type_aliases.insert(ta.name.name.clone(), ta.aliased.clone());
+                }
+                ModuleItem::TypeDecl(td) => {
+                    // For ADTs, build a union via And (will render as enum or anyOf)
+                    if !td.constructors.is_empty() {
+                        let all_nullary = td.constructors.iter().all(|c| c.args.is_empty());
+                        if all_nullary {
+                            // Simple enum: Status = Active | Inactive
+                            let span = td.span.clone();
+                            let items: Vec<TypeExpr> = td.constructors.iter()
+                                .map(|c| TypeExpr::Name(c.name.clone()))
+                                .collect();
+                            type_aliases.insert(td.name.name.clone(), TypeExpr::And { items, span });
+                        }
+                        // Non-nullary constructors are complex ADTs — skip for now
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Also collect from domain items
+        for item in &module.items {
+            if let ModuleItem::DomainDecl(domain) = item {
+                for di in &domain.items {
+                    if let DomainItem::TypeAlias(td) = di {
+                        // DomainItem::TypeAlias wraps TypeDecl (ADT, not alias)
+                        let all_nullary = td.constructors.iter().all(|c| c.args.is_empty());
+                        if all_nullary && !td.constructors.is_empty() {
+                            let span = td.span.clone();
+                            let items: Vec<TypeExpr> = td.constructors.iter()
+                                .map(|c| TypeExpr::Name(c.name.clone()))
+                                .collect();
+                            type_aliases.insert(td.name.name.clone(), TypeExpr::And { items, span });
+                        }
+                    }
+                }
             }
         }
         let mut extra_items: Vec<ModuleItem> = Vec::new();
@@ -225,12 +299,12 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 ModuleItem::Def(def) => {
                     let is_static = has_decorator(&def.decorators, "static")
                         || static_sigs.contains(&def.name.name);
-                    apply_static_to_def(&module_path, &base_dir, is_static, def, &mut diags, &mut extra_items)
+                    apply_static_to_def(&module_path, &base_dir, is_static, def, &mut diags, &mut extra_items, &type_aliases)
                 }
                 ModuleItem::InstanceDecl(instance) => {
                     for def in &mut instance.defs {
                         let is_static = has_decorator(&def.decorators, "static");
-                        apply_static_to_def(&module_path, &base_dir, is_static, def, &mut diags, &mut extra_items);
+                        apply_static_to_def(&module_path, &base_dir, is_static, def, &mut diags, &mut extra_items, &type_aliases);
                     }
                 }
                 ModuleItem::DomainDecl(domain) => {
@@ -245,6 +319,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                                     def,
                                     &mut diags,
                                     &mut extra_items,
+                                    &type_aliases,
                                 );
                             }
                             DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
@@ -708,4 +783,153 @@ fn csv_to_expr(raw: &str, span: &Span) -> Result<Expr, csv::Error> {
         items,
         span: span.clone(),
     })
+}
+
+fn type_expr_to_openai_json_schema(
+    root_name: &str,
+    type_expr: &TypeExpr,
+    type_aliases: &std::collections::HashMap<String, TypeExpr>,
+) -> String {
+    fn te_to_schema(
+        te: &TypeExpr,
+        aliases: &std::collections::HashMap<String, TypeExpr>,
+        seen: &mut std::collections::HashSet<String>,
+    ) -> serde_json::Value {
+        use serde_json::json;
+        match te {
+            TypeExpr::Name(name) => {
+                let n = &name.name;
+                match n.as_str() {
+                    "Text" | "String" => json!({"type": "string"}),
+                    "Int" => json!({"type": "integer"}),
+                    "Float" => json!({"type": "number"}),
+                    "Bool" => json!({"type": "boolean"}),
+                    _ => {
+                        if !seen.contains(n) {
+                            if let Some(resolved) = aliases.get(n) {
+                                seen.insert(n.clone());
+                                let result = te_to_schema(resolved, aliases, seen);
+                                seen.remove(n);
+                                return result;
+                            }
+                        }
+                        // Unresolved type — treat as string
+                        json!({"type": "string"})
+                    }
+                }
+            }
+            TypeExpr::Record { fields, .. } => {
+                let mut properties = serde_json::Map::new();
+                let mut required = Vec::new();
+                for (field_name, field_type) in fields {
+                    let is_option = is_option_type(field_type);
+                    let schema = if is_option {
+                        te_to_schema(&unwrap_option(field_type), aliases, seen)
+                    } else {
+                        te_to_schema(field_type, aliases, seen)
+                    };
+                    properties.insert(field_name.name.clone(), schema);
+                    if !is_option {
+                        required.push(serde_json::Value::String(field_name.name.clone()));
+                    }
+                }
+                let mut obj = serde_json::Map::new();
+                obj.insert("type".to_string(), json!("object"));
+                obj.insert("properties".to_string(), serde_json::Value::Object(properties));
+                if !required.is_empty() {
+                    obj.insert("required".to_string(), serde_json::Value::Array(required));
+                }
+                obj.insert("additionalProperties".to_string(), json!(false));
+                serde_json::Value::Object(obj)
+            }
+            TypeExpr::Apply { base, args, .. } => {
+                if let TypeExpr::Name(base_name) = base.as_ref() {
+                    match base_name.name.as_str() {
+                        "List" | "Array" => {
+                            let item_schema = args.first()
+                                .map(|a| te_to_schema(a, aliases, seen))
+                                .unwrap_or(json!({}));
+                            json!({"type": "array", "items": item_schema})
+                        }
+                        "Option" | "Maybe" => {
+                            let inner = args.first()
+                                .map(|a| te_to_schema(a, aliases, seen))
+                                .unwrap_or(json!({}));
+                            // For OpenAI structured output, Option types become nullable
+                            let mut schema = inner.as_object().cloned().unwrap_or_default();
+                            schema.insert("nullable".to_string(), json!(true));
+                            serde_json::Value::Object(schema)
+                        }
+                        _ => {
+                            if let Some(resolved) = aliases.get(&base_name.name) {
+                                te_to_schema(resolved, aliases, seen)
+                            } else {
+                                json!({"type": "string"})
+                            }
+                        }
+                    }
+                } else {
+                    json!({"type": "string"})
+                }
+            }
+            TypeExpr::And { items, .. } => {
+                // Union type — use anyOf
+                let schemas: Vec<_> = items.iter().map(|i| te_to_schema(i, aliases, seen)).collect();
+                if schemas.len() == 1 {
+                    schemas.into_iter().next().unwrap()
+                } else {
+                    // Check if all items are just names (enum-like ADT)
+                    let all_names = items.iter().all(|i| matches!(i, TypeExpr::Name(_)));
+                    if all_names {
+                        let enum_vals: Vec<_> = items.iter().filter_map(|i| {
+                            if let TypeExpr::Name(n) = i { Some(json!(n.name)) } else { None }
+                        }).collect();
+                        json!({"type": "string", "enum": enum_vals})
+                    } else {
+                        json!({"anyOf": schemas})
+                    }
+                }
+            }
+            TypeExpr::Tuple { items, .. } => {
+                let schemas: Vec<_> = items.iter().map(|i| te_to_schema(i, aliases, seen)).collect();
+                json!({"type": "array", "prefixItems": schemas})
+            }
+            TypeExpr::Func { .. } | TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {
+                json!({"type": "string"})
+            }
+        }
+    }
+
+    fn is_option_type(te: &TypeExpr) -> bool {
+        if let TypeExpr::Apply { base, .. } = te {
+            if let TypeExpr::Name(n) = base.as_ref() {
+                return n.name == "Option" || n.name == "Maybe";
+            }
+        }
+        false
+    }
+
+    fn unwrap_option(te: &TypeExpr) -> TypeExpr {
+        if let TypeExpr::Apply { args, .. } = te {
+            if let Some(inner) = args.first() {
+                return inner.clone();
+            }
+        }
+        te.clone()
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let schema = te_to_schema(type_expr, type_aliases, &mut seen);
+
+    // Wrap in OpenAI json_schema format
+    let wrapper = serde_json::json!({
+        "format": {
+            "type": "json_schema",
+            "name": root_name,
+            "schema": schema,
+            "strict": true
+        }
+    });
+
+    serde_json::to_string(&wrapper).unwrap_or_default()
 }
