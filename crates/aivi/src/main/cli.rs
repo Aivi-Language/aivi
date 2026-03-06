@@ -173,10 +173,35 @@ fn run() -> Result<(), AiviError> {
             let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
             let (only_tests, rest) = consume_multi_value_flag("--only", &rest)?;
             let (update_snapshots, rest) = consume_flag("--update-snapshots", &rest);
-            let Some(target) = rest.first() else {
-                print_help();
-                return Ok(());
+
+            // Resolve project source target: when aivi.toml exists, use its entry
+            // point to discover all source files recursively (same as `aivi check`).
+            // Otherwise fall back to the CLI argument.
+            let target: String = if let Ok(root) = env::current_dir() {
+                let toml_path = root.join("aivi.toml");
+                if toml_path.exists() {
+                    if let Ok(cfg) = aivi::read_aivi_toml(&toml_path) {
+                        let source_target = resolve_project_source_target(&root, &cfg.project.entry);
+                        source_target.to_string_lossy().into_owned()
+                    } else {
+                        match rest.first() {
+                            Some(t) => t.clone(),
+                            None => { print_help(); return Ok(()); }
+                        }
+                    }
+                } else {
+                    match rest.first() {
+                        Some(t) => t.clone(),
+                        None => { print_help(); return Ok(()); }
+                    }
+                }
+            } else {
+                match rest.first() {
+                    Some(t) => t.clone(),
+                    None => { print_help(); return Ok(()); }
+                }
             };
+            let target = &target;
 
             // Format all target files in-place before running tests so the suite is stable and
             // editor tooling doesn't surface spurious formatter diffs.
@@ -279,7 +304,65 @@ fn run() -> Result<(), AiviError> {
             }
 
             // Check and print module diagnostics (optionally including embedded stdlib).
-            let mut modules = aivi::load_modules_from_paths(&test_paths)?;
+            // Compute the transitive dependency closure of test files so unrelated
+            // broken source files don't block test execution.
+            let all_aivi_paths: Vec<_> = paths.iter()
+                .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("aivi"))
+                .cloned()
+                .collect();
+            let needed_paths = {
+                // Build module_name → file_path map from first `module` line of each file.
+                let mut mod_to_path = HashMap::<String, PathBuf>::new();
+                for p in &all_aivi_paths {
+                    if let Ok(content) = std::fs::read_to_string(p) {
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if let Some(mod_name) = line.strip_prefix("module ") {
+                                let mod_name = mod_name.trim().to_string();
+                                mod_to_path.insert(mod_name, p.clone());
+                                break;
+                            }
+                            // Skip comments and blank lines at top of file.
+                            if !line.is_empty() && !line.starts_with("//") {
+                                break;
+                            }
+                        }
+                    }
+                }
+                // BFS from test files following `use` declarations.
+                let mut needed = HashSet::<PathBuf>::new();
+                let mut queue = std::collections::VecDeque::<PathBuf>::new();
+                for tp in &test_paths {
+                    needed.insert(tp.clone());
+                    queue.push_back(tp.clone());
+                }
+                while let Some(file) = queue.pop_front() {
+                    if let Ok(content) = std::fs::read_to_string(&file) {
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if !line.starts_with("use ") {
+                                continue;
+                            }
+                            // Extract module path: `use foo.bar.baz (...)` → "foo.bar.baz"
+                            let rest = line["use ".len()..].trim();
+                            let mod_name: String = rest
+                                .split(|c: char| c.is_whitespace() || c == '(')
+                                .next()
+                                .unwrap_or("")
+                                .to_string();
+                            if let Some(dep_path) = mod_to_path.get(&mod_name) {
+                                if needed.insert(dep_path.clone()) {
+                                    queue.push_back(dep_path.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                let mut result: Vec<_> = needed.into_iter().collect();
+                result.sort();
+                result
+            };
+            let mut modules = aivi::load_modules_from_paths(&needed_paths)?;
             let mut check_diags = check_modules(&modules);
             if !aivi::file_diagnostics_have_errors(&check_diags) {
                 check_diags.extend(aivi::elaborate_expected_coercions(&mut modules));

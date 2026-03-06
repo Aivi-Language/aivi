@@ -20,6 +20,8 @@ pub(crate) enum JsonSchema {
     Tuple(Vec<JsonSchema>),
     Record(BTreeMap<String, JsonSchema>),
     Option(Box<JsonSchema>),
+    /// All-nullary ADT: accepts a JSON string matching one of the constructor names.
+    Enum(Vec<String>),
     /// No validation — accepts any JSON value.
     Any,
 }
@@ -54,6 +56,16 @@ impl fmt::Display for JsonSchema {
                 write!(f, " }}")
             }
             JsonSchema::Option(inner) => write!(f, "Option {inner}"),
+            JsonSchema::Enum(variants) => {
+                write!(f, "Enum(")?;
+                for (i, v) in variants.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " | ")?;
+                    }
+                    write!(f, "{v}")?;
+                }
+                write!(f, ")")
+            }
             JsonSchema::Any => write!(f, "Any"),
         }
     }
@@ -125,6 +137,37 @@ pub(crate) fn validate_json(
 
         (JsonSchema::Option(_), JV::Null) => {}
         (JsonSchema::Option(inner), v) => validate_json(v, inner, path, errors),
+
+        (JsonSchema::Enum(variants), JV::String(s)) => {
+            if !variants.contains(s) {
+                errors.push(JsonMismatch {
+                    path: path.to_string(),
+                    expected: format!(
+                        "one of {}",
+                        variants
+                            .iter()
+                            .map(|v| format!("\"{v}\""))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    got: format!("Text (\"{s}\")"),
+                    fragment: fragment_str(value),
+                });
+            }
+        }
+        (JsonSchema::Enum(variants), v) => errors.push(JsonMismatch {
+            path: path.to_string(),
+            expected: format!(
+                "one of {}",
+                variants
+                    .iter()
+                    .map(|v| format!("\"{v}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            got: json_type_name(v),
+            fragment: fragment_str(v),
+        }),
 
         (JsonSchema::List(elem), JV::Array(items)) => {
             for (i, item) in items.iter().enumerate() {
@@ -482,6 +525,21 @@ pub(crate) fn cg_type_to_json_schema(ty: &CgType) -> JsonSchema {
                     }
                 }
             }
+            // Domain / newtype: single constructor wrapping exactly one value → unwrap
+            if constructors.len() == 1 {
+                let (_, args) = &constructors[0];
+                if args.len() == 1 {
+                    return cg_type_to_json_schema(&args[0]);
+                }
+            }
+            // All-nullary constructors → Enum (string matching constructor names)
+            if !constructors.is_empty()
+                && constructors.iter().all(|(_, args)| args.is_empty())
+            {
+                return JsonSchema::Enum(
+                    constructors.iter().map(|(n, _)| n.clone()).collect(),
+                );
+            }
             JsonSchema::Any
         }
     }
@@ -597,5 +655,197 @@ mod tests {
         assert!(output.contains("failed to parse source"));
         assert!(output.contains("expected Int"));
         assert!(output.contains("twenty"));
+    }
+
+    #[test]
+    fn domain_type_unwraps_to_inner_schema() {
+        // domain Seconds = Int → CgType::Adt { name: "Seconds", constructors: [("Seconds", [Int])] }
+        let cg = CgType::Adt {
+            name: "Seconds".to_string(),
+            constructors: vec![("Seconds".to_string(), vec![CgType::Int])],
+        };
+        assert_eq!(cg_type_to_json_schema(&cg), JsonSchema::Int);
+    }
+
+    #[test]
+    fn domain_type_wrapping_text() {
+        let cg = CgType::Adt {
+            name: "Email".to_string(),
+            constructors: vec![("Email".to_string(), vec![CgType::Text])],
+        };
+        assert_eq!(cg_type_to_json_schema(&cg), JsonSchema::Text);
+    }
+
+    #[test]
+    fn domain_type_in_record() {
+        // { duration: Seconds } where Seconds wraps Int
+        let seconds_cg = CgType::Adt {
+            name: "Seconds".to_string(),
+            constructors: vec![("Seconds".to_string(), vec![CgType::Int])],
+        };
+        let mut fields = BTreeMap::new();
+        fields.insert("duration".to_string(), seconds_cg);
+        let schema = cg_type_to_json_schema(&CgType::Record(fields));
+
+        let mut expected_fields = BTreeMap::new();
+        expected_fields.insert("duration".to_string(), JsonSchema::Int);
+        assert_eq!(schema, JsonSchema::Record(expected_fields));
+
+        // Validate: {"duration": 42} should pass
+        let json: serde_json::Value = serde_json::from_str(r#"{"duration": 42}"#).unwrap();
+        let mut errors = Vec::new();
+        validate_json(&json, &schema, "$", &mut errors);
+        assert!(errors.is_empty());
+
+        // Validate: {"duration": "slow"} should fail
+        let bad_json: serde_json::Value =
+            serde_json::from_str(r#"{"duration": "slow"}"#).unwrap();
+        let mut errors = Vec::new();
+        validate_json(&bad_json, &schema, "$", &mut errors);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "$.duration");
+    }
+
+    #[test]
+    fn enum_adt_produces_enum_schema() {
+        // Status = Active | Inactive | Pending
+        let cg = CgType::Adt {
+            name: "Status".to_string(),
+            constructors: vec![
+                ("Active".to_string(), vec![]),
+                ("Inactive".to_string(), vec![]),
+                ("Pending".to_string(), vec![]),
+            ],
+        };
+        let schema = cg_type_to_json_schema(&cg);
+        assert_eq!(
+            schema,
+            JsonSchema::Enum(vec![
+                "Active".to_string(),
+                "Inactive".to_string(),
+                "Pending".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn validate_enum_accepts_valid_constructor() {
+        let schema = JsonSchema::Enum(vec![
+            "Active".to_string(),
+            "Inactive".to_string(),
+        ]);
+
+        let json: serde_json::Value = serde_json::from_str(r#""Active""#).unwrap();
+        let mut errors = Vec::new();
+        validate_json(&json, &schema, "$", &mut errors);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn validate_enum_rejects_unknown_variant() {
+        let schema = JsonSchema::Enum(vec![
+            "Active".to_string(),
+            "Inactive".to_string(),
+        ]);
+
+        let json: serde_json::Value = serde_json::from_str(r#""Deleted""#).unwrap();
+        let mut errors = Vec::new();
+        validate_json(&json, &schema, "$", &mut errors);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].expected.contains("Active"));
+        assert!(errors[0].expected.contains("Inactive"));
+    }
+
+    #[test]
+    fn validate_enum_rejects_non_string() {
+        let schema = JsonSchema::Enum(vec![
+            "Active".to_string(),
+            "Inactive".to_string(),
+        ]);
+
+        let json: serde_json::Value = serde_json::from_str("42").unwrap();
+        let mut errors = Vec::new();
+        validate_json(&json, &schema, "$", &mut errors);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].got.contains("Int"));
+    }
+
+    #[test]
+    fn enum_in_record_field() {
+        // { name: Text, status: Status } where Status = Active | Inactive
+        let status_cg = CgType::Adt {
+            name: "Status".to_string(),
+            constructors: vec![
+                ("Active".to_string(), vec![]),
+                ("Inactive".to_string(), vec![]),
+            ],
+        };
+        let mut fields = BTreeMap::new();
+        fields.insert("name".to_string(), CgType::Text);
+        fields.insert("status".to_string(), status_cg);
+        let schema = cg_type_to_json_schema(&CgType::Record(fields));
+
+        // Valid JSON
+        let json: serde_json::Value =
+            serde_json::from_str(r#"{"name": "Alice", "status": "Active"}"#).unwrap();
+        let mut errors = Vec::new();
+        validate_json(&json, &schema, "$", &mut errors);
+        assert!(errors.is_empty());
+
+        // Invalid enum value
+        let bad: serde_json::Value =
+            serde_json::from_str(r#"{"name": "Alice", "status": "Deleted"}"#).unwrap();
+        let mut errors = Vec::new();
+        validate_json(&bad, &schema, "$", &mut errors);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "$.status");
+    }
+
+    #[test]
+    fn nested_record_with_subtype() {
+        // { user: { name: Text, address: { city: Text, zip: Int } } }
+        let mut address_fields = BTreeMap::new();
+        address_fields.insert("city".to_string(), CgType::Text);
+        address_fields.insert("zip".to_string(), CgType::Int);
+
+        let mut user_fields = BTreeMap::new();
+        user_fields.insert("name".to_string(), CgType::Text);
+        user_fields.insert("address".to_string(), CgType::Record(address_fields));
+
+        let mut root_fields = BTreeMap::new();
+        root_fields.insert("user".to_string(), CgType::Record(user_fields));
+
+        let schema = cg_type_to_json_schema(&CgType::Record(root_fields));
+
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{"user": {"name": "Alice", "address": {"city": "Berlin", "zip": 10115}}}"#,
+        )
+        .unwrap();
+        let mut errors = Vec::new();
+        validate_json(&json, &schema, "$", &mut errors);
+        assert!(errors.is_empty());
+
+        // Wrong zip type
+        let bad: serde_json::Value = serde_json::from_str(
+            r#"{"user": {"name": "Alice", "address": {"city": "Berlin", "zip": "abc"}}}"#,
+        )
+        .unwrap();
+        let mut errors = Vec::new();
+        validate_json(&bad, &schema, "$", &mut errors);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].path, "$.user.address.zip");
+    }
+
+    #[test]
+    fn mixed_adt_stays_any() {
+        // Shape = Circle Float | Point  (not all nullary, not single-constructor domain)
+        let cg = CgType::Adt {
+            name: "Shape".to_string(),
+            constructors: vec![
+                ("Circle".to_string(), vec![CgType::Float]),
+                ("Point".to_string(), vec![]),
+            ],
+        };
+        assert_eq!(cg_type_to_json_schema(&cg), JsonSchema::Any);
     }
 }
