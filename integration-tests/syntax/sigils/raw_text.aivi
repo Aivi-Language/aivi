@@ -14,7 +14,7 @@ withBraces = ~`no {interpolation} here`
 
 @test "raw text sigil produces Text"
 rawTextSigil = do Effect {
-  assertEq json "{\"id\": 1, \"name\": \"Alice\"}"
+  assertEq json "\{\"id\": 1, \"name\": \"Alice\"\}"
   assert (text.contains "line two" multiline)
-  assertEq withBraces "no {interpolation} here"
+  assertEq withBraces "no \{interpolation\} here"
 }
