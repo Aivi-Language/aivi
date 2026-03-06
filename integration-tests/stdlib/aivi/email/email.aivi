@@ -14,17 +14,61 @@ mime_parsing_helpers = do Effect {
   assert (text.contains "hello" combined)
 }
 
-@test "smtp surface"
+@test "smtp surface with multi-recipient"
 smtp_surface = do Effect {
   _ <- attempt (smtpSend {
       host: "smtp.example.com"
       user: "u"
-      password: "p"
+      auth: Password "p"
       from: "from@example.com"
-      to: "to@example.com"
+      to: ["to@example.com", "to2@example.com"]
+      cc: Some ["cc@example.com"]
+      bcc: None
       subject: "hello"
       body: "world"
+      port: None
+      starttls: None
   }
   )
   assert True
+}
+
+@test "email auth password constructor"
+email_auth_password = do Effect {
+  pwAuth = Password "secret"
+  pwAuth match
+    | Password p => assertEq p "secret"
+    | _          => assert False
+}
+
+@test "email auth oauth2 constructor"
+email_auth_oauth2 = do Effect {
+  oauthAuth = OAuth2 "mytoken123"
+  oauthAuth match
+    | OAuth2 t => assertEq t "mytoken123"
+    | _        => assert False
+}
+
+@test "idle result timed out"
+idle_result_timed_out = do Effect {
+  t = TimedOut
+  t match
+    | TimedOut => assert True
+    | _        => assert False
+}
+
+@test "idle result mailbox changed"
+idle_result_mailbox_changed = do Effect {
+  m = MailboxChanged
+  m match
+    | MailboxChanged => assert True
+    | _              => assert False
+}
+
+@test "mailbox info record shape"
+mailbox_info_shape = do Effect {
+  info = { name: "INBOX", separator: Some "/", attributes: ["\\HasNoChildren"] }
+  assertEq info.name "INBOX"
+  assertEq info.separator (Some "/")
+  assertEq (List.length info.attributes) 1
 }

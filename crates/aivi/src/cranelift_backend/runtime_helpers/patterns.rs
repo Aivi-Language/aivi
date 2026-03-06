@@ -117,6 +117,8 @@ pub extern "C" fn rt_tuple_item(
 }
 
 /// Get the length of a List value.
+/// Returns -1 for non-list values so list patterns ([]/[x, ...rest]) don't
+/// accidentally match Option, Result, Constructor, etc.
 #[no_mangle]
 pub extern "C" fn rt_list_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };

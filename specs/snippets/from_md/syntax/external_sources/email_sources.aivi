@@ -1,12 +1,38 @@
-// Fetch unread emails
+// Fetch unread emails with password auth
 inbox = email.imap {
   host: "imap.gmail.com"
-  filter: "UNSEEN"
+  user: "user@gmail.com"
+  auth: Password "secret"
+  filter: Some "UNSEEN"
+  mailbox: None
+  limit: None
+  port: None
+  starttls: None
 }
 
-// Sending as a sink effect
-sendWelcome = user => email.send {
-  to: user.email
+// Fetch with OAuth2
+inboxOauth = email.imap {
+  host: "imap.gmail.com"
+  user: "user@gmail.com"
+  auth: OAuth2 myAccessToken
+  filter: Some "UNSEEN"
+  mailbox: None
+  limit: None
+  port: None
+  starttls: None
+}
+
+// Sending with multiple recipients
+sendWelcome = user => email.smtpSend {
+  host: "smtp.gmail.com"
+  user: "sender@gmail.com"
+  auth: Password "secret"
+  from: "sender@gmail.com"
+  to: [user.email]
+  cc: None
+  bcc: None
   subject: "Welcome!"
   body: "Glad to have you, {user.name}"
+  port: None
+  starttls: None
 }
