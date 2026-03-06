@@ -500,13 +500,23 @@ pub extern "C" fn rt_binary_op(
                                 && !runtime.jit_match_failed
                                 && runtime.jit_pending_error.is_none()
                             {
-                                // If the result is a record with strictly fewer
-                                // fields that are all a subset of the input record's
-                                // fields, this is a sub-type match (e.g. Point2.(+)
-                                // on Point3 args). Skip it in favor of a more
-                                // specific clause, but keep as fallback.
-                                if is_strict_record_subset(&result, &input_keys) {
-                                    eprintln!("[SUBSET_SKIP] op={op} input_keys={input_keys:?} result_keys={:?}", record_key_set(&result));
+                                // Skip Effect results when operands are non-Effect
+                                // values. Domain operators like aivi.database.(+)
+                                // accept any args and return an Effect thunk without
+                                // validating input types; prefer a pure clause.
+                                let is_effect_mismatch = matches!(&result, Value::Effect(_))
+                                    && !matches!(&lhs, Value::Effect(_))
+                                    && !matches!(&rhs, Value::Effect(_));
+                                if is_effect_mismatch {
+                                    if fallback_result.is_none() {
+                                        fallback_result = Some(result);
+                                    }
+                                } else if is_strict_record_subset(&result, &input_keys) {
+                                    // If the result is a record with strictly fewer
+                                    // fields that are all a subset of the input record's
+                                    // fields, this is a sub-type match (e.g. Point2.(+)
+                                    // on Point3 args). Skip it in favor of a more
+                                    // specific clause, but keep as fallback.
                                     if subset_fallback.is_none() {
                                         subset_fallback = Some(result);
                                     }

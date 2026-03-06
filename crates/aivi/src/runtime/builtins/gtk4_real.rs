@@ -137,6 +137,7 @@ mod bridge {
             }
             "focus-enter" => Value::Constructor { name: "GtkFocusIn".to_string(), args: vec![wid, name] },
             "focus-leave" => Value::Constructor { name: "GtkFocusOut".to_string(), args: vec![wid, name] },
+            "tick" => Value::Constructor { name: "GtkTick".to_string(), args: vec![] },
             "notify::show-sidebar" => {
                 let (cname, _) = parse_constructor_handler(&event.handler);
                 Value::Constructor {
@@ -655,6 +656,11 @@ mod bridge {
             let signal = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
             let widget_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
             Ok(effect(move |_| { aivi_gtk4::signal_emit(widget_id, &signal, &handler, &payload).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
+        }));
+
+        fields.insert("setInterval".to_string(), builtin("gtk4.setInterval", 1, |mut args, _| {
+            let ms = match args.remove(0) { Value::Int(v) => v as u32, _ => return Err(invalid("expects Int")) };
+            Ok(effect(move |_| { aivi_gtk4::set_interval(ms).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
         }));
 
         // ── Signal bindings ──

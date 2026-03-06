@@ -86,6 +86,13 @@ splitLines_functional = do Effect {
   assertEq (List.length lines) 3
 }
 
+@test "join"
+join_functional = do Effect {
+  assertEq (join ", " ["a", "b", "c"]) "a, b, c"
+  assertEq (join "-" ["hello"]) "hello"
+  assertEq (join "," []) ""
+}
+
 // -- Trimming and Padding --
 
 @test "trim"

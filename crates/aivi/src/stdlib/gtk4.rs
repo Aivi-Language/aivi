@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.ui.gtk4
 export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
 export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
-export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal
+export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal, GtkTick
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated
 export widgetShow, widgetHide
@@ -48,6 +48,7 @@ export signalBindDialogPresent, signalBindStackPage
 export trayNotifyPersonalEmail, traySetEmailSuggestions
 export gtkApp
 export gtkAppFull
+export gtkSetInterval
 
 use aivi
 
@@ -94,6 +95,7 @@ GtkSignalEvent =
   | GtkFocusIn       WidgetId Text
   | GtkFocusOut      WidgetId Text
   | GtkUnknownSignal WidgetId Text Text Text Text
+  | GtkTick
 
 gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode
 gtkElement = tag attrs children => GtkElement tag attrs children
@@ -127,6 +129,9 @@ dbusServerStart = gtk4.dbusServerStart
 
 signalEmit : WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 signalEmit = gtk4.signalEmit
+
+gtkSetInterval : Int -> Effect GtkError Unit
+gtkSetInterval = gtk4.setInterval
 
 widgetById : Text -> Effect GtkError WidgetId
 widgetById = gtk4.widgetById

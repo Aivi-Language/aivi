@@ -929,6 +929,10 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "setInterval".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
                 "osOpenUri".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),
