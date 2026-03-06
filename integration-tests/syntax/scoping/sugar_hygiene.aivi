@@ -36,7 +36,7 @@ unlessSugarNoShadow = do Effect {
 
 @test "loop binding shadows outer n only inside loop body"
 loopBindingShadowsLocally = do Effect {
-  n = 100
+  n      = 100
   result = generate {
     loop n = 1 => {
       yield n

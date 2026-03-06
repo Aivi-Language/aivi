@@ -11,16 +11,16 @@ Edge = { from: Int, to: Int, cap: Int }
 
 // Helpers -- text keys avoid record-key issues in Map
 edgeKey = from to => "{ from }:{ to }"
-getCap = from to caps => Map.getOrElse (edgeKey from to) 0 caps
-setCap = from to value caps => Map.insert (edgeKey from to) value caps
-addCap = from to delta caps => setCap from to (getCap from to caps + delta) caps
+getCap  = from to caps => Map.getOrElse (edgeKey from to) 0 caps
+setCap  = from to value caps => Map.insert (edgeKey from to) value caps
+addCap  = from to delta caps => setCap from to (getCap from to caps + delta) caps
 
 // Build residual network from edges
 buildResidual = edges => {
   backward = List.map (e => { from: e.to, to: e.from, cap: 0 }) edges
   allEdges = edges ++ backward
-  graph = fromEdges (List.map (e => (e.from, e.to)) allEdges)
-  caps = List.foldl (acc e => addCap e.from e.to e.cap acc) Map.empty allEdges
+  graph    = fromEdges (List.map (e => (e.from, e.to)) allEdges)
+  caps     = List.foldl (acc e => addCap e.from e.to e.cap acc) Map.empty allEdges
   { graph: graph, capacities: caps }
 }
 
@@ -35,10 +35,10 @@ bfsLoop = residual source sink q parents => (Queue.dequeue q) match
   | Some (current, q2) =>
     if current == sink then Some parents
     else {
-      neighbors = edgesFrom residual.graph current
+      neighbors      = edgesFrom residual.graph current
       (q3, parents3) = List.foldl ((q0, par) edge => {
-        next = edge.to
-        cap = getCap current next residual.capacities
+        next      = edge.to
+        cap       = getCap current next residual.capacities
         isVisited = next == source || Map.has next par
         if cap > 0 && !isVisited then
           (Queue.enqueue next q0, Map.insert next current par)
@@ -65,7 +65,7 @@ walkMin = path caps best => path match
   | []              => best
   | [_]             => best
   | [a, b, ...rest] => {
-      c = getCap a b caps
+      c       = getCap a b caps
       newBest = if best == 0 then c else if c < best then c else best
       walkMin ([b] ++ rest) caps newBest
     }
@@ -75,8 +75,8 @@ updateCaps = path delta caps => path match
   | []              => caps
   | [_]             => caps
   | [a, b, ...rest] => {
-      fwd = getCap a b caps
-      bwd = getCap b a caps
+      fwd   = getCap a b caps
+      bwd   = getCap b a caps
       caps2 = caps |> setCap a b (fwd - delta) |> setCap b a (bwd + delta)
       updateCaps ([b] ++ rest) delta caps2
     }
@@ -90,7 +90,7 @@ edmondsKarp = edges source sink => {
 ekLoop = residual source sink totalFlow => (bfs residual source sink) match
   | None         => totalFlow
   | Some parents => {
-      path = reconstructPath parents source sink
+      path  = reconstructPath parents source sink
       delta = pathCapacity path residual.capacities
       if delta == 0 then totalFlow
       else {

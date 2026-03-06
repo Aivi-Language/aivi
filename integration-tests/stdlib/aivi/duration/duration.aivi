@@ -33,7 +33,7 @@ span_negative = do Effect {
 
 @test "span to seconds"
 span_to_seconds = do Effect {
-  s = { millis: 5000 }
+  s    = { millis: 5000 }
   secs = s.millis / 1000
   assertEq secs 5
 }
@@ -41,6 +41,6 @@ span_to_seconds = do Effect {
 @test "span arithmetic"
 span_arithmetic = do Effect {
   timeout = { millis: 30000 }
-  delay = { millis: timeout.millis + 500 }
+  delay   = { millis: timeout.millis + 500 }
   assertEq delay.millis 30500
 }

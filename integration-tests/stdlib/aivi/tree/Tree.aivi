@@ -19,7 +19,7 @@ traversals = do Effect {
 
 @test "from list by builds expected shape"
 fromListByBuildsExpectedShape = do Effect {
-  idFn = x => x
+  idFn       = x => x
   parentIdFn = x =>
     if x == 1 then None
     else if x == 2 then Some 1
@@ -40,7 +40,7 @@ fromListByBuildsExpectedShape = do Effect {
 
 @test "from list by rejects multiple roots"
 fromListByRejectsMultipleRoots = do Effect {
-  idFn = x => x
+  idFn       = x => x
   parentIdFn = _ => None
   assertEq (fromListBy idFn parentIdFn [1, 2]) None
 }

@@ -113,7 +113,7 @@ tenant_concurrency_limit = do Effect {
 
 @test "worker action helpers"
 worker_action_helpers = do Effect {
-  k = planKey "job-a" 2026-01-01T00:00:00Z
+  k   = planKey "job-a" 2026-01-01T00:00:00Z
   run =
     {
       key: k

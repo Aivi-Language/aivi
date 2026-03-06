@@ -300,6 +300,7 @@
             top_delim: stack.last().map(|f| f.sym),
             top_context,
             effect_align_lhs: None,
+            bind_align_lhs: None,
             arm_align_pat: None,
             map_align_key: None,
             machine_align: None,
@@ -545,6 +546,43 @@
                     i = j;
                     continue;
                 }
+
+            // Binding `=` alignment groups: consecutive lines with top-level `=` at the
+            // same indentation level, unbroken by blank/degraded lines.
+            if find_top_level_token(&lines[i].tokens, "=", first_idx).is_some() {
+                let this_indent = lines[i].indent_len;
+                let mut j = i;
+                let mut max_lhs = 0usize;
+                while j < lines.len() {
+                    if lines[j].tokens.is_empty() || lines[j].degraded {
+                        break;
+                    }
+                    if lines[j].indent_len != this_indent {
+                        break;
+                    }
+                    let first_idx_j = match first_code_index(&lines[j].tokens) {
+                        Some(v) => v,
+                        None => break,
+                    };
+                    let Some(eq_idx) =
+                        find_top_level_token(&lines[j].tokens, "=", first_idx_j)
+                    else {
+                        break;
+                    };
+                    let lhs_tokens = &lines[j].tokens[first_idx_j..eq_idx];
+                    let lhs_str =
+                        format_tokens_simple(lhs_tokens, lines[j].top_delim).trim().to_string();
+                    max_lhs = max_lhs.max(lhs_str.len());
+                    j += 1;
+                }
+                if j - i >= 2 {
+                    for line in lines.iter_mut().take(j).skip(i) {
+                        line.bind_align_lhs = Some(max_lhs);
+                    }
+                }
+                i = j;
+                continue;
+            }
         }
 
         i += 1;
@@ -1155,6 +1193,88 @@
                     let depth = net_open_depth(&state.tokens);
                     // If the line already opened a delimiter group (e.g. `=> {`), delimiter-based
                     // indentation handles the continuation; avoid a one-shot RHS indent.
+                    if depth == 0 {
+                        rhs_next_line_indent = Some(line_indent_len);
+                        rhs_next_line_depth = Some(depth);
+                        rhs_block_base_indent = Some(line_indent_len);
+                        rhs_block_base_depth = Some(line_depth);
+                    }
+                }
+                update_open_depth(&mut open_depth, &state.tokens);
+                continue;
+            }
+        }
+
+        if let Some(max_lhs) = state.bind_align_lhs {
+            if let Some(eq_idx) = find_top_level_token(&state.tokens, "=", first_idx) {
+                // `=` alignment across consecutive binding lines.
+                let lhs_tokens = &state.tokens[first_idx..eq_idx];
+                let rhs_tokens = &state.tokens[eq_idx + 1..];
+                let lhs = format_tokens_simple(lhs_tokens, state.top_delim)
+                    .trim()
+                    .to_string();
+                let rhs = format_tokens_simple(rhs_tokens, state.top_delim)
+                    .trim()
+                    .to_string();
+                let spaces = (max_lhs.saturating_sub(lhs.len())) + 1;
+                out.push_str(&effective_indent);
+                out.push_str(&lhs);
+                out.push_str(&" ".repeat(spaces));
+                out.push_str("=");
+                if !rhs.is_empty() {
+                    out.push(' ');
+                    out.push_str(&rhs);
+                }
+                rendered_lines.push(out);
+                prev_effective_indent_len = effective_indent_len;
+                prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                if should_pop_hang {
+                    hang_delim_stack.pop();
+                }
+                if let Some(last) = last_code_token(&state.tokens) {
+                    if let Some(open) = is_open_sym(&last) {
+                        hang_delim_stack.push((open, prev_effective_indent_len));
+                    }
+                }
+                if let Some(else_idx) =
+                    find_top_level_token_clamped(&state.tokens, "else", first_idx)
+                {
+                    if let Some(idx) = if_stack.iter().rposition(|f| f.phase == IfPhase::Then) {
+                        let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
+                            t.kind != "comment" && t.text != "\n"
+                        });
+                        if_stack[idx].phase = IfPhase::Else;
+                        if_stack[idx].active_indent = !else_inline;
+                    }
+                }
+                if prev_non_blank_last_token.as_deref() == Some("then") {
+                    if_stack.push(IfFrame {
+                        if_indent: prev_effective_indent_len,
+                        phase: IfPhase::Then,
+                        active_indent: true,
+                    });
+                }
+                if state.tokens.get(first_idx).map(|t| t.text.as_str()) == Some("then")
+                    && prev_non_blank_last_token.as_deref() != Some("then")
+                {
+                    if_stack.push(IfFrame {
+                        if_indent: prev_effective_indent_len,
+                        phase: IfPhase::Then,
+                        active_indent: false,
+                    });
+                }
+                if find_top_level_token(&state.tokens, "if", first_idx).is_some()
+                    && find_top_level_token(&state.tokens, "then", first_idx).is_none()
+                {
+                    pending_then_indent = Some(prev_effective_indent_len);
+                } else {
+                    pending_then_indent = None;
+                }
+                if line_has_top_level_eq {
+                    pipeop_seed_indent = Some(line_indent_len);
+                }
+                if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                    let depth = net_open_depth(&state.tokens);
                     if depth == 0 {
                         rhs_next_line_indent = Some(line_indent_len);
                         rhs_next_line_depth = Some(depth);

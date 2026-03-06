@@ -122,12 +122,12 @@ validateUser_shortCircuit = do Effect {
 doOption_nestedLookup = do Effect {
   inner1 = Map.insert "timeout" 30 Map.empty
   inner2 = Map.insert "retries" 5 Map.empty
-  cfg = Map.insert "network" inner1 (Map.insert "app" inner2 Map.empty)
+  cfg    = Map.insert "network" inner1 (Map.insert "app" inner2 Map.empty)
 
   timeout = lookupSetting "network" "timeout" cfg
   retries = lookupSetting "app" "retries" cfg
   missing = lookupSetting "network" "missing" cfg
-  absent = lookupSetting "nosection" "key" cfg
+  absent  = lookupSetting "nosection" "key" cfg
 
   assertEq timeout (Some 30)
   assertEq retries (Some 5)
@@ -144,8 +144,8 @@ doOption_shortCircuit = do Effect {
 
 @test "generator: pairs summing to target"
 doList_pairsSum = do Effect {
-  xs = [1, 2, 3, 4]
-  ys = [6, 7, 8, 9]
+  xs    = [1, 2, 3, 4]
+  ys    = [6, 7, 8, 9]
   pairs = toList (pairsWithSum 10 xs ys)
   // 1+9=10, 2+8=10, 3+7=10, 4+6=10
   assertEq pairs [(1, 9), (2, 8), (3, 7), (4, 6)]

@@ -35,7 +35,7 @@ mapHas = do Effect {
 
 @test "map remove"
 mapRemove = do Effect {
-  m = insert "a" 1 (insert "b" 2 empty)
+  m  = insert "a" 1 (insert "b" 2 empty)
   m2 = remove "a" m
   assertEq (get "a" m2) None
   assertEq (get "b" m2) (Some 2)
@@ -43,28 +43,28 @@ mapRemove = do Effect {
 
 @test "map update existing"
 mapUpdate = do Effect {
-  m = insert "a" 10 empty
+  m  = insert "a" 10 empty
   m2 = update "a" (v => v + 5) m
   assertEq (get "a" m2) (Some 15)
 }
 
 @test "map update missing key unchanged"
 mapUpdateMissing = do Effect {
-  m = insert "a" 10 empty
+  m  = insert "a" 10 empty
   m2 = update "b" (v => v + 5) m
   assertEq (size m2) 1
 }
 
 @test "map keys"
 mapKeys = do Effect {
-  m = insert "a" 1 empty
+  m  = insert "a" 1 empty
   ks = keys m
   assertEq ks ["a"]
 }
 
 @test "map values"
 mapValues = do Effect {
-  m = insert "a" 1 empty
+  m  = insert "a" 1 empty
   vs = values m
   assertEq vs [1]
 }
@@ -103,7 +103,7 @@ mapGetOrElse = do Effect {
 
 @test "map map values"
 mapMapValues = do Effect {
-  m = fromList [("a", 1), ("b", 2)]
+  m  = fromList [("a", 1), ("b", 2)]
   m2 = map (v => v * 10) m
   assertEq (get "a" m2) (Some 10)
   assertEq (get "b" m2) (Some 20)
@@ -126,7 +126,7 @@ setInsertContains = do Effect {
 
 @test "set remove"
 setRemove = do Effect {
-  s = Set.insert 1 (Set.insert 2 Set.empty)
+  s  = Set.insert 1 (Set.insert 2 Set.empty)
   s2 = Set.remove 1 s
   assertEq (Set.contains 1 s2) False
   assertEq (Set.contains 2 s2) True
@@ -171,7 +171,7 @@ setFromListDedup = do Effect {
 
 @test "set toList"
 setToList = do Effect {
-  s = Set.fromList [1]
+  s  = Set.fromList [1]
   xs = Set.toList s
   assertEq xs [1]
 }

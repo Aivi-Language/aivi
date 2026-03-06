@@ -20,16 +20,16 @@ strict_fields = do Effect {
 @test "schema required fields"
 schema_required_fields = do Effect {
   payload = encodeObject [("id", encodeInt 1)]
-  schema = { required: ["id", "name"], strict: True }
-  issues = validateSchema schema payload
+  schema  = { required: ["id", "name"], strict: True }
+  issues  = validateSchema schema payload
   assertEq (List.length issues) 1
 }
 
 @test "migrate object"
 migrate_object = do Effect {
-  payload = encodeObject [("name", encodeText "old")]
+  payload  = encodeObject [("name", encodeText "old")]
   migrated = migrateObject (entries => [("name", encodeText "new"), ...entries]) payload
-  field = decodeField "name" migrated
+  field    = decodeField "name" migrated
   field match
     | Ok value => assertEq value (encodeText "new")
     | Err _    => assert False

@@ -76,7 +76,7 @@ boolOps = do Effect {
 
 @test "tuple creation and matching"
 tupleCreation = do Effect {
-  t = (1, 2, 3)
+  t         = (1, 2, 3)
   (a, b, c) = t
   assertEq a 1
   assertEq b 2
@@ -85,7 +85,7 @@ tupleCreation = do Effect {
 
 @test "tuple pair"
 tuplePair = do Effect {
-  pair = (42, "hello")
+  pair   = (42, "hello")
   (n, s) = pair
   assertEq n 42
   assertEq s "hello"
@@ -93,7 +93,7 @@ tuplePair = do Effect {
 
 @test "nested tuple matching"
 nestedTuple = do Effect {
-  t = ((1, 2), (3, 4))
+  t                = ((1, 2), (3, 4))
   ((a, b), (c, d)) = t
   assertEq (a + b + c + d) 10
 }
@@ -137,14 +137,14 @@ stringConcat = do Effect {
 
 @test "text interpolation basic"
 textInterpolation = do Effect {
-  name = "world"
+  name   = "world"
   result = "hello {name}"
   assertEq result "hello world"
 }
 
 @test "text interpolation with expression"
 textInterpolationExpr = do Effect {
-  x = 42
+  x      = 42
   result = "the answer is {x}"
   assertEq result "the answer is 42"
 }
@@ -165,14 +165,14 @@ recordManyFields = do Effect {
 recordThroughFunction = do Effect {
   getX = r => r.x
   getY = r => r.y
-  r = { x: 10, y: 20 }
+  r    = { x: 10, y: 20 }
   assertEq (getX r) 10
   assertEq (getY r) 20
 }
 
 @test "record patch multiple fields"
 recordPatchMultiple = do Effect {
-  r = { x: 1, y: 2, z: 3 }
+  r  = { x: 1, y: 2, z: 3 }
   r2 = r <| { x: 10, z: 30 }
   assertEq r2.x 10
   assertEq r2.y 2
@@ -182,13 +182,13 @@ recordPatchMultiple = do Effect {
 // --- ADT construction with multiple args (triggers rt_alloc_constructor, rt_constructor_arg) ---
 
 Result E A = Ok A | Err E
-Tree A = Leaf | Node (Tree A) A (Tree A)
+Tree A     = Leaf | Node (Tree A) A (Tree A)
 
 @test "result ok and err matching"
 resultMatching = do Effect {
-  ok = Ok 42
+  ok  = Ok 42
   err = Err "fail"
-  v = ok match
+  v   = ok match
     | Ok x  => x
     | Err _ => 0
     assertEq v 42
@@ -224,7 +224,7 @@ nestedConstructorMatch = do Effect {
 
 @test "pair matching"
 pairMatching = do Effect {
-  p = MkPair 10 20
+  p            = MkPair 10 20
   (MkPair a b) = p
   assertEq (a + b) 30
 }
@@ -265,7 +265,7 @@ closureMultiCapture = do Effect {
 @test "closure returned from function"
 closureFromFunc = do Effect {
   makeScaler = factor offset => x => x * factor + offset
-  scale = makeScaler 3 5
+  scale      = makeScaler 3 5
   assertEq (scale 10) 35
   assertEq (scale 0) 5
 }
@@ -273,7 +273,7 @@ closureFromFunc = do Effect {
 @test "closure in list"
 closureInList = do Effect {
   fns = [x => x + 1, x => x * 2, x => x - 3]
-  f0 = fns match | [a, ...] => a | _ => x => x
+  f0  = fns match | [a, ...] => a | _ => x => x
   assertEq (f0 5) 6
 }
 

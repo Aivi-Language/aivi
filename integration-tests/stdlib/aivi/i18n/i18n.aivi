@@ -55,7 +55,7 @@ sigil_key = do Effect {
 
 @test "sigil message render"
 sigil_message_render = do Effect {
-  m = ~m"You have {count:Int} items in your cart."
+  m      = ~m"You have {count:Int} items in your cart."
   result = render m { count: 5 }
   result match
     | Ok txt => assertEq txt "You have 5 items in your cart."
@@ -64,7 +64,7 @@ sigil_message_render = do Effect {
 
 @test "sigil message no placeholders"
 sigil_message_no_placeholders = do Effect {
-  m = ~m"Plain hello"
+  m      = ~m"Plain hello"
   result = render m {}
   result match
     | Ok txt => assertEq txt "Plain hello"
@@ -74,13 +74,13 @@ sigil_message_no_placeholders = do Effect {
 @test "fallback tags"
 fallbackTags_functional = do Effect {
   locale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
-  tags = fallbackTags locale
+  tags   = fallbackTags locale
   assert (List.length tags >= 1)
 }
 
 @test "fallback tags no region"
 fallbackTags_no_region = do Effect {
   locale = { language: "ja", region: None, variants: [], tag: "ja" }
-  tags = fallbackTags locale
+  tags   = fallbackTags locale
   assertEq tags ["ja"]
 }

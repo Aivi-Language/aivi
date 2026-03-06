@@ -67,7 +67,7 @@ visitNode = graph node state => {
       }
       else s
     else {
-      nested = visitNode graph next s
+      nested  = visitNode graph next s
       lowNode = getOr nested.lowlink node bigInt
       lowNext = getOr nested.lowlink next bigInt
       nested <| { lowlink: Map.insert node (if lowNode < lowNext then lowNode else lowNext) nested.lowlink }

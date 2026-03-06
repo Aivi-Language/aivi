@@ -19,7 +19,7 @@ bool_functional = do Effect {
 
 @test "bytes"
 bytes_functional = do Effect {
-  b = toBytes Utf8 "abc"
+  b   = toBytes Utf8 "abc"
   res = fromBytes Utf8 b
   res match
     | Ok s  => assertEq s "abc"
@@ -87,7 +87,7 @@ option_functional = do Effect {
 
 @test "patch"
 patch_functional = do Effect {
-  user = { name: "A", age: 30 }
+  user  = { name: "A", age: 30 }
   older = user <| { age: _ + 1 }
   assertEq older.age 31
 }
@@ -144,7 +144,7 @@ toText_functional = do Effect {
 
 @test "tuple"
 tuple_functional = do Effect {
-  t = (1, "two")
+  t   = (1, "two")
   res = t match
     | (a, b) => if a == 1 && b == "two" then True else False
     | _      => False

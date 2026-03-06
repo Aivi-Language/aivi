@@ -589,6 +589,47 @@ mod align_tests {
         let out2 = format_text(&out);
         assert_eq!(out, out2, "alignment should be idempotent");
     }
+
+    #[test]
+    fn align_consecutive_eq_bindings() {
+        let input = "module demo\n\nmain = do Effect {\n  vendor = bill.billerName\n  amount = bill.amountDue ?? 0.0\n  dueAt = bill.dueDate ?? \"\"\n  logicalKey = sha256 \"{emailId}:{vendor}:{toText amount}\"\n  billId = sha256 \"{emailId}:{pv}:{logicalKey}\"\n}\n";
+        let out = format_text(input);
+        let lines: Vec<&str> = out.lines().collect();
+        let eq_cols: Vec<usize> = lines
+            .iter()
+            .filter(|l| l.contains(" = "))
+            .filter(|l| !l.contains("main"))
+            .map(|l| l.find(" = ").expect("= present"))
+            .collect();
+        assert!(eq_cols.len() >= 2, "at least 2 binding lines");
+        assert!(
+            eq_cols.iter().all(|&c| c == eq_cols[0]),
+            "all = should be aligned at same column, got {:?}",
+            eq_cols,
+        );
+        let out2 = format_text(&out);
+        assert_eq!(out, out2, "alignment should be idempotent");
+    }
+
+    #[test]
+    fn align_consecutive_eq_bindings_top_level() {
+        let input = "module demo\n\nadd = a => b => a + b\nsubtract = a => b => a - b\nmultiply = a => b => a * b\n";
+        let out = format_text(input);
+        let lines: Vec<&str> = out.lines().collect();
+        let eq_cols: Vec<usize> = lines
+            .iter()
+            .filter(|l| l.contains(" = "))
+            .map(|l| l.find(" = ").expect("= present"))
+            .collect();
+        assert_eq!(eq_cols.len(), 3, "3 binding lines");
+        assert!(
+            eq_cols.iter().all(|&c| c == eq_cols[0]),
+            "all = should be aligned, got {:?}",
+            eq_cols,
+        );
+        let out2 = format_text(&out);
+        assert_eq!(out, out2, "alignment should be idempotent");
+    }
 }
 
 #[cfg(test)]

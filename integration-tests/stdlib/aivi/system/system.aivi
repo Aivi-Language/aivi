@@ -11,23 +11,23 @@ use aivi.net.https as https
 use aivi.rest as rest
 use aivi.email as email
 
-User = { id: Int, name: Text }
-AppConfig = { port: Int, debug: Bool }
-ImageMeta = { width: Int, height: Int, format: Text }
-PixelImage = { width: Int, height: Int, pixels: List Int }
+User         = { id: Int, name: Text }
+AppConfig    = { port: Int, debug: Bool }
+ImageMeta    = { width: Int, height: Int, format: Text }
+PixelImage   = { width: Int, height: Int, pixels: List Int }
 InboxMessage = { subject: Option Text, body: Text }
 
-readTextSource = reader => reader "/tmp/mock.txt"
-readJsonSource = reader => reader "/tmp/user.json"
-readCsvSource = reader => reader "/tmp/users.csv"
+readTextSource      = reader => reader "/tmp/mock.txt"
+readJsonSource      = reader => reader "/tmp/user.json"
+readCsvSource       = reader => reader "/tmp/users.csv"
 readImageMetaSource = reader => reader "/tmp/photo.png"
-readImageSource = reader => reader "/tmp/photo.png"
-envGetSource = getter => getter "AIVI_API_KEY"
-envDecodeSource = decoder => decoder "AIVI_APP"
-httpGetSource = getter => getter ~u(https://api.example.com/users)
-httpsGetSource = getter => getter ~u(https://api.example.com/users)
-restGetSource = getter => getter ~u(https://api.example.com/users)
-imapSource = reader => reader {
+readImageSource     = reader => reader "/tmp/photo.png"
+envGetSource        = getter => getter "AIVI_API_KEY"
+envDecodeSource     = decoder => decoder "AIVI_APP"
+httpGetSource       = getter => getter ~u(https://api.example.com/users)
+httpsGetSource      = getter => getter ~u(https://api.example.com/users)
+restGetSource       = getter => getter ~u(https://api.example.com/users)
+imapSource          = reader => reader {
   host: "imap.example.com"
   user: "bot@example.com"
   password: "secret"
@@ -78,11 +78,11 @@ live_source_adapters_typecheck = do Effect {
 
 @test "file and image sources can be mocked"
 file_and_image_sources_can_be_mocked = do Effect {
-  mockReadText = _ => pure (Ok "mock text")
-  mockReadJson = _ => pure { id: 1, name: "Ada" }
-  mockReadCsv = _ => pure [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }]
+  mockReadText  = _ => pure (Ok "mock text")
+  mockReadJson  = _ => pure { id: 1, name: "Ada" }
+  mockReadCsv   = _ => pure [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }]
   mockImageMeta = _ => pure { width: 64, height: 64, format: "png" }
-  mockImage = _ => pure { width: 2, height: 2, pixels: [0, 1, 2, 3] }
+  mockImage     = _ => pure { width: 2, height: 2, pixels: [0, 1, 2, 3] }
 
   textRes <- readTextSource mockReadText
   user    <- readJsonSource mockReadJson
@@ -102,7 +102,7 @@ file_and_image_sources_can_be_mocked = do Effect {
 
 @test "env sources can be mocked"
 env_sources_can_be_mocked = do Effect {
-  mockEnvGet = _ => pure "token-123"
+  mockEnvGet    = _ => pure "token-123"
   mockEnvDecode = _ => pure { port: 8080, debug: True }
 
   apiKey <- envGetSource mockEnvGet
@@ -115,7 +115,7 @@ env_sources_can_be_mocked = do Effect {
 
 @test "http and https sources can be mocked"
 http_and_https_sources_can_be_mocked = do Effect {
-  mockHttpGet = _ => pure (Ok { status: 200, headers: [], body: "ok-http" })
+  mockHttpGet  = _ => pure (Ok { status: 200, headers: [], body: "ok-http" })
   mockHttpsGet = _ => pure (Ok { status: 200, headers: [], body: "ok-https" })
 
   httpRes  <- httpGetSource mockHttpGet

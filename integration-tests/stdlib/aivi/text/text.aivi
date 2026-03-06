@@ -188,8 +188,8 @@ parseFloat_functional = do Effect {
 @test "bytes roundtrip"
 bytes_roundtrip = do Effect {
   original = "hello"
-  b = toBytes Utf8 original
-  result = fromBytes Utf8 b
+  b        = toBytes Utf8 original
+  result   = fromBytes Utf8 b
   result match
     | Ok s  => assertEq s original
     | Err _ => assert False

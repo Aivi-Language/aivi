@@ -17,7 +17,7 @@ makeFns = generate {
 
 @test "generator closures each capture their own bound iteration value"
 generatorClosureCapture = do Effect {
-  fns = toList makeFns
+  fns     = toList makeFns
   results = map (f => f 5) fns
   // f10 5 = 15, f20 5 = 25, f30 5 = 35
   assertEq results [15, 25, 35]

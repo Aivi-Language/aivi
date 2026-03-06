@@ -4,7 +4,7 @@ module integrationTests.syntax.patternMatching.nestedConstructorPattern
 use aivi
 use aivi.testing
 
-Option A = None | Some A
+Option A   = None | Some A
 Result E A = Err E | Ok A
 
 // Deep nested constructor patterns: Option (Result E A) with record payload.

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use aivi::{
     check_modules, check_types, elaborate_expected_coercions, file_diagnostics_have_errors,
-    load_modules_from_paths, DiagnosticSeverity, FileDiagnostic,
+    DiagnosticSeverity, FileDiagnostic, Pipeline,
 };
 
 #[path = "test_support.rs"]
@@ -156,9 +156,10 @@ fn run_test_group(
         return;
     }
 
-    // Load all modules in the group together.
-    let mut modules = match load_modules_from_paths(paths) {
-        Ok(m) => m,
+    // Load all modules in the group together via Pipeline so we also
+    // capture parse-time diagnostics (e.g. @static errors).
+    let pipeline = match Pipeline::from_paths(paths) {
+        Ok(p) => p,
         Err(e) => {
             let err_msg = format!("{e}");
             let all_matched = expectations.iter().all(|exp| {
@@ -177,7 +178,9 @@ fn run_test_group(
         }
     };
 
-    let mut diags = check_modules(&modules);
+    let mut diags: Vec<FileDiagnostic> = pipeline.parse_diagnostics().to_vec();
+    let mut modules = pipeline.into_modules();
+    diags.extend(check_modules(&modules));
     if !file_diagnostics_have_errors(&diags) {
         diags.extend(elaborate_expected_coercions(&mut modules));
     }

@@ -4,8 +4,8 @@ module integrationTests.syntax.bindings.basic
 use aivi
 use aivi.testing
 
-x = 1
-y = if x < 2 then 3 else 4
+x    = 1
+y    = if x < 2 then 3 else 4
 pair = (x, y)
 
 @test "simple value bindings"

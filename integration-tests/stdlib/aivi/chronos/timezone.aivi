@@ -8,7 +8,7 @@ use aivi.chronos.timezone (getOffset, toInstant, atZone)
 @test "timezone functional"
 timezone_functional = do Effect {
   // Test basic timezone creation and offset
-  utc = ~tz(UTC)
+  utc   = ~tz(UTC)
   paris = ~tz(Europe/Paris)
 
   // Test ZonedDateTime creation
@@ -35,7 +35,7 @@ timezone_functional = do Effect {
   // Test atZone conversion
   // Convert Paris time (12:00 CEST) to Tokyo (JST = UTC+9)
   // 10:00 UTC + 9 hours = 19:00 JST
-  tokyo = ~tz(Asia/Tokyo)
+  tokyo    = ~tz(Asia/Tokyo)
   zdtTokyo = atZone zdt tokyo
 
   assertEq zdtTokyo.zone.id "Asia/Tokyo"

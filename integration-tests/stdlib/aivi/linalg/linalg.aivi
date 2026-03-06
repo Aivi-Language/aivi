@@ -21,7 +21,7 @@ vec_functional = do Effect {
 dot_functional = do Effect {
   v1 = { size: 2, data: [1.0, 2.0] }
   v2 = { size: 2, data: [3.0, 4.0] }
-  d = dot v1 v2
+  d  = dot v1 v2
   assert (d == 11.0)
 }
 
@@ -40,8 +40,8 @@ solve2x2_functional = do Effect {
   // x + y = 3
   // x - y = 1
   // => x=2, y=1
-  m = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
-  v = { size: 2, data: [3.0, 1.0] }
+  m   = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
+  v   = { size: 2, data: [3.0, 1.0] }
   res = solve2x2 m v
   assert (res.data == [2.0, 1.0])
 }
@@ -62,8 +62,8 @@ dot_self = do Effect {
 
 @test "matMul with identity"
 matMul_identity = do Effect {
-  id2 = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
-  m = { rows: 2, cols: 2, data: [5.0, 6.0, 7.0, 8.0] }
+  id2    = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
+  m      = { rows: 2, cols: 2, data: [5.0, 6.0, 7.0, 8.0] }
   result = matMul id2 m
   assert (result.data == m.data)
 }

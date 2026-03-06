@@ -7,7 +7,7 @@ use aivi.testing
 // --- ADT definitions ---
 
 Option A = None | Some A
-Shape = Circle Int | Rect Int Int | Point
+Shape    = Circle Int | Rect Int Int | Point
 
 // --- Basic constructor matching ---
 

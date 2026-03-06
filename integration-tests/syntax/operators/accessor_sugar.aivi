@@ -51,7 +51,7 @@ items = [
   { label: "C", active: True }
 ]
 
-activeItems = filter active items
+activeItems     = filter active items
 activeItemsExpl = filter (x => x.active) items
 
 @test "predicate lifting: bare bool field used as filter predicate"

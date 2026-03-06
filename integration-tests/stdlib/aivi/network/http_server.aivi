@@ -31,7 +31,7 @@ requestFields = do Effect {
 @test "response construction"
 responseConstruction = do Effect {
   responseBody = [72, 101, 108, 108, 111]
-  resp =
+  resp         =
     {
       status: 200
       headers: [{ name: "Content-Type", value: "text/plain" }]
@@ -59,8 +59,8 @@ wsMsgBinary = do Effect {
 
 @test "ws message ping pong close"
 wsMsgPingPong = do Effect {
-  ping = Ping
-  pong = Pong
+  ping     = Ping
+  pong     = Pong
   closeMsg = Close
   assertEq ping Ping
   assertEq pong Pong
@@ -69,7 +69,7 @@ wsMsgPingPong = do Effect {
 
 @test "server reply http variant"
 serverReplyHttp = do Effect {
-  resp = { status: 404, headers: [], body: [] }
+  resp  = { status: 404, headers: [], body: [] }
   reply = Http resp
   reply match
     | Http r => assertEq r.status 404

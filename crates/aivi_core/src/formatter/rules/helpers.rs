@@ -24,6 +24,7 @@ struct LineState<'a> {
     top_delim: Option<char>,
     top_context: Option<ContextKind>,
     effect_align_lhs: Option<usize>,
+    bind_align_lhs: Option<usize>,
     arm_align_pat: Option<usize>,
     map_align_key: Option<usize>,
     machine_align: Option<(usize, usize, usize)>,

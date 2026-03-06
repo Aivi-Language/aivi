@@ -27,37 +27,37 @@ range_empty = do Effect {
 
 @test "from list to list"
 fromList_toList = do Effect {
-  g = fromList [10, 20, 30]
+  g  = fromList [10, 20, 30]
   xs = toList g
   assertEq xs [10, 20, 30]
 }
 
 @test "map"
 map_functional = do Effect {
-  g = range 1 4
+  g       = range 1 4
   doubled = g |> map (x => x * 2)
-  xs = toList doubled
+  xs      = toList doubled
   assertEq xs [2, 4, 6]
 }
 
 @test "filter"
 filter_functional = do Effect {
-  g = range 1 6
+  g     = range 1 6
   evens = filter (x => x % 2 == 0) g
-  xs = toList evens
+  xs    = toList evens
   assertEq xs [2, 4]
 }
 
 @test "reduce sum"
 foldl_sum = do Effect {
-  g = range 1 4
+  g     = range 1 4
   total = reduce (acc x => acc + x) 0 g
   assertEq total 6
 }
 
 @test "reduce empty"
 foldl_empty = do Effect {
-  g = range 0 0
+  g     = range 0 0
   total = reduce (acc x => acc + x) 42 g
   assertEq total 42
 }

@@ -60,10 +60,10 @@ heapFromList = do Effect {
 
 @test "heap tuple priority"
 heapTuplePriority = do Effect {
-  h0 = Heap.empty
-  h1 = Heap.push (3, "c") h0
-  h2 = Heap.push (1, "a") h1
-  h3 = Heap.push (2, "b") h2
+  h0  = Heap.empty
+  h1  = Heap.push (3, "c") h0
+  h2  = Heap.push (1, "a") h1
+  h3  = Heap.push (2, "b") h2
   res = Heap.popMin h3
   res match
     | Some ((w, n), _rest) => do Effect {

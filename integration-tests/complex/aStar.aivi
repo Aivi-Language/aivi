@@ -63,7 +63,7 @@ search = state graph goal heuristicFunc => Heap.popMin state.queue match
     if current == goal then
       Some (reconstructPath state.parents goal)
     else {
-      edges = edgesFrom graph current
+      edges     = edgesFrom graph current
       nextState = expandNeighbors current currentG goal heuristicFunc {
         queue: rest
         scores: state.scores

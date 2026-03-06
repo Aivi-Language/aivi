@@ -6,7 +6,7 @@ use aivi.regex
 use aivi.testing
 use aivi.url
 
-pattern = ~r/\w+@\w+\.\w+/
+pattern  = ~r/\w+@\w+\.\w+/
 endpoint = ~u(https://api.example.com)
 
 @test "sigils work"

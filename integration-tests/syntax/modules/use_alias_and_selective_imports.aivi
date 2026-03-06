@@ -5,8 +5,8 @@ use aivi.text as text
 use aivi.text
 use aivi.testing
 
-len = length
-upper = toUpper
+len          = length
+upper        = toUpper
 qualifiedLen = text.length
 
 @test "use alias and selective imports"

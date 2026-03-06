@@ -10,7 +10,7 @@ use aivi.net.https
 @test "build secure get request"
 buildSecureGetRequest = do Effect {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/get", query: [], hash: None }
-  req = { method: "GET", url: reqUrl, headers: [], body: None }
+  req    = { method: "GET", url: reqUrl, headers: [], body: None }
   assertEq req.method "GET"
   assertEq req.body None
 }
@@ -18,7 +18,7 @@ buildSecureGetRequest = do Effect {
 @test "build secure post request"
 buildSecurePostRequest = do Effect {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
-  req =
+  req    =
     {
       method: "POST"
       url: reqUrl

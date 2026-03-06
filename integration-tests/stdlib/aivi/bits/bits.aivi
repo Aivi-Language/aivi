@@ -95,21 +95,21 @@ test_get = do Effect {
 
 @test "set sets a bit"
 test_set = do Effect {
-  b = fromInt 0
+  b  = fromInt 0
   b2 = set 63 b
   assert (get 63 b2)
 }
 
 @test "clear clears a bit"
 test_clear = do Effect {
-  b = fromInt 1
+  b  = fromInt 1
   b2 = clear 63 b
   assertEq (toInt b2) 0
 }
 
 @test "toggle flips a bit"
 test_toggle = do Effect {
-  b = fromInt 0
+  b  = fromInt 0
   b2 = toggle 63 b
   assert (get 63 b2)
   b3 = toggle 63 b2
@@ -135,7 +135,7 @@ test_popCount = do Effect {
 
 @test "slice extracts sub-range"
 test_slice = do Effect {
-  b = fromInt 72623859790382856
+  b     = fromInt 72623859790382856
   first = slice 0 1 b
   assertEq (toInt first) 1
 }
@@ -144,8 +144,8 @@ test_slice = do Effect {
 
 @test "streamRead reads sequentially"
 test_streamRead = do Effect {
-  b = fromInt 72623859790382856
-  s = streamFromBits b
+  b  = fromInt 72623859790382856
+  s  = streamFromBits b
   r1 = streamRead 2 s
   r1 match
     | Ok (_, s2) => assertEq (streamRemaining s2) 6
