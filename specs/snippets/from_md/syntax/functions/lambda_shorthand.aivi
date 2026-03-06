@@ -1,11 +1,11 @@
 // Single arg with _
-double = _ * 2
-isEven = _ % 2 == 0
+double  = _ * 2
+isEven  = _ % 2 == 0
 getName = .name // Accessor shorthand for x => x.name
 
 // Equivalent explicit forms
-double = x => x * 2
-isEven = x => x % 2 == 0
+double  = x => x * 2
+isEven  = x => x % 2 == 0
 getName = user => user.name
 
 // Predicates can automatically deconstruct fields:

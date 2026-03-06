@@ -1,40 +1,40 @@
-AppId = Int
-WindowId = Int
-WidgetId = Int
-BoxId = Int
-ButtonId = Int
-LabelId = Int
-EntryId = Int
-ScrollAreaId = Int
-DrawAreaId = Int
-DragSourceId = Int
-DropTargetId = Int
-MenuModelId = Int
-MenuButtonId = Int
-DialogId = Int
-FileDialogId = Int
-ImageId = Int
-ListStoreId = Int
-ListViewId = Int
-TreeViewId = Int
-GestureClickId = Int
-ClipboardId = Int
-ActionId = Int
-ShortcutId = Int
-NotificationId = Int
+AppId           = Int
+WindowId        = Int
+WidgetId        = Int
+BoxId           = Int
+ButtonId        = Int
+LabelId         = Int
+EntryId         = Int
+ScrollAreaId    = Int
+DrawAreaId      = Int
+DragSourceId    = Int
+DropTargetId    = Int
+MenuModelId     = Int
+MenuButtonId    = Int
+DialogId        = Int
+FileDialogId    = Int
+ImageId         = Int
+ListStoreId     = Int
+ListViewId      = Int
+TreeViewId      = Int
+GestureClickId  = Int
+ClipboardId     = Int
+ActionId        = Int
+ShortcutId      = Int
+NotificationId  = Int
 LayoutManagerId = Int
-GtkError = Text
-GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
-GtkAttr = GtkAttribute Text Text
-GtkSignalEvent =
-  | GtkClicked       WidgetId Text
-  | GtkInputChanged  WidgetId Text Text
-  | GtkActivated     WidgetId Text
-  | GtkToggled       WidgetId Text Bool
-  | GtkValueChanged  WidgetId Text Float
-  | GtkKeyPressed    WidgetId Text Text Text
-  | GtkFocusIn       WidgetId Text
-  | GtkFocusOut      WidgetId Text
+GtkError        = Text
+GtkNode         = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
+GtkAttr         = GtkAttribute Text Text
+GtkSignalEvent  =
+  | GtkClicked WidgetId Text
+  | GtkInputChanged WidgetId Text Text
+  | GtkActivated WidgetId Text
+  | GtkToggled WidgetId Text Bool
+  | GtkValueChanged WidgetId Text Float
+  | GtkKeyPressed WidgetId Text Text Text
+  | GtkFocusIn WidgetId Text
+  | GtkFocusOut WidgetId Text
   | GtkUnknownSignal WidgetId Text Text Text Text
 
 init: Unit -> Effect GtkError Unit

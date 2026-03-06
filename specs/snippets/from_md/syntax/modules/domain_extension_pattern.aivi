@@ -6,4 +6,4 @@ export distanceToOrigin, isZero
 use geo.vector (domain Vector, Vec2)
 
 distanceToOrigin = v => sqrt (v.x * v.x + v.y * v.y)
-isZero = v => v.x == 0 && v.y == 0
+isZero           = v => v.x == 0 && v.y == 0

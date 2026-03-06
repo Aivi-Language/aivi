@@ -34,7 +34,7 @@ fourFieldRecord = do Effect {
 @test "computed field expressions evaluate correctly"
 computedFields = do Effect {
   base = 5
-  r = { first: base + 1, second: base * 2, third: base * 3 }
+  r    = { first: base + 1, second: base * 2, third: base * 3 }
   assertEq r.first 6
   assertEq r.second 10
   assertEq r.third 15
@@ -44,7 +44,7 @@ computedFields = do Effect {
 
 @test "record destructure binds fields by name"
 recordDestructure = do Effect {
-  r = { x: 7, y: 8, z: 9 }
+  r           = { x: 7, y: 8, z: 9 }
   { x, y, z } = r
   assertEq x 7
   assertEq y 8
@@ -53,7 +53,7 @@ recordDestructure = do Effect {
 
 @test "destructured fields match their declared values"
 destructuredFieldValues = do Effect {
-  r = { a: 1, b: 2, c: 3 }
+  r           = { a: 1, b: 2, c: 3 }
   { a, b, c } = r
   assertEq a 1
   assertEq b 2
@@ -78,7 +78,7 @@ fieldIndependence = do Effect {
 
 @test "record patch updates target field only"
 recordPatch = do Effect {
-  r = { a: 10, b: 20, c: 30 }
+  r  = { a: 10, b: 20, c: 30 }
   r2 = r <| { b: 99 }
   assertEq r2.a 10
   assertEq r2.b 99

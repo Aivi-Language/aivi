@@ -11,7 +11,7 @@ fetchUsersSnapshot =
 
 @test "user table formatting"
 userTableSnapshot = do Effect {
-  users <- pure [{ id: 1, name: "Ada" }, { id: 2, name: "Grace" }]
+  users     <- pure [{ id: 1, name: "Ada" }, { id: 2, name: "Grace" }]
   formatted <- pure (formatUserTable users)
   assertSnapshot "user_table" formatted
 }

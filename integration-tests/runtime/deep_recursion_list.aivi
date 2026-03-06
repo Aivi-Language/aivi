@@ -37,7 +37,7 @@ rangeLength50k = do Effect {
 @test "range fold with multiplication accumulator"
 rangeFoldMul = do Effect {
   // product of 1..10 = 3628800 (10!)
-  xs = [1..10]
+  xs     = [1..10]
   result = foldl (acc => x => acc * x) 1 xs
   assertEq result 3628800
 }
@@ -52,14 +52,14 @@ rangeFold10k = do Effect {
 
 @test "fold counts elements"
 foldCount = do Effect {
-  xs = [0..9999]
+  xs    = [0..9999]
   count = foldl (acc => _ => acc + 1) 0 xs
   assertEq count 10000
 }
 
 @test "fold finds maximum in large range"
 foldMax = do Effect {
-  xs = [0..999]
+  xs     = [0..999]
   maxVal = foldl (acc => x => if x > acc then x else acc) 0 xs
   assertEq maxVal 999
 }
@@ -67,7 +67,7 @@ foldMax = do Effect {
 @test "nested fold over moderate list"
 nestedFold = do Effect {
   // sum 0..11 = 11 * 12 / 2 = 66
-  xs = [0..11]
+  xs    = [0..11]
   total = foldl (acc => x => acc + x) 0 xs
   assertEq total 66
 }

@@ -10,7 +10,7 @@ dijkstra = do Effect {
           if d > currentDist
             then do Effect { recurse { dists: state.dists, pq: restPq } }
             else do Effect {
-              edges = edgesFrom graph node
+              edges   = edgesFrom graph node
               result2 = processEdges state.dists d edges restPq
               result2 match
                 | (newDists, newPq) => recurse { dists: newDists, pq: newPq }

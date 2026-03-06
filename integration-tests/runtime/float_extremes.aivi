@@ -65,7 +65,7 @@ negZeroArith = do Effect {
 @test "inf constant matches division result"
 infConstMatchesDiv = do Effect {
   fromDiv = 1.0 / 0.0
-  diff = fromDiv - inf
+  diff    = fromDiv - inf
   // Both are +inf; inf - inf = NaN, not 0
   assertEq (isNaN diff) True
 }

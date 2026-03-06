@@ -26,7 +26,7 @@ generatorWithMatch = do Effect {
 @test "generator with lambda predicate capturing outer"
 generatorLambdaFilter = do Effect {
   threshold = 3
-  g = generate {
+  g         = generate {
     n <- [1, 2, 3, 4, 5]
     n -> n > threshold
     yield (n * 2)
@@ -79,7 +79,7 @@ nestedGenerators = do Effect {
 // --- Generator with pipe chain ---
 
 double = x => x * 2
-inc = x => x + 1
+inc    = x => x + 1
 
 @test "generator with pipe chain in yield"
 generatorPipeChain = do Effect {
@@ -95,7 +95,7 @@ generatorPipeChain = do Effect {
 @test "generator cartesian with guard captures outer"
 generatorCartesianGuard = do Effect {
   target = 10
-  pairs = generate {
+  pairs  = generate {
     x <- [1, 2, 3, 4]
     y <- [6, 7, 8, 9]
     s = x + y
@@ -110,7 +110,7 @@ generatorCartesianGuard = do Effect {
 @test "generator loop captures outer scope"
 generatorLoopCapturesOuter = do Effect {
   factor = 2
-  g = generate {
+  g      = generate {
     loop n = 1 => {
       yield (n * factor)
       if n >= 5 then {}

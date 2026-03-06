@@ -1220,7 +1220,7 @@
                 out.push_str(&effective_indent);
                 out.push_str(&lhs);
                 out.push_str(&" ".repeat(spaces));
-                out.push_str("=");
+                out.push('=');
                 if !rhs.is_empty() {
                     out.push(' ');
                     out.push_str(&rhs);

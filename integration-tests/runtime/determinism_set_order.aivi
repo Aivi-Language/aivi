@@ -28,7 +28,7 @@ singleElementToList = do Effect {
 
 @test "toList is stable on same set"
 setToListStable = do Effect {
-  s = Set.fromList [9, 3, 6]
+  s  = Set.fromList [9, 3, 6]
   l1 = Set.toList s
   l2 = Set.toList s
   assertEq l1 l2
@@ -51,7 +51,7 @@ setInsertionOrderIndependent = do Effect {
 
 @test "fromList toList round-trip preserves all elements"
 setRoundTrip = do Effect {
-  s = Set.fromList [10, 20, 30, 40]
+  s  = Set.fromList [10, 20, 30, 40]
   xs = Set.toList s
   s2 = Set.fromList xs
   assertEq (Set.size s) 4

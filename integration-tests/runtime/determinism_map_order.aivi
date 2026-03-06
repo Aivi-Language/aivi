@@ -32,7 +32,7 @@ singleEntryToList = do Effect {
 
 @test "toList is stable on same map"
 toListStable = do Effect {
-  m = fromList [("b", 2), ("a", 1), ("c", 3)]
+  m  = fromList [("b", 2), ("a", 1), ("c", 3)]
   l1 = toList m
   l2 = toList m
   assertEq l1 l2
@@ -43,9 +43,9 @@ toListStable = do Effect {
 @test "fromList toList round-trip preserves all entries"
 fromListToListRoundTrip = do Effect {
   entries = [("a", 1), ("b", 2), ("c", 3)]
-  m = fromList entries
-  xs = toList m
-  m2 = fromList xs
+  m       = fromList entries
+  xs      = toList m
+  m2      = fromList xs
   assertEq (size m) 3
   assertEq (size m2) 3
   assertEq (get "a" m2) (Some 1)

@@ -1,12 +1,12 @@
 // Crate native: binds to quick_xml::de::from_str from the quick-xml crate.
 // The crate must be declared in Cargo.toml under [dependencies].
 @native "quick_xml::de::from_str"
-fromStr : Text -> Result Text Text
+fromStr: Text -> Result Text Text
 
 // Crate native with nested path: binds to serde_json::from_str
 @native "serde_json::from_str"
-parseJson : Text -> Result Text Text
+parseJson: Text -> Result Text Text
 
 // Crate native: sha2 digest
 @native "sha2::digest::hex_digest"
-sha256Hex : Text -> Text
+sha256Hex: Text -> Text

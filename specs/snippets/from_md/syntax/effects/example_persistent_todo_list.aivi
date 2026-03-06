@@ -23,19 +23,19 @@ decodeTodo = line => Text.split "|" line match
     | None                     => None
     | _                        => None
 
-encodeTodos = todos =>
-  todos
-  |> List.map encodeTodo
-  |> List.intersperse "\n"
-  |> Text.concat
+  encodeTodos = todos =>
+    todos
+|> List.map encodeTodo
+|> List.intersperse "\n"
+|> Text.concat
 
 decodeTodos = raw =>
   raw
-  |> Text.splitLines
-  |> List.flatMap (line => decodeTodo line match
-    | Some todo => [todo]
-    | None      => []
-    )
+|> Text.splitLines
+|> List.flatMap (line => decodeTodo line match
+  | Some todo => [todo]
+  | None      => []
+  )
 
 loadTodos = path => do Effect {
   raw <- readText path or ""

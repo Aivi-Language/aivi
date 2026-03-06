@@ -5,4 +5,4 @@ config = {
 }
 
 { host, port } = config
-serverUrl = "http://{host}:{port}"
+serverUrl      = "http://{host}:{port}"

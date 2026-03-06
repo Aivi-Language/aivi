@@ -19,7 +19,7 @@ ServerConfig = {
 }
 
 HttpError = { message: Text }
-WsError = { message: Text }
+WsError   = { message: Text }
 
 WsMessage
 = TextMsg Text

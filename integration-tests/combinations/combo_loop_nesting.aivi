@@ -89,7 +89,7 @@ loopNestedDoEffect = do Effect {
 @test "loop in generator captures outer scope"
 loopInGeneratorCapturesOuter = do Effect {
   multiplier = 10
-  g = generate {
+  g          = generate {
     loop n = 1 => {
       yield (n * multiplier)
       if n >= 4 then {}

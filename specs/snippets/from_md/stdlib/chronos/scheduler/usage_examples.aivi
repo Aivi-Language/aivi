@@ -14,8 +14,8 @@ run = {
 idx0 = Map.empty
 idx1 = upsertPlan run idx0
 
-limit = { tenantId: "tenant-eu", maxConcurrent: 4 }
+limit   = { tenantId: "tenant-eu", maxConcurrent: 4 }
 allowed = canStartForTenant limit [run]
 
 metric = metricRetried "tenant-eu" "email-drip" run.scheduledAt 2
-log = logRetry run 2 { millis: 2000 }
+log    = logRetry run 2 { millis: 2000 }

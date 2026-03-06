@@ -21,7 +21,7 @@ machine PipeCounter =
 @test "pipeline threads value once"
 pipelineOnce = do Effect {
   double = x => x * 2
-  inc = x => x + 1
+  inc    = x => x + 1
 
   // `5` is evaluated once; the result flows through both functions.
   result = 5 |> double |> inc
@@ -70,9 +70,9 @@ effectBoundThenPiped = do Effect {
 
 @test "chained pipeline correct result"
 chainedPipelineCorrect = do Effect {
-  add1 = x => x + 1
+  add1   = x => x + 1
   double = x => x * 2
-  sub3 = x => x - 3
+  sub3   = x => x - 3
 
   // (((5 + 1) * 2) - 3) = 9
   result = 5 |> add1 |> double |> sub3

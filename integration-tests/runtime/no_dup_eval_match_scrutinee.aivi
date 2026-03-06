@@ -39,7 +39,7 @@ matchScrutineeAllScenarios = do Effect {
   // A pure scrutinee like `n * n` is evaluated once; every arm sees the
   // same computed value.
 
-  n = 6
+  n      = 6
   result = (n * n) match
     | 36 => "thirty-six"
     | _  => "wrong"
