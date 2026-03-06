@@ -856,6 +856,37 @@ export extractionRunPlan = emailId => schemaVer => promptVer => modelId => exist
 }
 
 #[test]
+fn semantic_tokens_text_interpolation_with_nested_string_literal() {
+    // Regression: a string literal inside {…} must not prematurely close the outer
+    // TextLit.  The lexer fix ensures the outer string arrives as one token; the LSP's
+    // in_quote tracking in emit_interpolated_string_tokens must find the real closing }
+    // and produce correct token splits.
+    let text = "module Test\nx = \"Re: {name ?? \" \"}\"\n";
+    let tokens = collect_semantic_token_texts(text);
+
+    // The prefix text segment "Re: " (or including the opening quote) is a string.
+    assert!(
+        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s.contains("Re:")),
+        "expected prefix text 'Re: ' to be a string token, got: {tokens:?}"
+    );
+    // The opening { is an operator.
+    assert!(
+        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_OPERATOR && s == "{"),
+        "expected '{{' to be an operator token, got: {tokens:?}"
+    );
+    // The closing } is an operator.
+    assert!(
+        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_OPERATOR && s == "}"),
+        "expected '}}' to be an operator token, got: {tokens:?}"
+    );
+    // The nested string literal " " inside {…} is emitted as a string token.
+    assert!(
+        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\" \""),
+        "expected nested string '\" \"' inside interpolation to be a string token, got: {tokens:?}"
+    );
+}
+
+#[test]
 fn semantic_tokens_multiline_typedef_brackets_get_signature_modifier() {
     // Both { and } of a multi-line type signature should carry the signature modifier.
     let text = "module test\nuser : {\n  id: Int\n  name: Text\n}\nuser = { id: 1, name: \"Alice\" }\n";
