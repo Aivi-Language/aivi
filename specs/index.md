@@ -38,6 +38,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Generators](syntax/generators)
 #### Effects & Control
 - [Effects](syntax/effects)
+- [Capabilities](syntax/capabilities)
 - [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
 - [Machines](syntax/machines)
@@ -116,6 +117,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 #### Email
 - [Email](stdlib/system/email)
 #### UI
+- [App Architecture](stdlib/ui/app_architecture)
 - [GTK4](stdlib/ui/gtk4)
 - [Layout](stdlib/ui/layout)
 - [VDOM](stdlib/ui/vdom)
