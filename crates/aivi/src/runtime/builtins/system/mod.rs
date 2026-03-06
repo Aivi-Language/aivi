@@ -319,6 +319,27 @@ fn scalar_text_to_value(raw: &str) -> Value {
 }
 
 pub(in crate::runtime::builtins) fn json_to_runtime(value: &JsonValue) -> Value {
+    json_to_runtime_with_schema(value, None)
+}
+
+/// Schema-aware JSON→Value conversion.  When a schema node is
+/// `Option(inner)`, non-null JSON values are wrapped in `Some(…)` so that
+/// the runtime `??` operator (which pattern-matches on `Some`/`None`)
+/// works correctly.
+pub(in crate::runtime::builtins) fn json_to_runtime_with_schema(
+    value: &JsonValue,
+    schema: Option<&crate::runtime::json_schema::JsonSchema>,
+) -> Value {
+    use crate::runtime::json_schema::JsonSchema;
+
+    // If the schema says Option, handle the Some/None wrapping here.
+    if let Some(JsonSchema::Option(inner)) = schema {
+        return match value {
+            JsonValue::Null => make_none(),
+            other => make_some(json_to_runtime_with_schema(other, Some(inner))),
+        };
+    }
+
     match value {
         JsonValue::Null => make_none(),
         JsonValue::Bool(v) => Value::Bool(*v),
@@ -332,13 +353,38 @@ pub(in crate::runtime::builtins) fn json_to_runtime(value: &JsonValue) -> Value 
             }
         }
         JsonValue::String(s) => Value::Text(s.clone()),
-        JsonValue::Array(items) => Value::List(Arc::new(
-            items.iter().map(json_to_runtime).collect::<Vec<_>>(),
-        )),
+        JsonValue::Array(items) => {
+            let elem_schema = match schema {
+                Some(JsonSchema::List(inner)) => Some(inner.as_ref()),
+                _ => None,
+            };
+            Value::List(Arc::new(
+                items
+                    .iter()
+                    .map(|item| json_to_runtime_with_schema(item, elem_schema))
+                    .collect::<Vec<_>>(),
+            ))
+        }
         JsonValue::Object(map) => {
+            let record_schema = match schema {
+                Some(JsonSchema::Record(fields)) => Some(fields),
+                _ => None,
+            };
             let mut out = HashMap::new();
             for (key, value) in map {
-                out.insert(key.clone(), json_to_runtime(value));
+                let field_schema =
+                    record_schema.and_then(|fields| fields.get(key.as_str()));
+                out.insert(key.clone(), json_to_runtime_with_schema(value, field_schema));
+            }
+            // Emit None for Option fields that are absent from the JSON object.
+            if let Some(fields) = record_schema {
+                for (key, field_schema) in fields {
+                    if !out.contains_key(key.as_str())
+                        && matches!(field_schema, JsonSchema::Option(_))
+                    {
+                        out.insert(key.clone(), make_none());
+                    }
+                }
             }
             Value::Record(Arc::new(out))
         }

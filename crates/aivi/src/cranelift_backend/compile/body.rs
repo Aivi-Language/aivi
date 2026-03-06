@@ -133,6 +133,7 @@ fn compile_definition_body<M: Module>(
                 &empty_spec_map,
                 module,
                 str_counter,
+                module_name,
             );
 
             // Emit function-entry tracking (lambda — show parent name for context).
@@ -310,6 +311,7 @@ fn compile_definition_body<M: Module>(
             &local_spec_map,
             module,
             str_counter,
+            module_name,
         );
 
         // Emit function-entry tracking so runtime warnings can include the function name.

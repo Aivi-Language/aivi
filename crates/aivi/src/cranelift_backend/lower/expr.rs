@@ -181,7 +181,16 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     }
 
     fn lower_global(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
-        let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
+        // For bare (unqualified) names, prefer the qualified form
+        // `module_name.name` to avoid cross-module name collisions
+        // (e.g. `init` in aivi.ui.gtk4 vs aivi.path).
+        let resolved = if !name.contains('.') && !self.module_name.is_empty() {
+            let qualified = format!("{}.{}", self.module_name, name);
+            qualified
+        } else {
+            name.to_string()
+        };
+        let (name_ptr, name_len) = self.embed_str(builder, resolved.as_bytes());
         let call = builder.ins().call(
             self.helpers.rt_get_global,
             &[self.ctx_param, name_ptr, name_len],
@@ -318,11 +327,22 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     ) -> TypedValue {
         // Check for direct call: App(Global(name), arg) where name is a JIT function with arity 1
         if let RustIrExpr::Global { name, .. } = func {
-            let maybe_info = self.jit_funcs.get(name.as_str()).cloned();
+            // Try qualified name first for bare names to resolve cross-module collisions
+            let resolved = if !name.contains('.') && !self.module_name.is_empty() {
+                let qualified = format!("{}.{}", self.module_name, name);
+                if self.jit_funcs.contains_key(qualified.as_str()) {
+                    qualified
+                } else {
+                    name.clone()
+                }
+            } else {
+                name.clone()
+            };
+            let maybe_info = self.jit_funcs.get(resolved.as_str()).cloned();
             if let Some(info) = maybe_info {
                 if info.arity == 1 {
                     // Try specialization routing
-                    let maybe_specs = self.spec_map.get(name.as_str()).cloned();
+                    let maybe_specs = self.spec_map.get(resolved.as_str()).cloned();
                     if let Some(spec_names) = maybe_specs {
                         let arg_tv = self.lower_expr(builder, arg);
                         let arg_tvs = [arg_tv];
@@ -358,12 +378,23 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         // Check for direct call: Call(Global(name), args) where name is a
         // JIT function with matching arity.
         if let RustIrExpr::Global { name, .. } = func {
-            let maybe_info = self.jit_funcs.get(name.as_str()).cloned();
+            // Try qualified name first for bare names to resolve cross-module collisions
+            let resolved = if !name.contains('.') && !self.module_name.is_empty() {
+                let qualified = format!("{}.{}", self.module_name, name);
+                if self.jit_funcs.contains_key(qualified.as_str()) {
+                    qualified
+                } else {
+                    name.clone()
+                }
+            } else {
+                name.clone()
+            };
+            let maybe_info = self.jit_funcs.get(resolved.as_str()).cloned();
             if let Some(info) = maybe_info {
                 if info.arity == args.len() {
                     // Try specialization routing: lower args first to get types,
                     // then check for a matching specialization.
-                    let maybe_specs = self.spec_map.get(name.as_str()).cloned();
+                    let maybe_specs = self.spec_map.get(resolved.as_str()).cloned();
                     if let Some(spec_names) = maybe_specs {
                         let arg_tvs: Vec<TypedValue> =
                             args.iter().map(|a| self.lower_expr(builder, a)).collect();

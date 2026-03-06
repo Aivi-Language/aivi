@@ -39,6 +39,21 @@ pub extern "C" fn rt_get_global(
     let val = match runtime.ctx.globals.get(name) {
         Some(v) => v,
         None => {
+            // For qualified names (e.g. "aivi.ui.gtk4.init"), fall back to the
+            // bare name ("init") when the qualified form isn't registered.
+            // This handles imported names that only exist under their bare form.
+            if let Some(dot_pos) = name.rfind('.') {
+                let bare = &name[dot_pos + 1..];
+                if let Some(v) = runtime.ctx.globals.get(bare) {
+                    return match runtime.force_value(v.clone()) {
+                        Ok(forced) => abi::box_value(forced),
+                        Err(e) => {
+                            unsafe { set_pending_error(ctx, e) };
+                            abi::box_value(Value::Unit)
+                        }
+                    };
+                }
+            }
             rt_warn(
                 ctx,
                 "undefined global",
@@ -48,7 +63,7 @@ pub extern "C" fn rt_get_global(
             return abi::box_value(Value::Unit);
         }
     };
-    match runtime.force_value(val) {
+    match runtime.force_value(val.clone()) {
         Ok(forced) => abi::box_value(forced),
         Err(e) => {
             unsafe { set_pending_error(ctx, e) };

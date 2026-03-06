@@ -79,6 +79,12 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
             Some(args[0].clone())
         }
         ("??", Value::Constructor { name, .. }, rhs) if name == "None" => Some(rhs.clone()),
+        // Handle un-wrapped values from schema-less JSON deserialization.
+        // The type checker guarantees `??` is only used on `Option A`, so if
+        // the LHS is Unit (absent field) use the default, otherwise the value
+        // is present — pass it through.
+        ("??", Value::Unit, rhs) => Some(rhs.clone()),
+        ("??", lhs, _rhs) => Some(lhs.clone()),
         _ => None,
     }
 }

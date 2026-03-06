@@ -9,6 +9,16 @@ export main
 
 // Types
 
+domain Pixel over (Int, Int) = {
+  Delta = Int Int
+  
+  (+): Pixel -> Pixel -> Pixel
+  (+) = (x1, y1) (x2, y2) => (x1 + x2, y1 + y2)
+
+  1x = 1 0
+  1y = 0 1
+}
+
 Direction = Up | Down | Left | Right
 
 Msg = Arrow Direction | Restart
@@ -70,7 +80,7 @@ delta =
   | Right => (1, 0)
 
 // Pseudo-random food placement (LCG)
-
+ 
 placeFood : Int -> List (Int, Int) -> ((Int, Int), Int)
 placeFood = seed snake => {
   s   = (seed * 37 + 13) % (gridW * gridH)
@@ -196,3 +206,5 @@ main = gtkApp {
   toMsg: toMsg
   update: update
 }
+
+

@@ -101,6 +101,9 @@ pub(crate) struct LowerCtx<'a, M: Module> {
     /// recycled by the next constructor/record/list allocation.
     /// Set by `lower_match` when the scrutinee is consumed.
     reuse_token: Option<Value>,
+    /// The module name for the function being compiled, used to qualify bare
+    /// global references so cross-module name collisions are resolved correctly.
+    module_name: String,
 }
 
 /// Metadata about a JIT-compiled function, used for direct calls.
@@ -544,6 +547,7 @@ impl DeclaredHelpers {
 }
 
 impl<'a, M: Module> LowerCtx<'a, M> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         ctx_param: Value,
         helpers: &'a HelperRefs,
@@ -552,6 +556,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         spec_map: &'a HashMap<String, Vec<String>>,
         module: &'a mut M,
         str_counter: &'a mut usize,
+        module_name: &str,
     ) -> Self {
         Self {
             locals: HashMap::new(),
@@ -565,6 +570,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             str_cache: HashMap::new(),
             use_map: None,
             reuse_token: None,
+            module_name: module_name.to_string(),
         }
     }
 

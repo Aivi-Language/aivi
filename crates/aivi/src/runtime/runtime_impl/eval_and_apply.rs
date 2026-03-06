@@ -108,7 +108,6 @@ impl Runtime {
                     Value::Effect(e) => e.clone(),
                     Value::Source(s) => s.effect.clone(),
                     _ => {
-                        eprintln!("[DEBUG run_effect_value] expected Effect but got: {:?}", std::mem::discriminant(&value));
                         return Err(RuntimeError::TypeError {
                             context: "effect execution".to_string(),
                             expected: "Effect".to_string(),
