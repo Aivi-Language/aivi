@@ -21,7 +21,7 @@ getFocusPair = event => event match
   | GtkFocusIn wid name => (wid, name)
   | _                   => (0, "")
 
-TestMsg = Save | NameChanged Text | ToggledMsg Bool
+TestMsg  = Save | NameChanged Text | ToggledMsg Bool
 TestMsg2 = TitleChanged Text | BodyChanged Text
 
 toTestMsg = event => event match
@@ -72,7 +72,7 @@ signal_event_match_by_name = do Effect {
 
 @test "GtkNode constructors"
 gtk_node_constructors = do Effect {
-  elem = gtkElement "GtkBox" [gtkAttr "spacing" "8"] [gtkTextNode "hello"]
+  elem   = gtkElement "GtkBox" [gtkAttr "spacing" "8"] [gtkTextNode "hello"]
   getTag = n => n match
     | GtkElement tag _ _ => tag
     | _                  => ""

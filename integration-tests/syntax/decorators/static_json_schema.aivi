@@ -2,43 +2,41 @@
 module integrationTests.syntax.decorators.staticJsonSchema
 
 use aivi
+use aivi.prelude (toText)
 use aivi.testing
-use aivi.data.json
+use aivi.text (contains)
 
 ExtractionResult = {
-  title:   Text,
-  summary: Text,
-  tags:    List Text,
-  score:   Option Float
+  title: Text
+  summary: Text
+  tags: List Text
+  score: Option Float
 }
 
 @static
 extractionSchema = type.jsonSchema ExtractionResult
 
-@test "type.jsonSchema produces valid JSON"
-jsonSchemaIsValidJson = do Effect {
-  parsed = json.parse extractionSchema
-  assert (isOk parsed) "extractionSchema should be valid JSON"
-}
-
-@test "type.jsonSchema contains schema structure"
-jsonSchemaHasFormat = do Effect {
-  assert (contains "json_schema" extractionSchema) "should contain json_schema format type"
-  assert (contains "ExtractionResult" extractionSchema) "should contain type name"
-  assert (contains "strict" extractionSchema) "should contain strict flag"
+@test "type.jsonSchema produces record with json_schema wrapper"
+jsonSchemaHasWrapper = do Effect {
+  schemaText = toText extractionSchema
+  assert (contains "json_schema" schemaText)
+  assert (contains "ExtractionResult" schemaText)
+  assert (contains "strict" schemaText)
 }
 
 @test "type.jsonSchema maps record fields"
 jsonSchemaHasFields = do Effect {
-  assert (contains "title" extractionSchema) "should contain title field"
-  assert (contains "summary" extractionSchema) "should contain summary field"
-  assert (contains "tags" extractionSchema) "should contain tags field"
-  assert (contains "score" extractionSchema) "should contain score field"
+  schemaText = toText extractionSchema
+  assert (contains "title" schemaText)
+  assert (contains "summary" schemaText)
+  assert (contains "tags" schemaText)
+  assert (contains "score" schemaText)
 }
 
 @test "type.jsonSchema maps primitive types"
 jsonSchemaMapsPrimitives = do Effect {
-  assert (contains "string" extractionSchema) "should map Text to string"
-  assert (contains "number" extractionSchema) "should map Float to number"
-  assert (contains "array" extractionSchema) "should map List to array"
+  schemaText = toText extractionSchema
+  assert (contains "string" schemaText)
+  assert (contains "number" schemaText)
+  assert (contains "array" schemaText)
 }

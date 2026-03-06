@@ -31,8 +31,8 @@ toHexRed = do Effect {
 @test "toHsl and back"
 toHslRoundTrip = do Effect {
   original = { r: 128, g: 64, b: 32 }
-  hsl = toHsl original
-  back = toRgb hsl
+  hsl      = toHsl original
+  back     = toRgb hsl
   assertEq back.r original.r
   assertEq back.g original.g
   assertEq back.b original.b
@@ -50,7 +50,7 @@ adjustLightnessUp = do Effect {
 @test "adjustLightness darkens"
 adjustLightnessDown = do Effect {
   original = { r: 128, g: 128, b: 128 }
-  darker = adjustLightness original (-10)
+  darker   = adjustLightness original (-10)
   assertEq (darker.r < original.r) True
 }
 
@@ -59,8 +59,8 @@ adjustLightnessDown = do Effect {
 @test "adjustSaturation"
 adjustSatTest = do Effect {
   original = { r: 200, g: 100, b: 50 }
-  more = adjustSaturation original 10
-  less = adjustSaturation original (-10)
+  more     = adjustSaturation original 10
+  less     = adjustSaturation original (-10)
   assert (more.r >= 0)
   assert (less.r >= 0)
 }
@@ -70,7 +70,7 @@ adjustSatTest = do Effect {
 @test "adjustHue"
 adjustHueTest = do Effect {
   original = { r: 255, g: 0, b: 0 }
-  shifted = adjustHue original 120
+  shifted  = adjustHue original 120
   assert (shifted.g > shifted.r)
 }
 

@@ -1,0 +1,199 @@
+module demos.snake
+
+use aivi
+use aivi.list
+use aivi.ui.gtk4
+use aivi.concurrency
+
+export main
+
+// Types
+
+Direction = Up | Down | Left | Right
+
+Msg = Arrow Direction | Restart
+
+State = {
+  snake: List (Int, Int)
+  food: (Int, Int)
+  dir: Direction
+  score: Int
+  seed: Int
+  gameOver: Bool
+}
+
+// Grid size
+
+gridW = 30
+gridH = 20
+
+// Join a list of texts into one
+joinTexts : List Text -> Text
+joinTexts =
+  | []           => ""
+  | [x, ...rest] => "{x}{joinTexts rest}"
+
+contains : (Int, Int) -> List (Int, Int) -> Bool
+contains = pos xs => find (_ == pos) xs match
+  | Some _ => True
+  | None   => False
+
+dropLast : List a -> List a
+dropLast = xs => take (List.length xs - 1) xs
+
+// Initial state
+
+initialState : State
+initialState = {
+  snake: [(5, 10), (4, 10), (3, 10)]
+  food: (20, 10)
+  dir: Right
+  score: 0
+  seed: 7
+  gameOver: False
+}
+
+// Direction helpers
+
+opposite : Direction -> Direction
+opposite =
+  | Up    => Down
+  | Down  => Up
+  | Left  => Right
+  | Right => Left
+
+delta : Direction -> (Int, Int)
+delta =
+  | Up    => (0, -1)
+  | Down  => (0, 1)
+  | Left  => (-1, 0)
+  | Right => (1, 0)
+
+// Pseudo-random food placement (LCG)
+
+placeFood : Int -> List (Int, Int) -> ((Int, Int), Int)
+placeFood = seed snake => {
+  s = (seed * 37 + 13) % (gridW * gridH)
+  idx = if s < 0 then 0 - s else s
+  x = idx % gridW
+  y = idx / gridW
+  pos = (x, y)
+  if contains pos snake
+    then placeFood (s + 1) snake
+    else (pos, s)
+}
+
+// Advance the snake one step
+
+step : Direction -> State -> State
+step = newDir state => {
+  dir = if newDir == opposite state.dir then state.dir else newDir
+  pair = state.snake match
+    | []           => ((0, 0), [])
+    | [h, ...rest] => (h, rest)
+    (head, body) = pair
+    (hx, hy) = head
+    (dx, dy) = delta dir
+    nx = hx + dx
+    ny = hy + dy
+    dead = nx < 0 || nx >= gridW || ny < 0 || ny >= gridH || contains (nx, ny) body
+    if dead
+      then state <| { gameOver: True }
+      else {
+        ateFood = (nx, ny) == state.food
+        newSnake = if ateFood
+          then [(nx, ny), ...state.snake]
+          else [(nx, ny), ...dropLast state.snake]
+        foodResult = if ateFood
+          then placeFood (state.seed + state.score * 7 + nx * 13 + ny) newSnake
+          else (state.food, state.seed)
+        (newFood, newSeed) = foodResult
+        {
+          snake: newSnake
+          food: newFood
+          dir: dir
+          score: if ateFood then state.score + 1 else state.score
+          seed: newSeed
+          gameOver: False
+        }
+      }
+}
+
+// Rendering helpers
+
+cellChar : Int -> Int -> State -> Text
+cellChar = x y state => {
+  pos = (x, y)
+  isSnake = contains pos state.snake
+  isFood = state.food == pos
+  if isSnake then "■"
+  else if isFood then "●"
+  else "·"
+}
+
+rowText : Int -> State -> Text
+rowText = y state =>
+  joinTexts (map (x => cellChar x y state) [0.. gridW - 1])
+
+gridRows : State -> List Text
+gridRows = state =>
+  map (y => rowText y state) [0.. gridH - 1]
+
+scoreText : State -> Text
+scoreText = state => "Snake · Score: {toText state.score}"
+
+statusText : State -> Text
+statusText = state =>
+  if state.gameOver then "Game Over — press R to restart" else "Arrow keys to move"
+
+// View
+
+view : State -> GtkNode
+view = state =>
+  ~<gtk>
+    <GtkBox orientation="vertical" spacing="2" marginTop="8" marginStart="8" marginEnd="8" marginBottom="8">
+      <GtkLabel label={scoreText state} />
+      <each items={gridRows state} as={row}>
+        <GtkLabel label={row} />
+      </each>
+      <GtkLabel label={statusText state} />
+    </GtkBox>
+  </gtk>
+
+// Event handling
+
+toMsg : GtkSignalEvent -> Option Msg
+toMsg = event => event match
+  | GtkKeyPressed _ _ "Up" _    => Some (Arrow Up)
+  | GtkKeyPressed _ _ "Down" _  => Some (Arrow Down)
+  | GtkKeyPressed _ _ "Left" _  => Some (Arrow Left)
+  | GtkKeyPressed _ _ "Right" _ => Some (Arrow Right)
+  | GtkKeyPressed _ _ "r" _     => Some Restart
+  | _                           => None
+
+update : Msg -> State -> Effect GtkError State
+update = msg => state => msg match
+  | Arrow dir => pure (if state.gameOver then state else step dir state)
+  | Restart   => pure initialState
+
+// Entry point
+
+main : Effect GtkError Unit
+main = do Effect {
+  _     <- init Unit
+  appId <- appNew "demos.snake"
+  win   <- windowNew appId "Snake" 500 460
+  root  <- buildFromNode (view initialState)
+  windowSetChild win root
+  rx <- signalStream Unit
+  windowPresent win
+  _ <- fold { st: initialState, rootId: root } (acc => event => toMsg event match
+    | None     => pure acc
+    | Some msg => do Effect {
+        next    <- update msg acc.st
+        newRoot <- reconcileNode acc.rootId (view next)
+        pure { st: next, rootId: newRoot }
+      }
+  ) rx
+  pure Unit
+}

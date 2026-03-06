@@ -6,5 +6,5 @@ use aivi
 
 use testOpaque.definer (Wrapper, make)
 
-w = make 42
+w   = make 42
 bad = w.inner

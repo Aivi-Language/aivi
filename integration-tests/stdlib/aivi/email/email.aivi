@@ -7,7 +7,7 @@ use aivi.email
 
 @test "mime parsing helpers"
 mime_parsing_helpers = do Effect {
-  raw = "Subject: hi\nContent-Type: text/plain\n\nhello"
+  raw   = "Subject: hi\nContent-Type: text/plain\n\nhello"
   parts = mimeParts raw
   assertEq (List.length parts >= 1) True
   combined = flattenBodies parts

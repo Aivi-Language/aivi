@@ -78,11 +78,11 @@ column_construct = do Effect {
 
 @test "delta construct"
 delta_construct = do Effect {
-  user = { id: 1, name: "Alice" }
+  user        = { id: 1, name: "Alice" }
   insertDelta = ins user
   deleteDelta = del (u => u.id == 1)
   upsertDelta = ups (u => u.id == 1) user (u => u <| { name: "Bob" })
-  users0 = table "users"[]
+  users0      = table "users"[]
   users1 <- applyDelta users0 insertDelta
   users2 <- applyDelta users1 deleteDelta
   users3 <- applyDelta users2 upsertDelta
@@ -129,7 +129,7 @@ delta_chunk_helper = do Effect {
 
 @test "fts helpers"
 fts_helpers = do Effect {
-  doc = ftsDoc "doc-1" ["hello", "world"]
+  doc      = ftsDoc "doc-1" ["hello", "world"]
   anyQuery = ftsMatchAny ["hello", "world"]
   allQuery = ftsMatchAll ["hello", "world"]
   assertEq doc.docId "doc-1"

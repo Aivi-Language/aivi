@@ -32,23 +32,23 @@ rgb_functional = do Effect {
 
 @test "adjust hue"
 adjustHue_functional = do Effect {
-  rgb = { r: 255, g: 0, b: 0 }
+  rgb     = { r: 255, g: 0, b: 0 }
   shifted = adjustHue rgb 120
   assert (shifted.g > 0 || shifted.b > 0)
 }
 
 @test "adjust lightness"
 adjustLightness_functional = do Effect {
-  rgb = { r: 20, g: 40, b: 60 }
+  rgb     = { r: 20, g: 40, b: 60 }
   lighter = adjustLightness rgb 10
-  darker = adjustLightness rgb (-10)
+  darker  = adjustLightness rgb (-10)
   assert (lighter.r >= rgb.r)
   assert (darker.r <= rgb.r)
 }
 
 @test "adjust saturation"
 adjustSaturation_functional = do Effect {
-  rgb = { r: 100, g: 100, b: 100 }
+  rgb  = { r: 100, g: 100, b: 100 }
   more = adjustSaturation rgb 20
   less = adjustSaturation rgb (-20)
   assert (more.r >= rgb.r)
@@ -70,8 +70,8 @@ toHex_functional = do Effect {
 
 @test "to hsl"
 toHsl_functional = do Effect {
-  rgb = { r: 100, g: 150, b: 200 }
-  hsl = toHsl rgb
+  rgb   = { r: 100, g: 150, b: 200 }
+  hsl   = toHsl rgb
   recon = toRgb hsl
   assert (abs (recon.r - rgb.r) < 10)
   assert (abs (recon.g - rgb.g) < 10)

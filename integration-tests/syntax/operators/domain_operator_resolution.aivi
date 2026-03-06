@@ -9,7 +9,7 @@ use aivi.testing
 span0 : Span
 span0 = { millis: 0 }
 
-spanPlusDelta = span0 + 1s
+spanPlusDelta  = span0 + 1s
 spanMinusDelta = { millis: 1000 } - (1s)
 
 spanPlusSpan = { millis: 1000 } + { millis: 2000 }

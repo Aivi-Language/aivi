@@ -9,7 +9,7 @@ results = [Ok 5, Ok 15, Err "bad", Ok 20]
 passing = results |> filter (Ok { value } when value > 10)
 
 // Constructor-only predicate: (Some _) matches all Some values.
-options = [None, Some 1, None, Some 2]
+options  = [None, Some 1, None, Some 2]
 someOnly = options |> filter (Some _)
 
 @test "pattern predicate with guard"

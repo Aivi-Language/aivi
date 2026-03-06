@@ -184,14 +184,14 @@ requiredFieldMissing = do Effect {
 
 @test "decodeList success"
 decodeListOk = do Effect {
-  arr = JsonArray [JsonInt 1, JsonInt 2, JsonInt 3]
+  arr    = JsonArray [JsonInt 1, JsonInt 2, JsonInt 3]
   result = decodeList decodeInt arr
   assertEq result (Ok [1, 2, 3])
 }
 
 @test "decodeList failure in element"
 decodeListErrElem = do Effect {
-  arr = JsonArray [JsonInt 1, JsonString "bad"]
+  arr    = JsonArray [JsonInt 1, JsonString "bad"]
   result = decodeList decodeInt arr
   assertEq (isErr result) True
 }
@@ -206,14 +206,14 @@ decodeListNotArr = do Effect {
 
 @test "strictFields all allowed"
 strictFieldsOk = do Effect {
-  obj = JsonObject [("name", JsonString "X")]
+  obj    = JsonObject [("name", JsonString "X")]
   result = strictFields ["name", "age"] obj
   assertEq (isOk result) True
 }
 
 @test "strictFields unknown key"
 strictFieldsUnknown = do Effect {
-  obj = JsonObject [("name", JsonString "X"), ("extra", JsonNull)]
+  obj    = JsonObject [("name", JsonString "X"), ("extra", JsonNull)]
   result = strictFields ["name"] obj
   assertEq (isErr result) True
 }
@@ -229,7 +229,7 @@ strictFieldsNotObj = do Effect {
 @test "validateSchema required fields present"
 validateSchemaOk = do Effect {
   schema = { required: ["name"], strict: False }
-  obj = JsonObject [("name", JsonString "Alice")]
+  obj    = JsonObject [("name", JsonString "Alice")]
   issues = validateSchema schema obj
   assertEq issues []
 }
@@ -237,7 +237,7 @@ validateSchemaOk = do Effect {
 @test "validateSchema missing required field"
 validateSchemaMissing = do Effect {
   schema = { required: ["name", "age"], strict: False }
-  obj = JsonObject [("name", JsonString "Alice")]
+  obj    = JsonObject [("name", JsonString "Alice")]
   issues = validateSchema schema obj
   assertEq (List.length issues) 1
 }
@@ -253,7 +253,7 @@ validateSchemaNotObj = do Effect {
 
 @test "migrateObject transforms entries"
 migrateObjTransform = do Effect {
-  obj = JsonObject [("old", JsonInt 1)]
+  obj      = JsonObject [("old", JsonInt 1)]
   migrated = migrateObject (entries => [("new", JsonInt 2)]) obj
   assertEq (jsonToText migrated) "\{\"new\":2}"
 }
@@ -268,7 +268,7 @@ migrateObjPassthrough = do Effect {
 
 @test "renderSchemaIssue produces text"
 renderIssueText = do Effect {
-  issue = { path: "$.name", message: "missing" }
+  issue  = { path: "$.name", message: "missing" }
   result = renderSchemaIssue 1 issue
   assert (result != "")
 }
@@ -282,7 +282,7 @@ renderIssuesText = do Effect {
 
 @test "renderJsonError produces text"
 renderJsonErrText = do Effect {
-  err = { message: "expected Int" }
+  err    = { message: "expected Int" }
   result = renderJsonError "$.user.id" err
   assert (result != "")
 }

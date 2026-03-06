@@ -18,7 +18,7 @@ lowbit = _ match
 addDelta = size idx delta tree =>
   if idx > size then tree
   else {
-    cur = Map.getOrElse idx 0 tree
+    cur     = Map.getOrElse idx 0 tree
     updated = Map.insert idx (cur + delta) tree
     addDelta size (idx + lowbit idx) delta updated
   }
@@ -59,7 +59,7 @@ update : Fenwick -> Int -> Int -> Fenwick
 update = fenwick idx value =>
   if idx < 1 || idx > fenwick.size then fenwick
   else {
-    prev = rangeSum fenwick idx idx
+    prev  = rangeSum fenwick idx idx
     delta = prev match
       | Some v => value - v
       | None   => value
@@ -77,7 +77,7 @@ naiveSum = arr l r => arr match
 verifyIndices = indices fen arr =>
   List.foldl (acc i => {
       expected = naiveSum arr i i
-      result = rangeSum fen i i match
+      result   = rangeSum fen i i match
         | Some got => got == expected
         | None     => False
         acc && result
@@ -85,7 +85,7 @@ verifyIndices = indices fen arr =>
 
 @test "Fenwick tree prefix sums"
 behaviors = do Effect {
-  values = [3, 1, 4, 1, 5]
+  values  = [3, 1, 4, 1, 5]
   fenwick = buildFromList values
 
   sum05 = rangeSum fenwick 1 5

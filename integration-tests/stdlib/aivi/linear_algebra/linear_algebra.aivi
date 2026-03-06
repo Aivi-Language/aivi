@@ -34,8 +34,8 @@ matMul_functional = do Effect {
 
 @test "solve2x2"
 solve2x2_functional = do Effect {
-  m = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
-  v = { size: 2, data: [3.0, 1.0] }
+  m   = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
+  v   = { size: 2, data: [3.0, 1.0] }
   res = solve2x2 m v
   assert (res.data == [2.0, 1.0])
 }

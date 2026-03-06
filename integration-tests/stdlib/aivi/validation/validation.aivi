@@ -159,14 +159,14 @@ test_toResult_invalid = do Effect {
 
 @test "formatDecodeError formats path and message"
 test_formatDecodeError = do Effect {
-  err = { path: ["user", "preferences", "theme"], message: "Expected Text, got Int" }
+  err    = { path: ["user", "preferences", "theme"], message: "Expected Text, got Int" }
   result = formatDecodeError err
   assertEq result "at $.user.preferences.theme: Expected Text, got Int"
 }
 
 @test "formatDecodeError with empty path"
 test_formatDecodeError_empty = do Effect {
-  err = { path: [], message: "unexpected type" }
+  err    = { path: [], message: "unexpected type" }
   result = formatDecodeError err
   assertEq result "at $.: unexpected type"
 }

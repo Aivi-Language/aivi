@@ -52,6 +52,23 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
         // Compile-time evaluation for deterministic source calls.
         let original_span = expr_span(&def.expr);
         let expr = def.expr.clone();
+
+        // Handle `type.jsonSchema` without arguments (FieldAccess, not Call).
+        if let Expr::FieldAccess { base, field, .. } = &expr {
+            if let Expr::Ident(name) = base.as_ref() {
+                if name.name == "type" && field.name == "jsonSchema" {
+                    emit_diag(
+                        module_path,
+                        out,
+                        "E1554",
+                        "`@static type.jsonSchema` expects a type name as argument".to_string(),
+                        original_span,
+                    );
+                    return;
+                }
+            }
+        }
+
         let Expr::Call { func, args, .. } = &expr else {
             // `@static` is allowed on any value definition; compile-time evaluation is best-effort.
             return;
@@ -834,14 +851,17 @@ fn type_expr_to_openai_json_schema(
                 for (field_name, field_type) in fields {
                     let is_option = is_option_type(field_type);
                     let schema = if is_option {
-                        te_to_schema(&unwrap_option(field_type), aliases, seen)
+                        // For OpenAI strict mode: nullable inner type
+                        let inner = te_to_schema(&unwrap_option(field_type), aliases, seen);
+                        let mut s = inner.as_object().cloned().unwrap_or_default();
+                        s.insert("nullable".to_string(), json!(true));
+                        serde_json::Value::Object(s)
                     } else {
                         te_to_schema(field_type, aliases, seen)
                     };
                     properties.insert(field_name.name.clone(), schema);
-                    if !is_option {
-                        required.push(serde_json::Value::String(field_name.name.clone()));
-                    }
+                    // OpenAI strict mode requires ALL properties in required
+                    required.push(serde_json::Value::String(field_name.name.clone()));
                 }
                 let mut obj = serde_json::Map::new();
                 obj.insert("type".to_string(), json!("object"));

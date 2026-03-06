@@ -90,7 +90,7 @@ atanZero = do Effect {
 @test "atan2 basic"
 atan2Basic = do Effect {
   result = atan2 1.0 1.0
-  diff = result.radians - (pi / 4.0)
+  diff   = result.radians - (pi / 4.0)
   assert (abs diff < 0.0001)
 }
 
@@ -400,14 +400,14 @@ isNaNTest = do Effect {
 @test "degrees to radians"
 degToRad = do Effect {
   angle = degrees 180.0
-  diff = angle.radians - pi
+  diff  = angle.radians - pi
   assert (abs diff < 0.0001)
 }
 
 @test "radians to degrees"
 radToDeg = do Effect {
   angle = radians pi
-  diff = (toDegrees angle) - 180.0
+  diff  = (toDegrees angle) - 180.0
   assert (abs diff < 0.0001)
 }
 

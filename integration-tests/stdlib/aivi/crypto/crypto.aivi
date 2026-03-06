@@ -67,7 +67,7 @@ hmacVerify_roundtrip = do Effect {
     msg = fromHex "deadbeef" match
       | Ok b  => b
       | Err _ => panic "bad hex"
-    tag = hmacSha256 key msg
+    tag   = hmacSha256 key msg
     valid = hmacVerify key msg tag
     assert valid
 }
@@ -107,7 +107,7 @@ randomUuid_format = do Effect {
 @test "to hex from hex roundtrip"
 toHex_fromHex_roundtrip = do Effect {
   original <- randomBytes 16
-  hex = toHex original
+  hex     = toHex original
   decoded = fromHex hex match
     | Ok b  => b
     | Err _ => panic "fromHex failed"

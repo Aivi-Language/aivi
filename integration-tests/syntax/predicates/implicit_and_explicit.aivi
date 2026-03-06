@@ -9,8 +9,8 @@ filter = pred xs => xs match
   | [x, ...rest] =>
     if pred x then [x, ...(filter pred rest)] else filter pred rest
 
-values = [1, 2, 3, 4, 5]
-gt2 = values |> filter (_ > 2)
+values   = [1, 2, 3, 4, 5]
+gt2      = values |> filter (_ > 2)
 expected = [3, 4, 5]
 
 @test "predicate filtering"

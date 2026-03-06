@@ -69,8 +69,8 @@ buildRange = arr start end =>
         }
       | None => Empty
   else {
-    mid = (start + end) / 2
-    left = buildRange arr start mid
+    mid   = (start + end) / 2
+    left  = buildRange arr start mid
     right = buildRange arr (mid + 1) end
     nodeFromChildren start end left right
   }
@@ -105,7 +105,7 @@ updatePoint = tree idx value => tree match
       right: Empty
     }
   | Node { start, end, left, right } => {
-      newLeft = updatePoint left idx value
+      newLeft  = updatePoint left idx value
       newRight = updatePoint right idx value
       nodeFromChildren start end newLeft newRight
     }

@@ -8,7 +8,7 @@ use aivi.testing
 
 @test "pipe is function application"
 pipeIsApp = do Effect {
-  inc = x => x + 1
+  inc    = x => x + 1
   result = 41 |> inc
   assertEq result 42
 }
@@ -16,7 +16,7 @@ pipeIsApp = do Effect {
 @test "chained pipes"
 chainedPipes = do Effect {
   double = x => x * 2
-  inc = x => x + 1
+  inc    = x => x + 1
   result = 5 |> double |> inc
   assertEq result 11
 }
@@ -25,7 +25,7 @@ chainedPipes = do Effect {
 
 @test "currying works"
 curryingWorks = do Effect {
-  add = a b => a + b
+  add  = a b => a + b
   add2 = add 2
   assertEq (add2 40) 42
 }
@@ -33,8 +33,8 @@ curryingWorks = do Effect {
 @test "multi-stage currying"
 multiStageCurry = do Effect {
   add3 = a b c => a + b + c
-  f = add3 10
-  g = f 20
+  f    = add3 10
+  g    = f 20
   assertEq (g 12) 42
 }
 
@@ -43,7 +43,7 @@ multiStageCurry = do Effect {
 @test "application is left-associative"
 appLeftAssoc = do Effect {
   apply = f x => f x
-  inc = x => x + 1
+  inc   = x => x + 1
   assertEq (apply inc 5) 6
 }
 

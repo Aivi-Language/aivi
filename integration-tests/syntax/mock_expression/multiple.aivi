@@ -5,20 +5,20 @@ use aivi
 use aivi.testing
 
 firstName = "Ada"
-lastName = "Lovelace"
+lastName  = "Lovelace"
 
 fullName = firstName ++ " " ++ lastName
 
 @test "multiple mocks"
-multipleMocks =
+multipleMocks  =
   mock firstName = "Alan"
-mock lastName = "Turing"
+mock lastName  = "Turing"
 in do Effect {
   assertEq fullName "Alan Turing"
 }
 
 @test "nested mocks override outer"
-nestedMocks =
+nestedMocks    =
   mock firstName = "Grace"
 in do Effect {
   name1 <- pure firstName

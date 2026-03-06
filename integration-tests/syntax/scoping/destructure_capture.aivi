@@ -10,9 +10,9 @@ Person = { name: Text, age: Int }
 
 @test "closure captures destructured name binding and returns it"
 doEffectDestructureName = do Effect {
-  user = { name: "Alice", age: 30 }
+  user          = { name: "Alice", age: 30 }
   { name, age } = user
-  getName = _ => name
+  getName       = _ => name
   assertEq (getName Unit) "Alice"
   assertEq name "Alice"
   assertEq age 30
@@ -20,47 +20,47 @@ doEffectDestructureName = do Effect {
 
 @test "closure captures destructured age binding"
 doEffectDestructureAge = do Effect {
-  user = { name: "Bob", age: 17 }
+  user          = { name: "Bob", age: 17 }
   { name, age } = user
-  isAdult = _ => age >= 18
+  isAdult       = _ => age >= 18
   assert (isAdult Unit == False)
-  user2 = { name: "Carol", age: 20 }
-  { age } = user2
+  user2    = { name: "Carol", age: 20 }
+  { age }  = user2
   isAdult2 = _ => age >= 18
   assert (isAdult2 Unit)
 }
 
 @test "closure captures destructured integer binding"
 doEffectDestructureMixed = do Effect {
-  info = { name: "Dave", score: 42 }
+  info            = { name: "Dave", score: 42 }
   { name, score } = info
-  addScore = x => score + x
+  addScore        = x => score + x
   assertEq (addScore 0) 42
   assertEq (addScore 8) 50
 }
 
 @test "closure from function capturing field via record access"
 closureFromFunctionFieldAccess = do Effect {
-  getAge = user => _ => user.age
+  getAge   = user => _ => user.age
   getAgeFn = getAge { name: "Eve", age: 28 }
   assertEq (getAgeFn Unit) 28
 }
 
 @test "tuple destructure binding captured in closure"
 tupleDestructureCapture = do Effect {
-  pair = (10, 20)
+  pair   = (10, 20)
   (a, b) = pair
-  sumFn = offset => a + b + offset
+  sumFn  = offset => a + b + offset
   assertEq (sumFn 0) 30
   assertEq (sumFn 5) 35
 }
 
 @test "nested record field access captured in closure"
 nestedFieldCapture = do Effect {
-  wrapper = { inner: { value: 7 } }
-  inner = wrapper.inner
+  wrapper   = { inner: { value: 7 } }
+  inner     = wrapper.inner
   { value } = inner
-  addValue = x => x + value
+  addValue  = x => x + value
   assertEq (addValue 3) 10
   assertEq (addValue 0) 7
 }

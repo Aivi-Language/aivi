@@ -33,7 +33,7 @@ loopClosureOffsets = do Effect {
       if state.i >= 3 then pure state.fns
       else do Effect {
         offset = state.i * 100
-        f = x => x + offset
+        f      = x => x + offset
         recurse { i: state.i + 1, fns: [...state.fns, f] }
       }
     }
@@ -56,9 +56,9 @@ loopClosureMultiCall = do Effect {
     }
   }
   // Each closure should add its own n, regardless of how many times called
-  first = fns match | [f, ..._] => f | _ => _ => 0
+  first  = fns match | [f, ..._] => f | _ => _ => 0
   second = fns match | [_, f, ..._] => f | _ => _ => 0
-  third = fns match | [_, _, f] => f | _ => _ => 0
+  third  = fns match | [_, _, f] => f | _ => _ => 0
   assertEq (first 0) 1
   assertEq (first 100) 101
   assertEq (second 0) 2

@@ -35,7 +35,7 @@ closureInGenerator = do Effect {
 
 @test "inner closure defined and composed in do Effect"
 innerClosureInDoEffect = do Effect {
-  base = 100
+  base       = 100
   clampedAdd = limit n => if n + base > limit then limit else n + base
   assertEq (clampedAdd 120 10) 110
   assertEq (clampedAdd 120 25) 120
@@ -49,9 +49,9 @@ closureInHigherOrder = do Effect {
 
 @test "closure used inside do Option"
 closureInDoOption = do Effect {
-  offset = 5
+  offset    = 5
   addOffset = x => Some (x + offset)
-  result = do Option {
+  result    = do Option {
     a <- Some 10
     b <- addOffset a
     Some b

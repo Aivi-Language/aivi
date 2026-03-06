@@ -18,7 +18,7 @@ recordFieldAccess = do Effect {
 
 @test "record patch updates field"
 patchUpdates = do Effect {
-  r = { x: 1, y: 2 }
+  r  = { x: 1, y: 2 }
   r2 = r <| { y: 9 }
   assertEq r2.y 9
   assertEq r2.x 1
@@ -26,7 +26,7 @@ patchUpdates = do Effect {
 
 @test "record patch computed update"
 patchComputed = do Effect {
-  r = { age: 30 }
+  r  = { age: 30 }
   r2 = r <| { age: _ + 1 }
   assertEq r2.age 31
 }

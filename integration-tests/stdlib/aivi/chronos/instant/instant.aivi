@@ -9,7 +9,7 @@ use aivi.chronos.instant (domain Instant)
 @test "compare and diff"
 compare_and_diff = do Effect {
   start = 2024-01-01T00:00:00Z
-  end = 2024-01-01T00:00:10Z
+  end   = 2024-01-01T00:00:10Z
 
   assert (start < end)
   assert (end > start)
@@ -26,7 +26,7 @@ add_sub_roundtrip = do Effect {
 
   step = { millis: 1500 }
 
-  later = base + step
+  later     = base + step
   roundtrip = later - step
 
   assertEq (later - base).millis 1500

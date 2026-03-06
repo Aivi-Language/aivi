@@ -22,7 +22,7 @@ clientEndpoints = do Effect {
 
 @test "openapi static endpoints can be destructured"
 destructureEndpoints = do Effect {
-  client = petStoreApi {}
+  client                              = petStoreApi {}
   { listPets, createPet, getPetById } = client
   assert True
 }

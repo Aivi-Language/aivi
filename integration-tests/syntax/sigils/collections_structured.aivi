@@ -11,7 +11,7 @@ users = ~map{
 }
 
 baseTags = ~set["base"]
-tags = ~set[...baseTags, "hot", "new"]
+tags     = ~set[...baseTags, "hot", "new"]
 
 @test "structured sigils work"
 structuredSigilsWork = do Effect {

@@ -51,7 +51,7 @@ sortLoop = graph indeg q outRev => (Queue.dequeue q) match
 topologicalSort : Graph -> Result (List Int) (List Int)
 topologicalSort = graph => {
   indeg = buildIndegree graph
-  q0 = enqueueZero graph.nodes indeg Queue.empty
+  q0    = enqueueZero graph.nodes indeg Queue.empty
   sortLoop graph indeg q0 []
 }
 
@@ -69,7 +69,7 @@ topoSmoke = do Effect {
   assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
 
   // Test cyclic graph detection
-  cyclicAdj = ~map{ 0 => [1], 1 => [0] }
+  cyclicAdj   = ~map{ 0 => [1], 1 => [0] }
   cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
   cycle <- pure (topologicalSort cyclicGraph)
   assert (cycle == Err [0, 1] || cycle == Err [1, 0])

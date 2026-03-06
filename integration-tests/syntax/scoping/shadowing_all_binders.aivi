@@ -23,7 +23,7 @@ paramShadow = do Effect {
 
 @test "pattern binding x shadows outer x in do Effect"
 patternShadow = do Effect {
-  x = 99
+  x      = 99
   (x, y) = (7, 8)
   assertEq x 7
   assertEq y 8
@@ -38,7 +38,7 @@ doBlockBindShadow = do Effect {
 
 @test "match arm binding x shadows outer x, outer unchanged after"
 matchArmShadow = do Effect {
-  x = 999
+  x      = 999
   result = (Some 77) match
     | Some x => x
     | None   => 0

@@ -13,8 +13,8 @@ processEdges = dists d edges pq => edges match
   | []              => pure { dists: dists, pq: pq }
   | [edge, ...rest] => do Effect {
       currentDist = Map.getOrElse edge.to 999999.0 dists
-      newDist = d + edge.weight
-      nextDists = if newDist < currentDist
+      newDist     = d + edge.weight
+      nextDists   = if newDist < currentDist
         then Map.insert edge.to newDist dists
         else dists
       nextPq = if newDist < currentDist
@@ -38,7 +38,7 @@ dijkstra_shortestPaths = do Effect {
       result match
         | None                     => pure state.dists
         | Some ((d, node), restPq) => do Effect {
-            dF = d + 0.0
+            dF          = d + 0.0
             currentDist = Map.getOrElse node 999999.0 state.dists
             if dF > currentDist
               then do Effect { recurse { dists: state.dists, pq: restPq } }

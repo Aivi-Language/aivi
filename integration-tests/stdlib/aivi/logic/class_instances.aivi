@@ -93,9 +93,9 @@ polymorphic_map = do Effect {
 
 @test "class methods work with pipes"
 pipe_class_methods = do Effect {
-  xs = [1, 2, 3, 4, 5]
+  xs       = [1, 2, 3, 4, 5]
   filtered = xs |> filter (x => x > 2)
-  mapped = filtered |> map (x => x * 10)
-  result = reduce (acc x => acc + x) 0 mapped
+  mapped   = filtered |> map (x => x * 10)
+  result   = reduce (acc x => acc + x) 0 mapped
   assertEq result 120
 }

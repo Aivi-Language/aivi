@@ -14,7 +14,7 @@ sharedState = "original"
 
 @test "first test sees its own mock"
 firstTestUsesMock =
-  mock sharedState = "mocked"
+  mock sharedState  = "mocked"
 in do Effect {
   assertEq sharedState "mocked"
 }
@@ -34,7 +34,7 @@ applyTag = tag => tag
 
 @test "third test mock is scoped to itself"
 thirdTestOwnMock =
-  mock sharedTag = "beta"
+  mock sharedTag   = "beta"
 in do Effect {
   assertEq (applyTag sharedTag) "beta"
 }
