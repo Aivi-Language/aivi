@@ -86,8 +86,8 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 scrutinee, arms, location, ..
             } => self.lower_match(builder, scrutinee, arms, location.as_deref()),
             RustIrExpr::Binary {
-                op, left, right, ..
-            } => self.lower_binary(builder, op, left, right),
+                op, left, right, location, ..
+            } => self.lower_binary(builder, op, left, right, location.as_deref()),
 
             RustIrExpr::Pipe { func, arg, .. } => self.lower_app(builder, func, arg),
 

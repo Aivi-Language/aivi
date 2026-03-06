@@ -442,11 +442,13 @@ fn inline_children(
             op,
             left,
             right,
+            location,
         } => RustIrExpr::Binary {
             id,
             op,
             left: Box::new(inline_expr(*left, candidates, id_gen, depth)),
             right: Box::new(inline_expr(*right, candidates, id_gen, depth)),
+            location,
         },
 
         RustIrExpr::Mock {

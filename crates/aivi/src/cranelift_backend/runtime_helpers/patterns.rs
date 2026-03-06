@@ -558,11 +558,11 @@ pub extern "C" fn rt_binary_op(
         runtime.jit_rt_warning_count += 1;
         return abi::box_value(Value::Unit);
     }
-    eprintln!(
-        "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}operator error{RT_RESET}: binary operator `{op}` could not be applied to the given operand types"
-    );
-    eprintln!(
-        "  {RT_CYAN}hint{RT_RESET}: check that both operands have compatible types for `{op}`"
+    rt_warn(
+        ctx,
+        "operator error",
+        &format!("binary operator `{op}` could not be applied to the given operand types"),
+        &format!("check that both operands have compatible types for `{op}`"),
     );
     abi::box_value(Value::Unit)
 }

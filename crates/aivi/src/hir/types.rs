@@ -154,6 +154,7 @@ pub enum HirExpr {
         op: String,
         left: Box<HirExpr>,
         right: Box<HirExpr>,
+        location: Option<String>,
     },
     Block {
         id: u32,

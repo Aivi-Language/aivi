@@ -4,7 +4,6 @@ use aivi
 use aivi.list
 use aivi.text
 use aivi.ui.gtk4
-use aivi.concurrency
 
 export main
 
@@ -108,7 +107,8 @@ step = newDir state => {
         foodResult = if ateFood
           then placeFood (state.seed + state.score * 7 + nx * 13 + ny) newSnake
           else (state.food, state.seed)
-        (newFood, newSeed) = foodResult {
+        (newFood, newSeed) = foodResult
+        {
           snake: newSnake
           food: newFood
           dir: dir
@@ -179,21 +179,12 @@ update = msg => state => msg match
 // Entry point
 
 main : Effect GtkError Unit
-main = do Effect {
-  _     <- init Unit
-  appId <- appNew "demos.snake"
-  win   <- windowNew appId "Snake" 500 460
-  root  <- buildFromNode (view initialState)
-  windowSetChild win root
-  rx <- signalStream Unit
-  windowPresent win
-  _ <- fold { st: initialState, rootId: root } (acc => event => toMsg event match
-    | None     => pure acc
-    | Some msg => do Effect {
-        next    <- update msg acc.st
-        newRoot <- reconcileNode acc.rootId (view next)
-        pure { st: next, rootId: newRoot }
-      }
-  ) rx
-  pure Unit
+main = gtkApp {
+  id: "demos.snake"
+  title: "Snake"
+  size: (500, 460)
+  model: initialState
+  view: view
+  toMsg: toMsg
+  update: update
 }

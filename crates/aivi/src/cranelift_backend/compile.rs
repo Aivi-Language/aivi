@@ -101,7 +101,16 @@ fn jit_compile_into_runtime(
     // Monomorphize
     let spec_map = timed!(
         "monomorphize",
-        monomorphize_program(&mut rust_program.modules, &monomorph_plan)
+        {
+            if std::env::var("AIVI_DEBUG_MONO").is_ok() {
+                for (k, v) in &monomorph_plan {
+                    if k.contains("gtkApp") || k.contains("gtk") {
+                        eprintln!("[DEBUG MONO] {} => {:?}", k, v);
+                    }
+                }
+            }
+            monomorphize_program(&mut rust_program.modules, &monomorph_plan)
+        }
     );
 
     // Inline small functions

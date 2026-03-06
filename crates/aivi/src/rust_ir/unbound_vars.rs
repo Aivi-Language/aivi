@@ -377,11 +377,13 @@ fn rewrite_implicit_field_vars(
             op,
             left,
             right,
+            location,
         } => HirExpr::Binary {
             id,
             op,
             left: Box::new(rewrite_implicit_field_vars(*left, implicit_param, unbound)),
             right: Box::new(rewrite_implicit_field_vars(*right, implicit_param, unbound)),
+            location,
         },
         other => other,
     }

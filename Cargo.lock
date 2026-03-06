@@ -134,7 +134,6 @@ dependencies = [
  "ordered-float",
  "palette",
  "parking_lot",
- "rayon",
  "regex",
  "rust_decimal",
  "rustfft",

@@ -168,6 +168,7 @@ pub enum RustIrExpr {
         op: String,
         left: Box<RustIrExpr>,
         right: Box<RustIrExpr>,
+        location: Option<String>,
     },
     Raw {
         id: u32,
@@ -506,11 +507,13 @@ fn lower_expr(
             op,
             left,
             right,
+            location,
         } => RustIrExpr::Binary {
             id,
             op,
             left: Box::new(lower_expr(*left, globals, locals)?),
             right: Box::new(lower_expr(*right, globals, locals)?),
+            location,
         },
         HirExpr::Raw { id, text } => RustIrExpr::Raw { id, text },
         HirExpr::Mock {
