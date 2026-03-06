@@ -4,7 +4,6 @@ module integrationTests.stdlib.aivi.logic.tests
 use aivi
 use aivi.prelude
 use aivi.testing
-use aivi.logic
 
 // -- Setoid (equality) --
 

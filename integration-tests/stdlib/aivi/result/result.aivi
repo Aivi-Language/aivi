@@ -4,7 +4,6 @@ module integrationTests.stdlib.aivi.result.tests
 use aivi
 use aivi.prelude
 use aivi.testing
-use aivi.logic
 use aivi.result
 
 // -- Predicates --

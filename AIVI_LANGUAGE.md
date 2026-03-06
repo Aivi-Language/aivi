@@ -18,6 +18,9 @@ apply: always
 - Records are structural and closed (no row polymorphism).
 - Effects are explicit: `Effect E A` (error type `E`, success type `A`).
 - Domains give meaning to operators and suffix literals for non-`Int` types.
+- No semicolons — bindings and block statements are separated by newlines.
+- Opening `{` always on the same line as the keyword (`do Effect {`, `generate {`, `x match`).
+- Avoid deeply nested expressions — extract inner logic into named helper functions.
 
 ---
 
@@ -1455,7 +1458,9 @@ topoSmoke = do Effect {
 | `def f(x):`            | No `def`, no parens for args     | `f = x => ...`                                      |
 | `fn f(x: T) -> R`      | No `fn` keyword                  | `f : T -> R` / `f = x => ...`                       |
 | `f :: T -> R`          | Single colon for type signatures | `f : T -> R`                                        |
-| `var x = 1; x = 2`     | No mutation                      | `x = 1; x = x + 1` (shadow)                         |
+| `var x = 1; x = 2`     | No mutation                      | `x = 1` (shadow with `x = x + 1` on next line)      |
+| `x = 1; y = 2`        | No semicolons — use newlines     | `x = 1` (newline) `y = 2`                           |
+| `do Effect` `{` on next line | Opening `{` must be on same line | `do Effect {`                               |
 | `null` / `nil`         | No nulls                         | `None` / `Option A`                                 |
 | `Just x` / `Nothing`   | AIVI is not Haskell              | `Some x` / `None`                                   |
 | `Left e` / `Right x`   | AIVI is not Haskell              | `Err e` / `Ok x`                                    |
@@ -1481,3 +1486,4 @@ topoSmoke = do Effect {
 | `"x" ++ "y"`           | No string concat operator        | `"{x}{y}"`                                          |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
 | `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |
+| Deep nesting / inline lambdas in lambdas | Extract into named helpers | `step1 = ...; step2 = ...; result = step2 (step1 x)` |

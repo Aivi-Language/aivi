@@ -4,7 +4,6 @@ module integrationTests.compileFail.ambiguousClassMemberNoContext
 
 use aivi
 use aivi.prelude
-use aivi.logic
 
 // `empty` without type context should fail because
 // multiple Monoid instances exist (List, Map).
