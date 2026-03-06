@@ -37,6 +37,13 @@ Password hashing uses deliberately slow algorithms to resist brute-force attacks
 | **hashPassword** password<br><code>Text -> Effect CryptoError Text</code> | Hashes a password using Argon2id with safe defaults. Returns an opaque PHC-format string. |
 | **verifyPassword** password hash<br><code>Text -> Text -> Effect CryptoError Bool</code> | Verifies a password against a stored hash. Constant-time. |
 
+## Capability mapping (Phase 1 surface)
+
+Pure hashing / HMAC helpers carry no capability requirement. RNG-backed operations do:
+
+- `randomUuid`, `randomBytes` → `randomness.secure`
+- salted password hashing (for example `hashPassword`) also consumes `randomness.secure`
+
 ## Random
 
 | Function | Explanation |

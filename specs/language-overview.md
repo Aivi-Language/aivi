@@ -462,5 +462,5 @@ testFetch =
 | `aivi.net.httpServer` | `listen`, `route`, `Handler` |
 | `aivi.ui.gtk4` | `gtkApp`, `signalStream`, `buildFromNode`, `reconcileNode` |
 | `aivi.crypto` | `hash`, `hmac`, `encrypt`, `decrypt` |
-| `aivi.database` | `connect`, `query`, `transaction` |
+| `aivi.database` | `connect`, `open`, `loadOn`, `applyDeltaOn`, `beginTxOn` |
 | `aivi.log` | `info`, `warn`, `error`, `debug` |

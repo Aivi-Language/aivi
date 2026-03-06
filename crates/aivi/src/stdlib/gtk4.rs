@@ -495,12 +495,13 @@ trayNotifyPersonalEmail = gtk4.trayNotifyPersonalEmail
 traySetEmailSuggestions : List Text -> Effect GtkError Unit
 traySetEmailSuggestions = gtk4.traySetEmailSuggestions
 
-gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
+gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, onStart: AppId -> WindowId -> Effect GtkError Unit, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
 gtkApp = config => do Effect {
   _ <- init Unit
   appId <- appNew config.id
   (w, h) = config.size
   win <- windowNew appId config.title w h
+  _ <- config.onStart appId win
   initialView = config.view config.model
   root <- buildFromNode initialView
   windowSetChild win root
@@ -523,6 +524,7 @@ gtkApp = config => do Effect {
   }
 }
 
+@deprecated "use gtkApp; gtkAppFull is a compatibility shim for advanced window flags and update-time handles"
 gtkAppFull : { id: Text, title: Text, size: (Int, Int), decorated: Bool, hideOnClose: Bool, model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: AppId -> WindowId -> msg -> s -> Effect GtkError s, onStart: AppId -> WindowId -> Effect GtkError Unit } -> Effect GtkError Unit
 gtkAppFull = config => do Effect {
   _ <- init Unit

@@ -42,6 +42,7 @@ impl TypeChecker {
             "PatchOp",
             "Column",
             "DbConfig",
+            "DbConnection",
             "DbError",
             // Source kinds (used at type-level only; v0.1 keeps SourceError as Text).
             "File",

@@ -12,6 +12,10 @@ Typed file sources remove boilerplate parsing by letting the expected type drive
 - `file.imageMeta : Text -> Source Image A`
 - `file.image : Text -> Source Image A`
 
+## Capability mapping (Phase 1 surface)
+
+Loading a file source requires `file.read` (or the broader `file` family shorthand). This applies to `file.read`, `file.json`, `file.csv`, `file.imageMeta`, and `file.image`.
+
 ## Example
 
 ```aivi

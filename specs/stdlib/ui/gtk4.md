@@ -8,6 +8,20 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 
 <div class="import-badge">use aivi.ui.gtk4</div>
 
+Single-window GTK applications should follow the [official app architecture](./app_architecture.md). This page documents the raw GTK bindings plus the `gtkApp` entry point that hosts that architecture.
+
+## Capability mapping (Phase 1 surface)
+
+GTK runtime operations use the `ui` capability family:
+
+- widget/window construction and presentation → `ui.window`
+- `signalPoll`, `signalStream`, `signalEmit` → `ui.signal`
+- clipboard helpers → `ui.clipboard`
+- desktop notification helpers → `ui.notification`
+- `gtkApp` is the coarse-grained `ui` entry point and may be annotated with the broader `ui` family shorthand
+
+This milestone only defines the capability surface; it does **not** change the blessed GTK architecture or introduce handler syntax yet.
+
 ## Public API
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/public_api.aivi{aivi}
@@ -337,7 +351,7 @@ nextMsg = do Effect {
 }
 ```
 
-### Example: consuming signal events via `signalStream` (recommended)
+### Example: consuming signal events via `signalStream` (manual/custom loop)
 
 ```aivi
 Msg = Save | NameChanged Text | Toggled Bool | VolumeChanged Float
@@ -364,7 +378,7 @@ runLoop = do Effect {
 
 ### `gtkApp` — Elm-architecture combinator
 
-`gtkApp` encapsulates the entire GTK application lifecycle (init, window creation, event loop) into a single call. The user provides a configuration record and `gtkApp` handles the rest:
+`gtkApp` is the single blessed entry point for GTK applications in AIVI. The user provides a configuration record and `gtkApp` handles init, startup, window creation, event ingestion, and reconciliation:
 
 ```aivi
 gtkApp : {
@@ -372,13 +386,18 @@ gtkApp : {
   title:  Text,
   size:   (Int, Int),
   model:  s,
+  onStart: AppId -> WindowId -> Effect GtkError Unit,
   view:   s -> GtkNode,
   toMsg:  GtkSignalEvent -> Option msg,
   update: msg -> s -> Effect GtkError s
 } -> Effect GtkError Unit
 ```
 
-Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → event loop using `channel.recv` with `toMsg`/`update`. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
+Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → event loop using `channel.recv` with `toMsg`/`update`. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
+
+`onStart` is the blessed place for one-time startup work such as app CSS, timers, or action registration. Steady-state application behavior still flows through `Msg` and `update`.
+
+`gtkAppFull` remains exported as a deprecated compatibility shim for uncommon window flags (`decorated`, `hideOnClose`) and legacy code that still needs `AppId`/`WindowId` inside `update`. It is not the public path for new applications.
 
 ### `reconcileNode` — vdom-style tree patching
 
@@ -400,8 +419,8 @@ Msg = TitleChanged Text | BodyChanged Text | Save
 editorView : { title: Text, body: Text } -> GtkNode
 editorView = state => ~<gtk>
   <GtkBox orientation="vertical" spacing="8">
-    <GtkEntry id="titleInput" placeholderText="Title" />
-    <GtkEntry id="bodyInput" placeholderText="Body" />
+    <GtkEntry id="titleInput" placeholderText="Title" onInput={ TitleChanged } />
+    <GtkEntry id="bodyInput" placeholderText="Body" onInput={ BodyChanged } />
     <GtkButton label="Save" onClick={ Msg.Save } />
   </GtkBox>
 </gtk>
@@ -427,6 +446,7 @@ main = gtkApp {
   title:  "Notepad",
   size:   (640, 480),
   model:  { title: "", body: "" },
+  onStart: _ _ => pure Unit,
   view:   editorView,
   toMsg:  toMsg,
   update: update

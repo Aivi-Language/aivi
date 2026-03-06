@@ -1146,6 +1146,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let db_row = checker.fresh_var_id();
     let db_error_ty = Type::con("DbError");
     let db_config_ty = Type::con("DbConfig");
+    let db_connection_ty = Type::con("DbConnection");
     let table_ty = Type::con("Table").app(vec![Type::Var(db_row)]);
     let pred_ty = Type::con("Pred").app(vec![Type::Var(db_row)]);
     let patch_ty = Type::con("Patch").app(vec![Type::Var(db_row)]);
@@ -1182,8 +1183,31 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(Box::new(db_config_ty), Box::new(db_effect_unit_ty.clone())),
             ),
             (
+                "connect".to_string(),
+                Type::Func(
+                    Box::new(Type::con("DbConfig")),
+                    Box::new(
+                        Type::con("Effect").app(vec![db_error_ty.clone(), db_connection_ty.clone()]),
+                    ),
+                ),
+            ),
+            (
+                "close".to_string(),
+                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+            ),
+            (
                 "load".to_string(),
-                Type::Func(Box::new(table_ty.clone()), Box::new(db_effect_rows_ty)),
+                Type::Func(Box::new(table_ty.clone()), Box::new(db_effect_rows_ty.clone())),
+            ),
+            (
+                "loadOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(table_ty.clone()),
+                        Box::new(db_effect_rows_ty.clone()),
+                    )),
+                ),
             ),
             (
                 "applyDelta".to_string(),
@@ -1191,7 +1215,20 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(table_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(delta_ty.clone()),
-                        Box::new(db_effect_table_ty),
+                        Box::new(db_effect_table_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "applyDeltaOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(table_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(delta_ty.clone()),
+                            Box::new(db_effect_table_ty.clone()),
+                        )),
                     )),
                 ),
             ),
@@ -1200,20 +1237,69 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(Box::new(list_table_ty), Box::new(db_effect_unit_ty.clone())),
             ),
             (
+                "runMigrationsOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("List").app(vec![table_ty.clone()])),
+                        Box::new(db_effect_unit_ty.clone()),
+                    )),
+                ),
+            ),
+            (
                 "configureSqlite".to_string(),
                 Type::Func(
                     Box::new(sqlite_tuning_ty),
                     Box::new(db_effect_unit_ty.clone()),
                 ),
             ),
+            (
+                "configureSqliteOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::Record {
+                            fields: vec![
+                                ("wal".to_string(), Type::con("Bool")),
+                                ("busyTimeoutMs".to_string(), Type::con("Int")),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        }),
+                        Box::new(db_effect_unit_ty.clone()),
+                    )),
+                ),
+            ),
             ("beginTx".to_string(), db_effect_unit_ty.clone()),
             ("commitTx".to_string(), db_effect_unit_ty.clone()),
             ("rollbackTx".to_string(), db_effect_unit_ty.clone()),
+            (
+                "beginTxOn".to_string(),
+                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+            ),
+            (
+                "commitTxOn".to_string(),
+                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+            ),
+            (
+                "rollbackTxOn".to_string(),
+                Type::Func(Box::new(db_connection_ty.clone()), Box::new(db_effect_unit_ty.clone())),
+            ),
             (
                 "savepoint".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
                     Box::new(db_effect_unit_ty.clone()),
+                ),
+            ),
+            (
+                "savepointOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(db_effect_unit_ty.clone()),
+                    )),
                 ),
             ),
             (
@@ -1224,6 +1310,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "releaseSavepointOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(db_effect_unit_ty.clone()),
+                    )),
+                ),
+            ),
+            (
                 "rollbackToSavepoint".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
@@ -1231,8 +1327,28 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "rollbackToSavepointOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(db_effect_unit_ty.clone()),
+                    )),
+                ),
+            ),
+            (
                 "runMigrationSql".to_string(),
                 Type::Func(Box::new(list_text_ty), Box::new(db_effect_unit_ty.clone())),
+            ),
+            (
+                "runMigrationSqlOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("List").app(vec![text_ty.clone()])),
+                        Box::new(db_effect_unit_ty.clone()),
+                    )),
+                ),
             ),
             (
                 "ins".to_string(),

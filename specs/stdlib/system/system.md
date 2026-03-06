@@ -12,6 +12,15 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 
 <<< ../../snippets/from_md/stdlib/system/system/overview.aivi{aivi}
 
+## Capability mapping (Phase 1 surface)
+
+- `env.get`, `env.decode` → `process.env.read`
+- `env.set`, `env.remove` → `process.env.write`
+- `args`, `localeTag` → `process.args`
+- `exit` → `process.exit`
+
+The function names stay the same during migration; capability clauses tighten their effect signatures.
+
 ## Core API (v0.1)
 
 ### Environment

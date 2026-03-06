@@ -8,14 +8,17 @@ export IntType, BoolType, TimestampType, Varchar
 export AutoIncrement, NotNull
 export DefaultBool, DefaultInt, DefaultText, DefaultNow
 export Pred, Patch, Delta, DbError
-export Driver, DbConfig, configure
+export Driver, DbConfig, DbConnection, configure, connect, open, close
 export Sqlite, Postgresql, Mysql
 export SqliteTuning, MigrationStep, SavepointName, TxAction
 export FtsDoc, FtsQuery
 export table, load, query, applyDelta, applyDeltas, runMigrations, runMigrationSql
-export configureSqlite
+export loadOn, queryOn, applyDeltaOn, applyDeltasOn, runMigrationsOn, runMigrationSqlOn
+export configureSqlite, configureSqliteOn
 export beginTx, commitTx, rollbackTx, inTransaction
+export beginTxOn, commitTxOn, rollbackTxOn, inTransactionOn
 export savepoint, releaseSavepoint, rollbackToSavepoint
+export savepointOn, releaseSavepointOn, rollbackToSavepointOn
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export ins, upd, del, ups
 export domain Database
@@ -73,8 +76,24 @@ FtsQuery = {
 configure : DbConfig -> Effect DbError Unit
 configure = config => database.configure config
 
+connect : DbConfig -> Effect DbError DbConnection
+connect = config => database.connect config
+
+open : DbConfig -> Resource DbError DbConnection
+open = config => resource {
+  conn <- connect config
+  yield conn
+  _ <- close conn
+}
+
+close : DbConnection -> Effect DbError Unit
+close = conn => database.close conn
+
 configureSqlite : SqliteTuning -> Effect DbError Unit
 configureSqlite = tuning => database.configureSqlite tuning
+
+configureSqliteOn : DbConnection -> SqliteTuning -> Effect DbError Unit
+configureSqliteOn = conn tuning => database.configureSqliteOn conn tuning
 
 table : Text -> List Column -> Table A
 table = name columns => database.table name columns
@@ -82,14 +101,26 @@ table = name columns => database.table name columns
 load : Table A -> Effect DbError (List A)
 load = value => database.load value
 
+loadOn : DbConnection -> Table A -> Effect DbError (List A)
+loadOn = conn value => database.loadOn conn value
+
 query : Table A -> (A -> Bool) -> Effect DbError (List A)
 query = tbl pred => do Effect {
   rows <- load tbl
   pure (List.filter pred rows)
 }
 
+queryOn : DbConnection -> Table A -> (A -> Bool) -> Effect DbError (List A)
+queryOn = conn tbl pred => do Effect {
+  rows <- loadOn conn tbl
+  pure (List.filter pred rows)
+}
+
 applyDelta : Table A -> Delta A -> Effect DbError (Table A)
 applyDelta = table delta => database.applyDelta table delta
+
+applyDeltaOn : DbConnection -> Table A -> Delta A -> Effect DbError (Table A)
+applyDeltaOn = conn table delta => database.applyDeltaOn conn table delta
 
 applyDeltas : Table A -> List (Delta A) -> Effect DbError (Table A)
 applyDeltas = table deltas => deltas match
@@ -99,8 +130,19 @@ applyDeltas = table deltas => deltas match
       applyDeltas next rest
     }
 
+applyDeltasOn : DbConnection -> Table A -> List (Delta A) -> Effect DbError (Table A)
+applyDeltasOn = conn table deltas => deltas match
+  | [] => pure table
+  | [d, ...rest] => do Effect {
+      next <- applyDeltaOn conn table d
+      applyDeltasOn conn next rest
+    }
+
 runMigrations : List (Table A) -> Effect DbError Unit
 runMigrations = tables => database.runMigrations tables
+
+runMigrationsOn : DbConnection -> List (Table A) -> Effect DbError Unit
+runMigrationsOn = conn tables => database.runMigrationsOn conn tables
 
 collectSql : List MigrationStep -> List Text
 collectSql = steps => steps match
@@ -111,14 +153,27 @@ runMigrationSql : List MigrationStep -> Effect DbError Unit
 runMigrationSql = steps =>
   database.runMigrationSql (collectSql steps)
 
+runMigrationSqlOn : DbConnection -> List MigrationStep -> Effect DbError Unit
+runMigrationSqlOn = conn steps =>
+  database.runMigrationSqlOn conn (collectSql steps)
+
 beginTx : Effect DbError Unit
 beginTx = database.beginTx Unit
+
+beginTxOn : DbConnection -> Effect DbError Unit
+beginTxOn = conn => database.beginTxOn conn
 
 commitTx : Effect DbError Unit
 commitTx = database.commitTx Unit
 
+commitTxOn : DbConnection -> Effect DbError Unit
+commitTxOn = conn => database.commitTxOn conn
+
 rollbackTx : Effect DbError Unit
 rollbackTx = database.rollbackTx Unit
+
+rollbackTxOn : DbConnection -> Effect DbError Unit
+rollbackTxOn = conn => database.rollbackTxOn conn
 
 inTransaction : Effect DbError A -> Effect DbError A
 inTransaction = action => do Effect {
@@ -135,14 +190,38 @@ inTransaction = action => do Effect {
       }
 }
 
+inTransactionOn : DbConnection -> Effect DbError A -> Effect DbError A
+inTransactionOn = conn action => do Effect {
+  beginTxOn conn
+  result <- attempt action
+  result match
+    | Ok value => do Effect {
+        commitTxOn conn
+        pure value
+      }
+    | Err err => do Effect {
+        rollbackTxOn conn
+        fail err
+      }
+}
+
 savepoint : SavepointName -> Effect DbError Unit
 savepoint = name => database.savepoint name
+
+savepointOn : DbConnection -> SavepointName -> Effect DbError Unit
+savepointOn = conn name => database.savepointOn conn name
 
 releaseSavepoint : SavepointName -> Effect DbError Unit
 releaseSavepoint = name => database.releaseSavepoint name
 
+releaseSavepointOn : DbConnection -> SavepointName -> Effect DbError Unit
+releaseSavepointOn = conn name => database.releaseSavepointOn conn name
+
 rollbackToSavepoint : SavepointName -> Effect DbError Unit
 rollbackToSavepoint = name => database.rollbackToSavepoint name
+
+rollbackToSavepointOn : DbConnection -> SavepointName -> Effect DbError Unit
+rollbackToSavepointOn = conn name => database.rollbackToSavepointOn conn name
 
 chunkDeltas : Int -> List (Delta A) -> List (List (Delta A))
 chunkDeltas = size deltas =>

@@ -28,6 +28,14 @@ It provides **Fibers** (lightweight threads) and **Channels** for safe communica
 
 Code reference: `crates/aivi/src/stdlib/concurrency.rs` — `aivi.concurrency` exports `par`, `scope`, `make`, `send`, `recv`, `close`
 
+## Capability mapping (Phase 1 surface)
+
+- `sleep` → `clock.sleep`
+- wall-clock reads such as `Instant.now` (see `aivi.chronos.instant`) → `clock.now`
+- `scope`, `spawn`, `race`, `select`, explicit task cancellation → `cancellation.propagate`
+- `timeoutWith` → `clock.sleep` + `cancellation.propagate`
+- ordinary resource cleanup remains cancellation-protected without requiring an explicit `cancellation.mask` clause
+
 ## Channels
 
 Channels provide a mechanism for synchronization and communication between concurrent fibers.

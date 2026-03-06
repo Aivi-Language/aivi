@@ -322,6 +322,7 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::HttpServer(_) => "HttpServer",
         Value::WebSocket(_) => "WebSocket",
         Value::ImapSession(_) => "ImapSession",
+        Value::DbConnection(_) => "DbConnection",
     }
 }
 

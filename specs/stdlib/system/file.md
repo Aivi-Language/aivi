@@ -21,6 +21,14 @@ Direct file access is dangerous (locks, missing files, permissions). AIVI wraps 
 
 <<< ../../snippets/from_md/stdlib/system/file/types.aivi{aivi}
 
+## Capability mapping (Phase 1 surface)
+
+- `open`, `readAll`, `readText`, `readJson`, `readCsv`, `readBytes`, `readLines`, `imageMeta`, `image` → `file.read`
+- `exists`, `stat`, `listDir` → `file.metadata`
+- `writeText`, `writeBytes`, `appendText`, `delete`, `mkdir`, `mkdirAll`, `rmdir` → `file.write`
+- `copy`, `move` → `file.read` + `file.write`
+- the broader `file` family shorthand covers all file capabilities
+
 ## Resource Operations
 
 For more control or large files, use the resource-based API.

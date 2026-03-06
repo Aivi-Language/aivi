@@ -2,29 +2,31 @@
 module integrationTests.stdlib.aivi.database.pool.tests
 
 use aivi
+use aivi.file as File
 use aivi.testing
-use aivi.database.pool
+use aivi.database as Db
+use aivi.database.pool as Pool
 
 @test "pool error construct"
 poolError_construct = do Effect {
-  e1 = Timeout
-  e2 = Closed
-  e3 = HealthFailed
-  e4 = InvalidConfig "bad"
-  assertEq e1 Timeout
-  assertEq e2 Closed
-  assertEq e3 HealthFailed
+  e1 = Pool.Timeout
+  e2 = Pool.Closed
+  e3 = Pool.HealthFailed
+  e4 = Pool.InvalidConfig "bad"
+  assertEq e1 Pool.Timeout
+  assertEq e2 Pool.Closed
+  assertEq e3 Pool.HealthFailed
   e4 match
-    | InvalidConfig msg => assertEq msg "bad"
-    | _                 => assert False
+    | InvalidConfig reason => assertEq reason "bad"
+    | _                    => assert False
 }
 
 @test "queue policy construct"
 queuePolicy_construct = do Effect {
-  q1 = Fifo
-  q2 = Lifo
-  assertEq q1 Fifo
-  assertEq q2 Lifo
+  q1 = Pool.Fifo
+  q2 = Pool.Lifo
+  assertEq q1 Pool.Fifo
+  assertEq q2 Pool.Lifo
 }
 
 @test "pool stats type"
@@ -33,4 +35,60 @@ poolStats_type = do Effect {
   assertEq s.size 4
   assertEq s.idle 2
   assert (s.closed == False)
+}
+
+poolPath = "/tmp/aivi-db-pool-transaction.sqlite"
+
+users : Table { id: Int, name: Text }
+users = Db.table "pool_users"[]
+
+poolCfg : Pool.Config DbConnection
+poolCfg = {
+  maxSize: 2
+  minIdle: 0
+  acquireTimeout: { millis: 1000 }
+  idleTimeout: None
+  maxLifetime: None
+  healthCheckInterval: None
+  backoffPolicy: Pool.Fixed ({ millis: 25 })
+  queuePolicy: Pool.Fifo
+  acquire: _ => Db.connect { driver: Sqlite, url: poolPath }
+  release: Db.close
+  healthCheck: _ => pure True
+}
+
+expectPoolOk : Result PoolError A -> Effect Text A
+expectPoolOk = result => result match
+  | Ok value => pure value
+  | Err _    => fail "expected pool result ok"
+
+@test "pooled connections isolate uncommitted writes"
+pooled_connections_isolate_uncommitted_writes = do Effect {
+  _    <- File.delete poolPath
+  init <- Db.connect { driver: Sqlite, url: poolPath }
+  _    <- Db.runMigrationsOn init [users]
+  _    <- Db.close init
+
+  poolResult <- Pool.create poolCfg
+  pool       <- expectPoolOk poolResult
+
+  outerResult <- Pool.withConn pool (conn1 => do Effect {
+      _           <- Db.beginTxOn conn1
+      _           <- Db.applyDeltaOn conn1 users (Db.ins { id: 1, name: "Outer" })
+
+      beforeResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
+      rowsBefore   <- expectPoolOk beforeResult
+      assertEq (List.length rowsBefore) 0
+
+      _ <- Db.commitTxOn conn1
+
+      afterResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
+      rowsAfter   <- expectPoolOk afterResult
+      pure rowsAfter
+  })
+
+  rows <- expectPoolOk outerResult
+  _    <- Pool.close pool
+  _    <- File.delete poolPath
+  assertEq (List.length rows) 1
 }

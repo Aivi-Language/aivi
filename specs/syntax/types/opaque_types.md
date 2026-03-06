@@ -160,7 +160,7 @@ error[E4101]: cannot access field `host` on opaque type `Url` outside module `ai
 
 ## Existing handle-based opaque types
 
-AIVI already has types that are opaque at the runtime level — `FileHandle`, `Listener`, `Connection`, `Server`, `WebSocket`, etc. These are declared without a right-hand side:
+AIVI already has types that are opaque at the runtime level — `FileHandle`, `Listener`, `Connection`, `DbConnection`, `Server`, `WebSocket`, etc. These are declared without a right-hand side:
 
 ```aivi
 FileHandle

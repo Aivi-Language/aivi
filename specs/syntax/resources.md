@@ -16,6 +16,15 @@ Resource E A
 
 A `Resource` is **not** a handle itself   it is a *recipe* for obtaining one. The handle only exists within the scope where the resource is acquired.
 
+### Capability requirements (Phase 1 surface)
+
+`Resource` carries the same optional capability clause as `Effect`:
+
+```aivi
+openStore : DbConfig -> Resource DbError DbConn with { db.connect }
+```
+
+The clause covers acquisition and cleanup as well as any helper effects used inside the resource block. Resource safety itself does not need extra user syntax: cleanup remains cancellation-protected automatically. See [Capabilities](capabilities.md) for the shared vocabulary.
 
 ## 15.2 Defining Resources
 
@@ -65,7 +74,7 @@ Resources interact with the cancellation system (see [Concurrency](/stdlib/syste
 - Cancellation is checked at `<-` bind points. If a task is cancelled before a resource is acquired, acquisition does not run.
 - If cancellation arrives **during use** of an acquired resource, cleanup still runs. The resource block's finalizer is registered at acquisition time and cannot be skipped.
 - Cleanup code itself runs in a **cancellation-protected** context   it will not be interrupted by a second cancellation signal.
-
+- This automatic masking is structural. Authors do **not** add `cancellation.mask` merely to obtain ordinary finalizer guarantees; explicit cancellation-control APIs are the place where `cancellation.*` appears in public signatures.
 
 ## 15.6 Composability and Nesting
 

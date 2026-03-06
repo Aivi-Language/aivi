@@ -44,6 +44,9 @@ Driver =
 // - Postgresql/Mysql: url is a connection string.
 DbConfig = { driver: Driver, url: Text }
 
+// Explicit connections are opaque runtime handles.
+DbConnection
+
 // Deltas express insert/update/delete/upsert
 Delta A =
   | Insert A

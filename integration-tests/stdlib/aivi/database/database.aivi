@@ -115,6 +115,78 @@ migration_sql_helper = do Effect {
   assert True
 }
 
+@test "explicit connection commit and rollback"
+explicit_connection_commit_and_rollback = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "users"[]
+  _      <- runMigrationsOn conn [users0]
+  _      <- beginTxOn conn
+  users1 <- applyDeltaOn conn users0 (ins { id: 1, name: "Alice" })
+  _      <- commitTxOn conn
+  rows1  <- loadOn conn users1
+  assertEq (List.length rows1) 1
+
+  _      <- beginTxOn conn
+  _      <- applyDeltaOn conn users1 (ins { id: 2, name: "Bob" })
+  _      <- rollbackTxOn conn
+  rows2  <- loadOn conn users0
+  _      <- close conn
+  assertEq (List.length rows2) 1
+}
+
+@test "savepoint rollback on explicit connection"
+savepoint_rollback_on_explicit_connection = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "savepoint_users"[]
+  _      <- runMigrationsOn conn [users0]
+  _      <- beginTxOn conn
+  users1 <- applyDeltaOn conn users0 (ins { id: 1, name: "Alpha" })
+  _      <- savepointOn conn "after_first"
+  _      <- applyDeltaOn conn users1 (ins { id: 2, name: "Beta" })
+  _      <- rollbackToSavepointOn conn "after_first"
+  _      <- commitTxOn conn
+  rows   <- loadOn conn users0
+  _      <- close conn
+  assertEq (List.length rows) 1
+}
+
+@test "inTransactionOn rolls back on failure"
+inTransactionOn_rolls_back_on_failure = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  users0  = table "tx_users"[]
+  _       <- runMigrationsOn conn [users0]
+  result  <- attempt (inTransactionOn conn (do Effect {
+    _ <- applyDeltaOn conn users0 (ins { id: 1, name: "Tx" })
+    fail "boom"
+  }))
+  rows    <- loadOn conn users0
+  _       <- close conn
+  assertEq (List.length rows) 0
+  result match
+    | Err err => assertEq err "boom"
+    | Ok _    => assert False
+}
+
+@test "invalid savepoint name fails"
+invalid_savepoint_name_fails = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  result <- attempt (savepointOn conn "not-ok!")
+  _      <- close conn
+  result match
+    | Err _ => assert True
+    | Ok _  => assert False
+}
+
+@test "commit without transaction fails"
+commit_without_transaction_fails = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  result <- attempt (commitTxOn conn)
+  _      <- close conn
+  result match
+    | Err _ => assert True
+    | Ok _  => assert False
+}
+
 @test "delta chunk helper"
 delta_chunk_helper = do Effect {
   deltas =

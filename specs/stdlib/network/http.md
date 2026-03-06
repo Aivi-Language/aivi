@@ -8,6 +8,10 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 
 <<< ../../snippets/from_md/stdlib/network/http/http_domain.aivi{aivi}
 
+## Capability mapping (Phase 1 surface)
+
+`get`, `post`, and `fetch` require `network.http` (or the broader `network` family shorthand). The `rest` source facade maps to the same capability family.
+
 ## Functions
 
 | Function | Explanation |
