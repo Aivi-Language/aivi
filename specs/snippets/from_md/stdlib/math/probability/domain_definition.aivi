@@ -1,0 +1,5 @@
+domain Probability over Probability = {
+  (+): Probability -> Probability -> Probability
+  (-): Probability -> Probability -> Probability
+  (*): Probability -> Probability -> Probability
+}

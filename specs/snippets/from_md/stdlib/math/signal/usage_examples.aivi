@@ -1,0 +1,6 @@
+use aivi.signal
+use aivi.number.complex
+
+audio = { samples: [0.0, 0.5, 1.0, 0.5], rate: 44100.0 }
+spectrum = fft audio
+recon = ifft spectrum
