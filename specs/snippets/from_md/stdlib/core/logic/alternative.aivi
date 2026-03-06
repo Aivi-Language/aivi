@@ -1,6 +1,6 @@
 use aivi.logic
 
-class Alternative (F A) = given (A: Any), Applicative {
+class Alternative (F A) = Applicative {
   alt: F A -> F A
 }
 

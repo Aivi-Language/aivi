@@ -1,6 +1,6 @@
 use aivi.logic
 
-class Filterable (F A) = given (A: Any), Functor {
+class Filterable (F A) = Functor {
   filter: (A -> Bool) -> F A
 }
 

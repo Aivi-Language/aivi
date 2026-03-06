@@ -1,15 +1,15 @@
 // Filtering
 
-class Filterable (F A) = given (A: Any), Functor {
+class Filterable (F A) = Functor {
   filter: (A -> Bool) -> F A
 }
 
 // Alt/Alternative/Plus
 
-class Alternative (F A) = given (A: Any), Applicative {
+class Alternative (F A) = Applicative {
   alt: F A -> F A
 }
 
-class Plus (F A) = given (A: Any), Alternative {
+class Plus (F A) = Alternative {
   zero: F A
 }
