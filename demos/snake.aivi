@@ -9,23 +9,26 @@ export main
 
 // Types
 
-domain Pixel over (Int, Int) = {
-  Delta = Int Int
-  
-  (+): Pixel -> Pixel -> Pixel
-  (+) = (x1, y1) (x2, y2) => (x1 + x2, y1 + y2)
-
-  1x = 1 0
-  1y = 0 1
-}
-
 Direction = Up | Down | Left | Right
+
+Pixel = (Int, Int)
+
+domain Pixels over Pixel = {
+  Delta = Direction
+
+  (+) : Pixel -> Direction -> Pixel
+  (+) = (x, y) dir => dir match
+    | Up    => (x, y - 1)
+    | Down  => (x, y + 1)
+    | Left  => (x - 1, y)
+    | Right => (x + 1, y)
+}
 
 Msg = Arrow Direction | Restart
 
 State = {
-  snake: List (Int, Int)
-  food: (Int, Int)
+  snake: List Pixel
+  food: Pixel
   dir: Direction
   score: Int
   seed: Int
@@ -43,7 +46,7 @@ joinTexts =
   | []           => ""
   | [x, ...rest] => "{x}{joinTexts rest}"
 
-contains : (Int, Int) -> List (Int, Int) -> Bool
+contains : Pixel -> List Pixel -> Bool
 contains = pos xs => find (_ == pos) xs match
   | Some _ => True
   | None   => False
@@ -72,16 +75,9 @@ opposite =
   | Left  => Right
   | Right => Left
 
-delta : Direction -> (Int, Int)
-delta =
-  | Up    => (0, -1)
-  | Down  => (0, 1)
-  | Left  => (-1, 0)
-  | Right => (1, 0)
-
 // Pseudo-random food placement (LCG)
- 
-placeFood : Int -> List (Int, Int) -> ((Int, Int), Int)
+
+placeFood : Int -> List Pixel -> (Pixel, Int)
 placeFood = seed snake => {
   s   = (seed * 37 + 13) % (gridW * gridH)
   idx = if s < 0 then 0 - s else s
@@ -104,21 +100,18 @@ step = newDir state => {
     | [h, ...rest] => (h, rest)
 
     (head, body) = pair
-    (hx, hy)     = head
-    (dx, dy)     = delta dir
-
-    nx   = hx + dx
-    ny   = hy + dy
-    dead = nx < 0 || nx >= gridW || ny < 0 || ny >= gridH || contains (nx, ny) body
+    newHead      = head + dir
+    (nx, ny)     = newHead
+    dead         = nx < 0 || nx >= gridW || ny < 0 || ny >= gridH || contains newHead body
 
     if dead
       then state <| { gameOver: True }
       else {
-        ateFood = (nx, ny) == state.food
+        ateFood = newHead == state.food
 
         newSnake = if ateFood
-          then [(nx, ny), ...state.snake]
-          else [(nx, ny), ...dropLast state.snake]
+          then [newHead, ...state.snake]
+          else [newHead, ...dropLast state.snake]
 
         foodResult = if ateFood
           then placeFood (state.seed + state.score * 7 + nx * 13 + ny) newSnake
@@ -206,5 +199,3 @@ main = gtkApp {
   toMsg: toMsg
   update: update
 }
-
-

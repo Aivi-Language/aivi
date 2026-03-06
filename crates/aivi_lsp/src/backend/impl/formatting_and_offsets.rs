@@ -3,8 +3,11 @@ impl Backend {
         text: &str,
         options: aivi::FormatOptions,
     ) -> Vec<TextEdit> {
-        let range = Self::full_document_range(text);
         let formatted = aivi::format_text_with_options(text, options);
+        if formatted == text {
+            return vec![];
+        }
+        let range = Self::full_document_range(text);
         vec![TextEdit::new(range, formatted)]
     }
 
