@@ -374,12 +374,9 @@ fn cmd_project_build_cranelift(
     release: bool,
 ) -> Result<(), AiviError> {
     let source_target = resolve_project_source_target(root, &cfg.project.entry);
-    let target_str = source_target
-        .to_str()
-        .ok_or_else(|| AiviError::InvalidPath(source_target.display().to_string()))?;
 
     let (program, cg_types, monomorph_plan, surface_modules) =
-        aivi::desugar_target_with_cg_types_and_surface(target_str)?;
+        aivi::desugar_target_with_cg_types_and_surface(&source_target)?;
 
     // 1a. Collect crate-native bindings and validate dependencies
     let crate_natives =
@@ -511,18 +508,13 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
         ));
     }
     let source_target = resolve_project_source_target(&root, &cfg.project.entry);
-    let target = source_target
-        .to_str()
-        .ok_or_else(|| AiviError::InvalidPath(source_target.display().to_string()))?;
     if proj_args.watch {
-        let watch_dir = source_target
-            .parent()
-            .unwrap_or(&root)
-            .to_path_buf();
-        return watch::run_watch(target, &watch_dir);
+        let watch_dir = resolve_project_source_root(&root, &cfg.project.entry);
+        return watch::run_watch(&source_target, &watch_dir);
     }
     aivi::run_pre_run_scripts(&cfg.scripts)?;
-    let (program, cg_types, monomorph_plan, surface_modules) = aivi::desugar_target_with_cg_types_and_surface(target)?;
+    let (program, cg_types, monomorph_plan, surface_modules) =
+        aivi::desugar_target_with_cg_types_and_surface(&source_target)?;
     aivi::run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
 }
 
@@ -610,16 +602,28 @@ fn resolve_project_entry(project_root: &Path, entry: &str) -> PathBuf {
     }
 }
 
+fn resolve_project_source_root(project_root: &Path, entry: &str) -> PathBuf {
+    let entry_path = resolve_project_entry(project_root, entry);
+    entry_path.parent().unwrap_or(project_root).to_path_buf()
+}
+
+fn recursive_target_arg(path: &Path) -> String {
+    let base = path.to_string_lossy().replace('\\', "/");
+    if base == "." {
+        "./...".to_string()
+    } else if base.ends_with('/') {
+        format!("{base}...")
+    } else {
+        format!("{base}/...")
+    }
+}
+
 /// Derives the recursive source target from the project entry.
 ///
 /// For an entry like `src/main.aivi` the source directory is `<root>/src/...`
 /// so that all `.aivi` files under `src/` are included in compilation.
-fn resolve_project_source_target(project_root: &Path, entry: &str) -> PathBuf {
-    let entry_path = resolve_project_entry(project_root, entry);
-    let src_dir = entry_path
-        .parent()
-        .unwrap_or(project_root);
-    src_dir.join("...")
+fn resolve_project_source_target(project_root: &Path, entry: &str) -> String {
+    recursive_target_arg(&resolve_project_source_root(project_root, entry))
 }
 
 #[cfg(test)]
@@ -656,5 +660,13 @@ mod tests {
         )
         .expect("feature resolution");
         assert_eq!(feature, Some("aivi/gtk4-libadwaita"));
+    }
+
+    #[test]
+    fn recursive_target_arg_normalizes_backslashes() {
+        assert_eq!(
+            recursive_target_arg(Path::new(r"C:\demo\src")),
+            "C:/demo/src/..."
+        );
     }
 }
