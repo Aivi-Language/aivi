@@ -117,6 +117,7 @@ pub(crate) enum Value {
     Stream(Arc<StreamHandle>),
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
+    ImapSession(aivi_email::ImapSession),
 }
 
 impl std::fmt::Debug for Value {
@@ -160,6 +161,7 @@ impl std::fmt::Debug for Value {
             Value::Stream(_) => write!(f, "Stream(<stream>)"),
             Value::HttpServer(_) => write!(f, "HttpServer(<server>)"),
             Value::WebSocket(_) => write!(f, "WebSocket(<socket>)"),
+            Value::ImapSession(_) => write!(f, "ImapSession(<session>)"),
         }
     }
 }

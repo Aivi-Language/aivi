@@ -247,6 +247,7 @@ pub(crate) fn format_value(value: &Value) -> String {
         Value::Stream(_) => "<stream>".to_string(),
         Value::HttpServer(_) => "<http-server>".to_string(),
         Value::WebSocket(_) => "<websocket>".to_string(),
+        Value::ImapSession(_) => "<imap-session>".to_string(),
     }
 }
 

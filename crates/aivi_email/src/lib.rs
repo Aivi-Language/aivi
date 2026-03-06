@@ -1,5 +1,7 @@
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("{message}")]
@@ -8,25 +10,36 @@ pub struct AiviEmailError {
 }
 
 #[derive(Debug, Clone)]
+pub enum EmailAuth {
+    Password(String),
+    OAuth2(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct ImapConfig {
     pub host: String,
     pub user: String,
-    pub password: String,
+    pub auth: EmailAuth,
     pub mailbox: String,
     pub filter: String,
     pub limit: i64,
     pub port: i64,
+    pub starttls: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct SmtpConfig {
     pub host: String,
     pub user: String,
-    pub password: String,
+    pub auth: EmailAuth,
     pub from: String,
-    pub to: String,
+    pub to: Vec<String>,
+    pub cc: Vec<String>,
+    pub bcc: Vec<String>,
     pub subject: String,
     pub body: String,
+    pub port: i64,
+    pub starttls: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -45,17 +58,75 @@ pub struct MimePart {
     pub body: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct MailboxInfo {
+    pub name: String,
+    pub separator: Option<String>,
+    pub attributes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdleResult {
+    TimedOut,
+    MailboxChanged,
+}
+
+// XOAUTH2 authenticator for the imap crate
+struct XOAuth2 {
+    token_response: Vec<u8>,
+}
+
+impl XOAuth2 {
+    fn new(user: &str, access_token: &str) -> Self {
+        // XOAUTH2 format: "user=<user>\x01auth=Bearer <token>\x01\x01"
+        let auth_string = format!("user={}\x01auth=Bearer {}\x01\x01", user, access_token);
+        Self {
+            token_response: auth_string.into_bytes(),
+        }
+    }
+}
+
+impl imap::Authenticator for XOAuth2 {
+    type Response = Vec<u8>;
+    fn process(&self, _challenge: &[u8]) -> Self::Response {
+        self.token_response.clone()
+    }
+}
+
+pub type ImapSession = Arc<Mutex<imap::Session<Box<dyn imap::ImapConnection>>>>;
+
+fn connect_and_auth(
+    config: &ImapConfig,
+) -> Result<imap::Session<Box<dyn imap::ImapConnection>>, AiviEmailError> {
+    let mut builder = imap::ClientBuilder::new(&config.host, config.port as u16);
+    if config.starttls {
+        builder = builder.mode(imap::ConnectionMode::StartTls);
+    }
+    let client = builder.connect().map_err(|err| AiviEmailError {
+        message: format!("email.imap transport error: {err}"),
+    })?;
+
+    match &config.auth {
+        EmailAuth::Password(password) => {
+            client
+                .login(&config.user, password)
+                .map_err(|(err, _)| AiviEmailError {
+                    message: format!("email.imap auth error: {err}"),
+                })
+        }
+        EmailAuth::OAuth2(token) => {
+            let auth = XOAuth2::new(&config.user, token);
+            client
+                .authenticate("XOAUTH2", &auth)
+                .map_err(|(err, _)| AiviEmailError {
+                    message: format!("email.imap OAuth2 auth error: {err}"),
+                })
+        }
+    }
+}
+
 pub fn load_imap_messages(config: ImapConfig) -> Result<Vec<EmailMessage>, AiviEmailError> {
-    let client = imap::ClientBuilder::new(&config.host, config.port as u16)
-        .connect()
-        .map_err(|err| AiviEmailError {
-            message: format!("email.imap transport error: {err}"),
-        })?;
-    let mut session = client
-        .login(config.user, config.password)
-        .map_err(|(err, _)| AiviEmailError {
-            message: format!("email.imap auth error: {err}"),
-        })?;
+    let mut session = connect_and_auth(&config)?;
 
     session
         .select(&config.mailbox)
@@ -112,28 +183,344 @@ pub fn load_imap_messages(config: ImapConfig) -> Result<Vec<EmailMessage>, AiviE
     Ok(out)
 }
 
+// --- Session-based API ---
+
+pub fn imap_open(config: &ImapConfig) -> Result<ImapSession, AiviEmailError> {
+    let session = connect_and_auth(config)?;
+    Ok(Arc::new(Mutex::new(session)))
+}
+
+pub fn imap_close(session: &ImapSession) -> Result<(), AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    s.logout().map_err(|err| AiviEmailError {
+        message: format!("email.imap logout error: {err}"),
+    })?;
+    Ok(())
+}
+
+pub fn imap_select(mailbox: &str, session: &ImapSession) -> Result<MailboxInfo, AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let mb = s.select(mailbox).map_err(|err| AiviEmailError {
+        message: format!("email.imapSelect error: {err}"),
+    })?;
+    Ok(MailboxInfo {
+        name: mailbox.to_string(),
+        separator: None,
+        attributes: mb.flags.iter().map(|f| format!("{f}")).collect(),
+    })
+}
+
+pub fn imap_examine(mailbox: &str, session: &ImapSession) -> Result<MailboxInfo, AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let mb = s.examine(mailbox).map_err(|err| AiviEmailError {
+        message: format!("email.imapExamine error: {err}"),
+    })?;
+    Ok(MailboxInfo {
+        name: mailbox.to_string(),
+        separator: None,
+        attributes: mb.flags.iter().map(|f| format!("{f}")).collect(),
+    })
+}
+
+pub fn imap_search(query: &str, session: &ImapSession) -> Result<Vec<u32>, AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let ids = s.uid_search(query).map_err(|err| AiviEmailError {
+        message: format!("email.imapSearch error: {err}"),
+    })?;
+    let mut uids: Vec<u32> = ids.into_iter().collect();
+    uids.sort_unstable();
+    Ok(uids)
+}
+
+pub fn imap_fetch(
+    uids: &[u32],
+    session: &ImapSession,
+) -> Result<Vec<EmailMessage>, AiviEmailError> {
+    if uids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let uid_set = uids
+        .iter()
+        .map(|u| u.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let fetches = s
+        .uid_fetch(uid_set, "UID RFC822")
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapFetch error: {err}"),
+        })?;
+    let mut out = Vec::new();
+    for msg in fetches.iter() {
+        let Some(raw) = msg.body() else {
+            continue;
+        };
+        let parsed = mailparse::parse_mail(raw).map_err(|err| AiviEmailError {
+            message: format!("email.imapFetch decode error: {err}"),
+        })?;
+        out.push(EmailMessage {
+            uid: msg.uid,
+            subject: header_value(&parsed, "Subject"),
+            from: header_value(&parsed, "From"),
+            to: header_value(&parsed, "To"),
+            date: header_value(&parsed, "Date"),
+            body: parsed.get_body().unwrap_or_default(),
+        });
+    }
+    Ok(out)
+}
+
+pub fn imap_set_flags(
+    uids: &[u32],
+    flags: &[String],
+    session: &ImapSession,
+) -> Result<(), AiviEmailError> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let uid_set = uid_set_string(uids);
+    let flag_str = flags.join(" ");
+    s.uid_store(&uid_set, format!("FLAGS ({flag_str})"))
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapSetFlags error: {err}"),
+        })?;
+    Ok(())
+}
+
+pub fn imap_add_flags(
+    uids: &[u32],
+    flags: &[String],
+    session: &ImapSession,
+) -> Result<(), AiviEmailError> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let uid_set = uid_set_string(uids);
+    let flag_str = flags.join(" ");
+    s.uid_store(&uid_set, format!("+FLAGS ({flag_str})"))
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapAddFlags error: {err}"),
+        })?;
+    Ok(())
+}
+
+pub fn imap_remove_flags(
+    uids: &[u32],
+    flags: &[String],
+    session: &ImapSession,
+) -> Result<(), AiviEmailError> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let uid_set = uid_set_string(uids);
+    let flag_str = flags.join(" ");
+    s.uid_store(&uid_set, format!("-FLAGS ({flag_str})"))
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapRemoveFlags error: {err}"),
+        })?;
+    Ok(())
+}
+
+pub fn imap_expunge(session: &ImapSession) -> Result<(), AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    s.expunge().map_err(|err| AiviEmailError {
+        message: format!("email.imapExpunge error: {err}"),
+    })?;
+    Ok(())
+}
+
+pub fn imap_copy(uids: &[u32], mailbox: &str, session: &ImapSession) -> Result<(), AiviEmailError> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let uid_set = uid_set_string(uids);
+    s.uid_copy(&uid_set, mailbox)
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapCopy error: {err}"),
+        })?;
+    Ok(())
+}
+
+pub fn imap_move(uids: &[u32], mailbox: &str, session: &ImapSession) -> Result<(), AiviEmailError> {
+    if uids.is_empty() {
+        return Ok(());
+    }
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let uid_set = uid_set_string(uids);
+    s.uid_mv(&uid_set, mailbox).map_err(|err| AiviEmailError {
+        message: format!("email.imapMove error: {err}"),
+    })?;
+    Ok(())
+}
+
+pub fn imap_list_mailboxes(session: &ImapSession) -> Result<Vec<MailboxInfo>, AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let names = s.list(Some(""), Some("*")).map_err(|err| AiviEmailError {
+        message: format!("email.imapListMailboxes error: {err}"),
+    })?;
+    let mut out = Vec::new();
+    for name in names.iter() {
+        out.push(MailboxInfo {
+            name: name.name().to_string(),
+            separator: name.delimiter().map(|c| c.to_string()),
+            attributes: name.attributes().iter().map(|a| format!("{a:?}")).collect(),
+        });
+    }
+    Ok(out)
+}
+
+pub fn imap_create_mailbox(name: &str, session: &ImapSession) -> Result<(), AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    s.create(name).map_err(|err| AiviEmailError {
+        message: format!("email.imapCreateMailbox error: {err}"),
+    })?;
+    Ok(())
+}
+
+pub fn imap_delete_mailbox(name: &str, session: &ImapSession) -> Result<(), AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    s.delete(name).map_err(|err| AiviEmailError {
+        message: format!("email.imapDeleteMailbox error: {err}"),
+    })?;
+    Ok(())
+}
+
+pub fn imap_rename_mailbox(
+    from: &str,
+    to: &str,
+    session: &ImapSession,
+) -> Result<(), AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    s.rename(from, to).map_err(|err| AiviEmailError {
+        message: format!("email.imapRenameMailbox error: {err}"),
+    })?;
+    Ok(())
+}
+
+pub fn imap_append(
+    mailbox: &str,
+    content: &str,
+    session: &ImapSession,
+) -> Result<(), AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    s.append(mailbox, content.as_bytes())
+        .finish()
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapAppend error: {err}"),
+        })?;
+    Ok(())
+}
+
+pub fn imap_idle(timeout_secs: u64, session: &ImapSession) -> Result<IdleResult, AiviEmailError> {
+    let mut s = session.lock().map_err(|e| AiviEmailError {
+        message: format!("email.imap lock error: {e}"),
+    })?;
+    let mut idle = s.idle();
+    idle.timeout(Duration::from_secs(timeout_secs));
+    let outcome = idle
+        .wait_while(|_response| {
+            // Return false to stop waiting on any server response
+            false
+        })
+        .map_err(|err| AiviEmailError {
+            message: format!("email.imapIdle error: {err}"),
+        })?;
+    match outcome {
+        imap::extensions::idle::WaitOutcome::TimedOut => Ok(IdleResult::TimedOut),
+        imap::extensions::idle::WaitOutcome::MailboxChanged => Ok(IdleResult::MailboxChanged),
+    }
+}
+
 pub fn send_smtp_message(config: SmtpConfig) -> Result<(), AiviEmailError> {
-    let email = Message::builder()
-        .from(config.from.parse().map_err(|e| AiviEmailError {
-            message: format!("Invalid from address: {e}"),
-        })?)
-        .to(config.to.parse().map_err(|e| AiviEmailError {
-            message: format!("Invalid to address: {e}"),
-        })?)
+    let mut builder = Message::builder().from(config.from.parse().map_err(|e| AiviEmailError {
+        message: format!("Invalid from address: {e}"),
+    })?);
+
+    for addr in &config.to {
+        builder = builder.to(addr.parse().map_err(|e| AiviEmailError {
+            message: format!("Invalid to address '{addr}': {e}"),
+        })?);
+    }
+    for addr in &config.cc {
+        builder = builder.cc(addr.parse().map_err(|e| AiviEmailError {
+            message: format!("Invalid cc address '{addr}': {e}"),
+        })?);
+    }
+    for addr in &config.bcc {
+        builder = builder.bcc(addr.parse().map_err(|e| AiviEmailError {
+            message: format!("Invalid bcc address '{addr}': {e}"),
+        })?);
+    }
+
+    let email = builder
         .subject(config.subject)
         .body(config.body)
         .map_err(|e| AiviEmailError {
             message: format!("Failed to build email: {e}"),
         })?;
 
-    let creds = Credentials::new(config.user, config.password);
+    let creds = match &config.auth {
+        EmailAuth::Password(password) => Credentials::new(config.user.clone(), password.clone()),
+        EmailAuth::OAuth2(token) => {
+            // lettre doesn't natively support XOAUTH2, use the token as password
+            // with the access_token mechanism
+            Credentials::new(config.user.clone(), token.clone())
+        }
+    };
 
-    let mailer = SmtpTransport::relay(&config.host)
-        .map_err(|e| AiviEmailError {
-            message: format!("Invalid SMTP host: {e}"),
-        })?
-        .credentials(creds)
-        .build();
+    let mailer = if config.starttls {
+        SmtpTransport::starttls_relay(&config.host)
+            .map_err(|e| AiviEmailError {
+                message: format!("Invalid SMTP host: {e}"),
+            })?
+            .port(config.port as u16)
+            .credentials(creds)
+            .build()
+    } else {
+        SmtpTransport::relay(&config.host)
+            .map_err(|e| AiviEmailError {
+                message: format!("Invalid SMTP host: {e}"),
+            })?
+            .port(config.port as u16)
+            .credentials(creds)
+            .build()
+    };
 
     mailer.send(&email).map_err(|e| AiviEmailError {
         message: format!("SMTP send failed: {e}"),
@@ -171,4 +558,11 @@ fn header_value(parsed: &mailparse::ParsedMail<'_>, name: &str) -> Option<String
         .iter()
         .find(|h| h.get_key_ref().eq_ignore_ascii_case(name))
         .map(|h| h.get_value())
+}
+
+fn uid_set_string(uids: &[u32]) -> String {
+    uids.iter()
+        .map(|u| u.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
 }
