@@ -52,7 +52,6 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "traverse",
     "bimap",
     "promap",
-    "each",
     "assertEq",
     "__assertSnapshot",
     "__asGenerator",
