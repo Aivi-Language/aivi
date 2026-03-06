@@ -55,7 +55,7 @@ fetchUsersWithMock =
   mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
   in do Effect {
     users <- fetchUsers
-    _ <- assertEq (List.length users) 1
+    _ <- assertEq (length users) 1
     users match
       | [u, ..._] => assertEq u.name "Ada"
       | []        => fail "expected one mocked user"
