@@ -6,5 +6,5 @@ eval =
   | Mul a b => eval a * eval b
 
 // (2 + 3) * 4 = 20
-expr = Mul (Add (Num 2) (Num 3)) (Num 4)
+expr   = Mul (Add (Num 2) (Num 3)) (Num 4)
 result = eval expr

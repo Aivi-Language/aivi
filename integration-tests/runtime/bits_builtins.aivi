@@ -30,9 +30,9 @@ fromIntLarge = do Effect {
 
 @test "fromBytes and toBytes roundtrip"
 fromToBytes = do Effect {
-  b = fromInt 42
+  b     = fromInt 42
   bytes = toBytes b
-  b2 = fromBytes bytes
+  b2    = fromBytes bytes
   assertEq (toInt b2) 42
 }
 
@@ -55,8 +55,8 @@ onesTest = do Effect {
 
 @test "and operation"
 andTest = do Effect {
-  a = fromInt 240
-  b = fromInt 170
+  a      = fromInt 240
+  b      = fromInt 170
   result = and a b
   assertEq (toInt result) 160
 }
@@ -65,8 +65,8 @@ andTest = do Effect {
 
 @test "or operation"
 orTest = do Effect {
-  a = fromInt 240
-  b = fromInt 15
+  a      = fromInt 240
+  b      = fromInt 15
   result = or a b
   assertEq (toInt result) 255
 }
@@ -75,8 +75,8 @@ orTest = do Effect {
 
 @test "xor operation"
 xorTest = do Effect {
-  a = fromInt 240
-  b = fromInt 170
+  a      = fromInt 240
+  b      = fromInt 170
   result = xor a b
   assertEq (toInt result) 90
 }
@@ -94,14 +94,14 @@ complementTest = do Effect {
 
 @test "shiftLeft"
 shiftLeftTest = do Effect {
-  b = fromInt 1
+  b      = fromInt 1
   result = shiftLeft 3 b
   assertEq (toInt result) 8
 }
 
 @test "shiftRight"
 shiftRightTest = do Effect {
-  b = fromInt 8
+  b      = fromInt 8
   result = shiftRight 3 b
   assertEq (toInt result) 1
 }
@@ -117,14 +117,14 @@ getBitTest = do Effect {
 
 @test "set bit"
 setBitTest = do Effect {
-  b = fromInt 0
+  b  = fromInt 0
   b2 = set 3 b
   assertEq (get 3 b2) True
 }
 
 @test "clear bit"
 clearBitTest = do Effect {
-  b = fromInt 255
+  b  = fromInt 255
   b2 = clear 56 b
   assertEq (get 56 b2) False
   assertEq (get 57 b2) True
@@ -132,7 +132,7 @@ clearBitTest = do Effect {
 
 @test "toggle bit"
 toggleBitTest = do Effect {
-  b = fromInt 0
+  b  = fromInt 0
   b2 = toggle 5 b
   assertEq (get 5 b2) True
   b3 = toggle 5 b2
@@ -187,16 +187,16 @@ streamBasic = do Effect {
 
 @test "streamRead success"
 streamReadOk = do Effect {
-  b = fromInt 65535
-  s = streamFromBits b
+  b      = fromInt 65535
+  s      = streamFromBits b
   result = streamRead 1 s
   assertEq (isOk result) True
 }
 
 @test "streamRead past end"
 streamReadPastEnd = do Effect {
-  b = fromInt 255
-  s = streamFromBits b
+  b      = fromInt 255
+  s      = streamFromBits b
   result = streamRead 10 s
   assertEq (isErr result) True
 }
@@ -211,16 +211,16 @@ streamPeekNoAdvance = do Effect {
 
 @test "streamPeek past end"
 streamPeekPastEnd = do Effect {
-  b = fromInt 255
-  s = streamFromBits b
+  b      = fromInt 255
+  s      = streamFromBits b
   result = streamPeek 10 s
   assertEq (isErr result) True
 }
 
 @test "streamSkip advances offset"
 streamSkipOk = do Effect {
-  b = fromInt 65535
-  s = streamFromBits b
+  b      = fromInt 65535
+  s      = streamFromBits b
   result = streamSkip 1 s
   result match
     | Ok s2 => assertEq (streamRemaining s2) 7
@@ -229,8 +229,8 @@ streamSkipOk = do Effect {
 
 @test "streamSkip past end"
 streamSkipPastEnd = do Effect {
-  b = fromInt 255
-  s = streamFromBits b
+  b      = fromInt 255
+  s      = streamFromBits b
   result = streamSkip 10 s
   assertEq (isErr result) True
 }

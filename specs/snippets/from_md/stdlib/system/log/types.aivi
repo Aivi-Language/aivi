@@ -1,2 +1,2 @@
-Level = Trace | Debug | Info | Warn | Error
+Level   = Trace | Debug | Info | Warn | Error
 Context = List (Text, Text)

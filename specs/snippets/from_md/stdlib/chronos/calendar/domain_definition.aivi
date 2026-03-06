@@ -13,8 +13,8 @@ domain Calendar over Date = {
   (-) = date delta => date + (negateDelta delta)
 
   // Delta literals
-  1d = Day 1
-  1m = Month 1
-  1y = Year 1
+  1d  = Day 1
+  1m  = Month 1
+  1y  = Year 1
   eom = End
 }

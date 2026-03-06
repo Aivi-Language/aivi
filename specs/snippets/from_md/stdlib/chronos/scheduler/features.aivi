@@ -15,4 +15,4 @@ lease = {
 }
 
 isLeaseFresh = leaseActive 2026-01-01T00:00:30Z lease
-nextRetry = retryDelay backoff 3 900
+nextRetry    = retryDelay backoff 3 900

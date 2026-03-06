@@ -1,5 +1,5 @@
 // map: transform the success value
-doubled = Ok 5 |> map (_ * 2)    // Ok 10
+doubled = Ok 5 |> map (_ * 2) // Ok 10
 
 // mapErr: transform the error value
 wrapped = Err "not found" |> mapErr (e => { code: 404, message: e })

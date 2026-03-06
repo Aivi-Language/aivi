@@ -2,6 +2,6 @@ use aivi.net.streams
 use aivi.logic
 
 // fromList creates an in-memory stream for testing and pure pipelines.
-nums = fromList [1, 2, 3, 4, 5]
-evens = filter (x => x % 2 == 0) nums
+nums    = fromList [1, 2, 3, 4, 5]
+evens   = filter (x => x % 2 == 0) nums
 doubled = map (x => x * 2) evens

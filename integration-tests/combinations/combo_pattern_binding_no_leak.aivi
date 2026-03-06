@@ -37,7 +37,7 @@ armBindingsIndependent = do Effect {
 
 @test "pattern binding from non-matching arm does not pollute result"
 patternBindingNotLeaking = do Effect {
-  s = Active 99
+  s     = Active 99
   label = s match
     | Inactive  => "off"
     | Active n  => if n > 0 then "active-positive" else "active-zero"
@@ -70,7 +70,7 @@ onlyMatchedArmValueExits = do Effect {
 
 @test "result must be explicitly rebound after match to be used"
 explicitRebindAfterMatch = do Effect {
-  s = Active 5
+  s     = Active 5
   score = s match
     | Inactive  => 0
     | Active n  => n * 10
@@ -83,7 +83,7 @@ explicitRebindAfterMatch = do Effect {
 
 @test "multiple arms binding same name do not interfere"
 multipleArmsBindSameName = do Effect {
-  inputs = [Active 2, Inactive, Pending 5, Active 3]
+  inputs    = [Active 2, Inactive, Pending 5, Active 3]
   sumActive = inputs |> foldl (acc => s => s match
     | Active n  => acc + n
     | Inactive  => acc

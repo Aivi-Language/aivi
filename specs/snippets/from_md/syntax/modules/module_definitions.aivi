@@ -2,8 +2,8 @@ module my.utility.math
 export add, subtract
 export pi
 
-pi = 3.14159
-add = a b => a + b
+pi       = 3.14159
+add      = a b => a + b
 subtract = a b => a - b
 
 // Internal helper, not exported

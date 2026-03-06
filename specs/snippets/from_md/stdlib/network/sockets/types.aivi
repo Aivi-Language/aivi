@@ -1,2 +1,2 @@
-Address = { host: Text, port: Int }
+Address     = { host: Text, port: Int }
 SocketError = { message: Text }

@@ -6,7 +6,7 @@ class Plus (F A) = Alternative {
 
 // zero is the identity for alt
 z : Option Int
-z = zero    // None
+z = zero // None
 
 zs : List Int
-zs = zero   // []
+zs = zero // []

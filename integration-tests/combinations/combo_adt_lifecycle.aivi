@@ -10,7 +10,7 @@ use aivi.generator
 
 // --- ADT definitions ---
 
-Tree = Leaf Int | Branch Tree Tree
+Tree  = Leaf Int | Branch Tree Tree
 Shape = Circle Int | Rect Int Int | Point
 
 // --- ADT constructed in do, matched in lambda ---
@@ -61,7 +61,7 @@ recursiveTreeTraversal = do Effect {
 
 @test "ADT payload captured in closure used after match"
 adtPayloadClosureCapture = do Effect {
-  shape = Rect 3 7
+  shape     = Rect 3 7
   transform = shape match
     | Rect w h => n => n + w * h
     | _        => n => n
@@ -79,7 +79,7 @@ personScore = p => p match
 
 @test "ADT with record payloads in nested match and do"
 adtRecordPayloads = do Effect {
-  people = [Student { name: "Alice", score: 95 }, Teacher { name: "Bob", rating: 5 }]
+  people  = [Student { name: "Alice", score: 95 }, Teacher { name: "Bob", rating: 5 }]
   results = mapList personScore people
   assertEq results [95, 50]
 }
@@ -97,7 +97,7 @@ mapTree = f t => t match
 @test "map over tree with closure capturing outer"
 mapTreeWithClosure = do Effect {
   factor = 10
-  tree = Branch (Leaf 1) (Leaf 2)
+  tree   = Branch (Leaf 1) (Leaf 2)
   mapped = mapTree (n => n * factor) tree
   assertEq (sumTree mapped) 30
 }

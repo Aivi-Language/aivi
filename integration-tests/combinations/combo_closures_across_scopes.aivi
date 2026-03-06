@@ -52,8 +52,8 @@ Wrapper = Val Int | Empty
 @test "match arm closure captures pattern var and outer scope"
 matchArmClosure = do Effect {
   multiplier = 10
-  shape = Val 3
-  areaFn = shape match
+  shape      = Val 3
+  areaFn     = shape match
     | Val n => x => n * n * multiplier + x
     | Empty => x => x
     assertEq (areaFn 0) 90
@@ -66,7 +66,7 @@ matchArmClosure = do Effect {
 generatorTwoScopes = do Effect {
   factor = 3
   offset = 1
-  g = generate {
+  g      = generate {
     n <- [1, 2, 3]
     yield (n * factor + offset)
   }

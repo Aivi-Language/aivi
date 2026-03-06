@@ -11,7 +11,7 @@ use aivi.generator
 // --- Pipe chain in do Effect ---
 
 double = x => x * 2
-inc = x => x + 1
+inc    = x => x + 1
 
 @test "pipe chain in do Effect"
 pipeInDoEffect = do Effect {
@@ -34,10 +34,10 @@ pipeInGenerator = do Effect {
 
 @test "patch operator in closure capturing record"
 patchInClosure = do Effect {
-  base = { x: 1, y: 2, name: "test" }
+  base    = { x: 1, y: 2, name: "test" }
   updateY = newY => base <| { y: newY }
-  r1 = updateY 10
-  r2 = updateY 20
+  r1      = updateY 10
+  r2      = updateY 20
   assertEq r1.y 10
   assertEq r2.y 20
   assertEq r1.x 1
@@ -49,7 +49,7 @@ patchInClosure = do Effect {
 @test "patch operator used in loop accumulation"
 patchInLoop = do Effect {
   addValue = r v => r <| { total: r.total + v }
-  result = applyValues { total: 0 } [10, 20, 30]
+  result   = applyValues { total: 0 } [10, 20, 30]
   assertEq result.total 60
 }
 

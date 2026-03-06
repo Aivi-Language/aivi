@@ -40,9 +40,9 @@ treeDepthTest = do Effect {
 @test "triple nested closure"
 tripleNested = do Effect {
   make = a => b => c => d => a + b + c + d
-  f = make 1
-  g = f 2
-  h = g 3
+  f    = make 1
+  g    = f 2
+  h    = g 3
   assertEq (h 4) 10
 }
 
@@ -56,7 +56,7 @@ closureCapturesComputed = do Effect {
 @test "closure in list operations"
 closureInList = do Effect {
   multiplier = 3
-  result = map (x => x * multiplier) [1, 2, 3, 4]
+  result     = map (x => x * multiplier) [1, 2, 3, 4]
   assertEq result [3, 6, 9, 12]
 }
 
@@ -104,7 +104,7 @@ complexRecord = do Effect {
 
 @test "record patch with nested update"
 recordPatchNested = do Effect {
-  config = { debug: False, maxRetries: 3, label: "prod" }
+  config  = { debug: False, maxRetries: 3, label: "prod" }
   updated = config <| { debug: True, label: "dev" }
   assertEq updated.debug True
   assertEq updated.maxRetries 3
@@ -114,7 +114,7 @@ recordPatchNested = do Effect {
 @test "record as function return"
 recordAsReturn = do Effect {
   mkPair = a b => { first: a, second: b }
-  pair = mkPair 1 "hello"
+  pair   = mkPair 1 "hello"
   assertEq pair.first 1
   assertEq pair.second "hello"
 }
@@ -207,7 +207,7 @@ doListComprehension = do Effect {
 
 @test "string concatenation"
 stringConcat = do Effect {
-  name = "world"
+  name     = "world"
   greeting = "hello " ++ name
   assertEq greeting "hello world"
 }
@@ -216,7 +216,7 @@ stringConcat = do Effect {
 
 @test "tuple destructuring"
 tupleDestructure = do Effect {
-  pair = (1, "hello")
+  pair   = (1, "hello")
   (a, b) = pair
   assertEq a 1
   assertEq b "hello"
@@ -224,7 +224,7 @@ tupleDestructure = do Effect {
 
 @test "triple tuple"
 tripleTuple = do Effect {
-  t = (1, 2, 3)
+  t         = (1, 2, 3)
   (a, b, c) = t
   assertEq (a + b + c) 6
 }

@@ -22,7 +22,7 @@ machine SpreadCounter =
 @test "spread copies all fields from base"
 spreadCopiesAllFields = do Effect {
   base = { x: 1, y: 2, z: 3 }
-  r = { ...base, y: 99 }
+  r    = { ...base, y: 99 }
   assertEq r.x 1
   assertEq r.y 99
   assertEq r.z 3
@@ -78,7 +78,7 @@ multipleOverridesOnce = do Effect {
 
 @test "patch operator evaluates base once"
 patchOnce = do Effect {
-  base = { score: 0, name: "Alice", active: True }
+  base    = { score: 0, name: "Alice", active: True }
   patched = base <| { score: _ + 10, active: False }
   assertEq patched.score 10
   assertEq patched.name "Alice"

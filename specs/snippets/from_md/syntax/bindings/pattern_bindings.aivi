@@ -1,3 +1,3 @@
-{ name } = user // Shorthand for { name: name }
+{ name }    = user // Shorthand for { name: name }
 { name: n } = user // Rename binding to 'n'
-[h, ...t] = xs // List destructuring
+[h, ...t]   = xs // List destructuring

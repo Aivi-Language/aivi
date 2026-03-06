@@ -1,5 +1,5 @@
-isOk (Ok 42)        // True
-isOk (Err "fail")   // False
+isOk (Ok 42) // True
+isOk (Err "fail") // False
 
-isErr (Ok 42)       // False
-isErr (Err "fail")  // True
+isErr (Ok 42) // False
+isErr (Err "fail") // True

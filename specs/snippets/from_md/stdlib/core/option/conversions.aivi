@@ -1,6 +1,6 @@
 // toList: convert to a list
-items = Some "hello" |> toList    // ["hello"]
-empty = None |> toList            // []
+items = Some "hello" |> toList // ["hello"]
+empty = None |> toList // []
 
 // toResult: convert to Result with error
 result = maybeUser |> toResult "User not found"

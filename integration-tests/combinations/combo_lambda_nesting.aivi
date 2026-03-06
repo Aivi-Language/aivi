@@ -48,7 +48,7 @@ lambdaInDoResult = do Effect {
 
 @test "lambda in do List captures outer"
 lambdaInDoList = do Effect {
-  scale = 10
+  scale  = 10
   result = do List {
     x <- [1, 2, 3]
     multiply = n => n * scale
@@ -62,7 +62,7 @@ lambdaInDoList = do Effect {
 @test "lambda in generator captures outer"
 lambdaInGenerator = do Effect {
   base = 100
-  g = generate {
+  g    = generate {
     n <- [1, 2, 3]
     addBase = x => x + base
     yield (addBase n)
@@ -77,7 +77,7 @@ lambdaFromMatchArm = do Effect {
   makeAdder = opt => opt match
     | Some n => x => x + n
     | None   => x => x
-    adder = makeAdder (Some 10)
+    adder    = makeAdder (Some 10)
     identity = makeAdder None
     assertEq (adder 5) 15
     assertEq (identity 5) 5
@@ -105,7 +105,7 @@ applyAll = fns arg => fns match
 
 @test "list of closures each captures creation-time value"
 closureListCapture = do Effect {
-  fns = buildAdders 3
+  fns     = buildAdders 3
   results = applyAll fns 10
   assertEq results [13, 12, 11]
 }

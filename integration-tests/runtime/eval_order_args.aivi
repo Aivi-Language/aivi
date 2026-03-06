@@ -48,7 +48,7 @@ argPositionFour = do Effect {
 
 @test "computed args at correct positions"
 computedArgPositions = do Effect {
-  base = 10
+  base   = 10
   result = toList3 (base + 1) (base * 2) (base * 3)
   assertEq result [11, 20, 30]
 }
@@ -63,8 +63,8 @@ subArgOrder = do Effect {
 
 @test "nested computed args respect position"
 nestedComputedArgs = do Effect {
-  f = x => x * 2
-  g = x => x + 100
+  f      = x => x * 2
+  g      = x => x + 100
   result = toList3 (f 1) (g 2) (f (g 3))
   assertEq result [2, 102, 206]
 }
@@ -116,7 +116,7 @@ partialAppFixesFirst = do Effect {
 @test "chained partial application preserves order"
 chainedPartial = do Effect {
   mkList = a b c => [a, b, c]
-  f = mkList 1
-  g = f 2
+  f      = mkList 1
+  g      = f 2
   assertEq (g 3) [1, 2, 3]
 }

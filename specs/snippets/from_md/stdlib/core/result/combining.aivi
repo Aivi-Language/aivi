@@ -1,8 +1,8 @@
 // flatten: remove nesting
 nested = Ok (Ok 42)
-flat = flatten nested    // Ok 42
+flat   = flatten nested // Ok 42
 
 // orElse: fallback chain
-primary = Err "failed"
+primary   = Err "failed"
 secondary = Ok "backup"
-value = primary |> orElse secondary    // Ok "backup"
+value     = primary |> orElse secondary // Ok "backup"

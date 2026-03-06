@@ -8,4 +8,4 @@ rotate2 = ~mat[0.0-1.0
 ]
 
 combined = multiply2 scale2 rotate2
-unit = combined * 0.5
+unit     = combined * 0.5

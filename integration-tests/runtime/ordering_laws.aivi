@@ -42,8 +42,8 @@ intTrichotomy = do Effect {
   a = 3
   b = 7
   // exactly one of the three holds
-  lessThan = a < b
-  equalTo = a == b
+  lessThan    = a < b
+  equalTo     = a == b
   greaterThan = a > b
   assertEq lessThan True
   assertEq equalTo False
@@ -111,10 +111,10 @@ floatTransitive = do Effect {
 
 @test "float trichotomy for finite values"
 floatTrichotomy = do Effect {
-  a = 1.5
-  b = 2.5
-  lessThan = a < b
-  equalTo = a == b
+  a           = 1.5
+  b           = 2.5
+  lessThan    = a < b
+  equalTo     = a == b
   greaterThan = a > b
   assertEq lessThan True
   assertEq equalTo False
@@ -140,11 +140,11 @@ floatNegOrder = do Effect {
 @test "larger range of int values order correctly"
 intLargeRange = do Effect {
   vals = [(-100), (-50), 0, 50, 100]
-  a = (-100)
-  b = (-50)
-  c = 0
-  d = 50
-  e = 100
+  a    = (-100)
+  b    = (-50)
+  c    = 0
+  d    = 50
+  e    = 100
   // spot-check full chain
   assert (a < b)
   assert (b < c)

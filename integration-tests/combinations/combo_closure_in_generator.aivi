@@ -39,7 +39,7 @@ closuresCalledAfterGeneration = do Effect {
 
 @test "closure captures both outer scope and iteration binding"
 closureCapturesOuterAndIter = do Effect {
-  base = 100
+  base     = 100
   closures = toList (generate {
       n <- [1, 2, 3]
       yield (x => base + n + x)
@@ -52,7 +52,7 @@ closureCapturesOuterAndIter = do Effect {
 
 @test "generator yields closures capturing tuple pattern binding"
 generatorAdtClosures = do Effect {
-  pairs = [(1, 10), (2, 20), (3, 30)]
+  pairs    = [(1, 10), (2, 20), (3, 30)]
   closures = toList (generate {
       p <- pairs
       yield (p match
@@ -73,7 +73,7 @@ closuresCalledOutOfOrder = do Effect {
   })
   // Verify each closure gives the correct result: independent captured values
   withFive = closures |> map (f => f 5)
-  withTen = closures |> map (f => f 10)
+  withTen  = closures |> map (f => f 10)
   assertEq withFive [5, 15, 25]
   assertEq withTen [0, 10, 20]
 }

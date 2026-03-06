@@ -19,7 +19,7 @@ use aivi.testing
 @test "max + 1 wraps to min (two's-complement)"
 overflowAdd = do Effect {
   // Both are local Int literals: JIT uses iadd which wraps.
-  maxVal = 9223372036854775807
+  maxVal  = 9223372036854775807
   wrapped = maxVal + 1
   // Derive i64::MIN without an out-of-range literal.
   minVal = 0-9223372036854775807-1
@@ -28,9 +28,9 @@ overflowAdd = do Effect {
 
 @test "min - 1 wraps to max (two's-complement)"
 overflowSub = do Effect {
-  minVal = 0-9223372036854775807-1
+  minVal  = 0-9223372036854775807-1
   wrapped = minVal - 1
-  maxVal = 9223372036854775807
+  maxVal  = 9223372036854775807
   assertEq wrapped maxVal
 }
 

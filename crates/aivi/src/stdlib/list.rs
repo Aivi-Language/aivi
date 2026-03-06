@@ -7,6 +7,7 @@ export empty, isEmpty, length, reverse
 export foldr, scanl
 export take, drop, takeWhile, dropWhile, partition, find, findMap
 export at, indexOf, zip, zipWith, unzip, intersperse, chunk, dedup, uniqueBy
+export any, all, elem, dropLast, last
 export traverse_, sequence_, mapM, mapM_, forM, forM_, forEachEffect
 
 use aivi
@@ -76,6 +77,21 @@ dedup = xs => List.dedup xs
 
 uniqueBy : (A -> B) -> List A -> List A
 uniqueBy = f xs => List.uniqueBy f xs
+
+any : (A -> Bool) -> List A -> Bool
+any = pred xs => List.any pred xs
+
+all : (A -> Bool) -> List A -> Bool
+all = pred xs => List.all pred xs
+
+elem : A -> List A -> Bool
+elem = needle xs => List.elem needle xs
+
+dropLast : List A -> List A
+dropLast = xs => List.dropLast xs
+
+last : List A -> Option A
+last = xs => List.last xs
 
 traverse_ : (A -> Effect E B) -> List A -> Effect E Unit
 traverse_ = f xs => xs match

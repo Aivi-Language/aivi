@@ -2,7 +2,7 @@ use aivi.crypto
 
 // Hashing
 digest = sha256 "hello world" // hex string
-tag = hmacSha256 myKey myMessage // keyed hash
+tag    = hmacSha256 myKey myMessage // keyed hash
 
 // Password handling
 hashed <- hashPassword "s3cret" // Argon2id PHC string

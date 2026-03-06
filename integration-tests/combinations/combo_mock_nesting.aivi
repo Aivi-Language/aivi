@@ -15,7 +15,7 @@ greeting = "Hello"
 
 @test "mock active in do Effect"
 mockInDoEffect =
-  mock greeting = "Hi"
+  mock greeting  = "Hi"
 in do Effect {
   assertEq greeting "Hi"
 }

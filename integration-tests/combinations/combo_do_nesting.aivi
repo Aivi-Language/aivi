@@ -11,7 +11,7 @@ use aivi.testing
 
 @test "do Option inside do Effect captures outer binding"
 doOptionInDoEffect = do Effect {
-  base = 100
+  base   = 100
   result = do Option {
     a <- Some 10
     Some (a + base)
@@ -64,7 +64,7 @@ threeNestedDoEffect = do Effect {
 @test "do Effect inside match arms uses pattern variables"
 doEffectInMatchArm = do Effect {
   base = 10
-  val = Some 5
+  val  = Some 5
   result <- val match
     | None   => pure 0
     | Some n => do Effect {
@@ -100,7 +100,7 @@ chainedDoOption = do Effect {
 @test "nested match with do Effect arms captures outer"
 nestedMatchDoEffectArms = do Effect {
   scale = 3
-  xs = [1, 2, 3]
+  xs    = [1, 2, 3]
   result <- xs match
     | []           => pure 0
     | [x, ...rest] => do Effect {

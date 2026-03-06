@@ -441,5 +441,70 @@ pub(super) fn build_list_record() -> Value {
         }),
     );
 
+    fields.insert(
+        "any".to_string(),
+        builtin("list.any", 2, |mut args, runtime| {
+            let items = expect_list(args.pop().unwrap(), "List.any")?;
+            let pred = expect_callable(args.pop().unwrap(), "List.any")?;
+            for item in items.iter().cloned() {
+                if expect_bool(runtime.apply(pred.clone(), item)?, "List.any")? {
+                    return Ok(Value::Bool(true));
+                }
+            }
+            Ok(Value::Bool(false))
+        }),
+    );
+
+    fields.insert(
+        "all".to_string(),
+        builtin("list.all", 2, |mut args, runtime| {
+            let items = expect_list(args.pop().unwrap(), "List.all")?;
+            let pred = expect_callable(args.pop().unwrap(), "List.all")?;
+            for item in items.iter().cloned() {
+                if !expect_bool(runtime.apply(pred.clone(), item)?, "List.all")? {
+                    return Ok(Value::Bool(false));
+                }
+            }
+            Ok(Value::Bool(true))
+        }),
+    );
+
+    fields.insert(
+        "dropLast".to_string(),
+        builtin("list.dropLast", 1, |mut args, _| {
+            let items = expect_list(args.pop().unwrap(), "List.dropLast")?;
+            if items.is_empty() {
+                return Ok(list_value(Vec::new()));
+            }
+            let out: Vec<Value> = items.iter().take(items.len() - 1).cloned().collect();
+            Ok(list_value(out))
+        }),
+    );
+
+    fields.insert(
+        "last".to_string(),
+        builtin("list.last", 1, |mut args, _| {
+            let items = expect_list(args.pop().unwrap(), "List.last")?;
+            match items.last() {
+                Some(v) => Ok(make_some(v.clone())),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+
+    fields.insert(
+        "elem".to_string(),
+        builtin("list.elem", 2, |mut args, _| {
+            let items = expect_list(args.pop().unwrap(), "List.elem")?;
+            let needle = args.pop().unwrap();
+            for item in items.iter() {
+                if values_equal(item, &needle) {
+                    return Ok(Value::Bool(true));
+                }
+            }
+            Ok(Value::Bool(false))
+        }),
+    );
+
     Value::Record(Arc::new(fields))
 }

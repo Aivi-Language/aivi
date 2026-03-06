@@ -20,7 +20,7 @@ moveBy =
 
 @test "multi-clause function returns different closures"
 multiClauseReturnsClosure = do Effect {
-  upFn = moveBy Up
+  upFn   = moveBy Up
   downFn = moveBy Down
   stayFn = moveBy Stay
   assertEq (upFn 10) 11

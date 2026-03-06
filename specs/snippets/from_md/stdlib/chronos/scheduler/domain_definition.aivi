@@ -11,4 +11,4 @@ planned = {
 }
 
 plannedKey = keyText planned
-terminal = isTerminal Succeeded
+terminal   = isTerminal Succeeded

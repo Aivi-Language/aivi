@@ -3,10 +3,10 @@ use aivi.result
 // Validation pipeline with error transformation
 validateUser = input => {
   parseJson input
-    |> mapErr (e => { field: "body", error: e })
-    |> flatMap validateSchema
-    |> flatMap checkPermissions
-    |> map normalizeData
+  |> mapErr (e => { field: "body", error: e })
+  |> flatMap validateSchema
+  |> flatMap checkPermissions
+  |> map normalizeData
 }
 
 // Usage with default

@@ -15,7 +15,7 @@ Val = Low Int | Mid Int | High Int
 @test "closure in guarded arm captures pattern binding"
 closureInGuardedArm = do Effect {
   val = Mid 21
-  fn = val match
+  fn  = val match
     | Low n when n < 10  => x => x + n
     | Mid n when n <= 50 => x => x * n
     | High n             => x => x - n
@@ -44,9 +44,9 @@ onlyMatchingArmCaptured = do Effect {
 
 @test "arm closure ignores outer n, uses pattern-bound n"
 armClosureUsesPatternN = do Effect {
-  n = 999
+  n   = 999
   val = Some 5
-  fn = val match
+  fn  = val match
     | None   => x => x + n
     | Some n => x => x + n
   // Some arm fired: fn captures n=5 from the pattern, not outer n=999

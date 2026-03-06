@@ -85,8 +85,8 @@ adtEq = do Effect {
 @test "equality is symmetric for integers"
 intSymmetry = do Effect {
   // if a == b then b == a
-  a = 42
-  b = 42
+  a    = 42
+  b    = 42
   aEqB = a == b
   bEqA = b == a
   assert aEqB

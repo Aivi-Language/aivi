@@ -58,8 +58,8 @@ matchReturnsClosure = do Effect {
 
 @test "match guards with closures capturing outer"
 matchGuardsClosure = do Effect {
-  limit = 50
-  isSmall = n => n < limit
+  limit    = 50
+  isSmall  = n => n < limit
   classify = n => n match
     | n when isSmall n => "small"
     | _                => "big"
@@ -88,7 +88,7 @@ matchReturnDoEffect = do Effect {
 @test "match arms return generators using pattern vars"
 matchReturnGenerator = do Effect {
   val = Some 3
-  g = val match
+  g   = val match
     | None   => generate { yield 0 }
     | Some n => generate {
         i <- [1, 2, 3]
@@ -101,7 +101,7 @@ matchReturnGenerator = do Effect {
 
 @test "ADT match in do block with field access"
 adtMatchInDoBlock = do Effect {
-  data = Some { name: "Alice", score: 95 }
+  data   = Some { name: "Alice", score: 95 }
   result = data match
     | Some r => r.score
     | None   => 0

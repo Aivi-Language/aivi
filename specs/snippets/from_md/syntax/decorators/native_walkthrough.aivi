@@ -3,10 +3,10 @@
 //   No body is needed — the compiler auto-generates the def.
 
 @native "uuid.v4"
-v4 : Effect Text Text
+v4: Effect Text Text
 
 @native "uuid.v5"
-v5 : Text -> Text -> Effect Text Text
+v5: Text -> Text -> Effect Text Text
 
 // Step 2 – Use it like any other AIVI function.
 //   The caller never sees the native machinery.

@@ -108,6 +108,10 @@ impl Runtime {
                     Value::Effect(e) => e.clone(),
                     Value::Source(s) => s.effect.clone(),
                     _ => {
+                        if std::env::var("AIVI_DEBUG_EFFECT").is_ok() {
+                            eprintln!("[DEBUG] run_effect_value: expected Effect, got {:?}", format_value(&value));
+                            eprintln!("[DEBUG] backtrace:\n{}", std::backtrace::Backtrace::force_capture());
+                        }
                         return Err(RuntimeError::TypeError {
                             context: "effect execution".to_string(),
                             expected: "Effect".to_string(),

@@ -7,6 +7,6 @@ domain Name over CarrierType = {
   (+) = carrier delta => ...
 
   // 3. Define literals
-  1d = Day 1
+  1d             = Day 1
   ~my_sigil(...) = ...
 }

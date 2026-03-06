@@ -5,8 +5,8 @@ class Filterable (F A) = Functor {
 }
 
 // Example: filter on List
-evens = filter (x => x % 2 == 0) [1, 2, 3, 4, 5]   // [2, 4]
+evens = filter (x => x % 2 == 0) [1, 2, 3, 4, 5] // [2, 4]
 
 // Example: filter on Option
-big = filter (x => x > 10) (Some 42)                 // Some 42
-gone = filter (x => x > 10) (Some 3)                 // None
+big  = filter (x => x > 10) (Some 42) // Some 42
+gone = filter (x => x > 10) (Some 3) // None
