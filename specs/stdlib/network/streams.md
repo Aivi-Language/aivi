@@ -32,3 +32,14 @@ The `Streams` domain provides stream-oriented utilities for processing inbound a
 | **flatMap** f stream<br><code>(A -> Stream B) -> Stream A -> Stream B</code> | Maps and flattens nested streams. |
 | **merge** left right<br><code>Stream A -> Stream A -> Stream A</code> | Interleaves events from both streams. |
 | **fold** f seed stream<br><code>(B -> A -> B) -> B -> Stream A -> Effect StreamError B</code> | Consumes stream into one value. |
+
+## HKT Instances
+
+`Stream A` implements the following type-class instances from `aivi.logic`:
+
+| Class | Method | Behaviour |
+| --- | --- | --- |
+| **Functor** | `map f stream` | Lazily transforms each item (returns a new `Stream B`). |
+| **Filterable** | `filter pred stream` | Lazily keeps items matching `pred` (returns a new `Stream A`). |
+
+> **Why no Foldable?** — `fold` consumes the stream and may perform I/O, so it returns `Effect StreamError B` rather than a pure `B`. This makes it incompatible with the pure `Foldable` class signature.

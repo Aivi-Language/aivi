@@ -366,6 +366,11 @@ All class methods from `aivi.logic` support both direct application and pipe syn
 `map f xs` and `xs |> map f` are equivalent. `use aivi.logic` brings all class methods
 into scope.
 
+**Bidirectional resolution of zero-argument members**: Class members that are values
+(e.g. `empty` from `Monoid`) resolve via expected type from context — a type annotation
+or function signature is enough. When ambiguous, use qualified forms: `List.empty`,
+`Map.empty`.
+
 ### Type class instance table
 
 | Type | Functor | Filterable | Foldable | Traversable | Monad | Semigroup | Monoid | Alternative | Plus |
@@ -376,6 +381,7 @@ into scope.
 | `Map K V` | ✓ | ✓ | ✓ | — | — | ✓ | ✓ | — | — |
 | `Generator A` | ✓ | ✓ | ✓ | — | — | — | — | — | — |
 | `Tree A` | ✓ | ✓ | ✓ | — | — | — | — | — | — |
+| `Stream A` | ✓ | ✓ | — | — | — | — | — | — | — |
 
 ### Type variable constraints
 

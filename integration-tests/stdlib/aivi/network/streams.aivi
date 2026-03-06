@@ -3,6 +3,7 @@ module integrationTests.stdlib.aivi.network.streams.tests
 
 use aivi
 use aivi.testing
+use aivi.logic
 use aivi.net.streams
 
 // -- Type construction --
@@ -186,4 +187,29 @@ takeAfterDrop = do Effect {
   taken = streams.take 3 rest
   result <- streams.fold (acc x => [...acc, x]) [] taken
   assertEq result [2, 3, 4]
+}
+
+// -- HKT class instances --
+
+@test "Functor map via class dispatch"
+functorMap = do Effect {
+  s = streams.fromList [10, 20, 30]
+  mapped = map (x => x + 1) s
+  result <- streams.fold (acc x => [...acc, x]) [] mapped
+  assertEq result [11, 21, 31]
+}
+
+@test "Filterable filter via class dispatch"
+filterableFilter = do Effect {
+  s = streams.fromList [1, 2, 3, 4, 5, 6]
+  filtered = filter (x => x > 3) s
+  result <- streams.fold (acc x => [...acc, x]) [] filtered
+  assertEq result [4, 5, 6]
+}
+
+@test "Functor then Filterable via class dispatch"
+functorThenFilterable = do Effect {
+  s = streams.fromList [1, 2, 3, 4, 5]
+  result <- streams.fold (acc x => [...acc, x]) [] (s |> map (x => x * 2) |> filter (x => x > 4))
+  assertEq result [6, 8, 10]
 }

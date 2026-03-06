@@ -481,4 +481,43 @@ impl TypeChecker {
         }
         self.checked_defs.insert(name);
     }
+
+    /// Find the body expression for a zero-arg class member by matching the
+    /// resolved type's constructor against instance parameters.
+    pub(super) fn find_instance_member_body(
+        &self,
+        method_name: &str,
+        resolved_type: &Type,
+    ) -> Option<Expr> {
+        let con_name = match resolved_type {
+            Type::Con(name, _) => name.as_str(),
+            _ => return None,
+        };
+
+        let classes = self.method_to_classes.get(method_name)?;
+        for class_name in classes {
+            for instance in self
+                .instances
+                .iter()
+                .filter(|i| i.class_name == *class_name)
+            {
+                let inst_con = instance
+                    .params
+                    .first()
+                    .and_then(type_expr_constructor_name);
+                if inst_con.as_deref() == Some(con_name) {
+                    return instance.member_bodies.get(method_name).cloned();
+                }
+            }
+        }
+        None
+    }
+}
+
+fn type_expr_constructor_name(te: &TypeExpr) -> Option<String> {
+    match te {
+        TypeExpr::Name(n) => Some(n.name.clone()),
+        TypeExpr::Apply { base, .. } => type_expr_constructor_name(base),
+        _ => None,
+    }
 }
