@@ -7,6 +7,8 @@ impl Runtime {
         let mut callables = Vec::new();
         let mut match_failures = 0;
         let mut last_error = None;
+        let saved_suppress = self.jit_suppress_warnings;
+        self.jit_suppress_warnings = true;
         for clause in clauses.into_iter() {
             let a = arg.clone();
             match self.apply(clause, a) {
@@ -19,6 +21,7 @@ impl Runtime {
                         // This ensures HKT dispatch is correct: e.g. `filter pred
                         // list` returns the filtered list rather than a generator
                         // closure produced by the Generator Filterable instance.
+                        self.jit_suppress_warnings = saved_suppress;
                         return Ok(value);
                     }
                 }
@@ -33,6 +36,7 @@ impl Runtime {
                 }
             }
         }
+        self.jit_suppress_warnings = saved_suppress;
         // No concrete result found. If there are callables (partial applications),
         // return them so the caller can continue applying arguments.
         if !callables.is_empty() {
