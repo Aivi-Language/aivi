@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -18,11 +18,11 @@ use tower_lsp::lsp_types::{
     FoldingRangeProviderCapability, GotoDefinitionParams, GotoDefinitionResponse, Hover,
     HoverParams, HoverProviderCapability, ImplementationProviderCapability, InitializeParams,
     InitializeResult, InitializedParams, InlayHint, InlayHintParams, InlayHintServerCapabilities,
-    Location, OneOf, ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams,
-    SelectionRangeProviderCapability, SemanticTokensFullOptions, SemanticTokensOptions,
-    SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities,
-    ServerCapabilities, SignatureHelp, SignatureHelpOptions, SignatureHelpParams,
-    SymbolInformation, TextDocumentPositionParams, TextDocumentSyncCapability,
+    Location, MessageType, OneOf, PrepareRenameResponse, ReferenceParams, RenameOptions,
+    RenameParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
+    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
+    SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp, SignatureHelpOptions,
+    SignatureHelpParams, SymbolInformation, TextDocumentPositionParams, TextDocumentSyncCapability,
     TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit, WorkspaceSymbolParams,
 };
 use tower_lsp::{LanguageServer, LspService, Server};
@@ -61,9 +61,110 @@ struct AiviConfig {
     strict: Option<AiviStrictConfig>,
 }
 
+static PANIC_HOOK_INSTALLED: Once = Once::new();
+
+impl Backend {
+    fn install_panic_hook(&self) {
+        let client = self.client.clone();
+        let runtime = tokio::runtime::Handle::current();
+        PANIC_HOOK_INSTALLED.call_once(move || {
+            let previous = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |panic_info| {
+                let message = Self::panic_telemetry_message(panic_info);
+                let client = client.clone();
+                std::mem::drop(runtime.spawn(async move {
+                    client.log_message(MessageType::ERROR, message).await;
+                }));
+                previous(panic_info);
+            }));
+        });
+    }
+
+    pub(crate) fn format_telemetry_message(
+        operation: &str,
+        elapsed: Duration,
+        detail: &str,
+    ) -> String {
+        if detail.is_empty() {
+            format!(
+                "[telemetry] {operation} duration_ms={}",
+                elapsed.as_millis()
+            )
+        } else {
+            format!(
+                "[telemetry] {operation} duration_ms={} {detail}",
+                elapsed.as_millis()
+            )
+        }
+    }
+
+    fn panic_telemetry_message(info: &std::panic::PanicHookInfo<'_>) -> String {
+        let payload = if let Some(message) = info.payload().downcast_ref::<&str>() {
+            (*message).to_string()
+        } else if let Some(message) = info.payload().downcast_ref::<String>() {
+            message.clone()
+        } else {
+            "non-string panic payload".to_string()
+        };
+        let location = info
+            .location()
+            .map(|location| {
+                format!(
+                    "{}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            })
+            .unwrap_or_else(|| "unknown location".to_string());
+        format!("[telemetry] panic event at {location}: {payload}")
+    }
+
+    async fn log_telemetry(&self, operation: &str, elapsed: Duration, detail: String) {
+        Self::log_telemetry_with_client(&self.client, operation, elapsed, detail).await;
+    }
+
+    async fn log_telemetry_with_client(
+        client: &tower_lsp::Client,
+        operation: &str,
+        elapsed: Duration,
+        detail: String,
+    ) {
+        client
+            .log_message(
+                MessageType::LOG,
+                Self::format_telemetry_message(operation, elapsed, &detail),
+            )
+            .await;
+    }
+
+    async fn log_join_error(&self, operation: &str, err: &tokio::task::JoinError) {
+        Self::log_join_error_with_client(&self.client, operation, err).await;
+    }
+
+    async fn log_join_error_with_client(
+        client: &tower_lsp::Client,
+        operation: &str,
+        err: &tokio::task::JoinError,
+    ) {
+        if err.is_cancelled() {
+            return;
+        }
+        let level = if err.is_panic() {
+            MessageType::ERROR
+        } else {
+            MessageType::WARNING
+        };
+        client
+            .log_message(level, format!("[telemetry] {operation} task failed: {err}"))
+            .await;
+    }
+}
+
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        self.install_panic_hook();
         let mut workspace_folders: Vec<std::path::PathBuf> = Vec::new();
         if let Some(folders) = params.workspace_folders.as_ref() {
             for folder in folders {
@@ -117,7 +218,10 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
                 references_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -232,6 +336,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         let version = params.text_document.version;
+        let uri_display = uri.to_string();
         self.update_document(uri.clone(), text.clone()).await;
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
         let (include_specs_snippets, strict, parse_diags, checkpoint) = {
@@ -249,7 +354,8 @@ impl LanguageServer for Backend {
             )
         };
         let uri2 = uri.clone();
-        let (diagnostics, new_checkpoint) = tokio::task::spawn_blocking(move || {
+        let diagnostics_started = Instant::now();
+        let (diagnostics, new_checkpoint) = match tokio::task::spawn_blocking(move || {
             let (cp, is_new) = match checkpoint {
                 Some(cp) => (cp, false),
                 None => {
@@ -269,11 +375,24 @@ impl LanguageServer for Backend {
             (diags, is_new.then_some(cp))
         })
         .await
-        .unwrap_or_default();
+        {
+            Ok(result) => result,
+            Err(err) => {
+                self.log_join_error("diagnostics.did_open", &err).await;
+                (Vec::new(), None)
+            }
+        };
         if let Some(cp) = new_checkpoint {
             let mut state = self.state.lock().await;
             state.typecheck_checkpoint.get_or_insert(cp);
         }
+        let diagnostic_count = diagnostics.len();
+        self.log_telemetry(
+            "diagnostics.did_open",
+            diagnostics_started.elapsed(),
+            format!("uri={uri_display} version={version} count={diagnostic_count}"),
+        )
+        .await;
         self.client
             .publish_diagnostics(uri, diagnostics, Some(version))
             .await;
@@ -324,6 +443,8 @@ impl LanguageServer for Backend {
             }
             v
         };
+        let diagnostics_started = Instant::now();
+        let uri_display = uri.to_string();
 
         tokio::time::sleep(Duration::from_millis(150)).await;
 
@@ -351,7 +472,7 @@ impl LanguageServer for Backend {
         let client = self.client.clone();
 
         let handle = tokio::spawn(async move {
-            let (diagnostics, new_checkpoint) = tokio::task::spawn_blocking(move || {
+            let (diagnostics, new_checkpoint) = match tokio::task::spawn_blocking(move || {
                 let (cp, is_new) = match checkpoint {
                     Some(cp) => (cp, false),
                     None => {
@@ -371,7 +492,15 @@ impl LanguageServer for Backend {
                 (diags, is_new.then_some(cp))
             })
             .await
-            .unwrap_or_default();
+            {
+                Ok(result) => result,
+                Err(err) => {
+                    Backend::log_join_error_with_client(&client, "diagnostics.did_change", &err)
+                        .await;
+                    (Vec::new(), None)
+                }
+            };
+            let diagnostic_count = diagnostics.len();
 
             let should_publish = {
                 let mut state = state_arc.lock().await;
@@ -381,6 +510,16 @@ impl LanguageServer for Backend {
                 state.pending_diagnostics = None;
                 state.diagnostics_version == current_version
             };
+
+            Backend::log_telemetry_with_client(
+                &client,
+                "diagnostics.did_change",
+                diagnostics_started.elapsed(),
+                format!(
+                    "uri={uri_display} version={version} count={diagnostic_count} published={should_publish}"
+                ),
+            )
+            .await;
 
             if should_publish {
                 client
@@ -736,6 +875,34 @@ impl LanguageServer for Backend {
         Ok(edit)
     }
 
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+        let Some(text) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(None);
+        };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let response = match tokio::task::spawn_blocking(move || {
+            Self::prepare_rename_with_workspace(&text, &uri2, position, &workspace)
+        })
+        .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                self.log_join_error("prepare_rename", &err).await;
+                None
+            }
+        };
+        Ok(response)
+    }
+
     async fn code_action(
         &self,
         params: CodeActionParams,
@@ -822,6 +989,7 @@ impl LanguageServer for Backend {
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
+        let uri_display = uri.to_string();
         let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
@@ -831,11 +999,25 @@ impl LanguageServer for Backend {
         let workspace = self.workspace_modules_for(&uri).await;
         let gtk_index = { Arc::clone(&self.state.lock().await.gtk_index) };
         let uri2 = uri.clone();
-        let items = tokio::task::spawn_blocking(move || {
+        let completion_started = Instant::now();
+        let items = match tokio::task::spawn_blocking(move || {
             Self::build_completion_items(&text, &uri2, position, &workspace, &gtk_index)
         })
         .await
-        .unwrap_or_default();
+        {
+            Ok(items) => items,
+            Err(err) => {
+                self.log_join_error("completion", &err).await;
+                Vec::new()
+            }
+        };
+        let item_count = items.len();
+        self.log_telemetry(
+            "completion",
+            completion_started.elapsed(),
+            format!("uri={uri_display} count={item_count}"),
+        )
+        .await;
         Ok(Some(CompletionResponse::Array(items)))
     }
 

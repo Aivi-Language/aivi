@@ -3,7 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use aivi::parse_modules;
-use tower_lsp::lsp_types::{Location, Position, TextEdit, Url, WorkspaceEdit};
+use tower_lsp::lsp_types::{
+    Location, Position, PrepareRenameResponse, TextEdit, Url, WorkspaceEdit,
+};
 
 use crate::backend::Backend;
 use crate::state::IndexedModule;
@@ -123,23 +125,9 @@ impl Backend {
         new_name: &str,
         workspace_modules: &HashMap<String, IndexedModule>,
     ) -> Option<WorkspaceEdit> {
-        let _ident = Self::extract_identifier(text, position)?;
-
-        if new_name.is_empty() || new_name.contains('.') {
-            return None;
-        }
-        let mut chars = new_name.chars();
-        let first = chars.next()?;
-        if !(first.is_ascii_alphabetic() || first == '_') {
-            return None;
-        }
-        if !chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
-            return None;
-        }
-
         let locations =
-            Self::build_references_with_workspace(text, uri, position, true, workspace_modules);
-        if locations.is_empty() {
+            Self::rename_locations_with_workspace(text, uri, position, workspace_modules)?;
+        if !Self::is_valid_rename_name(new_name) {
             return None;
         }
 
@@ -156,5 +144,48 @@ impl Backend {
             document_changes: None,
             change_annotations: None,
         })
+    }
+
+    pub(crate) fn prepare_rename_with_workspace(
+        text: &str,
+        uri: &Url,
+        position: Position,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Option<PrepareRenameResponse> {
+        let locations =
+            Self::rename_locations_with_workspace(text, uri, position, workspace_modules)?;
+        let range = locations.into_iter().find_map(|location| {
+            (location.uri == *uri && Self::range_contains_position(&location.range, position))
+                .then_some(location.range)
+        })?;
+        Some(PrepareRenameResponse::Range(range))
+    }
+
+    fn rename_locations_with_workspace(
+        text: &str,
+        uri: &Url,
+        position: Position,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Option<Vec<Location>> {
+        let _ident = Self::extract_identifier(text, position)?;
+        let locations =
+            Self::build_references_with_workspace(text, uri, position, true, workspace_modules);
+        if locations.is_empty() {
+            None
+        } else {
+            Some(locations)
+        }
+    }
+
+    fn is_valid_rename_name(new_name: &str) -> bool {
+        if new_name.is_empty() || new_name.contains('.') {
+            return false;
+        }
+        let mut chars = new_name.chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+        (first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
     }
 }

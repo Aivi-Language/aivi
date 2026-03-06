@@ -384,7 +384,7 @@ impl Backend {
     }
 
     /// Handle multi-line use statements where the cursor is on a continuation line:
-    /// ```
+    /// ```text
     /// use aivi.text (
     ///   length
     ///   |cursor

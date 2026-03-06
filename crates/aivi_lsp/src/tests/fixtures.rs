@@ -1,4 +1,3 @@
-
 fn sample_text() -> &'static str {
     r#"@no_prelude
 module examples.compiler.math
@@ -100,7 +99,13 @@ fn find_symbol_span(text: &str, name: &str) -> Span {
 fn completion_items_include_keywords_and_defs() {
     let text = sample_text();
     let uri = sample_uri();
-    let items = Backend::build_completion_items(text, &uri, Position::new(0, 0), &HashMap::new(), &GtkIndex::default());
+    let items = Backend::build_completion_items(
+        text,
+        &uri,
+        Position::new(0, 0),
+        &HashMap::new(),
+        &GtkIndex::default(),
+    );
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"module"));
     assert!(labels.contains(&"examples.compiler.math"));
@@ -134,10 +139,7 @@ fn examples_open_without_lsp_errors() {
     let mut files = Vec::new();
     collect_aivi_files(&examples_dir, &mut files);
     files.sort();
-    assert!(
-        !files.is_empty(),
-        "expected integration-tests/**/*.aivi"
-    );
+    assert!(!files.is_empty(), "expected integration-tests/**/*.aivi");
 
     // Build a workspace index from all example modules so `use ...` across examples resolves.
     let mut workspace = HashMap::new();
@@ -253,7 +255,8 @@ fn completion_after_use_suggests_modules() {
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi", "aivi.text"]);
     let position = position_after(text, "use aivi.t");
-    let items = Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
+    let items =
+        Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"aivi.text"));
 }
@@ -264,7 +267,8 @@ fn completion_inside_use_import_list_suggests_remaining_exports() {
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi.text"]);
     let position = position_after(text, "use aivi.text (length, isE");
-    let items = Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
+    let items =
+        Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(
         !labels.contains(&"length"),
@@ -282,7 +286,8 @@ fn completion_after_qualified_module_name_suggests_exports() {
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi.text"]);
     let position = position_after(text, "aivi.text.");
-    let items = Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
+    let items =
+        Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"length"));
     assert!(labels.contains(&"isEmpty"));
@@ -554,7 +559,11 @@ run = MyHeap.push 1 Heap.empty"#;
     let lib_path = PathBuf::from("lib.aivi");
     let (lib_modules, _) = parse_modules(&lib_path, lib_text);
     for module in &lib_modules {
-        eprintln!("module: {}, items: {}", module.name.name, module.items.len());
+        eprintln!(
+            "module: {}, items: {}",
+            module.name.name,
+            module.items.len()
+        );
         for item in module.items.iter() {
             if let ModuleItem::DomainDecl(d) = item {
                 eprintln!("  domain: {}, items: {}", d.name.name, d.items.len());
@@ -587,20 +596,26 @@ run = MyHeap.push 1 Heap.empty"#;
     let lib_hover_pos = position_for(lib_text, "push : a");
     let doc_index = DocIndex::default();
     let lib_hover = Backend::build_hover(lib_text, &lib_uri, lib_hover_pos, &doc_index);
-    eprintln!("lib hover: {:?}", lib_hover.as_ref().map(|h| match &h.contents {
-        HoverContents::Markup(m) => m.value.clone(),
-        _ => "not markup".to_string(),
-    }));
+    eprintln!(
+        "lib hover: {:?}",
+        lib_hover.as_ref().map(|h| match &h.contents {
+            HoverContents::Markup(m) => m.value.clone(),
+            _ => "not markup".to_string(),
+        })
+    );
 
     // Now test the workspace hover
     let position = position_for(app_text, "push 1");
     eprintln!("position: {:?}", position);
     let hover =
         Backend::build_hover_with_workspace(app_text, &app_uri, position, &workspace, &doc_index);
-    eprintln!("workspace hover: {:?}", hover.as_ref().map(|h| match &h.contents {
-        HoverContents::Markup(m) => m.value.clone(),
-        _ => "not markup".to_string(),
-    }));
+    eprintln!(
+        "workspace hover: {:?}",
+        hover.as_ref().map(|h| match &h.contents {
+            HoverContents::Markup(m) => m.value.clone(),
+            _ => "not markup".to_string(),
+        })
+    );
     assert!(
         hover.is_some(),
         "Should find hover for dotted domain member 'MyHeap.push'"
@@ -633,20 +648,15 @@ run = add 1 2"#;
     let workspace = workspace_with_stdlib(&["aivi", "aivi.prelude"]);
     let doc_index = DocIndex::default();
     let start = std::time::Instant::now();
-    let hover =
-        Backend::build_hover_with_workspace(text, &uri, position, &workspace, &doc_index)
-            .expect("hover found");
+    let hover = Backend::build_hover_with_workspace(text, &uri, position, &workspace, &doc_index)
+        .expect("hover found");
     let elapsed = start.elapsed();
     let HoverContents::Markup(markup) = hover.contents else {
         panic!("expected markup hover");
     };
     assert!(markup.value.contains("`add`"));
     // Hover should complete in well under 1 second (previously it could be 10s+)
-    assert!(
-        elapsed.as_secs() < 5,
-        "Hover took too long: {:?}",
-        elapsed
-    );
+    assert!(elapsed.as_secs() < 5, "Hover took too long: {:?}", elapsed);
 }
 
 #[test]
@@ -838,6 +848,92 @@ run = add 1 2"#;
         .values()
         .flatten()
         .all(|edit| edit.new_text == "sum"));
+}
+
+#[test]
+fn build_prepare_rename_returns_current_identifier_range() {
+    let math_text = r#"@no_prelude
+module examples.compiler.math
+export add
+add : Number -> Number -> Number
+add = x y => x + y"#;
+    let app_text = r#"@no_prelude
+module examples.compiler.app
+export run
+use examples.compiler.math (add)
+run = add 1 2"#;
+
+    let math_uri = Url::parse("file:///math.aivi").expect("valid uri");
+    let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
+
+    let mut workspace = HashMap::new();
+    let math_path = PathBuf::from("math.aivi");
+    let (math_modules, _) = parse_modules(&math_path, math_text);
+    for module in math_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: math_uri.clone(),
+                module,
+                text: Some(math_text.to_string()),
+            },
+        );
+    }
+    let app_path = PathBuf::from("app.aivi");
+    let (app_modules, _) = parse_modules(&app_path, app_text);
+    for module in app_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: app_uri.clone(),
+                module,
+                text: Some(app_text.to_string()),
+            },
+        );
+    }
+
+    let position = position_for(app_text, "add 1 2");
+    let response = Backend::prepare_rename_with_workspace(app_text, &app_uri, position, &workspace)
+        .expect("prepare rename");
+    let range = match response {
+        tower_lsp::lsp_types::PrepareRenameResponse::Range(range)
+        | tower_lsp::lsp_types::PrepareRenameResponse::RangeWithPlaceholder { range, .. } => range,
+        tower_lsp::lsp_types::PrepareRenameResponse::DefaultBehavior { .. } => {
+            panic!("expected explicit prepare rename range")
+        }
+    };
+    assert_eq!(range.start, position);
+    assert_eq!(
+        range.end,
+        Position::new(position.line, position.character + 3)
+    );
+}
+
+#[test]
+fn build_prepare_rename_returns_none_without_identifier() {
+    let text = r#"@no_prelude
+module examples.prepare.rename
+
+run = 42
+"#;
+    let uri = Url::parse("file:///prepare.aivi").expect("valid uri");
+    let path = PathBuf::from("prepare.aivi");
+    let (modules, _) = parse_modules(&path, text);
+    let mut workspace = HashMap::new();
+    for module in modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: uri.clone(),
+                module,
+                text: Some(text.to_string()),
+            },
+        );
+    }
+
+    let response =
+        Backend::prepare_rename_with_workspace(text, &uri, Position::new(2, 0), &workspace);
+    assert!(response.is_none(), "blank lines should not be renamable");
 }
 
 #[test]

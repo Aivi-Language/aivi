@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::time::Duration;
 use tower_lsp::lsp_types::{CompletionResponse, TextDocumentItem};
 
 #[test]
@@ -56,7 +57,13 @@ fn completion_handler_serializes_to_json() {
     };
 
     let position = position_after(&item.text, "add ");
-    let items = Backend::build_completion_items(&item.text, &item.uri, position, &HashMap::new(), &GtkIndex::default());
+    let items = Backend::build_completion_items(
+        &item.text,
+        &item.uri,
+        position,
+        &HashMap::new(),
+        &GtkIndex::default(),
+    );
     let response = CompletionResponse::Array(items);
 
     let json = serde_json::to_value(&response).expect("completion json");
@@ -120,10 +127,28 @@ fn completion_handler_handles_position_at_eof() {
     };
 
     let eof_position = Position::new(10, 100);
-    let items =
-        Backend::build_completion_items(&item.text, &item.uri, eof_position, &HashMap::new(), &GtkIndex::default());
+    let items = Backend::build_completion_items(
+        &item.text,
+        &item.uri,
+        eof_position,
+        &HashMap::new(),
+        &GtkIndex::default(),
+    );
     assert!(
         items.iter().any(|entry| entry.label == "add"),
         "expected completion to include local defs at EOF, got: {items:#?}"
+    );
+}
+
+#[test]
+fn telemetry_message_formats_operation_duration_and_detail() {
+    let message = Backend::format_telemetry_message(
+        "completion",
+        Duration::from_millis(12),
+        "uri=file:///test.aivi count=3",
+    );
+    assert_eq!(
+        message,
+        "[telemetry] completion duration_ms=12 uri=file:///test.aivi count=3"
     );
 }
