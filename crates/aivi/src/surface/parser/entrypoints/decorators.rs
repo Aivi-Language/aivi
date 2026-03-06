@@ -953,7 +953,7 @@ fn camel_to_snake(s: &str) -> String {
         if ch.is_uppercase() {
             if i > 0 {
                 let prev = chars[i - 1];
-                let next_is_lower = chars.get(i + 1).map_or(false, |c| c.is_lowercase());
+                let next_is_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());
                 // Insert underscore before:
                 // - an uppercase letter following a lowercase letter (camelCase boundary)
                 // - an uppercase letter followed by lowercase when previous was also uppercase (acronym end)
