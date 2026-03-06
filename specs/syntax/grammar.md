@@ -48,6 +48,7 @@ Text literals are delimited by `"` and support interpolation segments `{ Expr }`
 <<< ../snippets/from_md/syntax/grammar/text_literals_and_interpolation.aivi{aivi}
 
 Inside a `TextLit`, `{` starts interpolation and `}` ends it; braces must be balanced within the interpolated expression.
+String literals that appear inside an interpolation block are fully supported — a `"` inside `{…}` starts and ends a nested string without closing the outer `TextLit`.
 Each `{ Expr }` splice is treated as an expected-`Text` position, so the compiler may insert a `toText` coercion (see `ToText` in Types).
 
 ### Separators (layout)

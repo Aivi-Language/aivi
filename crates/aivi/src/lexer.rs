@@ -132,6 +132,7 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
             index += 1;
             col += 1;
             let mut closed = false;
+            let mut brace_depth = 0usize;
             while index < chars.len() {
                 if chars[index] == '\n' {
                     break;
@@ -141,7 +142,42 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                     col += 2;
                     continue;
                 }
+                if chars[index] == '{' {
+                    brace_depth += 1;
+                    index += 1;
+                    col += 1;
+                    continue;
+                }
+                if chars[index] == '}' && brace_depth > 0 {
+                    brace_depth -= 1;
+                    index += 1;
+                    col += 1;
+                    continue;
+                }
                 if chars[index] == '"' {
+                    if brace_depth > 0 {
+                        // Nested string literal inside an interpolation block — skip it.
+                        index += 1;
+                        col += 1;
+                        while index < chars.len() && chars[index] != '\n' {
+                            if chars[index] == '\\'
+                                && index + 1 < chars.len()
+                                && chars[index + 1] != '\n'
+                            {
+                                index += 2;
+                                col += 2;
+                                continue;
+                            }
+                            if chars[index] == '"' {
+                                index += 1;
+                                col += 1;
+                                break;
+                            }
+                            index += 1;
+                            col += 1;
+                        }
+                        continue;
+                    }
                     index += 1;
                     col += 1;
                     closed = true;
