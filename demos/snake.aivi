@@ -183,8 +183,8 @@ toMsg = event => event match
   | GtkTick                     => Some Tick
   | _                           => None
 
-update : AppId -> WindowId -> Msg -> State -> Effect GtkError State
-update = _ _ msg state => msg match
+update : Msg -> State -> Effect GtkError State
+update = msg state => msg match
   | Arrow dir => pure (if state.gameOver then state else state <| { dir: dir })
   | Tick      => pure (if state.gameOver then state else step state.dir state)
   | Restart   => pure initialState
@@ -197,18 +197,16 @@ css = ".snakerow \{ font-family: monospace; font-size: 14px; letter-spacing: 2px
 // Entry point
 
 main : Effect GtkError Unit
-main = gtkAppFull {
+main = gtkApp {
   id: "demos.snake"
   title: "Snake"
   size: (540, 420)
-  decorated: True
-  hideOnClose: False
   model: initialState
-  view: view
-  toMsg: toMsg
-  update: update
   onStart: appId _ => do Effect {
     _ <- appSetCss appId css
     gtkSetInterval 150
   }
+  view: view
+  toMsg: toMsg
+  update: update
 }

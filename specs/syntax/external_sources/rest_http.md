@@ -14,6 +14,10 @@ AIVI supports both low-level HTTP (`http`/`https`) and a REST-oriented facade (`
 
 `rest.fetch` supports request-level options (timeouts, retries, bearer auth, strict status handling).
 
+## Capability mapping (Phase 1 surface)
+
+Loading a REST or HTTP source requires `network.http` (or the broader `network` family shorthand).
+
 ## Example
 
 ```aivi

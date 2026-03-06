@@ -9,6 +9,10 @@ Environment boundaries support single-value reads and structured prefix decoding
 - `env.get : Text -> Source Env Text`
 - `env.decode : Text -> Source Env A`
 
+## Capability mapping (Phase 1 surface)
+
+Loading from `env.get` or `env.decode` requires `process.env.read`.
+
 ## Example
 
 ```aivi

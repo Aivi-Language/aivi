@@ -118,6 +118,7 @@ pub(crate) enum Value {
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
     ImapSession(aivi_email::ImapSession),
+    DbConnection(aivi_database::DbConnection),
 }
 
 impl std::fmt::Debug for Value {
@@ -162,6 +163,7 @@ impl std::fmt::Debug for Value {
             Value::HttpServer(_) => write!(f, "HttpServer(<server>)"),
             Value::WebSocket(_) => write!(f, "WebSocket(<socket>)"),
             Value::ImapSession(_) => write!(f, "ImapSession(<session>)"),
+            Value::DbConnection(_) => write!(f, "DbConnection(<connection>)"),
         }
     }
 }

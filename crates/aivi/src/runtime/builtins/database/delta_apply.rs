@@ -137,6 +137,181 @@ fn parse_driver(value: Value) -> Result<Driver, RuntimeError> {
     }
 }
 
+fn parse_db_config(config: Value, ctx: &str) -> Result<(Driver, String), RuntimeError> {
+    let config_fields = expect_record(config, ctx)?;
+    let driver = config_fields
+        .get("driver")
+        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects DbConfig.driver")))?
+        .clone();
+    let url = config_fields
+        .get("url")
+        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects DbConfig.url")))?
+        .clone();
+    let driver = parse_driver(driver)?;
+    let url = expect_text(url, ctx)?;
+    Ok((driver, url))
+}
+
+fn expect_db_connection(value: Value, ctx: &str) -> Result<aivi_database::DbConnection, RuntimeError> {
+    match value {
+        Value::DbConnection(connection) => Ok(connection),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects DbConnection, got {}",
+            crate::runtime::format_value(&other)
+        ))),
+    }
+}
+
+fn default_db_connection(
+    state: &DatabaseState,
+) -> Result<Option<aivi_database::DbConnection>, RuntimeError> {
+    state.default_connection().map_err(RuntimeError::Message)
+}
+
+fn require_default_db_connection(
+    state: &DatabaseState,
+) -> Result<aivi_database::DbConnection, RuntimeError> {
+    default_db_connection(state)?
+        .ok_or_else(|| RuntimeError::Message("database backend is not configured".to_string()))
+}
+
+fn load_rows_from_connection(
+    table: Value,
+    connection: &aivi_database::DbConnection,
+) -> Result<Value, RuntimeError> {
+    let (name, _columns, _rows) = table_parts(table, "database.load")?;
+    let entry = connection
+        .load_table(name)
+        .map_err(RuntimeError::Message)?;
+    let rows_json = match entry {
+        Some((_rev, _cols, rows_json)) => rows_json,
+        None => aivi_database::EMPTY_ROWS_JSON.to_string(),
+    };
+    let rows_value = decode_json(&rows_json)?;
+    let Value::List(rows) = rows_value else {
+        return Err(RuntimeError::Message(
+            "database: invalid persisted rows (expected List)".to_string(),
+        ));
+    };
+    Ok(Value::List(rows))
+}
+
+fn apply_delta_on_connection(
+    table: Value,
+    delta: Value,
+    connection: &aivi_database::DbConnection,
+    runtime: &mut Runtime,
+) -> Result<Value, RuntimeError> {
+    let (name, columns, _rows) = table_parts(table, "database.applyDelta")?;
+    let columns_json = encode_json(&columns)?;
+
+    for _attempt in 0..3 {
+        let entry = connection
+            .load_table(name.clone())
+            .map_err(RuntimeError::Message)?;
+
+        if entry.is_none() {
+            connection
+                .migrate_table(name.clone(), columns_json.clone())
+                .map_err(RuntimeError::Message)?;
+            continue;
+        }
+
+        let (rev, _stored_cols, rows_json) = entry.unwrap();
+        let rows_value = decode_json(&rows_json)?;
+        let Value::List(rows_list) = rows_value else {
+            return Err(RuntimeError::Message(
+                "database: invalid persisted rows (expected List)".to_string(),
+            ));
+        };
+        let current_rows: Vec<Value> = rows_list.iter().cloned().collect();
+
+        let new_rows = apply_delta_rows(&current_rows, delta.clone(), runtime)?;
+        let rows_json = encode_json(&list_value(new_rows.clone()))?;
+
+        let saved = connection.compare_and_swap_rows(
+            name.clone(),
+            rev,
+            columns_json.clone(),
+            rows_json,
+        );
+        match saved {
+            Ok(_new_rev) => return Ok(make_table(name.clone(), columns.clone(), new_rows)),
+            Err(err) => {
+                if err.contains("retry") {
+                    continue;
+                }
+                return Err(RuntimeError::Message(err));
+            }
+        }
+    }
+
+    Err(RuntimeError::Message(
+        "database.applyDelta failed due to concurrent writes; retry".to_string(),
+    ))
+}
+
+fn run_migrations_on_connection(
+    tables: Value,
+    connection: &aivi_database::DbConnection,
+) -> Result<Value, RuntimeError> {
+    let tables = expect_list(tables, "database.runMigrations")?;
+    connection.ensure_schema().map_err(RuntimeError::Message)?;
+
+    for table in tables.iter() {
+        let (name, columns, _rows) = table_parts(table.clone(), "database.runMigrations")?;
+        let columns_json = encode_json(&columns)?;
+        connection
+            .migrate_table(name, columns_json)
+            .map_err(RuntimeError::Message)?;
+    }
+    Ok(Value::Unit)
+}
+
+fn configure_sqlite_on_connection(
+    config: Value,
+    connection: &aivi_database::DbConnection,
+) -> Result<Value, RuntimeError> {
+    let config_fields = expect_record(config, "database.configureSqlite")?;
+    let wal = config_fields
+        .get("wal")
+        .cloned()
+        .unwrap_or(Value::Bool(true));
+    let busy_timeout = config_fields
+        .get("busyTimeoutMs")
+        .cloned()
+        .unwrap_or(Value::Int(5000));
+    let wal = match wal {
+        Value::Bool(v) => v,
+        other => {
+            return Err(RuntimeError::Message(format!(
+                "database.configureSqlite expects wal Bool, got {}",
+                crate::runtime::format_value(&other)
+            )))
+        }
+    };
+    let busy_timeout_ms = expect_int(busy_timeout, "database.configureSqlite")?;
+    connection
+        .sqlite_configure(wal, busy_timeout_ms)
+        .map_err(RuntimeError::Message)?;
+    Ok(Value::Unit)
+}
+
+fn run_migration_sql_on_connection(
+    statements_value: Value,
+    connection: &aivi_database::DbConnection,
+) -> Result<Value, RuntimeError> {
+    let list = expect_list(statements_value, "database.runMigrationSql")?;
+    let mut statements = Vec::with_capacity(list.len());
+    for item in list.iter() {
+        statements.push(expect_text(item.clone(), "database.runMigrationSql")?);
+    }
+    connection
+        .run_migration_sql(statements)
+        .map_err(RuntimeError::Message)?;
+    Ok(Value::Unit)
+}
+
 fn require_sql_identifier(value: Value, ctx: &str, field: &str) -> Result<String, RuntimeError> {
     let name = expect_text(value, ctx)?;
     if name
@@ -176,33 +351,9 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
-                            let config_fields =
-                                expect_record(config.clone(), "database.configure")?;
-                            let driver = config_fields
-                                .get("driver")
-                                .ok_or_else(|| {
-                                    RuntimeError::Message(
-                                        "database.configure expects DbConfig.driver".to_string(),
-                                    )
-                                })?
-                                .clone();
-                            let url = config_fields
-                                .get("url")
-                                .ok_or_else(|| {
-                                    RuntimeError::Message(
-                                        "database.configure expects DbConfig.url".to_string(),
-                                    )
-                                })?
-                                .clone();
-
-                            let driver = parse_driver(driver)?;
-                            let url = expect_text(url, "database.configure")?;
-
-                            state
-                                .handle()
-                                .configure(driver, url)
-                                .map_err(RuntimeError::Message)?;
-                            state.set_configured();
+                            let (driver, url) =
+                                parse_db_config(config.clone(), "database.configure")?;
+                            state.configure(driver, url).map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
                     }),
@@ -215,35 +366,17 @@ pub(super) fn build_database_record() -> Value {
     {
         let state = state.clone();
         fields.insert(
-            "load".to_string(),
-            builtin("database.load", 1, move |mut args, _| {
-                let table = args.pop().unwrap();
+            "connect".to_string(),
+            builtin("database.connect", 1, move |mut args, _| {
+                let config = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
-                            if !state.is_configured() {
-                                let (_, _, rows) = table_parts(table.clone(), "database.load")?;
-                                return Ok(list_value(rows.iter().cloned().collect()));
-                            }
-
-                            let (name, _columns, _rows) =
-                                table_parts(table.clone(), "database.load")?;
-                            let entry = state
-                                .handle()
-                                .load_table(name.clone())
-                                .map_err(RuntimeError::Message)?;
-                            let rows_json = match entry {
-                                Some((_rev, _cols, rows_json)) => rows_json,
-                                None => aivi_database::EMPTY_ROWS_JSON.to_string(),
-                            };
-                            let rows_value = decode_json(&rows_json)?;
-                            let Value::List(rows) = rows_value else {
-                                return Err(RuntimeError::Message(
-                                    "database: invalid persisted rows (expected List)".to_string(),
-                                ));
-                            };
-                            Ok(Value::List(rows))
+                            let (driver, url) =
+                                parse_db_config(config.clone(), "database.connect")?;
+                            let connection = state.connect(driver, url).map_err(RuntimeError::Message)?;
+                            Ok(Value::DbConnection(connection))
                         }
                     }),
                 };
@@ -251,6 +384,59 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "close".to_string(),
+        builtin("database.close", 1, move |mut args, _| {
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection = expect_db_connection(connection.clone(), "database.close")?;
+                    connection.close().map_err(RuntimeError::Message)?;
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "load".to_string(),
+            builtin("database.load", 1, move |mut args, _| {
+                let table = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| match default_db_connection(&state)? {
+                            Some(connection) => load_rows_from_connection(table.clone(), &connection),
+                            None => {
+                                let (_, _, rows) = table_parts(table.clone(), "database.load")?;
+                                Ok(list_value(rows.iter().cloned().collect()))
+                            }
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    fields.insert(
+        "loadOn".to_string(),
+        builtin("database.loadOn", 2, move |mut args, _| {
+            let table = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection = expect_db_connection(connection.clone(), "database.loadOn")?;
+                    load_rows_from_connection(table.clone(), &connection)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     {
         let state = state.clone();
@@ -262,72 +448,14 @@ pub(super) fn build_database_record() -> Value {
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
-                        move |runtime| {
-                            if !state.is_configured() {
-                                return apply_delta(table.clone(), delta.clone(), runtime);
-                            }
-
-                            let (name, columns, _rows) =
-                                table_parts(table.clone(), "database.applyDelta")?;
-                            let columns_json = encode_json(&columns)?;
-
-                            // Retry a few times if another writer updated the same table.
-                            for _attempt in 0..3 {
-                                let entry = state
-                                    .handle()
-                                    .load_table(name.clone())
-                                    .map_err(RuntimeError::Message)?;
-
-                                if entry.is_none() {
-                                    state
-                                        .handle()
-                                        .migrate_table(name.clone(), columns_json.clone())
-                                        .map_err(RuntimeError::Message)?;
-                                    continue;
-                                }
-
-                                let (rev, _stored_cols, rows_json) = entry.unwrap();
-                                let rows_value = decode_json(&rows_json)?;
-                                let Value::List(rows_list) = rows_value else {
-                                    return Err(RuntimeError::Message(
-                                        "database: invalid persisted rows (expected List)"
-                                            .to_string(),
-                                    ));
-                                };
-                                let current_rows: Vec<Value> = rows_list.iter().cloned().collect();
-
-                                let new_rows =
-                                    apply_delta_rows(&current_rows, delta.clone(), runtime)?;
-                                let rows_json = encode_json(&list_value(new_rows.clone()))?;
-
-                                let saved =
-                                    state.handle().compare_and_swap_rows(
-                                        name.clone(),
-                                        rev,
-                                        columns_json.clone(),
-                                        rows_json,
-                                    );
-                                match saved {
-                                    Ok(_new_rev) => {
-                                        return Ok(make_table(
-                                            name.clone(),
-                                            columns.clone(),
-                                            new_rows,
-                                        ))
-                                    }
-                                    Err(err) => {
-                                        if err.contains("retry") {
-                                            continue;
-                                        }
-                                        return Err(RuntimeError::Message(err));
-                                    }
-                                }
-                            }
-
-                            Err(RuntimeError::Message(
-                                "database.applyDelta failed due to concurrent writes; retry"
-                                    .to_string(),
-                            ))
+                        move |runtime| match default_db_connection(&state)? {
+                            Some(connection) => apply_delta_on_connection(
+                                table.clone(),
+                                delta.clone(),
+                                &connection,
+                                runtime,
+                            ),
+                            None => apply_delta(table.clone(), delta.clone(), runtime),
                         }
                     }),
                 };
@@ -335,6 +463,23 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "applyDeltaOn".to_string(),
+        builtin("database.applyDeltaOn", 3, move |mut args, _| {
+            let delta = args.pop().unwrap();
+            let table = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    let connection =
+                        expect_db_connection(connection.clone(), "database.applyDeltaOn")?;
+                    apply_delta_on_connection(table.clone(), delta.clone(), &connection, runtime)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     {
         let state = state.clone();
@@ -345,27 +490,11 @@ pub(super) fn build_database_record() -> Value {
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
-                        move |_| {
-                            if !state.is_configured() {
-                                return Ok(Value::Unit);
+                        move |_| match default_db_connection(&state)? {
+                            Some(connection) => {
+                                run_migrations_on_connection(tables.clone(), &connection)
                             }
-                            let tables = expect_list(tables.clone(), "database.runMigrations")?;
-
-                            state
-                                .handle()
-                                .ensure_schema()
-                                .map_err(RuntimeError::Message)?;
-
-                            for table in tables.iter() {
-                                let (name, columns, _rows) =
-                                    table_parts(table.clone(), "database.runMigrations")?;
-                                let columns_json = encode_json(&columns)?;
-                                state
-                                    .handle()
-                                    .migrate_table(name, columns_json)
-                                    .map_err(RuntimeError::Message)?;
-                            }
-                            Ok(Value::Unit)
+                            None => Ok(Value::Unit),
                         }
                     }),
                 };
@@ -373,6 +502,22 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "runMigrationsOn".to_string(),
+        builtin("database.runMigrationsOn", 2, move |mut args, _| {
+            let tables = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection =
+                        expect_db_connection(connection.clone(), "database.runMigrationsOn")?;
+                    run_migrations_on_connection(tables.clone(), &connection)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     {
         let state = state.clone();
@@ -384,32 +529,8 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
-                            let config_fields =
-                                expect_record(config.clone(), "database.configureSqlite")?;
-                            let wal = config_fields
-                                .get("wal")
-                                .cloned()
-                                .unwrap_or(Value::Bool(true));
-                            let busy_timeout = config_fields
-                                .get("busyTimeoutMs")
-                                .cloned()
-                                .unwrap_or(Value::Int(5000));
-                            let wal = match wal {
-                                Value::Bool(v) => v,
-                                other => {
-                                    return Err(RuntimeError::Message(format!(
-                                        "database.configureSqlite expects wal Bool, got {}",
-                                        crate::runtime::format_value(&other)
-                                    )))
-                                }
-                            };
-                            let busy_timeout_ms =
-                                expect_int(busy_timeout, "database.configureSqlite")?;
-                            state
-                                .handle()
-                                .sqlite_configure(wal, busy_timeout_ms)
-                                .map_err(RuntimeError::Message)?;
-                            Ok(Value::Unit)
+                            let connection = require_default_db_connection(&state)?;
+                            configure_sqlite_on_connection(config.clone(), &connection)
                         }
                     }),
                 };
@@ -417,6 +538,22 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "configureSqliteOn".to_string(),
+        builtin("database.configureSqliteOn", 2, move |mut args, _| {
+            let config = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection =
+                        expect_db_connection(connection.clone(), "database.configureSqliteOn")?;
+                    configure_sqlite_on_connection(config.clone(), &connection)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     for name in ["beginTx", "commitTx", "rollbackTx"] {
         let state = state.clone();
@@ -427,22 +564,47 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
+                            let connection = require_default_db_connection(&state)?;
                             match name {
-                                "beginTx" => state
-                                    .handle()
+                                "beginTx" => connection
                                     .begin_transaction()
                                     .map_err(RuntimeError::Message)?,
-                                "commitTx" => state
-                                    .handle()
+                                "commitTx" => connection
                                     .commit_transaction()
                                     .map_err(RuntimeError::Message)?,
-                                _ => state
-                                    .handle()
+                                _ => connection
                                     .rollback_transaction()
                                     .map_err(RuntimeError::Message)?,
-                            };
+                            }
                             Ok(Value::Unit)
                         }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    for name in ["beginTxOn", "commitTxOn", "rollbackTxOn"] {
+        fields.insert(
+            name.to_string(),
+            builtin(&format!("database.{name}"), 1, move |mut args, _| {
+                let connection = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new(move |_| {
+                        let connection = expect_db_connection(connection.clone(), &format!("database.{name}"))?;
+                        match name {
+                            "beginTxOn" => connection
+                                .begin_transaction()
+                                .map_err(RuntimeError::Message)?,
+                            "commitTxOn" => connection
+                                .commit_transaction()
+                                .map_err(RuntimeError::Message)?,
+                            _ => connection
+                                .rollback_transaction()
+                                .map_err(RuntimeError::Message)?,
+                        }
+                        Ok(Value::Unit)
                     }),
                 };
                 Ok(Value::Effect(Arc::new(effect)))
@@ -460,15 +622,10 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
-                            let name = require_sql_identifier(
-                                raw_name.clone(),
-                                "database.savepoint",
-                                "name",
-                            )?;
-                            state
-                                .handle()
-                                .savepoint(name)
-                                .map_err(RuntimeError::Message)?;
+                            let connection = require_default_db_connection(&state)?;
+                            let name =
+                                require_sql_identifier(raw_name.clone(), "database.savepoint", "name")?;
+                            connection.savepoint(name).map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
                     }),
@@ -477,6 +634,25 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "savepointOn".to_string(),
+        builtin("database.savepointOn", 2, move |mut args, _| {
+            let raw_name = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection =
+                        expect_db_connection(connection.clone(), "database.savepointOn")?;
+                    let name =
+                        require_sql_identifier(raw_name.clone(), "database.savepointOn", "name")?;
+                    connection.savepoint(name).map_err(RuntimeError::Message)?;
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     {
         let state = state.clone();
@@ -488,13 +664,13 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
+                            let connection = require_default_db_connection(&state)?;
                             let name = require_sql_identifier(
                                 raw_name.clone(),
                                 "database.releaseSavepoint",
                                 "name",
                             )?;
-                            state
-                                .handle()
+                            connection
                                 .release_savepoint(name)
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
@@ -506,6 +682,32 @@ pub(super) fn build_database_record() -> Value {
         );
     }
 
+    fields.insert(
+        "releaseSavepointOn".to_string(),
+        builtin("database.releaseSavepointOn", 2, move |mut args, _| {
+            let raw_name = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection = expect_db_connection(
+                        connection.clone(),
+                        "database.releaseSavepointOn",
+                    )?;
+                    let name = require_sql_identifier(
+                        raw_name.clone(),
+                        "database.releaseSavepointOn",
+                        "name",
+                    )?;
+                    connection
+                        .release_savepoint(name)
+                        .map_err(RuntimeError::Message)?;
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
     {
         let state = state.clone();
         fields.insert(
@@ -516,13 +718,13 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
+                            let connection = require_default_db_connection(&state)?;
                             let name = require_sql_identifier(
                                 raw_name.clone(),
                                 "database.rollbackToSavepoint",
                                 "name",
                             )?;
-                            state
-                                .handle()
+                            connection
                                 .rollback_to_savepoint(name)
                                 .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
@@ -534,6 +736,32 @@ pub(super) fn build_database_record() -> Value {
         );
     }
 
+    fields.insert(
+        "rollbackToSavepointOn".to_string(),
+        builtin("database.rollbackToSavepointOn", 2, move |mut args, _| {
+            let raw_name = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection = expect_db_connection(
+                        connection.clone(),
+                        "database.rollbackToSavepointOn",
+                    )?;
+                    let name = require_sql_identifier(
+                        raw_name.clone(),
+                        "database.rollbackToSavepointOn",
+                        "name",
+                    )?;
+                    connection
+                        .rollback_to_savepoint(name)
+                        .map_err(RuntimeError::Message)?;
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
     {
         let state = state.clone();
         fields.insert(
@@ -544,18 +772,8 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
-                            let list =
-                                expect_list(statements_value.clone(), "database.runMigrationSql")?;
-                            let mut statements = Vec::with_capacity(list.len());
-                            for item in list.iter() {
-                                statements
-                                    .push(expect_text(item.clone(), "database.runMigrationSql")?);
-                            }
-                            state
-                                .handle()
-                                .run_migration_sql(statements.clone())
-                                .map_err(RuntimeError::Message)?;
-                            Ok(Value::Unit)
+                            let connection = require_default_db_connection(&state)?;
+                            run_migration_sql_on_connection(statements_value.clone(), &connection)
                         }
                     }),
                 };
@@ -563,6 +781,22 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "runMigrationSqlOn".to_string(),
+        builtin("database.runMigrationSqlOn", 2, move |mut args, _| {
+            let statements_value = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection =
+                        expect_db_connection(connection.clone(), "database.runMigrationSqlOn")?;
+                    run_migration_sql_on_connection(statements_value.clone(), &connection)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     fields.insert("ins".to_string(), builtin_constructor("Insert", 1));
     fields.insert("upd".to_string(), builtin_constructor("Update", 2));

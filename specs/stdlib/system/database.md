@@ -19,6 +19,14 @@ It builds on existing AIVI features:
 Table schemas are defined with ordinary values. `db.table` takes a table name and a
 list of `Column` values; the row type comes from the table binding's type annotation.
 
+`aivi.database` supports two execution styles:
+
+- **default connection helpers** such as `db.configure`, `db.load`, and `db.beginTx`
+- **explicit connection helpers** such as `db.connect`, `db.loadOn`, and `db.beginTxOn`
+
+New code should prefer explicit `DbConnection` handles so transaction ownership stays local and
+works cleanly with pooling.
+
 ## Types
 
 <<< ../../snippets/from_md/stdlib/system/database/types.aivi{aivi}
@@ -57,6 +65,7 @@ Schema definitions are typed values. Mark them `@static` to allow compile-time v
 
 Database pooling is provided by `aivi.database.pool`. The pool is configured explicitly (no hidden globals),
 and `withConn` guarantees deterministic release via AIVI resources even on failure or cancellation.
+Use `db.connect` / `db.close` as the pool's acquire/release functions when you want pooled database handles.
 
 <<< ../../snippets/from_md/stdlib/system/database/pooling.aivi{aivi}
 
@@ -65,6 +74,17 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 - `Database` compiles predicate expressions into `WHERE` clauses and patch instructions into `SET` clauses.
 - Joins are translated into single SQL queries to avoid N+1 patterns.
 - Advanced SQL remains available via `db.query` in [External Sources](../../syntax/external_sources.md).
+- Transactions are scoped to a single `DbConnection`. `db.beginTxOn conn` never affects any other connection in the same pool.
+- The ambient helpers (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.savepoint`, ...) are compatibility sugar over the current default connection selected by `db.configure`.
+- Nested `beginTxOn` calls are not part of the transaction model; use savepoints for inner rollback boundaries.
+
+## Capability mapping (Phase 1 surface)
+
+- `db.configure`, `db.configureSqlite`, pool creation / acquisition → `db.connect`
+- `db.load` and read-only query helpers → `db.query`
+- `db.applyDelta`, `db.applyDeltas`, transactions, savepoints → `db.mutate`
+- `db.runMigrations`, `db.runMigrationSql` → `db.migrate`
+- the broader `db` family shorthand covers all database capabilities
 
 ## Core API (v0.1)
 
@@ -74,28 +94,42 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | --- | --- |
 | **db.table** name columns<br><code>Text -> List Column -> Table A</code> | Creates a table definition. The row type `A` is inferred from the binding's type annotation. |
 | **db.configure** config<br><code>DbConfig -> Effect DbError Unit</code> | Selects the runtime backend (Sqlite, Postgresql, Mysql). |
+| **db.connect** config<br><code>DbConfig -> Effect DbError DbConnection</code> | Opens an explicit database connection handle. Prefer this for pooled or transaction-heavy code. |
+| **db.open** config<br><code>DbConfig -> Resource DbError DbConnection</code> | Resource wrapper around `db.connect` / `db.close` for deterministic cleanup. |
+| **db.close** conn<br><code>DbConnection -> Effect DbError Unit</code> | Closes an explicit connection handle. |
 | **db.runMigrations** tables<br><code>List (Table A) -> Effect DbError Unit</code> | Creates or updates tables to match their column definitions. |
+| **db.runMigrationsOn** conn tables<br><code>DbConnection -> List (Table A) -> Effect DbError Unit</code> | Runs migrations on the given explicit connection. |
 | **db.runMigrationSql** steps<br><code>List MigrationStep -> Effect DbError Unit</code> | Runs ordered SQL migration steps (id + sql) against the configured backend. |
+| **db.runMigrationSqlOn** conn steps<br><code>DbConnection -> List MigrationStep -> Effect DbError Unit</code> | Runs ordered SQL migration steps on the given explicit connection. |
 | **db.configureSqlite** tuning<br><code>SqliteTuning -> Effect DbError Unit</code> | Tunes SQLite `journal_mode` (WAL/DELETE) and busy-timeout for local-first workloads. |
+| **db.configureSqliteOn** conn tuning<br><code>DbConnection -> SqliteTuning -> Effect DbError Unit</code> | Applies SQLite tuning to one explicit connection. |
 
 ### Data loading
 
 | Function | Explanation |
 | --- | --- |
-| **db.load** table<br><code>Table A -> Effect (SourceError Db) (List A)</code> | Loads all rows from `table`. Validates fields against type `A`. |
+| **db.load** table<br><code>Table A -> Effect DbError (List A)</code> | Loads all rows from `table` using the default configured connection. |
+| **db.loadOn** conn table<br><code>DbConnection -> Table A -> Effect DbError (List A)</code> | Loads rows through an explicit connection handle. |
 | **db.applyDelta** table delta<br><code>Table A -> Delta A -> Effect DbError (Table A)</code> | Applies an insert, update, delete, or upsert delta. Also available as the domain `+` operator. |
+| **db.applyDeltaOn** conn table delta<br><code>DbConnection -> Table A -> Delta A -> Effect DbError (Table A)</code> | Applies a delta through an explicit connection. |
 | **db.applyDeltas** table deltas<br><code>Table A -> List (Delta A) -> Effect DbError (Table A)</code> | Applies many deltas in one effect for projection-heavy write workloads. |
+| **db.applyDeltasOn** conn table deltas<br><code>DbConnection -> Table A -> List (Delta A) -> Effect DbError (Table A)</code> | Applies many deltas through an explicit connection. |
 
 ### Transactions and savepoints
 
 | Function | Explanation |
 | --- | --- |
-| **db.beginTx**<br><code>Effect DbError Unit</code> | Starts a transaction. |
-| **db.commitTx**<br><code>Effect DbError Unit</code> | Commits the current transaction. |
-| **db.rollbackTx**<br><code>Effect DbError Unit</code> | Rolls back the current transaction. |
-| **db.savepoint** name<br><code>Text -> Effect DbError Unit</code> | Creates a savepoint with SQL-safe identifier validation. |
-| **db.releaseSavepoint** name<br><code>Text -> Effect DbError Unit</code> | Releases a savepoint. |
-| **db.rollbackToSavepoint** name<br><code>Text -> Effect DbError Unit</code> | Rolls back to a savepoint while keeping outer transaction active. |
+| **db.beginTxOn** conn<br><code>DbConnection -> Effect DbError Unit</code> | Starts a transaction on `conn`. |
+| **db.commitTxOn** conn<br><code>DbConnection -> Effect DbError Unit</code> | Commits the transaction currently active on `conn`. |
+| **db.rollbackTxOn** conn<br><code>DbConnection -> Effect DbError Unit</code> | Rolls back the transaction currently active on `conn`. |
+| **db.inTransactionOn** conn action<br><code>DbConnection -> Effect DbError A -> Effect DbError A</code> | Runs `action` in a transaction, committing on success and rolling back on failure. |
+| **db.savepointOn** conn name<br><code>DbConnection -> Text -> Effect DbError Unit</code> | Creates a savepoint with SQL-safe identifier validation. |
+| **db.releaseSavepointOn** conn name<br><code>DbConnection -> Text -> Effect DbError Unit</code> | Releases a savepoint on `conn`. |
+| **db.rollbackToSavepointOn** conn name<br><code>DbConnection -> Text -> Effect DbError Unit</code> | Rolls back to a savepoint while keeping the outer transaction active. |
+
+The ambient forms (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.inTransaction`, `db.savepoint`, ...)
+operate on the current default connection configured with `db.configure`. They exist for convenience and
+backward compatibility, but explicit `...On` forms are the canonical transaction API.
 
 ### Delta constructors
 

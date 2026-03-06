@@ -25,6 +25,19 @@ For *handling* an effect error as a value, the standard library provides:
 
 `attempt` runs the inner effect and captures its outcome (success or failure with `E`) as a `Result E A`. The outer effect uses a *different* error type `F`, since the original error `E` has been caught and is now represented as data inside the `Result`. If `F` is unconstrained, the outer effect cannot fail (equivalent to `Effect Never (Result E A)` in practice).
 
+### Capability requirements (Phase 1 surface)
+
+Capabilities refine `Effect E A` without turning it into a different effect type. Write a minimum-authority clause after the effect type:
+
+```aivi
+loadConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.read }
+```
+
+- the capability clause is checked statically and is **not** part of `E`
+- callers may run an effect in any larger capability scope
+- lexical narrowing uses `with { ... } in expr`
+- handler / interpreter binding is specified in a later milestone; see [Capabilities](capabilities.md) for the vocabulary and migration rules
+
 ### Examples (core operations)
 
 `pure` lifts a value into an effect:
@@ -48,6 +61,16 @@ For *handling* an effect error as a value, the standard library provides:
 The standard library function `load` lifts a typed `Source` (see [External Sources](external_sources.md)) into an `Effect`.
 
 <<< ../snippets/from_md/syntax/effects/load.aivi{aivi}
+
+The capability required by `load` is determined by the source kind:
+
+- file / image sources → `file.read`
+- REST / HTTP / HTTPS sources → `network.http`
+- environment sources → `process.env.read`
+- database-backed source loads → `db.query`
+- `@static` embedded sources → no runtime capability after compilation
+
+See [External Sources](external_sources.md) and [Capabilities](capabilities.md) for the full mapping.
 
 ## 9.2 `do Effect` blocks
 

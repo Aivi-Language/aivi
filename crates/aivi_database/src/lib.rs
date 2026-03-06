@@ -1,4 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::mpsc;
 
 const META_TABLE: &str = "aivi_tables";
@@ -16,24 +17,32 @@ pub enum Driver {
 type DbResp<T> = mpsc::Sender<Result<T, String>>;
 
 enum DbRequest {
-    Configure {
+    OpenConnection {
         driver: Driver,
         url: String,
+        resp: DbResp<u64>,
+    },
+    CloseConnection {
+        connection_id: u64,
         resp: DbResp<()>,
     },
     EnsureSchema {
+        connection_id: u64,
         resp: DbResp<()>,
     },
     LoadTable {
+        connection_id: u64,
         name: String,
         resp: DbResp<Option<LoadTableRow>>,
     },
     MigrateTable {
+        connection_id: u64,
         name: String,
         columns_json: String,
         resp: DbResp<()>,
     },
     CompareAndSwapRows {
+        connection_id: u64,
         name: String,
         expected_rev: i64,
         columns_json: String,
@@ -41,35 +50,169 @@ enum DbRequest {
         resp: DbResp<i64>,
     },
     SqliteConfigure {
+        connection_id: u64,
         wal: bool,
         busy_timeout_ms: i64,
         resp: DbResp<()>,
     },
     BeginTransaction {
+        connection_id: u64,
         resp: DbResp<()>,
     },
     CommitTransaction {
+        connection_id: u64,
         resp: DbResp<()>,
     },
     RollbackTransaction {
+        connection_id: u64,
         resp: DbResp<()>,
     },
     Savepoint {
+        connection_id: u64,
         name: String,
         resp: DbResp<()>,
     },
     ReleaseSavepoint {
+        connection_id: u64,
         name: String,
         resp: DbResp<()>,
     },
     RollbackToSavepoint {
+        connection_id: u64,
         name: String,
         resp: DbResp<()>,
     },
     RunMigrationSql {
+        connection_id: u64,
         statements: Vec<String>,
         resp: DbResp<()>,
     },
+}
+
+#[derive(Clone)]
+pub struct DbConnection {
+    handle: DbHandle,
+    connection_id: u64,
+}
+
+impl DbConnection {
+    fn request<T>(
+        &self,
+        req: impl FnOnce(u64, mpsc::Sender<Result<T, String>>) -> DbRequest,
+    ) -> Result<T, String> {
+        self.handle
+            .request(|resp| req(self.connection_id, resp))
+    }
+
+    pub fn close(&self) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::CloseConnection {
+            connection_id,
+            resp,
+        })
+    }
+
+    pub fn ensure_schema(&self) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::EnsureSchema {
+            connection_id,
+            resp,
+        })
+    }
+
+    pub fn load_table(&self, name: String) -> Result<Option<LoadTableRow>, String> {
+        self.request(|connection_id, resp| DbRequest::LoadTable {
+            connection_id,
+            name,
+            resp,
+        })
+    }
+
+    pub fn migrate_table(&self, name: String, columns_json: String) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::MigrateTable {
+            connection_id,
+            name,
+            columns_json,
+            resp,
+        })
+    }
+
+    pub fn compare_and_swap_rows(
+        &self,
+        name: String,
+        expected_rev: i64,
+        columns_json: String,
+        rows_json: String,
+    ) -> Result<i64, String> {
+        self.request(|connection_id, resp| DbRequest::CompareAndSwapRows {
+            connection_id,
+            name,
+            expected_rev,
+            columns_json,
+            rows_json,
+            resp,
+        })
+    }
+
+    pub fn sqlite_configure(&self, wal: bool, busy_timeout_ms: i64) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::SqliteConfigure {
+            connection_id,
+            wal,
+            busy_timeout_ms,
+            resp,
+        })
+    }
+
+    pub fn begin_transaction(&self) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::BeginTransaction {
+            connection_id,
+            resp,
+        })
+    }
+
+    pub fn commit_transaction(&self) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::CommitTransaction {
+            connection_id,
+            resp,
+        })
+    }
+
+    pub fn rollback_transaction(&self) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::RollbackTransaction {
+            connection_id,
+            resp,
+        })
+    }
+
+    pub fn savepoint(&self, name: String) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::Savepoint {
+            connection_id,
+            name,
+            resp,
+        })
+    }
+
+    pub fn release_savepoint(&self, name: String) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::ReleaseSavepoint {
+            connection_id,
+            name,
+            resp,
+        })
+    }
+
+    pub fn rollback_to_savepoint(&self, name: String) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::RollbackToSavepoint {
+            connection_id,
+            name,
+            resp,
+        })
+    }
+
+    pub fn run_migration_sql(&self, statements: Vec<String>) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::RunMigrationSql {
+            connection_id,
+            statements,
+            resp,
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -97,76 +240,12 @@ impl DbHandle {
             .map_err(|_| "database backend worker stopped".to_string())?
     }
 
-    pub fn configure(&self, driver: Driver, url: String) -> Result<(), String> {
-        self.request(|resp| DbRequest::Configure { driver, url, resp })
-    }
-
-    pub fn ensure_schema(&self) -> Result<(), String> {
-        self.request(|resp| DbRequest::EnsureSchema { resp })
-    }
-
-    pub fn load_table(&self, name: String) -> Result<Option<LoadTableRow>, String> {
-        self.request(|resp| DbRequest::LoadTable { name, resp })
-    }
-
-    pub fn migrate_table(&self, name: String, columns_json: String) -> Result<(), String> {
-        self.request(|resp| DbRequest::MigrateTable {
-            name,
-            columns_json,
-            resp,
+    pub fn connect(&self, driver: Driver, url: String) -> Result<DbConnection, String> {
+        let connection_id = self.request(|resp| DbRequest::OpenConnection { driver, url, resp })?;
+        Ok(DbConnection {
+            handle: self.clone(),
+            connection_id,
         })
-    }
-
-    pub fn compare_and_swap_rows(
-        &self,
-        name: String,
-        expected_rev: i64,
-        columns_json: String,
-        rows_json: String,
-    ) -> Result<i64, String> {
-        self.request(|resp| DbRequest::CompareAndSwapRows {
-            name,
-            expected_rev,
-            columns_json,
-            rows_json,
-            resp,
-        })
-    }
-
-    pub fn sqlite_configure(&self, wal: bool, busy_timeout_ms: i64) -> Result<(), String> {
-        self.request(|resp| DbRequest::SqliteConfigure {
-            wal,
-            busy_timeout_ms,
-            resp,
-        })
-    }
-
-    pub fn begin_transaction(&self) -> Result<(), String> {
-        self.request(|resp| DbRequest::BeginTransaction { resp })
-    }
-
-    pub fn commit_transaction(&self) -> Result<(), String> {
-        self.request(|resp| DbRequest::CommitTransaction { resp })
-    }
-
-    pub fn rollback_transaction(&self) -> Result<(), String> {
-        self.request(|resp| DbRequest::RollbackTransaction { resp })
-    }
-
-    pub fn savepoint(&self, name: String) -> Result<(), String> {
-        self.request(|resp| DbRequest::Savepoint { name, resp })
-    }
-
-    pub fn release_savepoint(&self, name: String) -> Result<(), String> {
-        self.request(|resp| DbRequest::ReleaseSavepoint { name, resp })
-    }
-
-    pub fn rollback_to_savepoint(&self, name: String) -> Result<(), String> {
-        self.request(|resp| DbRequest::RollbackToSavepoint { name, resp })
-    }
-
-    pub fn run_migration_sql(&self, statements: Vec<String>) -> Result<(), String> {
-        self.request(|resp| DbRequest::RunMigrationSql { statements, resp })
     }
 }
 
@@ -177,24 +256,51 @@ impl Default for DbHandle {
 }
 
 pub struct DatabaseState {
-    configured: AtomicBool,
+    default_connection: Mutex<Option<DbConnection>>,
     handle: DbHandle,
 }
 
 impl DatabaseState {
     pub fn new() -> Self {
         Self {
-            configured: AtomicBool::new(false),
+            default_connection: Mutex::new(None),
             handle: DbHandle::new(),
         }
     }
 
     pub fn is_configured(&self) -> bool {
-        self.configured.load(Ordering::SeqCst)
+        self.default_connection
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false)
     }
 
-    pub fn set_configured(&self) {
-        self.configured.store(true, Ordering::SeqCst);
+    pub fn configure(&self, driver: Driver, url: String) -> Result<(), String> {
+        let connection = self.connect(driver, url)?;
+        let previous = {
+            let mut guard = self
+                .default_connection
+                .lock()
+                .map_err(|_| "database state poisoned".to_string())?;
+            guard.replace(connection)
+        };
+        if let Some(previous) = previous {
+            previous.close()?;
+        }
+        Ok(())
+    }
+
+    pub fn connect(&self, driver: Driver, url: String) -> Result<DbConnection, String> {
+        let connection = self.handle.connect(driver, url)?;
+        connection.ensure_schema()?;
+        Ok(connection)
+    }
+
+    pub fn default_connection(&self) -> Result<Option<DbConnection>, String> {
+        self.default_connection
+            .lock()
+            .map(|guard| guard.clone())
+            .map_err(|_| "database state poisoned".to_string())
     }
 
     pub fn handle(&self) -> &DbHandle {
@@ -500,13 +606,23 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
         }
     }
 
-    let mut backend: Option<Backend> = None;
+    fn backend_mut(
+        backends: &mut HashMap<u64, Backend>,
+        connection_id: u64,
+    ) -> Result<&mut Backend, String> {
+        backends
+            .get_mut(&connection_id)
+            .ok_or_else(|| format!("database connection {connection_id} is not open"))
+    }
+
+    let mut next_connection_id: u64 = 1;
+    let mut backends: HashMap<u64, Backend> = HashMap::new();
 
     for req in rx {
         match req {
-            DbRequest::Configure { driver, url, resp } => {
-                let result = (|| -> Result<(), String> {
-                    backend = Some(match driver {
+            DbRequest::OpenConnection { driver, url, resp } => {
+                let result = (|| -> Result<u64, String> {
+                    let backend = match driver {
                         Driver::Sqlite => {
                             let conn = rusqlite::Connection::open(url)
                                 .map_err(|e| backend_err("sqlite.open", e))?;
@@ -524,115 +640,139 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                                 .map_err(|e| backend_err("mysql.connect", e))?;
                             Backend::Mysql(conn)
                         }
-                    });
-                    if let Some(backend) = backend.as_mut() {
-                        backend.ensure_schema()?;
-                    }
-                    Ok(())
+                    };
+                    let connection_id = next_connection_id;
+                    next_connection_id = next_connection_id.saturating_add(1);
+                    backends.insert(connection_id, backend);
+                    Ok(connection_id)
                 })();
                 let _ = resp.send(result);
             }
-            DbRequest::EnsureSchema { resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.ensure_schema(),
-                    None => Err("database backend is not configured".to_string()),
+            DbRequest::CloseConnection {
+                connection_id,
+                resp,
+            } => {
+                let result = if backends.remove(&connection_id).is_some() {
+                    Ok(())
+                } else {
+                    Err(format!("database connection {connection_id} is not open"))
                 };
                 let _ = resp.send(result);
             }
-            DbRequest::LoadTable { name, resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.load_table(&name),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::EnsureSchema {
+                connection_id,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id).and_then(|backend| {
+                    backend.ensure_schema()
+                });
+                let _ = resp.send(result);
+            }
+            DbRequest::LoadTable {
+                connection_id,
+                name,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.load_table(&name));
                 let _ = resp.send(result);
             }
             DbRequest::MigrateTable {
+                connection_id,
                 name,
                 columns_json,
                 resp,
             } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.migrate_table(&name, &columns_json),
-                    None => Err("database backend is not configured".to_string()),
-                };
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.migrate_table(&name, &columns_json));
                 let _ = resp.send(result);
             }
             DbRequest::CompareAndSwapRows {
+                connection_id,
                 name,
                 expected_rev,
                 columns_json,
                 rows_json,
                 resp,
             } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.compare_and_swap_rows(
+                let result = backend_mut(&mut backends, connection_id).and_then(|backend| {
+                    backend.compare_and_swap_rows(
                         &name,
                         expected_rev,
                         &columns_json,
                         &rows_json,
-                    ),
-                    None => Err("database backend is not configured".to_string()),
-                };
+                    )
+                });
                 let _ = resp.send(result);
             }
             DbRequest::SqliteConfigure {
+                connection_id,
                 wal,
                 busy_timeout_ms,
                 resp,
             } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.sqlite_configure(wal, busy_timeout_ms),
-                    None => Err("database backend is not configured".to_string()),
-                };
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.sqlite_configure(wal, busy_timeout_ms));
                 let _ = resp.send(result);
             }
-            DbRequest::BeginTransaction { resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.begin_transaction(),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::BeginTransaction {
+                connection_id,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.begin_transaction());
                 let _ = resp.send(result);
             }
-            DbRequest::CommitTransaction { resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.commit_transaction(),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::CommitTransaction {
+                connection_id,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.commit_transaction());
                 let _ = resp.send(result);
             }
-            DbRequest::RollbackTransaction { resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.rollback_transaction(),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::RollbackTransaction {
+                connection_id,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.rollback_transaction());
                 let _ = resp.send(result);
             }
-            DbRequest::Savepoint { name, resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.savepoint(&name),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::Savepoint {
+                connection_id,
+                name,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.savepoint(&name));
                 let _ = resp.send(result);
             }
-            DbRequest::ReleaseSavepoint { name, resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.release_savepoint(&name),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::ReleaseSavepoint {
+                connection_id,
+                name,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.release_savepoint(&name));
                 let _ = resp.send(result);
             }
-            DbRequest::RollbackToSavepoint { name, resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.rollback_to_savepoint(&name),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::RollbackToSavepoint {
+                connection_id,
+                name,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.rollback_to_savepoint(&name));
                 let _ = resp.send(result);
             }
-            DbRequest::RunMigrationSql { statements, resp } => {
-                let result = match backend.as_mut() {
-                    Some(backend) => backend.run_migration_sql(&statements),
-                    None => Err("database backend is not configured".to_string()),
-                };
+            DbRequest::RunMigrationSql {
+                connection_id,
+                statements,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.run_migration_sql(&statements));
                 let _ = resp.send(result);
             }
         }

@@ -43,6 +43,18 @@ To handle errors as values, use `attempt` (see [Effects](effects.md)):
 
 <<< ../snippets/from_md/syntax/external_sources/sourceerror_02.aivi{aivi}
 
+### Capability mapping (Phase 1 surface)
+
+`Source K A` is pure description data. The capability requirement appears when the source is **loaded**:
+
+- `load (file.*)` / `load (file.image*)` → `file.read`
+- `load (rest.*)` / `load (http.*)` / `load (https.*)` → `network.http`
+- `load (env.*)` → `process.env.read`
+- `load (email.imap ...)` and other mail/network connectors → `network`
+- database-backed source reads → `db.query`
+- `@static` embedded sources → no runtime capability after compilation
+
+See [Capabilities](capabilities.md) for the standard vocabulary.
 
 ## 12.2 File Sources
 

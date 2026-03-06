@@ -1,9 +1,10 @@
 use aivi
+use aivi.database as db
 use aivi.database.pool as Pool
 
-Conn = { id: Int }
+dbConfig = { driver: Sqlite, url: "./app.sqlite" }
 
-cfg : Pool.Config Conn
+cfg : Pool.Config DbConnection
 cfg = {
   maxSize: 4
   minIdle: 1
@@ -14,8 +15,8 @@ cfg = {
   backoffPolicy: Pool.Fixed ({ millis: 25 })
   queuePolicy: Pool.Fifo
 
-  acquire: _ => pure { id: 0 }
-  release: _ => pure Unit
+  acquire: _ => db.connect dbConfig
+  release: db.close
   healthCheck: _ => pure True
 }
 
@@ -24,5 +25,10 @@ main = do Effect {
   poolRes <- Pool.create cfg
   poolRes match
     | Err e   => pure (Err e)
-    | Ok pool => Pool.withConn pool (_ => pure 123)
+    | Ok pool =>
+        Pool.withConn pool (conn =>
+          db.inTransactionOn conn (do Effect {
+            pure 123
+          })
+        )
 }

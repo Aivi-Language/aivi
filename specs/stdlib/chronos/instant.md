@@ -24,6 +24,10 @@ It corresponds to a UTC timestamp (Unix epoch). While `DateTime` (in `Calendar`)
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/domain_definition.aivi{aivi}
 
+## Capability mapping (Phase 1 surface)
+
+Effectful wall-clock reads such as `now` require `clock.now` (or the broader `clock` family shorthand).
+
 ## Usage Examples
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/usage_examples.aivi{aivi}

@@ -159,7 +159,10 @@ FieldDecl      := lowerIdent ":" Type
 ## 0.3 Expressions
 
 ```ebnf
-Expr           := IfExpr
+Expr           := WithCapsExpr
+
+WithCapsExpr   := "with" CapabilitySet "in" Expr
+               | IfExpr
 
 IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr
@@ -336,7 +339,7 @@ If you want multi-argument matching, match on a tuple:
 ## 0.6 Types
 
 ```ebnf
-Type           := TypeArrow
+Type           := TypeArrow [ CapabilityClause ]
 TypeArrow      := TypeAnd [ "->" TypeArrow ]
 TypeAnd        := TypePipe { "with" TypePipe }
 TypePipe       := TypeApp { "|>" TypeApp }
@@ -348,10 +351,16 @@ TypeAtom       := UpperIdent
                | TupleType
                | RecordType
 
+CapabilityClause := "with" CapabilitySet
+CapabilitySet    := "{" CapabilityPath { "," CapabilityPath } "}"
+CapabilityPath   := lowerIdent { "." lowerIdent }
+
 TupleType      := "(" Type "," Type { "," Type } ")"
 RecordType     := "{" { RecordTypeField } "}"
 RecordTypeField:= lowerIdent ":" Type [ FieldSep ]
 ```
+
+Capability clauses are only meaningful when the annotated type is an `Effect ...` or `Resource ...` shape. Likewise, `with { ... } in expr` is a capability-narrowing form; it does not install handlers or mocks.
 
 ## 0.7 Patterns
 
