@@ -26,6 +26,7 @@ mod defaults;
 mod duration;
 mod email;
 mod file;
+mod forms;
 mod generator;
 mod geometry;
 mod graph;
@@ -236,6 +237,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: file::MODULE_NAME,
         source: file::SOURCE,
+    },
+    EmbeddedModule {
+        name: forms::MODULE_NAME,
+        source: forms::SOURCE,
     },
     EmbeddedModule {
         name: email::MODULE_NAME,

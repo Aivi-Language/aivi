@@ -232,6 +232,7 @@ fn type_span(ty: &TypeExpr) -> Span {
     match ty {
         TypeExpr::Name(name) => name.span.clone(),
         TypeExpr::And { span, .. }
+        | TypeExpr::CapabilityClause { span, .. }
         | TypeExpr::Apply { span, .. }
         | TypeExpr::Func { span, .. }
         | TypeExpr::Record { span, .. }

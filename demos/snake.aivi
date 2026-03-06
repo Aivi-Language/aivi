@@ -192,7 +192,7 @@ update = msg state => msg match
 // CSS for monospace grid
 
 css : Text
-css = ".snakerow \{ font-family: monospace; font-size: 14px; letter-spacing: 2px; \} .snakeheader \{ font-family: monospace; font-size: 13px; margin-bottom: 4px; \} .snakestatus \{ font-family: monospace; font-size: 12px; margin-top: 4px; \}"
+css = ~`.snakerow { font-family: monospace; font-size: 14px; letter-spacing: 2px; } .snakeheader { font-family: monospace; font-size: 13px; margin-bottom: 4px; } .snakestatus { font-family: monospace; font-size: 12px; margin-top: 4px; }`
 
 // Entry point
 

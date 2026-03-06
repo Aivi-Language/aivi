@@ -44,7 +44,7 @@ impl Parser {
                 span,
             });
         }
-        let mut expr = self.parse_lambda_or_binary()?;
+        let mut expr = self.parse_capability_scope_or_expr()?;
         // Result fallback sugar:
         //   res or "boom"
         //   res or | Err NotFound m => m | Err _ => "boom"
@@ -114,6 +114,36 @@ impl Parser {
                 span,
             });
         }
+        self.parse_capability_scope_or_expr()
+    }
+
+    fn parse_capability_scope_or_expr(&mut self) -> Option<Expr> {
+        let checkpoint = self.pos;
+        self.consume_newlines();
+        if self.consume_ident_text("with").is_some() {
+            if let Some(capabilities) = self.try_parse_capability_list() {
+                self.consume_newlines();
+                if self.consume_ident_text("in").is_none() {
+                    self.emit_diag("E1532", "expected `in` after capability clause", self.previous_span());
+                }
+                let body = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: self.previous_span(),
+                });
+                let end_span = expr_span(&body);
+                let start_span = capabilities
+                    .first()
+                    .map(|cap| cap.span.clone())
+                    .unwrap_or_else(|| self.previous_span());
+                let span = merge_span(start_span, end_span);
+                return Some(Expr::CapabilityScope {
+                    capabilities,
+                    body: Box::new(body),
+                    span,
+                });
+            }
+        }
+        self.pos = checkpoint;
         self.parse_lambda_or_binary()
     }
 

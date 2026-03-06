@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::mpsc;
+use std::sync::Mutex;
 
 const META_TABLE: &str = "aivi_tables";
 pub const EMPTY_ROWS_JSON: &str = "{\"t\":\"List\",\"v\":[]}";
@@ -100,8 +100,7 @@ impl DbConnection {
         &self,
         req: impl FnOnce(u64, mpsc::Sender<Result<T, String>>) -> DbRequest,
     ) -> Result<T, String> {
-        self.handle
-            .request(|resp| req(self.connection_id, resp))
+        self.handle.request(|resp| req(self.connection_id, resp))
     }
 
     pub fn close(&self) -> Result<(), String> {
@@ -663,9 +662,8 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 connection_id,
                 resp,
             } => {
-                let result = backend_mut(&mut backends, connection_id).and_then(|backend| {
-                    backend.ensure_schema()
-                });
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.ensure_schema());
                 let _ = resp.send(result);
             }
             DbRequest::LoadTable {
@@ -696,12 +694,7 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 resp,
             } => {
                 let result = backend_mut(&mut backends, connection_id).and_then(|backend| {
-                    backend.compare_and_swap_rows(
-                        &name,
-                        expected_rev,
-                        &columns_json,
-                        &rows_json,
-                    )
+                    backend.compare_and_swap_rows(&name, expected_rev, &columns_json, &rows_json)
                 });
                 let _ = resp.send(result);
             }
@@ -776,5 +769,26 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 let _ = resp.send(result);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commit_without_active_transaction_returns_error() {
+        let state = DatabaseState::new();
+        let connection = state
+            .connect(Driver::Sqlite, ":memory:".to_string())
+            .expect("sqlite connection");
+        let err = connection
+            .commit_transaction()
+            .expect_err("commit without transaction should fail");
+        assert!(
+            err.contains("transaction"),
+            "expected transaction error, got: {err}"
+        );
+        connection.close().expect("close connection");
     }
 }

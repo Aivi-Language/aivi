@@ -4,7 +4,7 @@
 Capabilities describe the external authority an `Effect E A` or `Resource E A` needs, without changing the meaning of `E` or `A`.
 <!-- /quick-info -->
 
-> **Status:** Phase 1 capability surface is specified here. Signature clauses and lexical narrowing are part of the language design. Handler / interpreter binding and runtime plumbing land in later milestones. Until then, existing ambient builtins remain valid and should be read as implicitly requiring the mapped capabilities from this page.
+> **Status:** Phase 1 capability surface is specified here. Signature clauses, lexical narrowing, and scoped handler binding are part of the language design. Runtime plumbing and first-class diagnostics continue to land in follow-up milestones. Existing ambient builtins remain valid and should be read as the default interpreters for the mapped capabilities on this page.
 
 ## Overview
 
@@ -89,8 +89,8 @@ Rules:
 
 - the inner scope may use only the listed capabilities
 - nested `with` blocks intersect, so an inner scope can narrow further but never widen authority
-- local scoping does **not** install implementations, mocks, or handlers; it only reduces the authority already in scope
-- later handler / interpreter syntax should reuse these same capability names and lexical scopes rather than inventing a second mechanism
+- bare local scoping does **not** install implementations; it only reduces the authority already in scope
+- `with { capability = handler } in expr` reuses this same lexical form to install scoped interpreters; see [Effect Handlers](effect_handlers.md)
 
 ## Resources and cancellation
 
@@ -107,6 +107,18 @@ The clause covers the whole resource lifecycle:
 - helper effects used inside the resource body
 
 Resource cleanup remains cancellation-protected automatically. Authors do **not** add `cancellation.mask` merely to obtain ordinary finalizer guarantees. Explicit cancellation-control APIs (`scope`, `spawn`, `race`, future masking forms, task cancellation) are the places where `cancellation.*` becomes part of the public signature.
+
+## GTK command/subscription alignment
+
+The blessed GTK app architecture reuses this same capability vocabulary for UI-hosted work:
+
+- `gtkApp` itself remains the coarse-grained `ui` entry point,
+- `Command.perform` / `Command.startTask` inherit the capability requirements of their enclosed `Effect`,
+- `Command.after` and `Subscription.every` consume `clock.sleep` / `clock.schedule`,
+- keyed task or subscription cancellation uses `cancellation.propagate`,
+- `Subscription.source` inherits the capability requirements of its `Resource`.
+
+This is intentional. Commands and subscriptions do **not** introduce a second permission model for UI code; they are declarative hosts for ordinary `Effect` / `Resource` work that already carries capability clauses.
 
 ## Mapping existing ambient APIs
 
@@ -132,6 +144,9 @@ Resource cleanup remains cancellation-protected automatically. Authors do **not*
 | `scope`, `spawn`, `race`, explicit task cancellation | `cancellation.propagate` |
 | `crypto.randomUuid`, `crypto.randomBytes`, salted password hashing | `randomness.secure` |
 | `gtkApp`, `signalStream`, `reconcileNode`, clipboard / notification helpers | `ui` |
+| `Command.after`, `Subscription.every` | `clock.sleep` / `clock.schedule` |
+| keyed `Command.startTask`, `Command.cancel`, subscription replacement/removal | `cancellation.propagate` |
+| `Subscription.source` over files, sockets, db notifications, or custom feeds | capabilities required by the underlying `Resource` |
 | `@static` embedded sources | no runtime capability after compilation |
 
 ## Migration from ambient builtins
@@ -140,5 +155,5 @@ Resource cleanup remains cancellation-protected automatically. Authors do **not*
 2. Annotate public `Effect` and `Resource` signatures with the smallest capability set they require.
 3. Prefer narrow leaves (`file.read`) over broad families (`file`) unless the API genuinely needs the whole family.
 4. Use `with { ... } in` to narrow large helper bodies and make accidental authority creep visible in code review.
-5. Continue using `mock ... in` for test substitution until the dedicated handler / interpreter milestone lands.
+5. Use `with { capability = handler } in` for capability-scoped interpreters; keep `mock ... in` for binding-level substitution and snapshot-style tests.
 6. Later compiler and LSP work will turn these capability contracts into first-class diagnostics and quick-fixes.

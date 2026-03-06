@@ -49,6 +49,7 @@ export const sidebar = [
         items: [
           { text: 'Effects', link: '/syntax/effects' },
           { text: 'Capabilities', link: '/syntax/capabilities' },
+          { text: 'Effect Handlers', link: '/syntax/effect_handlers' },
           { text: 'do Notation', link: '/syntax/do_notation' },
           { text: 'Resources', link: '/syntax/resources' },
           { text: 'Machines', link: '/syntax/machines' },
