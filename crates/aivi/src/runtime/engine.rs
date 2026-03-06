@@ -104,6 +104,10 @@ pub(crate) struct Runtime {
     /// detect when a MultiClause operator clause produced warnings (e.g. wrong
     /// field access) so the next clause can be tried instead.
     pub(crate) jit_rt_warning_count: u64,
+    /// When true, `rt_warn` increments the counter but does NOT print to stderr.
+    /// Used during MultiClause trial dispatch where wrong-type clauses are
+    /// expected to fail silently.
+    pub(crate) jit_suppress_warnings: bool,
     /// Guard to prevent recursive MultiClause dispatch in `rt_binary_op`.
     /// When true, nested binary ops use the first matching clause directly.
     pub(crate) jit_binary_op_dispatching: bool,

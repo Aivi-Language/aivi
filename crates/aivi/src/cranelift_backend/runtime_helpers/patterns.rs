@@ -124,7 +124,7 @@ pub extern "C" fn rt_list_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i6
     let value = unsafe { &*ptr };
     match value {
         Value::List(items) => items.len() as i64,
-        _ => -1,
+        _ => 0,
     }
 }
 
