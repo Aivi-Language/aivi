@@ -605,14 +605,18 @@ impl Backend {
         fn extract_bind_value_type(ty: &aivi::TypeExpr) -> aivi::TypeExpr {
             match ty {
                 aivi::TypeExpr::Apply { base, args, .. }
-                    if args.len() == 1
+                    if !args.is_empty()
                         && matches!(
                             base.as_ref(),
                             aivi::TypeExpr::Name(name)
-                                if name.name == "Effect" || name.name == "Task" || name.name == "Result"
+                                if name.name == "Effect" || name.name == "Task"
+                                    || name.name == "Result" || name.name == "Resource"
+                                    || name.name == "Source"
                         ) =>
                 {
-                    args[0].clone()
+                    // The value type is always the last type argument
+                    // (e.g. Effect E A -> A, Result E A -> A, Task A -> A)
+                    args.last().cloned().unwrap_or_else(|| ty.clone())
                 }
                 _ => ty.clone(),
             }
@@ -727,9 +731,12 @@ impl Backend {
                 }
                 let base = inferred
                     .and_then(|types| types.get(ident))
-                    .map(|ty| format!("`{ident}` : `{ty}`"))
-                    .unwrap_or_else(|| format!("`{ident}`"));
-                return Some(Self::hover_badge_markdown("value", base));
+                    .map(|ty| format!("`{ident}` : `{ty}`"));
+                if let Some(base) = base {
+                    return Some(Self::hover_badge_markdown("value", base));
+                }
+                // No type info available; fall through so span_types fallback can provide it.
+                return None;
             }
         }
         None

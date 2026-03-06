@@ -4,6 +4,10 @@ use std::sync::Arc;
 use super::util::{builtin, list_value};
 use crate::runtime::{RuntimeError, Value};
 
+fn is_none_value(value: &Value) -> bool {
+    matches!(value, Value::Constructor { name, args } if name == "None" && args.is_empty())
+}
+
 /// Converts any AIVI runtime `Value` into the AIVI `JsonValue` ADT.
 ///
 /// Mapping:
@@ -188,6 +192,34 @@ pub(super) fn json_value_to_text(value: &Value) -> Result<String, RuntimeError> 
                 })
                 .collect();
             Ok(format!("{{{}}}", parts?.join(",")))
+        }
+        // Handle raw AIVI values (from openapi request bodies)
+        Value::Text(s) => Ok(format!("\"{}\"", json_escape(s))),
+        Value::Int(n) => Ok(n.to_string()),
+        Value::Float(f) => Ok(format_float(*f)),
+        Value::Bool(true) => Ok("true".to_string()),
+        Value::Bool(false) => Ok("false".to_string()),
+        Value::List(items) => {
+            let parts: Result<Vec<String>, RuntimeError> =
+                items.iter().map(json_value_to_text).collect();
+            Ok(format!("[{}]", parts?.join(",")))
+        }
+        Value::Record(fields) => {
+            let parts: Result<Vec<String>, RuntimeError> = fields
+                .iter()
+                .filter(|(_, v)| !is_none_value(v))
+                .map(|(key, val)| {
+                    let val_str = json_value_to_text(val)?;
+                    Ok(format!("\"{}\":{}", json_escape(key), val_str))
+                })
+                .collect();
+            Ok(format!("{{{}}}", parts?.join(",")))
+        }
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+            json_value_to_text(&args[0])
+        }
+        Value::Constructor { name, args } if name == "None" && args.is_empty() => {
+            Ok("null".to_string())
         }
         _ => Err(RuntimeError::Message(
             "json: expected JsonValue, got unexpected constructor".to_string(),

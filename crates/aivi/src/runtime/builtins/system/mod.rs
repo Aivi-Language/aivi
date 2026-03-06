@@ -318,7 +318,7 @@ fn scalar_text_to_value(raw: &str) -> Value {
     Value::Text(raw.to_string())
 }
 
-fn json_to_runtime(value: &JsonValue) -> Value {
+pub(in crate::runtime::builtins) fn json_to_runtime(value: &JsonValue) -> Value {
     match value {
         JsonValue::Null => make_none(),
         JsonValue::Bool(v) => Value::Bool(*v),

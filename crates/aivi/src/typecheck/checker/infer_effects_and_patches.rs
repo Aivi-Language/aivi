@@ -34,7 +34,9 @@ impl TypeChecker {
                         }
                     };
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Let { pattern, expr, .. } => {
                     // `x = expr` inside `effect { ... }` is a pure let-binding and must not run
@@ -85,7 +87,9 @@ impl TypeChecker {
                     }
 
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Filter { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
@@ -168,12 +172,16 @@ impl TypeChecker {
                     };
                     self.unify_with_span(expr_ty, expected, expr_span(expr))?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Let { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Expr { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
@@ -290,7 +298,9 @@ impl TypeChecker {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let bind_elem = self.generate_source_elem(expr_ty, expr_span(expr))?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, bind_elem.clone(), pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                     current_elem = Some(bind_elem);
                 }
                 BlockItem::Let { pattern, expr, .. } => {
@@ -299,7 +309,9 @@ impl TypeChecker {
                     }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Filter { expr, .. } => {
                     let mut guard_env = local_env.clone();
@@ -360,7 +372,9 @@ impl TypeChecker {
                     let value_ty =
                         self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Let { pattern, expr, .. } => {
                     if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
@@ -368,7 +382,9 @@ impl TypeChecker {
                     }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Filter { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
