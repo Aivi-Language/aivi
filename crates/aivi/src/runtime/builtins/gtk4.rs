@@ -29,6 +29,7 @@ fn build_gtk4_stubs() -> Value {
         ("signalPoll", 1),
         ("signalEmit", 4),
         ("signalStream", 1),
+        ("setInterval", 1),
         ("dbusServerStart", 1),
         ("init", 1),
         ("appNew", 1),

@@ -249,6 +249,7 @@ mod linux_impl {
         fn g_main_context_default() -> *mut c_void;
         fn g_main_context_pending(context: *mut c_void) -> c_int;
         fn g_main_context_iteration(context: *mut c_void, may_block: c_int) -> c_int;
+        fn g_timeout_add(interval: c_uint, function: unsafe extern "C" fn(*mut c_void) -> c_int, data: *mut c_void) -> c_uint;
     }
 
     #[link(name = "gobject-2.0")]
@@ -4124,6 +4125,32 @@ mod linux_impl {
             Ok(final_id)
         })
     }
+
+    unsafe extern "C" fn tick_timeout_cb(_data: *mut c_void) -> c_int {
+        let event = SignalEvent {
+            widget_id: 0,
+            widget_name: String::new(),
+            signal: "tick".to_string(),
+            handler: String::new(),
+            payload: String::new(),
+        };
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            state.signal_senders.retain(|s| s.send(event.clone()).is_ok());
+            state.signal_events.push_back(SignalEventState {
+                widget_id: 0,
+                signal: "tick".to_string(),
+                handler: String::new(),
+                payload: String::new(),
+            });
+        });
+        1 // TRUE — keep repeating
+    }
+
+    pub(super) fn set_interval(ms: u32) -> Result<(), Gtk4Error> {
+        unsafe { g_timeout_add(ms, tick_timeout_cb, null_mut()) };
+        Ok(())
+    }
 } // mod linux_impl
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -4272,6 +4299,7 @@ delegate!(signal_bind_dialog_present(handler: &str, dialog_id: i64, parent_id: i
 delegate!(signal_bind_stack_page(handler: &str, stack_id: i64, page_name: &str) -> Result<(), Gtk4Error>);
 delegate!(build_from_node(node: &GtkNode) -> Result<i64, Gtk4Error>);
 delegate!(build_with_ids(node: &GtkNode) -> Result<BuildResult, Gtk4Error>);
+delegate!(set_interval(ms: u32) -> Result<(), Gtk4Error>);
 
 pub fn reconcile_node(root_id: i64, node: &GtkNode) -> Result<i64, Gtk4Error> {
     #[cfg(target_os = "linux")]

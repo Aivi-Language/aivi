@@ -67,10 +67,12 @@ Notes:
 | **split** sep text<br><code>Text -> Text -> List Text</code> | Splits `text` on `sep`. |
 | **splitLines** text<br><code>Text -> List Text</code> | Splits on line endings. |
 | **chunk** size text<br><code>Int -> Text -> List Text</code> | Splits into codepoint chunks of length `size`. |
+| **join** sep parts<br><code>Text -> List Text -> Text</code> | Joins `parts` with `sep` between each element. The inverse of `split`. |
 
 Notes:
 - `slice start end text` is half-open (`start` inclusive, `end` exclusive) and clamps out-of-range indices.
 - `chunk` splits by codepoint count, not bytes.
+- `join sep []` returns `""` ; `join sep [x]` returns `x` with no separator appended.
 
 ### Trimming and padding
 
