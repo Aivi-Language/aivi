@@ -94,12 +94,13 @@ extractRgb = color =>
 
 ```aivi
 use aivi.bits
+use aivi.logic
 
 parseHeader : Bits -> Result Text { version: Int, flags: Bits, payload: Bits }
 parseHeader = raw =>
   stream = streamFromBits raw
-  stream |> streamRead 1 |> Result.chain (vb, s1) =>
-  s1    |> streamRead 2 |> Result.chain (flags, s2) =>
-  s2    |> streamRead 4 |> Result.map (payload, _) =>
+  stream |> streamRead 1 |> chain (vb, s1) =>
+  s1    |> streamRead 2 |> chain (flags, s2) =>
+  s2    |> streamRead 4 |> map (payload, _) =>
   { version: toInt vb, flags: flags, payload: payload }
 ```

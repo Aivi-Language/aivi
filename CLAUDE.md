@@ -126,27 +126,40 @@ Prefer `gtkApp` for new apps. The `on Msg => handler` callback style and `signal
 ### Decorators
 Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1.
 
-## 21 Anti-Patterns (Do NOT write these)
+## Anti-Patterns (Do NOT write these)
 
 | Wrong                  | Why                              | Correct                                             |
 |:---------------------- |:-------------------------------- |:--------------------------------------------------- |
 | `let x = 1`            | No `let` keyword                 | `x = 1`                                             |
 | `def f(x):`            | No `def`, no parens for args     | `f = x => ...`                                      |
+| `fn f(x: T) -> R`      | No `fn` keyword                  | `f : T -> R` / `f = x => ...`                       |
+| `f :: T -> R`          | Single colon for type signatures | `f : T -> R`                                        |
 | `var x = 1; x = 2`     | No mutation, no semicolons!                      | `x = 1; x = x + 1` (shadow)                         |
 | `null` / `nil`         | No nulls                         | `None` / `Option A`                                 |
+| `Just x` / `Nothing`   | AIVI is not Haskell              | `Some x` / `None`                                   |
+| `Left e` / `Right x`   | AIVI is not Haskell              | `Err e` / `Ok x`                                    |
+| `Some(x)` / `Ok(x)`   | Constructors take no parens      | `Some x` / `Ok x`                                   |
 | `throw` / `try/catch`  | No exceptions                    | `fail e` / `attempt` / `or`                         |
 | `for x in xs { ... }`  | No loops                         | `xs \|> map f` or `generate { x <- xs; yield f x }` |
 | `while cond { ... }`   | No loops                         | Recursion or `loop`/`recurse` in generators         |
+| `f(x, y)`              | No parens for function calls     | `f x y`                                             |
 | `x.method()`           | No methods, no parens            | `method x` or `x \|> method`                        |
+| `List<Int>` / `Option<T>` | No angle-bracket generics     | `List Int` / `Option T`                             |
+| `List.map f xs`        | HKT methods are unqualified      | `map f xs` (with `use aivi.logic`)                  |
+| `fmap` / `>>=` / `<$>` / `<*>` | Haskell operators       | `map` / `chain` / `map` / `ap`                      |
+| `impl Trait for Type`  | Rust syntax                      | `instance Class (Type) = { ... }`                   |
+| `newtype Foo = Foo T`  | Haskell syntax                   | `opaque Foo = T`                                    |
+| `do { x <- m }`        | Must name the monad              | `do Effect { x <- m }`                              |
 | `case x of ...`        | `case` is kernel only            | `x match \| pat => expr`                            |
 | `String`               | Type is called `Text`            | `Text`                                              |
 | `return x`             | No return statement              | Expression result is implicit; `pure x` in effects  |
 | `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
 | `a & b`, `a \| b`      | No bitwise operators             | `use aivi.bits; and a b`, `or a b`                  |
 | `a << 2`, `a >> 2`     | No shift operators               | `use aivi.bits; shiftLeft 2 a`, `shiftRight 2 a`   |
-| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a` 
-| `"x" ++ "y"` (string concat)     | There is only text interpolation | `"{x}{y}"`                       |
+| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a`                       |
+| `"x" ++ "y"`           | No string concat operator        | `"{x}{y}"`                                          |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
+| `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |
 
 
 ## Pre-commit Checklist

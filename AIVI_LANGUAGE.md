@@ -314,47 +314,69 @@ Type signatures are also required for multi-clause function definitions (`f = | 
 ### Classes and instances (ad-hoc polymorphism, HKTs)
 
 ```aivi
+class Setoid A = {
+  equals: A -> A -> Bool
+}
+
+class Ord A = Setoid {
+  lte: A -> A -> Bool
+}
+
+class Semigroup A = {
+  concat: A -> A -> A
+}
+
+class Monoid A = Semigroup {
+  empty: A
+}
+
 class Functor (F A) = {
-  map : (A -> B) -> F B
+  map: (A -> B) -> F B
 }
 
 class Apply (F A) = Functor {
-  ap : F (A -> B) -> F B
+  ap: F (A -> B) -> F B
 }
 
-class Chain (M A) = Apply {
-  chain : (A -> M B) -> M A -> M B
+class Applicative (F A) = Apply {
+  of: A -> F A
 }
 
-class Applicative (M A) = Apply {
-  of : A -> M A
+class Chain (F A) = Apply {
+  chain: (A -> F B) -> F B
 }
 
 class Monad (M A) = Applicative, Chain {}
 
 class Foldable (F A) = {
-  reduce : (B -> A -> B) -> B -> F A -> B
+  reduce: (B -> A -> B) -> B -> B
 }
 
-class Traversable (F A) = Functor, Foldable {
-  traverse : (A -> Effect E B) -> F A -> Effect E (F B)
+class Traversable (T A) = Functor, Foldable {
+  traverse: (A -> F B) -> F (T B)
 }
 
 class Filterable (F A) = Functor {
-  filter : (A -> Bool) -> F A
+  filter: (A -> Bool) -> F A
 }
 
 class Alternative (F A) = Applicative {
-  alt : F A -> F A
+  alt: F A -> F A
 }
 
 class Plus (F A) = Alternative {
-  zero : F A
+  zero: F A
+}
+
+class Bifunctor (F A B) = {
+  bimap: (A -> C) -> (B -> D) -> F C D
 }
 
 instance Monad (Option A) = { ... }
 instance Monad (Result E A) = { ... }
 instance Monad (List A) = { ... }
+instance Semigroup Text = { ... }
+instance Monoid Text = { ... }
 ```
 
 Type variables in class/instance declarations are implicitly universally quantified.
@@ -373,15 +395,15 @@ or function signature is enough. When ambiguous, use qualified forms: `List.empt
 
 ### Type class instance table
 
-| Type | Functor | Filterable | Foldable | Traversable | Monad | Semigroup | Monoid | Alternative | Plus |
-|------|:-------:|:----------:|:--------:|:-----------:|:-----:|:---------:|:------:|:-----------:|:----:|
-| `List A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Option A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Result E A` | ✓ | — | ✓ | ✓ | ✓ | — | — | ✓ | — |
-| `Map K V` | ✓ | ✓ | ✓ | — | — | ✓ | ✓ | — | — |
-| `Generator A` | ✓ | ✓ | ✓ | — | — | — | — | — | — |
-| `Tree A` | ✓ | ✓ | ✓ | — | — | — | — | — | — |
-| `Stream A` | ✓ | ✓ | — | — | — | — | — | — | — |
+| Type | Setoid | Ord | Semigroup | Monoid | Functor | Filterable | Foldable | Traversable | Apply | Applicative | Chain | Monad | Bifunctor | Alternative | Plus |
+|------|:------:|:---:|:---------:|:------:|:-------:|:----------:|:--------:|:-----------:|:-----:|:-----------:|:-----:|:-----:|:---------:|:-----------:|:----:|
+| `List A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| `Option A` | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| `Result E A` | ✓ | — | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| `Map K V` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+| `Generator A` | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+| `Tree A` | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+| `Stream A` | — | — | — | — | ✓ | ✓ | — | — | — | — | — | — | — | — | — |
 
 ### Type variable constraints
 
@@ -1158,7 +1180,7 @@ testFetch =
   mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
   in do Effect {
     users <- fetchUsers   // calls mock transparently
-    assertEq (List.length users) 1
+    assertEq (length users) 1
   }
 ```
 
@@ -1195,7 +1217,7 @@ snapshotTest =
   mock snapshot rest.get
   in do Effect {
     users <- fetchUsers
-    assertEq (List.length users) 3
+    assertEq (length users) 3
   }
 ```
 
@@ -1425,24 +1447,37 @@ topoSmoke = do Effect {
 
 ---
 
-## 21 Anti-Patterns (Do NOT write these)
+## Anti-Patterns (Do NOT write these)
 
 | Wrong                  | Why                              | Correct                                             |
 |:---------------------- |:-------------------------------- |:--------------------------------------------------- |
 | `let x = 1`            | No `let` keyword                 | `x = 1`                                             |
 | `def f(x):`            | No `def`, no parens for args     | `f = x => ...`                                      |
+| `fn f(x: T) -> R`      | No `fn` keyword                  | `f : T -> R` / `f = x => ...`                       |
+| `f :: T -> R`          | Single colon for type signatures | `f : T -> R`                                        |
 | `var x = 1; x = 2`     | No mutation                      | `x = 1; x = x + 1` (shadow)                         |
 | `null` / `nil`         | No nulls                         | `None` / `Option A`                                 |
+| `Just x` / `Nothing`   | AIVI is not Haskell              | `Some x` / `None`                                   |
+| `Left e` / `Right x`   | AIVI is not Haskell              | `Err e` / `Ok x`                                    |
+| `Some(x)` / `Ok(x)`   | Constructors take no parens      | `Some x` / `Ok x`                                   |
 | `throw` / `try/catch`  | No exceptions                    | `fail e` / `attempt` / `or`                         |
 | `for x in xs { ... }`  | No loops                         | `xs \|> map f` or `generate { x <- xs; yield f x }` |
 | `while cond { ... }`   | No loops                         | Recursion or `loop`/`recurse` in generators         |
+| `f(x, y)`              | No parens for function calls     | `f x y`                                             |
 | `x.method()`           | No methods, no parens            | `method x` or `x \|> method`                        |
+| `List<Int>` / `Option<T>` | No angle-bracket generics     | `List Int` / `Option T`                             |
+| `List.map f xs`        | HKT methods are unqualified      | `map f xs` (with `use aivi.logic`)                  |
+| `fmap` / `>>=` / `<$>` / `<*>` | Haskell operators       | `map` / `chain` / `map` / `ap`                      |
+| `impl Trait for Type`  | Rust syntax                      | `instance Class (Type) = { ... }`                   |
+| `newtype Foo = Foo T`  | Haskell syntax                   | `opaque Foo = T`                                    |
+| `do { x <- m }`        | Must name the monad              | `do Effect { x <- m }`                              |
 | `case x of ...`        | `case` is kernel only            | `x match \| pat => expr`                            |
 | `String`               | Type is called `Text`            | `Text`                                              |
 | `return x`             | No return statement              | Expression result is implicit; `pure x` in effects  |
 | `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
 | `a & b`, `a \| b`      | No bitwise operators             | `use aivi.bits; and a b`, `or a b`                  |
 | `a << 2`, `a >> 2`     | No shift operators               | `use aivi.bits; shiftLeft 2 a`, `shiftRight 2 a`   |
-| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a` 
-| `"x" ++ "y"` (string concat)     | There is only text interpolation | `"{x}{y}"`                       |
+| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a`                       |
+| `"x" ++ "y"`           | No string concat operator        | `"{x}{y}"`                                          |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
+| `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |

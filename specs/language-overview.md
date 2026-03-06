@@ -432,7 +432,7 @@ testFetch =
   mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
   in do Effect {
     users <- fetchUsers
-    assertEq (List.length users) 1
+    assertEq (length users) 1
   }
 ```
 
