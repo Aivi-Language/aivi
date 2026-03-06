@@ -211,11 +211,13 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             op,
             left,
             right,
+            location,
         } => HirExpr::Binary {
             id,
             op,
             left: Box::new(desugar_expr(*left, id_gen)),
             right: Box::new(desugar_expr(*right, id_gen)),
+            location,
         },
 
         // ── THE ACTUAL WORK — block desugaring ──

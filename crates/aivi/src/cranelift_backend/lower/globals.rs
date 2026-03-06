@@ -406,6 +406,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         op: &str,
         left: &RustIrExpr,
         right: &RustIrExpr,
+        location: Option<&str>,
     ) -> TypedValue {
         let lhs = self.lower_expr(builder, left);
         let rhs = self.lower_expr(builder, right);
@@ -436,6 +437,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             if let Some(tv) = self.try_native_float_op(builder, op, lhs.val, rf) {
                 return tv;
             }
+        }
+
+        // Emit location before the fallback runtime call so warnings show the source site
+        if let Some(loc) = location {
+            self.emit_set_location(builder, loc);
         }
 
         // Fallback: box both and call rt_binary_op

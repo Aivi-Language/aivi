@@ -565,6 +565,7 @@ mod tests {
             op: op.to_string(),
             left: Box::new(left),
             right: Box::new(right),
+            location: None,
         }
     }
 

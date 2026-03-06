@@ -17,6 +17,7 @@ fn lower_expr_inner_ctx(
                 text: "0".to_string(),
             }),
             right: Box::new(lower_expr_ctx(*expr, id_gen, ctx, false)),
+            location: None,
         },
         Expr::TextInterpolate { parts, .. } => HirExpr::TextInterpolate {
             id: id_gen.next(),
@@ -310,7 +311,7 @@ fn lower_expr_inner_ctx(
             else_branch: Box::new(lower_expr_ctx(*else_branch, id_gen, ctx, false)),
         },
         Expr::Binary {
-            op, left, right, ..
+            op, left, right, span,
         } => {
             if op == "&&" {
                 let cond = lower_expr_ctx(*left, id_gen, ctx, false);
@@ -383,11 +384,15 @@ fn lower_expr_inner_ctx(
                     };
                 }
             }
+            let location = ctx
+                .source_path
+                .map(|path| format!("{}:{}:{}", path, span.start.line, span.start.column));
             HirExpr::Binary {
                 id: id_gen.next(),
                 op,
                 left: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
                 right: Box::new(lower_expr_ctx(*right, id_gen, ctx, false)),
+                location,
             }
         }
         Expr::Block { kind, items, .. } => {
