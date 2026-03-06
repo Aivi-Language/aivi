@@ -357,8 +357,8 @@ impl Parser {
         //   class Name (Var Params) = [given (A: Constraint, ...),] [Super1, Super2, ...] { ... }
         //
         // Examples:
-        //   class Functor (F A) = given (A: Any) { map: (A -> B) -> F B }
-        //   class Monad (M A) = given (A: Any), Applicative, Chain {}
+        //   class Functor (F A) = { map: (A -> B) -> F B }
+        //   class Monad (M A) = Applicative, Chain {}
         //   class Collection (C A) = given (A: Eq) { elem: A -> C A -> Bool }
 
         fn peek_is_given_constraints(parser: &Parser) -> bool {

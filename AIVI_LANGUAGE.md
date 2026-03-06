@@ -314,50 +314,51 @@ Type signatures are also required for multi-clause function definitions (`f = | 
 ### Classes and instances (ad-hoc polymorphism, HKTs)
 
 ```aivi
-class Functor (F A) = given (A: Any) {
+class Functor (F A) = {
   map : (A -> B) -> F B
 }
 
-class Apply (F A) = given (A: Any), Functor {
+class Apply (F A) = Functor {
   ap : F (A -> B) -> F B
 }
 
-class Chain (M A) = given (A: Any), Apply {
+class Chain (M A) = Apply {
   chain : (A -> M B) -> M A -> M B
 }
 
-class Applicative (M A) = given (A: Any), Apply {
+class Applicative (M A) = Apply {
   of : A -> M A
 }
 
-class Monad (M A) = given (A: Any), Applicative, Chain {}
+class Monad (M A) = Applicative, Chain {}
 
-class Foldable (F A) = given (A: Any) {
+class Foldable (F A) = {
   reduce : (B -> A -> B) -> B -> F A -> B
 }
 
-class Traversable (F A) = given (A: Any), Functor, Foldable {
+class Traversable (F A) = Functor, Foldable {
   traverse : (A -> Effect E B) -> F A -> Effect E (F B)
 }
 
-class Filterable (F A) = given (A: Any), Functor {
+class Filterable (F A) = Functor {
   filter : (A -> Bool) -> F A
 }
 
-class Alternative (F A) = given (A: Any), Applicative {
+class Alternative (F A) = Applicative {
   alt : F A -> F A
 }
 
-class Plus (F A) = given (A: Any), Alternative {
+class Plus (F A) = Alternative {
   zero : F A
 }
 
-instance Monad (Option A) = given (A: Any) { ... }
-instance Monad (Result E A) = given (A: Any) { ... }
-instance Monad (List A) = given (A: Any) { ... }
+instance Monad (Option A) = { ... }
+instance Monad (Result E A) = { ... }
+instance Monad (List A) = { ... }
 ```
 
-`given (A: Any)` declares universally quantified type variables for higher-kinded types.
+Type variables in class/instance declarations are implicitly universally quantified.
+Use `given (A: ClassName)` only when a real constraint is needed (e.g., `given (A: Eq)`).
 HKT class member signatures use **abbreviated form**: the container type is omitted and
 added internally by the compiler as the last argument.
 

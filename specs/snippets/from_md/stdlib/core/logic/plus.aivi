@@ -1,6 +1,6 @@
 use aivi.logic
 
-class Plus (F A) = given (A: Any), Alternative {
+class Plus (F A) = Alternative {
   zero: F A
 }
 

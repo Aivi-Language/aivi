@@ -114,10 +114,10 @@ Required (email) User
 User |> Pick (id, name) |> Optional (name)
 
 // Classes and HKTs
-class Functor (F A) = given (A: Any) {
+class Functor (F A) = {
   map : (A -> B) -> F B
 }
-instance Monad (Option A) = given (A: Any) { ... }
+instance Monad (Option A) = { ... }
 // Typeclass methods accessed via pipe only: fa |> map f
 ```
 

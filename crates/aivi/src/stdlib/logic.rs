@@ -40,67 +40,67 @@ class Group A = Monoid {
 
 // 3. Categories
 
-class Semigroupoid (F A B) = given (A: Any, B: Any) {
+class Semigroupoid (F A B) = {
   compose: F B C -> F A C
 }
 
-class Category (F A B) = given (A: Any, B: Any), Semigroupoid {
+class Category (F A B) = Semigroupoid {
   id: F A A
 }
 
 // 4. Functional Mappings
 
-class Functor (F A) = given (A: Any) {
+class Functor (F A) = {
   map: (A -> B) -> F B
 }
 
-class Apply (F A) = given (A: Any), Functor {
+class Apply (F A) = Functor {
   ap: F (A -> B) -> F B
 }
 
-class Applicative (F A) = given (A: Any), Apply {
+class Applicative (F A) = Apply {
   of: A -> F A
 }
 
-class Chain (F A) = given (A: Any), Apply {
+class Chain (F A) = Apply {
   chain: (A -> F B) -> F B
 }
 
-class Monad (M A) = given (A: Any), Applicative, Chain {}
+class Monad (M A) = Applicative, Chain {}
 
 // 5. Folds and Traversals
 
-class Foldable (F A) = given (A: Any) {
+class Foldable (F A) = {
   reduce: (B -> A -> B) -> B -> B
 }
 
-class Traversable (T A) = given (A: Any), Functor, Foldable {
+class Traversable (T A) = Functor, Foldable {
   traverse: (A -> F B) -> F (T B)
 }
 
 // 5b. Filtering
 
-class Filterable (F A) = given (A: Any), Functor {
+class Filterable (F A) = Functor {
   filter: (A -> Bool) -> F A -> F A
 }
 
 // 5c. Alternatives
 
-class Alternative (F A) = given (A: Any), Applicative {
+class Alternative (F A) = Applicative {
   alt: F A -> F A -> F A
 }
 
-class Plus (F A) = given (A: Any), Alternative {
+class Plus (F A) = Alternative {
   zero: F A
 }
 
 // 6. Higher-Order Mappings
 
-class Bifunctor (F A B) = given (A: Any, B: Any) {
+class Bifunctor (F A B) = {
   bimap: (A -> C) -> (B -> D) -> F C D
 }
 
-class Profunctor (F A B) = given (A: Any, B: Any) {
+class Profunctor (F A B) = {
   promap: (A -> B) -> (C -> D) -> F A D
 }
 
@@ -110,43 +110,43 @@ class Profunctor (F A B) = given (A: Any, B: Any) {
 
 // Option
 
-instance Functor (Option A) = given (A: Any) {
+instance Functor (Option A) = {
   map: f opt =>
     opt match
       | None   => None
       | Some x => Some (f x)
 }
 
-instance Apply (Option A) = given (A: Any) {
+instance Apply (Option A) = {
   ap: fOpt opt =>
     (fOpt, opt) match
       | (Some f, Some x) => Some (f x)
       | _                => None
 }
 
-instance Applicative (Option A) = given (A: Any) {
+instance Applicative (Option A) = {
   of: Some
 }
 
-instance Chain (Option A) = given (A: Any) {
+instance Chain (Option A) = {
   chain: f opt =>
     opt match
       | None   => None
       | Some x => f x
 }
 
-instance Monad (Option A) = given (A: Any) {}
+instance Monad (Option A) = {}
 
 // Result
 
-instance Functor (Result E A) = given (A: Any) {
+instance Functor (Result E A) = {
   map: f res =>
     res match
       | Ok x  => Ok (f x)
       | Err e => Err e
 }
 
-instance Apply (Result E A) = given (A: Any) {
+instance Apply (Result E A) = {
   ap: fRes xRes =>
     (fRes, xRes) match
       | (Ok f, Ok x)   => Ok (f x)
@@ -154,34 +154,34 @@ instance Apply (Result E A) = given (A: Any) {
       | (_, Err e)     => Err e
 }
 
-instance Applicative (Result E A) = given (A: Any) {
+instance Applicative (Result E A) = {
   of: Ok
 }
 
-instance Chain (Result E A) = given (A: Any) {
+instance Chain (Result E A) = {
   chain: f res =>
     res match
       | Ok x  => f x
       | Err e => Err e
 }
 
-instance Monad (Result E A) = given (A: Any) {}
+instance Monad (Result E A) = {}
 
 // List
 
-instance Functor (List A) = given (A: Any) {
+instance Functor (List A) = {
   map: f xs => List.map f xs
 }
 
-instance Filterable (List A) = given (A: Any) {
+instance Filterable (List A) = {
   filter: pred xs => List.filter pred xs
 }
 
-instance Foldable (List A) = given (A: Any) {
+instance Foldable (List A) = {
   reduce: f init xs => List.foldl f init xs
 }
 
-instance Traversable (List A) = given (A: Any) {
+instance Traversable (List A) = {
   traverse: f xs => xs match
     | []           => pure []
     | [x, ...rest] => do Effect {
@@ -191,53 +191,53 @@ instance Traversable (List A) = given (A: Any) {
     }
 }
 
-instance Apply (List A) = given (A: Any) {
+instance Apply (List A) = {
   ap: fs xs => List.flatMap (f => List.map f xs) fs
 }
 
-instance Applicative (List A) = given (A: Any) {
+instance Applicative (List A) = {
   of: x => [x]
 }
 
-instance Chain (List A) = given (A: Any) {
+instance Chain (List A) = {
   chain: f xs => List.flatMap f xs
 }
 
-instance Monad (List A) = given (A: Any) {}
+instance Monad (List A) = {}
 
-instance Semigroup (List A) = given (A: Any) {
+instance Semigroup (List A) = {
   concat: xs ys => xs match
     | []           => ys
     | [x, ...rest] => [x, ...concat rest ys]
 }
 
-instance Monoid (List A) = given (A: Any) {
+instance Monoid (List A) = {
   empty: []
 }
 
-instance Alternative (List A) = given (A: Any) {
+instance Alternative (List A) = {
   alt: ys xs => if List.isEmpty xs then ys else xs
 }
 
-instance Plus (List A) = given (A: Any) {
+instance Plus (List A) = {
   zero: []
 }
 
 // Option additional instances
 
-instance Filterable (Option A) = given (A: Any) {
+instance Filterable (Option A) = {
   filter: pred opt => opt match
     | Some x => if pred x then Some x else None
     | None   => None
 }
 
-instance Foldable (Option A) = given (A: Any) {
+instance Foldable (Option A) = {
   reduce: f init opt => opt match
     | Some x => f init x
     | None   => init
 }
 
-instance Traversable (Option A) = given (A: Any) {
+instance Traversable (Option A) = {
   traverse: f opt => opt match
     | Some x => do Effect {
       y <- f x
@@ -246,31 +246,31 @@ instance Traversable (Option A) = given (A: Any) {
     | None => pure None
 }
 
-instance Semigroup (Option A) = given (A: Any) {
+instance Semigroup (Option A) = {
   concat: a b => (a, b) match
     | (Some x, _) => Some x
     | (None, y)   => y
 }
 
-instance Alternative (Option A) = given (A: Any) {
+instance Alternative (Option A) = {
   alt: fallback opt => opt match
     | Some x => Some x
     | None   => fallback
 }
 
-instance Plus (Option A) = given (A: Any) {
+instance Plus (Option A) = {
   zero: None
 }
 
 // Result additional instances
 
-instance Foldable (Result E A) = given (A: Any) {
+instance Foldable (Result E A) = {
   reduce: f init res => res match
     | Ok x  => f init x
     | Err _ => init
 }
 
-instance Traversable (Result E A) = given (A: Any) {
+instance Traversable (Result E A) = {
   traverse: f res => res match
     | Ok x  => do Effect {
       y <- f x
@@ -279,13 +279,13 @@ instance Traversable (Result E A) = given (A: Any) {
     | Err e => pure (Err e)
 }
 
-instance Bifunctor (Result E A) = given (A: Any) {
+instance Bifunctor (Result E A) = {
   bimap: f g res => res match
     | Ok x  => Ok (g x)
     | Err e => Err (f e)
 }
 
-instance Alternative (Result E A) = given (A: Any) {
+instance Alternative (Result E A) = {
   alt: fallback res => res match
     | Ok x  => Ok x
     | Err _ => fallback
@@ -293,23 +293,23 @@ instance Alternative (Result E A) = given (A: Any) {
 
 // Map
 
-instance Functor (Map K V) = given (V: Any) {
+instance Functor (Map K V) = {
   map: f m => Map.map f m
 }
 
-instance Filterable (Map K V) = given (V: Any) {
+instance Filterable (Map K V) = {
   filter: pred m => Map.filterWithKey (_ v => pred v) m
 }
 
-instance Foldable (Map K V) = given (V: Any) {
+instance Foldable (Map K V) = {
   reduce: f init m => Map.foldWithKey (acc _ v => f acc v) init m
 }
 
-instance Semigroup (Map K V) = given (V: Any) {
+instance Semigroup (Map K V) = {
   concat: a b => Map.union a b
 }
 
-instance Monoid (Map K V) = given (V: Any) {
+instance Monoid (Map K V) = {
   empty: Map.empty
 }
 "#;

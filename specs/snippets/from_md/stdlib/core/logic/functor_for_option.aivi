@@ -1,6 +1,6 @@
 use aivi.logic
 
-instance Functor (Option A) = given (A: Any) {
+instance Functor (Option A) = {
   map: f opt => opt match
     | None   => None
     | Some x => Some (f x)

@@ -27,10 +27,9 @@ Instances:
 
 Notes:
 
-- `instance ClassName (TypeExpr) = given (A: Any) { ... }` defines a dictionary value for a class implementation.
-- In `Result E A`, `E` is a fixed type parameter and `A` is the type variable bound by `given (A: Any)`. Read it as: “`Result` with the error fixed to `E`, as a 1-parameter type constructor”.
+- `instance ClassName (TypeExpr) = { ... }` defines a dictionary value for a class implementation.
+- In `Result E A`, `E` is a fixed type parameter and `A` is the HKT type variable. Read it as: “`Result` with the error fixed to `E`, as a 1-parameter type constructor”.
+- Type variables in class/instance declarations are implicitly universally quantified. Use `given (A: ClassName)` only when a real constraint is needed (e.g., `given (A: Eq)`). `given (A: Any)` is redundant and should be omitted.
 - HKT class member signatures use **abbreviated form**: the container type is omitted from the parameter list and added internally by the compiler as the last argument. For example, `map: (A -> B) -> F B` expands to `map: (A -> B) -> F A -> F B`.
 - Constructor methods whose return type equals the container (e.g., `of: A -> F A`) are not expanded.
 
-> [!NOTE] Implementation Note: Kinds
-> In the v0.1 compiler, kind annotations like `(F A) = given (A: Any)` are enforced by the type checker.
