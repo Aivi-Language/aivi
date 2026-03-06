@@ -104,7 +104,7 @@ mod bridge {
         }
     }
 
-    fn make_signal_event_value(event: aivi_gtk4::SignalEvent) -> Value {
+    pub(super) fn make_signal_event_value(event: aivi_gtk4::SignalEvent) -> Value {
         let wid = Value::Int(event.widget_id);
         let name = Value::Text(event.widget_name);
         match event.signal.as_str() {
@@ -134,6 +134,15 @@ mod bridge {
             "value-changed" => {
                 let val = event.payload.parse::<f64>().unwrap_or(0.0);
                 Value::Constructor { name: "GtkValueChanged".to_string(), args: vec![wid, name, Value::Float(val)] }
+            }
+            "key-pressed" => {
+                let mut parts = event.payload.splitn(2, '\n');
+                let key = parts.next().unwrap_or_default().to_string();
+                let detail = parts.next().unwrap_or_default().to_string();
+                Value::Constructor {
+                    name: "GtkKeyPressed".to_string(),
+                    args: vec![wid, name, Value::Text(key), Value::Text(detail)],
+                }
             }
             "focus-enter" => Value::Constructor { name: "GtkFocusIn".to_string(), args: vec![wid, name] },
             "focus-leave" => Value::Constructor { name: "GtkFocusOut".to_string(), args: vec![wid, name] },
@@ -714,6 +723,34 @@ mod bridge {
         }));
 
         fields
+    }
+}
+
+#[cfg(all(test, feature = "gtk4-libadwaita", target_os = "linux"))]
+mod tests {
+    use super::bridge::make_signal_event_value;
+    use crate::runtime::Value;
+
+    #[test]
+    fn maps_key_pressed_signal_into_typed_event() {
+        let value = make_signal_event_value(aivi_gtk4::SignalEvent {
+            widget_id: 42,
+            widget_name: "game".to_string(),
+            signal: "key-pressed".to_string(),
+            handler: String::new(),
+            payload: "Up\n111".to_string(),
+        });
+        match value {
+            Value::Constructor { name, args } => {
+                assert_eq!(name, "GtkKeyPressed");
+                assert_eq!(args.len(), 4);
+                assert!(matches!(args[0], Value::Int(42)));
+                assert!(matches!(args[1], Value::Text(ref text) if text == "game"));
+                assert!(matches!(args[2], Value::Text(ref text) if text == "Up"));
+                assert!(matches!(args[3], Value::Text(ref text) if text == "111"));
+            }
+            other => panic!("expected GtkKeyPressed, got {other:?}"),
+        }
     }
 }
 

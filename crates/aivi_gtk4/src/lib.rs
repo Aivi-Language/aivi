@@ -209,6 +209,9 @@ mod linux_impl {
 
         fn gtk_gesture_click_new() -> *mut c_void;
         fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
+        fn gtk_event_controller_key_new() -> *mut c_void;
+        fn gdk_keyval_name(keyval: c_uint) -> *const c_char;
+        fn gtk_widget_set_focusable(widget: *mut c_void, focusable: c_int);
 
         fn gtk_icon_theme_get_for_display(display: *mut c_void) -> *mut c_void;
         fn gtk_icon_theme_add_search_path(icon_theme: *mut c_void, path: *const c_char);
@@ -249,7 +252,11 @@ mod linux_impl {
         fn g_main_context_default() -> *mut c_void;
         fn g_main_context_pending(context: *mut c_void) -> c_int;
         fn g_main_context_iteration(context: *mut c_void, may_block: c_int) -> c_int;
-        fn g_timeout_add(interval: c_uint, function: unsafe extern "C" fn(*mut c_void) -> c_int, data: *mut c_void) -> c_uint;
+        fn g_timeout_add(
+            interval: c_uint,
+            function: unsafe extern "C" fn(*mut c_void) -> c_int,
+            data: *mut c_void,
+        ) -> c_uint;
     }
 
     #[link(name = "gobject-2.0")]
@@ -432,6 +439,10 @@ mod linux_impl {
         signal_name: String,
         handler: String,
         payload_kind: SignalPayloadKind,
+    }
+
+    struct WindowKeyCallbackData {
+        widget_id: i64,
     }
 
     impl RealGtkState {
@@ -821,6 +832,47 @@ mod linux_impl {
             handler: event.handler,
             payload: event.payload,
         }
+    }
+
+    unsafe extern "C" fn gtk_window_key_pressed_callback(
+        _controller: *mut c_void,
+        keyval: c_uint,
+        keycode: c_uint,
+        _state: c_uint,
+        data: *mut c_void,
+    ) -> c_int {
+        if data.is_null() {
+            return 0;
+        }
+        let binding = unsafe { &*(data as *const WindowKeyCallbackData) };
+        let key_name = unsafe { gdk_keyval_name(keyval) };
+        let key_name = if key_name.is_null() {
+            keyval.to_string()
+        } else {
+            unsafe { CStr::from_ptr(key_name) }
+                .to_string_lossy()
+                .into_owned()
+        };
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let event = SignalEventState {
+                widget_id: binding.widget_id,
+                signal: "key-pressed".to_string(),
+                handler: String::new(),
+                payload: format!("{key_name}\n{keycode}"),
+            };
+            let widget_name = state
+                .widget_id_to_name
+                .get(&binding.widget_id)
+                .cloned()
+                .unwrap_or_default();
+            let typed_event = make_signal_event(event.clone(), widget_name);
+            state
+                .signal_senders
+                .retain(|s| s.send(typed_event.clone()).is_ok());
+            state.signal_events.push_back(event);
+        });
+        0
     }
 
     unsafe extern "C" fn gtk_signal_callback(instance: *mut c_void, data: *mut c_void) {
@@ -2860,10 +2912,32 @@ mod linux_impl {
             unsafe {
                 gtk_window_set_title(window, title_c.as_ptr());
                 gtk_window_set_default_size(window, width, height);
+                gtk_widget_set_focusable(window, 1);
             }
             let id = state.alloc_id();
             state.windows.insert(id, window);
             state.widgets.insert(id, window);
+            let controller = unsafe { gtk_event_controller_key_new() };
+            if controller.is_null() {
+                return Err(Gtk4Error::new(
+                    "gtk4.windowNew failed to create key controller",
+                ));
+            }
+            let signal_c = CString::new("key-pressed")
+                .map_err(|_| Gtk4Error::new("gtk4.windowNew invalid key signal"))?;
+            let callback_data = Box::new(WindowKeyCallbackData { widget_id: id });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+            unsafe {
+                gtk_widget_add_controller(window, controller);
+                g_signal_connect_data(
+                    controller,
+                    signal_c.as_ptr(),
+                    gtk_window_key_pressed_callback as *const c_void,
+                    callback_ptr,
+                    std::ptr::null_mut(),
+                    0,
+                );
+            }
             apply_pending_display_customizations(&mut state)?;
             Ok(id)
         })
@@ -4136,7 +4210,9 @@ mod linux_impl {
         };
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
-            state.signal_senders.retain(|s| s.send(event.clone()).is_ok());
+            state
+                .signal_senders
+                .retain(|s| s.send(event.clone()).is_ok());
             state.signal_events.push_back(SignalEventState {
                 widget_id: 0,
                 signal: "tick".to_string(),

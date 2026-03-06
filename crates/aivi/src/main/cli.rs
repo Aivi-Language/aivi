@@ -87,33 +87,11 @@ fn run() -> Result<(), AiviError> {
             let (debug_trace, rest) = consume_debug_trace_flag(&rest);
             let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
             maybe_enable_debug_trace(debug_trace);
-            // When aivi.toml exists, use the project entry to resolve
-            // sources recursively — same as `aivi run`.
-            let target: String = if let Ok(root) = env::current_dir() {
-                let toml_path = root.join("aivi.toml");
-                if toml_path.exists() {
-                    if let Ok(cfg) = aivi::read_aivi_toml(&toml_path) {
-                        let source_target = resolve_project_source_target(&root, &cfg.project.entry);
-                        source_target.to_string_lossy().into_owned()
-                    } else {
-                        rest.first().cloned().unwrap_or_else(|| { print_help(); String::new() })
-                    }
-                } else {
-                    match rest.first() {
-                        Some(t) => t.clone(),
-                        None => { print_help(); return Ok(()); }
-                    }
-                }
-            } else {
-                match rest.first() {
-                    Some(t) => t.clone(),
-                    None => { print_help(); return Ok(()); }
-                }
-            };
-            if target.is_empty() {
+            let Some(target_ctx) = resolve_check_or_test_target(&rest) else {
+                print_help();
                 return Ok(());
-            }
-            let pipeline = Pipeline::from_target(&target)?;
+            };
+            let pipeline = Pipeline::from_target(&target_ctx.target)?;
             let mut diagnostics = pipeline.parse_diagnostics().to_vec();
             diagnostics.extend(check_modules(pipeline.modules()));
             if !aivi::file_diagnostics_have_errors(&diagnostics) {
@@ -173,106 +151,42 @@ fn run() -> Result<(), AiviError> {
             let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
             let (only_tests, rest) = consume_multi_value_flag("--only", &rest)?;
             let (update_snapshots, rest) = consume_flag("--update-snapshots", &rest);
-
-            // Resolve project source target: when aivi.toml exists, use its entry
-            // point to discover all source files recursively (same as `aivi check`).
-            // Otherwise fall back to the CLI argument.
-            let target: String = if let Ok(root) = env::current_dir() {
-                let toml_path = root.join("aivi.toml");
-                if toml_path.exists() {
-                    if let Ok(cfg) = aivi::read_aivi_toml(&toml_path) {
-                        let source_target = resolve_project_source_target(&root, &cfg.project.entry);
-                        source_target.to_string_lossy().into_owned()
-                    } else {
-                        match rest.first() {
-                            Some(t) => t.clone(),
-                            None => { print_help(); return Ok(()); }
-                        }
-                    }
-                } else {
-                    match rest.first() {
-                        Some(t) => t.clone(),
-                        None => { print_help(); return Ok(()); }
-                    }
-                }
-            } else {
-                match rest.first() {
-                    Some(t) => t.clone(),
-                    None => { print_help(); return Ok(()); }
-                }
+            let Some(target_ctx) = resolve_check_or_test_target(&rest) else {
+                print_help();
+                return Ok(());
             };
-            let target = &target;
+            let target = target_ctx.target.as_str();
 
             // Format all target files in-place before running tests so the suite is stable and
             // editor tooling doesn't surface spurious formatter diffs.
             let paths = aivi::resolve_target(target)?;
-            let mut test_paths = Vec::new();
-            for path in &paths {
-                if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
-                    continue;
-                }
-                let content = std::fs::read_to_string(path)?;
-                if content.contains("@test") {
-                    test_paths.push(path.clone());
-                }
-            }
+            let test_paths = collect_candidate_test_paths(&paths)?;
             if test_paths.is_empty() {
                 return Err(AiviError::InvalidCommand(format!(
                     "no @test definitions found under {target}"
                 )));
             }
-            for path in &test_paths {
-                let content = std::fs::read_to_string(path)?;
-                let formatted = aivi::format_text(&content);
-                if formatted != content {
-                    std::fs::write(path, formatted)?;
-                }
-            }
+            format_test_paths_in_place(&test_paths)?;
 
-            // Parse and print diagnostics first so failures aren't silent.
-            let mut diagnostics = Vec::new();
-            for path in &test_paths {
-                let text = std::fs::read_to_string(path)?;
-                let (_modules, mut file_diags) = aivi::parse_modules(path.as_path(), &text);
-                diagnostics.append(&mut file_diags);
-            }
-            for diag in &diagnostics {
+            let mut pipeline = Pipeline::from_target(target)?;
+            let parse_diagnostics = pipeline.parse_diagnostics().to_vec();
+            for diag in &parse_diagnostics {
                 let rendered =
                     render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
                 if !rendered.is_empty() {
                     eprintln!("{rendered}");
                 }
             }
-            if aivi::file_diagnostics_have_errors(&diagnostics) {
+            if aivi::file_diagnostics_have_errors(&parse_diagnostics) {
                 return Err(AiviError::Diagnostics);
             }
 
-            // Discover @test definitions from user sources only.
-            let mut test_entries: Vec<(String, String)> = Vec::new();
-            let mut test_name_to_path = HashMap::<String, PathBuf>::new();
-            for path in &test_paths {
-                let text = std::fs::read_to_string(path)?;
-                let (modules, _diags) = aivi::parse_modules(path.as_path(), &text);
-                for module in modules {
-                    for item in module.items {
-                        let aivi::ModuleItem::Def(def) = item else {
-                            continue;
-                        };
-                        if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
-                            let name = format!("{}.{}", module.name.name, def.name.name);
-                            let description = match &dec.arg {
-                                Some(aivi::Expr::Literal(aivi::Literal::String { text, .. })) => text.clone(),
-                                _ => name.clone(),
-                            };
-                            test_name_to_path.insert(name.clone(), path.clone());
-                            test_entries.push((name, description));
-                        }
-                    }
-                }
+            let (mut test_entries, test_name_to_path) = collect_test_entries_with_paths(pipeline.modules());
+            if test_entries.is_empty() {
+                return Err(AiviError::InvalidCommand(format!(
+                    "no @test definitions found under {target}"
+                )));
             }
-            test_entries.sort();
-            test_entries.dedup();
-            debug_assert!(!test_entries.is_empty());
 
             if !only_tests.is_empty() {
                 let mut filtered = Vec::new();
@@ -303,70 +217,7 @@ fn run() -> Result<(), AiviError> {
                 test_entries = filtered;
             }
 
-            // Check and print module diagnostics (optionally including embedded stdlib).
-            // Compute the transitive dependency closure of test files so unrelated
-            // broken source files don't block test execution.
-            let all_aivi_paths: Vec<_> = paths.iter()
-                .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("aivi"))
-                .cloned()
-                .collect();
-            let needed_paths = {
-                // Build module_name → file_path map from first `module` line of each file.
-                let mut mod_to_path = HashMap::<String, PathBuf>::new();
-                for p in &all_aivi_paths {
-                    if let Ok(content) = std::fs::read_to_string(p) {
-                        for line in content.lines() {
-                            let line = line.trim();
-                            if let Some(mod_name) = line.strip_prefix("module ") {
-                                let mod_name = mod_name.trim().to_string();
-                                mod_to_path.insert(mod_name, p.clone());
-                                break;
-                            }
-                            // Skip comments and blank lines at top of file.
-                            if !line.is_empty() && !line.starts_with("//") {
-                                break;
-                            }
-                        }
-                    }
-                }
-                // BFS from test files following `use` declarations.
-                let mut needed = HashSet::<PathBuf>::new();
-                let mut queue = std::collections::VecDeque::<PathBuf>::new();
-                for tp in &test_paths {
-                    needed.insert(tp.clone());
-                    queue.push_back(tp.clone());
-                }
-                while let Some(file) = queue.pop_front() {
-                    if let Ok(content) = std::fs::read_to_string(&file) {
-                        for line in content.lines() {
-                            let line = line.trim();
-                            if !line.starts_with("use ") {
-                                continue;
-                            }
-                            // Extract module path: `use foo.bar.baz (...)` → "foo.bar.baz"
-                            let rest = line["use ".len()..].trim();
-                            let mod_name: String = rest
-                                .split(|c: char| c.is_whitespace() || c == '(')
-                                .next()
-                                .unwrap_or("")
-                                .to_string();
-                            if let Some(dep_path) = mod_to_path.get(&mod_name) {
-                                if needed.insert(dep_path.clone()) {
-                                    queue.push_back(dep_path.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-                let mut result: Vec<_> = needed.into_iter().collect();
-                result.sort();
-                result
-            };
-            let mut modules = aivi::load_modules_from_paths(&needed_paths)?;
-            let mut check_diags = check_modules(&modules);
-            if !aivi::file_diagnostics_have_errors(&check_diags) {
-                check_diags.extend(aivi::elaborate_expected_coercions(&mut modules));
-            }
+            let mut check_diags = pipeline.typecheck();
             if !check_stdlib {
                 check_diags.retain(|diag| !diag.path.starts_with("<embedded:"));
             }
@@ -377,28 +228,18 @@ fn run() -> Result<(), AiviError> {
                     eprintln!("{rendered}");
                 }
             }
-            diagnostics.extend(check_diags);
-            if aivi::file_diagnostics_have_errors(&diagnostics) {
+            if aivi::file_diagnostics_have_errors(&check_diags) {
                 return Err(AiviError::Diagnostics);
             }
 
-            let program = aivi::desugar_modules(&modules);
-            let project_root = std::path::Path::new(target)
-                .canonicalize()
-                .ok()
-                .and_then(|p| {
-                    if p.is_file() {
-                        p.parent().map(|p| p.to_path_buf())
-                    } else {
-                        Some(p)
-                    }
-                });
+            let program = pipeline.desugar();
+            let modules = pipeline.into_modules();
             let report = aivi::run_test_suite(
                 program,
                 &test_entries,
                 &modules,
                 update_snapshots,
-                project_root,
+                target_ctx.project_root,
             )?;
 
             // Write out deterministic report files for CI and tooling:
@@ -935,6 +776,103 @@ fn consume_multi_value_flag(flag: &str, args: &[String]) -> Result<(Vec<String>,
     Ok((values, out))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TargetContext {
+    target: String,
+    project_root: Option<PathBuf>,
+}
+
+fn resolve_check_or_test_target(args: &[String]) -> Option<TargetContext> {
+    if let Ok(root) = env::current_dir() {
+        let toml_path = root.join("aivi.toml");
+        if toml_path.exists() {
+            if let Ok(cfg) = aivi::read_aivi_toml(&toml_path) {
+                return Some(TargetContext {
+                    target: resolve_project_source_target(&root, &cfg.project.entry),
+                    project_root: Some(root),
+                });
+            }
+        }
+    }
+
+    let target = args.first()?.clone();
+    Some(TargetContext {
+        project_root: explicit_target_project_root(&target),
+        target,
+    })
+}
+
+fn explicit_target_project_root(target: &str) -> Option<PathBuf> {
+    let base = target
+        .strip_suffix("/...")
+        .or_else(|| target.strip_suffix("/**"))
+        .or_else(|| target.strip_suffix("\\..."))
+        .or_else(|| target.strip_suffix("\\**"))
+        .unwrap_or(target);
+    let base = if base.is_empty() { "." } else { base };
+    let path = Path::new(base).canonicalize().ok()?;
+    if path.is_file() {
+        path.parent().map(|parent| parent.to_path_buf())
+    } else {
+        Some(path)
+    }
+}
+
+fn collect_candidate_test_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>, AiviError> {
+    let mut test_paths = Vec::new();
+    for path in paths {
+        if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
+            continue;
+        }
+        let content = std::fs::read_to_string(path)?;
+        if content.contains("@test") {
+            test_paths.push(path.clone());
+        }
+    }
+    Ok(test_paths)
+}
+
+fn format_test_paths_in_place(paths: &[PathBuf]) -> Result<(), AiviError> {
+    for path in paths {
+        let content = std::fs::read_to_string(path)?;
+        let formatted = aivi::format_text(&content);
+        if formatted != content {
+            std::fs::write(path, formatted)?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_test_entries_with_paths(
+    modules: &[aivi::Module],
+) -> (Vec<(String, String)>, HashMap<String, PathBuf>) {
+    let mut test_entries = Vec::new();
+    let mut test_name_to_path = HashMap::<String, PathBuf>::new();
+    for module in modules {
+        if module.path.starts_with("<embedded:") {
+            continue;
+        }
+        let path = PathBuf::from(module.path.clone());
+        for item in &module.items {
+            let aivi::ModuleItem::Def(def) = item else {
+                continue;
+            };
+            if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
+                let name = format!("{}.{}", module.name.name, def.name.name);
+                let description = match &dec.arg {
+                    Some(aivi::Expr::Literal(aivi::Literal::String { text, .. })) => text.clone(),
+                    _ => name.clone(),
+                };
+                test_name_to_path.insert(name.clone(), path.clone());
+                test_entries.push((name, description));
+            }
+        }
+    }
+    test_entries.sort();
+    test_entries.dedup();
+    (test_entries, test_name_to_path)
+}
+
 struct Spinner {
     stop: Arc<AtomicBool>,
     message: Arc<Mutex<String>>,
@@ -1045,6 +983,19 @@ mod cli_tests {
         assert!(
             text.lines().count() >= 1,
             "version text should have at least one line, got: {text:?}"
+        );
+    }
+
+    #[test]
+    fn explicit_target_project_root_handles_recursive_suffixes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).expect("create src");
+
+        let recursive = format!("{}/**", src.display());
+        assert_eq!(
+            explicit_target_project_root(&recursive),
+            Some(src.canonicalize().expect("canonicalize src"))
         );
     }
 }
