@@ -21,16 +21,22 @@ pub(super) fn build_calendar_record() -> Value {
         "daysInMonth".to_string(),
         builtin("calendar.daysInMonth", 1, |mut args, _| {
             let date = date_from_value(args.pop().unwrap(), "calendar.daysInMonth")?;
-            Ok(Value::Int(days_in_month(date.year(), date.month()) as i64))
+            Ok(Value::Int(
+                days_in_month(date.year(), date.month(), "calendar.daysInMonth")? as i64,
+            ))
         }),
     );
     fields.insert(
         "endOfMonth".to_string(),
         builtin("calendar.endOfMonth", 1, |mut args, _| {
             let date = date_from_value(args.pop().unwrap(), "calendar.endOfMonth")?;
-            let max_day = days_in_month(date.year(), date.month());
-            let end = NaiveDate::from_ymd_opt(date.year(), date.month(), max_day)
-                .expect("valid end-of-month date");
+            let max_day = days_in_month(date.year(), date.month(), "calendar.endOfMonth")?;
+            let end = NaiveDate::from_ymd_opt(date.year(), date.month(), max_day).ok_or_else(
+                || RuntimeError::InvalidArgument {
+                    context: "calendar.endOfMonth".to_string(),
+                    reason: "resulting date is invalid".to_string(),
+                },
+            )?;
             Ok(date_to_value(end))
         }),
     );
@@ -50,7 +56,8 @@ pub(super) fn build_calendar_record() -> Value {
         builtin("calendar.addMonths", 2, |mut args, _| {
             let months = expect_int(args.pop().unwrap(), "calendar.addMonths")?;
             let date = date_from_value(args.pop().unwrap(), "calendar.addMonths")?;
-            Ok(date_to_value(add_months(date, months)))
+            let next = add_months(date, months, "calendar.addMonths")?;
+            Ok(date_to_value(next))
         }),
     );
     fields.insert(
@@ -58,15 +65,7 @@ pub(super) fn build_calendar_record() -> Value {
         builtin("calendar.addYears", 2, |mut args, _| {
             let years = expect_int(args.pop().unwrap(), "calendar.addYears")?;
             let date = date_from_value(args.pop().unwrap(), "calendar.addYears")?;
-            let year = date.year() + years as i32;
-            let max_day = days_in_month(year, date.month());
-            let day = date.day().min(max_day);
-            let next = NaiveDate::from_ymd_opt(year, date.month(), day).ok_or_else(|| {
-                RuntimeError::InvalidArgument {
-                    context: "calendar.addYears".to_string(),
-                    reason: "resulting date is invalid".to_string(),
-                }
-            })?;
+            let next = add_years(date, years, "calendar.addYears")?;
             Ok(date_to_value(next))
         }),
     );
@@ -117,25 +116,117 @@ fn date_to_value(date: NaiveDate) -> Value {
     map.insert("day".to_string(), Value::Int(date.day() as i64));
     Value::Record(Arc::new(map))
 }
-fn add_months(date: NaiveDate, months: i64) -> NaiveDate {
-    let mut year = date.year() as i64;
-    let mut month = date.month() as i64;
-    let total = month - 1 + months;
-    year += total.div_euclid(12);
-    month = total.rem_euclid(12) + 1;
-    let year_i32 = year as i32;
-    let month_u32 = month as u32;
-    let max_day = days_in_month(year_i32, month_u32);
+
+fn add_months(date: NaiveDate, months: i64, ctx: &str) -> Result<NaiveDate, RuntimeError> {
+    let base_year = i64::from(date.year());
+    let base_month = i64::from(date.month());
+    let total = (base_month - 1)
+        .checked_add(months)
+        .ok_or_else(|| RuntimeError::Overflow {
+            context: ctx.to_string(),
+        })?;
+    let year = base_year
+        .checked_add(total.div_euclid(12))
+        .ok_or_else(|| RuntimeError::Overflow {
+            context: ctx.to_string(),
+        })?;
+    let month = total.rem_euclid(12) + 1;
+    let year_i32 = i32::try_from(year).map_err(|_| RuntimeError::Overflow {
+        context: ctx.to_string(),
+    })?;
+    let month_u32 = u32::try_from(month).map_err(|_| RuntimeError::Overflow {
+        context: ctx.to_string(),
+    })?;
+    let max_day = days_in_month(year_i32, month_u32, ctx)?;
     let day = date.day().min(max_day);
-    NaiveDate::from_ymd_opt(year_i32, month_u32, day).expect("valid date")
+    NaiveDate::from_ymd_opt(year_i32, month_u32, day).ok_or_else(|| RuntimeError::InvalidArgument {
+        context: ctx.to_string(),
+        reason: "resulting date is invalid".to_string(),
+    })
 }
-fn days_in_month(year: i32, month: u32) -> u32 {
+
+fn add_years(date: NaiveDate, years: i64, ctx: &str) -> Result<NaiveDate, RuntimeError> {
+    let years_i32 = i32::try_from(years).map_err(|_| RuntimeError::Overflow {
+        context: ctx.to_string(),
+    })?;
+    let year = date
+        .year()
+        .checked_add(years_i32)
+        .ok_or_else(|| RuntimeError::Overflow {
+            context: ctx.to_string(),
+        })?;
+    let max_day = days_in_month(year, date.month(), ctx)?;
+    let day = date.day().min(max_day);
+    NaiveDate::from_ymd_opt(year, date.month(), day).ok_or_else(|| RuntimeError::InvalidArgument {
+        context: ctx.to_string(),
+        reason: "resulting date is invalid".to_string(),
+    })
+}
+
+fn days_in_month(year: i32, month: u32, ctx: &str) -> Result<u32, RuntimeError> {
+    if !(1..=12).contains(&month) {
+        return Err(RuntimeError::InvalidArgument {
+            context: ctx.to_string(),
+            reason: format!("month {month} out of range"),
+        });
+    }
     let (next_year, next_month) = if month == 12 {
-        (year + 1, 1)
+        (
+            year.checked_add(1).ok_or_else(|| RuntimeError::Overflow {
+                context: ctx.to_string(),
+            })?,
+            1,
+        )
     } else {
         (year, month + 1)
     };
     let first_next =
-        NaiveDate::from_ymd_opt(next_year, next_month, 1).expect("valid next month date");
-    first_next.pred_opt().expect("previous day").day()
+        NaiveDate::from_ymd_opt(next_year, next_month, 1).ok_or_else(|| RuntimeError::Overflow {
+            context: ctx.to_string(),
+        })?;
+    let prev = first_next
+        .pred_opt()
+        .ok_or_else(|| RuntimeError::Overflow {
+            context: ctx.to_string(),
+        })?;
+    Ok(prev.day())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_years_rejects_out_of_range_year_delta() {
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).expect("valid test date");
+        let years = i64::from(i32::MAX) + 1;
+        let err = add_years(date, years, "calendar.addYears")
+            .expect_err("expected overflow for out-of-range year delta");
+        assert!(matches!(
+            err,
+            RuntimeError::Overflow { ref context } if context == "calendar.addYears"
+        ));
+    }
+
+    #[test]
+    fn add_years_rejects_wrapping_year_delta() {
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).expect("valid test date");
+        let err = add_years(date, 4_294_967_296, "calendar.addYears")
+            .expect_err("expected overflow instead of wraparound");
+        assert!(matches!(
+            err,
+            RuntimeError::Overflow { ref context } if context == "calendar.addYears"
+        ));
+    }
+
+    #[test]
+    fn add_months_rejects_out_of_range_result_year() {
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).expect("valid test date");
+        let err = add_months(date, 6_000_000, "calendar.addMonths")
+            .expect_err("expected overflow for out-of-range resulting year");
+        assert!(matches!(
+            err,
+            RuntimeError::Overflow { ref context } if context == "calendar.addMonths"
+        ));
+    }
 }

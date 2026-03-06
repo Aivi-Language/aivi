@@ -195,26 +195,40 @@ impl TypeChecker {
                 local_env.insert(name.clone(), Scheme::mono(expected));
             }
 
-            // Bind parameters in the local env.
+            // Bind parameters in the local env, constraining them from the
+            // type signature when available so that class method dispatch in the
+            // body sees concrete container types (e.g. `List Text` instead of a
+            // fresh type variable).
+            let sig_scheme = sigs
+                .get(&name)
+                .and_then(|items| (items.len() == 1).then(|| &items[0]));
+            let mut remaining_sig_ty = sig_scheme.map(|s| self.instantiate(s));
+
             for pattern in &def.params {
-                let _ = self.infer_pattern(pattern, &mut local_env)?;
+                let param_ty = self.infer_pattern(pattern, &mut local_env)?;
+                if let Some(sig_ty) = remaining_sig_ty.take() {
+                    let applied = self.apply(sig_ty);
+                    match self.expand_alias(applied) {
+                        Type::Func(expected_param, rest) => {
+                            if self
+                                .unify_with_span(param_ty, *expected_param, def.name.span.clone())
+                                .is_ok()
+                            {
+                                remaining_sig_ty = Some(*rest);
+                            } else {
+                                remaining_sig_ty = None;
+                            }
+                        }
+                        _ => {
+                            // Signature/parameter mismatch: stop propagating
+                            // signature-driven expectations during elaboration.
+                            remaining_sig_ty = None;
+                        }
+                    }
+                }
             }
 
-            // If a signature exists, propagate the expected result type into the body.
-            let expected_body = sigs.get(&name).map(|sig| {
-                let Some(sig) = (sig.len() == 1).then(|| &sig[0]) else {
-                    return self.fresh_var();
-                };
-                let mut expected = self.instantiate(sig);
-                for _ in &def.params {
-                    let applied = self.apply(expected);
-                    expected = match self.expand_alias(applied) {
-                        Type::Func(_, rest) => *rest,
-                        other => other,
-                    };
-                }
-                expected
-            });
+            let expected_body = remaining_sig_ty;
 
             let (elab, _ty) = self.elab_expr(expr, expected_body, &mut local_env)?;
             def.expr = elab;
@@ -364,22 +378,67 @@ impl TypeChecker {
                 self.check_or_coerce(out, expected, env)
             }
             Expr::Lambda { params, body, span } => {
-                // Bind lambda parameters before elaborating the body so references resolve during
-                // expected-coercion elaboration.
+                // Bind lambda parameters, constraining them from the expected
+                // type when available so that class method dispatch in the body
+                // sees concrete types (e.g. `List Text` rather than a fresh var).
                 let mut lambda_env = env.clone();
+                let mut remaining_expected = expected.clone();
+                let mut param_tys = Vec::new();
                 for pattern in &params {
-                    let _ = self.infer_pattern(pattern, &mut lambda_env)?;
+                    let param_ty = self.infer_pattern(pattern, &mut lambda_env)?;
+                    if let Some(exp_ty) = remaining_expected.take() {
+                        let applied = self.apply(exp_ty);
+                        match self.expand_alias(applied) {
+                            Type::Func(expected_param, rest) => {
+                                let expected_param_ty = *expected_param;
+                                if self
+                                    .unify_with_span(
+                                        param_ty.clone(),
+                                        expected_param_ty,
+                                        span.clone(),
+                                    )
+                                    .is_ok()
+                                {
+                                    remaining_expected = Some(*rest);
+                                } else {
+                                    remaining_expected = None;
+                                }
+                            }
+                            _ => {
+                                // Mismatch with the expected lambda type:
+                                // keep elaborating, but do not propagate a
+                                // potentially wrong expected body type.
+                                remaining_expected = None;
+                            }
+                        }
+                    }
+                    param_tys.push(param_ty);
                 }
 
-                // For now, only elaborate the body with no expected type. Expected-type coercions
-                // are primarily needed at call sites (arguments/fields), not for lambda bodies.
-                let (body, _ty) = self.elab_expr(*body, None, &mut lambda_env)?;
+                let (body, body_ty) =
+                    self.elab_expr(*body, remaining_expected, &mut lambda_env)?;
                 let out = Expr::Lambda {
                     params,
                     body: Box::new(body),
                     span,
                 };
-                self.check_or_coerce(out, expected, env)
+
+                // Build the lambda type from the (now-constrained) param types
+                // and the elaborated body type. This avoids re-inferring from
+                // scratch via check_or_coerce which would lose the param types.
+                let mut lambda_ty = body_ty;
+                for param_ty in param_tys.into_iter().rev() {
+                    lambda_ty =
+                        Type::Func(Box::new(self.apply(param_ty)), Box::new(lambda_ty));
+                }
+                if let Some(expected_ty) = expected {
+                    let _ = self.unify_with_span(
+                        lambda_ty.clone(),
+                        expected_ty,
+                        expr_span(&out),
+                    );
+                }
+                Ok((out, self.apply(lambda_ty)))
             }
             Expr::Match {
                 scrutinee,
