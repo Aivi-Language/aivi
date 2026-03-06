@@ -3780,6 +3780,60 @@ fn parses_text_interpolation_expr() {
 }
 
 #[test]
+fn parses_text_interpolation_with_nested_string_literal() {
+    // A string literal inside {…} must not prematurely close the outer string.
+    let src = r#"module Example
+
+subject = "Re: {email ?? " "}"
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "subject" => Some(d),
+            _ => None,
+        })
+        .expect("subject");
+    assert!(matches!(&def.expr, Expr::TextInterpolate { .. }));
+}
+
+#[test]
+fn parses_text_interpolation_nested_string_with_closing_brace_inside() {
+    // A "}" inside a nested string literal must not close the outer interpolation.
+    let src = r#"module Example
+
+x = "prefix {f "a}b"} suffix"
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::TextInterpolate { .. }));
+}
+
+#[test]
+fn lexer_string_with_nested_string_in_interpolation_has_no_diags() {
+    // The lexer must produce a single string token without diagnostics.
+    let src = r#""Re: {email ?? " "}""#;
+    let (tokens, diags) = crate::lexer::lex(src);
+    assert!(diags.is_empty(), "unexpected diags: {:?}", diags);
+    let string_tokens: Vec<_> = tokens.iter().filter(|t| t.kind == "string").collect();
+    assert_eq!(
+        string_tokens.len(),
+        1,
+        "expected 1 string token, got {string_tokens:?}"
+    );
+}
+
+#[test]
 fn parses_field_section_expr() {
     let src = "module Example\n\nx = .name\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);

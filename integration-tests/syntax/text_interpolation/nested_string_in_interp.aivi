@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.syntax.textInterpolation.nestedStringInInterp
+
+use aivi
+use aivi.testing
+
+maybeEmail : Option Text
+maybeEmail = Some "hello@example.com"
+
+// A string literal inside {} must not terminate the outer string.
+subject = "Re: {maybeEmail ?? " "}"
+
+// A "}" inside a nested string must not close the interpolation block.
+withBrace = "prefix {if True then "a}b" else "c"} suffix"
+
+@test "nested string literal in interpolation"
+testNestedString = do Effect {
+  assertEq subject "Re: hello@example.com"
+  assertEq withBrace "prefix a}b suffix"
+}
