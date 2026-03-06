@@ -33,3 +33,29 @@ Notes:
 - HKT class member signatures use **abbreviated form**: the container type is omitted from the parameter list and added internally by the compiler as the last argument. For example, `map: (A -> B) -> F B` expands to `map: (A -> B) -> F A -> F B`.
 - Constructor methods whose return type equals the container (e.g., `of: A -> F A`) are not expanded.
 
+## Bidirectional Resolution of Zero-Argument Members
+
+Class members that are values (not functions) — such as `empty` from `Monoid` — cannot
+be dispatched by argument type at runtime. Instead, the compiler resolves them at
+compile time using **bidirectional type inference**: the expected type from the
+surrounding context (type annotation, function signature, etc.) determines which
+instance to use.
+
+```aivi
+emptyList : List Int
+emptyList = empty       -- resolves to Monoid (List A) instance → []
+
+emptyMap : Map Text Int
+emptyMap = empty        -- resolves to Monoid (Map K V) instance → Map.empty
+```
+
+When no type context is available, the compiler reports an error and suggests
+adding a type annotation or using a qualified form:
+
+```
+error: cannot resolve class member 'empty' (from Monoid) without type context
+       — add a type annotation or use a qualified form (e.g. List.empty)
+```
+
+Qualified forms (`List.empty`, `Map.empty`) always work regardless of context.
+

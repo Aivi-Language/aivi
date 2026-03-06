@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::surface::{Module, ModuleItem, ScopeItemKind, TypeDecl, TypeExpr};
+use crate::surface::{Expr, Module, ModuleItem, ScopeItemKind, TypeDecl, TypeExpr};
 
 #[derive(Clone, Debug)]
 pub(super) struct ClassDeclInfo {
@@ -17,6 +17,9 @@ pub(super) struct ClassDeclInfo {
 pub(super) struct InstanceDeclInfo {
     pub(super) class_name: String,
     pub(super) params: Vec<TypeExpr>,
+    /// Bodies of instance members, used by bidirectional resolution to inline
+    /// zero-argument class members (e.g. `empty` from Monoid).
+    pub(super) member_bodies: HashMap<String, Expr>,
 }
 
 const AUTO_FORWARD_DECORATOR: &str = "__auto_forward";
@@ -133,9 +136,15 @@ pub(super) fn collect_local_class_env(
                 );
             }
             ModuleItem::InstanceDecl(instance_decl) => {
+                let member_bodies = instance_decl
+                    .defs
+                    .iter()
+                    .map(|d| (d.name.name.clone(), d.expr.clone()))
+                    .collect();
                 instances.push(InstanceDeclInfo {
                     class_name: instance_decl.name.name.clone(),
                     params: instance_decl.params.clone(),
+                    member_bodies,
                 });
             }
             _ => {}
@@ -410,6 +419,7 @@ pub(super) fn synthesize_auto_forward_instances(
             let candidate = InstanceDeclInfo {
                 class_name: instance.class_name.clone(),
                 params,
+                member_bodies: instance.member_bodies.clone(),
             };
             if instances
                 .iter()

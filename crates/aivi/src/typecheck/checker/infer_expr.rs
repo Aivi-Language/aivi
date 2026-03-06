@@ -17,6 +17,20 @@ impl TypeChecker {
             })
         } else if name.name == "_" {
             Ok(self.fresh_var())
+        } else if self.method_to_classes.contains_key(&name.name) {
+            // Zero-argument class member used without enough type context.
+            // Bidirectional resolution (via check_or_coerce) handles this when
+            // an expected type is available. Without context, report a helpful error.
+            let classes = self.method_to_classes[&name.name].join(", ");
+            Err(TypeError {
+                span: name.span.clone(),
+                message: format!(
+                    "cannot resolve class member '{}' (from {}) without type context — add a type annotation or use a qualified form (e.g. List.{})",
+                    name.name, classes, name.name
+                ),
+                expected: None,
+                found: None,
+            })
         } else {
             Err(TypeError {
                 span: name.span.clone(),

@@ -485,6 +485,40 @@ impl TypeChecker {
             }
         }
 
+        // Bare class-member identifiers (zero args) — use the expected type to
+        // pick the right instance.  This is the bidirectional path that makes
+        // `empty` (Monoid), `id` (Category), etc. usable without explicit type
+        // application: the expected type flows down from annotations, argument
+        // positions, or constraint propagation and disambiguates the instance.
+        //
+        // After type-checking succeeds, we inline the matching instance's body
+        // expression so the runtime gets the concrete value (e.g. `[]` for
+        // Monoid List) instead of a bare `Ident("empty")` that can't dispatch.
+        if let (Some(expected_ty), Expr::Ident(name)) = (expected.clone(), &expr) {
+            if env.get(&name.name).is_none()
+                && env
+                    .get_all(&name.name)
+                    .is_none_or(|items| items.len() <= 1)
+                && self.method_to_classes.contains_key(&name.name)
+            {
+                let checkpoint = self.subst.clone();
+                match self.infer_method_call(name, &[], Some(expected_ty.clone()), env) {
+                    Ok(inferred) => {
+                        // Find the matching instance and inline its body so the
+                        // runtime gets the concrete value instead of the ambiguous
+                        // bare identifier.
+                        if let Some(body) =
+                            self.find_instance_member_body(&name.name, &inferred)
+                        {
+                            return self.elab_expr(body, Some(inferred), env);
+                        }
+                        return Ok((expr, inferred));
+                    }
+                    Err(_) => self.subst = checkpoint,
+                }
+            }
+        }
+
         if let (Some(expected_ty), Expr::Call { func, args, .. }) = (expected.clone(), &expr) {
             if let Expr::Ident(name) = func.as_ref() {
                 if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name)

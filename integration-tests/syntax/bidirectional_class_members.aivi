@@ -1,0 +1,36 @@
+@no_prelude
+module integrationTests.syntax.bidirectionalClassMembers
+
+use aivi
+use aivi.prelude
+use aivi.testing
+use aivi.logic
+
+// Bidirectional type inference for zero-argument class members.
+// `empty` resolves from the Monoid class via expected type from annotations.
+
+// Top-level typed binding drives Monoid class member resolution.
+emptyListViaMonoid : List Int
+emptyListViaMonoid = empty
+
+@test "empty resolved for List via type annotation and Monoid"
+emptyAnnotated = do Effect {
+  assertEq emptyListViaMonoid []
+}
+
+emptyMapViaMonoid : Map Text Int
+emptyMapViaMonoid = empty
+
+@test "empty resolved for Map via type annotation and Monoid"
+emptyMapAnnotated = do Effect {
+  assertEq (Map.size emptyMapViaMonoid) 0
+}
+
+// Use qualified form (List.empty) as a fallback when type context is unavailable.
+concatWithEmpty : List Int -> List Int
+concatWithEmpty = xs => concat xs List.empty
+
+@test "qualified empty works as fallback"
+emptyArgPos = do Effect {
+  assertEq (concatWithEmpty [1, 2, 3]) [1, 2, 3]
+}

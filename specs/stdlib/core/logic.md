@@ -158,5 +158,6 @@ Which types implement which classes. `use aivi.logic` brings all class methods i
 | **Map K** | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
 | **Generator** | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
 | **Tree** | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
+| **Stream** | — | — | — | — | ✓ | ✓ | — | — | — | — | — | — | — | — | — |
 
 > **Set, Queue, Deque, Heap** — Foldable/Filterable instances are deferred until builtin runtime operations are added for those types. Set and Heap cannot be Functors (mapping can violate structural invariants).
