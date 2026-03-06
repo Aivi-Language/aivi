@@ -1876,11 +1876,8 @@ mod linux_impl {
                 {
                     unsafe { gtk_stack_set_transition_duration(widget, value) };
                 }
-                if let Some(value) = props.get("visible-child-name") {
-                    if let Ok(name_c) = CString::new(value.as_str()) {
-                        unsafe { gtk_stack_set_visible_child_name(widget, name_c.as_ptr()) };
-                    }
-                }
+                // visible-child-name is deferred until after children are added
+                // (see build_widget_from_node_real)
             }
             "GtkMenuButton" => {
                 set_obj_str(widget, props, "label", "GtkMenuButton")?;
@@ -2363,6 +2360,15 @@ mod linux_impl {
             wire_scroll_fades(scroll_fade_scrolled, scroll_fade_top, scroll_fade_bottom);
         }
 
+        // Deferred: set visible-child-name on GtkStack after children are added
+        if matches!(kind, CreatedWidgetKind::Stack) {
+            if let Some(value) = props.get("visible-child-name") {
+                if let Ok(name_c) = CString::new(value.as_str()) {
+                    unsafe { gtk_stack_set_visible_child_name(raw, name_c.as_ptr()) };
+                }
+            }
+        }
+
         let node_id = node_attr(attrs, "id").map(str::to_string);
         let live = LiveNode {
             widget_id: id,
@@ -2601,6 +2607,15 @@ mod linux_impl {
         let mut new_child_objects = collect_child_objects(children);
         new_child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
         reconcile_children(state, live, &new_child_objects, id_map)?;
+
+        // Deferred: set visible-child-name on GtkStack after children are reconciled
+        if matches!(live.kind, CreatedWidgetKind::Stack) {
+            if let Some(value) = live.props.get("visible-child-name") {
+                if let Ok(name_c) = CString::new(value.as_str()) {
+                    unsafe { gtk_stack_set_visible_child_name(raw, name_c.as_ptr()) };
+                }
+            }
+        }
 
         Ok(true)
     }
