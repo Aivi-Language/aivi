@@ -52,13 +52,13 @@ fn first_diff(a: &str, b: &str) -> Option<(usize, String, String)> {
 #[test]
 fn examples_are_formatter_idempotent() {
     let root = workspace_root();
-    let examples_dir = root.join("integration-tests");
 
     let mut files = Vec::new();
-    collect_aivi_files(&examples_dir, &mut files);
+    collect_aivi_files(&root.join("integration-tests"), &mut files);
+    collect_aivi_files(&root.join("demos"), &mut files);
     assert!(
         !files.is_empty(),
-        "no .aivi files found under integration-tests/"
+        "no .aivi files found under integration-tests/ or demos/"
     );
 
     let mut failures = Vec::new();
@@ -92,5 +92,5 @@ fn examples_are_formatter_idempotent() {
             report.push_str("  outputs differed\n");
         }
     }
-    panic!("formatter is not idempotent on integration-tests:\n{report}");
+    panic!("formatter is not idempotent on integration-tests/demos:\n{report}");
 }

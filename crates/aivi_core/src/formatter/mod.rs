@@ -469,6 +469,163 @@ mod align_tests {
 }
 
 #[cfg(test)]
+mod garbage_bracket_tests {
+    use super::*;
+
+    /// Pure garbage: only brackets and random tokens. Must not panic.
+    #[test]
+    fn pure_garbage_brackets_does_not_panic() {
+        let inputs = [
+            "}}}0 )))",
+            "((({{{[[[",
+            "}])>",
+            "{{{}}})))(((]]]",
+            "module demo\n\n}}}0 )))\n",
+            "))))}}}]]] let x = 1",
+            "{{{((([[[)))]]]}}}",
+            "({[)}]",
+            "))))))))))",
+            "((((((((((",
+            "{ } ( ) [ ] { } ( ) [ ] } } }",
+        ];
+        for input in &inputs {
+            let _ = format_text(input);
+        }
+    }
+
+    /// Unbalanced input is returned verbatim (no formatting applied).
+    #[test]
+    fn garbage_brackets_returned_unchanged() {
+        let inputs = [
+            "}}}0 )))",
+            "module demo\n\nf = x => x + 1\n}}}0 )))\ng = 2\n",
+            "((({{{[[[\nmodule demo\nf = 1\n",
+            "module demo\n\nf = (x => x ]\n",
+            "module demo\n\nf = { x: 1\ng = y => y + 1\n",
+        ];
+        for input in &inputs {
+            assert_eq!(
+                format_text(input),
+                *input,
+                "unbalanced input should be returned unchanged: {:?}",
+                input,
+            );
+        }
+    }
+
+    /// Valid code with garbage appended at the end should be returned unchanged
+    /// (the garbage unbalances the file).
+    #[test]
+    fn valid_code_with_trailing_garbage_unchanged() {
+        let input = "module demo\n\nf = x => x + 1\ng = y => y * 2\n}}}0 )))\n";
+        assert_eq!(format_text(input), input);
+    }
+
+    /// Valid code with garbage prepended should be returned unchanged.
+    #[test]
+    fn valid_code_with_leading_garbage_unchanged() {
+        let input = "}}}0 )))\nmodule demo\n\nf = x => x + 1\n";
+        assert_eq!(format_text(input), input);
+    }
+
+    /// Garbage interspersed in otherwise valid code — unbalanced, returned unchanged.
+    #[test]
+    fn garbage_interspersed_in_valid_code() {
+        let input = "module demo\n\nf = x => (x + 1\n))) extra\ng = 2\n";
+        assert_eq!(format_text(input), input);
+    }
+
+    /// Balanced brackets with random tokens inside should not panic.
+    #[test]
+    fn balanced_brackets_with_random_content_no_panic() {
+        let inputs = [
+            "(0)",
+            "{}}}{", // still unbalanced overall
+            "({[]})",
+            "((({{{[[[]]]}}})))",
+            "module demo\n\nf = (((x)))\n",
+            "module demo\n\nf = {a: {b: {c: 1}}}\n",
+        ];
+        for input in &inputs {
+            let _ = format_text(input);
+        }
+    }
+
+    /// Strings containing brackets should not affect the balance check.
+    #[test]
+    fn brackets_inside_strings_ignored_by_balance_check() {
+        // The string contains unbalanced brackets, but the bracket check should skip strings.
+        // We intentionally omit spaces around `=` to verify the formatter runs (it adds spaces).
+        let input = "module demo\n\nf=\"{{{)))}}}\" |> g\n";
+        let formatted = format_text(input);
+        // This is balanced code (string content not counted), so it should format
+        assert!(
+            formatted.contains("f = "),
+            "balanced code (brackets in strings) should be formatted, got: {:?}",
+            formatted,
+        );
+    }
+
+    /// Real-world scenario: user accidentally deletes a closing brace in a do-block.
+    #[test]
+    fn missing_closing_brace_in_do_block() {
+        let input = "\
+module demo
+
+main = do Effect {
+  x <- foo
+  y <- bar
+  pure x
+
+helper = a => a + 1
+";
+        assert_eq!(
+            format_text(input),
+            input,
+            "missing closing brace should return input unchanged",
+        );
+    }
+
+    /// Real-world scenario: extra closing paren in a function call chain.
+    #[test]
+    fn extra_closing_paren_in_pipeline() {
+        let input = "module demo\n\nresult = xs |> map f) |> filter g\n";
+        assert_eq!(format_text(input), input);
+    }
+
+    /// Idempotency: formatting balanced code twice gives the same result.
+    #[test]
+    fn idempotency_on_complex_balanced_code() {
+        let input = "\
+module demo
+
+use aivi
+
+State = { count: Int, name: Text }
+
+f : State -> State
+f = s => s <| { count: s.count + 1 }
+
+g = do Effect {
+  x <- pure 1
+  y <- pure (x + 2)
+  pure (x + y)
+}
+
+view = state =>
+  ~<gtk>
+    <GtkBox orientation=\"vertical\" spacing=\"8\">
+      <GtkLabel label=\"hello\" />
+    </GtkBox>
+  </gtk>
+";
+        let out1 = format_text(input);
+        let out2 = format_text(&out1);
+        assert_eq!(out1, out2, "formatting should be idempotent");
+    }
+}
+
+#[cfg(test)]
 mod bench {
     use super::*;
     #[test]
