@@ -32,6 +32,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Generators](syntax/generators.md)
 #### Effects & Control
 - [Effects](syntax/effects.md)
+- [Capabilities](syntax/capabilities.md)
 - [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
 - [Machines](syntax/machines.md)
@@ -110,6 +111,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 #### Email
 - [Email](stdlib/system/email.md)
 #### UI
+- [App Architecture](stdlib/ui/app_architecture.md)
 - [GTK4](stdlib/ui/gtk4.md)
 - [Layout](stdlib/ui/layout.md)
 - [VDOM](stdlib/ui/vdom.md)
