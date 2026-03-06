@@ -288,9 +288,7 @@ pub(crate) fn register_machines_for_jit(
                 };
                 globals.set(state_name.clone(), state_ctor.clone());
                 let qualified = format!("{module_name}.{state_name}");
-                if globals.get(&qualified).is_none() {
-                    globals.set(qualified, state_ctor);
-                }
+                globals.set(qualified, state_ctor);
             }
 
             // Register transition builtins (both short and qualified)
@@ -310,9 +308,7 @@ pub(crate) fn register_machines_for_jit(
                     globals.set(event_name.clone(), transition_value.clone());
                 }
                 let qualified_transition = format!("{module_name}.{event_name}");
-                if globals.get(&qualified_transition).is_none() {
-                    globals.set(qualified_transition, transition_value);
-                }
+                globals.set(qualified_transition, transition_value);
                 can_fields.insert(
                     event_name.clone(),
                     make_machine_can_builtin(runtime_machine_name.clone(), event_name),
@@ -328,9 +324,10 @@ pub(crate) fn register_machines_for_jit(
             let machine_value = Value::Record(Arc::new(machine_fields));
             globals.set(machine_decl.name.name.clone(), machine_value.clone());
             let qualified_machine = format!("{module_name}.{}", machine_decl.name.name);
-            if globals.get(&qualified_machine).is_none() {
-                globals.set(qualified_machine, machine_value);
-            }
+            // Always overwrite qualified name — the JIT may have registered a
+            // dummy placeholder (kernel lowers machine defs to Unit) that must
+            // be replaced with the real machine record.
+            globals.set(qualified_machine, machine_value);
 
             // Register machine spec with RuntimeContext
             runtime

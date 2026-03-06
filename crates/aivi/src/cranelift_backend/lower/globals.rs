@@ -8,7 +8,13 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         name: &str,
         value: cranelift_codegen::ir::Value,
     ) {
-        let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
+        // Qualify bare names with module prefix, matching lower_global resolution
+        let resolved = if !name.contains('.') && !self.module_name.is_empty() {
+            format!("{}.{}", self.module_name, name)
+        } else {
+            name.to_string()
+        };
+        let (name_ptr, name_len) = self.embed_str(builder, resolved.as_bytes());
         builder.ins().call(
             self.helpers.rt_set_global,
             &[self.ctx_param, name_ptr, name_len, value],

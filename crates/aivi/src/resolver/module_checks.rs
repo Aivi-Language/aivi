@@ -87,7 +87,11 @@ fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<File
                 .alias
                 .as_ref()
                 .unwrap_or(&item.name);
-            if !used.contains(local.name.as_str()) {
+            // For aliased imports (`load as dbLoad`), resolve_import_names
+            // qualifies uses to the full path (e.g. "aivi.database.load"),
+            // so also check the qualified form.
+            let qualified = format!("{}.{}", use_decl.module.name, item.name.name);
+            if !used.contains(local.name.as_str()) && !used.contains(qualified.as_str()) {
                 diagnostics.push(file_diag(
                     module,
                     Diagnostic {

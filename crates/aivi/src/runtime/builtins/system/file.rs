@@ -7,7 +7,7 @@ use image::ImageReader;
 use serde_json::Value as JsonValue;
 
 use super::super::util::{builtin, expect_text};
-use super::{json_to_runtime, scalar_text_to_value, source_decode_error, source_transport_error};
+use super::{json_to_runtime_with_schema, scalar_text_to_value, source_decode_error, source_transport_error};
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 
 pub(in crate::runtime::builtins) fn build_file_record() -> Value {
@@ -83,7 +83,15 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                         *guard = Some(raw.clone());
                     }
 
-                    Ok(json_to_runtime(&parsed))
+                    // Use the schema (if set) to produce proper Option wrappers.
+                    let schema_opt = schema_ref
+                        .lock()
+                        .ok()
+                        .and_then(|g| g.clone());
+                    Ok(json_to_runtime_with_schema(
+                        &parsed,
+                        schema_opt.as_ref(),
+                    ))
                 }),
             };
             let mut source = SourceValue::new("File".to_string(), Arc::new(effect));

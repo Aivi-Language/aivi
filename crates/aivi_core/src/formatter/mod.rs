@@ -335,6 +335,41 @@ mod tests {
         );
     }
 
+    /// Regression: unclosed opener inflated the delimiter stack, causing downstream
+    /// lines to receive wrong indentation and context ("scrambled variables").
+    #[test]
+    fn mismatched_brackets_returns_input_unchanged() {
+        // Unclosed paren
+        let input = "module demo\n\nmain = do Effect {\n  x <- foo\n  y <- bar (\n  z <- baz\n}\n";
+        assert_eq!(format_text(input), input);
+
+        // Unclosed bracket
+        let input2 =
+            "module demo\n\nmain = do Effect {\n  x <- foo\n  y <- [1, 2, 3\n  z <- baz\n}\n";
+        assert_eq!(format_text(input2), input2);
+
+        // Unclosed brace leaking into unrelated definition
+        let input3 = "module demo\n\nf = { x: 1\ng = y => y + 1\n";
+        assert_eq!(format_text(input3), input3);
+
+        // Extra closer
+        let input4 = "module demo\n\nf = x => x + 1 )\ng = 2\n";
+        assert_eq!(format_text(input4), input4);
+
+        // Mismatched pair
+        let input5 = "module demo\n\nf = (x => x]\n";
+        assert_eq!(format_text(input5), input5);
+    }
+
+    /// Balanced brackets must still be formatted normally.
+    #[test]
+    fn balanced_brackets_still_formatted() {
+        let input = "module demo\n\nmain = do Effect {\nx<-foo\n}\n";
+        let formatted = format_text(input);
+        assert_ne!(formatted, input, "balanced input should be formatted");
+        assert!(formatted.contains("  x <- foo"));
+    }
+
     /// Regression test: `;` between non-operator tokens must not insert a phantom
     /// space that the second pass then removes (non-idempotency).
     #[test]

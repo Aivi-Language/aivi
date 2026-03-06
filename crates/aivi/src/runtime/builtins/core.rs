@@ -264,18 +264,13 @@ pub(crate) fn register_builtins(env: &Env) {
         builtin("bind", 2, |mut args, _| {
             let func = args.pop().unwrap();
             let effect = args.pop().unwrap();
-            let effect_clone = effect.clone();
             let effect = EffectValue::Thunk {
                 func: std::sync::Arc::new(move |runtime| {
                     let value = runtime.run_effect_value(effect.clone())?;
                     let applied = runtime.apply(func.clone(), value)?;
-                    if !matches!(applied, Value::Effect(_) | Value::Resource(_) | Value::Source(_)) {
-                        eprintln!("[DEBUG bind] after apply, expected Effect but got discriminant: {:?}", std::mem::discriminant(&applied));
-                    }
                     runtime.run_effect_value(applied)
                 }),
             };
-            let _ = effect_clone;
             Ok(Value::Effect(std::sync::Arc::new(effect)))
         }),
     );
