@@ -65,6 +65,11 @@ impl Backend {
 
         let line_prefix = Self::line_prefix(text, position);
 
+        // @static source completions: detect cursor on a line following `@static`
+        if let Some(static_items) = Self::static_source_completions(text, position, &line_prefix) {
+            return static_items;
+        }
+
         // GTK sigil completions: detect cursor inside ~<gtk>...</gtk>
         if let Some(gtk_ctx) = Self::gtk_sigil_context(text, position) {
             return Self::gtk_completions(&gtk_ctx, gtk_index);
@@ -541,6 +546,104 @@ impl Backend {
             "given guard (in do block)",
         ),
     ];
+
+    /// Detect when cursor is on the RHS of a binding after `@static` and provide
+    /// completions for known compile-time sources.
+    fn static_source_completions(
+        text: &str,
+        position: Position,
+        line_prefix: &str,
+    ) -> Option<Vec<CompletionItem>> {
+        // Check if the previous non-empty line is `@static`
+        let offset = Self::offset_at(text, position).min(text.len());
+        let before = &text[..offset];
+        let prev_lines: Vec<&str> = before.lines().collect();
+
+        // The current line is the last element; find the previous non-empty line.
+        let prev_nonempty = prev_lines
+            .iter()
+            .rev()
+            .skip(1)
+            .find(|l| !l.trim().is_empty())?;
+        if prev_nonempty.trim() != "@static" {
+            return None;
+        }
+
+        // We're on the binding line after @static. Check if cursor is in
+        // value position (after `=`) or still in name position.
+        let trimmed = line_prefix.trim_start();
+        let after_eq = if let Some(idx) = trimmed.find('=') {
+            trimmed[idx + 1..].trim_start()
+        } else {
+            return None;
+        };
+
+        let sources: &[(&str, &str, &str, &str)] = &[
+            (
+                "file.read",
+                "file.read \"${1:path}\"",
+                "Embed file contents as Text",
+                "@static source",
+            ),
+            (
+                "file.json",
+                "file.json \"${1:path}\"",
+                "Parse JSON file, embed as typed value",
+                "@static source",
+            ),
+            (
+                "file.csv",
+                "file.csv \"${1:path}\"",
+                "Parse CSV file, embed as List of records",
+                "@static source",
+            ),
+            (
+                "env.get",
+                "env.get \"${1:KEY}\"",
+                "Embed environment variable as Text",
+                "@static source",
+            ),
+            (
+                "openapi.fromUrl",
+                "openapi.fromUrl ~url(${1:https://example.com/api.json})",
+                "Generate typed API client from OpenAPI spec URL",
+                "@static source",
+            ),
+            (
+                "openapi.fromFile",
+                "openapi.fromFile \"${1:path}\"",
+                "Generate typed API client from local OpenAPI spec",
+                "@static source",
+            ),
+            (
+                "type.jsonSchema",
+                "type.jsonSchema ${1:TypeName}",
+                "Generate OpenAI-compatible JSON Schema from a type",
+                "@static source",
+            ),
+        ];
+
+        let mut items = Vec::new();
+        for (label, snippet, doc, detail) in sources {
+            if !label.starts_with(after_eq) {
+                continue;
+            }
+            items.push(CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                insert_text: Some(snippet.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                detail: Some(detail.to_string()),
+                documentation: Some(Documentation::MarkupContent(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc.to_string(),
+                })),
+                sort_text: Some("0".to_string()),
+                ..CompletionItem::default()
+            });
+        }
+        Some(items)
+    }
 
     pub(super) fn resolve_completion_item(
         mut item: CompletionItem,

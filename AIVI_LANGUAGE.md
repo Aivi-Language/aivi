@@ -985,6 +985,22 @@ result <- listPets {}
 
 Config fields: `bearerToken : Option Text`, `headers : Option (List (Text, Text))`, `timeoutMs : Option Int`, `retryCount : Option Int`, `strictStatus : Option Bool`, `baseUrl : Option Text`.
 
+`@static type.jsonSchema TypeName` generates an OpenAI-compatible JSON Schema from a type alias at compile time:
+
+```aivi
+ExtractionResult = {
+  title:   Text,
+  summary: Text,
+  tags:    List Text,
+  score:   Option Float
+}
+
+@static
+extractionSchema = type.jsonSchema ExtractionResult
+```
+
+`extractionSchema` becomes a `Text` constant containing the JSON schema. Maps `Text`→string, `Int`→integer, `Float`→number, `Bool`→boolean, `List T`→array, records→object, `Option T`→nullable. Useful for LLM structured-output APIs.
+
 ---
 
 ## 14 Sigils
@@ -1154,7 +1170,7 @@ Compile-time metadata only. No user-defined decorators.
 | `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
 | `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
-`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable.
+`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`, `type.jsonSchema TypeName`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable. `type.jsonSchema` produces a `Text` constant with an OpenAI-compatible JSON Schema.
 
 Unknown decorators are compile errors.
 `@native` is only valid on top-level definitions and requires an explicit type signature. No dummy body is needed — the compiler auto-generates the def from the type signature. Runtime natives use `.` paths (`"mod.fn"`); crate natives use `::` paths (`"crate::fn"`) and require `aivi build`.

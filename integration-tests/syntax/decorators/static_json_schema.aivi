@@ -1,0 +1,44 @@
+@no_prelude
+module integrationTests.syntax.decorators.staticJsonSchema
+
+use aivi
+use aivi.testing
+use aivi.data.json
+
+ExtractionResult = {
+  title:   Text,
+  summary: Text,
+  tags:    List Text,
+  score:   Option Float
+}
+
+@static
+extractionSchema = type.jsonSchema ExtractionResult
+
+@test "type.jsonSchema produces valid JSON"
+jsonSchemaIsValidJson = do Effect {
+  parsed = json.parse extractionSchema
+  assert (isOk parsed) "extractionSchema should be valid JSON"
+}
+
+@test "type.jsonSchema contains schema structure"
+jsonSchemaHasFormat = do Effect {
+  assert (contains "json_schema" extractionSchema) "should contain json_schema format type"
+  assert (contains "ExtractionResult" extractionSchema) "should contain type name"
+  assert (contains "strict" extractionSchema) "should contain strict flag"
+}
+
+@test "type.jsonSchema maps record fields"
+jsonSchemaHasFields = do Effect {
+  assert (contains "title" extractionSchema) "should contain title field"
+  assert (contains "summary" extractionSchema) "should contain summary field"
+  assert (contains "tags" extractionSchema) "should contain tags field"
+  assert (contains "score" extractionSchema) "should contain score field"
+}
+
+@test "type.jsonSchema maps primitive types"
+jsonSchemaMapsPrimitives = do Effect {
+  assert (contains "string" extractionSchema) "should map Text to string"
+  assert (contains "number" extractionSchema) "should map Float to number"
+  assert (contains "array" extractionSchema) "should map List to array"
+}

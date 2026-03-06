@@ -814,6 +814,11 @@ impl TypeChecker {
         // argument patterns, for basic exhaustiveness checking.
         let mut seen_ctors: HashSet<String> = HashSet::new();
 
+        // List pattern tracking: exact-length patterns (e.g. `[]`, `[x]`) and
+        // the lowest N for a `[_, ..., _, ...rest]` pattern (covers length N+).
+        let mut list_exact_lengths: HashSet<usize> = HashSet::new();
+        let mut list_min_rest: Option<usize> = None;
+
         for arm in arms {
             if has_catch_all.is_some() {
                 self.emit_extra_diag(
@@ -861,6 +866,20 @@ impl TypeChecker {
                     covered_ctors.insert(ctor_name);
                 }
             }
+
+            if !guarded {
+                if let Pattern::List { items, rest, .. } = &arm.pattern {
+                    if rest.is_some() {
+                        let min = items.len();
+                        list_min_rest = Some(match list_min_rest {
+                            Some(prev) => prev.min(min),
+                            None => min,
+                        });
+                    } else {
+                        list_exact_lengths.insert(items.len());
+                    }
+                }
+            }
         }
 
         // Non-exhaustive matches are errors unless there is a catch-all arm.
@@ -870,6 +889,49 @@ impl TypeChecker {
 
         let scrutinee_ty = self.apply(scrutinee_ty);
         let scrutinee_ty = self.expand_alias(scrutinee_ty);
+
+        // List exhaustiveness: `[]` + `[x, ...rest]` covers all lists.
+        if let Type::Con(ref name, _) = scrutinee_ty {
+            if name == "List" && (list_min_rest.is_some() || !list_exact_lengths.is_empty()) {
+                if let Some(min_rest) = list_min_rest {
+                    let all_covered =
+                        (0..min_rest).all(|len| list_exact_lengths.contains(&len));
+                    if all_covered {
+                        return;
+                    }
+                    let missing: Vec<String> = (0..min_rest)
+                        .filter(|len| !list_exact_lengths.contains(len))
+                        .map(|len| {
+                            if len == 0 {
+                                "[]".to_string()
+                            } else {
+                                format!("list of exactly {} element(s)", len)
+                            }
+                        })
+                        .collect();
+                    self.emit_extra_diag(
+                        "E3100",
+                        crate::diagnostics::DiagnosticSeverity::Error,
+                        format!(
+                            "non-exhaustive list match (missing: {})",
+                            missing.join(", ")
+                        ),
+                        match_span.clone(),
+                    );
+                    return;
+                }
+                // Only exact-length list patterns, no `...rest` — never exhaustive.
+                self.emit_extra_diag(
+                    "W3102",
+                    crate::diagnostics::DiagnosticSeverity::Warning,
+                    "non-exhaustive list match: add a `[..., ...rest]` or `_` arm to cover all lengths"
+                        .to_string(),
+                    match_span.clone(),
+                );
+                return;
+            }
+        }
+
         let expected_ctors: Option<Vec<String>> = match scrutinee_ty {
             Type::Con(ref name, _) if name == "Bool" => {
                 Some(vec!["True".to_string(), "False".to_string()])

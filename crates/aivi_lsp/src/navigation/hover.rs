@@ -985,6 +985,13 @@ impl Backend {
             ));
             return Some(Self::hover_markdown(contents));
         }
+        if let Some(contents) = Self::hover_contents_for_static_source(&ident) {
+            Self::hover_debug(format!(
+                "build_hover: resolved static source {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
         Self::hover_debug(format!(
             "build_hover: unresolved token {ident:?}; returning generic fallback after {:?}",
             started.elapsed()
@@ -1182,6 +1189,16 @@ impl Backend {
         // Handle dotted identifiers: first check if it's a full module name (e.g.
         // "aivi.collections"), then check Domain.method / Type.constructor patterns.
         if ident.contains('.') {
+            // 0. Compile-time @static source names (e.g. type.jsonSchema, file.read).
+            if let Some(contents) = Self::hover_contents_for_static_source(&ident) {
+                Self::hover_debug(format!(
+                    "build_hover_ws: resolved static source {} after {:?}",
+                    ident,
+                    started.elapsed()
+                ));
+                return Some(Self::hover_markdown(contents));
+            }
+
             // 1. Exact module name match.
             if let Some(indexed) = workspace_modules.get(&ident) {
                 let doc_text = indexed
