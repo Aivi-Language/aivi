@@ -4,7 +4,6 @@ module integrationTests.syntax.bidirectionalClassMembers
 use aivi
 use aivi.prelude
 use aivi.testing
-use aivi.logic
 
 // Bidirectional type inference for zero-argument class members.
 // `empty` resolves from the Monoid class via expected type from annotations.

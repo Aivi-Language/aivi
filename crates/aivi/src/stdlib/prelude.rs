@@ -7,6 +7,15 @@ export Int, Float, Bool, Text, Char, Bytes
 export List, Option, Result, Tuple, Patch
 export ToText, toText
 
+export Setoid, Ord
+export Semigroup, Monoid, Group
+export Semigroupoid, Category
+export Functor, Apply, Applicative, Chain, Monad
+export Foldable, Traversable
+export Bifunctor, Profunctor
+export Filterable
+export Alternative, Plus
+
 export Calendar
 export Duration
 export Color

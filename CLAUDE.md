@@ -119,6 +119,9 @@ the same session.
 - Bindings are immutable; use recursion, folds, or generators — no loops
 - No nulls — use `Option A` or `Result E A`
 - Exhaustive pattern matches
+- No semicolons — bindings and block statements are separated by newlines
+- Opening `{` always on the same line as the keyword (`do Effect {`, `generate {`, `match`)
+- Avoid deeply nested expressions — extract inner logic into named helper functions
 
 ### GTK4 UI
 Prefer `gtkApp` for new apps. The `on Msg => handler` callback style and `signalBind*` helpers are **deprecated**. See `AGENTS.md §4.4` for the preferred Elm-architecture pattern with `gtkApp`.
@@ -134,7 +137,9 @@ Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1.
 | `def f(x):`            | No `def`, no parens for args     | `f = x => ...`                                      |
 | `fn f(x: T) -> R`      | No `fn` keyword                  | `f : T -> R` / `f = x => ...`                       |
 | `f :: T -> R`          | Single colon for type signatures | `f : T -> R`                                        |
-| `var x = 1; x = 2`     | No mutation, no semicolons!                      | `x = 1; x = x + 1` (shadow)                         |
+| `var x = 1; x = 2`     | No mutation, no semicolons!      | `x = 1` (shadow with `x = x + 1` on next line)      |
+| `x = 1; y = 2`        | No semicolons — use newlines     | `x = 1` (newline) `y = 2`                           |
+| `do Effect` `{` on next line | Opening `{` must be on same line | `do Effect {`                               |
 | `null` / `nil`         | No nulls                         | `None` / `Option A`                                 |
 | `Just x` / `Nothing`   | AIVI is not Haskell              | `Some x` / `None`                                   |
 | `Left e` / `Right x`   | AIVI is not Haskell              | `Err e` / `Ok x`                                    |
@@ -160,6 +165,7 @@ Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1.
 | `"x" ++ "y"`           | No string concat operator        | `"{x}{y}"`                                          |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
 | `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |
+| Deep nesting / inline lambdas in lambdas | Extract into named helpers | `step1 = ...; step2 = ...; result = step2 (step1 x)` |
 
 
 ## Pre-commit Checklist
