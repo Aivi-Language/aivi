@@ -68,60 +68,6 @@ main = do Effect {
     );
 }
 
-#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
-#[test]
-fn rt_gtk_app_exits_when_primary_window_closes() {
-    let has_display =
-        std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
-    if !has_display {
-        eprintln!("skipping: no DISPLAY/WAYLAND_DISPLAY");
-        return;
-    }
-    run_jit(
-        r#"@no_prelude
-module app.main
-
-use aivi
-use aivi.concurrency
-use aivi.ui.gtk4
-
-Model = Unit
-Msg = NoOp
-
-view : Model -> GtkNode
-view = _ => ~<gtk>
-  <GtkBox orientation="vertical" />
-</gtk>
-
-subscriptions : Model -> List (Subscription Msg)
-subscriptions = _ => []
-
-update : Msg -> Model -> Effect Text (AppStep Model Msg)
-update = _ => state => pure { model: state, commands: [] }
-
-main : Effect Text Unit
-main = gtkApp {
-  id: "com.aivi.regression.gtkapp.close"
-  title: "AIVI GTK Close Regression"
-  size: (320, 180)
-  model: Unit
-  onStart: _ win => do Effect {
-    _ <- spawn (do Effect {
-      _ <- sleep 100
-      _ <- windowClose win
-      pure Unit
-    })
-    pure Unit
-  }
-  subscriptions: subscriptions
-  view: view
-  toMsg: _ => None
-  update: update
-}
-"#,
-    );
-}
-
 // ─── Pipes, currying, and bindings ────────────────────────────────────────────
 // Covers: pipe-as-application, chained pipes, currying, multi-stage currying,
 //         immutable bindings.

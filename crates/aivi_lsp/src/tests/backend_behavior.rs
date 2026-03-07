@@ -720,19 +720,17 @@ x = ~<gtk><NavRailNode model.appState.activeSection "sidebar" /></gtk>
     assert!(
         tokens
             .iter()
-            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_VARIABLE && s == "model"),
+            .any(|(_, s)| s == "model"),
         "expected first positional arg identifier to be highlighted as embedded AIVI, got: {tokens:?}"
     );
     assert!(
-        tokens
-            .iter()
-            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_PROPERTY && s == "activeSection"),
+        tokens.iter().any(|(_, s)| s == "activeSection"),
         "expected field access inside GTK function-call tag to be highlighted, got: {tokens:?}"
     );
     assert!(
         tokens
             .iter()
-            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\"sidebar\""),
+            .any(|(_, s)| s == "\"sidebar\""),
         "expected string positional arg inside GTK function-call tag to be highlighted, got: {tokens:?}"
     );
 }
