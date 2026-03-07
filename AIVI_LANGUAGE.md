@@ -623,7 +623,7 @@ main = do Effect {
 
 ### `do M { ... }` - General monadic blocks
 
-`do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. `Option` and `Result` are also supported:
+`do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. `Option`, `Result`, and `Query` are also supported:
 
 ```aivi
 // do Option: short-circuits on None
@@ -639,6 +639,18 @@ validateAge = input => do Result {
   ok <- if n >= 0 && n <= 150 then Ok n else Err "out of range"
   Ok ok
 }
+
+// do Query: compose in-memory database queries (aivi.database)
+// MVP: rows are loaded from the store first; SQL pushdown is not yet implemented.
+activeNames : Query Text
+activeNames = do Query {
+  user <- db.from userTable    // bind each row
+  db.guard_ user.active        // skip rows where active is False
+  db.queryOf user.name         // project the name field
+}
+
+// Execute against a connection
+names <- db.runQueryOn conn activeNames
 ```
 
 The same bind (`<-`) and pure-bind (`=`) syntax applies. Statement availability by block kind:
@@ -933,6 +945,24 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 `aivi.database` supports both a default configured backend (`configure`, `load`, `applyDelta`) and
 explicit `DbConnection` handles (`connect`, `open`, `loadOn`, `applyDeltaOn`). Prefer
 `beginTxOn` / `inTransactionOn` / savepoint `...On` helpers for transaction-safe pooled code.
+
+**Query DSL (v0.1 MVP):** `aivi.database` also exports a `Query A` type and `do Query { ... }` notation for composing typed, composable queries. In v0.1 queries execute in memory (rows are loaded from the store first; SQL pushdown is not yet implemented). Use `runQueryOn conn q` to execute.
+
+```aivi
+// Build a typed query
+expensiveItems : Query Text
+expensiveItems = do Query {
+  item <- db.from itemTable
+  db.guard_ (item.price > 100)
+  db.queryOf item.name
+}
+// Or with functional helpers
+expensiveItems2 : Query Text
+expensiveItems2 = db.from itemTable |> db.where_ (_.price > 100) |> db.select _.name
+
+// Execute
+names <- db.runQueryOn conn expensiveItems
+```
 
 **Network** (`aivi.net.*`):
 `http`, `https`, `httpServer`, `sockets`, `streams`
