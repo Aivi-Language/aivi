@@ -1,7 +1,7 @@
 # Reactive Dataflow
 
 <!-- quick-info: {"kind":"topic","name":"reactive dataflow"} -->
-AIVI reactive dataflow is a pure memoized derivation graph over committed model snapshots. External change still enters through `Msg` via commands and subscriptions; reactive values only decide how current state is derived and reused.
+AIVI reactive dataflow is a pure derivation graph over committed model snapshots. A committed model snapshot is simply the full `Model` after one successful app turn. `computed` values memoize—that is, cache—their last pure result until one of their inputs changes—while external change still enters through `Msg` via commands and subscriptions.
 <!-- /quick-info -->
 
 If you want the gentler introduction first, read [Reactive Signals](./reactive_signals.md) and [Native GTK & libadwaita Apps](./native_gtk_apps.md). This page explains the underlying rules.
@@ -20,14 +20,24 @@ You can always compute those values inline, and often that is the best choice. R
 
 The important boundary is this: reactive dataflow stays on the **pure** side of the app. It does not fetch data, spawn work, or mutate state.
 
+## Quick mental model
+
+Use reactive dataflow when:
+
+- the app already has the right source data in its `Model`
+- a derived value is reused, expensive, or easier to understand when named
+- you want caching for pure calculations, not a second effect system
+
+If all you need is one short expression inside `view`, an ordinary helper is still the simplest choice.
+
 ## Core vocabulary
 
-| Term | Meaning |
-| --- | --- |
-| **source value** | An authoritative snapshot that may change between app turns. In a standard GTK app, source values are ordinary fields inside the committed `Model`. |
-| **derived value** | Any pure projection over source values or other derived values. A helper like `filteredRows = state => ...` is already a derived value. |
-| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects and no capability clauses. |
-| **computed value** | A signal with stable identity and memoization. The host tracks what it read last time and reuses the cached result until one of those dependencies changes. |
+| Term | Meaning | Example |
+| --- | --- | --- |
+| **source value** | An authoritative snapshot that may change between app turns. In a standard GTK app, source values are ordinary fields inside the committed `Model`. | `state.rows`, `state.query`, `state.loading` |
+| **derived value** | Any pure projection over source values or other derived values. | `length state.rows`, `filter isVisible state.rows` |
+| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects and no capability clauses. | `headline = signal (state => ...)` |
+| **computed value** | A signal with stable identity and memoization. The host tracks what it read last time and reuses the cached result until one of those dependencies changes. | `visibleRows = computed "rows.visible" (state => ...)` |
 
 A plain helper is correct by default. Promote it to `signal` or `computed` only when the extra structure helps.
 
@@ -94,18 +104,21 @@ Inside GTK sigils hosted by `gtkApp`, attribute splices and `<each items={...}>`
 
 ## How reactive dataflow fits the normal app loop
 
-Reactive dataflow does not bypass `Msg` or `update`. A normal flow still looks like this:
+Reactive dataflow does not bypass `Msg` or `update`. It sits between the committed model and the next render:
 
-1. a GTK signal, timer, command result, or subscription event produces a `Msg`,
-2. `update` stores the new authoritative snapshot in the model,
-3. `gtkApp` commits the new model and invalidates affected computed signals,
-4. `view` reads the signals it needs,
-5. dirty computed values recalculate lazily,
-6. `reconcileNode` patches the live widget tree.
+1. a GTK signal, timer, command result, or subscription event produces a `Msg`
+2. `update` commits the next authoritative model
+3. `view` reads any `signal` or `computed` helpers it needs
+4. dirty computed values recalculate lazily
+5. `reconcileNode` patches the live widget tree
 
-That means data from a watcher, search task, or network stream becomes reactive source data **only after `update` commits it to the model**.
+That means data from a watcher, search task, or network stream becomes reactive source data **only after `update` commits it to the model**. For the full event-loop picture, see [GTK App Architecture](./app_architecture.md#how-one-app-turn-works).
 
 ## Memoization and invalidation
+
+Memoization just means caching the result of a pure calculation so repeated reads do not redo the same work unnecessarily.
+
+### What `computed` remembers
 
 Each committed source snapshot has a logical revision. A computed cache entry stores:
 
@@ -113,6 +126,10 @@ Each committed source snapshot has a logical revision. A computed cache entry st
 - the source and signal dependencies it read during the last successful evaluation,
 - the dependency revisions seen during that evaluation,
 - the cached result.
+
+In practice, the host remembers “which inputs did I read last time?” and “what result did I get?” If those inputs still match, the cached result can be reused safely.
+
+### Advanced invalidation rules
 
 Invalidation follows these rules:
 

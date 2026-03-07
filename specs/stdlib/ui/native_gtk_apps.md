@@ -6,6 +6,17 @@ AIVI's main desktop-app story is native GTK4 and libadwaita software. Use `gtkAp
 
 This page is the broad guide. If you want the details afterward, follow up with [`aivi.ui.gtk4`](./gtk4.md), [GTK App Architecture](./app_architecture.md), [Reactive Signals](./reactive_signals.md), [Reactive Dataflow](./reactive_dataflow.md), and [`aivi.ui.forms`](./forms.md).
 
+## Two different meanings of “signal”
+
+AIVI UI docs use the word **signal** in two different ways:
+
+| Term | Meaning |
+| --- | --- |
+| **GTK signal** | widget input such as clicks, text changes, focus, and toggles |
+| **reactive signal** | pure derived data created with `signal` or `computed` |
+
+GTK signals flow **into** your app as `GtkSignalEvent`. Reactive signals are read **inside** your app from the committed model.
+
 ## What GTK and libadwaita mean in AIVI
 
 GTK4 is the native widget toolkit: windows, buttons, entries, lists, signals, accessibility, drawing, and the event loop. libadwaita builds on GTK and adds GNOME-style application structure and adaptive widgets such as clamps, header bars, and preference rows.
@@ -162,50 +173,37 @@ There is no separate form runtime and no hidden widget-owned field state.
 
 ## Guided example
 
-The example below shows the pieces working together:
+The examples below build up the full pattern in smaller steps.
 
-- `AdwClamp` provides a simple libadwaita layout container,
-- `GtkEntry` and `GtkButton` emit signals,
-- `toMsg: auto` derives the simple signal routing from the current view,
-- `SubscriptionEvery` keeps a timer alive,
-- `CommandAfter` schedules a delayed follow-up message,
-- direct `{ model, commands }` records keep `update` readable.
+### Example 1: minimal `gtkApp`
 
 ```aivi
-use aivi
 use aivi.text
 use aivi.ui.gtk4
 
 Model = {
   projectName: Text
-  secondsSinceSave: Int
   status: Text
 }
 
 Msg
   = ProjectNameChanged Text
   | Save
-  | Tick
-  | ClearStatus
 
 initialModel : Model
 initialModel = {
   projectName: ""
-  secondsSinceSave: 0
   status: "Waiting for changes"
 }
 
-headline : Model -> Text
-headline = state =>
-  if state.projectName == ""
+pageTitle : Model -> Text
+pageTitle = model =>
+  if model.projectName == ""
     then "Project Settings"
-    else "Project Settings · {state.projectName}"
-
-statusText : Model -> Text
-statusText = state => state.status
+    else "Project Settings · {model.projectName}"
 
 view : Model -> GtkNode
-view = state =>
+view = model =>
   ~<gtk>
     <AdwClamp maximumSize="480">
       <GtkBox
@@ -216,66 +214,32 @@ view = state =>
         marginStart="24"
         marginEnd="24"
       >
-        <GtkLabel label={headline state} cssClass="title-2" />
+        <GtkLabel label={pageTitle model} cssClass="title-2" />
         <GtkEntry
-          text={state.projectName}
+          text={model.projectName}
           placeholderText="Project name"
           onInput={ ProjectNameChanged }
         />
         <GtkButton label="Save" onClick={ Save } />
-        <GtkLabel label={statusText state} />
-        <GtkLabel label={"Seconds since save: {toText state.secondsSinceSave}"} />
+        <GtkLabel label={model.status} />
       </GtkBox>
     </AdwClamp>
   </gtk>
 
-subscriptions : Model -> List (Subscription Msg)
-subscriptions = _ => [
-  SubscriptionEvery {
-    key: "clock"
-    millis: 1000
-    tag: Tick
-  }
-]
-
-renameProject : Text -> Model -> AppStep Model Msg
-renameProject = txt state => {
-  model: state <| { projectName: txt }
-  commands: []
-}
-
-saveProject : Model -> AppStep Model Msg
-saveProject = state => {
-  model: state <| { secondsSinceSave: 0, status: "Saved" }
-  commands: [
-    CommandAfter {
-      key: "clear-status"
-      millis: 2000
-      msg: ClearStatus
-    }
-  ]
-}
-
-tick : Model -> AppStep Model Msg
-tick = state => {
-  model: state <| { secondsSinceSave: state.secondsSinceSave + 1 }
-  commands: []
-}
-
-clearStatus : Model -> AppStep Model Msg
-clearStatus = state => {
-  model: state <| { status: "Waiting for changes" }
-  commands: []
-}
-
 update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
-update = msg => state =>
+update = msg => model =>
   pure (
     msg match
-      | ProjectNameChanged txt => renameProject txt state
-      | Save                   => saveProject state
-      | Tick                   => tick state
-      | ClearStatus            => clearStatus state
+      | ProjectNameChanged newName =>
+          {
+            model: model <| { projectName: newName }
+            commands: []
+          }
+      | Save =>
+          {
+            model: model <| { status: "Saved" }
+            commands: []
+          }
   )
 
 main : Effect GtkError Unit
@@ -290,6 +254,99 @@ main = gtkApp {
   toMsg: auto
   update: update
 }
+```
+
+This is enough for many simple settings and editor screens.
+
+### Example 2: add a repeating timer and delayed follow-up
+
+Now extend the same app with a timer and a one-shot command:
+
+```aivi
+Model = {
+  projectName: Text
+  secondsSinceSave: Int
+  status: Text
+}
+
+Msg
+  = ProjectNameChanged Text
+  | Save
+  | Tick
+  | ClearStatus
+
+subscriptions : Model -> List (Subscription Msg)
+subscriptions = _ => [
+  SubscriptionEvery {
+    key: "clock"
+    millis: 1000
+    tag: Tick
+  }
+]
+
+update = msg => model =>
+  pure (
+    msg match
+      | Save =>
+          {
+            model: model <| { secondsSinceSave: 0, status: "Saved" }
+            commands: [
+              CommandAfter {
+                key: "clear-status"
+                millis: 2000
+                msg: ClearStatus
+              }
+            ]
+          }
+      | Tick =>
+          {
+            model: model <| { secondsSinceSave: model.secondsSinceSave + 1 }
+            commands: []
+          }
+      | ClearStatus =>
+          {
+            model: model <| { status: "Waiting for changes" }
+            commands: []
+          }
+      | ProjectNameChanged newName =>
+          {
+            model: model <| { projectName: newName }
+            commands: []
+          }
+  )
+```
+
+### Example 3: refactor repetitive update branches into helpers
+
+Once the screen grows, extract small helper functions so `update` stays easy to scan:
+
+```aivi
+renameProject : Text -> Model -> AppStep Model Msg
+renameProject = newName model => {
+  model: model <| { projectName: newName }
+  commands: []
+}
+
+saveProject : Model -> AppStep Model Msg
+saveProject = model => {
+  model: model <| { secondsSinceSave: 0, status: "Saved" }
+  commands: [
+    CommandAfter {
+      key: "clear-status"
+      millis: 2000
+      msg: ClearStatus
+    }
+  ]
+}
+
+update = msg => model =>
+  pure (
+    msg match
+      | ProjectNameChanged newName => renameProject newName model
+      | Save                       => saveProject model
+      | Tick                       => tick model
+      | ClearStatus                => clearStatus model
+  )
 ```
 
 When a screen has several unnamed widgets producing the same signal, either give them `id="..."` names or keep an explicit `toMsg`. `auto` is meant for the straightforward constructor-routing cases, not for every possible GTK event workflow.

@@ -21,6 +21,18 @@ GTK runtime operations use the `ui` capability family:
 
 These capabilities describe where native UI effects live in AIVI's effect system. They do not create a separate “special UI language”.
 
+## Essential API for first apps
+
+Most single-window GTK apps only need this smaller subset:
+
+- `gtkApp` — the standard event-loop host
+- `GtkNode` and `GtkSignalEvent` — widget-tree and input-event types
+- `~<gtk>...</gtk>` — the usual way to build the view tree
+- timer helpers such as `commandAfter` or `subscriptionEvery`
+- `reconcileNode` only indirectly, because `gtkApp` calls it for you
+
+The rest of this page is still important reference material, but you do not need to memorize all of it before building a first app.
+
 ## Public API
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/public_api.aivi{aivi}
@@ -188,6 +200,14 @@ Attributes on shorthand tags become properties automatically, except for pass-th
 | `ref="btnRef"` | `ref` |
 | `onClick={...}` | `signal:clicked` |
 | `onInput={...}` | `signal:changed` |
+
+### Which syntax to use
+
+| Syntax style | Reach for it when... |
+| --- | --- |
+| shorthand tags such as `<GtkButton ... />` | day-to-day app code; this is the most readable default |
+| verbose `<object class="...">` form | you need builder-style structure or want to mirror GTK builder docs closely |
+| explicit `<signal ... />` tags | the signal name is clearer written explicitly or does not map neatly to sugar |
 
 Inside `~<gtk>` sigils, the LSP can also help with tag-name completion, widget property completion, and snippets for construct-only properties.
 
@@ -406,6 +426,12 @@ The helper surface includes:
 - compatibility helpers: `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`
 
 `commandPerform` and `subscriptionSource` operate on `Msg` directly today (`run : Effect GtkError msg`, `open : Resource GtkError (Recv msg)`), which keeps many ordinary apps straightforward to write. `appStep` and `appStepWith` are optional shorthand for the same `{ model, commands }` record shape that `update` returns.
+
+| Helper | Use it when... | Optional? |
+| --- | --- | --- |
+| `appStep`, `appStepWith` | you want shorter syntax for `{ model, commands }` | yes |
+| `noSubscriptions` | the app has no timers or long-lived feeds | yes |
+| `liftAppUpdate` | older code still returns only `model` from `update` | yes; mainly a migration helper |
 
 `onStart` is the right place for one-time setup such as app CSS or action registration. Repeating timers, ongoing background work, and external feeds belong in commands or subscriptions.
 
