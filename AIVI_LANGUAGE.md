@@ -944,20 +944,71 @@ explicit `DbConnection` handles (`connect`, `open`, `loadOn`, `applyDeltaOn`). P
 
 ## 13 External Sources
 
-`Source K A` represents typed external data. Load with `load` inside `do Effect { ... }`.
+`Source K A` represents typed external data. Prefer **schema-first source declarations** and keep
+`load` as the only effectful step inside `do Effect { ... }`.
 
 ```aivi
-cfg <- load (file.read "config.json")
-cfgTyped <- load (file.json "config.json")
-rows <- load (file.csv "users.csv")
-resp <- load (rest.get ~u(https://api.example.com/data))
-apiKey <- load (env.get "API_KEY")
-appCfg <- load (env.decode "AIVI_APP")
+User = { id: Int, name: Text }
+
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json"
+    schema: source.schema.derive
+  }
+
+appConfig : Source Env { port: Int, debug: Bool }
+appConfig =
+  env.decode {
+    prefix: "AIVI_APP"
+    schema: source.schema.derive
+  }
+
+do Effect {
+  users <- load usersSource
+  cfg   <- load appConfig
+  pure (users, cfg)
+}
 ```
 
 Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/decode`, `email.imap`.
 
 Capability mapping (Phase 1): `load (file.*)` -> `file.read`, `load (rest.*|http.*|https.*)` -> `network.http`, `load (env.*)` -> `process.env.read`, database-backed source reads -> `db.query`, and `@static` embedded sources require no runtime capability once compiled into the binary.
+
+### Source pipeline helpers
+
+Phase 3 adds pure source-pipeline combinators around the declaration:
+
+```aivi
+nonEmpty : List A -> Validation (List DecodeError) (List A)
+nonEmpty = xs =>
+  if List.length xs == 0 then
+    Invalid [{ path: [], message: "expected at least one row" }]
+  else
+    Valid xs
+
+usersCount : Source File Int
+usersCount =
+  usersSource
+    |> source.transform List.length
+
+validatedUsers : Source File (List User)
+validatedUsers =
+  usersSource
+    |> source.validate nonEmpty
+```
+
+- `source.transform` is for pure normalization after decode.
+- `source.validate` is for semantic rejection that should surface as `DecodeError`.
+- `source.decodeErrors : SourceError K -> List DecodeError` extracts structured schema/validation mismatches (`IOError` becomes `[]`).
+- The wider Phase 3 composition model adds canonical retry/timeout/cache/provenance stages around `load`; see `specs/syntax/external_sources/composition.md` for the stage order and policy semantics.
+
+Compatibility forms like `file.json "./users.json"` and `env.decode "AIVI_APP"` still work, but the record forms above are the preferred public surface because tooling can describe the schema contract before `load`.
+
+### Tooling notes
+
+- Schema-first record declarations power hover/diagnostics for `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
+- `aivi lsp` checks whole **workspace snapshots** incrementally: open documents shadow disk, cached checkpoints reuse only when their fingerprints match, and dependents recheck when export surfaces or exported schema summaries change.
 
 ### Email Module (`aivi.email`)
 
@@ -1186,6 +1237,8 @@ main = gtkApp {
 The Phase 4 reactive model keeps authoritative source snapshots inside the committed model. Plain derived helpers stay pure, while computed values are memoized pure projections invalidated when committed source snapshots change and reevaluated lazily on the next read. Commands and subscriptions remain the only effectful boundaries: they may capture derived values by value, but they never mutate reactive values directly.
 
 `onStart` is for one-time startup work such as registering CSS and actions. `signalStream`, `buildFromNode`, `reconcileNode`, and the deprecated `gtkSetInterval` remain available as lower-level primitives for custom loops and legacy code, but they are not a competing blessed architecture. `gtkAppFull` remains as a deprecated compatibility shim for advanced window flags and legacy code that still needs raw handles during `update`.
+
+The LSP reinforces this public path: completions scaffold the blessed `gtkApp` loop, hover docs cover `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`, and lower-level signal APIs are documented as escape hatches rather than a second recommended architecture.
 
 For forms, keep editable input in `aivi.ui.forms.Field` values inside the model, map `GtkInputChanged` to `setValue`, map `GtkFocusOut` to `touch`, and flip a `submitted: Bool` flag on your submit message. Render inline errors with `visibleErrors submitted validator field`, and construct the final typed payload with the existing `Validation` applicative:
 

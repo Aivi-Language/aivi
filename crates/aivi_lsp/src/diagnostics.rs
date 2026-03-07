@@ -175,8 +175,348 @@ impl Backend {
             strict,
             workspace_modules,
         ));
+        out.extend(Self::build_source_tooling_diagnostics(&file_modules));
 
         out
+    }
+
+    fn build_source_tooling_diagnostics(modules: &[aivi::Module]) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+
+        for module in modules {
+            let declared_types: HashSet<&str> = module
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    ModuleItem::TypeSig(sig) => Some(sig.name.name.as_str()),
+                    _ => None,
+                })
+                .collect();
+
+            for item in &module.items {
+                let ModuleItem::Def(def) = item else {
+                    continue;
+                };
+
+                if !declared_types.contains(def.name.name.as_str())
+                    && Self::expr_contains_ident_path(&def.expr, "source.schema.derive")
+                {
+                    out.push(Self::source_tooling_hint(
+                        def.name.span.clone(),
+                        "LSP-SOURCE003",
+                        "Schema-first declarations using `source.schema.derive` should have an explicit `Source ...` type signature so hover and schema diagnostics can describe the decode contract before `load`.",
+                    ));
+                }
+
+                Self::collect_source_tooling_expr_diagnostics(&def.expr, &mut out);
+            }
+        }
+
+        out
+    }
+
+    fn collect_source_tooling_expr_diagnostics(expr: &aivi::Expr, out: &mut Vec<Diagnostic>) {
+        use aivi::{BlockItem, Expr, PathSegment, TextPart};
+
+        match expr {
+            Expr::Ident(_) | Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => {}
+            Expr::UnaryNeg { expr, .. } | Expr::Suffixed { base: expr, .. } => {
+                Self::collect_source_tooling_expr_diagnostics(expr, out);
+            }
+            Expr::TextInterpolate { parts, .. } => {
+                for part in parts {
+                    if let TextPart::Expr { expr, .. } = part {
+                        Self::collect_source_tooling_expr_diagnostics(expr, out);
+                    }
+                }
+            }
+            Expr::List { items, .. } => {
+                for item in items {
+                    Self::collect_source_tooling_expr_diagnostics(&item.expr, out);
+                }
+            }
+            Expr::Tuple { items, .. } => {
+                for item in items {
+                    Self::collect_source_tooling_expr_diagnostics(item, out);
+                }
+            }
+            Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
+                for field in fields {
+                    Self::collect_source_tooling_expr_diagnostics(&field.value, out);
+                }
+            }
+            Expr::FieldAccess { base, .. } => {
+                Self::collect_source_tooling_expr_diagnostics(base, out);
+            }
+            Expr::Index { base, index, .. } => {
+                Self::collect_source_tooling_expr_diagnostics(base, out);
+                Self::collect_source_tooling_expr_diagnostics(index, out);
+            }
+            Expr::Call { func, args, span } => {
+                if let Some(path) = Self::expr_ident_path(func) {
+                    match path.as_str() {
+                        "file.json" | "env.decode" => {
+                            if let Some(arg) = args.first() {
+                                match arg {
+                                    Expr::Literal(aivi::Literal::String { .. }) => out.push(
+                                        Self::source_tooling_hint(
+                                            span.clone(),
+                                            "LSP-SOURCE001",
+                                            &format!(
+                                                "Prefer the schema-first record form for `{path}` so tooling can surface the connector config and decode contract before `load`."
+                                            ),
+                                        ),
+                                    ),
+                                    Expr::Record { fields, .. } => {
+                                        let has_schema = fields.iter().any(|field| {
+                                            matches!(
+                                                field.path.first(),
+                                                Some(PathSegment::Field(name))
+                                                    if name.name == "schema"
+                                            )
+                                        });
+                                        if !has_schema {
+                                            out.push(Self::source_tooling_hint(
+                                                span.clone(),
+                                                "LSP-SOURCE002",
+                                                &format!(
+                                                    "Add a `schema: source.schema.derive` (or another `source.schema.*` strategy) field to this `{path}` declaration to opt into schema-first hover and decode diagnostics."
+                                                ),
+                                            ));
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                Self::collect_source_tooling_expr_diagnostics(func, out);
+                for arg in args {
+                    Self::collect_source_tooling_expr_diagnostics(arg, out);
+                }
+            }
+            Expr::Lambda { body, .. } => {
+                Self::collect_source_tooling_expr_diagnostics(body, out);
+            }
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                if let Some(scrutinee) = scrutinee {
+                    Self::collect_source_tooling_expr_diagnostics(scrutinee, out);
+                }
+                for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::collect_source_tooling_expr_diagnostics(guard, out);
+                    }
+                    Self::collect_source_tooling_expr_diagnostics(&arm.body, out);
+                }
+            }
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::collect_source_tooling_expr_diagnostics(cond, out);
+                Self::collect_source_tooling_expr_diagnostics(then_branch, out);
+                Self::collect_source_tooling_expr_diagnostics(else_branch, out);
+            }
+            Expr::Binary { left, right, .. } => {
+                Self::collect_source_tooling_expr_diagnostics(left, out);
+                Self::collect_source_tooling_expr_diagnostics(right, out);
+            }
+            Expr::CapabilityScope { body, handlers, .. } => {
+                for handler in handlers {
+                    Self::collect_source_tooling_expr_diagnostics(&handler.handler, out);
+                }
+                Self::collect_source_tooling_expr_diagnostics(body, out);
+            }
+            Expr::Block { items, .. } => {
+                for item in items {
+                    match item {
+                        BlockItem::Bind { expr, .. }
+                        | BlockItem::Let { expr, .. }
+                        | BlockItem::Filter { expr, .. }
+                        | BlockItem::Yield { expr, .. }
+                        | BlockItem::Recurse { expr, .. }
+                        | BlockItem::Expr { expr, .. } => {
+                            Self::collect_source_tooling_expr_diagnostics(expr, out);
+                        }
+                        BlockItem::When { cond, effect, .. }
+                        | BlockItem::Unless { cond, effect, .. } => {
+                            Self::collect_source_tooling_expr_diagnostics(cond, out);
+                            Self::collect_source_tooling_expr_diagnostics(effect, out);
+                        }
+                        BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
+                            Self::collect_source_tooling_expr_diagnostics(cond, out);
+                            Self::collect_source_tooling_expr_diagnostics(fail_expr, out);
+                        }
+                        BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
+                            Self::collect_source_tooling_expr_diagnostics(transition, out);
+                            Self::collect_source_tooling_expr_diagnostics(handler, out);
+                        }
+                    }
+                }
+            }
+            Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
+                for substitution in substitutions {
+                    if let Some(value) = &substitution.value {
+                        Self::collect_source_tooling_expr_diagnostics(value, out);
+                    }
+                }
+                Self::collect_source_tooling_expr_diagnostics(body, out);
+            }
+        }
+    }
+
+    fn expr_contains_ident_path(expr: &aivi::Expr, expected: &str) -> bool {
+        use aivi::{BlockItem, Expr, TextPart};
+
+        if Self::expr_ident_path(expr).as_deref() == Some(expected) {
+            return true;
+        }
+
+        match expr {
+            Expr::Ident(_) | Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => {
+                false
+            }
+            Expr::UnaryNeg { expr, .. } | Expr::Suffixed { base: expr, .. } => {
+                Self::expr_contains_ident_path(expr, expected)
+            }
+            Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+                TextPart::Text { .. } => false,
+                TextPart::Expr { expr, .. } => Self::expr_contains_ident_path(expr, expected),
+            }),
+            Expr::List { items, .. } => items
+                .iter()
+                .any(|item| Self::expr_contains_ident_path(&item.expr, expected)),
+            Expr::Tuple { items, .. } => items
+                .iter()
+                .any(|item| Self::expr_contains_ident_path(item, expected)),
+            Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields
+                .iter()
+                .any(|field| Self::expr_contains_ident_path(&field.value, expected)),
+            Expr::FieldAccess { base, .. } => Self::expr_contains_ident_path(base, expected),
+            Expr::Index { base, index, .. } => {
+                Self::expr_contains_ident_path(base, expected)
+                    || Self::expr_contains_ident_path(index, expected)
+            }
+            Expr::Call { func, args, .. } => {
+                Self::expr_contains_ident_path(func, expected)
+                    || args
+                        .iter()
+                        .any(|arg| Self::expr_contains_ident_path(arg, expected))
+            }
+            Expr::Lambda { body, .. } => Self::expr_contains_ident_path(body, expected),
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                scrutinee
+                    .as_ref()
+                    .is_some_and(|expr| Self::expr_contains_ident_path(expr, expected))
+                    || arms.iter().any(|arm| {
+                        arm.guard
+                            .as_ref()
+                            .is_some_and(|guard| Self::expr_contains_ident_path(guard, expected))
+                            || Self::expr_contains_ident_path(&arm.body, expected)
+                    })
+            }
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::expr_contains_ident_path(cond, expected)
+                    || Self::expr_contains_ident_path(then_branch, expected)
+                    || Self::expr_contains_ident_path(else_branch, expected)
+            }
+            Expr::Binary { left, right, .. } => {
+                Self::expr_contains_ident_path(left, expected)
+                    || Self::expr_contains_ident_path(right, expected)
+            }
+            Expr::CapabilityScope { handlers, body, .. } => {
+                handlers
+                    .iter()
+                    .any(|handler| Self::expr_contains_ident_path(&handler.handler, expected))
+                    || Self::expr_contains_ident_path(body, expected)
+            }
+            Expr::Block { items, .. } => items.iter().any(|item| match item {
+                BlockItem::Bind { expr, .. }
+                | BlockItem::Let { expr, .. }
+                | BlockItem::Filter { expr, .. }
+                | BlockItem::Yield { expr, .. }
+                | BlockItem::Recurse { expr, .. }
+                | BlockItem::Expr { expr, .. } => Self::expr_contains_ident_path(expr, expected),
+                BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
+                    Self::expr_contains_ident_path(cond, expected)
+                        || Self::expr_contains_ident_path(effect, expected)
+                }
+                BlockItem::Given {
+                    cond, fail_expr, ..
+                } => {
+                    Self::expr_contains_ident_path(cond, expected)
+                        || Self::expr_contains_ident_path(fail_expr, expected)
+                }
+                BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => {
+                    Self::expr_contains_ident_path(transition, expected)
+                        || Self::expr_contains_ident_path(handler, expected)
+                }
+            }),
+            Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
+                substitutions.iter().any(|substitution| {
+                    substitution
+                        .value
+                        .as_ref()
+                        .is_some_and(|value| Self::expr_contains_ident_path(value, expected))
+                }) || Self::expr_contains_ident_path(body, expected)
+            }
+        }
+    }
+
+    fn expr_ident_path(expr: &aivi::Expr) -> Option<String> {
+        match expr {
+            aivi::Expr::Ident(name) => Some(name.name.clone()),
+            aivi::Expr::FieldAccess { base, field, .. } => {
+                Some(format!("{}.{}", Self::expr_ident_path(base)?, field.name))
+            }
+            _ => None,
+        }
+    }
+
+    fn source_tooling_hint(span: aivi::Span, code: &str, message: &str) -> Diagnostic {
+        Diagnostic {
+            range: Self::span_to_range(span),
+            severity: Some(DiagnosticSeverity::HINT),
+            code: Some(NumberOrString::String(code.to_string())),
+            code_description: None,
+            source: Some("aivi.source".to_string()),
+            message: message.to_string(),
+            related_information: None,
+            tags: None,
+            data: None,
+        }
     }
 
     fn file_diag_to_lsp(uri: &Url, file_diag: aivi::FileDiagnostic) -> Diagnostic {

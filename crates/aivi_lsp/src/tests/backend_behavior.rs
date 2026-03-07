@@ -5,10 +5,12 @@ fn build_diagnostics_reports_error() {
     let diagnostics = Backend::build_diagnostics(text, &uri);
     assert!(!diagnostics.is_empty());
     assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
-    assert!(diagnostics[0]
-        .source
-        .as_deref()
-        .is_some_and(|s| s.starts_with("aivi.")));
+    assert!(
+        diagnostics[0]
+            .source
+            .as_deref()
+            .is_some_and(|s| s.starts_with("aivi."))
+    );
 }
 
 #[test]
@@ -316,6 +318,75 @@ loadConfig = path => do Effect {
             .iter()
             .any(|info| info.message.contains("missing capability `file.read`")),
         "expected related info to mention restrictive signature, got: {related:?}"
+    );
+}
+
+#[test]
+fn diagnostics_hint_for_legacy_file_json_source_form() {
+    let text = r#"module demo
+use aivi
+
+users : Source File (List Int)
+users = file.json "./users.json"
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    let diag = diagnostics
+        .iter()
+        .find(|diag| matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "LSP-SOURCE001"))
+        .expect("expected schema-first source hint");
+
+    assert_eq!(diag.severity, Some(DiagnosticSeverity::HINT));
+    assert!(
+        diag.message.contains("schema-first record form"),
+        "expected schema-first guidance, got: {}",
+        diag.message
+    );
+}
+
+#[test]
+fn diagnostics_hint_for_missing_schema_strategy_on_source_record() {
+    let text = r#"module demo
+use aivi
+
+cfg : Source Env { port: Int }
+cfg = env.decode {
+  prefix: "AIVI_APP"
+}
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    let diag = diagnostics
+        .iter()
+        .find(|diag| matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "LSP-SOURCE002"))
+        .expect("expected schema strategy hint");
+
+    assert_eq!(diag.severity, Some(DiagnosticSeverity::HINT));
+    assert!(diag.message.contains("`schema: source.schema.derive`"));
+}
+
+#[test]
+fn diagnostics_hint_for_schema_derive_without_type_signature() {
+    let text = r#"module demo
+use aivi
+
+cfg =
+  env.decode {
+    prefix: "AIVI_APP"
+    schema: source.schema.derive
+  }
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    let diag = diagnostics
+        .iter()
+        .find(|diag| matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "LSP-SOURCE003"))
+        .expect("expected derive signature hint");
+
+    assert_eq!(diag.severity, Some(DiagnosticSeverity::HINT));
+    assert!(
+        diag.message
+            .contains("explicit `Source ...` type signature")
     );
 }
 

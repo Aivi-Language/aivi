@@ -121,6 +121,10 @@ impl TypeChecker {
             "Effect".to_string(),
             arrow(star.clone(), arrow(star.clone(), star.clone())),
         );
+        self.builtin_types.insert(
+            "Validation".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
         // Sources (boundaries)
         self.builtin_types.insert(
             "Source".to_string(),

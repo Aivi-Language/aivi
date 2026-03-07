@@ -47,6 +47,12 @@ impl Backend {
         }
     }
 
+    fn append_source_tooling_docs(contents: &mut String, ident: &str) {
+        if let Some(extra) = Self::source_tooling_doc_for_ident(ident) {
+            Self::append_markdown_section(contents, &extra);
+        }
+    }
+
     fn gtk_architecture_doc_for_ident(ident: &str) -> Option<String> {
         let (badge, body) = match ident {
             "gtkApp" => (
@@ -155,16 +161,68 @@ impl Backend {
         Some(Self::hover_badge_markdown(badge, body.to_string()))
     }
 
+    fn source_tooling_doc_for_ident(ident: &str) -> Option<String> {
+        let (badge, body) = match ident {
+            "load" => (
+                "source-pipeline",
+                "`load`\n\nExecutes a `Source K A` in canonical source-pipeline order: acquire connector data, decode with the source schema, run pure `source.transform` stages, then run `source.validate` stages before producing `A` or `SourceError K`.",
+            ),
+            "SourceError" => (
+                "source-error",
+                "`SourceError K = IOError Text | DecodeError (List DecodeError)`\n\nStructured source failures distinguish connector/transport errors from schema and validation failures. `source.validate` feeds semantic failures into the same `DecodeError` bucket so callers can inspect one error surface.",
+            ),
+            "file.json" => (
+                "source-constructor",
+                "`file.json`\n\nSchema-first JSON source constructor.\n\nPrefer the record form:\n```aivi\nfile.json {\n  path: \"./users.json\"\n  schema: source.schema.derive\n}\n```\nThe compatibility string form still works, but the record form gives hover and diagnostics a stable schema contract to describe before `load` runs.",
+            ),
+            "env.decode" => (
+                "source-constructor",
+                "`env.decode`\n\nSchema-first environment decoder.\n\nPrefer the record form:\n```aivi\nenv.decode {\n  prefix: \"AIVI_APP\"\n  schema: source.schema.derive\n}\n```\nUse this when the surrounding result type should drive record decoding and source-schema hover.",
+            ),
+            "source.transform" => (
+                "source-stage",
+                "`source.transform`\n\nPure, total normalization after decode.\n\nUse this for reshaping, sorting, filtering, or projecting decoded values. If a stage can reject data, prefer `source.validate` so failures remain structured `DecodeError` values.",
+            ),
+            "source.validate" => (
+                "source-stage",
+                "`source.validate`\n\nSemantic validation stage for schema-decoded values.\n\n`source.validate` expects `Validation (List DecodeError) B` and folds `Invalid` results into `SourceError.DecodeError`. Validation failures are not retried as transport failures.",
+            ),
+            "source.decodeErrors" => (
+                "source-stage",
+                "`source.decodeErrors`\n\nExtract the accumulated `List DecodeError` from a `SourceError K`.\n\n`IOError` values produce `[]`, so this is the helper to use when UI or tests want to render only schema/validation mismatches.",
+            ),
+            "source.schema.derive" => (
+                "source-schema",
+                "`source.schema.derive`\n\nDerive the external schema contract from the declared result type of the source.\n\nTop-level schema-first declarations should carry an explicit `Source ...` type signature so tooling can describe that schema before any later `load` call.",
+            ),
+            _ => return None,
+        };
+
+        Some(Self::hover_badge_markdown(badge, body.to_string()))
+    }
+
     fn gtk_app_field_doc(field_name: &str, full_host: bool) -> Option<String> {
         let body = match field_name {
             "id" => "`id` : `Text`\n\nApplication identifier passed to GTK during startup.",
-            "title" => "`title` : `Text`\n\nPrimary window title shown by the blessed `gtkApp` host.",
+            "title" => {
+                "`title` : `Text`\n\nPrimary window title shown by the blessed `gtkApp` host."
+            }
             "size" => "`size` : `(Int, Int)`\n\nInitial window width and height.",
-            "model" => "`model` : `s`\n\nInitial application state. Keep form fields, submit flags, and subscription-driving state here.",
-            "onStart" => "`onStart` : `AppId -> WindowId -> Effect GtkError Unit`\n\nOne-time startup hook that runs before the initial render.",
-            "subscriptions" => "`subscriptions` : `s -> List (Subscription msg)`\n\nDerive long-lived timers or external feeds from the current model. Use `noSubscriptions` when the app has nothing to listen to.",
-            "view" => "`view` : `s -> GtkNode`\n\nPure projection from the current model into the GTK node tree. Keep rendering here and leave effects to commands/subscriptions.",
-            "toMsg" => "`toMsg` : `GtkSignalEvent -> Option msg`\n\nTranslate the primary GTK signal stream into domain messages. Match by widget `id=\"...\"`, feed `GtkInputChanged` into `setValue`, and use `GtkFocusOut` to drive `touch`.",
+            "model" => {
+                "`model` : `s`\n\nInitial application state. Keep form fields, submit flags, and subscription-driving state here."
+            }
+            "onStart" => {
+                "`onStart` : `AppId -> WindowId -> Effect GtkError Unit`\n\nOne-time startup hook that runs before the initial render."
+            }
+            "subscriptions" => {
+                "`subscriptions` : `s -> List (Subscription msg)`\n\nDerive long-lived timers or external feeds from the current model. Use `noSubscriptions` when the app has nothing to listen to."
+            }
+            "view" => {
+                "`view` : `s -> GtkNode`\n\nPure projection from the current model into the GTK node tree. Keep rendering here and leave effects to commands/subscriptions."
+            }
+            "toMsg" => {
+                "`toMsg` : `GtkSignalEvent -> Option msg`\n\nTranslate the primary GTK signal stream into domain messages. Match by widget `id=\"...\"`, feed `GtkInputChanged` into `setValue`, and use `GtkFocusOut` to drive `touch`."
+            }
             "update" => {
                 if full_host {
                     "`update` : `AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)`\n\nAdvanced compatibility shape for `gtkAppFull`. New code should prefer `gtkApp`'s simpler `msg -> s` update and return `appStep` / `appStepWith`."
@@ -1304,6 +1362,7 @@ impl Backend {
                 Self::hover_contents_for_module(module, &ident, inferred, doc.as_deref(), doc_index)
             {
                 Self::append_gtk_architecture_docs(&mut contents, &ident);
+                Self::append_source_tooling_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover: resolved in module {} after {:?}",
                     module.name.name,
@@ -1313,13 +1372,14 @@ impl Backend {
             }
         }
         if let Some(module) = Self::module_at_position(&modules, position) {
-            if let Some(contents) = Self::hover_contents_for_local_binding(
+            if let Some(mut contents) = Self::hover_contents_for_local_binding(
                 module,
                 &ident,
                 position,
                 inferred.get(&module.name.name),
                 None,
             ) {
+                Self::append_source_tooling_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover: resolved as local binding in {} after {:?}",
                     module.name.name,
@@ -1332,6 +1392,7 @@ impl Backend {
                 Self::hover_from_span_types(&ident, position, &span_types, &module.name.name)
             {
                 Self::append_gtk_architecture_docs(&mut contents, &ident);
+                Self::append_source_tooling_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover: resolved from span types in {} after {:?}",
                     module.name.name,
@@ -1354,9 +1415,17 @@ impl Backend {
             ));
             return Some(Self::hover_markdown(contents));
         }
-        if let Some(contents) = Self::hover_contents_for_static_source(&ident) {
+        if let Some(mut contents) = Self::hover_contents_for_static_source(&ident) {
+            Self::append_source_tooling_docs(&mut contents, &ident);
             Self::hover_debug(format!(
                 "build_hover: resolved static source {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
+        if let Some(contents) = Self::source_tooling_doc_for_ident(&ident) {
+            Self::hover_debug(format!(
+                "build_hover: resolved source tooling doc {ident:?} after {:?}",
                 started.elapsed()
             ));
             return Some(Self::hover_markdown(contents));
@@ -1422,6 +1491,8 @@ impl Backend {
                 doc.as_deref(),
                 doc_index,
             ) {
+                let mut contents = contents;
+                Self::append_source_tooling_docs(&mut contents, &format!("{prefix}.{member}"));
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -1438,6 +1509,8 @@ impl Backend {
         if let Some(contents) =
             Self::hover_contents_for_module(current_module, member, inf, doc.as_deref(), doc_index)
         {
+            let mut contents = contents;
+            Self::append_source_tooling_docs(&mut contents, &format!("{prefix}.{member}"));
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,
@@ -1566,9 +1639,18 @@ impl Backend {
         // "aivi.collections"), then check Domain.method / Type.constructor patterns.
         if ident.contains('.') {
             // 0. Compile-time @static source names (e.g. type.jsonSchema, file.read).
-            if let Some(contents) = Self::hover_contents_for_static_source(&ident) {
+            if let Some(mut contents) = Self::hover_contents_for_static_source(&ident) {
+                Self::append_source_tooling_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover_ws: resolved static source {} after {:?}",
+                    ident,
+                    started.elapsed()
+                ));
+                return Some(Self::hover_markdown(contents));
+            }
+            if let Some(contents) = Self::source_tooling_doc_for_ident(&ident) {
+                Self::hover_debug(format!(
+                    "build_hover_ws: resolved source tooling doc {} after {:?}",
                     ident,
                     started.elapsed()
                 ));
@@ -1593,6 +1675,8 @@ impl Backend {
                     doc.as_deref(),
                     doc_index,
                 ) {
+                    let mut contents = contents;
+                    Self::append_source_tooling_docs(&mut contents, &ident);
                     Self::hover_debug(format!(
                         "build_hover_ws: resolved dotted module {} after {:?}",
                         ident,
@@ -1603,13 +1687,16 @@ impl Backend {
             }
 
             // 2. Domain.method or Type.constructor (e.g. "Heap.push", "Map.empty").
-            if let Some(hover) = Self::hover_for_dotted_member(
+            if let Some(mut hover) = Self::hover_for_dotted_member(
                 &ident,
                 current_module,
                 workspace_modules,
                 &inferred,
                 doc_index,
             ) {
+                if let HoverContents::Markup(markup) = &mut hover.contents {
+                    Self::append_source_tooling_docs(&mut markup.value, &ident);
+                }
                 Self::hover_debug(format!(
                     "build_hover_ws: resolved dotted member {} after {:?}",
                     ident,
@@ -1636,6 +1723,7 @@ impl Backend {
                 workspace_modules,
             );
             Self::append_gtk_architecture_docs(&mut contents, &ident);
+            Self::append_source_tooling_docs(&mut contents, &ident);
             Self::hover_debug(format!(
                 "build_hover_ws: resolved in current module {} after {:?}",
                 current_module.name.name,
@@ -1678,6 +1766,7 @@ impl Backend {
                     workspace_modules,
                 );
                 Self::append_gtk_architecture_docs(&mut contents, lookup);
+                Self::append_source_tooling_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover_ws: resolved via import {} after {:?}",
                     use_decl.module.name,
@@ -1687,13 +1776,14 @@ impl Backend {
             }
         }
 
-        if let Some(contents) = Self::hover_contents_for_local_binding(
+        if let Some(mut contents) = Self::hover_contents_for_local_binding(
             current_module,
             &ident,
             position,
             inferred_current,
             Some(workspace_modules),
         ) {
+            Self::append_source_tooling_docs(&mut contents, &ident);
             Self::hover_debug(format!(
                 "build_hover_ws: resolved local binding in {} after {:?}",
                 current_module.name.name,
@@ -1706,6 +1796,7 @@ impl Backend {
             Self::hover_from_span_types(&ident, position, &span_types, &current_module.name.name)
         {
             Self::append_gtk_architecture_docs(&mut contents, &ident);
+            Self::append_source_tooling_docs(&mut contents, &ident);
             Self::hover_debug(format!(
                 "build_hover_ws: resolved from span types in {} after {:?}",
                 current_module.name.name,
@@ -1723,6 +1814,13 @@ impl Backend {
         if let Some(contents) = Self::hover_contents_for_primitive_value(&ident) {
             Self::hover_debug(format!(
                 "build_hover_ws: resolved primitive token {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
+        if let Some(contents) = Self::source_tooling_doc_for_ident(&ident) {
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved source tooling doc {ident:?} after {:?}",
                 started.elapsed()
             ));
             return Some(Self::hover_markdown(contents));

@@ -19,8 +19,9 @@ The open desktop is having a moment. Governments, enterprises, and individuals a
 
 - 🦀 **Rust-powered runtime** — no GC pauses, no Electron bloat, no 200 MB runtime. Your app links against GTK4 directly.
 - 🧠 **Purely functional** — immutable by default, exhaustive pattern matching, no nulls, typed errors. The compiler catches whole classes of bugs before they ship.
-- 🖥️ **GTK4 as a first-class citizen** — a dedicated XML sigil, typed signal streams, and a declarative model/update loop make UI code feel like it belongs in the language.
-- ⚡ **Developer experience that doesn't quit** — a built-in LSP with autocomplete, hover, diagnostics, and formatting. A VS Code extension. A formatter. An MCP server for AI-assisted workflows.
+- 🖥️ **GTK4 as a first-class citizen** — a dedicated XML sigil, the blessed `gtkApp` architecture, typed subscriptions, and reactive `computed` helpers make native UI code feel like it belongs in the language.
+- 📦 **Schema-first data pipelines** — typed `Source K A` declarations keep connector config, schema, transforms, and validation visible before `load` performs any effect.
+- ⚡ **Developer experience that doesn't quit** — a built-in LSP with workspace-aware incremental checking, autocomplete, hover, diagnostics, formatting, and VS Code integration.
 
 ---
 
@@ -43,9 +44,14 @@ ApiError = NotFound | Timeout | ParseError Text
 greet : User -> Text
 greet = user => "Hello, { user.name }!"
 
-// The return type drives decoding — no json.decode needed
+// Source declarations stay pure; `load` is still the only effectful step
 userSource : Int -> Source RestApi User
-userSource = id => rest.get ~u(https://api.example.com/users/{ id })
+userSource = id =>
+  rest.get {
+    url: ~u(https://api.example.com/users/{ id }),
+    schema: source.schema.derive,
+    strictStatus: True
+  }
 
 fetchUser : Int -> Effect ApiError User
 fetchUser = id => do Effect {
@@ -93,42 +99,52 @@ editorNode =
 
 No callback spaghetti. Signal handlers are typed ADT constructors — the compiler rejects anything that isn't a valid `Msg`.
 
-### Event loop with `signalStream`
+### Blessed app loop with `gtkApp`
 
-Events arrive through a typed channel. You dispatch them in a tail-recursive loop — purely functional, no mutable state:
+The primary public UI story is `Model -> View -> Msg -> Update` hosted by `gtkApp`. Timers become subscriptions, post-update work becomes commands, and expensive pure reads can be memoized with `computed`:
 
 ```ocaml
+Msg = Increment | Tick
+
+Model = { count: Int, ticking: Bool }
+
+countLabel : Model -> Text
+countLabel =
+  computed "counter.label" (state =>
+    "Count: { Int.toString state.count }"
+  )
+
+subscriptions : Model -> List (Subscription Msg)
+subscriptions = state =>
+  if state.ticking then
+    [subscriptionEvery { key: "counter.tick", millis: 1000, tag: Tick }]
+  else
+    []
+
 main : Effect GtkError Unit
-main = do Effect {
-  init Unit
-  appId <- appNew "com.example.notepad"
-  win   <- windowNew appId "Notepad" 640 480
-  root  <- buildFromNode editorNode
-  windowSetChild win root
-  titleInputId <- widgetById "titleInput"
-  bodyInputId  <- widgetById "bodyInput"
-  rx    <- signalStream {}
-  windowPresent win
-  _ <- appRun appId
-  loop state = { title: "", body: "" } => {
-    result <- channel.recv rx
-    result match
-      | Err _ => pure Unit           // channel closed, app is shutting down
-      | Ok event =>
-          event match
-            | GtkInputChanged wid txt when wid == titleInputId =>
-                recurse (state <| { title: txt })
-            | GtkInputChanged wid txt when wid == bodyInputId =>
-                recurse (state <| { body: txt })
-            | GtkClicked _ =>
-                do Effect {
-                  _ <- saveNote state
-                  recurse state
-                }
-            | _ => recurse state
-  }
+main = gtkApp {
+  id: "com.example.counter",
+  title: "Counter",
+  size: (480, 240),
+  model: { count: 0, ticking: True },
+  onStart: _ _ => pure Unit,
+  subscriptions: subscriptions,
+  view: state => ~<gtk>
+    <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
+      <GtkLabel label={countLabel state} />
+      <GtkButton id="incrementBtn" label="Increment" onClick={ Increment } />
+    </GtkBox>
+  </gtk>,
+  toMsg: event => event match
+    | GtkClicked _ "incrementBtn" => Some Increment
+    | _                           => None,
+  update: msg => state => msg match
+    | Increment => pure (appStep (state <| { count: state.count + 1 }))
+    | Tick      => pure (appStep (state <| { count: state.count + 1 }))
 }
 ```
+
+Lower-level `signalStream`, `buildFromNode`, and `reconcileNode` still exist for custom loops and library code, but `gtkApp` is the single blessed host for standard applications. `demos/snake.aivi` shows this pattern with `subscriptionEvery` and reactive `computed` helpers in a complete app.
 
 ### Dynamic lists with `<each>`
 
@@ -213,6 +229,41 @@ The `aivi.concurrency` module gives you scoped tasks and typed channels — real
 
 ---
 
+## Schema-first sources and typed pipelines
+
+Phase 3 keeps `Source K A` and `load`, but moves schema and connector information onto the declaration itself so tooling can explain the contract before runtime:
+
+```ocaml
+use aivi.validation
+
+User = { id: Int, name: Text }
+
+nonEmpty : List A -> Validation (List DecodeError) (List A)
+nonEmpty = xs =>
+  if List.length xs == 0 then
+    Invalid [{ path: [], message: "expected at least one row" }]
+  else
+    Valid xs
+
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json",
+    schema: source.schema.derive
+  }
+    |> source.validate nonEmpty
+
+usersCount : Effect (SourceError File) Int
+usersCount = do Effect {
+  users <- load usersSource
+  pure (List.length users)
+}
+```
+
+The record forms of `file.json`, `env.decode`, and `rest.get` are now the preferred public surface. They line up with source hovers/diagnostics in the LSP and with the wider Phase 3 source-pipeline story in `specs/syntax/external_sources/`.
+
+---
+
 ## Effects, resources, and typed data
 
 Effects are part of the type. You can't accidentally call an effectful function in a pure context, and error types are tracked like any other:
@@ -268,6 +319,19 @@ main = do Effect {
   print "Created: { newPet.name } (id: { newPet.id })"
 }
 ```
+
+## Incremental workspace tooling
+
+Phase 4 also tightens the editor/compiler story:
+
+- the LSP works over **workspace snapshots**, not isolated files,
+- open buffers shadow on-disk files for that snapshot,
+- cached checkpoints are reused only when their fingerprints still match,
+- dependent modules are rechecked incrementally when an edited module's export surface or exported schema summary changes.
+
+That same tooling layer now knows about the blessed GTK and schema-first source stories: hover/completion cover `gtkApp`, `appStep`, `noSubscriptions`, `subscriptionEvery`, `commandAfter`, `commandPerform`, `file.json`, `env.decode`, `source.transform`, `source.validate`, and `source.schema.derive`.
+
+For concrete proof points, see `demos/snake.aivi` for the reactive GTK host and `integration-tests/runtime/source_pipeline.aivi` for the schema-first source pipeline slice.
 
 Works equally well with a local file: `openapi.fromFile "./specs/api.yaml"`. The same type-driven decoding applies everywhere — HTTP sources, file sources, environment variables — if the type is known at the call site, AIVI decodes into it automatically.
 

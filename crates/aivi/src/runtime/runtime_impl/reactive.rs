@@ -368,11 +368,12 @@ fn reactive_changed_root_fields(previous: &Value, current: &Value) -> HashSet<St
             .collect::<HashSet<_>>()
             .into_iter()
             .filter(|field| {
-                previous_fields.get(field).map_or(true, |previous_value| {
+                previous_fields.get(field).is_none_or(|previous_value| {
                     current_fields
                         .get(field)
-                        .map(|current_value| !reactive_values_match(previous_value, current_value))
-                        .unwrap_or(true)
+                        .is_none_or(|current_value| {
+                            !reactive_values_match(previous_value, current_value)
+                        })
                 })
             })
             .collect(),
