@@ -5,6 +5,18 @@ The `aivi.logic` module defines the shared interface hierarchy used across the A
 <!-- /quick-info -->
 <div class="import-badge">use aivi.logic</div>
 
+## Start here
+
+If you opened this page because another module says “`Option` is a `Functor`” or “`Result` is a `Monad`”, you do **not** need a full category-theory background first.
+Read the quick chooser below, then jump straight to the class you need.
+
+Plain-language decoder:
+
+- **Functor** = a wrapper or container you can `map` over
+- **Applicative** = several wrapped values prepared independently, then combined
+- **Monad** = wrapped step-by-step work where later steps may depend on earlier results
+- **Monoid** = a type whose values can be combined, plus an `empty` identity value
+
 <<< ../../snippets/from_md/stdlib/core/logic/standard_library_logic_algebraic_hierarchy.aivi{aivi}
 
 See also:
@@ -37,6 +49,22 @@ If you only need the everyday mental model, start here:
 | combine several independent wrapped steps | `Applicative` | prepare several inputs separately, then combine them |
 | sequence wrapped steps that depend on earlier results | `Monad` | later steps can inspect earlier results |
 | collapse many values into one summary | `Foldable` | reduce or fold |
+
+### One problem, three levels of power
+
+These three classes often appear together:
+
+| Class | Use it when... | Plain-language question |
+| --- | --- | --- |
+| `Functor` | you already have the wrapped value and your function returns a plain value | “Can I transform the inside?” |
+| `Applicative` | you have several wrapped inputs that do not depend on one another | “Can I combine these independent inputs?” |
+| `Monad` | each next step may depend on the earlier successful value | “What should I do next based on what I just got?” |
+
+For example, `Option` uses all three ideas:
+
+- `map` changes `Some x` into `Some (f x)` and leaves `None` alone
+- applicative combination can build a value from several optional inputs such as `host`, `port`, and `token`
+- monadic sequencing powers `do Option { ... }`, where the second step can inspect the first step's result
 
 ## Why this matters in everyday code
 
@@ -114,7 +142,7 @@ A `Functor` lets you transform values **inside** another structure without chang
 
 ### Applicative
 
-An `Applicative` can lift a plain value into the context with `of` and combine independent computations.
+An `Applicative` can lift a plain value into the context with `of` and combine independent computations. In plainer terms: you can prepare several wrapped inputs separately, then combine them at the end.
 
 <<< ../../snippets/from_md/stdlib/core/logic/applicative.aivi{aivi}
 
@@ -128,7 +156,7 @@ A good mental model is: use `Applicative` when several steps can be prepared ind
 
 ### Monad
 
-A `Monad` is an `Applicative` plus `Chain`. It models step-by-step computations where each step can depend on the previous one.
+A `Monad` combines applicative setup with `Chain`. It models step-by-step computations where each step can depend on the previous one.
 
 <<< ../../snippets/from_md/stdlib/core/logic/monad.aivi{aivi}
 
@@ -148,7 +176,7 @@ A `Traversable` lets you map with an effect and collect the results in one pass.
 
 <<< ../../snippets/from_md/stdlib/core/logic/traversable.aivi{aivi}
 
-This is especially useful when you have a list of effectful steps and want either one collected success or one combined effectful computation.
+This is especially useful when you have a list of effectful steps and want either one collected success or one combined effectful computation. A common example is turning `List (Result Text Int)` into `Result Text (List Int)`.
 
 ## 5b. Filtering
 

@@ -7,6 +7,23 @@ Think of a generator as a **lazy recipe for values**. If you know iterators or s
 <!-- /quick-info -->
 <div class="import-badge">use aivi.generator</div>
 
+## Start here
+
+If you are new to generators, copy this three-stage workflow first:
+
+1. build a generator,
+2. transform it,
+3. consume it.
+
+```aivi
+numbers = range 1 10
+shifted = map (n => n + 1) numbers
+firstThree = take 3 shifted
+result = toList firstThree
+```
+
+Read that top to bottom as: “describe a sequence, adjust it, then finally materialize it.”
+
 ## Mental model first
 
 `Generator A` is best understood as “a reusable plan for producing `A` values on demand,” not as “a list that already exists.”
@@ -21,7 +38,7 @@ The underlying encoding is:
 
 `Generator A ≡ ∀R. (R -> A -> R) -> R -> R`
 
-You do not need that type equation for everyday use. It means a generator can feed its values into any fold-like consumer without exposing loops or mutable iteration state.
+You do not need that type equation for everyday use. In plain language, it means a generator can feed values into whatever consumer you provide without exposing loops or mutable iteration state. Another way to say it: a generator is a value-producing plan that already knows how to cooperate with folds.
 
 ## What generators are for
 
@@ -71,7 +88,7 @@ Because generators are pure values, you can pass them around, transform them, an
 | **zip** genA genB<br><code>Generator a -> Generator b -> Generator (a, b)</code> | Pairs values from two generators and stops when either side ends. |
 | **zipWith** f genA genB<br><code>(a -> b -> c) -> Generator a -> Generator b -> Generator c</code> | Zips and combines in one step. |
 | **enumerate** gen<br><code>Generator a -> Generator (Int, a)</code> | Adds a zero-based index to each value. |
-| **scan** f init gen<br><code>(b -> a -> b) -> b -> Generator a -> Generator b</code> | Like a running fold: it yields every intermediate accumulator. |
+| **scan** f init gen<br><code>(b -> a -> b) -> b -> Generator a -> Generator b</code> | Like a running fold: it yields every intermediate accumulator, which is useful for running totals or progressive summaries. |
 | **concat** genA genB<br><code>Generator a -> Generator a -> Generator a</code> | Produces all of `genA`, then all of `genB`. |
 | **intersperse** sep gen<br><code>a -> Generator a -> Generator a</code> | Inserts `sep` between yielded values. |
 | **chunk** size gen<br><code>Int -> Generator a -> Generator (List a)</code> | Groups values into lists of size `size`. The final chunk may be shorter. |
@@ -89,6 +106,18 @@ Because generators are pure values, you can pass them around, transform them, an
 | **find** pred gen<br><code>(a -> Bool) -> Generator a -> Option a</code> | Returns the first matching value, or `None`. |
 | **head** gen<br><code>Generator a -> Option a</code> | Returns the first value, or `None` if the generator is empty. |
 | **forEach** f gen<br><code>(a -> Unit) -> Generator a -> Unit</code> | Runs `f` for every yielded value when you need side effects. |
+
+### A small `scan` example
+
+`scan` is easiest to understand by looking at the intermediate states it keeps:
+
+```aivi
+numbers = fromList [1, 2, 3]
+runningTotals = scan (total => n => total + n) 0 numbers
+result = toList runningTotals
+```
+
+The final `result` is `[0, 1, 3, 6]`, because `scan` keeps every accumulator value instead of only the last one.
 
 ## Practical guidance
 

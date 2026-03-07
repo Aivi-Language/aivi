@@ -250,6 +250,75 @@ x =
 }
 
 #[test]
+fn gtk_sigil_function_call_tag_lowers_to_lower_camel_call() {
+    let src = r#"
+module Example
+
+x = ~<gtk><NavRailNode model.appState.activeSection "sidebar" /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    match &def.expr {
+        Expr::Call { func, args, .. } => {
+            assert!(
+                matches!(func.as_ref(), Expr::Ident(name) if name.name == "navRailNode"),
+                "expected GTK function tag to lower to a lowerCamel function call, got {func:?}"
+            );
+            assert_eq!(
+                args.len(),
+                2,
+                "expected positional tag args to stay as separate call args"
+            );
+            assert!(
+                matches!(&args[1], Expr::Literal(Literal::String { text, .. }) if text == "sidebar"),
+                "expected second positional arg to stay as a string literal, got {:?}",
+                args[1]
+            );
+        }
+        other => panic!("expected function call, got {other:?}"),
+    }
+
+    assert!(
+        !expr_contains_ident(&def.expr, "NavRailNode"),
+        "expected sugar to rewrite the tag name to lowerCamel"
+    );
+}
+
+#[test]
+fn gtk_sigil_function_call_tag_requires_self_closing_form() {
+    let src = r#"
+module Example
+
+x =
+  ~<gtk>
+    <NavRailNode model.appState.activeSection>
+    </NavRailNode>
+  </gtk>
+"#;
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.iter().any(|code| code == "E1617"),
+        "expected E1617 for non-self-closing GTK function-call sugar, got: {codes:?}"
+    );
+}
+
+#[test]
 fn gtk_sigil_props_requires_record_literal() {
     let src = r#"
 module Example

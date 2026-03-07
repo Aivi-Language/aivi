@@ -117,6 +117,10 @@ HostedSubscription = {
   reusable: Bool
 }
 
+HostedEvent msg
+  = HostedMsg msg
+  | HostedCloseRequest
+
 Command msg
   = CommandNone
   | CommandBatch (List (Command msg))
@@ -226,11 +230,26 @@ emitIfSome = sender maybeMsg =>
     | None     => pure Unit
     | Some msg => concurrent.send sender msg
 
+emitHosted : Sender (HostedEvent msg) -> msg -> Effect GtkError Unit
+emitHosted = sender => msg => concurrent.send sender (HostedMsg msg)
+
+emitIfSomeHosted : Sender (HostedEvent msg) -> Option msg -> Effect GtkError Unit
+emitIfSomeHosted = sender => maybeMsg =>
+  maybeMsg match
+    | None     => pure Unit
+    | Some msg => emitHosted sender msg
+
 emitMappedError : Sender msg -> Option (GtkError -> msg) -> GtkError -> Effect GtkError Unit
 emitMappedError = sender onError err =>
   onError match
     | None        => pure Unit
     | Some mkMsg  => concurrent.send sender (mkMsg err)
+
+emitMappedHostedError : Sender (HostedEvent msg) -> Option (GtkError -> msg) -> GtkError -> Effect GtkError Unit
+emitMappedHostedError = sender => onError => err =>
+  onError match
+    | None       => pure Unit
+    | Some mkMsg => emitHosted sender (mkMsg err)
 
 flattenCommands : List (Command msg) -> List (Command msg)
 flattenCommands = commands =>
@@ -267,7 +286,7 @@ replaceHostedCommand = key handle handles => do Effect {
   pure (Map.insert key handle cleared)
 }
 
-launchCommands : Sender msg -> List (Command msg) -> Map CommandKey HostedCommand -> Effect GtkError (Map CommandKey HostedCommand)
+launchCommands : Sender (HostedEvent msg) -> List (Command msg) -> Map CommandKey HostedCommand -> Effect GtkError (Map CommandKey HostedCommand)
 launchCommands = sender => commands => handles =>
   commands match
     | [] => pure handles
@@ -276,39 +295,39 @@ launchCommands = sender => commands => handles =>
         launchCommands sender rest nextHandles
       }
 
-launchCommand : Sender msg -> Command msg -> Map CommandKey HostedCommand -> Effect GtkError (Map CommandKey HostedCommand)
+launchCommand : Sender (HostedEvent msg) -> Command msg -> Map CommandKey HostedCommand -> Effect GtkError (Map CommandKey HostedCommand)
 launchCommand = sender => command => handles =>
   command match
     | CommandNone => pure handles
     | CommandBatch nested => launchCommands sender (flattenCommands nested) handles
     | CommandEmit msg => do Effect {
-        _ <- concurrent.send sender msg
+        _ <- emitHosted sender msg
         pure handles
       }
     | CommandPerform spec => do Effect {
         _ <- concurrent.spawn (do Effect {
           result <- attempt spec.run
           result match
-            | Ok msg  => concurrent.send sender msg
-            | Err err => emitMappedError sender spec.onError err
+            | Ok msg  => emitHosted sender msg
+            | Err err => emitMappedHostedError sender spec.onError err
         })
         pure handles
       }
     | CommandAfter { key, millis, msg } => do Effect {
         task <- concurrent.spawn (do Effect {
           _ <- concurrent.sleep millis
-          concurrent.send sender msg
+          emitHosted sender msg
         })
         replaceHostedCommand key { cancel: task.cancel } handles
       }
     | CommandCancel key => cancelHostedCommand key handles
 
-startEverySubscription : Sender msg -> Int -> msg -> Effect GtkError HostedSubscription
+startEverySubscription : Sender (HostedEvent msg) -> Int -> msg -> Effect GtkError HostedSubscription
 startEverySubscription = sender => millis => tag => do Effect {
   task <- concurrent.spawn (do Effect {
     loop _ = Unit => {
       _ <- concurrent.sleep millis
-      _ <- concurrent.send sender tag
+      _ <- emitHosted sender tag
       recurse Unit
     }
   })
@@ -319,14 +338,14 @@ startEverySubscription = sender => millis => tag => do Effect {
   }
 }
 
-startSourceSubscription : Sender msg -> Resource GtkError (Recv msg) -> Option (GtkError -> msg) -> Option msg -> Effect GtkError HostedSubscription
+startSourceSubscription : Sender (HostedEvent msg) -> Resource GtkError (Recv msg) -> Option (GtkError -> msg) -> Option msg -> Effect GtkError HostedSubscription
 startSourceSubscription = sender => open => onError => onClosed => do Effect {
   task <- concurrent.spawn (do Effect {
     receiver <- open
-    result <- attempt (concurrent.forEach receiver (msg => concurrent.send sender msg))
+    result <- attempt (concurrent.forEach receiver (msg => emitHosted sender msg))
     result match
-      | Ok _    => emitIfSome sender onClosed
-      | Err err => emitMappedError sender onError err
+      | Ok _    => emitIfSomeHosted sender onClosed
+      | Err err => emitMappedHostedError sender onError err
   })
   pure {
     cancel: task.cancel
@@ -348,11 +367,11 @@ cancelSubscriptionEntries = entries =>
         cancelSubscriptionEntries rest
       }
 
-syncSubscriptions : Sender msg -> List (Subscription msg) -> Map SubscriptionKey HostedSubscription -> Effect GtkError (Map SubscriptionKey HostedSubscription)
+syncSubscriptions : Sender (HostedEvent msg) -> List (Subscription msg) -> Map SubscriptionKey HostedSubscription -> Effect GtkError (Map SubscriptionKey HostedSubscription)
 syncSubscriptions = sender => subscriptions => current =>
   syncSubscriptionList sender (flattenSubscriptions subscriptions) current emptyHostedSubscriptions
 
-syncSubscriptionList : Sender msg -> List (Subscription msg) -> Map SubscriptionKey HostedSubscription -> Map SubscriptionKey HostedSubscription -> Effect GtkError (Map SubscriptionKey HostedSubscription)
+syncSubscriptionList : Sender (HostedEvent msg) -> List (Subscription msg) -> Map SubscriptionKey HostedSubscription -> Map SubscriptionKey HostedSubscription -> Effect GtkError (Map SubscriptionKey HostedSubscription)
 syncSubscriptionList = sender => subscriptions => current => next =>
   subscriptions match
     | [] => do Effect {
@@ -398,20 +417,36 @@ syncSubscriptionList = sender => subscriptions => current => next =>
           | SubscriptionBatch nested =>
               syncSubscriptionList sender [...flattenSubscriptions nested, ...rest] current next
 
-forwardGtkMessages : Sender msg -> Recv GtkSignalEvent -> (GtkSignalEvent -> Option msg) -> Effect GtkError Unit
+gtkAppCloseRequested : GtkSignalEvent -> Bool
+gtkAppCloseRequested = event =>
+  event match
+    | GtkUnknownSignal _ _ "close-request" _ _ => True
+    | _                                        => False
+
+forwardGtkMessages : Sender (HostedEvent msg) -> Recv GtkSignalEvent -> (GtkSignalEvent -> Option msg) -> Effect GtkError Unit
 forwardGtkMessages = msgTx => signalRx => toMsgFn =>
   concurrent.forEach signalRx (event =>
-    toMsgFn event match
-      | None     => pure Unit
-      | Some msg => concurrent.send msgTx msg
+    if gtkAppCloseRequested event
+      then concurrent.send msgTx HostedCloseRequest
+      else
+        toMsgFn event match
+          | None     => pure Unit
+          | Some msg => emitHosted msgTx msg
   )
 
-runGtkAppLoop : Sender msg -> Recv msg -> AppId -> WindowId -> s -> WidgetId -> Map CommandKey HostedCommand -> Map SubscriptionKey HostedSubscription -> (s -> GtkNode) -> (s -> List (Subscription msg)) -> (AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)) -> Effect GtkError Unit
+runGtkAppLoop : Sender (HostedEvent msg) -> Recv (HostedEvent msg) -> AppId -> WindowId -> s -> WidgetId -> Map CommandKey HostedCommand -> Map SubscriptionKey HostedSubscription -> (s -> GtkNode) -> (s -> List (Subscription msg)) -> (AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)) -> Effect GtkError Unit
 runGtkAppLoop = msgTx => msgRx => appId => win => currentModel => currentRoot => currentCommands => currentSubscriptions => viewFn => subscriptionsFn => updateFn => do Effect {
   result <- concurrent.recv msgRx
   result match
     | Err _ => pure Unit
-    | Ok msg => do Effect {
+    | Ok HostedCloseRequest =>
+        do Effect {
+          hideOnClose <- widgetGetBoolProperty win "hide-on-close"
+          if hideOnClose
+            then runGtkAppLoop msgTx msgRx appId win currentModel currentRoot currentCommands currentSubscriptions viewFn subscriptionsFn updateFn
+            else pure Unit
+        }
+    | Ok (HostedMsg msg) => do Effect {
         step <- updateFn appId win msg currentModel
         nextCommands <- launchCommands msgTx (flattenCommands step.commands) currentCommands
         if step.model == currentModel
@@ -472,6 +507,9 @@ gtkSetInterval = gtk4.setInterval
 
 widgetById : Text -> Effect GtkError WidgetId
 widgetById = gtk4.widgetById
+
+widgetGetBoolProperty : WidgetId -> Text -> Effect GtkError Bool
+widgetGetBoolProperty = gtk4.widgetGetBoolProperty
 
 widgetSetBoolProperty : WidgetId -> Text -> Bool -> Effect GtkError Unit
 widgetSetBoolProperty = gtk4.widgetSetBoolProperty
@@ -858,6 +896,7 @@ runGtkAppHost = config =>
     _ <- windowSetDecorated win config.decorated
     _ <- windowSetHideOnClose win config.hideOnClose
     _ <- config.onStart appId win
+    _ <- windowOnClose win "__gtkAppClose"
     _ <- gtk4.reactiveInit config.model
     initialView = viewFn config.model
     _ <- gtk4.autoBindingsSet initialView

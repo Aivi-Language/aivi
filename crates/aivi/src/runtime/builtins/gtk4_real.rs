@@ -230,6 +230,16 @@ mod bridge {
             };
         }
 
+        macro_rules! bridge_bool_it {
+            ($name:expr, $fn:path) => {
+                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
+                    let t = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))) };
+                    let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
+                    Ok(effect(move |_| { let r = $fn(id, &t).map_err(gtk4_err_to_runtime)?; Ok(Value::Bool(r)) }))
+                }));
+            };
+        }
+
         macro_rules! bridge_unit_ib {
             ($name:expr, $fn:path) => {
                 fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
@@ -276,6 +286,7 @@ mod bridge {
         // ── Widget ops ──
         bridge_unit_i!("widgetShow", aivi_gtk4::widget_show);
         bridge_unit_i!("widgetHide", aivi_gtk4::widget_hide);
+        bridge_bool_it!("widgetGetBoolProperty", aivi_gtk4::widget_get_bool_property);
 
         fields.insert("widgetSetBoolProperty".to_string(), builtin("gtk4.widgetSetBoolProperty", 3, |mut args, _| {
             let value = match args.remove(2) { Value::Bool(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Bool")) };

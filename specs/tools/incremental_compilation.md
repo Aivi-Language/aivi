@@ -3,7 +3,16 @@
 This guide explains how AIVI reuses compiler work across repeated checks without sacrificing correctness.
 It applies to `aivi check`, `aivi build`, `aivi lsp`, and any other tool that needs to answer the same questions many times as files change.
 
-The key idea is simple: reuse work only when the exact inputs still match, and only publish results that belong to one coherent workspace snapshot.
+The key idea is simple: reuse work only when the exact inputs still match, and only publish results that belong to one coherent workspace snapshot, meaning one complete view of files, unsaved editor text, and relevant settings at a moment in time.
+
+## Start here
+
+If you want the shortest reliable mental model, keep these four rules in mind:
+
+1. every request gets its own workspace snapshot
+2. caches may be reused only when they still match that snapshot
+3. private-body edits stay local unless they change public facts
+4. public API edits dirty importing modules
 
 ## Mental model first
 
@@ -22,7 +31,15 @@ In this document, that “photo” is called a **workspace snapshot**.
 | **workspace snapshot** | the full input for one check or editor request: workspace root, current file contents, open unsaved overlays, and relevant settings |
 | **open-document overlay** | unsaved editor text that temporarily overrides the file on disk for the current LSP session |
 | **definition group** | the chunk of top-level definitions that must be checked together because they refer to one another |
-| **strongly connected component (SCC)** | graph terminology for “a set of definitions where each one can reach the others through references,” so the compiler cannot safely split them apart |
+| **strongly connected component (SCC)** | graph terminology for “a set of definitions where each one can reach the others through references,” so the compiler cannot safely split them apart; if `a` calls `b` and `b` calls `a`, they are in the same SCC |
+
+## One concrete scenario
+
+Suppose `Module A` exports `parseUser`, but also contains a private helper `trimText`.
+
+- edit only `trimText` and keep `parseUser`'s public type and behavior surface unchanged: the compiler can usually recheck only the affected definition group inside `Module A`
+- change the exported signature or exported schema facts of `parseUser`: importers of `Module A` now need to be rechecked too
+- edit two mutually recursive helpers: if they are in the same SCC, they rise and fall together as one recheck unit
 
 ## Why this exists
 
@@ -127,6 +144,19 @@ A good rule of thumb is:
 ## When work becomes stale
 
 Invalidation is based on fingerprint changes, not file timestamps alone.
+
+### Dirty-set cheat sheet
+
+When a file changes, ask these beginner-friendly questions first:
+
+1. **Did the public API change?**  
+   If yes, importers become dirty.
+2. **Did only a private helper change?**  
+   If yes, keep the damage local to the affected definition groups.
+3. **Did imports, module names, or exported names change?**  
+   If yes, rebuild the module-graph slice around that module.
+4. **Did schema or compiler settings change?**  
+   If yes, invalidate the checkpoints that depend on those facts.
 
 ### 1. Text edits
 

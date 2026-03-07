@@ -342,7 +342,7 @@ Apps should model progress explicitly in `Msg` and `Model`, just like any other 
 
 ### Advanced window setup
 
-`gtkApp` is the only high-level host API. When an app needs extra one-time window configuration such as `windowSetDecorated` or `windowSetHideOnClose`, do that work in `onStart`.
+`gtkApp` is the only high-level host API. Closing the primary window ends the host loop by default, while `windowSetHideOnClose win True` keeps the loop alive and hides the window instead. When an app needs extra one-time window configuration such as `windowSetDecorated` or `windowSetHideOnClose`, do that work in `onStart`.
 
 ## Relation to lower-level primitives
 
@@ -360,6 +360,12 @@ Reach for them when you need custom hosting, experiments, or multi-window flows.
 This first example keeps one query string in the model and adds a repeating timer only while polling is enabled:
 
 ```aivi
+Model = {
+  query: Text
+  pollingEnabled: Bool
+  secondsVisible: Int
+}
+
 Msg = QueryChanged Text | Tick
 
 subscriptions : Model -> List (Subscription Msg)
@@ -396,6 +402,14 @@ update = msg => model =>
 When a message should launch asynchronous work, return a command from `update`:
 
 ```aivi
+Model = {
+  query: Text
+  searching: Bool
+  progress: Int
+  results: List Text
+  error: Option Text
+}
+
 Msg
   = QueryChanged Text
   | SearchProgress Int

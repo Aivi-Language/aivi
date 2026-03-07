@@ -1,10 +1,30 @@
 # Machine Syntax
 
 <!-- quick-info: {"kind":"syntax","name":"machine"} -->
-A `machine` declaration defines a **finite-state machine** type with named states and typed transitions. Machines are used inside `do Effect { ... }` blocks to enforce that state-dependent operations occur only in valid states.
+A `machine` declaration defines a workflow with named states and typed transitions. You use its generated functions inside `do Effect { ... }` blocks to move through that workflow safely.
 <!-- /quick-info -->
 
-Start with [State Machines](./state_machines.md) for the reader-facing explanation of when to use machines and what problem they solve. This page focuses on declaration syntax and the generated API surface.
+Start with [State Machines](./state_machines.md) if you want the reader-facing introduction. This page focuses on declaration syntax and on the API a `machine` declaration generates.
+
+## Start with a practical example
+
+```aivi
+machine AccountSyncMachine = {
+             -> Idle     : boot {}
+  Idle       -> Acquired : lease {}
+  Acquired   -> Syncing  : run { batchId: Int }
+  Syncing    -> Idle     : done {}
+}
+```
+
+This declaration says:
+
+- `boot` initializes the machine into `Idle`
+- `lease` is only legal while the machine is in `Idle`
+- `run` is only legal from `Acquired` and requires a `batchId`
+- `done` returns the workflow to `Idle`
+
+A machine is a good fit when a workflow has named steps that must happen in order.
 
 ## What a `machine` declaration does
 
@@ -22,7 +42,7 @@ machine MachineName = {
 }
 ```
 
-Each line is a transition rule.
+Each line is one transition rule.
 
 | Part | Meaning |
 |:-----|:--------|
@@ -33,19 +53,6 @@ Each line is a transition rule.
 
 The rule that starts with bare `->` is the **init transition**. It sets the initial state when the machine is first used.
 
-## A practical example
-
-```aivi
-machine AccountSyncMachine = {
-             -> Idle     : boot {}               -- Sets the initial state
-  Idle       -> Acquired : lease {}              -- Only legal while the machine is Idle
-  Acquired   -> Syncing  : run { batchId: Int }  -- Carries data into the transition
-  Syncing    -> Idle     : done {}               -- Returns the workflow to Idle
-}
-```
-
-This declaration introduces three states — `Idle`, `Acquired`, and `Syncing` — plus four transitions that describe the legal workflow.
-
 ## Using a machine in code
 
 Destructure the machine value to access its transition functions and helper fields.
@@ -54,14 +61,16 @@ Destructure the machine value to access its transition functions and helper fiel
 sync = do Effect {
   { boot, lease, run, done, currentState, can } = AccountSyncMachine
 
-  _ <- boot {}                                      -- Enter the initial state once
+  _ <- boot {}
   _ <- lease {}
   _ <- run { batchId: 42 }
   _ <- done {}
 
-  pure (currentState Unit)                          -- Read the live state when needed
+  pure (currentState Unit)
 }
 ```
+
+Read that block as “step through the workflow, then inspect the resulting state”.
 
 Every transition function is effectful. Calling one from the wrong state fails with `InvalidTransition`.
 

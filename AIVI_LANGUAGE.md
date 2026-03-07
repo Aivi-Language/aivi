@@ -1386,6 +1386,15 @@ Component-style tags (uppercase/dotted) use **record-based lowering** in both si
 ~<gtk><Ui.Row id="r1" onClick={ Save } /></gtk>
 ```
 
+GTK sigils also support **function-call tags** for local lowerCamel helpers. A simple uppercase self-closing tag with positional arguments lowers by lowercasing the first letter of the tag name:
+
+```aivi
+// Equivalent to: { navRailNode model.appState.activeSection "sidebar" }
+~<gtk><NavRailNode model.appState.activeSection "sidebar" /></gtk>
+```
+
+Function-call tags do not use component record lowering, cannot mix positional arguments with attributes, and must be self-closing.
+
 ---
 
 ## 15 Decorators (v0.1)

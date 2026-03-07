@@ -707,6 +707,40 @@ x = ~<gtk><object class="GtkBox" props={ { spacing: 1 } } /></gtk>
 }
 
 #[test]
+fn semantic_tokens_highlight_gtk_function_call_tag_arguments() {
+    let text = r#"module Test.gtk
+x = ~<gtk><NavRailNode model.appState.activeSection "sidebar" /></gtk>
+"#;
+
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_TYPE && s == "NavRailNode"),
+        "expected GTK function-call tag name to be highlighted as a tag token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_VARIABLE && s == "model"),
+        "expected first positional arg identifier to be highlighted as embedded AIVI, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_PROPERTY && s == "activeSection"),
+        "expected field access inside GTK function-call tag to be highlighted, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\"sidebar\""),
+        "expected string positional arg inside GTK function-call tag to be highlighted, got: {tokens:?}"
+    );
+}
+
+#[test]
 fn semantic_tokens_highlight_paths_and_calls() {
     let text = r#"use aivi.net.https (get)
 main = do Effect {

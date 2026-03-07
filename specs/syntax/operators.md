@@ -233,6 +233,8 @@ Signal handlers must be compile-time expressions.
 
 Uppercase or dotted tags that are not GTK widget prefixes are treated as component calls, so GTK-specific signal sugar and `props` normalization do not apply.
 
+GTK sigils also allow **function-call tags** for local helper functions: `<NavRailNode arg0 arg1 />` lowers to `{ navRailNode arg0 arg1 }`. This sugar only applies to simple non-widget tags, uses positional arguments, and must stay self-closing.
+
 **Diagnostics for GTK sigils:**
 
 | Code | Condition |
@@ -240,5 +242,6 @@ Uppercase or dotted tags that are not GTK widget prefixes are treated as compone
 | E1612 | Invalid `props` shape (must be a compile-time record literal) |
 | E1613 | Non-literal `props` value |
 | E1614 | Non-compile-time signal handler binding |
+| E1617 | Invalid GTK function-call tag usage |
 
 See [Collections](../stdlib/core/collections.md) for `~map` and `~set`, and [HTML Sigil](../stdlib/ui/html.md) for `~html`.
