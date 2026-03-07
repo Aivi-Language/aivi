@@ -85,7 +85,10 @@ function compileExtension() {
 }
 
 function packageVsix() {
-  run("pnpm install --node-linker=hoisted --public-hoist-pattern=*", { cwd: vscodeDir });
+  run(
+    "pnpm install --config.confirmModulesPurge=false --node-linker=hoisted --public-hoist-pattern=*",
+    { cwd: vscodeDir },
+  );
   run("pnpm exec vsce package --no-dependencies", { cwd: vscodeDir });
 }
 
@@ -103,8 +106,9 @@ function main() {
     compileExtension();
     packageVsix();
   } catch (err) {
-    writeJson(packageJsonPath, originalPackageJson);
     throw err;
+  } finally {
+    writeJson(packageJsonPath, originalPackageJson);
   }
 
   process.stdout.write(`Built VSIX (version ${nextVersion}).\n`);

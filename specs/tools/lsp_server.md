@@ -16,12 +16,12 @@ The server currently supports the following LSP capabilities:
 
 ### Information
 
-- **Hover**: Show type information and documentation when hovering over a symbol. The server uses multiple resolution strategies: first it attempts definition-based lookup, then falls back to **span-type lookup** which finds the smallest typed span containing the cursor position. This ensures hover information is available even for expressions without a named definition (e.g. intermediate sub-expressions).
+- **Hover**: Show type information and documentation when hovering over a symbol. The server uses multiple resolution strategies: first it attempts definition-based lookup, then falls back to **span-type lookup** which finds the smallest typed span containing the cursor position. This ensures hover information is available even for expressions without a named definition (e.g. intermediate sub-expressions). Phase 3/4 tooling augments this with schema-first help for `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`, plus blessed GTK/app-architecture help for `gtkApp`, `gtkAppFull`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
 - **Signature Help**: Show function signature and parameter information while typing function calls.
 
 ### Editing
 
-- **Completion**: Context-aware code completion for keywords, variables, functions, and types.
+- **Completion**: Context-aware code completion for keywords, variables, functions, and types. This includes Phase 4 scaffolds for the blessed `gtkApp` architecture (`gtkApp`, `noSubscriptions`, `subscriptionEvery`) so editors steer users toward the single public GTK loop instead of legacy helper patterns.
 - **Rename**: Rename a symbol and all its references across the workspace.
 - **Code Actions**: Contextual fixes and refactorings (based on diagnostics).
 - **Semantic Tokens**: Semantic syntax highlighting for precise coloring of tokens (e.g., distinguishing types from variables).
@@ -34,6 +34,8 @@ The LSP server reports diagnostics (errors and warnings) in real-time as you typ
 - **Syntax Checking**: Validates the grammar of the code.
 - **Type Checking**: Ensures type safety and correctness.
 - **Scope Analysis**: Checks for undefined variables and scoping rules.
+- **Source Ergonomics**: Hints on legacy structured-source forms (`file.json "..."`, `env.decode "..."`), missing schema strategies on schema-first config records, and missing explicit `Source ...` signatures for `source.schema.derive` declarations.
+- **Architecture Ergonomics**: Hover and completion guidance reinforce `gtkApp` as the blessed host, document `gtkAppFull` as compatibility-only, and surface the standard command/subscription helpers used by the reactive app loop.
 
 ## Incremental workspace checking
 

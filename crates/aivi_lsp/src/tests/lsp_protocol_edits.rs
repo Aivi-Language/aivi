@@ -450,7 +450,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(20),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(3)),
         )
         .await

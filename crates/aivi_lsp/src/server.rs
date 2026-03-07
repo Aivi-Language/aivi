@@ -248,6 +248,7 @@ impl Backend {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_diagnostics_publish_task(
         client: tower_lsp::Client,
         state_arc: Arc<Mutex<crate::state::BackendState>>,
@@ -285,7 +286,7 @@ impl Backend {
             let should_publish = {
                 let state = state_arc.lock().await;
                 state.diagnostics_snapshot == snapshot
-                    && target.version.map_or(true, |version| {
+                    && target.version.is_none_or(|version| {
                         state
                             .documents
                             .get(&target.uri)
@@ -358,7 +359,7 @@ impl Backend {
             let should_publish = {
                 let state = state_arc.lock().await;
                 state.diagnostics_snapshot == snapshot
-                    && target.version.map_or(true, |version| {
+                    && target.version.is_none_or(|version| {
                         state
                             .documents
                             .get(&target.uri)
@@ -398,6 +399,7 @@ impl Backend {
         .await;
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn spawn_diagnostics_publish_task(
         &self,
         snapshot: u64,
@@ -879,7 +881,9 @@ impl LanguageServer for Backend {
         let snapshot = self.begin_diagnostics_snapshot().await;
         let previous_summaries = self.document_module_export_summaries(&uri).await;
         self.remove_document(&uri).await;
-        self.client.publish_diagnostics(uri.clone(), Vec::new(), None).await;
+        self.client
+            .publish_diagnostics(uri.clone(), Vec::new(), None)
+            .await;
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
         let current_summaries = Self::module_export_summaries_from_workspace(&uri, &workspace);
         let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);

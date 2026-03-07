@@ -384,6 +384,105 @@ run = readConfig "config.json"
 }
 
 #[test]
+fn build_hover_appends_source_pipeline_stage_docs() {
+    let text = r#"module examples.source_hover
+use aivi
+
+usersSource : Source File (List { id: Int, name: Text })
+usersSource =
+  file.json {
+    path: "./users.json"
+    schema: source.schema.derive
+  }
+
+usersCount : Source File Int
+usersCount = source.transform List.length usersSource
+
+decodeErrors = source.decodeErrors
+"#;
+    let uri = sample_uri();
+    let workspace = workspace_with_stdlib(&["aivi", "aivi.prelude"]);
+    let doc_index = DocIndex::default();
+
+    let transform_pos = position_for(text, "source.transform");
+    let transform_hover =
+        Backend::build_hover_with_workspace(text, &uri, transform_pos, &workspace, &doc_index)
+            .expect("transform hover");
+    let HoverContents::Markup(transform_markup) = transform_hover.contents else {
+        panic!("expected transform hover markup");
+    };
+    assert!(transform_markup.value.contains("`source.transform`"));
+    assert!(
+        transform_markup
+            .value
+            .contains("Pure, total normalization after decode")
+    );
+
+    let decode_errors_pos = position_for(text, "source.decodeErrors");
+    let decode_errors_hover =
+        Backend::build_hover_with_workspace(text, &uri, decode_errors_pos, &workspace, &doc_index)
+            .expect("decodeErrors hover");
+    let HoverContents::Markup(decode_errors_markup) = decode_errors_hover.contents else {
+        panic!("expected decodeErrors hover markup");
+    };
+    assert!(decode_errors_markup.value.contains("`source.decodeErrors`"));
+    assert!(
+        decode_errors_markup
+            .value
+            .contains("`IOError` values produce `[]`")
+    );
+}
+
+#[test]
+fn build_hover_describes_schema_first_source_constructors() {
+    let text = r#"module examples.source_hover
+use aivi
+
+usersSource : Source File (List { id: Int, name: Text })
+usersSource =
+  file.json {
+    path: "./users.json"
+    schema: source.schema.derive
+  }
+"#;
+    let uri = sample_uri();
+    let workspace = workspace_with_stdlib(&["aivi", "aivi.prelude"]);
+    let doc_index = DocIndex::default();
+
+    let file_json_pos = position_for(text, "file.json");
+    let file_json_hover =
+        Backend::build_hover_with_workspace(text, &uri, file_json_pos, &workspace, &doc_index)
+            .expect("file.json hover");
+    let HoverContents::Markup(file_json_markup) = file_json_hover.contents else {
+        panic!("expected file.json hover markup");
+    };
+    assert!(
+        file_json_markup
+            .value
+            .contains("Schema-first JSON source constructor")
+    );
+    assert!(
+        file_json_markup
+            .value
+            .contains("schema: source.schema.derive")
+    );
+
+    let derive_pos = position_for(text, "source.schema.derive");
+    let derive_hover =
+        Backend::build_hover_with_workspace(text, &uri, derive_pos, &workspace, &doc_index)
+            .expect("source.schema.derive hover");
+    let HoverContents::Markup(derive_markup) = derive_hover.contents else {
+        panic!("expected derive hover markup");
+    };
+    assert!(derive_markup.value.contains("`source.schema.derive`"));
+    assert!(
+        derive_markup
+            .value
+            .contains("explicit `Source ...` type signature")
+    );
+}
+
+#[test]
 fn build_hover_reports_type_signature_across_files_via_use() {
     let math_text = r#"@no_prelude
 module examples.compiler.math
@@ -720,9 +819,11 @@ fn build_references_finds_symbol_mentions() {
     let locations = Backend::build_references(text, &uri, position, true);
     let expected_span = find_symbol_span(text, "add");
     let expected_range = Backend::span_to_range(expected_span);
-    assert!(locations
-        .iter()
-        .any(|location| location.range == expected_range));
+    assert!(
+        locations
+            .iter()
+            .any(|location| location.range == expected_range)
+    );
     assert!(locations.len() >= 2);
 }
 
@@ -868,10 +969,12 @@ run = add 1 2"#;
     let changes = edit.changes.expect("changes");
     assert!(changes.contains_key(&math_uri));
     assert!(changes.contains_key(&app_uri));
-    assert!(changes
-        .values()
-        .flatten()
-        .all(|edit| edit.new_text == "sum"));
+    assert!(
+        changes
+            .values()
+            .flatten()
+            .all(|edit| edit.new_text == "sum")
+    );
 }
 
 #[test]

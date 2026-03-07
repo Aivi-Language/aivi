@@ -10,7 +10,9 @@ if command -v code >/dev/null 2>&1; then
   code --install-extension "$VSIX" --force >/dev/null
 else
   EXT_DIR="$HOME/.vscode/extensions"
-  VERSION="$(node -p "require('./package.json').version")"
+  VERSION="${VSIX##*/}"
+  VERSION="${VERSION%.vsix}"
+  VERSION="${VERSION#aivi-vscode-}"
   TARGET_DIR="$EXT_DIR/aivi.aivi-vscode-$VERSION"
   TMP_DIR="$(mktemp -d)"
   mkdir -p "$EXT_DIR"
@@ -19,5 +21,4 @@ else
   mv "$TMP_DIR/extension" "$TARGET_DIR"
   rm -rf "$TMP_DIR"
 fi
-
 
