@@ -1,7 +1,7 @@
 # Units Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.units"} -->
-The `Units` domain brings **Dimensional Analysis** to your code, solving the "Mars Climate Orbiter" problem. A bare number like `10` is dangerous is it meters? seconds? kilograms? By attaching physical units to your values, AIVI understands the laws of physics at compile time. It knows that `Meters / Seconds = Speed`, but `Meters + Seconds` is nonsense, catching bugs before they ever run.
+The `Units` domain brings **dimensional analysis** to your code. In plain language, that means numbers carry their physical meaning with them, so `10 meters` and `10 seconds` are not interchangeable by accident. This helps prevent the classic “the numbers looked compatible, but the units were wrong” kind of bug.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.units<span class="domain-badge">domain</span></div>
@@ -12,11 +12,21 @@ The `Units` domain brings **Dimensional Analysis** to your code, solving the "Ma
 
 This helps when you are writing code for science, engineering, graphics, simulations, sensors, or any other place where mixing units would be a real bug.
 
+## Start here
+
+Reach for `aivi.units` when:
+
+- a number crosses a module boundary and should stay self-describing,
+- you are combining measurements such as distance, time, speed, or mass,
+- a wrong unit would be a real defect, not just a display issue.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/core/units/overview.aivi{aivi}
 
 ## Supported dimensions
+
+Start here if you want to scan the built-in measurement families before reading the full domain definition.
 
 <<< ../../snippets/from_md/stdlib/core/units/supported_dimensions.aivi{aivi}
 
@@ -25,6 +35,8 @@ This helps when you are writing code for science, engineering, graphics, simulat
 <<< ../../snippets/from_md/stdlib/core/units/domain_definition.aivi{aivi}
 
 ## Helper functions
+
+The usual workflow is: define or pick a unit, do your arithmetic in one consistent system, then convert only at the boundary where you display or import data.
 
 | Function | Explanation |
 | --- | --- |

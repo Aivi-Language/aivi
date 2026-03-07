@@ -1,9 +1,11 @@
-# 3.5 Classes and HKTs
+# 3.5 Classes and Higher-Kinded Types (HKTs)
 
 This page covers two related ideas:
 
 - **classes** describe behaviour that many types can share
 - **HKTs** let those classes talk about type shapes such as `List`, `Option`, or `Result E`, not just fully finished types
+
+If “higher-kinded type” is a new phrase, read it as “a container shape such as `List` or `Option` before you plug in the final value type”.
 
 If you know interfaces or traits, a class fills a similar role. The main difference is that the compiler chooses an instance from the type, rather than looking for methods stored on an object.
 
@@ -42,6 +44,7 @@ That extra level is what lets one class describe operations that work across man
 ## The basic building blocks
 
 The examples below use container-oriented classes, so HKTs show up immediately.
+Here is what that looks like in code.
 
 ### A class over a container shape
 
@@ -86,6 +89,8 @@ This reads as: a `Monad` is anything that already has both the `Applicative` and
 An instance picks one concrete type or type expression and supplies the implementation for that class.
 
 ## Type variable constraints
+
+Some class members need extra promises about their type variables. AIVI writes those promises with a `given (...)` clause.
 
 Class declarations may attach constraints to the type variables used in member signatures with `given (...)`.
 

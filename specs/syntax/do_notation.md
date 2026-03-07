@@ -8,6 +8,8 @@ A few terms, in plain language:
 - **chain** means “run one step, then pass its successful result into the next step”
 - **desugaring** means “the compiler rewrites friendly syntax into simpler core expressions”
 
+Use `do M` when you want the same step-by-step reading style as `do Effect`, but your type is something like `Option`, `Result`, or `List` rather than an effectful computation.
+
 ## Start with concrete examples
 
 ### `Option`: stop at the first missing step
@@ -92,6 +94,8 @@ Those missing features are effect-specific because they depend on error handling
 ## How the compiler rewrites a `do M` block
 
 **Desugaring** means the compiler rewrites the block into ordinary function calls.
+
+In the examples below, `⟦ ... ⟧` means “the compiler’s rewritten form of ...”.
 
 ### Generic `do M { ... }`
 
@@ -184,6 +188,12 @@ If no suitable instance is available, compilation fails with an instance-resolut
 | `Option A`   | Stop early when any step returns `None`. |
 | `Result E A` | Chain computations that may fail, without using `Effect`. |
 | `List A`     | Describe non-deterministic combinations such as cartesian products. |
+
+## When to use which block form
+
+- Use `do Effect { ... }` for I/O, resource management, cancellation-aware work, and the effect-only statements from [Effects](effects.md).
+- Use `do M { ... }` when you want the same readable sequencing for `Option`, `Result`, `List`, or another type constructor with the required class instances.
+- Use `generate { ... }` when you are building a pure sequence of yielded values.
 
 ## References
 

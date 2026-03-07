@@ -34,9 +34,16 @@ Composition describes **how that source is executed and refined**:
 
 Keeping those concerns separate avoids bloated connector records and keeps execution policy out of the type-level source contract.
 
+A quick contrast:
+
+- **schema-first** answers “what are we reading, and what shape should it decode into?”
+- **composition** answers “once we read it, what extra policy should happen around that read?”
+
 ## Public model
 
 Every structured source has one canonical decode stage supplied by its declaration. Composition layers additional stages around that declaration while preserving `Source K A` as pure description data.
+
+You do not need to memorize the illustrative model below to use the feature. The everyday API is the set of combinators after it.
 
 Conceptually:
 
@@ -91,6 +98,8 @@ Even if you write the combinators in a different order, `load` follows one canon
    - on success, store the final value and its cache metadata;
 8. **emit observation events**
    - record start, finish, and failure information for tooling.
+
+In short: cache, retry, and timeout wrap the boundary work; transform and validate run only after decoding succeeds.
 
 This fixed order matters because it ensures:
 
@@ -246,6 +255,8 @@ loadUsersForTest =
 The important invariant is that the source pipeline stays the same. Tests swap interpreters, not source declarations.
 
 ## End-to-end example
+
+Here is how those pieces fit together in one realistic source declaration:
 
 ```aivi
 use aivi.validation

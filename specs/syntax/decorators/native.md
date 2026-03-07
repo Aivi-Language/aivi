@@ -12,6 +12,15 @@ There are two main cases:
 
 In both forms, the AIVI type signature is the contract that keeps the binding type-safe.
 
+## Start here: which form should you use?
+
+| Form | Best when | Resolved when |
+|:---- |:--------- |:------------- |
+| **runtime native** | the function is already exposed by the AIVI runtime as a builtin | when the program runs |
+| **crate native** | the function lives in a Rust crate listed in your project dependencies | when `aivi build` generates the native bridge |
+
+An **AOT** (ahead-of-time) build means the program is compiled to a native binary before it runs. Crate natives use that build step, so they work with `aivi build` rather than `aivi run`.
+
 ## Runtime natives (dot-path)
 
 Runtime natives bind to functions registered in the runtime's global environment.
@@ -39,7 +48,11 @@ now : Unit -> Instant   // the type signature is required
 ### How resolution works
 
 The string in `@native` is a runtime record path.
-The first segment selects a module record in the global environment, and later segments walk through fields on that record.
+In plain language, that means a dotted path such as `"time.now"`:
+
+- the first segment selects a builtin module record in the global environment,
+- later segments walk through fields on that record.
+
 The runtime-facing module name is chosen by AIVI itself and may differ from the Cargo crate name behind it.
 
 ### Rules

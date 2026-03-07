@@ -20,12 +20,12 @@ Most single-window GTK apps can be organized around these pieces:
 
 If you are familiar with Elm, Redux-style reducers, or other unidirectional UI architectures, the shape is similar: input becomes a message, the message updates state, and the UI is redrawn from that state.
 
-A lightweight mental model is:
+A practical mental model is:
 
-- the **model** is your app's notebook,
-- a **message** is a small note saying what just happened,
-- **update** writes the next notebook state,
-- **view** redraws the screen from that notebook,
+- the **model** is the source of truth,
+- a **message** says what just happened,
+- **update** computes the next model,
+- **view** redraws the screen from that model,
 - **commands** and **subscriptions** are the safe ways to do work outside pure rendering.
 
 ## Start here
@@ -127,21 +127,16 @@ For common constructor-style signal bindings such as `onInput={ ProjectNameChang
 
 A **turn** is one pass through the main loop: one incoming event, one `update`, one committed model, and one render.
 
+A key insight before the details: there is still only one official loop—event becomes `Msg`, `update` changes state, `view` rerenders, then the host runs follow-up work.
+
 A normal turn through `gtkApp` looks like this:
 
-1. initialize GTK and create the application/window,
-2. run `onStart` once,
-3. build and attach the initial `view model`,
-4. open the primary `signalStream`,
-5. start the initial `subscriptions model`,
-6. translate each incoming event into `Msg`,
-7. call `update`,
-8. commit the returned `model`,
-9. invalidate any reactive values affected by changed source snapshots,
-10. evaluate `view` against the new committed model,
-11. reconcile the new `view`,
-12. diff subscriptions against the new model,
-13. launch the returned commands.
+1. GTK or another host source produces an event.
+2. `toMsg` turns that event into a `Msg`.
+3. `update` returns the next committed `model` and any commands.
+4. reactive values are invalidated as needed, then `view` runs against the new model.
+5. `gtkApp` reconciles the widget tree and refreshes subscriptions.
+6. any returned commands start after the new model is current.
 
 The important idea is that there is still **one official loop**:
 
@@ -287,6 +282,8 @@ That `Resource` boundary matters because replacing or removing a subscription sh
 - **new key** → start it.
 
 In practice, that means subscriptions are a function of state, not imperative setup code scattered across your app.
+
+For example, if `clockRunning` changes from `True` to `False`, the `"clock"` subscription key disappears and `gtkApp` stops that timer automatically.
 
 ## Choosing between timers, signals, background work, and the scheduler
 

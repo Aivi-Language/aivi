@@ -33,8 +33,10 @@ testName = ...
 
 ## Mock expressions
 
+Beyond marking tests, AIVI also provides `mock ... in` for short-lived dependency replacement inside one test or one expression.
+
 <!-- quick-info: {"kind":"syntax","name":"mock expression"} -->
-Mock expressions provide **scoped binding substitution** for testing and isolation. A `mock ... in` expression temporarily replaces a module-level binding within a lexical scope.
+Mock expressions provide temporary binding replacement for testing and isolation. A `mock ... in` expression temporarily replaces a module-level binding within a lexical scope.
 <!-- /quick-info -->
 
 Use `mock ... in` when you want a test to replace a dependency for one expression without permanently changing the program.
@@ -61,6 +63,8 @@ in <body>
 <<< ../../snippets/from_md/syntax/mock_expression/multiple.aivi{aivi}
 
 ### Scoping rules
+
+Read these rules as guardrails for “replace this dependency only here, then put it back”.
 
 | Rule | Behaviour |
 |:---- |:--------- |

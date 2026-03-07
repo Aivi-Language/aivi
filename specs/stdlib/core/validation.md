@@ -43,6 +43,8 @@ If you want the computation to stop at the first failure, use `Result` instead.
 
 `Validation` is an **Applicative** rather than a **Monad**. In plain language, that means AIVI can combine independent validations side by side and accumulate their errors, but it does not support `chain` for workflows where each later check depends on an earlier successful value.
 
+If those words are unfamiliar, the practical takeaway is simple: `Validation` is for checks that can run independently, such as “name is present” and “email looks valid”, then report all failures together.
+
 Another way to say it:
 
 - `Result` is for “check step 1, then decide step 2”
@@ -60,7 +62,7 @@ For everyday use, you can read “`E` must be a `Semigroup`” as “the error t
 
 ## 3. Creating validations
 
-Helper functions make it easy to lift either a valid value or one or more errors into the `Validation` type.
+Helper functions make it easy to lift either a valid value or one or more errors into the `Validation` type. A good pattern is to validate each field separately, then combine those field checks at the end.
 
 <<< ../../snippets/from_md/stdlib/core/validation/creating_validations.aivi{aivi}
 

@@ -2,7 +2,9 @@
 
 AIVI is a statically typed, purely functional language for building software that needs clear data models, predictable behavior, and explicit handling of real-world side effects.
 
-That description can sound abstract if you do not already live in functional-programming terminology, so here is the practical version: AIVI is built for codebases where you want the compiler to help you keep track of data shape, missing values, failures, units, and system boundaries before the program runs.
+In plain language, **statically typed** means the compiler checks data shapes and function signatures before the program runs, and **purely functional** means values do not mutate in place and side effects stay visible instead of being hidden behind ordinary-looking calls.
+
+That can still sound abstract if you do not already live in functional-programming terminology, so here is the practical version: AIVI is built for codebases where you want the compiler to help you keep track of data shape, missing values, failures, units, and system boundaries before the program runs.
 
 ## A simple learning path
 

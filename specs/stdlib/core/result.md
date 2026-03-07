@@ -15,10 +15,14 @@ The `aivi.result` module provides utility functions for working with `Result E A
 
 Use `Result` when failure is expected and you want to keep it explicit instead of throwing exceptions or hiding error cases.
 
+Mental model: `Result` answers “did this step work, and if not, why not?”.
+
 ## Start here
 
 Reach for `Result` when each step may fail and later work depends on the earlier successful value.
 That is the usual shape for parsing, loading configuration, checking permissions, opening files, and any other workflow where “stop here and return the error” is the right behavior.
+
+If a missing value is normal, use [`Option`](option.md) instead. If you need to report several independent problems together, use [`Validation`](validation.md).
 
 ## Choosing between `Option`, `Result`, and `Validation`
 
@@ -82,11 +86,11 @@ Each binding answers one question: did the previous step succeed, and if so, wha
 
 ### A small `mapErr` example
 
-`mapErr` is especially useful when you want to wrap lower-level errors with domain context:
+`mapErr` is especially useful when the low-level error is technically correct but still needs domain context:
 
 ```aivi
-rawPort = parseInt text
-portResult = mapErr (err => ConfigError "PORT" err) rawPort
+portResult = parsePort text
+configResult = mapErr (err => ConfigError "PORT" err) portResult
 ```
 
 That keeps the original failure information while making the error more helpful at the call site.

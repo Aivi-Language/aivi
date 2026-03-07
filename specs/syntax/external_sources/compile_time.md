@@ -5,6 +5,7 @@
 <!-- /quick-info -->
 
 `@static` is for inputs that should be fixed when the program is built rather than read every time the program runs.
+This page focuses on when to use compile-time sources as part of source design. For decorator syntax and full feature details, see [`@static`](../decorators/static.md).
 
 Common uses:
 
@@ -13,7 +14,7 @@ Common uses:
 - schema artifacts used for validation,
 - generated clients or contracts discovered explicitly at compile time.
 
-In practical terms, `@static` trades runtime flexibility for simpler deployment and earlier failures.
+In practical terms, `@static` fixes data at build time. That gives you simpler deployment and earlier failures, but it also means the running program will not see later changes unless you rebuild.
 
 ## Supported patterns
 
@@ -88,5 +89,13 @@ Choose `@static` when the answer to these questions is "yes":
 3. is the source deterministic enough to make builds reproducible?
 
 If the value is expected to change between runs, keep it as a regular runtime source instead.
+
+## When not to choose `@static`
+
+Keep a normal runtime source when:
+
+- the value must be fresh on every run,
+- different deployments or users should see different data without rebuilding,
+- the source is non-deterministic enough to make builds hard to reproduce.
 
 See [Schema-First Source Definitions](schema_first.md) for how compile-time artifacts fit into source declarations, and see the full [`@static` decorator reference](/syntax/decorators/static#static-compile-time-evaluation) for details.

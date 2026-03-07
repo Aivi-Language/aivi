@@ -1,7 +1,7 @@
 # `@debug` — Structured Debug Tracing
 
 <!-- quick-info: {"kind":"decorator","name":"@debug"} -->
-`@debug` is a tooling pragma for compiler-emitted trace logs. No semantic effect unless compiled with `--debug-trace`.
+`@debug` is a tooling pragma for compiler-emitted structured trace events. It does not change program behaviour unless you compile with `--debug-trace`.
 <!-- /quick-info -->
 
 Use `@debug` when you want the compiler and runtime to emit structured trace events for a function.
@@ -26,6 +26,13 @@ Parameters are order-insensitive, duplicate flags are ignored, and the allowed f
 | `args` | Include function arguments in entry events |
 | `return` | Include the returned value in exit events |
 | `pipes` | Emit `pipe.in` and `pipe.out` events for `|>` steps |
+
+In practice:
+
+- keep the default `time` mode when you only care about duration,
+- add `args` when you need to see the inputs that caused a bad path,
+- add `return` when you need to inspect output values,
+- add `pipes` when a long pipeline needs step-by-step tracing.
 
 ## Example
 

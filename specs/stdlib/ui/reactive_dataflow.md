@@ -1,7 +1,7 @@
 # Reactive Dataflow
 
 <!-- quick-info: {"kind":"topic","name":"reactive dataflow"} -->
-AIVI reactive dataflow is a pure derivation graph over committed model snapshots. A committed model snapshot is simply the full `Model` after one successful app turn. `computed` values memoize—that is, cache—their last pure result until one of their inputs changes—while external change still enters through `Msg` via commands and subscriptions.
+AIVI reactive dataflow is a way to name and cache pure calculations over the current committed `Model`. A committed model snapshot is simply the full `Model` after one successful app turn. `computed` values memoize—that is, cache—their last pure result until one of their inputs changes—while external change still enters through `Msg` via commands and subscriptions.
 <!-- /quick-info -->
 
 If you want the gentler introduction first, read [Reactive Signals](./reactive_signals.md) and [Native GTK & libadwaita Apps](./native_gtk_apps.md). This page explains the underlying rules.
@@ -37,6 +37,14 @@ Use reactive dataflow when:
 
 If all you need is one short expression inside `view`, an ordinary helper is still the simplest choice.
 
+## Choose between a helper, `signal`, and `computed`
+
+| If the value is... | Reach for... | Why |
+| --- | --- | --- |
+| short, local, and read once | a plain helper or inline expression | the simplest thing stays the clearest |
+| reused in a few places or worth naming | `signal` | gives the derivation a readable name |
+| reused and expensive enough to cache | `computed` | keeps the value pure while avoiding repeated work |
+
 ## Core vocabulary
 
 | Term | Meaning | Example |
@@ -52,6 +60,8 @@ A plain helper is correct by default. Promote it to `signal` or `computed` only 
 ## Purity and turn boundaries
 
 Reactive values are evaluated **inside** an app turn, never in the background.
+
+The practical reason for these rules is predictability: reactive values should be as easy to test and reason about as ordinary pure helper functions.
 
 - They may read only committed source snapshots and other signals.
 - They may not perform `Effect`, acquire `Resource`, spawn tasks, sleep, or emit `Msg`.
@@ -138,14 +148,14 @@ In practice, the host remembers “which inputs did I read last time?” and “
 
 ### Advanced invalidation rules
 
-Invalidation follows these rules:
+Invalidation follows this checklist:
 
-1. when `update` commits a new model, every changed source snapshot gets a new revision,
-2. every computed signal that depended on one of those changed revisions becomes **dirty**,
-3. dirtiness propagates transitively through dependent computed signals,
-4. dirty signals do **not** rerun immediately; they recompute on the next synchronous read,
-5. the first read of a dirty computed signal records a fresh dependency set and caches the new result,
-6. later reads in the same turn reuse that cache.
+- when `update` commits a new model, every changed source snapshot gets a new revision,
+- every computed signal that depended on one of those changed revisions becomes **dirty**,
+- dirtiness propagates through dependent computed signals,
+- dirty signals do **not** rerun immediately; they recompute on the next synchronous read,
+- the first read of a dirty computed signal records a fresh dependency set and caches the new result,
+- later reads in the same turn reuse that cache.
 
 Consequences:
 

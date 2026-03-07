@@ -24,7 +24,9 @@ For a first database-backed feature, this is the shortest useful route:
 
 You can safely ignore pooling, multi-table joins, savepoints, and typed mutation helpers until that flow feels familiar.
 
-### Plain-language glossary
+### Terms you'll see later
+
+If this is your first pass, skim these and keep moving. The query and migration examples below will make them concrete.
 
 | Term | Plain meaning |
 | --- | --- |
@@ -54,6 +56,11 @@ main = do Effect {
 ```
 
 That gives you a complete first loop: connect, migrate, query, clean up.
+
+### Quick choice: `db.load` vs `db.runQuery`
+
+- use `db.load` when you want every row from one table with no extra filtering,
+- use `db.runQuery` when you want filtering, sorting, projections, joins, or aggregates.
 
 ### Advanced path
 
@@ -130,6 +137,8 @@ If you are learning the query DSL, read the examples in this order:
 3. pipeline helpers,
 4. joins,
 5. aggregates.
+
+Start here with the one-table example. The later examples reuse the same ideas and add one new concept at a time.
 
 ```aivi
 -- Build a query value once

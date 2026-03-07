@@ -1,7 +1,7 @@
 # IMAP Email Sources
 
 <!-- quick-info: {"kind":"topic","name":"imap email sources"} -->
-Email integration is available through IMAP as a typed source for one-shot mailbox reads, and as a session-based resource for full IMAP interaction including OAuth2, message management, and IDLE push notifications.
+AIVI provides email integration through IMAP, with a typed one-shot source for mailbox reads and a session API for longer-lived mailbox work such as search, flag management, and IDLE notifications.
 <!-- /quick-info -->
 
 IMAP support comes in two styles:
@@ -11,32 +11,47 @@ IMAP support comes in two styles:
 
 Use the one-shot source for simple inbox ingestion. Use the session API when you need to select mailboxes, manage flags, move messages, or listen for changes with IDLE.
 
+## Start here
+
+- Use the **one-shot source** when you want “load some messages as typed data”.
+- Use the **session API** when you need a conversation with the mailbox over time.
+- Most session workflows start with `imapOpen`, `imapSelect`, then `imapSearch` / `imapFetch`.
+
 ## APIs
 
 ### One-shot source
 
 - `email.imap : ImapConfig -> Source Imap (List A)`
 
-### Session builtins
+### Session lifecycle
 
 - `email.imapOpen : ImapConfig -> Effect Text ImapSessionHandle`
 - `email.imapClose : ImapSessionHandle -> Effect Text Unit`
 - `email.imapSelect : Text -> ImapSessionHandle -> Effect Text MailboxInfoRecord`
 - `email.imapExamine : Text -> ImapSessionHandle -> Effect Text MailboxInfoRecord`
+- `email.imapIdle : Int -> ImapSessionHandle -> Effect Text IdleResultValue`
+
+### Search and fetch
+
 - `email.imapSearch : Text -> ImapSessionHandle -> Effect Text (List Int)`
 - `email.imapFetch : List Int -> ImapSessionHandle -> Effect Text (List A)`
+
+### Flags and message changes
+
 - `email.imapSetFlags : List Int -> List Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapAddFlags : List Int -> List Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapRemoveFlags : List Int -> List Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapExpunge : ImapSessionHandle -> Effect Text Unit`
 - `email.imapCopy : List Int -> Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapMove : List Int -> Text -> ImapSessionHandle -> Effect Text Unit`
+
+### Mailbox administration
+
 - `email.imapListMailboxes : ImapSessionHandle -> Effect Text (List MailboxInfoRecord)`
 - `email.imapCreateMailbox : Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapDeleteMailbox : Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapRenameMailbox : Text -> Text -> ImapSessionHandle -> Effect Text Unit`
 - `email.imapAppend : Text -> Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapIdle : Int -> ImapSessionHandle -> Effect Text IdleResultValue`
 
 ## Authentication
 
@@ -76,6 +91,23 @@ do Effect {
 ```
 
 This is a good fit for batch-style jobs such as importing unread support messages or extracting invoices from a mailbox.
+
+## Example — explicit search and fetch
+
+If you need a little more control than the one-shot source gives you, this is the smallest useful session flow:
+
+```aivi
+do Effect {
+  session <- email.imapOpen config
+  _ <- email.imapSelect "INBOX" session
+  messageIds <- email.imapSearch "UNSEEN" session
+  messages <- email.imapFetch messageIds session
+  _ <- email.imapClose session
+  pure messages
+}
+```
+
+This pattern is useful when you want custom search strings or you want to decide yourself when the mailbox session opens and closes.
 
 ## Example — session with IDLE
 

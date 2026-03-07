@@ -15,6 +15,8 @@ The `aivi.option` module provides utility functions for working with `Option A` 
 
 Use `Option` when absence is expected and normal, such as a missing query parameter, an empty search result, or an optional configuration value.
 
+Mental model: `Option` answers only one question—“is there a value?”—and intentionally says nothing about *why* it is missing.
+
 ## Start here
 
 Use `Option` when:
@@ -24,6 +26,8 @@ Use `Option` when:
 - you are not collecting several independent failures.
 
 Do **not** use `Option` when the caller needs a real error message or error value. In those cases, move to `Result` or `Validation`.
+
+For example, a missing `page` query parameter is a good `Option Int`; a broken config file path is usually a `Result ConfigError Path`.
 
 ## Choosing between `Option`, `Result`, and `Validation`
 
@@ -38,6 +42,8 @@ Do **not** use `Option` when the caller needs a real error message or error valu
 This module adds small, practical helpers for checking, transforming, and converting `Option` values.
 
 ## Predicates
+
+These helpers are most useful near the edges of your program when you need a direct branch. In pipelines, `map`, `flatMap`, and `??` often read more clearly.
 
 | Function | Type | Description |
 |----------|------|-------------|

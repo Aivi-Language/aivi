@@ -17,6 +17,15 @@ The module is designed to be predictable:
 - Missing search results use `Option` instead of magic values.
 - Failed decodes use `Result` instead of silent corruption.
 
+## Start here
+
+Start here by matching the job to the section:
+
+- need to **find or compare text** → [Search and comparison](#search-and-comparison)
+- need to **split, join, or slice text** → [Slicing and splitting](#slicing-and-splitting)
+- need to **clean up or normalize user input** → [Trimming and padding](#trimming-and-padding) or [Case and normalization](#case-and-normalization)
+- need to **turn text into numbers or bytes** → [Encoding and decoding](#encoding-and-decoding) or [Formatting and conversion](#formatting-and-conversion)
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/core/text/overview.aivi{aivi}
@@ -47,6 +56,8 @@ The module is designed to be predictable:
 
 ### Search and comparison
 
+Use this group when you want to answer “does this text contain X?”, “where is X?”, or “how should these two values sort?”.
+
 | Function | Explanation |
 | --- | --- |
 | **contains** needle haystack<br><code>Text -> Text -> Bool</code> | Checks whether `needle` appears anywhere in `haystack`. |
@@ -71,6 +82,8 @@ Notes:
 - Text ordering here is not locale-aware. Use locale-aware tooling when human sorting rules matter.
 
 ### Slicing and splitting
+
+These helpers are the usual choice when text arrives as one value and you need to break it into smaller pieces or stitch pieces back together.
 
 | Function | Explanation |
 | --- | --- |
@@ -117,6 +130,8 @@ Notes:
 
 ### Case and normalization
 
+Reach for this section when you are comparing human text, cleaning input before storage, or making visually similar Unicode text behave consistently.
+
 | Function | Explanation |
 | --- | --- |
 | **toLower** text<br><code>Text -> Text</code> | Converts text to lowercase using Unicode rules. |
@@ -140,11 +155,22 @@ Normalization is useful when visually similar text can have different underlying
 
 ### Formatting and conversion
 
+This section is the bridge between raw text and other value types.
+
 | Function | Explanation |
 | --- | --- |
 | **debugText** value<br><code>A -> Text</code> | Converts a value to `Text` with the default debug formatter. For `ToText` conversion, use `toText` from `aivi.prelude`. |
 | **parseInt** text<br><code>Text -> Option Int</code> | Parses a decimal integer and returns `None` on failure. |
 | **parseFloat** text<br><code>Text -> Option Float</code> | Parses a decimal float and returns `None` on failure. |
+
+When you are parsing user input, the usual flow is: clean the text, parse it, then decide what to do with `None`.
+
+```aivi
+rawPort = " 8080 "
+trimmedPort = trim rawPort
+maybePort = parseInt trimmedPort
+port = maybePort ?? 3000
+```
 
 ## Usage examples
 

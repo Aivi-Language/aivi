@@ -23,6 +23,16 @@ The facade module `aivi.collections` re-exports all of the above for convenience
 
 That makes them a good fit for AIVI programs where you want predictable data flow, easy refactoring, and safe reuse of earlier values.
 
+## Start here
+
+A quick mental model:
+
+- **List** keeps order and duplicates.
+- **Map** keeps values by key.
+- **Set** keeps unique members.
+- **Queue / Deque** keeps arrival order for work.
+- **Heap** keeps the next smallest item ready.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/core/collections/overview.aivi{aivi}
@@ -69,6 +79,8 @@ Duplicate values are removed automatically because sets only keep unique members
 
 `List` is AIVI's general-purpose ordered collection. Reach for it when you want to process items in order, keep duplicates, or build pipeline-style transformations.
 
+Common list jobs include filtering search results, mapping over rows, chunking work into batches, and folding a sequence into one summary value.
+
 **Class instances** (via `use aivi.logic`): `Functor` · `Filterable` · `Foldable` · `Traversable` · `Apply` · `Applicative` · `Chain` · `Monad` · `Semigroup` · `Monoid` · `Alternative` · `Plus`
 
 Those class instances give you shared operations such as `map`, `filter`, `reduce`, `traverse`, `chain`, `concat`, `empty`, `alt`, and `zero`. The functions below are the list-specific helpers you will use most often.
@@ -109,6 +121,8 @@ Those class instances give you shared operations such as `map`, `filter`, `reduc
 
 Use `Map` when your program needs named lookups, caches, indexes, or configuration tables.
 
+Choose `Map` when the first question is “what value belongs to this key?” rather than “what item is next in order?”.
+
 **Class instances** (via `use aivi.logic`): `Functor` · `Filterable` · `Foldable` · `Semigroup` · `Monoid`
 
 The shared class methods operate on map **values**. Use the functions below when you need key-aware behavior.
@@ -147,6 +161,8 @@ Notes:
 
 Use `Set` when membership matters more than order, such as tracking enabled features, selected IDs, or permissions.
 
+`Set` is a good fit for questions like “is this enabled?”, “have I seen this already?”, or “which permissions does this user have?”.
+
 <<< ../../snippets/from_md/stdlib/core/collections/aivi_set.aivi{aivi}
 
 | Function | Explanation |
@@ -167,6 +183,8 @@ Use `Set` when membership matters more than order, such as tracking enabled feat
 
 A `Queue` is for first-in, first-out work: task scheduling, breadth-first search, or message buffering.
 
+Choose `Queue` when “oldest item first” is the rule. If you need to add or remove items at both ends, move to `Deque`.
+
 <<< ../../snippets/from_md/stdlib/core/collections/aivi_queue.aivi{aivi}
 
 | Function | Explanation |
@@ -179,6 +197,8 @@ A `Queue` is for first-in, first-out work: task scheduling, breadth-first search
 ### Deque
 
 A `Deque` (“double-ended queue”) lets you add or remove items from both ends.
+
+That makes it useful for undo buffers, sliding windows, and algorithms that grow from either side.
 
 <<< ../../snippets/from_md/stdlib/core/collections/deque.aivi{aivi}
 
@@ -195,6 +215,8 @@ A `Deque` (“double-ended queue”) lets you add or remove items from both ends
 ## `aivi.heap`
 
 A `Heap` is a priority queue. It is useful when the “next” item is whichever value compares smallest, not whichever arrived first.
+
+Use it when urgency or score decides what happens next: shortest path search, “run the soonest deadline first”, or “pick the smallest cost so far”.
 
 <<< ../../snippets/from_md/stdlib/core/collections/aivi_heap.aivi{aivi}
 

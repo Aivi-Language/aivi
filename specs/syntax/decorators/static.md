@@ -16,6 +16,14 @@ binding = source.call "argument"
 
 The binding must be parameterless because the compiler evaluates it before the program runs.
 
+## Start with the common cases
+
+Most people reach for `@static` in one of three situations:
+
+1. **embed checked-in data** such as JSON, CSV, or text files,
+2. **capture build-time environment values** once during compilation,
+3. **generate helper artifacts** such as API clients or JSON Schema text.
+
 ## Supported sources (v0.1)
 
 | Source call | Result type | Practical use |
@@ -27,6 +35,8 @@ The binding must be parameterless because the compiler evaluates it before the p
 | `openapi.fromUrl url` | typed module | Generate an API client from a remote OpenAPI spec |
 | `openapi.fromFile "path"` | typed module | Generate an API client from a local OpenAPI spec |
 | `type.jsonSchema TypeName` | `Text` | Generate OpenAI-compatible JSON Schema from a type |
+
+If you are just starting, focus on the first four rows. The OpenAPI and `type.jsonSchema` entries are the more advanced build-time code-generation cases.
 
 ## Examples
 
@@ -143,7 +153,7 @@ OpenAPI results are cached in `.aivi-cache/openapi/`; pass `--refresh-static` to
 `type.jsonSchema` converts an AIVI type alias into an [OpenAI-compatible JSON Schema](https://platform.openai.com/docs/guides/structured-outputs) at compile time. The result is a `Text` value containing the JSON schema string.
 <!-- /quick-info -->
 
-Use this when an external system, such as an LLM API, expects a JSON Schema description of structured output.
+Use this when an external system, such as an LLM API or validation service, expects a JSON Schema description of structured output.
 
 ### Syntax
 
