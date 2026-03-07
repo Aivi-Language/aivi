@@ -84,6 +84,8 @@ Typed access to environment configuration. Values are decoded using the expected
 
 Integration with relational and document stores. Uses carrier-specific domains for querying.
 
+> **v0.1 note:** The schema-first `Source Db` declaration and raw-SQL `db.query` external source shown below are **not yet implemented** in v0.1.  Use the typed `do Query { ... }` DSL in `aivi.database` for in-memory queries (see [Database Domain](../stdlib/system/database.md)).
+
 <<< ../snippets/from_md/syntax/external_sources/database_sources_db.aivi{aivi}
 
 See the [Database Domain](../stdlib/system/database.md) for table operations, deltas, and migrations.
