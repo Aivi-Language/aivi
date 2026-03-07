@@ -1,7 +1,6 @@
 // Minimal: only emits fn.enter / fn.exit with timing
 @debug
-processOrder : Order -> Effect AppError Receipt
-processOrder = order => do Effect {
+processOrder order = do Effect {
   validated <- validate order
   receipt   <- charge validated
   pure receipt
@@ -9,8 +8,7 @@ processOrder = order => do Effect {
 
 // Verbose: traces every pipe step, arguments, and return value
 @debug(pipes, args, return, time)
-pipeline : List Int -> Int
-pipeline = xs =>
+pipeline xs =
   xs
 |> filter (_ > 0)
 |> map (_ * 2)

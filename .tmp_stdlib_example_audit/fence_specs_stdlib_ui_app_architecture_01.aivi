@@ -1,7 +1,0 @@
-CommandKey = Text
-SubscriptionKey = Text
-
-AppStep model msg = {
-  model: model,
-  commands: List (Command msg)
-}

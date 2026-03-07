@@ -1,2 +1,0 @@
-HttpError = { message: Text }
-WsError   = { message: Text }

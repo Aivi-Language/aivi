@@ -141,15 +141,15 @@ If you are learning the query DSL, read the examples in this order:
 Start here with the one-table example. The later examples reuse the same ideas and add one new concept at a time.
 
 ```aivi
--- Build a query value once
+// Build a query value once
 activeUserNamesQuery : Query Text
 activeUserNamesQuery = do Query {
   user <- db.from userTable
-  db.guard_ user.active          -- keep only active users
-  db.queryOf user.name           -- project one field
+  db.guard_ user.active          // keep only active users
+  db.queryOf user.name           // project one field
 }
 
--- Run it with an explicit connection
+// Run it with an explicit connection
 main = do Effect {
   dbConn <- db.connect { driver: Sqlite, url: "app.db" }
   names  <- db.runQueryOn dbConn activeUserNamesQuery
@@ -186,9 +186,9 @@ recentTopNames : Query Text
 recentTopNames =
   db.from userTable
   |> db.where_ _.active
-  |> db.orderBy _.createdAt   -- sort before slicing
-  |> db.offset 10             -- skip the first page
-  |> db.limit 5               -- then keep the next five rows
+  |> db.orderBy _.createdAt   // sort before slicing
+  |> db.offset 10             // skip the first page
+  |> db.limit 5               // then keep the next five rows
   |> db.select _.name
 ```
 
@@ -216,7 +216,7 @@ activeUserOrders = do Query {
   user  <- db.from userTable
   db.guard_ user.active
   order <- db.from orderTable
-  db.guard_ (order.userId == user.id)   -- join condition
+  db.guard_ (order.userId == user.id)   // join condition
   db.queryOf { user: user, order: order }
 }
 ```

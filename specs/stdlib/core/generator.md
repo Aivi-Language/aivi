@@ -16,10 +16,10 @@ If you are new to generators, copy this three-stage workflow first:
 3. consume it.
 
 ```aivi
-numbers = range 1 10
-shifted = map (n => n + 1) numbers
+numbers    = range 1 10
+shifted    = map (n => n + 1) numbers
 firstThree = take 3 shifted
-result = toList firstThree
+result     = toList firstThree
 ```
 
 Read that top to bottom as: “describe a sequence, adjust it, then finally materialize it.”
@@ -122,9 +122,9 @@ These helpers are the finish line: they answer “what final result do I want fr
 `scan` is easiest to understand by looking at the intermediate states it keeps:
 
 ```aivi
-numbers = fromList [1, 2, 3]
+numbers       = fromList [1, 2, 3]
 runningTotals = scan (total => n => total + n) 0 numbers
-result = toList runningTotals
+result        = toList runningTotals
 ```
 
 The final `result` is `[0, 1, 3, 6]`, because `scan` keeps every accumulator value instead of only the last one.

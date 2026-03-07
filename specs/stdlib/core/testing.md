@@ -54,11 +54,11 @@ When production code depends on capabilities, the usual testing approach is to i
 @test "read config from fixtures"
 readConfigFromFixtures =
   with {
-    file.read = fixtureFiles,
+    file.read        = fixtureFiles
     process.env.read = fixtureEnv
   } in do Effect {
     cfg <- readConfig
-    _ <- assertEq cfg.mode "test"
+    _   <- assertEq cfg.mode "test"
     pure Unit
   }
 ```
@@ -79,14 +79,14 @@ fetchUsers = rest.get ~u(https://api.example.com/users)
 
 @test "fetch users with a mocked request"
 fetchUsersWithMock =
-  mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
-  in do Effect {
-    users <- fetchUsers
-    _ <- assertEq (length users) 1
-    users match
-      | [u, ..._] => assertEq u.name "Ada"
-      | []        => fail "expected one mocked user"
-  }
+  mock rest.get      = _ => pure [{ id: 1, name: "Ada" }]
+in do Effect {
+  users <- fetchUsers
+  _     <- assertEq (length users) 1
+  users match
+    | [u, ..._] => assertEq u.name "Ada"
+    | []        => fail "expected one mocked user"
+}
 ```
 
 Here the mock replaces `rest.get` only inside the test body, so the example can exercise the surrounding logic without making a real network call.

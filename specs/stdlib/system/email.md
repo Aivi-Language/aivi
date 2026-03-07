@@ -182,8 +182,8 @@ do Effect {
     user: "user@gmail.com"
     auth: OAuth2 myAccessToken
     mailbox: Some "INBOX"
-    filter: Some "UNSEEN"   -- only unread messages
-    limit: Some 20            -- keep the fetch bounded
+    filter: Some "UNSEEN"   // only unread messages
+    limit: Some 20          // keep the fetch bounded
     port: None
     starttls: None
   }
@@ -213,7 +213,7 @@ processInbox = token => resource {
     _    <- imapSelect "INBOX" session
     uids <- imapSearch "UNSEEN" session
     msgs <- imapFetch uids session
-    _    <- imapAddFlags uids ["\\Seen"] session   -- mark them as processed
+    _    <- imapAddFlags uids ["\\Seen"] session   // mark them as processed
     pure msgs
   })
 ```
@@ -233,6 +233,6 @@ watchInbox = session => do Effect {
         _    <- processMsgs msgs
         watchInbox session
       }
-    | TimedOut => watchInbox session   -- start another wait cycle
+    | TimedOut => watchInbox session   // start another wait cycle
 }
 ```

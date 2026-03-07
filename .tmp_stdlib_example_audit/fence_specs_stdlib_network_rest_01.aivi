@@ -1,4 +1,0 @@
-use aivi.rest
-
-loadUser : Url -> Effect Text User
-loadUser = userUrl => get userUrl

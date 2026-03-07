@@ -1,4 +1,0 @@
-use aivi.net.https
-
-loadProfile : Url -> Effect Text (Result Error Response)
-loadProfile = profileUrl => get profileUrl

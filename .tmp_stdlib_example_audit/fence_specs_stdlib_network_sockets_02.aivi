@@ -1,4 +1,0 @@
-use aivi.net.sockets
-
-sendDatagram = socket => address =>
-  sendTo socket address [1, 2, 3, 4]

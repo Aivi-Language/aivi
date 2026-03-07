@@ -87,12 +87,12 @@ use aivi.bits
 
 extractRgb : Bits -> { r: Int, g: Int, b: Int }
 extractRgb = color =>
-  // A one-byte mask lets us keep only the lowest 8 bits.
-  mask = fromInt 0xFF
-  { r: color |> shiftRight 16 |> and mask |> toInt
-  , g: color |> shiftRight 8  |> and mask |> toInt
-  , b: color |> and mask |> toInt
-  }
+// A one-byte mask lets us keep only the lowest 8 bits.
+mask = fromInt 0xFF
+{ r: color |> shiftRight 16 |> and mask |> toInt
+  g: color |> shiftRight 8 |> and mask |> toInt
+  b: color |> and mask |> toInt
+}
 ```
 
 ### Parse a simple binary header
@@ -103,10 +103,10 @@ use aivi.logic
 
 parseHeader : Bits -> Result Text { version: Int, flags: Bits, payload: Bits }
 parseHeader = raw =>
-  stream = streamFromBits raw
-  stream |> streamRead 1 |> chain (vb, s1) =>
-  s1    |> streamRead 2 |> chain (flags, s2) =>
-  // The final read returns the payload and the advanced stream.
-  s2    |> streamRead 4 |> map (payload, _) =>
+  stream      = streamFromBits raw
+stream |> streamRead 1 |> chain (vb, s1) =>
+  s1 |> streamRead 2 |> chain (flags, s2) =>
+// The final read returns the payload and the advanced stream.
+s2 |> streamRead 4 |> map (payload, _) =>
   { version: toInt vb, flags: flags, payload: payload }
 ```

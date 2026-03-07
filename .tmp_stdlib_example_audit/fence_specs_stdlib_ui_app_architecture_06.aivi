@@ -1,4 +1,0 @@
-commandPerform {
-  run: searchCatalog model.searchQuery
-  onError: Some SearchFailed
-}

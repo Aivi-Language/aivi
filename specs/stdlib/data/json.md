@@ -71,7 +71,7 @@ userSchema = file.json "./schemas/users.schema.json"
 usersSource : Source File (List User)
 usersSource =
   file.json {
-    path: "./users.json",
+    path: "./users.json"
     // Reuse the checked schema when loading this source.
     schema: source.schema.json userSchema
   }
@@ -89,13 +89,13 @@ Use `validateSchema` when you want a list of schema issues, and `migrateObject` 
 
 ```aivi
 JsonValue
-  = JsonNull
-  | JsonBool Bool
-  | JsonInt Int
-  | JsonFloat Float
-  | JsonString Text
-  | JsonArray (List JsonValue)
-  | JsonObject (List (Text, JsonValue))
+= JsonNull
+| JsonBool Bool
+| JsonInt Int
+| JsonFloat Float
+| JsonString Text
+| JsonArray (List JsonValue)
+| JsonObject (List (Text, JsonValue))
 ```
 
 ### `JsonError`

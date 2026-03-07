@@ -1,7 +1,0 @@
-// Shorthand — the most readable style for day-to-day app code.
-~<gtk>
-  <GtkBox spacing="24" marginTop="12">
-    <AdwActionRow title="Save AI Settings" />
-    <GtkButton label="Save" onClick={ Msg.Save } />
-  </GtkBox>
-</gtk>

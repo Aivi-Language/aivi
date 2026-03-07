@@ -90,10 +90,10 @@ A good rule of thumb:
 When an optional workflow starts to feel nested, split it into named steps:
 
 ```aivi
-maybeUser = lookupUser 42
-maybeName = map (_.name) maybeUser
+maybeUser      = lookupUser 42
+maybeName      = map (_.name) maybeUser
 maybeNamedUser = filter (name => name != "") maybeName
-displayName = maybeNamedUser ?? "Anonymous"
+displayName    = maybeNamedUser ?? "Anonymous"
 ```
 
 This reads better than packing all of that into one expression, and it makes the “where can this become `None`?” points obvious.
