@@ -1,0 +1,3 @@
+Header = { name: Text, value: Text }
+Body   = Plain Text | Form (List Header) | Json JsonValue
+Error  = { message: Text }

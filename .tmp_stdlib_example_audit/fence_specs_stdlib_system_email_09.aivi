@@ -1,0 +1,14 @@
+use aivi.email
+
+watchInbox = session => do Effect {
+  _ <- imapSelect "INBOX" session
+  result <- imapIdle 300 session
+  result match
+    | MailboxChanged => do Effect {
+        uids <- imapSearch "UNSEEN" session
+        msgs <- imapFetch uids session
+        _    <- processMsgs msgs
+        watchInbox session
+      }
+    | TimedOut => watchInbox session   -- start another wait cycle
+}

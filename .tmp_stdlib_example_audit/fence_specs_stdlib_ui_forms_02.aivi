@@ -1,0 +1,12 @@
+use aivi.validation
+use aivi.ui.forms
+
+displayName : Text -> Validation (List Text) Text
+displayName =
+  // Require a value and make sure it is long enough to feel intentional.
+  allOf [required, minLength 2]
+
+bio : Text -> Validation (List Text) Text
+bio =
+  // Empty is fine here, but very long bios are not.
+  maxLength 120

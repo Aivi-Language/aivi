@@ -2,7 +2,7 @@
 doubled = Some 5 |> map (_ * 2) // Some 10
 
 // flatMap: chain operations that may fail
-findUser  = id => users |> find (.id == id)
+findUser  = id => users |> find (_.id == id)
 findEmail = user => user.email
 
 email = findUser 42 |> flatMap findEmail

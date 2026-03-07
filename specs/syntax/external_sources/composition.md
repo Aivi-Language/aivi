@@ -48,7 +48,7 @@ You do not need to memorize the illustrative model below to use the feature. The
 Conceptually:
 
 ```aivi
--- illustrative model; exact runtime representation is not part of the public contract
+// Illustrative model only. The exact runtime representation is not part of the public contract.
 Source K A =
   SourcePipeline {
     connector: SourceConnector K,
@@ -247,8 +247,8 @@ Composition does not need a special mocking API. Tests reuse ordinary handlers:
 loadUsersForTest : Effect (SourceError RestApi) (List User)
 loadUsersForTest =
   with {
-    network.http = fixtureHttp,   -- serve a known response
-    clock.sleep = immediateClock  -- avoid real waiting during retries
+    network.http = fixtureHttp,   // serve a known response
+    clock.sleep = immediateClock  // avoid real waiting during retries
   } in load usersSource
 ```
 

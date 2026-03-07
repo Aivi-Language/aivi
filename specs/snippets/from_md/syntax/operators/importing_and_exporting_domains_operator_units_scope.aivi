@@ -1,4 +1,4 @@
-module demo.domainImport
+module demo.domain_import
 export addOneSecond
 
 // Import only the domain members (operators and suffix templates).

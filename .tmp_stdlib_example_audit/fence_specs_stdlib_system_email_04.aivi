@@ -1,0 +1,4 @@
+MimePart = {
+  contentType: Text
+  body: Text
+}

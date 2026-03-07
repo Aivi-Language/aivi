@@ -1,0 +1,6 @@
+visibleProjects =
+  computed "projects.visible" (model =>
+    model.projects
+      |> filter (matchesQuery model.searchQuery)
+      |> filter (matchesTags model.selectedTags)
+  )

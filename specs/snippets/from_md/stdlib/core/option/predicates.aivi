@@ -1,5 +1,5 @@
-isSome (Some 42) // True
-isSome None // False
+someValuePresent = isSome (Some 42) // True
+noValuePresent   = isSome None // False
 
-isNone (Some 42) // False
-isNone None // True
+someValueMissing = isNone (Some 42) // False
+noValueMissing   = isNone None // True

@@ -1,0 +1,2 @@
+// This record is automatically turned into JSON.
+body: Some { grant_type: "authorization_code", code: code }

@@ -1,0 +1,36 @@
+Msg = DraftTitleChanged Text | DraftBodyChanged Text | Save
+
+editorView : { draftTitle: Text, draftBody: Text } -> GtkNode
+editorView = state => ~<gtk>
+  <GtkBox orientation="vertical" spacing="8">
+    <GtkEntry id="titleInput" placeholderText="Title" onInput={ DraftTitleChanged } />
+    <GtkEntry id="bodyInput" placeholderText="Body" onInput={ DraftBodyChanged } />
+    <GtkButton label="Save" onClick={ Save } />
+  </GtkBox>
+</gtk>
+
+update : Msg -> { draftTitle: Text, draftBody: Text } -> Effect GtkError (AppStep { draftTitle: Text, draftBody: Text } Msg)
+update = msg => state =>
+  msg match
+    | DraftTitleChanged newTitle =>
+        pure { model: state <| { draftTitle: newTitle }, commands: [] }
+    | DraftBodyChanged newBody =>
+        pure { model: state <| { draftBody: newBody }, commands: [] }
+    | Save =>
+        do Effect {
+          _ <- saveNote state
+          pure { model: state, commands: [] }
+        }
+
+main : Effect GtkError Unit
+main = gtkApp {
+  id: "com.example.notepad",
+  title: "Notepad",
+  size: (640, 480),
+  model: { draftTitle: "", draftBody: "" },
+  onStart: _ _ => pure Unit,
+  subscriptions: noSubscriptions,
+  view: editorView,
+  toMsg: auto,
+  update: update
+}
