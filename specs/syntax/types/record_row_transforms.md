@@ -1,27 +1,55 @@
 # 3.4 Record Row Transforms
 
-To avoid duplicating similar record shapes across layers, AIVI provides derived type operators
-that transform record rows. These are type-level only and elaborate to plain record types.
+Record row transforms are type-level utilities for reusing and reshaping closed record types.
+They help when you have one canonical record shape and need a few closely related variants, such as create-input, update-input, or public-response types.
+
+## Syntax
 
 Field lists are written as tuples of field labels, and rename maps use record-like syntax:
 
 <<< ../../snippets/from_md/syntax/types/record_row_transforms_01.aivi{aivi}
 
-Semantics:
+These operators work at the type level only.
+After elaboration, the compiler still works with ordinary closed record types.
+
+## What each transform does
 
 - `Pick` keeps only the listed fields.
 - `Omit` removes the listed fields.
-- `Optional` wraps each listed field type in `Option` (if not already `Option`).
-- `Required` unwraps `Option` for each listed field (if not `Option`, the type is unchanged).
-- `Rename` renames fields; collisions are errors.
-- `Defaulted` is equivalent to `Optional` at the type level and is reserved for codec/default derivation.
+- `Optional` wraps each listed field type in `Option` if it is not already optional.
+- `Required` unwraps `Option` for each listed field; non-optional fields are left unchanged.
+- `Rename` changes field names; collisions are errors.
+- `Defaulted` is equivalent to `Optional` at the type level and is reserved for codec and default-derivation workflows.
 
-Errors:
+## Practical example
 
-- Selecting or renaming a field that does not exist in the source record is a type error.
-- `Rename` collisions (two fields mapping to the same name, or a rename colliding with an existing field) are type errors.
+```aivi
+User = {
+  id: Int,
+  email: Text,
+  name: Text,
+  isAdmin: Bool
+}
 
-Type-level piping mirrors expression piping and applies the left type as the final argument:
+PublicUser = User |> Omit ("isAdmin")
+PatchUser = User |> Optional ("email", "name")
+RenamedUser = User |> Rename { email: "loginEmail" }
+```
+
+The example above keeps a single source-of-truth record type and derives narrower or more convenient variants from it.
+That reduces duplication while keeping the final types explicit.
+
+## Errors to expect
+
+The compiler reports a type error when:
+
+- you try to select, omit, or rename a field that does not exist
+- `Rename` would cause two fields to end up with the same name
+- a rename collides with an existing field name that remains in the record
+
+## Type-level piping
+
+Type-level piping mirrors expression piping: the type on the left becomes the final argument to the transform on the right.
 
 <<< ../../snippets/from_md/syntax/types/record_row_transforms_02.aivi{aivi}
 

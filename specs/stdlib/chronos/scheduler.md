@@ -1,35 +1,52 @@
 # Scheduler Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.scheduler"} -->
-The `Scheduler` domain models production-grade scheduling primitives for cron, interval, and one-shot jobs with deterministic planning semantics.
+The `Scheduler` domain models durable scheduling primitives for cron, interval, and one-shot jobs.
 
-It is designed for distributed workers: plan keys are idempotent, leases and heartbeats are explicit values, retries support exponential backoff + jitter, and tenant limits are enforced through typed run-state analysis.
-
+It is meant for work that should survive process restarts or be coordinated across workers. Plan keys are idempotent, leases and heartbeats are explicit values, retries can include exponential backoff and jitter, and tenant limits can be reasoned about as typed data.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.scheduler<span class="domain-badge">domain</span></div>
+
+## When to use `Scheduler`
+
+Use this domain when a simple in-process timer is not enough. Typical cases include:
+
+- recurring jobs that must survive application restarts,
+- scheduled work handled by a worker fleet,
+- retry planning with backoff,
+- concurrency control per tenant,
+- explicit lease and heartbeat management.
+
+If the timing only matters while one GUI app is running, lighter tools such as `commandAfter` or `subscriptionEvery` are usually a better fit.
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/overview.aivi{aivi}
 
-## Features
+## Common operations
+
+These examples show how plans, triggers, retries, and execution state fit together:
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/features.aivi{aivi}
 
-## Domain Definition
+## Domain definition
+
+The domain definition is useful when you want to understand exactly which values are persisted or exchanged with workers:
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/domain_definition.aivi{aivi}
 
-## Usage Examples
+## Usage examples
+
+A good mental model is: build plans as pure data, store them durably, then let workers interpret those plans later.
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/usage_examples.aivi{aivi}
 
-## Worker/runtime helpers (v0.1)
+## Worker/runtime helpers
 
-The scheduler module also exposes execution-planning helpers for durable workers:
+The scheduler module also exposes pure helpers for worker-side planning logic:
 
 - `chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision`
 - `renewLease : Lease -> Timestamp -> Lease`
 - `planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun`
 
-These helpers keep lease, retry, and next-action logic deterministic and testable as pure values.
+These helpers make the most failure-prone parts of scheduling easier to test because lease renewal, retry timing, and next-action decisions remain pure value transformations.

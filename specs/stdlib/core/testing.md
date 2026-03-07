@@ -6,11 +6,19 @@ The `Testing` module is built right into the language because reliability should
 <!-- /quick-info -->
 <div class="import-badge">use aivi.testing</div>
 
+## What this module is for
+
+`aivi.testing` is the standard way to write automated checks for AIVI code. Tests live next to ordinary code, use normal language features, and run through the built-in test runner.
+
+That makes it easy to start small with a few assertions and grow toward larger test suites without switching tools.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/core/testing/overview.aivi{aivi}
 
-Tests are ordinary bindings annotated with the `@test` [decorator](../../syntax/decorators/). The `@test` decorator requires a mandatory description string that names the test case (e.g. `@test "adds two numbers"`). The test runner discovers all `@test` bindings and executes them, printing the description for each success and failure. A test passes when it completes without raising an assertion error.
+Tests are ordinary bindings annotated with the `@test` [decorator](../../syntax/decorators/). The decorator takes a description string such as `@test "adds two numbers"`, and the runner uses that text when reporting results.
+
+A test passes when it finishes without raising an assertion error.
 
 ## Core API (v0.1)
 
@@ -18,29 +26,29 @@ Tests are ordinary bindings annotated with the `@test` [decorator](../../syntax/
 
 | Function | Explanation |
 | --- | --- |
-| **assert** condition<br><code>Bool -> Effect Text Unit</code> | Fails the test when `condition` is `false`. |
-| **assertEq** expected actual<br><code>A -> A -> Effect Text Unit</code> | Fails the test when `expected` and `actual` are not equal (requires `Eq` constraint). |
-| **assertNe** a b<br><code>A -> A -> Effect Text Unit</code> | Fails the test when `a` and `b` are equal. |
-| **assertOk** result<br><code>Result E A -> Effect Text Unit</code> | Fails the test when `result` is `Err`. |
-| **assertErr** result<br><code>Result E A -> Effect Text Unit</code> | Fails the test when `result` is `Ok`. |
-| **assertSome** option<br><code>Option A -> Effect Text Unit</code> | Fails the test when `option` is `None`. |
-| **assertNone** option<br><code>Option A -> Effect Text Unit</code> | Fails the test when `option` is `Some`. |
-| **assertSnapshot** name value<br><code>Text -> A -> Effect Text Unit</code> | Compares `value` against a stored `.snap` file identified by `name`. Creates the file on first run. |
+| **assert** condition<br><code>Bool -> Effect Text Unit</code> | Fails the test when `condition` is false. |
+| **assertEq** expected actual<br><code>A -> A -> Effect Text Unit</code> | Fails when `expected` and `actual` are not equal. |
+| **assertNe** a b<br><code>A -> A -> Effect Text Unit</code> | Fails when `a` and `b` are equal. |
+| **assertOk** result<br><code>Result E A -> Effect Text Unit</code> | Fails when `result` is `Err`. |
+| **assertErr** result<br><code>Result E A -> Effect Text Unit</code> | Fails when `result` is `Ok`. |
+| **assertSome** option<br><code>Option A -> Effect Text Unit</code> | Fails when `option` is `None`. |
+| **assertNone** option<br><code>Option A -> Effect Text Unit</code> | Fails when `option` is `Some`. |
+| **assertSnapshot** name value<br><code>Text -> A -> Effect Text Unit</code> | Compares `value` against a stored `.snap` file identified by `name`. The first run creates the snapshot. |
 
 ### Running tests
 
-Tests are executed via the CLI:
+Use the CLI to execute tests:
 
 ```sh
-aivi test path/to/file.aivi      # run tests in a single file
-aivi test path/to/directory       # run all tests in a directory
+aivi test path/to/file.aivi       # Run tests in one file
+aivi test path/to/directory       # Run every test in a directory tree
 ```
 
-The runner prints a summary of passed / failed tests and returns a non-zero exit code when any test fails.
+The runner prints a pass/fail summary and returns a non-zero exit code when any test fails.
 
-### Capability handlers in tests
+## Testing capability-based code
 
-Capability-oriented code should usually be tested by installing scoped interpreters with [`with { capability = handler } in`](/syntax/effect_handlers):
+When production code depends on capabilities, the usual testing approach is to install scoped handlers with [`with { capability = handler } in`](/syntax/effect_handlers).
 
 ```aivi
 @test "read config from fixtures"
@@ -55,11 +63,11 @@ readConfigFromFixtures =
   }
 ```
 
-This keeps the production logic unchanged while swapping only the capability interpreters used in the test scope.
+This swaps the capability interpreters only inside the test scope, so the production logic stays unchanged.
 
-### Mocking REST/HTTP requests in tests
+## Mocking REST and HTTP calls
 
-For request-heavy code, use [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) to replace external dependencies without restructuring your production code:
+When code is still written around top-level bindings rather than capability signatures, [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) are a practical fallback.
 
 ```aivi
 use aivi.testing
@@ -81,13 +89,18 @@ fetchUsersWithMock =
   }
 ```
 
-Mock expressions provide **deep scoping** — any function called within the body that
-internally references the mocked binding will see the mock value. See the
-[Mock Expressions](/syntax/decorators/test#mock-expressions) spec for full details including
-snapshot mocks and multiple mock bindings.
+Here the mock replaces `rest.get` only inside the test body, so the example can exercise the surrounding logic without making a real network call.
 
-Prefer capability handlers over `mock ... in` when the code under test already exposes capability requirements. Keep mocks for binding-level substitution, snapshot capture, and APIs that have not yet migrated to capability signatures.
+Mock expressions provide **deep scoping**: functions called inside the mocked body also see the mock binding. See the [Mock Expressions](/syntax/decorators/test#mock-expressions) spec for details on snapshot mocks and multiple mocked bindings.
 
-### Snapshot assertions
+Prefer capability handlers when the code under test already exposes capabilities. Keep `mock ... in` for binding-level substitution, snapshots, and APIs that have not yet been expressed as capabilities.
 
-`assertSnapshot` compares a value against a stored `.snap` file. On first run (or `aivi test --update-snapshots`), the snapshot file is created. On subsequent runs, the value is compared against the stored snapshot.
+## Snapshot assertions
+
+`assertSnapshot` compares a rendered value against a stored `.snap` file.
+
+- On the first run, the snapshot file is created.
+- On later runs, the current value is compared to the stored one.
+- `aivi test --update-snapshots` refreshes existing snapshots when a change is intentional.
+
+Snapshot tests are especially helpful for larger structured output such as formatted text, generated code, or UI trees.

@@ -1,89 +1,108 @@
 # Opaque Types
 
-An **opaque type** hides its internal representation outside the defining module, preventing direct construction, field access, record update, and pattern matching on its structure. Only functions and domain operators exported by the defining module can manipulate the type.
+An **opaque type** exposes a public type name while hiding its representation outside the module that defines it.
+That gives you a practical way to enforce invariants: callers can use the type, but they cannot construct invalid values or depend on internal details.
 
-## Motivation
+## Why use an opaque type?
 
-Without opaque types, a record type alias like `Url` is fully transparent everywhere:
+Without `opaque`, a plain type alias is transparent everywhere.
+For example, if `Url` were just a record alias, any module could create a malformed value directly:
 
 ```aivi
-// anyone can write this — no validation, no guarantee
-badUrl = { protocol: "http", host: "", port: None, path: "", query: [], hash: None }
+badUrl = {
+  protocol: "http",
+  host: "",
+  port: None,
+  path: "",
+  query: [],
+  hash: None
+}   // no validation happens here
 ```
 
-This bypasses `Url.parse` and its validation, allowing invalid values to propagate silently. The `opaque` keyword fixes this by restricting who can construct and destructure the type.
+That bypasses your parsing and validation logic.
+`opaque` closes that escape hatch and forces callers through the API you choose to expose.
 
 ## Syntax
 
-The `opaque` keyword can precede any type definition form:
+The `opaque` keyword can be used with any type definition form:
 
 ```aivi
-// Opaque record (most common use case)
 opaque Url = {
-  protocol: Text
-  host: Text
-  port: Option Int
-  path: Text
-  query: List (Text, Text)
+  protocol: Text,
+  host: Text,
+  port: Option Int,
+  path: Text,
+  query: List (Text, Text),
   hash: Option Text
 }
 
-// Opaque ADT — hides constructors outside the module
-opaque Color = Red | Green | Blue
-
-// Opaque branded type
-opaque Email = Text!
-
-// Opaque plain alias
-opaque UserId = Int
+opaque Color = Red | Green | Blue   // constructors are hidden outside the module
+opaque Email = Text!                // opaque branded type
+opaque UserId = Int                 // opaque alias
 ```
 
-## Semantics
+## What changes inside and outside the module
 
-### Inside the defining module (transparent)
+### Inside the defining module
 
-Inside the module that declares the `opaque` type, the type behaves as if `opaque` were absent. All operations work normally: construction, field access, record update, and pattern matching.
+Inside the module that defines the type, `opaque` behaves as if it were not there.
+You can construct values, inspect fields, update records, and pattern match normally.
 
 ```aivi
 module aivi.url
 
 opaque Url = {
-  protocol: Text
-  host: Text
-  port: Option Int
-  path: Text
-  query: List (Text, Text)
+  protocol: Text,
+  host: Text,
+  port: Option Int,
+  path: Text,
+  query: List (Text, Text),
   hash: Option Text
 }
 
-// ✅ All of these work inside the defining module:
-example = { protocol: "https", host: "example.com", port: None, path: "/", query: [], hash: None }
-p = example.protocol
+example = {
+  protocol: "https",
+  host: "example.com",
+  port: None,
+  path: "/",
+  query: [],
+  hash: None
+}
+
+p = example.protocol                  // field access is allowed here
 updated = example <| { host: "other.com" }
-f = url => url match
-  | { protocol: "https" } => True
+
+usesHttps = url => url match
+  | { protocol: "https" } => True   // pattern matching is also allowed here
   | _                      => False
 ```
 
-### Outside the defining module (opaque)
+### Outside the defining module
 
-Outside the module, only the *type name* is visible — its structure is hidden.
+Outside the defining module, only the type name is visible.
+The structure is hidden.
 
 | Operation | Allowed? | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Type name in signatures | ✅ | `f : Url -> Text` is fine |
-| Exported functions | ✅ | `parse`, `toString`, accessor functions |
-| Domain operators | ✅ | `url + ("key", "val")` via `domain Url` |
-| Class instances | ✅ | `Eq`, `Show`, etc. work normally |
-| Record literal construction | ❌ | Compile error |
-| Field access (`url.host`) | ❌ | Compile error |
-| Record update (`url <| { ... }`) | ❌ | Compile error |
-| Pattern match on structure | ❌ | Compile error |
-| ADT constructor (`Red`, `Green`) | ❌ | Compile error (for opaque ADTs) |
+| Exported functions | ✅ | Use smart constructors, accessors, and helpers |
+| Domain operators | ✅ | Domain methods can still work through exported APIs |
+| Class instances | ✅ | `Eq`, `Show`, `ToText`, and similar instances work normally |
+| Record literal construction | ❌ | Callers cannot build the hidden representation directly |
+| Field access (`url.host`) | ❌ | Hidden fields stay hidden |
+| Record update (`url <| { ... }`) | ❌ | Updates would depend on the hidden layout |
+| Pattern match on structure | ❌ | Matching would reveal internals |
+| ADT constructor (`Red`, `Green`) | ❌ | For opaque ADTs, constructors are hidden too |
 
-### Providing an API surface
+## Designing the public API
 
-The defining module exports whatever operations it wants to expose:
+The defining module decides what operations to export.
+A common pattern is:
+
+- export the type name
+- export one or more validated constructors
+- export read-only accessor functions
+- export domain operations or class instances as needed
 
 ```aivi
 module aivi.url
@@ -92,55 +111,52 @@ export Url, parse, toString, protocol, host, port, path, query, hash
 
 opaque Url = { ... }
 
-// Smart constructor (the only way to create a Url from outside)
 parse : Text -> Result UrlError Url
-parse = text => ...
+parse = text => ...                 // validated constructor
 
-// Accessor functions
 protocol : Url -> Text
-protocol = url => url.protocol
+protocol = url => url.protocol      // safe accessor
 
 host : Url -> Text
 host = url => url.host
-
-// ... etc.
 ```
 
-Outside code uses the exported API:
+Callers then work through the exported surface instead of the hidden representation:
 
 ```aivi
 use aivi.url (Url, parse, protocol)
 
 myUrl = parse "https://example.com" or panic "bad url"
-p = protocol myUrl   // ✅ via exported accessor
+p = protocol myUrl                  // use the exported accessor
 ```
 
 ## Interaction with domains
 
-Domain operators declared `over` an opaque type work normally from outside the module, because the domain operator implementations live inside the defining module (or are explicitly granted access):
+Domain operators declared over an opaque type still work outside the module because their implementations live in code that is allowed to see the internals.
 
 ```aivi
 use aivi.url
 use aivi.url (domain Url)
 
 url = Url.parse "https://example.com" or panic "bad"
-url2 = url + ("q", "search")  // ✅ domain operator works
+url2 = url + ("q", "search")      // operator works through the exported domain API
 ```
 
 ## Interaction with classes
 
-Class instances for opaque types work normally. Instance declarations must be in the defining module (since they need access to internals), but instance usage works everywhere:
+Class instances for opaque types work normally.
+The instance definition belongs in code that can see the representation, but using the instance does not reveal any internals.
 
 ```aivi
-url1 == url2        // ✅ Eq instance works
-toText url1         // ✅ Show/ToText instance works
+url1 == url2        // `Eq` works
+toText url1         // `ToText` or similar conversion works
 ```
 
 ## Diagnostics
 
-When code outside the defining module tries to violate opacity, the compiler emits a clear error:
+When outside code tries to break opacity, the compiler reports the problem directly:
 
-```
+```text
 error[E4100]: cannot construct opaque type `Url` outside module `aivi.url`
   --> app.aivi:5:1
    |
@@ -158,18 +174,19 @@ error[E4101]: cannot access field `host` on opaque type `Url` outside module `ai
    = help: use an exported accessor function from `aivi.url`
 ```
 
-## Existing handle-based opaque types
+## Existing runtime-opaque handles
 
-AIVI already has types that are opaque at the runtime level — `FileHandle`, `Listener`, `Connection`, `DbConnection`, `Server`, `WebSocket`, etc. These are declared without a right-hand side:
+AIVI also has handle-like types such as `FileHandle`, `Listener`, `Connection`, `DbConnection`, `Server`, and `WebSocket` that are opaque for a different reason: they do not have an AIVI-level definition at all.
 
 ```aivi
 FileHandle
 ```
 
-These have **no** AIVI-level structure at all (they wrap Rust values). The `opaque` keyword is different: the type *has* a definition, but that definition is hidden outside the module.
+Those runtime handles wrap host-language values.
+By contrast, `opaque Url = { ... }` has a definition, but that definition is hidden outside the module.
 
 | Form | Has definition? | Visible outside? |
-|---|---|---|
+| --- | --- | --- |
 | `FileHandle` (runtime opaque) | No | Only as a type name |
 | `opaque Url = { ... }` (module opaque) | Yes | Only as a type name |
 | `Url = { ... }` (transparent) | Yes | Fully visible |

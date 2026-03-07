@@ -1,27 +1,42 @@
 # Duration Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.duration"} -->
-The `Duration` domain provides a type-safe way to represent **Spans of Time**.
+The `Duration` domain gives spans of time an explicit unit, so values like `500ms`, `30s`, or `5m` are unambiguous.
 
-In many systems, a timeout is just an integer like `500`. But is that 500 milliseconds? 500 seconds? Ambiguous units cause outages (like setting a 30-second timeout that the system reads as 30 milliseconds).
-
-`Duration` solves this by wrapping the number in a type that knows its unit. `500` becomes `500ms` or `0.5s`. The compiler ensures you don't compare Seconds to Apples, stopping bugs before they start.
-
+That is especially helpful for timeouts, retry delays, sleeps, polling intervals, and any other code where “just an integer” would be unclear.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.duration<span class="domain-badge">domain</span></div>
+
+## When to use `Duration`
+
+Use this domain for fixed spans of elapsed time, such as:
+
+- request timeouts,
+- retry backoff,
+- scheduling delays,
+- polling intervals,
+- “wait 250 milliseconds” style logic.
+
+If your logic is about calendar concepts like months, years, or “next business day”, use [`aivi.chronos.calendar`](./calendar.md) instead.
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/overview.aivi{aivi}
 
-## Features
+## Common operations
+
+These examples show the basic shapes and conversions you will use most often:
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/features.aivi{aivi}
 
-## Domain Definition
+## Domain definition
+
+The domain definition shows how durations are represented and which literal forms are available:
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/domain_definition.aivi{aivi}
 
-## Usage Examples
+## Usage examples
+
+In day-to-day code, a duration is often the most readable way to document timing intent right where it matters.
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/usage_examples.aivi{aivi}

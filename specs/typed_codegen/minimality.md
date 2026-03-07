@@ -1,66 +1,64 @@
-# Minimality proof (informal)
+# Minimality (informal)
 
-| Feature                  | Kernel primitive                                  |
-|:------------------------ |:------------------------------------------------- |
-| Lambdas                  | λ                                                 |
-| Multi-arg functions      | currying                                          |
-| Recursion                | `let rec`                                         |
-| Patterns                 | case                                              |
-| Records                  | closed records + update                           |
-| Patching                 | update + fold                                     |
-| Predicates               | λ + case                                          |
-| Generators               | fold (Church-encoded)                             |
-| Effects (`do Effect {}`) | `bind` + `pure` (nested λ / application)          |
-| Generic do-monads        | `chain` + `of` (desugared at HIR level)           |
-| Resources                | `__makeResource` (λ-wrapped acquire/cleanup pair) |
-| Plain blocks             | immediately-applied λ                             |
-| Domains                  | static rewrite                                    |
-| Sigils                   | function call                                     |
-| Modules                  | namespaces                                        |
-| Classes                  | dictionaries (records)                            |
-| HKTs                     | ∀                                                 |
+AIVI has a rich surface language, but the compiler lowers it to a much smaller core. This is useful for both implementers and advanced users: once lowering is complete, the backend only needs to understand a compact set of building blocks.
 
-Nothing else is required.
+## Surface feature → kernel building block
 
-## The true kernel
+| Surface feature | Kernel primitive |
+|:--------------- |:---------------- |
+| Lambdas | λ |
+| Multi-argument functions | currying |
+| Recursion | `let rec` |
+| Patterns | `case` |
+| Records | closed records + update |
+| Patching | update + fold |
+| Predicates | λ + case |
+| Generators | fold (Church-encoded) |
+| Effects (`do Effect {}`) | `bind` + `pure` |
+| Generic do-monads | `chain` + `of` |
+| Resources | `__makeResource` |
+| Plain blocks | immediately-applied λ |
+| Domains | static rewrite |
+| Sigils | function call |
+| Modules | namespaces |
+| Classes | dictionaries (records) |
+| HKTs | ∀ |
 
-> **AIVI's kernel is simply:**
-> **λ-calculus with algebraic data types, closed records with update, universal types, fold, and an opaque effect monad.**
-> **All block forms — `do Effect {}`, `do Option {}`, `do Result {}`, `resource {}`, `generate {}`, and `plain {}` — are fully desugared into nested λ/application/`bind`/`pure`/`chain`/`of` within the HIR itself.**
-> **Domains are static rewrite rules; patching, predicates, generators, resources, and effects are all elaborations of these primitives.**
+In other words, the surface language is expressive, but the core it compiles to is intentionally small.
 
-## Block desugaring
+## The kernel in one sentence
 
-Generic do-monads (`do Option`, `do Result`, `do List`) and Effect blocks are desugared
-via a `desugar_blocks()` pass that operates `HIR -> HIR`. This transformation
-eliminates all `Block`, `BlockKind`, and `BlockItem` variants, producing a flat HIR
-composed of nested lambdas and function calls.
+AIVI's kernel is λ-calculus with algebraic data types, closed records with update, universal types, fold, and an opaque effect monad.
 
-| Block kind                           | Stage         | Desugared form                                                    |
-|:------------------------------------ |:------------- |:----------------------------------------------------------------- |
-| `do Option { x <- e1; e2 }`          | HIR transform | `chain e1 (λx → e2)` — generic monadic desugaring                 |
-| `do Result { x <- e1; e2 }`          | HIR transform | `chain e1 (λx → e2)` — generic monadic desugaring                 |
-| `do Effect { x <- e1; e2 }`          | HIR transform | `__withResourceScope(bind e1 (λx → e2))`                          |
-| `do Effect { x = e; rest }`          | HIR transform | `bind (pure e) (λx → rest)` — let-binds are `pure`-wrapped at HIR |
-| `resource { acq; yield v; cleanup }` | HIR transform | `__makeResource (λ_ → acq_chain) (λ_ → cleanup_chain)`            |
-| `generate { yield e; ... }`          | HIR transform | Church-encoded fold via `gen_bind`/`gen_yield`/`gen_append`       |
-| `plain { x = e; body }`              | HIR transform | `(λx → body) e` — immediately-applied lambda                      |
+That means features that look quite different in source code—`do Effect`, `resource`, `generate`, domains, or predicates—end up as elaborations of the same small set of primitives.
 
-The resulting HIR is block-free before it reaches `RustIr` lowering.
+## How block forms are lowered
 
-## Optimization variants
+Generic do-monads (`do Option`, `do Result`, `do List`) and effect blocks are desugared by a `desugar_blocks()` pass that transforms `HIR -> HIR`.
+The output is block-free HIR composed of nested lambdas and ordinary function calls.
 
-Several `RustIrExpr` variants are theoretically reducible to the core λ-calculus +
-case primitives, but are preserved through to the Cranelift backend for code quality:
+| Block kind | Stage | Desugared form |
+|:---------- |:----- |:-------------- |
+| `do Option { x <- e1; e2 }` | HIR transform | `chain e1 (λx → e2)` |
+| `do Result { x <- e1; e2 }` | HIR transform | `chain e1 (λx → e2)` |
+| `do Effect { x <- e1; e2 }` | HIR transform | `__withResourceScope(bind e1 (λx → e2))` |
+| `do Effect { x = e; rest }` | HIR transform | `bind (pure e) (λx → rest)` |
+| `resource { acq; yield v; cleanup }` | HIR transform | `__makeResource (λ_ → acq_chain) (λ_ → cleanup_chain)` |
+| `generate { yield e; ... }` | HIR transform | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` |
+| `plain { x = e; body }` | HIR transform | `(λx → body) e` |
 
-| Variant           | Theoretical reduction                | Why it is kept                                                        |
-|:----------------- |:------------------------------------ |:--------------------------------------------------------------------- |
-| `If`              | `Match` on `Bool` (`True`/`False`)   | Cranelift emits a single `brif` branch vs. full match compilation     |
-| `Binary`          | `App(App(Var(op), left), right)`     | Cranelift uses native int/float machine instructions when types known |
-| `Call`            | Nested `App` (curried application)   | Avoids intermediate closure allocation for multi-arg calls            |
-| `Pipe`            | `App(func, arg)`                     | Carries debug metadata (`pipe_id`, `step`, `label`) for `@debug`      |
-| `TextInterpolate` | Chain of `++` (string concatenation) | Cranelift builds interpolated strings in a single pass                |
+By the time lowering reaches RustIR, these block forms no longer exist as separate syntax categories.
 
-These variants do not add expressive power — every program using them can be
-rewritten using only λ, application, and case. They exist because the Cranelift
-backend produces significantly better native code for these common patterns.
+## Why some non-kernel variants are kept
+
+Several RustIR expression forms could be reduced further to the pure kernel, but AIVI keeps them because they produce much better native code.
+
+| Variant | Theoretical reduction | Why it is kept |
+|:------- |:--------------------- |:-------------- |
+| `If` | `Match` on `Bool` | Cranelift can emit a single branch instruction instead of a full match lowering |
+| `Binary` | `App(App(Var(op), left), right)` | Known numeric operators lower to native int/float instructions |
+| `Call` | Nested `App` | Avoids building intermediate closures for multi-argument calls |
+| `Pipe` | `App(func, arg)` | Preserves debug metadata such as `pipe_id`, step index, and label |
+| `TextInterpolate` | Chain of string concatenations | Allows more efficient string assembly |
+
+These variants do not add expressive power. They are retained because the backend can generate better code from them than it could from their fully reduced equivalents.

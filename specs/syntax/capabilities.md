@@ -4,22 +4,34 @@
 Capabilities describe the external authority an `Effect E A` or `Resource E A` needs, without changing the meaning of `E` or `A`.
 <!-- /quick-info -->
 
-> **Status:** Phase 1 capability surface is specified here. Signature clauses, lexical narrowing, and scoped handler binding are part of the language design. Runtime plumbing and first-class diagnostics continue to land in follow-up milestones. Existing ambient builtins remain valid and should be read as the default interpreters for the mapped capabilities on this page.
+Capabilities answer a practical question: **what is this effectful code allowed to touch?** They describe outside-world authority such as file access, network access, clocks, UI integration, or process state.
 
-## Overview
+## What capabilities are
 
-AIVI does **not** introduce a second effect system for permissions. Capabilities sit **on top of** `Effect E A` and `Resource E A` as a minimum-authority contract:
+AIVI does **not** use capabilities as a second error channel. They sit on top of `Effect E A` and `Resource E A` as an authority contract:
 
-- `E` still models typed domain failures.
-- `A` is still the success value.
-- capability requirements describe which outside-world access is allowed.
-- missing capabilities are compile-time diagnostics, not values inside `E`.
+- `E` still describes typed domain failures
+- `A` is still the success value
+- capabilities describe which external operations may be used
+- missing capabilities are compile-time diagnostics, not runtime `E` values
 
-`attempt`, `or`, `resource`, and `do Effect { ... }` keep their existing semantics. The capability clause only refines which ambient operations may appear inside those effects.
+`attempt`, `or`, `resource`, and `do Effect { ... }` keep their existing meaning. A capability clause only narrows the external authority available inside that effectful code.
 
-## Surface syntax
+## What capabilities are for
 
-Capability requirements are written as a postfix clause on an effectful type:
+Capabilities make effectful code easier to understand and review.
+
+They help you answer questions like:
+
+- “Does this function only read a file, or can it also write?”
+- “Can this helper make network calls?”
+- “Does this UI action schedule timers or spawn background work?”
+
+In practice, capabilities help keep APIs narrow, make authority creep visible during code review, and separate business failures from permission or scope mistakes.
+
+## How capabilities look in code
+
+Write capability requirements as a postfix clause on an effectful type.
 
 ```aivi
 readConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.read }
@@ -29,30 +41,39 @@ openStore : DbConfig -> Resource DbError DbConn with { db.connect }
 launchUi : Model -> Effect GtkError Unit with { ui.window, ui.signal }
 ```
 
+```aivi
+saveProfile : Text -> Bytes -> Effect ProfileError Unit with { file.write, network.http }
+saveProfile = userId avatar => do Effect {
+  _ <- uploadAvatar userId avatar                       -- Needs network.http
+  _ <- file.writeBytes "./profile-avatar.bin" avatar    -- Needs file.write
+  pure Unit
+}
+```
+
 The capability clause is:
 
-- **unordered** — `{ file.read, process.env.read }` equals `{ process.env.read, file.read }`
-- **duplicate-free** — duplicates are ignored
-- **optional during migration** — omitting it means the declaration has not yet been tightened; new public APIs should spell the minimum required set explicitly
+- **unordered** — `{ file.read, process.env.read }` is the same set as `{ process.env.read, file.read }`
+- **duplicate-free** — repeating the same capability does not change the meaning
+- **best kept explicit on public APIs** — readers should be able to see the minimum required authority at the function boundary
 
-Family names may be used as coarse shorthands. `file` satisfies `file.read`, `file.write`, and `file.metadata`. Public library APIs should prefer the narrowest stable leaf names.
+Family names can act as coarse shorthands. For example, `file` covers `file.read`, `file.write`, and `file.metadata`. Public APIs should usually prefer the narrowest useful leaf name.
 
-## Standard vocabulary
+## Common capability vocabulary
 
 | Family | Common atoms | Meaning |
 | --- | --- | --- |
-| `file` | `file.read`, `file.write`, `file.metadata`, `file.watch` | Local filesystem and path authority. |
-| `network` | `network.http`, `network.socket.connect`, `network.socket.listen` | Outbound and inbound network access. |
-| `db` | `db.connect`, `db.query`, `db.mutate`, `db.migrate` | Database connectivity, reads, writes, and schema change authority. |
-| `clock` | `clock.now`, `clock.sleep`, `clock.schedule` | Reading time and scheduling timers. |
-| `randomness` | `randomness.secure`, `randomness.pseudo` | Entropy and random number generation. |
-| `process` | `process.args`, `process.env.read`, `process.env.write`, `process.exit`, `process.spawn` | Interaction with the host process and its environment. |
-| `ui` | `ui.window`, `ui.signal`, `ui.clipboard`, `ui.notification` | Native UI creation, event delivery, and desktop integration. |
-| `cancellation` | `cancellation.observe`, `cancellation.propagate`, `cancellation.mask` | Structured cancellation, task control, and protected cleanup scopes. |
+| `file` | `file.read`, `file.write`, `file.metadata`, `file.watch` | Local filesystem and path authority |
+| `network` | `network.http`, `network.socket.connect`, `network.socket.listen` | Outbound and inbound network access |
+| `db` | `db.connect`, `db.query`, `db.mutate`, `db.migrate` | Database connectivity, reads, writes, and schema changes |
+| `clock` | `clock.now`, `clock.sleep`, `clock.schedule` | Reading time and scheduling timers |
+| `randomness` | `randomness.secure`, `randomness.pseudo` | Entropy and random number generation |
+| `process` | `process.args`, `process.env.read`, `process.env.write`, `process.exit`, `process.spawn` | Interaction with the host process and environment |
+| `ui` | `ui.window`, `ui.signal`, `ui.clipboard`, `ui.notification` | Native UI creation, event delivery, and desktop integration |
+| `cancellation` | `cancellation.observe`, `cancellation.propagate`, `cancellation.mask` | Structured cancellation and cancellation control |
 
-The first segment of a capability path is the stable family name. Later milestones may add more leaves under those families, but the top-level vocabulary above is the Phase 1 contract.
+The first segment names the family. Later segments narrow that authority to the smallest useful operation.
 
-## Signature meaning and capability-polymorphic code
+## How to read a capability signature
 
 A capability clause describes the **minimum** authority a function needs. Callers may always invoke that function from a scope that has a **superset** of the listed capabilities.
 
@@ -67,13 +88,25 @@ refreshUser = url => do Effect {
 }
 ```
 
-`loadUserCache` is capability-polymorphic in the practical Phase 1 sense: it only asks for `file.read`, so it can run inside any larger effect scope that also happens to include `network`, `ui`, `db`, or other authority. A dedicated row-polymorphic syntax for naming an open capability tail is intentionally deferred to a later milestone.
+`loadUserCache` only asks for `file.read`, so it can run inside a larger scope that also includes `network.http`, `ui`, `db`, or other authority. The practical rule is simple: **smaller requirement sets compose into larger ones**.
 
-Pure functions carry no capability clause because they do not need external authority.
+Pure functions carry no capability clause because they do not need outside-world authority.
 
-## Local scoping
+## How to use capabilities
 
-`with { ... } in expr` lexically narrows the visible capability set for `expr`:
+### 1. Annotate effectful public APIs
+
+Put capability clauses on public `Effect` and `Resource` signatures.
+
+```aivi
+readConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.read }
+saveDraft : Text -> Effect FileError Unit with { file.write }
+openStore : DbConfig -> Resource DbError DbConn with { db.connect }
+```
+
+### 2. Narrow helper bodies with `with { ... } in`
+
+`with { ... } in expr` lexically narrows the visible capability set for `expr`.
 
 ```aivi
 loadBootConfig : Effect ConfigError BootConfig with { file.read, process.env.read }
@@ -89,12 +122,22 @@ Rules:
 
 - the inner scope may use only the listed capabilities
 - nested `with` blocks intersect, so an inner scope can narrow further but never widen authority
-- bare local scoping does **not** install implementations; it only reduces the authority already in scope
-- `with { capability = handler } in expr` reuses this same lexical form to install scoped interpreters; see [Effect Handlers](effect_handlers.md)
+- this form only narrows authority; it does not install implementations by itself
+- `with { capability = handler } in expr` uses the same surface form to install scoped interpreters; see [Effect Handlers](effect_handlers.md)
+
+### 3. Keep failures and authority separate
+
+`Effect E A` still means:
+
+- `E` is the typed domain error
+- `A` is the success value
+- capabilities describe which external operations the effect may use
+
+Missing capabilities are compile-time problems, not runtime `E` values.
 
 ## Resources and cancellation
 
-`Resource E A` accepts the same clause shape as `Effect E A`:
+`Resource E A` accepts the same clause shape as `Effect E A`.
 
 ```aivi
 openAuditLog : Text -> Resource FileError Handle with { file.write }
@@ -103,24 +146,24 @@ openAuditLog : Text -> Resource FileError Handle with { file.write }
 The clause covers the whole resource lifecycle:
 
 - acquisition before `yield`
-- release after `yield`
-- helper effects used inside the resource body
+- helper effects inside the resource body
+- cleanup after `yield`
 
-Resource cleanup remains cancellation-protected automatically. Authors do **not** add `cancellation.mask` merely to obtain ordinary finalizer guarantees. Explicit cancellation-control APIs (`scope`, `spawn`, `race`, future masking forms, task cancellation) are the places where `cancellation.*` becomes part of the public signature.
+Ordinary resource cleanup is still cancellation-protected automatically. You do **not** add `cancellation.mask` just to get normal finalizer safety. Explicit cancellation-control APIs such as `scope`, `spawn`, `race`, or task cancellation are where `cancellation.*` becomes part of the public signature.
 
-## GTK command/subscription alignment
+## Capabilities in GTK apps, timers, and background work
 
-The blessed GTK app architecture reuses this same capability vocabulary for UI-hosted work:
+GTK commands and subscriptions reuse the same capability vocabulary.
 
-- `gtkApp` itself remains the coarse-grained `ui` entry point,
-- `Command.perform` / `Command.startTask` inherit the capability requirements of their enclosed `Effect`,
-- `Command.after` and `Subscription.every` consume `clock.sleep` / `clock.schedule`,
-- keyed task or subscription cancellation uses `cancellation.propagate`,
-- `Subscription.source` inherits the capability requirements of its `Resource`.
+- `gtkApp` is the coarse-grained `ui` entry point
+- `Command.perform` and `Command.startTask` inherit the capabilities of the enclosed `Effect`
+- `Command.after` and `Subscription.every` consume `clock.sleep` or `clock.schedule`
+- keyed task or subscription cancellation uses `cancellation.propagate`
+- `Subscription.source` inherits the capabilities of its underlying `Resource`
 
-This is intentional. Commands and subscriptions do **not** introduce a second permission model for UI code; they are declarative hosts for ordinary `Effect` / `Resource` work that already carries capability clauses.
+This keeps UI code aligned with the rest of the language instead of introducing a separate permission model.
 
-## Mapping existing ambient APIs
+## How today’s APIs map to capabilities
 
 | Current surface | Capability requirement |
 | --- | --- |
@@ -143,17 +186,16 @@ This is intentional. Commands and subscriptions do **not** introduce a second pe
 | `timeoutWith` | `clock.sleep` + `cancellation.propagate` |
 | `scope`, `spawn`, `race`, explicit task cancellation | `cancellation.propagate` |
 | `crypto.randomUuid`, `crypto.randomBytes`, salted password hashing | `randomness.secure` |
-| `gtkApp`, `signalStream`, `reconcileNode`, clipboard / notification helpers | `ui` |
+| `gtkApp`, `signalStream`, `reconcileNode`, clipboard helpers, notification helpers | `ui` |
 | `Command.after`, `Subscription.every` | `clock.sleep` / `clock.schedule` |
 | keyed `Command.startTask`, `Command.cancel`, subscription replacement/removal | `cancellation.propagate` |
 | `Subscription.source` over files, sockets, db notifications, or custom feeds | capabilities required by the underlying `Resource` |
 | `@static` embedded sources | no runtime capability after compilation |
 
-## Migration from ambient builtins
+## Practical rules of thumb
 
-1. Keep the existing term names. Phase 1 changes the **type surface** first, not the call syntax.
-2. Annotate public `Effect` and `Resource` signatures with the smallest capability set they require.
-3. Prefer narrow leaves (`file.read`) over broad families (`file`) unless the API genuinely needs the whole family.
-4. Use `with { ... } in` to narrow large helper bodies and make accidental authority creep visible in code review.
-5. Use `with { capability = handler } in` for capability-scoped interpreters; keep `mock ... in` for binding-level substitution and snapshot-style tests.
-6. Later compiler and LSP work will turn these capability contracts into first-class diagnostics and quick-fixes.
+1. Put capabilities on public `Effect` and `Resource` signatures.
+2. Prefer narrow leaves such as `file.read` over broad family names such as `file`.
+3. Use `with { ... } in` to make helper bodies’ authority explicit.
+4. Use `with { capability = handler } in` when you want a scoped interpreter for a capability.
+5. Treat capabilities as an authority contract, not as part of your domain error model.

@@ -1,90 +1,90 @@
 # LSP Server
 
-The AIVI Language Server (`aivi-lsp`) implements the Language Server Protocol (LSP) to provide rich editing features in compatible editors (like VSCode, Neovim, Zed, etc.).
+The AIVI Language Server (`aivi-lsp`) implements the Language Server Protocol so editors such as VS Code, Neovim, Zed, and other LSP clients can understand AIVI code.
 
-## Capabilities
+In practice, the language server is what powers “editor intelligence”: navigation, hover information, diagnostics, formatting, and code-aware completion.
 
-The server currently supports the following LSP capabilities:
+## What the server provides
 
 ### Navigation
 
-- **Go to Definition**: Jump to where a symbol (function, type, variable) is defined.
-- **Go to Declaration**: Same as definition for most items.
-- **Go to Implementation**: Navigate to implementations of classes.
-- **Find References**: List all usages of a symbol in the workspace.
-- **Document Symbols**: List all symbols defined in the current file (outline view).
+- **Go to Definition**: jump to where a symbol is defined.
+- **Go to Declaration**: behaves the same as definition for most items.
+- **Go to Implementation**: jump to implementations of classes.
+- **Find References**: list uses of a symbol across the workspace.
+- **Document Symbols**: show an outline of symbols in the current file.
 
-### Information
+### Information and help while editing
 
-- **Hover**: Show type information and documentation when hovering over a symbol. The server uses multiple resolution strategies: first it attempts definition-based lookup, then falls back to **span-type lookup** which finds the smallest typed span containing the cursor position. This ensures hover information is available even for expressions without a named definition (e.g. intermediate sub-expressions). Phase 3/4 tooling augments this with schema-first help for `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`, plus blessed GTK/app-architecture help for `gtkApp`, `gtkAppFull`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
-- **Signature Help**: Show function signature and parameter information while typing function calls.
+- **Hover**: shows type information and documentation. The server first tries definition-based lookup, then falls back to span-type lookup so hover still works for expressions that do not have a named definition.
+- **Signature Help**: shows function signatures and parameter information while you type.
+- **Schema and source help**: hover content also documents source-oriented helpers such as `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
+- **GTK architecture help**: hover content documents `gtkApp`, `gtkAppFull`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
 
-### Editing
+### Editing support
 
-- **Completion**: Context-aware code completion for keywords, variables, functions, and types. This includes Phase 4 scaffolds for the blessed `gtkApp` architecture (`gtkApp`, `noSubscriptions`, `subscriptionEvery`) so editors steer users toward the single public GTK loop instead of legacy helper patterns.
-- **Rename**: Rename a symbol and all its references across the workspace.
-- **Code Actions**: Contextual fixes and refactorings (based on diagnostics).
-- **Semantic Tokens**: Semantic syntax highlighting for precise coloring of tokens (e.g., distinguishing types from variables).
-- **Formatting**: Format the document using the built-in formatter.
+- **Completion**: context-aware completion for keywords, variables, functions, and types.
+- **Rename**: rename a symbol and its references across the workspace.
+- **Code Actions**: context-sensitive fixes and refactorings based on diagnostics.
+- **Semantic Tokens**: token-aware highlighting that distinguishes language concepts more precisely than plain text grammars can.
+- **Formatting**: document formatting through the built-in formatter.
+
+Completion also includes scaffolds for the recommended `gtkApp` architecture so editors guide users toward the main public GTK app loop.
 
 ## Diagnostics
 
-The LSP server reports diagnostics (errors and warnings) in real-time as you type. It performs:
+The server reports diagnostics as you type. It checks:
 
-- **Syntax Checking**: Validates the grammar of the code.
-- **Type Checking**: Ensures type safety and correctness.
-- **Scope Analysis**: Checks for undefined variables and scoping rules.
-- **Source Ergonomics**: Hints on legacy structured-source forms (`file.json "..."`, `env.decode "..."`), missing schema strategies on schema-first config records, and missing explicit `Source ...` signatures for `source.schema.derive` declarations.
-- **Architecture Ergonomics**: Hover and completion guidance reinforce `gtkApp` as the blessed host, document `gtkAppFull` as compatibility-only, and surface the standard command/subscription helpers used by the reactive app loop.
+- syntax
+- types
+- scope and name resolution
+- structured-source ergonomics, including legacy source forms and missing schema strategies
+- GTK and app-architecture ergonomics, including the recommended `gtkApp` host and the standard command and subscription helpers
 
 ## Incremental workspace checking
 
-The LSP is specified in terms of **workspace snapshots**, not one-file analysis
-in isolation.
+The LSP works with **workspace snapshots**, not isolated one-file analyses.
 
-- open documents shadow the on-disk workspace for that snapshot
+- open documents shadow on-disk files for that snapshot
 - older in-flight semantic work may be cancelled or superseded
-- cached module facts may be reused only when their fingerprints match the
-  active snapshot
-- dependent modules are rechecked incrementally when an edited module's export
-  surface changes
+- cached module facts may be reused only when their fingerprints match the active snapshot
+- dependent modules are rechecked incrementally when an edited module's export surface changes
 
-The full cache ownership, invalidation, and publish rules are defined in
-[Incremental Compilation & Workspace Checking](incremental_compilation.md).
+The full ownership, invalidation, and publish rules are defined in [Incremental Compilation & Workspace Checking](incremental_compilation.md).
 
 ## Configuration
 
-The LSP server reads configuration from the editor's settings (sent via `workspace/didChangeConfiguration`). The following sections are supported:
+The server reads configuration from editor settings sent via `workspace/didChangeConfiguration`.
 
-### Format Options
+### Format options
 
-| Setting                | Type   | Default | Description                                                    |
-|:---------------------- |:------ |:------- |:-------------------------------------------------------------- |
-| `format.indentSize`    | number | `2`     | Number of spaces for indentation.                              |
-| `format.maxBlankLines` | number | `1`     | Maximum consecutive blank lines.                               |
-| `format.braceStyle`    | string | `"kr"`  | Brace placement style: `"kr"` (K&R / Java / TS) or `"allman"`. |
-| `format.maxWidth`      | number | `100`   | Maximum line width before wrapping.                            |
+| Setting | Type | Default | Description |
+|:-------- |:---- |:------- |:----------- |
+| `format.indentSize` | number | `2` | Number of spaces for indentation. |
+| `format.maxBlankLines` | number | `1` | Maximum consecutive blank lines. |
+| `format.braceStyle` | string | `"kr"` | Brace placement style: `"kr"` or `"allman"`. |
+| `format.maxWidth` | number | `100` | Maximum line width before wrapping. |
 
-### Diagnostics Options
+### Diagnostics options
 
-| Setting                            | Type    | Default | Description                                                                     |
-|:---------------------------------- |:------- |:------- |:------------------------------------------------------------------------------- |
-| `diagnostics.includeSpecsSnippets` | boolean | `false` | Include diagnostics for AIVI snippets embedded in specification markdown files. |
+| Setting | Type | Default | Description |
+|:-------- |:---- |:------- |:----------- |
+| `diagnostics.includeSpecsSnippets` | boolean | `false` | Include diagnostics for AIVI snippets embedded in spec markdown files. |
 
-### Strict Mode
+### Strict mode
 
-| Setting                          | Type    | Default | Description                                        |
-|:-------------------------------- |:------- |:------- |:-------------------------------------------------- |
-| `strict.level`                   | number  | `0`     | Strictness level (0 = default, higher = stricter). |
-| `strict.forbidImplicitCoercions` | boolean | `false` | Forbid implicit type coercions.                    |
-| `strict.warningsAsErrors`        | boolean | `false` | Treat warnings as errors.                          |
+| Setting | Type | Default | Description |
+|:-------- |:---- |:------- |:----------- |
+| `strict.level` | number | `0` | Strictness level (`0` = default, higher = stricter). |
+| `strict.forbidImplicitCoercions` | boolean | `false` | Forbid implicit type coercions. |
+| `strict.warningsAsErrors` | boolean | `false` | Treat warnings as errors. |
 
-## Installation & Usage
+## Starting the server
 
-The LSP server is embedded in the `aivi` CLI but can also be run as a standalone binary `aivi-lsp`.
-
-Editors typically start it via:
+The `aivi` CLI can launch the server directly, and editor integrations usually do exactly that:
 
 ```bash
-aivi lsp
+aivi lsp  # Start the language server for an editor client.
 ```
+
+The server is also available as the standalone binary `aivi-lsp`.

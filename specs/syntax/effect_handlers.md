@@ -1,51 +1,61 @@
 # Effect Handlers / Interpreters
 
-> **Status:** Phase 1 defines the official surface syntax and runtime contract for scoped capability interpreters on this page. Existing implementations may continue to route through ambient builtins until the follow-up compiler/runtime milestones land, but the semantics here are authoritative.
-
 <!-- quick-info: {"kind":"topic","name":"effect handlers"} -->
 Effect handlers install scoped interpreters for capability-bearing `Effect E A` and `Resource E A` code. They let the same program logic run against real IO, test doubles, or local simulations without changing `E`, `A`, or the capability vocabulary.
 <!-- /quick-info -->
 
-## Overview
+If capabilities describe **what authority code may use**, effect handlers describe **how that authority behaves in one scope**. For readers coming from other ecosystems, this is similar in spirit to dependency injection or swapping a service implementation for tests — but it is done with AIVI’s capability syntax.
 
-AIVI does **not** introduce a second effect type for handlers. The existing Phase 1 capability clause remains the authority story:
+## What effect handlers are for
 
-- `Effect E A` and `Resource E A` keep their existing meaning.
-- capability clauses still describe the **minimum authority** required.
-- `with { ... } in expr` remains the lexical scope form.
-- handler entries attach interpreters to those same capability names inside that same lexical scope.
+Effect handlers are useful when you want to:
 
-Handlers are therefore about **how a capability is interpreted in one scope**, not about changing the type of an effectful computation.
+- run the same logic against real IO in production and fixtures in tests
+- replace time, file access, or environment reads with deterministic local behavior
+- simulate part of the outside world without rewriting the business logic
+- override one capability in a small region of code without affecting the rest of the program
 
-## Surface syntax
+Handlers do **not** change the meaning of `Effect E A` or `Resource E A`.
 
-The `with { ... } in expr` form supports two entry kinds:
+- `E` is still the typed domain error
+- `A` is still the success value
+- capability clauses still describe the minimum authority required
+- handlers only choose the interpreter used for that authority in one scope
 
-1. a **bare capability** for lexical narrowing
+## Basic syntax
+
+`with { ... } in expr` supports two kinds of entries:
+
+1. a **bare capability** entry that narrows the available authority
 2. a **handler binding** that installs an interpreter for a capability or capability family
 
 ```aivi
 with {
-  file.read = fixtureFiles,
-  process.env.read = fixtureEnv,
-  clock.now
+  file.read = fixtureFiles,      -- Use fixture-backed file reads in this scope
+  process.env.read = fixtureEnv, -- Use deterministic environment values here
+  clock.now                      -- Keep the nearest outer/default clock.now interpreter
 } in readBootConfig
 ```
 
-Each entry behaves as follows:
+Each entry means:
 
 | Entry form | Meaning |
 | --- | --- |
-| `file.read` | `file.read` is in scope; resolve to the nearest outer or ambient interpreter. |
-| `file.read = fixtureFiles` | `file.read` is in scope and resolves to `fixtureFiles` in this lexical region. |
-| `file = localFs` | the `file` family is in scope and `localFs` interprets any `file.*` leaf not overridden by a more specific entry. |
+| `file.read` | `file.read` is allowed in this scope and resolves to the nearest outer or default interpreter |
+| `file.read = fixtureFiles` | `file.read` is allowed and handled by `fixtureFiles` in this scope |
+| `file = localFs` | the `file` family is allowed and `localFs` interprets any `file.*` leaf not overridden by a more specific entry |
 
-The right-hand side of a handler binding is a **pure expression** naming a handler value. It must not itself be an `Effect` or `Resource`. If a handler needs setup or teardown, acquire that support outside the `with` and bind the resulting value into the handler scope:
+## Installing a handler value
+
+The right-hand side of a handler binding is a **pure expression** naming a handler value. It is not itself an `Effect` or `Resource`.
+
+If a handler needs setup or teardown, acquire that support first and then install the resulting value into the handler scope.
 
 ```aivi
 testConfigRead =
   do Effect {
     fixtures <- openFixtureStore "./fixtures"
+
     with {
       file.read = fixtureReader fixtures,
       process.env.read = fixtureEnv fixtures
@@ -53,35 +63,37 @@ testConfigRead =
   }
 ```
 
+> Comment: the resource setup happens outside the `with`, and the scoped handler simply uses the prepared value.
+
 ## Scope, nesting, and precedence
 
 Handler scopes are:
 
 - **lexical** — active only inside the matching `in expr`
-- **deep** — calls made from inside the body see the scoped interpreter too
+- **deep** — function calls made from inside that scope see the same handler bindings
 - **nestable** — inner scopes may shadow outer interpreters
-- **authority-preserving** — installing a handler never widens the capability set already in scope
+- **authority-preserving** — installing a handler never grants a capability that was not already available
 
-### Authority resolution
+### How authority is checked
 
-The effective capability set for an expression is still the intersection of:
+The visible capability set for an expression is still the intersection of:
 
 - the enclosing function signature
 - any enclosing `with { ... } in` scopes
 - the innermost `with` block currently being checked
 
-An inner scope may narrow authority further, but it cannot grant a capability that was not already available from an outer scope.
+An inner scope may narrow authority further, but it cannot widen it.
 
-### Interpreter resolution
+### How interpreter lookup works
 
-When an operation requires a capability such as `file.read`, interpreter lookup proceeds as follows:
+When code needs a capability such as `file.read`, interpreter lookup works like this:
 
-1. walk outward from the innermost active `with` scope
-2. in each scope, prefer an **exact** match such as `file.read = ...`
+1. start at the innermost active `with` scope
+2. prefer an **exact** binding such as `file.read = ...`
 3. otherwise use a matching **family** binding such as `file = ...`
-4. if no scoped binding matches, fall back to the ambient runtime interpreter for that capability
+4. if no scoped binding matches, use the nearest outer or default runtime interpreter
 
-Bare capability entries participate in authority checking, but they do **not** stop interpreter lookup from continuing outward.
+Bare capability entries participate in authority checking, but they do not stop interpreter lookup from continuing outward.
 
 ```aivi
 with {
@@ -92,7 +104,7 @@ with {
 } in syncProfile
 ```
 
-In this example:
+In that example:
 
 - `file.read` resolves to `fixtureReads`
 - `file.write` resolves to `auditSink`
@@ -100,19 +112,9 @@ In this example:
 
 The same exact capability path must not be bound twice in one `with` block.
 
-## Handler values
+## Handlers in tests and local simulations
 
-Each capability family defines the interpreter shape for that family in the relevant standard-library surface. Phase 1 only standardizes the **binding mechanism**:
-
-- leaf handlers satisfy one capability path such as `clock.now`
-- family handlers may satisfy multiple leaves such as `clock.now`, `clock.sleep`, and `clock.schedule`
-- a leaf binding may override one operation inside a broader family interpreter
-
-The handler value is part of the surrounding pure environment. It is not a special runtime object outside the language; it is simply the value used when that capability is invoked in the current scope.
-
-## Tests and local simulation
-
-Tests use the same handler mechanism as ordinary code. A test installs interpreters with `with { capability = handler } in`, then runs the production logic unchanged:
+Tests use the same mechanism as ordinary code: install handlers, then run the production logic unchanged.
 
 ```aivi
 @test "refreshSession uses deterministic time"
@@ -123,20 +125,16 @@ refreshSessionDeterministic =
     process.env.read = fixtureEnv
   } in do Effect {
     session <- refreshSession
-    _ <- assertEq session.expiresAt expectedExpiry
+    _ <- assertEq session.expiresAt expectedExpiry   -- Deterministic because time is handled locally
     pure Unit
   }
 ```
 
-Use effect handlers when the code under test is written against capability requirements. Keep [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) for:
+Use effect handlers when your code is already written against capability requirements.
 
-- binding-level substitution of a specific imported name
-- snapshot capture / replay
-- legacy ambient APIs that have not yet been tightened to capability signatures
+Keep [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) for cases where you want to substitute a specific imported binding rather than interpret a capability.
 
-Handlers interpret **capabilities**. `mock ... in` substitutes **qualified bindings**. The two mechanisms may be nested when needed.
-
-## Interaction with `resource`
+## Handlers and `resource`
 
 Handlers apply to the full resource lifecycle:
 
@@ -144,26 +142,24 @@ Handlers apply to the full resource lifecycle:
 - helper effects inside the resource body
 - cleanup after `yield`
 
-When a resource is acquired with `<-`, the runtime captures the active handler environment that was in scope for that acquisition. The resource's cleanup phase later runs with that captured handler environment, even if inner scopes shadow the same capability before the enclosing block exits.
+When a resource is acquired with `<-`, the runtime captures the active handler environment for that acquisition. The cleanup phase later runs with that same captured environment, even if inner scopes shadow the capability before the enclosing block exits.
 
-This rule preserves pairing between acquisition and cleanup. A resource acquired through a test or local interpreter must also release through the matching interpreter.
+This keeps acquisition and release paired with the same interpreter.
 
 ## Cleanup and cancellation
 
-Handlers may change the meaning of operations such as file IO, HTTP, clocks, or cancellation observation, but they do **not** weaken AIVI's structural cleanup guarantees:
+Handlers may change the meaning of file IO, HTTP, clocks, or cancellation observation, but they do **not** weaken AIVI’s cleanup guarantees.
 
 - resource finalizers still run in LIFO order
 - cleanup still runs after normal completion, typed failure, and cancellation
 - cleanup remains cancellation-protected automatically
-- cleanup errors are still suppressed/logged rather than replacing the original failure
+- cleanup errors are still suppressed or logged instead of replacing the original failure
 
-In particular, handler bindings do **not** override the runtime rule that ordinary resource cleanup is masked from second-stage cancellation. The `cancellation.mask` capability remains for explicit user-facing cancellation-control APIs, not for everyday finalizer safety.
+If a handler value itself owns external state that needs teardown, model that state with `resource` and install the resulting value into the handler scope. Do not rely on leaving the `with` block to release it automatically.
 
-If a handler value itself owns external state that needs teardown, model that state with `resource` and then install the resulting value into the handler scope. Do not rely on handler exit alone to release it.
+## How handlers relate to capabilities
 
-## Interaction with capabilities
-
-Handlers do not replace capability clauses; they consume them.
+Handlers do not replace capability clauses; they use them.
 
 ```aivi
 readConfig : Effect ConfigError Config with { file.read, process.env.read }
@@ -176,11 +172,13 @@ readConfigForTests =
   } in readConfig
 ```
 
-The inner scope above does **not** widen `readConfig`'s authority. It only changes which interpreter is used for the already-required capabilities.
+The inner scope above does not widen `readConfig`’s authority. It only changes which interpreter serves the already-required capabilities.
 
-## Relation to other handler-shaped features
+## Related features that look similar
 
-- `on Transition => handler` in [Effects](effects.md) is a **machine transition handler**, not a capability interpreter.
-- `mock ... in` in [`@test`](decorators/test.md#mock-expressions) is binding substitution, not capability interpretation.
+These features are distinct from effect handlers:
 
-Those features remain valid and distinct.
+- `on transition => handler` in machine code is a **transition hook**, not a capability interpreter
+- `mock ... in` in [`@test`](decorators/test.md#mock-expressions) is **binding substitution**, not capability interpretation
+
+Use effect handlers when you want to reinterpret capability-driven effects in a scope. Use the other features when you are working with transitions or named bindings instead.

@@ -6,31 +6,48 @@ AIVI supports both low-level HTTP (`http`/`https`) and a REST-oriented facade (`
 
 <!-- /quick-info -->
 
-## APIs (v0.1)
+HTTP sources are for reading typed data from web services.
+
+Use them when your program needs to:
+
+- fetch JSON from an API,
+- submit requests with headers or authentication,
+- treat network responses as typed values at the boundary.
+
+## APIs
 
 - `http.get/post/fetch`
 - `https.get/post/fetch`
 - `rest.get/post/fetch`
 
-`rest.fetch` supports request-level options (timeouts, retries, bearer auth, strict status handling).
+`rest.fetch` supports request-level options such as timeouts, retries, bearer authentication, and strict status handling.
 
-## Composition alignment (Phase 3)
+## Choosing between `http` and `rest`
 
-REST request fields such as `timeoutMs`, `retryCount`, `bearerToken`, and `strictStatus` are still part of the connector-facing request shape.
+- use `http` or `https` when you want a lower-level HTTP boundary
+- use `rest` when you want a more REST-oriented, typed API surface
 
-Phase 3 source composition adds a **connector-independent** policy layer on top of those request fields:
+Both fit into the same `Source` model and are loaded with `load`.
 
-- `source.timeout` and `source.retry` define reusable acquisition policy for any source kind,
-- `source.cache` and `source.provenance` apply uniformly across REST, file, env, and database sources,
-- connector-specific request options continue to control HTTP-specific wire behavior.
-
-See [Source Composition](composition.md) for the cross-source execution model.
-
-## Capability mapping (Phase 1 surface)
+## Capability mapping
 
 Loading a REST or HTTP source requires `network.http` (or the broader `network` family shorthand).
 
-## Example
+## Simple example
+
+```aivi
+User = { name: Text, age: Int, gender: Text }
+
+usersSource : Source RestApi (List User)
+usersSource = rest.get ~u(https://api.example.com/users)  -- decode the response body as a list of User
+
+do Effect {
+  users <- load usersSource
+  pure users
+}
+```
+
+## Example with request options
 
 ```aivi
 Request = {
@@ -47,10 +64,30 @@ Request = {
 User = { name: Text, age: Int, gender: Text }
 
 usersSource : Source RestApi (List User)
-usersSource = rest.get ~u(https://api.example.com/users)
-
-do Effect {
-  users <- load usersSource
-  pure users
-}
+usersSource =
+  rest.fetch {
+    method: "GET"
+    url: ~u(https://api.example.com/users)
+    headers: []
+    body: None
+    timeoutMs: Some 5_000
+    retryCount: Some 2
+    bearerToken: Some apiToken       -- attach bearer auth at the request boundary
+    strictStatus: Some True          -- treat non-2xx responses as failures
+  }
 ```
+
+## How request options relate to source composition
+
+HTTP-specific request fields still describe wire-level behavior for that connector.
+
+Cross-source policies such as:
+
+- `source.timeout`
+- `source.retry`
+- `source.cache`
+- `source.provenance`
+
+apply at the source-composition layer and work consistently across REST, file, environment, and database sources.
+
+See [Source Composition](composition.md) for the reusable execution model.

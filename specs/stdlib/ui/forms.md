@@ -1,24 +1,21 @@
 # `aivi.ui.forms`
 ## Lightweight Forms and Validation for GTK Apps
 
-> **Status: Phase 2 lightweight foundation**  
-> `aivi.ui.forms` adds a first-class form story for the blessed GTK architecture without introducing a second UI runtime, schema DSL, or command system.
-
 <!-- quick-info: {"kind":"module","name":"aivi.ui.forms"} -->
-`aivi.ui.forms` provides lightweight building blocks for form-heavy GTK apps: typed field state with `Field A`, predictable `GtkInputChanged` / `GtkFocusOut` update helpers, and validation helpers built on top of `Validation (List E) A`.
+`aivi.ui.forms` gives GTK apps a small set of practical form helpers: typed field state with `Field A`, update helpers for common GTK input events, and validation helpers built on `Validation (List E) A`.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.ui.forms</div>
 
-`aivi.ui.forms` is designed to sit directly on top of the blessed [`gtkApp`](./app_architecture.md) architecture:
+This module is designed to fit naturally into [`gtkApp`](./app_architecture.md):
 
-- the **model** owns form state,
-- **`Msg`** constructors represent input, blur, and submit events,
-- **`update`** mutates field state with pure helpers,
-- **`view`** renders inline errors from pure validation results,
-- form submission still uses ordinary `Validation` composition and later command milestones can consume the typed validated result.
+- the **model** owns the editable values,
+- **`Msg`** constructors describe input, blur, and submit events,
+- **`update`** changes field state with pure helpers,
+- **`view`** renders inline feedback,
+- **commands** can consume the validated result when submission needs IO.
 
-It intentionally stays small so that future schema-first data work can reuse these helpers instead of competing with them.
+If you know ordinary web-form patterns, think of `Field A` as “the input value plus the small amount of UI metadata you usually track by hand”.
 
 ## Public API
 
@@ -45,19 +42,19 @@ maxLength : Int -> Text -> Validation (List Text) Text
 email : Text -> Validation (List Text) Text
 ```
 
-### `Field A`
+## `Field A`
 
-`Field A` is the recommended per-input model shape.
+`Field A` is the recommended model shape for one editable input.
 
-- `value` is the current editable value,
-- `touched` becomes `True` after blur,
+- `value` is the current draft value,
+- `touched` becomes `True` after the user leaves the field,
 - `dirty` becomes `True` after any input change.
 
-`aivi.ui.forms` does **not** prescribe one monolithic `Form` record type. Keep your overall screen model as an ordinary AIVI record and store `Field A` values only where you need editable state.
+The module deliberately stays small. Instead of forcing a single giant `Form` type, it lets you keep your overall screen model as a normal AIVI record and use `Field A` only where it helps.
 
-## GTK event flow
+## The usual GTK event flow
 
-The expected mapping from GTK signals into form state is:
+A typical field follows this mapping:
 
 | GTK event | `Msg` | Model helper |
 | --- | --- | --- |
@@ -65,34 +62,38 @@ The expected mapping from GTK signals into form state is:
 | `GtkFocusOut _ "fieldId"` | `FieldBlurred` | `touch field` |
 | `GtkClicked _ "submitBtn"` | `Submit` | `submitted: True` |
 
-That flow keeps forms inside the same event pipeline as every other GTK screen. There is no second subscription loop and no hidden mutable widget state.
+That keeps forms inside the same event pipeline as the rest of the app. There is no hidden widget-owned form state and no second validation loop to learn.
 
 ## Field-level validation
 
-Validators stay as ordinary pure functions returning `Validation (List E) A`.
+Validators stay as plain pure functions returning `Validation (List E) A`:
 
 ```aivi
 use aivi.validation
 use aivi.ui.forms
 
 displayName : Text -> Validation (List Text) Text
-displayName = allOf [required, minLength 2]
+displayName =
+  // Require a value and make sure it is long enough to feel intentional.
+  allOf [required, minLength 2]
 
 bio : Text -> Validation (List Text) Text
-bio = maxLength 120
+bio =
+  // Empty is fine here, but very long bios are not.
+  maxLength 120
 ```
 
-`minLength`, `maxLength`, and `email` treat empty input as valid so that `required` can be layered on separately without duplicating "required" and "too short"/"invalid email" messages for blank fields.
+`minLength`, `maxLength`, and `email` treat empty input as valid so that `required` can be layered on separately. That avoids duplicate messages such as “required” and “too short” for the same blank field.
 
-`visibleErrors submitted validator field` is the recommended rendering helper:
+`visibleErrors submitted validator field` is the helper most apps want for rendering:
 
-- before blur and before submit → `[]`
-- after blur → the field's current validation errors
-- after submit → all field errors, even for untouched fields
+- before blur and before submit → `[]`,
+- after blur → the field's current validation errors,
+- after submit → all field errors, even for untouched fields.
 
 ## Form-level validation
 
-Field-level checks control inline feedback. Form submission should still produce a typed domain value with the existing `Validation` applicative.
+Field-level checks are great for inline feedback. On submit, you usually want one typed domain value.
 
 ```aivi
 Contact = {
@@ -110,16 +111,20 @@ toContact : {
   name: Field Text
   email: Field Text
 } -> Validation (List Text) Contact
-toContact = model => ap (ap (Valid MkContact) (validate (allOf [required, minLength 2]) model.name)) (validate (allOf [required, email]) model.email)
+toContact = model =>
+  // Validate each field, then assemble a typed Contact value.
+  ap
+    (ap (Valid MkContact) (validate (allOf [required, minLength 2]) model.name))
+    (validate (allOf [required, email]) model.email)
 ```
 
-This is the intended layering:
+A good rule of thumb is:
 
 1. keep editable draft state in the GTK app model,
-2. render field errors from `visibleErrors`,
-3. produce the typed submit payload with `Validation`.
+2. show field errors with `visibleErrors`,
+3. build the final domain value with `Validation`.
 
-## Full blessed-architecture example
+## Full GTK app example
 
 ```aivi
 use aivi
@@ -163,9 +168,21 @@ emailErrors = model => visibleErrors model.submitted emailRule model.email
 view : Model -> GtkNode
 view = model => ~<gtk>
   <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
-    <GtkEntry id="nameInput" text={model.name.value} placeholderText="Name" onInput={ NameChanged } onFocusOut={ NameBlurred } />
+    <GtkEntry
+      id="nameInput"
+      text={model.name.value}
+      placeholderText="Name"
+      onInput={ NameChanged }
+      onFocusOut={ NameBlurred }
+    />
     <GtkLabel label={text.join ", " (nameErrors model)} />
-    <GtkEntry id="emailInput" text={model.email.value} placeholderText="Email" onInput={ EmailChanged } onFocusOut={ EmailBlurred } />
+    <GtkEntry
+      id="emailInput"
+      text={model.email.value}
+      placeholderText="Email"
+      onInput={ EmailChanged }
+      onFocusOut={ EmailBlurred }
+    />
     <GtkLabel label={text.join ", " (emailErrors model)} />
     <GtkButton id="submitBtn" label="Save" onClick={ Submit } />
   </GtkBox>
@@ -178,20 +195,23 @@ toMsg = event => event match
   | GtkInputChanged _ "emailInput" txt => Some (EmailChanged txt)
   | GtkFocusOut _ "emailInput"         => Some EmailBlurred
   | GtkClicked _ "submitBtn"           => Some Submit
-  | _                                  => None
+  | _                                   => None
 
 update : Msg -> Model -> Effect GtkError Model
 update = msg model => msg match
   | NameChanged txt =>
+      // Keep the latest draft value in the model.
       pure (model <| { name: setValue txt model.name })
   | NameBlurred =>
+      // Mark the field as touched so its errors can become visible.
       pure (model <| { name: touch model.name })
   | EmailChanged txt =>
       pure (model <| { email: setValue txt model.email })
   | EmailBlurred =>
       pure (model <| { email: touch model.email })
   | Submit =>
+      // Flip the submitted flag so every field shows its current errors.
       pure (model <| { submitted: True })
 ```
 
-This example intentionally stops before command execution. A later milestone may take the validated submit payload and run an effectful save command, but the form model itself already fits the blessed architecture today.
+This example stops before command execution on purpose. If submission should trigger IO, first produce the validated payload, then launch the command from `update`.

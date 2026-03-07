@@ -1,29 +1,35 @@
 # Reactive Dataflow
 
-> **Status: Phase 4 semantic model specified, `computed` runtime slice landed**  
-> This page defines the reactive semantics that sit on top of `gtkApp`: source snapshots, pure derived values, memoized computed signals, and invalidation rules. It does **not** create a second effect system or a hidden observer runtime.
-
 <!-- quick-info: {"kind":"topic","name":"reactive dataflow"} -->
 AIVI reactive dataflow is a pure memoized derivation graph over committed model snapshots. External change still enters through `Msg` via commands and subscriptions; reactive values only decide how current state is derived and reused.
 <!-- /quick-info -->
 
-Reactive dataflow is intentionally subordinate to the blessed GTK architecture:
+If you want the gentler introduction first, read [Reactive Signals](./reactive_signals.md) and [Native GTK & libadwaita Apps](./native_gtk_apps.md). This page explains the underlying rules.
 
-1. authoritative state still lives in `Model`,
-2. commands and subscriptions still own IO, timers, and background work,
-3. reactive values only derive reusable pure snapshots from that committed state,
-4. `view` and `subscriptions` read those snapshots synchronously during a turn.
+## Why this exists
+
+Many UI values are derived from other state:
+
+- filtered rows,
+- grouped sections,
+- labels such as “Showing 24 results”,
+- visibility flags,
+- expensive view-only projections.
+
+You can always compute those values inline, and often that is the best choice. Reactive dataflow becomes useful when a derived value deserves a name, is reused in more than one place, or is expensive enough that memoization matters.
+
+The important boundary is this: reactive dataflow stays on the **pure** side of the app. It does not fetch data, spawn work, or mutate state.
 
 ## Core vocabulary
 
 | Term | Meaning |
 | --- | --- |
-| **source value** | An authoritative snapshot that may change between app turns. In standard GTK apps, source values are ordinary fields inside the committed `Model` (for example query text, current rows, connection status, or the latest payload received from a subscription). |
-| **derived value** | Any pure projection over source values or other derived values. A plain helper function such as `filteredRows = state => ...` is already a derived value. |
-| **signal** | A named read-only derived value that can be reused by other reactive definitions or by the host. A signal has no side effects and no capability clauses. |
-| **computed value** | A signal with stable identity and memoization. The host tracks which source/signal revisions it read last time and reuses the cached result until one of those dependencies changes. |
+| **source value** | An authoritative snapshot that may change between app turns. In a standard GTK app, source values are ordinary fields inside the committed `Model`. |
+| **derived value** | Any pure projection over source values or other derived values. A helper like `filteredRows = state => ...` is already a derived value. |
+| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects and no capability clauses. |
+| **computed value** | A signal with stable identity and memoization. The host tracks what it read last time and reuses the cached result until one of those dependencies changes. |
 
-A plain derived helper is correct by default; use a computed signal only when the same pure work should be shared across reads or across app turns.
+A plain helper is correct by default. Promote it to `signal` or `computed` only when the extra structure helps.
 
 ## Purity and turn boundaries
 
@@ -32,17 +38,17 @@ Reactive values are evaluated **inside** an app turn, never in the background.
 - They may read only committed source snapshots and other signals.
 - They may not perform `Effect`, acquire `Resource`, spawn tasks, sleep, or emit `Msg`.
 - They may not mutate GTK widgets or the model directly.
-- They are synchronous: if a value might fail or wait for IO, model that uncertainty explicitly in the source snapshot with `Option`, `Result`, `LoadState`, or a similar domain type.
+- They are synchronous.
 
-This preserves AIVI's explicit-effects rule: change from the outside world still enters only through messages, commands, and subscriptions.
+If a value might fail or wait for IO, model that uncertainty explicitly in your source snapshot with `Option`, `Result`, `LoadState`, or a similar type.
 
 ## Derived values, signals, and computed values
 
-The spec distinguishes three levels of reuse:
+There are three common levels of reuse:
 
-1. **inline derived value** — local pure expression inside `view` or `subscriptions`;
-2. **named signal** — extracted pure helper shared by multiple readers;
-3. **computed signal** — named signal that the host memoizes.
+1. **inline derived value** — a local pure expression inside `view` or `subscriptions`,
+2. **named signal** — an extracted pure reader that improves reuse or readability,
+3. **computed signal** — a named reader whose result is memoized.
 
 Conceptual examples:
 
@@ -58,20 +64,19 @@ searchSummary = state =>
     else "Showing {length (visibleRows state)} rows"
 ```
 
-Both helpers above are derived values. They stay pure and may be recomputed whenever read.
+Both helpers above are already derived values. They stay pure and may be recomputed whenever read.
 
-When the same derivation is expensive or fan-out-heavy, promote it to a computed signal with stable identity:
+When the same derivation is expensive or widely reused, promote it:
 
 ```aivi
 visibleRows =
   computed "visibleRows" (state =>
+    // Cache the filtered list until one of the inputs changes.
     state.rows
       |> filter (matchesQuery state.query)
       |> filter (matchesTags state.selectedTags)
   )
 ```
-
-`computed "visibleRows" ...` is the shipped Phase 4 helper: the stable key names the memoized node in the reactive graph.
 
 The current public surface is:
 
@@ -83,16 +88,29 @@ readSignal : (model -> a) -> model -> a
 
 - `signal` marks a plain derived reader intended for reactive reuse,
 - `computed` marks a memoized reader with a stable key,
-- `readSignal` is the explicit non-GTK way to evaluate a signal value.
+- `readSignal` is the explicit non-GTK way to evaluate a signal.
 
-Inside GTK sigils hosted by `gtkApp`, attribute splices and `<each items={...}>` auto-read `signal`/`computed` helpers against the current committed model. Outside the sigil, signals remain explicit function values.
+Inside GTK sigils hosted by `gtkApp`, attribute splices and `<each items={...}>` auto-read `signal` and `computed` helpers against the current committed model. Outside the sigil, signals remain explicit function values.
+
+## How reactive dataflow fits the normal app loop
+
+Reactive dataflow does not bypass `Msg` or `update`. A normal flow still looks like this:
+
+1. a GTK signal, timer, command result, or subscription event produces a `Msg`,
+2. `update` stores the new authoritative snapshot in the model,
+3. `gtkApp` commits the new model and invalidates affected computed signals,
+4. `view` reads the signals it needs,
+5. dirty computed values recalculate lazily,
+6. `reconcileNode` patches the live widget tree.
+
+That means data from a watcher, search task, or network stream becomes reactive source data **only after `update` commits it to the model**.
 
 ## Memoization and invalidation
 
-Each committed source snapshot has a logical revision. A computed signal cache entry stores:
+Each committed source snapshot has a logical revision. A computed cache entry stores:
 
 - its stable key,
-- the set of source/signal dependencies it read during the last successful evaluation,
+- the source and signal dependencies it read during the last successful evaluation,
 - the dependency revisions seen during that evaluation,
 - the cached result.
 
@@ -101,74 +119,61 @@ Invalidation follows these rules:
 1. when `update` commits a new model, every changed source snapshot gets a new revision,
 2. every computed signal that depended on one of those changed revisions becomes **dirty**,
 3. dirtiness propagates transitively through dependent computed signals,
-4. dirty signals do **not** run immediately; they recompute lazily on the next synchronous read,
-5. the first read of a dirty computed signal in a turn reevaluates it against the current committed sources, records a fresh dependency set, and caches the new result,
-6. later reads of that computed signal in the same turn reuse that cache.
+4. dirty signals do **not** rerun immediately; they recompute on the next synchronous read,
+5. the first read of a dirty computed signal records a fresh dependency set and caches the new result,
+6. later reads in the same turn reuse that cache.
 
 Consequences:
 
-- repeated reads of the same computed signal within one `view` pass run the underlying pure computation at most once,
-- if a computed signal's dependency set is data-dependent, the host replaces the old dependency edges with the ones observed during the latest successful evaluation,
-- invalidation is about dependency correctness first; implementations may add equality-based short-circuiting later, but correctness must not rely on it.
+- repeated reads of the same computed signal within one render run the underlying pure computation at most once,
+- data-dependent dependency sets are recalculated from the latest successful evaluation,
+- correctness comes from dependency tracking first; memoization shortcuts must not change behavior.
 
-Reactive dependency cycles are invalid. Obvious self-recursion should be rejected statically; dynamic cycles must surface as a host error rather than loop forever silently.
-
-## Source-driven UI updates
-
-Reactive dataflow does not bypass `Msg` or `update`. External sources still update the UI through the blessed event loop:
-
-1. a GTK signal, timer, command result, or `Subscription.source` event produces a `Msg`,
-2. `update` stores the new authoritative snapshot in the model,
-3. `gtkApp` commits the new model and invalidates affected computed signals,
-4. `view` reads any required signals against that committed model,
-5. dirty computed signals recalculate lazily,
-6. `reconcileNode` patches the live widget tree.
-
-That means subscription-fed data such as search results, file-watch payloads, sensor readings, or database notifications become **source values only after `update` commits them**. No subscription or effect may write into a signal cache directly.
-
-In the current milestone, the host still reevaluates the `view` function after each committed update; signal-aware GTK bindings make those reads ergonomic and allow computed memoization to remove duplicate pure work inside a turn. Finer-grained widget-slot invalidation remains a follow-up optimization.
+Reactive dependency cycles are invalid. Obvious self-recursion should be rejected statically, and dynamic cycles must surface as a host error instead of looping forever.
 
 ## Boundaries: reactive values vs effects vs subscriptions
 
 | Concern | Reactive values | Effects / commands | Subscriptions |
 | --- | --- | --- | --- |
 | Owns authoritative state? | No. Reads committed source snapshots. | No. Reads captured values and produces later `Msg`. | No. Produces later `Msg` from long-lived resources. |
-| Can perform IO or use capabilities? | No. | Yes. Capabilities come from the enclosed `Effect` / `Resource`. | Yes. Acquisition and cleanup live in `Resource`; event forwarding lives in `Effect`. |
-| Runs when? | Synchronously when `view`, `subscriptions`, or command construction reads it. | After `update` commits the returned model. | While installed by `gtkApp`; diffed/cancelled by subscription key. |
-| May mutate model or widgets directly? | No. | No; must emit `Msg` and let `update` commit the next model. | No; must emit `Msg` and let `update` commit the next model. |
+| Can perform IO or use capabilities? | No. | Yes. | Yes. |
+| Runs when? | Synchronously when `view`, `subscriptions`, or command construction reads it. | After `update` commits the returned model. | While installed by `gtkApp`; diffed and cancelled by key. |
+| May mutate model or widgets directly? | No. | No; they must emit `Msg` and let `update` commit the next model. | No; they must emit `Msg` and let `update` commit the next model. |
 | Lifetime | Current turn plus memo cache for computed nodes. | One-shot or keyed background task lifetime. | Long-lived until removed, replaced, or host shutdown. |
 
-Two boundary rules are especially important:
+Two rules are especially useful in practice:
 
-- **effects capture snapshots, not live signals** — if a command needs derived data, evaluate the reactive value first and pass the resulting plain value into `run`;
-- **subscriptions describe producers, not observers** — a subscription may decide whether it should exist from the current model (or from computed values derived from it), but once running it can only influence the app by emitting `Msg`.
+- **effects capture snapshots, not live signals** — if a command needs derived data, evaluate the reactive value first and pass the plain result into the command,
+- **subscriptions describe producers, not observers** — a subscription may decide whether it should exist from the current model, but once running it can only influence the app by emitting `Msg`.
 
 ## Interaction with subscriptions
 
 `subscriptions : Model -> List (Subscription Msg)` may use derived or computed values to decide:
 
 - which subscriptions should be active,
-- which keys/configuration they should use,
+- which keys or configuration they should use,
 - which plain snapshot values should be captured when opening them.
 
-Those decisions are still recomputed only at commit boundaries. A reactive signal does **not** keep a subscription live by itself, and reading a signal does **not** open new resources.
+Those decisions are still recomputed only at commit boundaries. Reading a signal does not keep a subscription alive by itself and does not open resources.
 
 ## Interaction with forms and local view state
 
 Form helpers from [`aivi.ui.forms`](./forms.md) remain ordinary source values inside the model:
 
 - `Field.value`, `Field.touched`, and `Field.dirty` are source snapshots,
-- inline error lists and submit enablement are ideal derived/computed values,
-- asynchronous validation, debounced search, or remote suggestions remain commands/subscriptions.
+- inline error lists and submit enablement are ideal derived or computed values,
+- asynchronous validation, debounced search, or remote suggestions still belong to commands or subscriptions.
 
-So the reactive layer improves reuse of pure UI logic without introducing hidden mutable form state or a second validation loop.
+So the reactive layer improves reuse of pure UI logic without creating hidden mutable form state.
 
 ## Design constraints
 
-The Phase 4 reactive model intentionally keeps these guardrails:
+The reactive model deliberately keeps these guardrails:
 
 - no ambient observer graph outside `gtkApp`,
-- no hidden mutation from subscriptions/effects into computed caches,
+- no hidden mutation from subscriptions or effects into computed caches,
 - no second scheduler beyond the existing command/subscription host,
 - no separate capability model for reactive code,
-- no replacement for `Model -> View -> Msg -> Update`; reactive dataflow is an optimization and structuring layer inside that architecture.
+- no replacement for `Model -> View -> Msg -> Update`.
+
+In short: reactive dataflow is a tool for expressing and reusing pure derived state, not a second application architecture.

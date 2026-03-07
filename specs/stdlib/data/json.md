@@ -4,25 +4,53 @@
 The `aivi.json` module defines parsing strategies that connect raw data sources to typed structures via the `Validation` Applicative. 
 <!-- /quick-info -->
 
-<div class="import-badge">use aivi.json</div>
+`aivi.json` helps you move between raw JSON text and normal AIVI values. You can use it in a few different ways:
 
-## 1. Type-Driven Parsing 
+- parse JSON text into a generic `JsonValue`
+- decode JSON into a concrete AIVI type such as `User`
+- validate that an object has the shape you expect
+- migrate older JSON objects into a newer layout
 
-AIVI utilizes the type expected by the assignment to drive validation. Behind the scenes, `parse` takes a raw string (or dynamically parsed JSON Document) and checks it against an implicit AST dictionary of the expected shape.
+If you are new to `Validation`, the important idea is simple: decoding can return a valid value or a list of problems. That is especially useful for configuration files, API payloads, and imported data, because you can report several mistakes at once instead of stopping at the first one.
+
+## Import
+
+```aivi
+use aivi.json
+```
+
+## Decode JSON directly into the type you want
+
+A common pattern in AIVI is to state the type you want and let the JSON layer check the input against that type. This keeps the code close to the data model you actually care about.
 
 <<< ../../snippets/from_md/stdlib/data/json/type_driven_parsing.aivi{aivi}
 
-Because the output is `Validation (List DecodeError) A`, the caller never gets a malformed `User` structure that crashes deep within the logic phase. AIVI accumulates all structural errors instead of failing upon discovering the missing `age` key.
+In the example above, the result is `Validation (List DecodeError) User`. That means:
 
-## 2. Integrating Decode with External Sources
+- `Valid user` if the JSON matches the `User` type
+- `Invalid errors` if the JSON shape does not match
 
-A large part of the AIVI vision is that `Source` declarations automatically perform this validation when accessed via `<-` inside an `Effect` block. The implementation bridges `file.read` with `json.parse`.
+The benefit is practical: the caller does not receive a partially decoded `User`. Instead, it receives a clear list of problems, such as a missing field or a field with the wrong type.
+
+## Use JSON with external data sources
+
+JSON decoding is also useful at the boundary of your program, especially when reading files or other external sources. In that setup, the source provides raw JSON, and AIVI checks it before your main logic sees the value.
 
 <<< ../../snippets/from_md/stdlib/data/json/integrating_decode_with_external_sources.aivi{aivi}
 
-## 2.1 Schema values in source declarations
+This pattern is helpful when you want early failures with good error messages. Once the load succeeds, the rest of your code can work with a normal typed value instead of repeatedly checking raw JSON fields.
 
-Phase 3 source declarations can carry a checked `JsonSchema` value instead of relying only on the eventual `load` site.
+## Add custom decoders for values that need special rules
+
+Some values cannot be derived from structure alone. Enums, constrained strings, and custom tagged formats often need a small decoder that explains the allowed cases.
+
+<<< ../../snippets/from_md/stdlib/data/json/custom_decoders_for_enums_complex_types.aivi{aivi}
+
+A custom decoder is just a function that turns a `JsonValue` into either a valid result or a list of `DecodeError`s. That keeps special-case rules close to the type they belong to.
+
+## Validate against a schema when you need stricter contracts
+
+If you already have a JSON schema, you can attach it to a source declaration or validate a decoded object against it. This is useful when the JSON must match an external contract shared with other systems.
 
 ```aivi
 @static
@@ -33,26 +61,20 @@ usersSource : Source File (List User)
 usersSource =
   file.json {
     path: "./users.json",
+    // Reuse the checked schema when loading this source.
     schema: source.schema.json userSchema
   }
 ```
 
-When the schema artifact is compile-time stable, the compiler compares `JsonSchema` with the declaration's result type before runtime.
-At runtime, `load` still uses the existing `aivi.json` decode pipeline and surfaces accumulated `DecodeError` values if live data diverges from the contract.
+When the schema value is compile-time stable, the compiler can compare that schema with the source's result type before runtime. At runtime, `load` still uses the normal JSON decode pipeline and reports accumulated `DecodeError` values if the live data does not match.
 
-`validateSchema` and `migrateObject` remain the standard library hooks for explaining or repairing JSON shape changes; schema-first source migration guidance builds on those APIs rather than replacing them.
+Use `validateSchema` when you want a list of schema issues, and `migrateObject` when you need to reshape older JSON objects into the format your program expects today.
 
-## 3. Custom Decoders for Enums / Complex Types
-
-Developers can supply custom decoders for types that cannot be structurally derived automatically. A decoder is any function returning a `Validation (List DecodeError) A`.
-
-<<< ../../snippets/from_md/stdlib/data/json/custom_decoders_for_enums_complex_types.aivi{aivi}
-
-## Types
+## Core types
 
 ### `JsonValue`
 
-The sum type representing any JSON value.
+`JsonValue` represents any JSON value. It is the low-level format you work with before decoding into application-specific types.
 
 ```aivi
 JsonValue
@@ -67,7 +89,7 @@ JsonValue
 
 ### `JsonError`
 
-Returned when parsing or decoding fails.
+`JsonError` describes a parsing or decoding failure.
 
 ```aivi
 JsonError = { message: Text }
@@ -75,7 +97,7 @@ JsonError = { message: Text }
 
 ### `JsonSchema`
 
-Describes structural constraints used by `validateSchema`.
+`JsonSchema` describes basic structural rules checked by `validateSchema`.
 
 ```aivi
 JsonSchema = {
@@ -86,58 +108,58 @@ JsonSchema = {
 
 ### `SchemaIssue`
 
-A single validation failure produced by `validateSchema`.
+`SchemaIssue` describes one schema validation problem, including where it happened.
 
 ```aivi
 SchemaIssue = { path: Text, message: Text }
 ```
 
-## API Reference
+## API reference
 
-### Parsing and serialisation
+### Parse and serialise JSON
 
-| Function | Explanation |
-| --- | --- |
-| **decode** raw<br><code>Text -> Result JsonError JsonValue</code> | Parses a JSON text string into a `JsonValue`. Returns `Err` on malformed input. |
-| **jsonToText** value<br><code>JsonValue -> Text</code> | Converts a `JsonValue` back to a JSON text string. |
+| Function | Type | What it does |
+| --- | --- | --- |
+| `decode` | `Text -> Result JsonError JsonValue` | Parses raw JSON text into a `JsonValue`. Returns `Err` when the text is not valid JSON. |
+| `jsonToText` | `JsonValue -> Text` | Converts a `JsonValue` back into JSON text. |
 
-### Encoding
+### Build `JsonValue` values
 
-| Function | Explanation |
-| --- | --- |
-| **encodeText** t<br><code>Text -> JsonValue</code> | Wraps a `Text` value as `JsonString`. |
-| **encodeInt** n<br><code>Int -> JsonValue</code> | Wraps an `Int` as `JsonInt`. |
-| **encodeFloat** f<br><code>Float -> JsonValue</code> | Wraps a `Float` as `JsonFloat`. |
-| **encodeBool** b<br><code>Bool -> JsonValue</code> | Wraps a `Bool` as `JsonBool`. |
-| **encodeObject** entries<br><code>List (Text, JsonValue) -> JsonValue</code> | Builds a `JsonObject` from a key-value list. |
-| **encodeArray** items<br><code>List JsonValue -> JsonValue</code> | Builds a `JsonArray` from a list. |
+| Function | Type | What it does |
+| --- | --- | --- |
+| `encodeText` | `Text -> JsonValue` | Wraps `Text` as `JsonString`. |
+| `encodeInt` | `Int -> JsonValue` | Wraps an `Int` as `JsonInt`. |
+| `encodeFloat` | `Float -> JsonValue` | Wraps a `Float` as `JsonFloat`. |
+| `encodeBool` | `Bool -> JsonValue` | Wraps a `Bool` as `JsonBool`. |
+| `encodeObject` | `List (Text, JsonValue) -> JsonValue` | Builds a `JsonObject` from key-value pairs. |
+| `encodeArray` | `List JsonValue -> JsonValue` | Builds a `JsonArray` from a list of items. |
 
-### Decoding
+### Pull values back out of JSON
 
-| Function | Explanation |
-| --- | --- |
-| **decodeText** value<br><code>JsonValue -> Result JsonError Text</code> | Extracts `Text` from a `JsonString`, or returns `Err`. |
-| **decodeInt** value<br><code>JsonValue -> Result JsonError Int</code> | Extracts `Int` from a `JsonInt`, or returns `Err`. |
-| **decodeFloat** value<br><code>JsonValue -> Result JsonError Float</code> | Extracts `Float` from a `JsonFloat` or `JsonInt`, or returns `Err`. |
-| **decodeBool** value<br><code>JsonValue -> Result JsonError Bool</code> | Extracts `Bool` from a `JsonBool`, or returns `Err`. |
-| **decodeField** name obj<br><code>Text -> JsonValue -> Result JsonError JsonValue</code> | Looks up a field by name in a `JsonObject`. Returns `Err` when missing or when `obj` is not an object. |
-| **decodeList** decoder arr<br><code>(JsonValue -> Result JsonError A) -> JsonValue -> Result JsonError (List A)</code> | Decodes each element of a `JsonArray` using `decoder`. |
+| Function | Type | What it does |
+| --- | --- | --- |
+| `decodeText` | `JsonValue -> Result JsonError Text` | Extracts `Text` from a `JsonString`, or returns `Err` if the value has a different shape. |
+| `decodeInt` | `JsonValue -> Result JsonError Int` | Extracts `Int` from a `JsonInt`, or returns `Err`. |
+| `decodeFloat` | `JsonValue -> Result JsonError Float` | Extracts `Float` from a `JsonFloat` or `JsonInt`, or returns `Err`. |
+| `decodeBool` | `JsonValue -> Result JsonError Bool` | Extracts `Bool` from a `JsonBool`, or returns `Err`. |
+| `decodeField` | `Text -> JsonValue -> Result JsonError JsonValue` | Looks up a field by name in a `JsonObject`. Returns `Err` if the field is missing or the input is not an object. |
+| `decodeList` | `(JsonValue -> Result JsonError A) -> JsonValue -> Result JsonError (List A)` | Applies a decoder to each element of a `JsonArray`. |
 
-### Validation and migration
+### Validate and migrate objects
 
-| Function | Explanation |
-| --- | --- |
-| **requiredField** name obj<br><code>Text -> JsonValue -> Result JsonError JsonValue</code> | Alias for `decodeField`; signals intent that the field is required. |
-| **strictFields** allowed obj<br><code>List Text -> JsonValue -> Result JsonError JsonValue</code> | Fails if `obj` contains any key not in `allowed`. |
-| **validateSchema** schema obj<br><code>JsonSchema -> JsonValue -> List SchemaIssue</code> | Validates `obj` against `schema`, returning all issues found. An empty list means the object is valid. |
-| **migrateObject** patchFn value<br><code>(List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue -> JsonValue</code> | Applies `patchFn` to the entries of a `JsonObject`; passes non-objects through unchanged. Useful for schema migrations. |
+| Function | Type | What it does |
+| --- | --- | --- |
+| `requiredField` | `Text -> JsonValue -> Result JsonError JsonValue` | Alias for `decodeField` when you want the call site to clearly say that a field must exist. |
+| `strictFields` | `List Text -> JsonValue -> Result JsonError JsonValue` | Fails if an object contains keys outside the allowed list. |
+| `validateSchema` | `JsonSchema -> JsonValue -> List SchemaIssue` | Checks a `JsonValue` against a `JsonSchema` and returns every issue it finds. An empty list means the object passed validation. |
+| `migrateObject` | `(List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue -> JsonValue` | Applies a patch function to the entries of a `JsonObject`. Non-object values pass through unchanged. |
 
-### Error rendering
+### Render and log errors
 
-| Function | Explanation |
-| --- | --- |
-| **renderSchemaIssue** index issue<br><code>Int -> SchemaIssue -> Text</code> | Renders a single `SchemaIssue` as a numbered, ANSI-coloured line (e.g. `1. at $.user.age — expected Int`). |
-| **renderSchemaIssues** issues<br><code>List SchemaIssue -> Text</code> | Renders all `SchemaIssue`s as a compiler-style error block with ANSI colour. |
-| **renderJsonError** context err<br><code>Text -> JsonError -> Text</code> | Renders a `JsonError` at the given JSON path with ANSI colour. |
-| **logSchemaIssues** issues<br><code>List SchemaIssue -> Effect Text Unit</code> | Writes all `SchemaIssue`s to stderr using `renderSchemaIssues`. |
-| **logJsonError** context err<br><code>Text -> JsonError -> Effect Text Unit</code> | Writes a `JsonError` to stderr using `renderJsonError`. |
+| Function | Type | What it does |
+| --- | --- | --- |
+| `renderSchemaIssue` | `Int -> SchemaIssue -> Text` | Formats one `SchemaIssue` as a numbered, ANSI-coloured line. |
+| `renderSchemaIssues` | `List SchemaIssue -> Text` | Formats many schema issues as a compiler-style error block. |
+| `renderJsonError` | `Text -> JsonError -> Text` | Formats a `JsonError` at a given JSON path. |
+| `logSchemaIssues` | `List SchemaIssue -> Effect Text Unit` | Writes schema issues to stderr using `renderSchemaIssues`. |
+| `logJsonError` | `Text -> JsonError -> Effect Text Unit` | Writes a JSON error to stderr using `renderJsonError`. |

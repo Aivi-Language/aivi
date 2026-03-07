@@ -1,22 +1,24 @@
 # Geometry Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.geometry"} -->
-The `Geometry` domain creates shapes (`Sphere`, `Ray`, `Rect`) and checks if they touch.
-
-This is the "physical" side of math. While `Vector` handles movement, `Geometry` handles **stuff**.
-*   "Did I click the button?" (Point vs Rect)
-*   "Did the bullet hit the player?" (Ray vs Cylinder)
-*   "Is the tank inside the base?" (Point vs Polygon)
-
-Almost every visual application needs to know when two things collide. This domain gives you standard shapes and highly optimized algorithms to check for intersections instantly.
-
+The `Geometry` domain provides common shape types and spatial queries for tasks such as hit testing, collision checks, and distance measurements.
+Use it when your program needs to work with points, segments, rays, polygons, or volumes as meaningful shapes instead of loose numeric records.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.geometry<span class="domain-badge">domain</span></div>
+
+`aivi.geometry` pairs naturally with `aivi.vector`: vectors describe direction and movement, while geometry describes shapes and the relationships between them.
+
+## What it is for
+
+Reach for this domain when you need to answer questions such as:
+
+- “Did the pointer land inside this rectangle?”
+- “How far apart are these two points?”
+- “Does this ray hit the shape in front of it?”
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/math/geometry/overview.aivi{aivi}
-
 
 ## Features
 
@@ -26,9 +28,9 @@ Almost every visual application needs to know when two things collide. This doma
 
 <<< ../../snippets/from_md/stdlib/math/geometry/domain_definition.aivi{aivi}
 
-## Short Constructors
+## Convenience constructors
 
-Instead of verbose nested record literals, use convenience constructors:
+You can always build values with full record syntax, but the short constructors are easier to read in examples, tests, and small calculations.
 
 <<< ../../snippets/from_md/stdlib/math/geometry/short_constructors.aivi{aivi}
 
@@ -40,16 +42,18 @@ Instead of verbose nested record literals, use convenience constructors:
 | `segment2 x1 y1 x2 y2` | `Float -> ... -> Segment2` | `{ start: point2 x1 y1, end: point2 x2 y2 }` |
 | `ray3 ox oy oz dx dy dz` | `Float -> ... -> Ray` | `{ origin: point3 ox oy oz, dir: point3 dx dy dz }` |
 
-## Helper Functions
+## Common helpers
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
 | **distance** a b<br><code>Point2 -> Point2 -> Float</code> | Returns the Euclidean distance between two 2D points. |
 | **distance** a b<br><code>Point3 -> Point3 -> Float</code> | Returns the Euclidean distance between two 3D points. |
-| **midpoint** segment<br><code>Segment2 -> Point2</code> | Returns the center point of a line segment. |
-| **area** polygon<br><code>Polygon -> Float</code> | Returns the signed area (positive for counter-clockwise winding). |
-| **intersect** ray shape<br><code>Ray -> Shape -> Bool</code> | Tests whether a ray intersects a shape. |
+| **midpoint** segment<br><code>Segment2 -> Point2</code> | Returns the point halfway between a segment's start and end. |
+| **area** polygon<br><code>Polygon -> Float</code> | Returns the signed polygon area; counter-clockwise winding is positive. |
+| **intersect** ray shape<br><code>Ray -> Shape -> Bool</code> | Returns `True` when the ray intersects the given shape. |
 
 ## Usage Examples
+
+The examples below show the typical flow: create shape values, then call helpers such as `distance`, `area`, or `intersect` to ask geometric questions.
 
 <<< ../../snippets/from_md/stdlib/math/geometry/usage_examples.aivi{aivi}

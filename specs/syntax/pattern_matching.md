@@ -1,10 +1,12 @@
 # Pattern Matching
 
+Pattern matching lets you branch on the shape of a value instead of manually unpacking it with nested `if` checks. It is one of the most direct ways to work with `Option`, `Result`, lists, tuples, records, and custom constructors.
+
 ## 8.1 `match` branching
 
 <<< ../snippets/from_md/syntax/pattern_matching/choosing_the_match_subject_scrutinee_01.aivi{aivi}
 
-This is a concise way to do case analysis, similar to `match` in Rust or `case` in Haskell/Elixir.
+This is the main way to do case analysis, similar to `match` in Rust or `case` in Haskell and Elixir.
 
 ### Choosing the match subject (scrutinee)
 
@@ -14,11 +16,9 @@ This is a concise way to do case analysis, similar to `match` in Rust or `case` 
 
 <<< ../snippets/from_md/syntax/pattern_matching/choosing_the_match_subject_scrutinee_01.aivi{aivi}
 
-
-This rule composes with pipelines because `match` comes *after* the full expression:
+This rule composes nicely with pipelines because `match` comes *after* the full expression:
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
-
 
 In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
 
@@ -26,43 +26,44 @@ See also: [Functions and Pipes](functions.md) for `|>`.
 
 Compiler checks:
 
-- Non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present.
-- Unreachable arms (shadowed by earlier patterns) produce a warning.
-
+- non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present
+- unreachable arms (shadowed by earlier patterns) produce a warning
 
 ## 8.2 Multi-clause functions
 
-This is **not** a pipeline (`|>`). A leading `|` introduces an arm of a **unary** function that pattern-matches on its single (implicit) argument.
+A multi-clause function is a compact way to define a **unary** function by listing pattern arms directly.
 
-Multi-clause function definitions require an explicit type signature for the function name.
-With closed records, that signature provides the exact input shape used to type-check each arm.
-If no arm matches at runtime, evaluation fails with a non-exhaustive-match runtime error.
+The leading `|` tokens in this form introduce pattern branches; they are not pipelines.
+
+Multi-clause function definitions require an explicit type signature for the function name. With closed records, that signature provides the exact input shape used to type-check each arm.
+
+If execution reaches a call where no arm matches, evaluation fails with a non-exhaustive-match runtime error.
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
-Here is the same multi-clause shape without the `|>` pipeline operator, using rebinding plus record destructuring inside each arm:
-
-The leading `|` tokens below start multi-clause function arms (pattern branches); they are not pipelines.
+Here is the same idea without `|>`, using rebinding plus record destructuring inside each arm:
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_record_rebinding_01.aivi{aivi}
 
 <<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
 
-
 ## 8.3 Record Patterns
+
+Record patterns let you pick out only the fields you care about.
 
 <<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_01.aivi{aivi}
 
+This is often clearer than reading a field, storing it in a temporary name, and then matching on that temporary later.
 
 ## 8.4 Nested Patterns
 
-Record patterns support dotted keys, so nested patterns can often be written without extra braces.
+Record patterns support dotted keys, so nested data can often be matched without a tower of extra braces.
 
 <<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_02.aivi{aivi}
 
 ### Nested constructor patterns
 
-Constructor patterns may themselves take pattern arguments, so you can nest them:
+Constructor patterns may themselves take pattern arguments, so you can match several layers at once:
 
 <<< ../snippets/from_md/syntax/pattern_matching/destructuring_only_no_whole_value_binding.aivi{aivi}
 
@@ -72,47 +73,45 @@ For readability, nested constructor patterns can be written without parentheses 
 
 <<< ../snippets/from_md/syntax/pattern_matching/flattened_constructor_chain_patterns.aivi{aivi}
 
-This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
+This constructor-chain rule applies only in pattern context (after `|` and before `=>`).
 
-## 8.5 Record Pattern Syntax: `as`, `.{ }`, and `:`
+## 8.5 Record Pattern Syntax: `as` and `:`
 
-Record patterns use three distinct operators for different purposes:
+Record patterns use a few small pieces of syntax for distinct jobs.
 
-### `:`   Matching and renaming (instantiation)
+### `:` Matching and renaming (instantiation)
 
-`{ field: pat }` matches the field and binds the result of the nested pattern `pat`. This is the primary form for both matching and renaming:
+`{ field: pat }` matches the field and binds the result of the nested pattern `pat`. This is the main form for both matching and renaming.
 
 <<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
 
+### `as` Whole-value plus destructuring
 
-### `as`   Whole-value plus destructuring
-
-`field as { pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
+`field as { pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope.
 
 <<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_01.aivi{aivi}
-
 
 In nested position:
 
 <<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_02.aivi{aivi}
 
-
-Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
+Here `profile` is bound to the full value of the `profile` field, and `name` / `age` are also brought into scope from within that field.
 
 ### Summary
 
 | Syntax | `field` in scope? | `pat` contents in scope? | Use case |
 | :--- | :---: | :---: | :--- |
-| `{ field: pat }` | no (renamed) | yes | Match/rename a field |
-| `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
+| `{ field: pat }` | no (renamed) | yes | Match or rename a field |
+| `{ field as { pat } }` | yes | yes | Keep the whole field and destructure it |
 | `{ field }` | yes |   | Shorthand, binds field by name |
 
 ## 8.6 Guards
 
-Patterns can have guards using `when`:
+Patterns can have guards using `when`.
+
+Use a guard when the shape matches, but you still need an extra boolean condition.
 
 <<< ../snippets/from_md/syntax/pattern_matching/guards.aivi{aivi}
-
 
 ## 8.7 Usage Examples
 
@@ -138,7 +137,7 @@ Patterns can have guards using `when`:
 
 ## 8.8 Expressive Pattern Orchestration
 
-Pattern matching excels at simplifying complex conditional branches into readable declarations.
+Pattern matching turns complicated conditional logic into a set of named cases, which is often easier to read and easier to extend.
 
 <<< ../snippets/from_md/syntax/pattern_matching/expressive_pattern_orchestration.aivi{aivi}
 

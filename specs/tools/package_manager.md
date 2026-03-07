@@ -1,78 +1,72 @@
 # Package Manager & Packaging
 
-AIVI piggybacks on Rust's `cargo` ecosystem for packaging, dependency management,
-and publishing. An AIVI project is essentially a Rust project with additional
-metadata and build steps. AIVI sources live in `src/`, and compiled artefacts
-are written to `target/`.
+AIVI packages build on top of Rust's Cargo ecosystem. In practice, an AIVI package is a Cargo package with extra AIVI metadata and an AIVI-to-Rust build step.
 
-## Project Structure
+That means you get familiar Cargo behavior for fetching dependencies, packaging archives, and publishing crates, while `aivi` adds language-aware validation and scaffolding.
+
+## Project structure
 
 A typical AIVI project looks like this:
 
 ```text
 my-project/
 ├── aivi.toml        # AIVI-specific configuration
-├── Cargo.toml       # Rust/Cargo configuration
+├── Cargo.toml       # Cargo metadata plus AIVI package metadata
 ├── src/
-│   ├── main.aivi    # Entry point (for binaries)
-│   └── lib.aivi     # Entry point (for libraries)
+│   ├── main.aivi    # Entry point for applications
+│   └── lib.aivi     # Entry point for libraries
 ├── .gitignore
-└── target/          # Build artifacts
+└── target/          # Generated artefacts and build output
 ```
 
 ### `aivi.toml`
 
-The `aivi.toml` file configures the AIVI compiler settings for the project.
+`aivi.toml` describes the AIVI-facing part of the project.
 
 ```toml
 [project]
-kind = "bin"              # "bin" or "lib"
-entry = "main.aivi"       # Entry source file
-language_version = "0.1"  # Targeted AIVI version
+kind = "bin"                # "bin" for apps or "lib" for libraries.
+entry = "main.aivi"         # Entry source file inside src/.
+language_version = "0.1"    # Targeted AIVI language version.
 
 [build]
-gen_dir = "target/aivi-gen" # Where generated Rust code is placed
-rust_edition = "2024"       # Rust edition for generated code
-cargo_profile = "dev"       # Default cargo profile
-native_ui_target = "portable" # "portable" (default) or "gnome-gtk4-libadwaita"
+gen_dir = "target/aivi-gen" # Where generated Rust is written.
+rust_edition = "2024"       # Rust edition for generated code.
+cargo_profile = "dev"       # Default Cargo profile.
+native_ui_target = "portable" # Or "gnome-gtk4-libadwaita".
 ```
 
-### `Cargo.toml` Integration
+### `Cargo.toml`
 
-AIVI projects are valid Cargo packages. The `Cargo.toml` file contains standard
-Rust package metadata and dependencies.
+`Cargo.toml` stays a normal Cargo manifest. AIVI adds metadata under `[package.metadata.aivi]` so the CLI can validate language version and package kind.
 
-## Package Discovery
+## Discovering packages
 
-- `aivi search <query>` searches crates.io with the `aivi` keyword and only
-  presents AIVI packages.
+`aivi search <query>` searches crates.io and filters the results to packages that declare themselves as AIVI packages.
 
-## Installing Dependencies
+## Installing dependencies
 
-- `aivi install <spec>` edits `[dependencies]` in the root `Cargo.toml`, then
-  resolves the dependency with Cargo.
-- Installs are **strict by default**:
-  - the dependency must declare `[package.metadata.aivi]` with at least
-    `language_version` and `kind`
-  - dependencies must be `kind = "lib"` (applications are not installable)
-  - if the project declares `[project].language_version` in `aivi.toml`, the
-    dependency's `language_version` must match exactly
-- `--no-fetch` edits `Cargo.toml` but skips `cargo fetch` (useful for offline
-  workflows; validation happens via `cargo metadata`).
+`aivi install <spec>` edits the root `Cargo.toml` and then asks Cargo to resolve the dependency.
 
-### Dependency Specs
+Installs are strict by default:
 
-Supported `<spec>` formats:
+- the dependency must declare `[package.metadata.aivi]`
+- it must include `language_version` and `kind`
+- it must be `kind = "lib"` because applications are not installable as libraries
+- if your project declares `[project].language_version` in `aivi.toml`, the dependency must match it exactly
 
-- `name` (registry; defaults to `*`)
-- `name@version` (registry; also supports `name@latest`)
-- `git+https://host/repo(.git)#rev=<sha>` (git)
-- `path:../local-crate` (path; the package name is inferred from the dependency's
-  `Cargo.toml` if available)
+`--no-fetch` updates `Cargo.toml` but skips `cargo fetch`, which is useful in offline or controlled environments.
 
-## AIVI Package Metadata
+### Supported dependency specs
 
-An AIVI package is a Rust crate that declares:
+- `name` — latest registry version
+- `name@version` — specific registry version (also supports `name@latest`)
+- `git+https://host/repo(.git)#rev=<sha>` — Git dependency
+- `path:../local-crate` — local path dependency
+
+## AIVI package metadata
+
+Every AIVI package is a Rust crate that declares metadata like this:
 
 ```toml
 [package.metadata.aivi]
@@ -80,7 +74,7 @@ language_version = "0.1"
 kind = "lib"
 ```
 
-For publishable packages, the `entry` field is also required:
+Publishable packages also need an entry file:
 
 ```toml
 [package.metadata.aivi]
@@ -89,36 +83,24 @@ kind = "bin"
 entry = "src/main.aivi"
 ```
 
-## Packaging & Publishing
+## Packaging and publishing
 
-AIVI v0.1 intentionally delegates packaging and publishing to Cargo, but adds a
-small amount of preflight validation.
+AIVI delegates the actual archive creation and upload steps to Cargo, but adds preflight validation first.
 
-- `aivi package` runs `cargo package` after verifying that:
-  - `aivi.toml` exists and parses
-  - `Cargo.toml` contains `[package.metadata.aivi]` consistent with `aivi.toml`
-- `aivi publish` runs `cargo publish` with the same preflight validation.
-  - `--dry-run` forwards to `cargo publish --dry-run`
-  - `--allow-dirty` and `--no-verify` forward to Cargo
+- `aivi package` runs `cargo package` after checking that `aivi.toml` exists and that `[package.metadata.aivi]` matches it.
+- `aivi publish` runs `cargo publish` with the same checks.
+- `--dry-run`, `--allow-dirty`, and `--no-verify` are forwarded to Cargo where applicable.
 
-## Guide: Creating and Publishing an AIVI Package
+## Guide: creating and publishing a library
 
-### 1. Initialize a new library
+### 1. Create the package
 
 ```sh
-mkdir my-aivi-lib && cd my-aivi-lib
-aivi init --lib
+aivi init my-aivi-lib --lib  # Scaffold a library package.
+cd my-aivi-lib
 ```
 
-This creates:
-
-```
-my-aivi-lib/
-  aivi.toml          # project manifest
-  Cargo.toml         # auto-generated, includes [package.metadata.aivi]
-  src/
-    lib.aivi          # library entry point
-```
+This creates a project with `aivi.toml`, `Cargo.toml`, and `src/lib.aivi`.
 
 ### 2. Write your library
 
@@ -126,10 +108,9 @@ Edit `src/lib.aivi`:
 
 <<< ../snippets/from_md/runtime/package_manager/write_your_library.aivi{aivi}
 
+### 3. Check package metadata
 
-### 3. Configure metadata
-
-Ensure `Cargo.toml` has:
+Make sure `Cargo.toml` includes the package metadata AIVI expects:
 
 ```toml
 [package]
@@ -142,46 +123,44 @@ description = "A small AIVI utility library."
 [package.metadata.aivi]
 language_version = "0.1"
 kind = "lib"
+entry = "src/lib.aivi"
 ```
 
 ### 4. Test locally
 
 ```sh
-aivi test
+aivi test src  # Run any @test definitions before packaging.
 ```
 
-### 5. Publish
+### 5. Package or publish
 
 ```sh
-aivi publish --dry-run    # verify everything first
-aivi publish              # publish to crates.io
+aivi publish --dry-run  # Verify everything first.
+aivi publish            # Publish to crates.io.
 ```
 
-## Guide: Using an AIVI Package
+## Guide: using a package in another project
 
-### 1. Install a dependency
+### 1. Install the dependency
 
 ```sh
-aivi install my-aivi-lib@0.1.0
+aivi install my-aivi-lib@0.1.0  # Add the dependency and fetch it.
 ```
 
-This adds the dependency to `Cargo.toml` and fetches it.
-
-### 2. Import in your code
+### 2. Import it in your code
 
 <<< ../snippets/from_md/runtime/package_manager/import_in_your_code.aivi{aivi}
 
-
-### 3. Use a Git dependency
-
-```sh
-aivi install "git+https://github.com/user/my-aivi-lib.git#rev=abc123"
-```
-
-### 4. Use a local path dependency
+### 3. Use a Git dependency when needed
 
 ```sh
-aivi install "path:../my-aivi-lib"
+aivi install "git+https://github.com/user/my-aivi-lib.git#rev=abc123"  # Pin a specific Git revision.
 ```
 
-This is useful during development when the package is not yet published.
+### 4. Use a local path during development
+
+```sh
+aivi install "path:../my-aivi-lib"  # Work against a local checkout.
+```
+
+Path dependencies are especially useful before a package is published.

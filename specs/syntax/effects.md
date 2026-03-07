@@ -1,31 +1,35 @@
 # Effects
 
+`Effect E A` is how AIVI represents work that can do something observable, fail with a typed error, or be cancelled. Use it for operations like file I/O, network calls, UI actions, and other side effects.
+
 ## 9.1 The `Effect E A` Type
 
-Effectful operations in AIVI are modeled using the `Effect E A` type, where:
-- `E` is the **error domain** (describing what could go wrong).
-- `A` is the **successful return value**.
+Effectful operations in AIVI use the type `Effect E A`, where:
+
+- `E` is the **error domain**, describing what could go wrong
+- `A` is the successful return value
 
 ### Semantics
-- **Atomic Progress**: Effects are either successfully completed, failed with `E`, or **cancelled**.
-- **Cancellation**: Cancellation is an asynchronous signal that stops the execution of an effect. When cancelled, the effect is guaranteed to run all registered cleanup (see [Resources](resources.md)).
-- **Transparent Errors**: Errors in `E` are part of the type signature, forcing explicit handling or propagation.
+
+- **Atomic progress:** an effect either completes successfully, fails with `E`, or is cancelled
+- **Cancellation:** cancellation is an asynchronous signal that stops execution, but registered cleanup still runs; see [Resources](resources.md)
+- **Transparent errors:** errors in `E` are part of the type signature, so callers can see what must be handled or propagated
 
 ### Core operations (surface names)
 
-Effect sequencing is expressed via `do Effect { ... }` blocks, but the underlying interface is:
+Effect sequencing is usually written with `do Effect { ... }`, but the underlying interface is:
 
-- `pure : A -> Effect E A` (return a value)
-- `bind : Effect E A -> (A -> Effect E B) -> Effect E B` (sequence)
-- `fail : E -> Effect E A` (abort with an error)
+- `pure : A -> Effect E A` — lift a plain value into an effect
+- `bind : Effect E A -> (A -> Effect E B) -> Effect E B` — sequence one effect after another
+- `fail : E -> Effect E A` — stop with an error value
 
-For *handling* an effect error as a value, the standard library provides:
+For handling an effect error as data, the standard library provides:
 
 - `attempt : Effect E A -> Effect F (Result E A)`
 
-`attempt` runs the inner effect and captures its outcome (success or failure with `E`) as a `Result E A`. The outer effect uses a *different* error type `F`, since the original error `E` has been caught and is now represented as data inside the `Result`. If `F` is unconstrained, the outer effect cannot fail (equivalent to `Effect Never (Result E A)` in practice).
+`attempt` runs the inner effect and captures success or failure as a `Result E A`. The outer effect uses a different error type `F`, because the original `E` has been converted into data.
 
-### Capability requirements (Phase 1 surface)
+### Capability requirements
 
 Capabilities refine `Effect E A` without turning it into a different effect type. Write a minimum-authority clause after the effect type:
 
@@ -36,7 +40,9 @@ loadConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.
 - the capability clause is checked statically and is **not** part of `E`
 - callers may run an effect in any larger capability scope
 - lexical narrowing uses `with { ... } in expr`
-- handler / interpreter binding uses the same lexical scope form via `with { capability = handler } in expr`; see [Capabilities](capabilities.md) and [Effect Handlers](effect_handlers.md)
+- handler or interpreter binding uses the same scope form via `with { capability = handler } in expr`
+
+See [Capabilities](capabilities.md) and [Effect Handlers](effect_handlers.md) for the shared rules.
 
 ### Examples (core operations)
 
@@ -44,7 +50,7 @@ loadConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.
 
 <<< ../snippets/from_md/syntax/effects/examples_core_operations_01.aivi{aivi}
 
-`bind` sequences effects explicitly (the `do Effect { ... }` block desugars to `bind`):
+`bind` sequences effects explicitly; `do Effect { ... }` is the readable surface form of the same idea:
 
 <<< ../snippets/from_md/syntax/effects/examples_core_operations_02.aivi{aivi}
 
@@ -52,7 +58,7 @@ loadConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.
 
 <<< ../snippets/from_md/syntax/effects/examples_core_operations_03.aivi{aivi}
 
-`attempt` runs an effect and captures success/failure as a `Result`:
+`attempt` runs an effect and captures success or failure as a `Result`:
 
 <<< ../snippets/from_md/syntax/effects/examples_core_operations_04.aivi{aivi}
 
@@ -62,15 +68,15 @@ The standard library function `load` lifts a typed `Source` (see [External Sourc
 
 <<< ../snippets/from_md/syntax/effects/load.aivi{aivi}
 
-The capability required by `load` is determined by the source kind:
+The capability required by `load` depends on the source kind:
 
-- file / image sources → `file.read`
+- file or image sources → `file.read`
 - REST / HTTP / HTTPS sources → `network.http`
 - environment sources → `process.env.read`
 - database-backed source loads → `db.query`
 - `@static` embedded sources → no runtime capability after compilation
 
-When the source value carries Phase 3 composition metadata, `load` executes the source's canonical pipeline (cache lookup, acquisition policy, decode, transform, validate, provenance/observability) before returning the final value.
+When a source value carries composition metadata, `load` runs the source's canonical pipeline before returning the final value.
 
 See [External Sources](external_sources.md) and [Capabilities](capabilities.md) for the full mapping.
 
@@ -78,42 +84,47 @@ See [External Sources](external_sources.md) and [Capabilities](capabilities.md) 
 
 <<< ../snippets/from_md/syntax/effects/do_effect_blocks.aivi{aivi}
 
-This is syntax sugar for monadic binding (see Desugaring section). All effectful operations within these blocks are automatically sequenced.
+A `do Effect { ... }` block lets you write effectful code in the same order the steps happen.
+
+```aivi
+do Effect {
+  user <- loadUser id   // run the effect and bind its result
+  pure user.name        // wrap the final plain value back into Effect
+}
+```
 
 Inside a `do Effect { ... }` block:
 
-- `x <- eff` binds the result of an `Effect` to `x`
-- `x = e` is a pure local binding (does not run effects)
-- `x <- res` acquires a `Resource` (see [Resources](resources.md))
-- Branching is done with ordinary expressions (`if`, `match`); `->` guards are generator-only.
-- If a final expression is present, it must be an `Effect` (commonly `pure value` or an effect call like `print "..."`).
-- If there is no final expression, the block defaults to `pure Unit`.
+- `x <- eff` runs an `Effect` and binds its result to `x`
+- `x = e` is a pure local binding and does not run effects
+- `x <- res` acquires a `Resource`; see [Resources](resources.md)
+- branching uses ordinary expressions such as `if` and `match`
+- if a final expression is present, it must itself be an `Effect`
+- if there is no final expression, the block defaults to `pure Unit`
 
 Compiler checks:
 
-- `x = e` requires `e` to be a pure expression (not `Effect` and not `Resource`).
-  If you want to run an effect, use `<-`:
-  `use '<-' to run effects; '=' binds pure values`.
-- Expression statements in statement position (not the final expression) must be `Effect E Unit`.
-  If an effect returns a non-`Unit` value, you must bind it explicitly (even if you bind to `_`).
+- `x = e` requires `e` to be a pure expression, not an `Effect` and not a `Resource`
+- expression statements in statement position, rather than the final position, must be `Effect E Unit`
+- if an effect returns a non-`Unit` value and you want to ignore it, bind it explicitly, even if the binding name is `_`
 
 ### Fallback with `or` (fallback-only)
 
-`or` is **not** a general matcher. It is fallback-only sugar for common "default on error" patterns.
+`or` is focused sugar for common “default on error” patterns. It is not a second general-purpose `match` syntax.
 
 Two forms exist:
 
-1) **Effect fallback** (inside `do Effect {}` and only after `<-`):
+1. **Effect fallback** inside `do Effect { ... }` and only after `<-`:
 
 <<< ../snippets/from_md/syntax/effects/fallback_with_or_fallback_only_01.aivi{aivi}
 
-This runs the effect; if it fails, it produces the fallback value instead.
+This runs the effect and, if it fails, produces the fallback value instead.
 
-You can also match on the error value using arms (patterns match the **error**, not `Err`):
+You can also match on the error value using arms. In this form, patterns match the **error**, not `Err`:
 
 <<< ../snippets/from_md/syntax/effects/fallback_with_or_fallback_only_02.aivi{aivi}
 
-2) **Result fallback** (expression form):
+2. **Result fallback** as an expression form:
 
 <<< ../snippets/from_md/syntax/effects/fallback_with_or_fallback_only_03.aivi{aivi}
 
@@ -121,13 +132,11 @@ Or with explicit `Err ...` arms:
 
 <<< ../snippets/from_md/syntax/effects/fallback_with_or_fallback_only_04.aivi{aivi}
 
-Restrictions (v0.1):
+Restrictions:
 
-- Effect fallback arms match the error value (so write `NotFound m`, not `Err NotFound m`).
-- In `do Effect { ... }`, `x <- eff or | Err ... => ...` is parsed as a **Result** fallback (for ergonomics).
-  If you mean effect-fallback, write error patterns directly (`NotFound ...`) rather than `Err ...`.
-- Result fallback arms must match only `Err ...` at the top level (no `Ok ...`, no `_`).
-  Include a final `Err _` catch-all arm.
+- effect fallback arms match the error value, so write `NotFound msg`, not `Err NotFound msg`
+- in `do Effect { ... }`, `x <- eff or | Err ... => ...` is parsed as a **Result** fallback
+- result fallback arms must match only `Err ...` at the top level; include a final `Err _` catch-all arm
 
 ### `if ... else Unit` as a statement
 
@@ -135,45 +144,43 @@ In `do Effect { ... }`, this common pattern is allowed without `_ <-`:
 
 <<< ../snippets/from_md/syntax/effects/if_else_unit_as_a_statement.aivi{aivi}
 
-Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches have an `Effect` type.
+Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches still have an effect type.
 
 ### Concise vs explicit `do Effect` style
 
-These are equivalent:
+These forms are equivalent:
 
 <<< ../snippets/from_md/syntax/effects/concise_vs_explicit_do_effect_style_01.aivi{aivi}
 
 <<< ../snippets/from_md/syntax/effects/concise_vs_explicit_do_effect_style_02.aivi{aivi}
 
+Choose the version that makes sequencing and error flow easiest to read.
+
 ### `if` with nested blocks inside `do Effect`
 
-`if` is an expression, so you can branch inside a `do Effect { … }` block. When a branch needs multiple steps, use a nested `do Effect { … }` block (since `{ … }` is reserved for record-shaped forms).
-
-This pattern is common when a branch needs multiple effectful steps:
+`if` is an expression, so you can branch inside a `do Effect { ... }` block. When a branch needs multiple effectful steps, use a nested `do Effect { ... }` block, because `{ ... }` on its own is reserved for record-shaped forms.
 
 <<< ../snippets/from_md/syntax/effects/if_with_nested_blocks_inside_do_effect.aivi{aivi}
 
-Desugaring-wise, the `if … then … else …` appears inside the continuation of a `bind`, and each branch desugars to its own sequence of `bind` calls.
+Desugaring-wise, the `if ... then ... else ...` sits inside the continuation of a `bind`, and each branch desugars to its own sequence of `bind` calls.
 
-### Nested `do Effect { … }` expressions inside `if`
+### Nested `do Effect { ... }` expressions inside `if`
 
-An explicit `do Effect { … }` is itself an expression of type `Effect E A`. If you write `do Effect { … }` in an `if` branch, you usually want to run (bind) the chosen effect:
+An explicit `do Effect { ... }` is itself an expression of type `Effect E A`. If you write one in an `if` branch, you usually want to run the chosen effect by binding it:
 
 <<< ../snippets/from_md/syntax/effects/nested_do_effect_expressions_inside_if.aivi{aivi}
 
-If you instead write `if … then do Effect { … } else do Effect { … }` *without* binding it, the result of the `if` is an `Effect …` value, not a sequence of steps in the surrounding block (unless it is the final expression of that surrounding `do Effect { … }`).
-
+If you instead write `if ... then do Effect { ... } else do Effect { ... }` without binding it, the result of the `if` is an `Effect ...` value, not a sequence of steps in the surrounding block, unless it is the final expression of that surrounding `do Effect { ... }`.
 
 ## 9.3 Effects and patching
 
 <<< ../snippets/from_md/syntax/effects/effects_and_patching.aivi{aivi}
 
-Patches are pure values. Apply them where you have the record value available (often inside a `do Effect` block after decoding/loading).
-
+Patches are pure values. Compute or load the record first, then apply the patch where the record value is available.
 
 ## 9.4 Comparison and Translation
 
-The `do Effect` block is the primary way to sequence impure operations. It translates directly to monadic binds.
+`do Effect` is the main surface syntax for sequencing impure operations. It translates directly to monadic binds.
 
 Example translations:
 
@@ -191,7 +198,7 @@ Example translation:
 
 ## 9.5 Expressive Effect Composition
 
-Effect blocks can be combined with pipelines and pattern matching to create very readable business logic.
+Effect blocks combine well with pipelines and pattern matching, which makes everyday business logic read as a sequence of named steps rather than as deeply nested callbacks.
 
 ### Concatenating effectful operations
 
@@ -203,34 +210,32 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 
 ## 9.6 Tail-recursive loops
 
-`loop`/`recurse` can also be used inside `do Effect { ... }` blocks for stateful iteration without mutation or explicit recursion. This is the primary way to implement algorithms that need repeated effectful steps (e.g. graph traversal, iterative convergence).
+`loop` and `recurse` can also be used inside `do Effect { ... }` blocks for stateful iteration without mutation or explicit named recursion. This is the idiomatic way to express repeated effectful steps such as graph traversal or iterative refinement.
 
 ### Syntax
 
 <<< ../snippets/from_md/syntax/effects/syntax.aivi{aivi}
 
-
 ### Example: Dijkstra's shortest paths
 
 <<< ../snippets/from_md/syntax/effects/example_dijkstra_s_shortest_paths.aivi{aivi}
 
-
 ### Desugaring
 
-Inside effect blocks, `loop` desugars to a local recursive function at parse time (same as in generators   see [Generators § 7.6](generators.md#76-tail-recursive-loops)):
+Inside effect blocks, `loop` desugars to a local recursive function at parse time, using the same basic idea as in [Generators § 7.6](generators.md#76-tail-recursive-loops):
 
-```
+```text
 loop pat = init => { body }
 ```
 
 becomes:
 
-```
-__loopN = pat => body'   // body' has `recurse x` replaced with `__loopN x`
+```text
+__loopN = pat => body'   // `recurse x` becomes `__loopN x`
 __loopN init
 ```
 
-The loop body's `{ ... }` block is promoted to the parent effect-block kind, so `<-` binds, `when`/`unless` guards, and `recurse` work correctly inside.
+The loop body's `{ ... }` block is promoted to the parent effect-block kind, so `<-` binds, `when` / `unless`, and `recurse` work correctly inside.
 
 ## 9.7 Conditional effects
 
@@ -240,24 +245,21 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 
 <<< ../snippets/from_md/syntax/effects/when.aivi{aivi}
 
-
 ### `unless`
 
 `unless cond <- eff` runs `eff` only if `cond` is false:
 
 <<< ../snippets/from_md/syntax/effects/unless.aivi{aivi}
 
-
 ### `given`
 
-`given cond or failExpr` asserts a precondition. If `cond` is false, `failExpr` is evaluated (typically a `fail` call):
+`given cond or failExpr` asserts a precondition. If `cond` is false, `failExpr` is evaluated, typically as a `fail ...` call:
 
 <<< ../snippets/from_md/syntax/effects/given.aivi{aivi}
 
-
 ## 9.8 Transition event wiring (`on`)
 
-`on Transition => handler` registers a handler for a machine state transition event inside a `do Effect { ... }` block. This is the mechanism for wiring [Machine Runtime Semantics](machines_runtime.md) to effectful handlers.
+`on Transition => handler` registers a handler for a machine state transition event inside a `do Effect { ... }` block.
 
 ### Syntax
 
@@ -265,8 +267,8 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 on PostfixExpr => Expr
 ```
 
-- **`PostfixExpr`** evaluates to a machine transition function value.
-- **`Expr`** is the handler effect to run when the transition fires.
+- **`PostfixExpr`** evaluates to a machine transition function value
+- **`Expr`** is the handler effect to run when the transition fires
 
 ### Ordering
 
@@ -276,8 +278,7 @@ For machine transitions, runtime order is:
 2. machine state update
 3. registered `on` handlers for that transition
 
-If a handler fails, the transition remains applied.
-See [Machine Runtime Semantics](machines_runtime.md) for full runtime details.
+If a handler fails, the transition remains applied. See [Machine Runtime Semantics](machines_runtime.md) for the full runtime model.
 
 ### Example (minimal)
 
@@ -289,4 +290,4 @@ on Click => pure Unit
 
 <<< ../snippets/from_md/syntax/effects/example_persistent_todo_list.aivi{aivi}
 
-`on` is only allowed inside `do Effect { ... }` blocks. Using it in a generic `do M { ... }` block is a type error.
+`on` is allowed only inside `do Effect { ... }` blocks. Using it in a generic `do M { ... }` block is a type error.

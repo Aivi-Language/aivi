@@ -1,61 +1,80 @@
 # Modules
 
+Modules are how AIVI organizes code, controls visibility, and groups related definitions. If you are used to files plus imports in Rust, TypeScript, or Python, the role is familiar even though the syntax is more explicit.
+
 ## 10.1 Module Definitions
 
-Modules are the primary unit of code organization, encapsulation, and reuse in AIVI. They define a closed scope and explicitly export symbols for public use.
+A module declaration names the file's module and starts the module body.
 
-Modules can be written in a **flat** form that keeps file indentation shallow. The module body runs until end-of-file:
+Modules use a flat form, so most files stay readable without an extra indentation level.
 
 <<< ../snippets/from_md/syntax/modules/module_definitions.aivi{aivi}
 
-In v0.1, there is exactly one module per file. The `module` declaration must be the first non-empty item in the file (after any module decorators), and its body extends to EOF.
+Practical rules:
 
+- there is exactly one module per file
+- the `module` declaration is the first non-empty item in the file, after any module decorators
+- the module body continues to end-of-file
 
 ## 10.2 Module Pathing (Dot Separator)
 
-Modules are identified by hierarchical paths using common **dot notation**. This separates logical namespaces. By convention:
-- `aivi.…`   Standard library
-- `vendor.name.…`   Foreign libraries
-- `user.app.…`   Application-specific logic
+Module names use dot-separated paths. The path is the module's logical namespace, not just a filename.
 
-Module resolution is static and determined at compile time based on the project manifest.
+Common conventions:
 
+- `aivi.…` for the standard library
+- `vendor.name.…` for third-party libraries
+- `user.app.…` for application code
+
+Module resolution is static and is determined by the project manifest and tooling.
 
 ## 10.3 Importing and Scope
 
-Use the `use` keyword to bring symbols from another module into the current scope.
+Use `use` to bring exported names from another module into scope.
 
 ### Basic Import
+
+This is the direct form: import a module so you can use its exported names.
 
 <<< ../snippets/from_md/syntax/modules/basic_import.aivi{aivi}
 
 ### Selective / Selective Hiding
 
+Use selective imports when you want to make dependencies obvious, or `hiding` when you want almost everything except a few names.
+
 <<< ../snippets/from_md/syntax/modules/selective_selective_hiding.aivi{aivi}
 
 ### Renaming / Aliasing
+
+Aliasing helps when a module name is long or when two imports would otherwise collide.
+
+```aivi
+use company.project.analytics as Analytics // shorter name inside this file
+```
 
 <<< ../snippets/from_md/syntax/modules/renaming_aliasing.aivi{aivi}
 
 Compiler checks:
 
-- Importing a missing module or symbol is a compile-time error.
-- Unused imports produce a warning (suppressed if importing solely for a domain side-effect in v0.1).
-
+- importing a missing module or symbol is a compile-time error
+- unused imports produce a warning, unless the import is needed only for a domain side effect
 
 ## 10.4 Domain Exports
 
-Modules are the primary vehicle for delivering **Domains**. Exporting a domain automatically exports its carrier type, delta types, and operators.
+Modules are also the unit used to publish **domains**. If you are new to domains, think of them as packages of type-directed operator and literal behavior.
+
+Exporting a domain makes its carrier type, delta types, and operators available to importers.
 
 <<< ../snippets/from_md/syntax/modules/domain_exports.aivi{aivi}
 
-When another module imports the domain (for example: `use geo.vector (domain Vector)`), it gains the ability to use domain-resolved operators like `+` on `Vec2` records.
+A consuming module must import the domain explicitly when it wants the domain-resolved operators:
 
-In v0.1, importing a module does not automatically activate its domains; domains must be imported explicitly via `use ... (domain Name)` (or by importing specific operator/template bindings as values).
+- `use geo.vector (domain Vector)` imports the domain behavior
+- ordinary `use geo.vector` does not automatically activate that domain's operators
 
 ## 10.4.1 Inline export declarations
 
-`export` can also prefix declarations directly to reduce noise:
+You can put `export` directly in front of a declaration when the file mostly defines public items.
 
 ```aivi
 module app.flow
@@ -72,36 +91,44 @@ export machine Workflow = {
 }
 ```
 
-The original export-list form remains valid (`export run, Workflow`, `export domain Status`) and is still useful for re-export modules.
-
+The export-list form is still useful for facade modules and re-exports.
 
 ## 10.5 File-Scoped Modules (No Nesting)
 
-In v0.1, modules are **file-scoped**. There is no `{ ... }` module body syntax and no nested module declarations.
+Modules are file-scoped. There is no nested `module` syntax inside another module body.
 
-Use dot notation to define hierarchy: `module my.app.api` lives in a file such as `my/app/api.aivi` (project layout is determined by the manifest and tooling).
+Use a dotted path to express hierarchy instead:
+
+- `module my.app.api` lives in a file such as `my/app/api.aivi`
+- related modules form a tree through their paths, not by nesting declarations
 
 ### Module Re-exports
-A module can aggregate other modules, acting as a facade.
+
+A module can act as a small public facade that re-exports a curated API from several implementation modules.
 
 <<< ../snippets/from_md/syntax/modules/module_re_exports.aivi{aivi}
 
-
 ## 10.6 The Prelude
 
-Every AIVI module implicitly starts with `use aivi.prelude`. This provides access to the core language types and the most common domains without boilerplate.
+Every module implicitly starts with `use aivi.prelude`. This saves boilerplate for the most common types, functions, and default domains.
 
-To opt-out of this behavior (mandatory for the core stdlib itself):
+If you are writing low-level code and want a completely explicit environment, opt out with:
 
 <<< ../snippets/from_md/syntax/modules/the_prelude.aivi{aivi}
 
-
 ## 10.7 Circular Dependencies
 
-Circular module dependencies are **strictly prohibited** at the import level. The compiler enforces a Directed Acyclic Graph (DAG) for module resolution. For mutually recursive types or functions, they must reside within the same module or be decoupled via higher-order abstractions.
-## 10.8 Expressive Module Orchestration
+Circular module dependencies are not allowed. The compiler requires the module import graph to be acyclic.
 
-Modules allow for building clean, layered architectures where complex internal implementations are hidden behind simple, expressive facades.
+If two parts of the codebase appear to need each other, common fixes are:
+
+- move the mutually recursive parts into one module
+- extract a smaller shared module
+- depend on functions or interfaces rather than concrete implementations
+
+## 10.8 Practical module organization patterns
+
+These examples show common ways to keep public APIs small while letting implementation modules stay focused.
 
 ### Clean App Facade
 
@@ -113,21 +140,21 @@ Modules allow for building clean, layered architectures where complex internal i
 
 ### Context-Specific Environments (Static Injection)
 
-This pattern allows you to **statically swap** entire module implementations for different build contexts (e.g., Test vs. Prod). This is not for runtime configuration (see below), but for compile-time substitution of logic.
+This pattern swaps one module implementation for another at compile time. It is useful for test doubles, local development wiring, or alternate backends.
 
 <<< ../snippets/from_md/syntax/modules/context_specific_environments_static_injection_01.aivi{aivi}
 
 <<< ../snippets/from_md/syntax/modules/context_specific_environments_static_injection_02.aivi{aivi}
 
-To use the test environment, your test entry point (`tests/main.aivi`) simply imports the test module instead of the production one:
+A test entry point can simply import the test module instead of the production one:
 
 <<< ../snippets/from_md/syntax/modules/context_specific_environments_static_injection_03.aivi{aivi}
 
 ## 10.9 Runtime Configuration (Env Vars)
 
-For values that change between deployments (like API URLs or DB passwords) without changing code, use **Runtime Configuration** via the `Env` source.
+Use module swapping for code structure. Use runtime configuration for values that differ between deployments, such as URLs, credentials, or feature flags.
 
-Do not use module swapping for this. Instead, inject the configuration as data.
+That configuration should be injected as data, often through the `Env` source.
 
 See [12.4 Environment Sources](external_sources.md#124-environment-sources-env) for details.
 

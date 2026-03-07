@@ -6,63 +6,81 @@ The `aivi.result` module provides utility functions for working with `Result E A
 
 <div class="import-badge">use aivi.result</div>
 
+## What `Result` means
+
+`Result E A` represents a computation that can succeed or fail.
+
+- `Ok x` holds a successful value.
+- `Err e` holds an error value.
+
+Use `Result` when failure is expected and you want to keep it explicit instead of throwing exceptions or hiding error cases.
+
 ## Overview
 
-`Result E A` represents a computation that may fail: either `Ok x` containing a success value, or `Err e` containing an error. This module provides common operations for inspecting, transforming, and recovering from results.
+This module provides small helpers for checking results, transforming either side, converting to or from related types, and choosing fallbacks.
 
 ## Predicates
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `isOk` | `Result E A -> Bool` | Returns `True` if the result is successful |
-| `isErr` | `Result E A -> Bool` | Returns `True` if the result is an error |
+| `isOk` | `Result E A -> Bool` | Returns whether the result is successful |
+| `isErr` | `Result E A -> Bool` | Returns whether the result is an error |
 
 <<< ../../snippets/from_md/stdlib/core/result/predicates.aivi{aivi}
 
-## Extracting Values
+## Extracting values
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `getOrElse` | `A -> Result E A -> A` | Unwrap or return default value |
-| `getOrElseLazy` | `(E -> A) -> Result E A -> A` | Unwrap or map error to value |
+| `getOrElse` | `A -> Result E A -> A` | Returns the success value, or a default when the result is `Err` |
+| `getOrElseLazy` | `(E -> A) -> Result E A -> A` | Returns the success value, or computes a fallback from the error |
 
 <<< ../../snippets/from_md/stdlib/core/result/extracting.aivi{aivi}
+
+`getOrElseLazy` is handy when the fallback depends on the error details.
 
 ## Transformations
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `map` | `(A -> B) -> Result E B` | Transform success value |
-| `mapErr` | `(E -> F) -> Result E A -> Result F A` | Transform error value |
-| `flatMap` | `(A -> Result E B) -> Result E A -> Result E B` | Chain fallible operations |
+| `map` | `(A -> B) -> Result E A -> Result E B` | Transforms the success value while leaving errors alone |
+| `mapErr` | `(E -> F) -> Result E A -> Result F A` | Transforms the error value while leaving successes alone |
+| `flatMap` | `(A -> Result E B) -> Result E A -> Result E B` | Chains fallible operations together |
 
 <<< ../../snippets/from_md/stdlib/core/result/transformations.aivi{aivi}
+
+A useful mental model:
+
+- use `map` for success-only changes,
+- use `mapErr` when you need clearer or more structured errors,
+- use `flatMap` when the next step can also fail.
 
 ## Conversions
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `toOption` | `Result E A -> Option A` | Discard error, keep success as `Some` |
-| `fromOption` | `E -> Option A -> Result E A` | Convert `Option` to `Result` with error |
+| `toOption` | `Result E A -> Option A` | Drops the error and keeps the success as `Some` |
+| `fromOption` | `E -> Option A -> Result E A` | Turns a missing value into an explicit error |
 
 <<< ../../snippets/from_md/stdlib/core/result/conversions.aivi{aivi}
 
-## Combining Results
+## Combining results
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `flatten` | `Result E (Result E A) -> Result E A` | Remove one layer of nesting |
-| `orElse` | `Result E A -> Result E A -> Result E A` | Return first `Ok`, or fallback |
+| `flatten` | `Result E (Result E A) -> Result E A` | Removes one layer of nested `Result` |
+| `orElse` | `Result E A -> Result E A -> Result E A` | Returns the first `Ok`, or a fallback result |
 
 <<< ../../snippets/from_md/stdlib/core/result/combining.aivi{aivi}
 
-## Relationship to Other Modules
+## Relationship to other tools
 
-- **`attempt`**: Effect operator that catches errors as `Result`
-- **`aivi.logic`**: Provides `Functor`, `Applicative`, `Monad` instances for `Result`
-- **`aivi.option`**: Sister module for `Option A` utilities
-- **`do Result { ... }`**: Monadic syntax for chaining result operations
+- **`attempt`** turns effect failures into `Result` values.
+- **`aivi.logic`** provides shared operations such as `map`, `of`, and `chain` for `Result`.
+- **`aivi.option`** is useful when you only care whether a value exists, not why it is missing.
+- **`do Result { ... }`** gives you readable step-by-step syntax for chaining result-producing computations.
+- **`aivi.validation`** is a better fit when you want to collect several errors instead of stopping at the first one.
 
-## Example: Validation Pipeline
+## Example: validation-style pipeline with `Result`
 
 <<< ../../snippets/from_md/stdlib/core/result/pipeline_example.aivi{aivi}

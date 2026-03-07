@@ -8,81 +8,86 @@ The `aivi.bits` module provides bitwise operations through stdlib functions inst
 
 <!-- /quick-info -->
 
-## 1 Imports
+`aivi.bits` is the standard library module for working with raw binary data. Use it when you need masks, flags, packed values, protocol headers, or other low-level formats where individual bits matter.
+
+The module uses named functions instead of operator symbols. That makes examples easier to read once you know the pattern: build or load some `Bits`, transform them with functions such as `and`, `xor`, or `shiftLeft`, and convert the result back into the shape you need.
+
+## Import
 
 ```aivi
 use aivi.bits
 ```
 
-## 2 Types
+## Core ideas
 
-| Type | Definition | Description |
-|:-----|:-----------|:------------|
-| `Bits` | `Bytes` | Alias — immutable byte array viewed as a bit vector (MSB-first). |
-| `BitStream` | `{ data: Bits, offset: Int }` | Position-tracking wrapper for sequential byte-aligned reads. |
+- `Bits` is an immutable byte sequence viewed as binary data.
+- `BitStream` adds a read position so you can step through bytes in order.
+- Bit positions are **MSB-first**: bit `0` is the most significant bit of the first byte.
+- Most functions work on whole bytes, but you can also inspect or update individual bits.
 
-## 3 Construction & Conversion
+## Build and convert bit data
 
-| Function | Type | Description |
-|:---------|:-----|:------------|
-| `fromInt` | `Int -> Bits` | 8-byte big-endian encoding of a 64-bit integer. |
-| `toInt` | `Bits -> Int` | Decode first ≤ 8 bytes as a big-endian `Int`. Fails if length > 8. |
-| `fromBytes` | `Bytes -> Bits` | Identity (semantic alias). |
-| `toBytes` | `Bits -> Bytes` | Identity (semantic alias). |
-| `zero` | `Int -> Bits` | `n` zero bytes. |
-| `ones` | `Int -> Bits` | `n` bytes of `0xFF`. |
+| Function | Type | What it does |
+|:---------|:-----|:-------------|
+| `fromInt` | `Int -> Bits` | Encodes an `Int` as 8 big-endian bytes. Useful when you want a fixed-width binary representation. |
+| `toInt` | `Bits -> Int` | Decodes up to 8 bytes as a big-endian `Int`. Fails if more than 8 bytes are provided. |
+| `fromBytes` | `Bytes -> Bits` | Re-labels ordinary bytes as `Bits`. Use this when the same data should now be treated as a bit field. |
+| `toBytes` | `Bits -> Bytes` | Re-labels `Bits` back to `Bytes`. |
+| `zero` | `Int -> Bits` | Creates `n` zero bytes. Handy for padding or initializing an empty mask. |
+| `ones` | `Int -> Bits` | Creates `n` bytes of `0xFF`. Handy when you want an "all bits set" mask. |
 
-## 4 Bitwise Operations
+## Combine and shift values
 
-| Function | Type | Description |
-|:---------|:-----|:------------|
-| `and` | `Bits -> Bits -> Bits` | Pairwise AND. Shorter operand is zero-padded. |
-| `or` | `Bits -> Bits -> Bits` | Pairwise OR. |
-| `xor` | `Bits -> Bits -> Bits` | Pairwise XOR. |
-| `complement` | `Bits -> Bits` | Bitwise NOT (flip every bit). |
-| `shiftLeft` | `Int -> Bits -> Bits` | Shift all bits left by `n` positions; vacated bits are zero. |
-| `shiftRight` | `Int -> Bits -> Bits` | Shift all bits right by `n` positions; vacated bits are zero. |
+| Function | Type | What it does |
+|:---------|:-----|:-------------|
+| `and` | `Bits -> Bits -> Bits` | Pairwise AND. The shorter input is zero-padded first. Useful for masking out bits you do not want. |
+| `or` | `Bits -> Bits -> Bits` | Pairwise OR. Useful for combining flags. |
+| `xor` | `Bits -> Bits -> Bits` | Pairwise XOR. Useful for toggling matching bits or comparing bit patterns. |
+| `complement` | `Bits -> Bits` | Flips every bit. |
+| `shiftLeft` | `Int -> Bits -> Bits` | Shifts all bits left by `n` positions and fills the new space with zeroes. |
+| `shiftRight` | `Int -> Bits -> Bits` | Shifts all bits right by `n` positions and fills the new space with zeroes. |
 
-## 5 Individual Bit Access
+## Read or update a single bit
 
-Bit indices are MSB-first (bit 0 is the most significant bit of the first byte).
+Bit indexes are MSB-first, so bit `0` is the left-most bit in the first byte.
 
-| Function | Type | Description |
-|:---------|:-----|:------------|
-| `get` | `Int -> Bits -> Bool` | `True` if bit at index is set. Out-of-range returns `False`. |
-| `set` | `Int -> Bits -> Bits` | Set bit to 1. |
-| `clear` | `Int -> Bits -> Bits` | Set bit to 0. |
-| `toggle` | `Int -> Bits -> Bits` | Flip bit. |
-| `length` | `Bits -> Int` | Total bit count (`bytes × 8`). |
+| Function | Type | What it does |
+|:---------|:-----|:-------------|
+| `get` | `Int -> Bits -> Bool` | Returns `True` when the bit at the given index is set. Out-of-range indexes return `False`. |
+| `set` | `Int -> Bits -> Bits` | Sets the bit at the given index to `1`. |
+| `clear` | `Int -> Bits -> Bits` | Sets the bit at the given index to `0`. |
+| `toggle` | `Int -> Bits -> Bits` | Flips the bit at the given index. |
+| `length` | `Bits -> Int` | Returns the total number of bits (`bytes × 8`). |
 
-## 6 Slicing & Inspection
+## Slice and inspect data
 
-| Function | Type | Description |
-|:---------|:-----|:------------|
-| `slice` | `Int -> Int -> Bits -> Bits` | Extract bytes from `start` (inclusive) to `end` (exclusive). |
-| `popCount` | `Bits -> Int` | Number of set bits. |
+| Function | Type | What it does |
+|:---------|:-----|:-------------|
+| `slice` | `Int -> Int -> Bits -> Bits` | Extracts bytes from `start` (inclusive) to `end` (exclusive). This is useful when a format stores separate fields in fixed byte ranges. |
+| `popCount` | `Bits -> Int` | Counts how many bits are set to `1`. |
 
-## 7 BitStream (Sequential Reader)
+## Read structured binary data with `BitStream`
 
-`BitStream` threads a byte offset through a sequence of reads — useful for parsing binary protocols, file headers, or wire formats.
+`BitStream` is a simple sequential reader. It is helpful when a binary format is laid out field-by-field and you want each read to return the next chunk plus the updated stream.
 
-| Function | Type | Description |
-|:---------|:-----|:------------|
-| `streamFromBits` | `Bits -> BitStream` | Create a stream at offset 0. |
-| `streamRead` | `Int -> BitStream -> Result Text (Bits, BitStream)` | Read `n` bytes, advance offset. |
-| `streamPeek` | `Int -> BitStream -> Result Text Bits` | Read `n` bytes without advancing. |
-| `streamSkip` | `Int -> BitStream -> Result Text BitStream` | Advance offset by `n` bytes. |
-| `streamRemaining` | `BitStream -> Int` | Remaining bytes. |
+| Function | Type | What it does |
+|:---------|:-----|:-------------|
+| `streamFromBits` | `Bits -> BitStream` | Creates a stream starting at offset `0`. |
+| `streamRead` | `Int -> BitStream -> Result Text (Bits, BitStream)` | Reads `n` bytes and advances the stream. |
+| `streamPeek` | `Int -> BitStream -> Result Text Bits` | Reads `n` bytes without changing the current position. |
+| `streamSkip` | `Int -> BitStream -> Result Text BitStream` | Advances the stream by `n` bytes without returning the skipped data. |
+| `streamRemaining` | `BitStream -> Int` | Returns how many bytes are left unread. |
 
-## 8 Examples
+## Examples
 
-### Extract RGB from a 24-bit color
+### Extract RGB values from a 24-bit color
 
 ```aivi
 use aivi.bits
 
 extractRgb : Bits -> { r: Int, g: Int, b: Int }
 extractRgb = color =>
+  // A one-byte mask lets us keep only the lowest 8 bits.
   mask = fromInt 0xFF
   { r: color |> shiftRight 16 |> and mask |> toInt
   , g: color |> shiftRight 8  |> and mask |> toInt
@@ -90,7 +95,7 @@ extractRgb = color =>
   }
 ```
 
-### Parse a simple protocol header
+### Parse a simple binary header
 
 ```aivi
 use aivi.bits
@@ -101,6 +106,7 @@ parseHeader = raw =>
   stream = streamFromBits raw
   stream |> streamRead 1 |> chain (vb, s1) =>
   s1    |> streamRead 2 |> chain (flags, s2) =>
+  // The final read returns the payload and the advanced stream.
   s2    |> streamRead 4 |> map (payload, _) =>
   { version: toInt vb, flags: flags, payload: payload }
 ```

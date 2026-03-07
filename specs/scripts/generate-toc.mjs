@@ -16,6 +16,7 @@ function formatLink(link, withExtension) {
   if (!link) return ''
   const [rawBase, hash] = link.split('#')
   let base = rawBase
+  const hadTrailingSlash = base.endsWith('/') && base !== '/'
   if (base === '/') {
     base = 'index'
   } else {
@@ -24,7 +25,11 @@ function formatLink(link, withExtension) {
   }
 
   if (withExtension) {
-    if (!base.endsWith('.md')) base += '.md'
+    if (hadTrailingSlash) {
+      base += 'index.md'
+    } else if (!base.endsWith('.md')) {
+      base += '.md'
+    }
   } else if (base.endsWith('.md')) {
     base = base.slice(0, -3)
   }

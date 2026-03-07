@@ -1,39 +1,54 @@
 # Calendar Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.calendar"} -->
-The `Calendar` domain gives you robust tools for handling **Dates** and **Human Time**.
+The `Calendar` domain is for human calendar math: dates, months, years, and “what happens next month?” style questions.
 
-Handling time is deceptively hard. Ideally, a day is 24 hours. In reality, months have 28-31 days, years have 365 or 366 days, and timezones shift clocks back and forth.
-
-The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until a leap second deletes your data. This domain ensures that when you say "Next Month," it handles the math correctly whether it's February or July making your scheduling logic reliable and legible.
-
+It exists because calendar arithmetic is full of edge cases. Months have different lengths, leap years happen, and a calendar day is not the same thing as a fixed number of seconds.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">domain</span></div>
+
+## When to use `Calendar`
+
+Reach for `aivi.chronos.calendar` when your logic cares about what people see on calendars and clocks:
+
+- billing dates,
+- monthly renewals,
+- “end of month” calculations,
+- adding days, months, or years to a date,
+- building user-facing schedules.
+
+If you need a precise moment on the UTC timeline, use [`aivi.chronos.instant`](./instant.md). If you need time-zone-aware local time, use [`aivi.chronos.timezone`](./timezone.md).
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/calendar/overview.aivi{aivi}
 
-## Features
+## Common operations
+
+These examples show the kinds of calendar questions the domain is built to answer:
 
 <<< ../../snippets/from_md/stdlib/chronos/calendar/features.aivi{aivi}
 
-## Domain Definition
+## Domain definition
+
+The domain definition shows the underlying shapes used for dates, date-times, and calendar deltas:
 
 <<< ../../snippets/from_md/stdlib/chronos/calendar/domain_definition.aivi{aivi}
 
-## Helper Functions
+## Helper functions
 
-| Function | Explanation |
+| Function | What it helps with |
 | --- | --- |
-| **isLeapYear** date<br><code>Date -> Bool</code> | Returns whether `date.year` is a leap year. |
-| **daysInMonth** date<br><code>Date -> Int</code> | Returns the number of days in `date.month`. |
-| **endOfMonth** date<br><code>Date -> Date</code> | Returns the last day of the month for `date`. |
-| **addDays** date n<br><code>Date -> Int -> Date</code> | Applies a day delta with calendar normalization. |
-| **addMonths** date n<br><code>Date -> Int -> Date</code> | Applies a month delta with normalization and day clamping. |
-| **addYears** date n<br><code>Date -> Int -> Date</code> | Applies a year delta. |
-| **negateDelta** delta<br><code>Delta -> Delta</code> | Returns the inverse delta (except `End`, which is idempotent). |
+| **isLeapYear** date<br><code>Date -> Bool</code> | Ask whether `date.year` is a leap year before doing year-sensitive calculations. |
+| **daysInMonth** date<br><code>Date -> Int</code> | Find the number of days in the month for a given date. Useful for UI and validation. |
+| **endOfMonth** date<br><code>Date -> Date</code> | Jump to the last day of the current month. Good for statements, invoices, and monthly reporting. |
+| **addDays** date n<br><code>Date -> Int -> Date</code> | Move forward or backward by calendar days with normalization. |
+| **addMonths** date n<br><code>Date -> Int -> Date</code> | Move by whole months while handling month length differences and day clamping. |
+| **addYears** date n<br><code>Date -> Int -> Date</code> | Move by whole years while preserving calendar intent as closely as possible. |
+| **negateDelta** delta<br><code>Delta -> Delta</code> | Reverse a calendar delta so you can undo or mirror an adjustment. |
 
-## Usage Examples
+## Usage examples
+
+A good pattern is to model user-facing dates with `Calendar`, then convert to instants or zoned values only when you need execution or storage semantics.
 
 <<< ../../snippets/from_md/stdlib/chronos/calendar/usage_examples.aivi{aivi}

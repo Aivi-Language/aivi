@@ -1,10 +1,22 @@
 # Email Module
 
 <!-- quick-info: {"kind":"module","name":"aivi.email"} -->
-The `email` module provides IMAP inbox access and SMTP delivery. Use `imap` for one-shot message fetching, `imapOpen` for session-based IMAP operations (flags, move, delete, IDLE, mailbox management), and `smtpSend` to send messages. Both IMAP and SMTP support password and OAuth2 (XOAUTH2) authentication.
+The `email` module lets AIVI programs read mail from IMAP servers and send mail through SMTP.
+Use `imap` for simple one-shot reads, `imapOpen` when you need a longer-lived IMAP session, and `smtpSend` when your program needs to deliver mail.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.email</div>
+
+## What this module is for
+
+`aivi.email` is useful when a program needs to:
+
+- fetch incoming messages from an inbox,
+- search and manage mailboxes,
+- watch for changes with IMAP IDLE,
+- or send plain-text email notifications.
+
+Both IMAP and SMTP support password authentication and OAuth2 (`XOAUTH2`) access tokens.
 
 ## Types
 
@@ -16,14 +28,14 @@ Authentication method for IMAP and SMTP connections.
 EmailAuth = Password Text | OAuth2 Text
 ```
 
-| Constructor | Explanation |
+| Constructor | What it means |
 | --- | --- |
-| `Password Text` | Plain password authentication. |
-| `OAuth2 Text` | XOAUTH2 access token (e.g. from Gmail, Outlook). |
+| `Password Text` | Password-based authentication. |
+| `OAuth2 Text` | OAuth2 access token used through XOAUTH2. |
 
 ### `ImapConfig`
 
-Connection and filter configuration for IMAP.
+Connection and filtering settings for IMAP.
 
 ```aivi
 ImapConfig = {
@@ -38,20 +50,20 @@ ImapConfig = {
 }
 ```
 
-| Field | Type | Explanation |
+| Field | Type | What it controls |
 | --- | --- | --- |
 | `host` | `Text` | IMAP server hostname. |
-| `user` | `Text` | IMAP login username / email. |
-| `auth` | `EmailAuth` | Authentication method (`Password` or `OAuth2`). |
-| `port` | `Option Int` | IMAP port. Defaults to `993` (IMAPS) when `None`. |
-| `starttls` | `Option Bool` | Use STARTTLS on port 143 instead of implicit TLS. Defaults to `False` when `None`. |
-| `mailbox` | `Option Text` | Mailbox to open (e.g. `"INBOX"`). Defaults to `INBOX` when `None`. Used by the simple `imap` function. |
-| `filter` | `Option Text` | IMAP search filter string (e.g. `"UNSEEN"`). Fetches all when `None`. Used by the simple `imap` function. |
-| `limit` | `Option Int` | Maximum number of messages to return. No limit when `None`. Used by the simple `imap` function. |
+| `user` | `Text` | Login username, often the email address. |
+| `auth` | `EmailAuth` | Password or OAuth2 token. |
+| `port` | `Option Int` | IMAP port. When `None`, the default is `993` for implicit TLS. |
+| `starttls` | `Option Bool` | Whether to use STARTTLS, commonly on port `143`. When `None`, the default is `False`. |
+| `mailbox` | `Option Text` | Mailbox name such as `"INBOX"`. Used by the simple `imap` helper. |
+| `filter` | `Option Text` | IMAP search expression such as `"UNSEEN"`. Used by the simple `imap` helper. |
+| `limit` | `Option Int` | Maximum number of messages to return. |
 
 ### `SmtpConfig`
 
-Configuration for sending a single email via SMTP.
+Configuration for sending one plain-text email.
 
 ```aivi
 SmtpConfig = {
@@ -69,23 +81,23 @@ SmtpConfig = {
 }
 ```
 
-| Field | Type | Explanation |
+| Field | Type | What it controls |
 | --- | --- | --- |
 | `host` | `Text` | SMTP server hostname. |
-| `user` | `Text` | SMTP login username. |
-| `auth` | `EmailAuth` | Authentication method (`Password` or `OAuth2`). |
+| `user` | `Text` | Login username. |
+| `auth` | `EmailAuth` | Password or OAuth2 token. |
 | `from` | `Text` | Sender address. |
-| `to` | `List Text` | Recipient addresses. |
-| `cc` | `Option (List Text)` | CC recipient addresses. |
-| `bcc` | `Option (List Text)` | BCC recipient addresses. |
-| `subject` | `Text` | Email subject line. |
-| `body` | `Text` | Plain-text email body. |
-| `port` | `Option Int` | SMTP port. Defaults to `465` (SMTPS) when `None`. |
-| `starttls` | `Option Bool` | Use STARTTLS (typically port 587) instead of implicit TLS. Defaults to `False` when `None`. |
+| `to` | `List Text` | Primary recipients. |
+| `cc` | `Option (List Text)` | Carbon-copy recipients. |
+| `bcc` | `Option (List Text)` | Blind-carbon-copy recipients. |
+| `subject` | `Text` | Subject line. |
+| `body` | `Text` | Plain-text message body. |
+| `port` | `Option Int` | SMTP port. When `None`, the default is `465` for implicit TLS. |
+| `starttls` | `Option Bool` | Whether to use STARTTLS instead of implicit TLS. |
 
 ### `MimePart`
 
-A single decoded MIME part from a raw email message.
+A decoded MIME part extracted from a raw email message.
 
 ```aivi
 MimePart = {
@@ -96,7 +108,7 @@ MimePart = {
 
 ### `MailboxInfo`
 
-Information about an IMAP mailbox, returned by `imapListMailboxes`.
+Information about an IMAP mailbox.
 
 ```aivi
 MailboxInfo = {
@@ -108,46 +120,54 @@ MailboxInfo = {
 
 ### `IdleResult`
 
-Outcome of an `imapIdle` call.
+Result of waiting with IMAP IDLE.
 
 ```aivi
 IdleResult = TimedOut | MailboxChanged
 ```
 
+## Choose the right entry point
+
+- Use **`imap`** when you want a simple “connect, fetch, disconnect” workflow.
+- Use **`imapOpen`** when you need to search, flag, move, append, or watch messages over a longer session.
+- Use **`smtpSend`** when you want to send a plain-text message.
+- Use **`mimeParts`** and **`flattenBodies`** when you already have raw mail data and want to inspect or display it.
+
 ## Functions
 
-### One-shot (convenience)
+### One-shot helpers
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
-| **imap** config<br><code>ImapConfig -> Effect Text (List A)</code> | Connects, fetches messages matching `config.filter` from `config.mailbox`, and disconnects. Each message is decoded into the expected type `A`. |
-| **smtpSend** config<br><code>SmtpConfig -> Effect Text Unit</code> | Sends an email using `config`. Supports multiple recipients, CC, BCC. |
-| **mimeParts** raw<br><code>Text -> List MimePart</code> | Parses a raw MIME email string into a list of decoded parts. |
-| **flattenBodies** parts<br><code>List MimePart -> Text</code> | Concatenates the `body` of each `MimePart` with newlines, producing a single text. |
+| **imap** config<br><code>ImapConfig -> Effect Text (List A)</code> | Connects, fetches messages that match `config.filter` from `config.mailbox`, decodes them as `A`, and disconnects. |
+| **smtpSend** config<br><code>SmtpConfig -> Effect Text Unit</code> | Sends one email using the supplied SMTP settings. |
+| **mimeParts** raw<br><code>Text -> List MimePart</code> | Parses a raw MIME message into decoded parts. |
+| **flattenBodies** parts<br><code>List MimePart -> Text</code> | Joins the body text of multiple MIME parts into one plain text value. |
 
 ### Session-based IMAP
 
-Open a persistent IMAP connection as a `Resource` for multi-step mailbox interactions.
+Use `imapOpen` when you need several mailbox actions in one connection.
+As a `Resource`, it automatically closes the session when the surrounding resource scope ends.
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
-| **imapOpen** config<br><code>ImapConfig -> Resource Text ImapSession</code> | Opens a persistent IMAP connection. The session is automatically closed when the resource scope exits. |
-| **imapSelect** mailbox session<br><code>Text -> ImapSession -> Effect Text MailboxInfo</code> | Selects a mailbox in read-write mode. |
+| **imapOpen** config<br><code>ImapConfig -> Resource Text ImapSession</code> | Opens a persistent IMAP session. |
+| **imapSelect** mailbox session<br><code>Text -> ImapSession -> Effect Text MailboxInfo</code> | Opens a mailbox in read-write mode. |
 | **imapExamine** mailbox session<br><code>Text -> ImapSession -> Effect Text MailboxInfo</code> | Opens a mailbox in read-only mode. |
-| **imapSearch** query session<br><code>Text -> ImapSession -> Effect Text (List Int)</code> | Searches the selected mailbox. Returns a list of message UIDs matching the IMAP search query. |
-| **imapFetch** uids session<br><code>List Int -> ImapSession -> Effect Text (List A)</code> | Fetches messages by UID. Each message is decoded into the expected type `A`. |
-| **imapSetFlags** uids flags session<br><code>List Int -> List Text -> ImapSession -> Effect Text Unit</code> | Replaces all flags on messages (e.g. `["\\Seen", "\\Flagged"]`). |
-| **imapAddFlags** uids flags session<br><code>List Int -> List Text -> ImapSession -> Effect Text Unit</code> | Adds flags to messages without removing existing ones. |
-| **imapRemoveFlags** uids flags session<br><code>List Int -> List Text -> ImapSession -> Effect Text Unit</code> | Removes specific flags from messages. |
-| **imapExpunge** session<br><code>ImapSession -> Effect Text Unit</code> | Permanently removes all messages marked `\\Deleted` from the selected mailbox. |
-| **imapCopy** uids mailbox session<br><code>List Int -> Text -> ImapSession -> Effect Text Unit</code> | Copies messages by UID to another mailbox. |
-| **imapMove** uids mailbox session<br><code>List Int -> Text -> ImapSession -> Effect Text Unit</code> | Moves messages by UID to another mailbox. |
-| **imapListMailboxes** session<br><code>ImapSession -> Effect Text (List MailboxInfo)</code> | Lists all mailboxes on the server. |
-| **imapCreateMailbox** name session<br><code>Text -> ImapSession -> Effect Text Unit</code> | Creates a new mailbox. |
+| **imapSearch** query session<br><code>Text -> ImapSession -> Effect Text (List Int)</code> | Searches the selected mailbox and returns matching UIDs. |
+| **imapFetch** uids session<br><code>List Int -> ImapSession -> Effect Text (List A)</code> | Fetches the messages for the given UIDs and decodes them as `A`. |
+| **imapSetFlags** uids flags session<br><code>List Int -> List Text -> ImapSession -> Effect Text Unit</code> | Replaces the flags on the given messages. |
+| **imapAddFlags** uids flags session<br><code>List Int -> List Text -> ImapSession -> Effect Text Unit</code> | Adds flags such as `"\\Seen"` without removing the existing flags. |
+| **imapRemoveFlags** uids flags session<br><code>List Int -> List Text -> ImapSession -> Effect Text Unit</code> | Removes only the named flags. |
+| **imapExpunge** session<br><code>ImapSession -> Effect Text Unit</code> | Permanently removes messages marked `"\\Deleted"` from the selected mailbox. |
+| **imapCopy** uids mailbox session<br><code>List Int -> Text -> ImapSession -> Effect Text Unit</code> | Copies messages to another mailbox. |
+| **imapMove** uids mailbox session<br><code>List Int -> Text -> ImapSession -> Effect Text Unit</code> | Moves messages to another mailbox. |
+| **imapListMailboxes** session<br><code>ImapSession -> Effect Text (List MailboxInfo)</code> | Lists available mailboxes on the server. |
+| **imapCreateMailbox** name session<br><code>Text -> ImapSession -> Effect Text Unit</code> | Creates a mailbox. |
 | **imapDeleteMailbox** name session<br><code>Text -> ImapSession -> Effect Text Unit</code> | Deletes a mailbox. |
 | **imapRenameMailbox** from to session<br><code>Text -> Text -> ImapSession -> Effect Text Unit</code> | Renames a mailbox. |
 | **imapAppend** mailbox content session<br><code>Text -> Text -> ImapSession -> Effect Text Unit</code> | Appends a raw RFC822 message to a mailbox. |
-| **imapIdle** timeoutSecs session<br><code>Int -> ImapSession -> Effect Text IdleResult</code> | Waits for mailbox changes using IMAP IDLE. Returns `MailboxChanged` if activity is detected, or `TimedOut` after `timeoutSecs` seconds. |
+| **imapIdle** timeoutSecs session<br><code>Int -> ImapSession -> Effect Text IdleResult</code> | Waits for mailbox changes, returning `MailboxChanged` or `TimedOut`. |
 
 ## Examples
 
@@ -162,8 +182,8 @@ do Effect {
     user: "user@gmail.com"
     auth: OAuth2 myAccessToken
     mailbox: Some "INBOX"
-    filter: Some "UNSEEN"
-    limit: Some 20
+    filter: Some "UNSEEN"   -- only unread messages
+    limit: Some 20            -- keep the fetch bounded
     port: None
     starttls: None
   }
@@ -190,15 +210,15 @@ processInbox = token => resource {
   yield session
 }
   |> withResource (session => do Effect {
-    _ <- imapSelect "INBOX" session
+    _    <- imapSelect "INBOX" session
     uids <- imapSearch "UNSEEN" session
     msgs <- imapFetch uids session
-    _ <- imapAddFlags uids ["\\Seen"] session
+    _    <- imapAddFlags uids ["\\Seen"] session   -- mark them as processed
     pure msgs
   })
 ```
 
-### IDLE notification loop
+### Watching a mailbox with IMAP IDLE
 
 ```aivi
 use aivi.email
@@ -210,9 +230,9 @@ watchInbox = session => do Effect {
     | MailboxChanged => do Effect {
         uids <- imapSearch "UNSEEN" session
         msgs <- imapFetch uids session
-        _ <- processMsgs msgs
+        _    <- processMsgs msgs
         watchInbox session
       }
-    | TimedOut => watchInbox session
+    | TimedOut => watchInbox session   -- start another wait cycle
 }
 ```

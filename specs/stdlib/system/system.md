@@ -1,9 +1,9 @@
 # System Module
 
 <!-- quick-info: {"kind":"module","name":"aivi.system"} -->
-The `System` module connects your program to the operating system.
+The `System` module is the bridge between an AIVI program and the operating system that launched it.
 
-It allows you to read **Environment Variables** (like secret queries or API keys), handle command-line arguments, or signal success/failure with exit codes. It is the bridge between the managed AIVI runtime and the chaotic host machine.
+Use it to read environment variables, inspect command-line arguments, detect locale information, or terminate the process with an exit code.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.system</div>
@@ -12,33 +12,39 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 
 <<< ../../snippets/from_md/stdlib/system/system/overview.aivi{aivi}
 
-## Capability mapping (Phase 1 surface)
+## Capabilities
 
-- `env.get`, `env.decode` → `process.env.read`
-- `env.set`, `env.remove` → `process.env.write`
-- `args`, `localeTag` → `process.args`
-- `exit` → `process.exit`
+- `env.get` and `env.decode` require permission to read process environment variables.
+- `env.set` and `env.remove` require permission to write process environment variables.
+- `args` and `localeTag` require access to process metadata.
+- `exit` requires permission to terminate the process.
 
-The function names stay the same during migration; capability clauses tighten their effect signatures.
+## Environment helpers
 
-## Core API (v0.1)
+Environment variables are a common way to pass configuration into a program without editing source code.
+They are especially useful for secrets, deployment-specific endpoints, and feature flags.
 
-### Environment
-
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
-| **env.get** name<br><code>Text -> Effect Text (Option Text)</code> | Reads the environment variable `name`. Returns `None` when the variable is not set. |
-| **env.decode** prefix<br><code>Text -> Effect Text A</code> | Reads all environment keys under `prefix` and decodes them into the expected typed config `A`. |
+| **env.get** name<br><code>Text -> Effect Text (Option Text)</code> | Reads the environment variable `name`. Returns `None` when it is not set. |
+| **env.decode** prefix<br><code>Text -> Effect Text A</code> | Reads all environment variables under `prefix` and decodes them into the expected typed configuration `A`. |
 | **env.set** name value<br><code>Text -> Text -> Effect Text Unit</code> | Sets the environment variable `name` to `value`. |
 | **env.remove** name<br><code>Text -> Effect Text Unit</code> | Removes the environment variable `name`. |
 
-### Process
+## Process helpers
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
 | **args**<br><code>Effect Text (List Text)</code> | Returns the command-line arguments passed to the program. |
-| **localeTag**<br><code>Effect Text (Option Text)</code> | Returns the locale tag of the host system (e.g. `"en-GB"`), or `None` when unavailable. |
-| **exit** code<br><code>Int -> Effect Text Unit</code> | Terminates the process with `code`. A code of `0` signals success; any other value signals failure. |
+| **localeTag**<br><code>Effect Text (Option Text)</code> | Returns the host locale tag such as `"en-GB"`, or `None` when it is unavailable. |
+| **exit** code<br><code>Int -> Effect Text Unit</code> | Terminates the process with `code`. `0` means success; non-zero codes signal failure. |
+
+## Practical guidance
+
+- Use `env.get` when one variable is optional.
+- Use `env.decode` when several related variables form a typed config record.
+- Use `args` for command-line tools and batch jobs.
+- Use `exit` when another program, shell script, or CI job needs a clear success or failure signal.
 
 ## Type Signatures
 

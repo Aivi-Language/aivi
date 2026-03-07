@@ -4,7 +4,17 @@
 Typed file sources remove boilerplate parsing by letting the expected type drive decoding at the boundary.
 <!-- /quick-info -->
 
-## APIs (v0.1)
+File sources are the most direct way to bring local data into an AIVI program.
+
+They work well for:
+
+- JSON configuration files,
+- CSV imports,
+- checked-in fixtures for tests,
+- plain-text templates or content,
+- image metadata and decoded image payloads.
+
+## APIs
 
 - `file.read : Text -> Source File Text`
 - `file.json : Text -> Source File A`
@@ -12,7 +22,15 @@ Typed file sources remove boilerplate parsing by letting the expected type drive
 - `file.imageMeta : Text -> Source Image A`
 - `file.image : Text -> Source Image A`
 
-## Capability mapping (Phase 1 surface)
+## Choosing the right file source
+
+- use `file.read` when you want raw text
+- use `file.json` when the file should decode into a typed value
+- use `file.csv` when each row should decode into a typed record
+- use `file.imageMeta` when you only need image metadata such as width or format
+- use `file.image` when you need the decoded image payload itself
+
+## Capability mapping
 
 Loading a file source requires `file.read` (or the broader `file` family shorthand). This applies to `file.read`, `file.json`, `file.csv`, `file.imageMeta`, and `file.image`.
 
@@ -20,19 +38,44 @@ Loading a file source requires `file.read` (or the broader `file` family shortha
 
 ```aivi
 User = { id: Int, name: Text, enabled: Bool }
+AppConfig = { port: Int, debug: Bool }
+
+usersSource : Source File (List User)
+usersSource = file.csv "./users.csv"      -- each CSV row decodes to User
+
+configSource : Source File AppConfig
+configSource = file.json "./config.json"  -- the JSON object decodes to AppConfig
 
 do Effect {
-  users <- load (file.csv "./users.csv")
-  cfg   <- load (file.json "./config.json")
+  users <- load usersSource
+  cfg   <- load configSource
   pure { users, cfg }
 }
 ```
 
-## Error UX
+This style keeps parsing rules close to the file boundary instead of spreading ad hoc decoding logic through the rest of the program.
 
-Decode failures should surface source path + expected/received shape:
+## Raw text example
+
+```aivi
+do Effect {
+  template <- load (file.read "./email-template.txt")  -- no decoding beyond Text
+  pure template
+}
+```
+
+## Error experience
+
+When decoding fails, the error should point to both:
+
+- the file that was read,
+- the place inside the decoded structure where the mismatch happened.
+
+For example:
 
 ```text
 failed to parse source [File] at $.users[1].enabled
 expected Bool but received "yes"
 ```
+
+That kind of message makes it much easier to fix bad input data quickly.

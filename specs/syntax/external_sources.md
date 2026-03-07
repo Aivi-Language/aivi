@@ -1,13 +1,15 @@
 # External Sources
 
-External data enters AIVI through typed **Sources**. A source represents a persistent connection or a one-off fetch to an external system, with decoding intended to be type-driven at the boundary (see the v0.1 status note below).
+External sources are AIVI's typed way to read data that lives outside your program: files, environment variables, HTTP APIs, email, images, databases, and more.
 
-> [!NOTE]
-> v0.1 status:
-> - Implemented: `Source K A`, `load`, `file.read`/`json`/`csv`, `file.imageMeta`/`image`, `http.get`/`post`/`fetch` (and `https.*`), `rest.*`, `env.get`, and `env.decode`.
-> - Streaming sources remain out of scope in runtime v0.1.
-> - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
-> - Phase 3 adds the schema-first declaration and source-composition models specified in [Schema-First Source Definitions](external_sources/schema_first.md) and [Source Composition](external_sources/composition.md); compiler/runtime work for those models lands separately.
+If you are not used to functional programming, a helpful mental model is this:
+
+- a `Source K A` is a **recipe** for getting some external data,
+- `K` says **where it comes from**,
+- `A` says **what type you want after decoding**,
+- nothing is actually read until you call `load`.
+
+That separation keeps I/O explicit. You can define a source once, pass it around like any other value, and decide later where the actual read should happen.
 
 ## Source Guides
 
@@ -24,31 +26,55 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 
 <<< ../snippets/from_md/syntax/external_sources/the_source_type.aivi{aivi}
 
-- `K`   the **kind** of source (File, Http, Db, etc.)
-- `A`   the **decoded type** of the content
+- `K` is the **kind** of source, such as `File`, `RestApi`, `Env`, or `Imap`
+- `A` is the **decoded result type**
 
-### SourceError
-A `Source K A` yields an `Effect (SourceError K) A`. The error encapsulates transport boundaries vs structural bounds.
+In day-to-day code, a source gives you a clear boundary between "outside data" and "trusted, typed values inside the program".
+
+### A small example
 
 ```aivi
-SourceError K = 
+User = { id: Int, name: Text }
+
+usersSource : Source File (List User)
+usersSource = file.json "./users.json"  -- describe the boundary
+
+do Effect {
+  users <- load usersSource             -- perform the actual read
+  pure users
+}
+```
+
+### SourceError
+
+A `Source K A` is loaded through an effect:
+
+```aivi
+load : Source K A -> Effect (SourceError K) A
+```
+
+`SourceError K` separates transport problems from data-shape problems:
+
+```aivi
+SourceError K =
   | IOError Text
   | DecodeError (List aivi.validation.DecodeError)
 ```
 
-Sources are effectful. Loading a source performs I/O and returns an `Effect E A` (where `E` captures the possible source errors). All source interactions must occur within a `do Effect { ... }` block.
+- `IOError` means the program could not reach or read the external system
+- `DecodeError` means the read succeeded, but the payload did not match the expected shape
 
 Typical API shape:
 
 <<< ../snippets/from_md/syntax/external_sources/sourceerror_01.aivi{aivi}
 
-To handle errors as values, use `attempt` (see [Effects](effects.md)):
+If you want to handle failures as ordinary data, use `attempt`:
 
 <<< ../snippets/from_md/syntax/external_sources/sourceerror_02.aivi{aivi}
 
-### Capability mapping (Phase 1 surface)
+### Capability mapping
 
-`Source K A` is pure description data. The capability requirement appears when the source is **loaded**:
+Defining a source is pure. The capability requirement appears when the source is loaded:
 
 - `load (file.*)` / `load (file.image*)` → `file.read`
 - `load (rest.*)` / `load (http.*)` / `load (https.*)` → `network.http`
@@ -59,87 +85,107 @@ To handle errors as values, use `attempt` (see [Effects](effects.md)):
 
 See [Capabilities](capabilities.md) for the standard vocabulary.
 
+### A practical workflow
+
+Most source-heavy programs follow the same pattern:
+
+1. define the data type you want,
+2. build a source that can decode into that type,
+3. call `load` inside `do Effect { ... }`,
+4. handle `SourceError` at the boundary.
+
+That keeps parsing, validation, and I/O at the edge of the program instead of spread throughout the business logic.
+
 ## 12.2 File Sources
 
-Used for local system access. Supports structured (JSON, CSV) and unstructured (Bytes, Text) data.
+Use file sources for local configuration, checked-in fixtures, imports, and one-off data processing jobs.
+
+- `file.read` gives you raw `Text`
+- `file.json` decodes JSON into the type you ask for
+- `file.csv` decodes rows into a typed list
 
 <<< ../snippets/from_md/syntax/external_sources/file_sources.aivi{aivi}
 
+For a practical guide, see [File Sources](external_sources/file.md).
 
 ## 12.3 HTTP Sources
 
-Typed REST/API integration.
-In v0.1 this is available through `http.*`/`https.*` and the `aivi.rest` facade.
+Use HTTP or REST sources when your program reads typed data from a web service.
+
+- `http.*` and `https.*` expose the lower-level HTTP boundary
+- `rest.*` adds a REST-oriented surface for typed API work
 
 <<< ../snippets/from_md/syntax/external_sources/http_sources.aivi{aivi}
 
+For request options and examples, see [REST / HTTP Sources](external_sources/rest_http.md).
 
 ## 12.4 Environment Sources (Env)
 
-Typed access to environment configuration. Values are decoded using the expected type and optional defaults.
+Use environment sources for deployment-time configuration such as ports, feature flags, secrets, and connection strings.
+
+- `env.get` reads a single variable as `Text`
+- `env.decode` reads a prefixed group of variables and decodes them into a record or other type
 
 <<< ../snippets/from_md/syntax/external_sources/environment_sources_env.aivi{aivi}
 
+For practical patterns, see [Environment Sources](external_sources/environment.md).
+
 ## 12.5 Database Sources (Db)
 
-Integration with relational and document stores. Uses carrier-specific domains for querying.
-
-> **v0.1 note:** The schema-first `Source Db` declaration and raw-SQL `db.query` external source shown below are **not yet implemented** in v0.1.  Use the typed `do Query { ... }` DSL in `aivi.database` for in-memory queries (see [Database Domain](../stdlib/system/database.md)).
+Database sources apply the same idea to tables, projections, and query results: describe the boundary once, then decode rows into a typed result.
 
 <<< ../snippets/from_md/syntax/external_sources/database_sources_db.aivi{aivi}
 
-See the [Database Domain](../stdlib/system/database.md) for table operations, deltas, and migrations.
-
+For table operations, deltas, and migrations, see the [Database Domain](../stdlib/system/database.md).
 
 ## 12.6 Email Sources
 
-Interacting with mail servers (IMAP/SMTP).
-In v0.1, IMAP reads are available through `email.imap` / `aivi.email`.
+Email sources are useful when you want to treat a mailbox read as typed input, for example reading unseen support requests or extracting structured messages from an inbox.
 
 <<< ../snippets/from_md/syntax/external_sources/email_sources.aivi{aivi}
 
+For IMAP-specific guidance, see [IMAP Email Sources](external_sources/imap_email.md).
 
 ## 12.7 LLM Sources
 
-AIVI treats Large Language Models as typed probabilistic sources. This is a core part of the AIVI vision for intelligent data pipelines.
+AIVI models LLM boundaries as typed external inputs: you describe the shape you want back, then decode the response into that shape at the boundary.
 
 <<< ../snippets/from_md/syntax/external_sources/llm_sources.aivi{aivi}
 
-
 ## 12.8 Image Sources
 
-Images are typed by their metadata and pixel data format.
+Image sources let you read metadata and pixel-oriented image data through the same typed source model.
 
 <<< ../snippets/from_md/syntax/external_sources/image_sources.aivi{aivi}
 
+For practical examples, see [Image Sources](external_sources/image.md).
 
 ## 12.9 S3 / Cloud Storage Sources
 
-Integration with object storage.
+Object storage fits naturally into the source model: define the external object boundary, then load and decode it like any other source.
 
 <<< ../snippets/from_md/syntax/external_sources/s3_cloud_storage_sources.aivi{aivi}
 
-> [!NOTE]
-> Browser sources are **Experimental** and not guaranteed across all v0.1 runtime targets (including WASM).
+When portability matters, check the runtime-specific documentation for the storage connectors available in your target environment.
 
+## 12.10 Compile-Time Sources (`@static`)
 
-## 12.10 Compile-Time Sources (@static)
-
-Some sources are resolved at compile time and embedded into the binary. This ensures zero latency/failure at runtime.
+Some sources are read during compilation and embedded into the program. This is useful for build metadata, checked-in schemas, generated clients, and other inputs that should be fixed when the binary is built.
 
 <<< ../snippets/from_md/syntax/external_sources/compile_time_sources_static.aivi{aivi}
 
-## 12.11 Source composition (Phase 3)
+For supported patterns and caveats, see [Compile-Time Sources](external_sources/compile_time.md).
 
-Phase 3 treats a schema-bearing `Source K A` as a **declaration plus a canonical execution pipeline**:
+## 12.11 Source Composition
 
-1. optional cache lookup,
-2. connector acquisition wrapped by timeout / retry / backoff policy,
-3. schema-driven decode,
-4. pure transform stages,
-5. accumulated validation stages,
-6. cache write + provenance / observability emission.
+Sometimes "read and decode this value" is not enough. You may also want to:
 
-`load` remains the only effectful step. The composition layers are pure source-description data, just like the underlying connector declaration.
+- normalize the payload,
+- run semantic validation,
+- retry network acquisition,
+- cache successful results,
+- attach provenance or observability metadata.
 
-See [Source Composition](external_sources/composition.md) for the public stage model, policy semantics, provenance contract, and handler-based testing story.
+That is what source composition is for. It keeps those policies attached to the source definition so `load` can execute them in a predictable order.
+
+See [Source Composition](external_sources/composition.md) for the full stage model and examples.
