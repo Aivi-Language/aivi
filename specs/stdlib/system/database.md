@@ -1,7 +1,7 @@
 # Database Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.database"} -->
-The `Database` domain provides a type-safe, composable way to work with relational data. It treats tables as immutable records of schema plus rows, while compiling predicates and patches into efficient SQL under the hood.
+The `Database` domain provides a type-safe, composable way to work with relational data. It treats tables as immutable records of schema plus rows and provides a `do Query { ... }` notation for composing typed queries over those rows.
 
 It builds on existing AIVI features:
 - **Domains** for operator overloading and delta literals
@@ -41,9 +41,43 @@ works cleanly with pooling.
 
 ## Querying
 
-In v0.1, `Table A` is a persistent in-memory structure with explicit observation via `db.load`.
+<!-- quick-info: {"kind":"feature","name":"Query DSL"} -->
+`aivi.database` ships a typed `Query A` type and a `do Query { ... }` notation for
+composing queries in a readable, composable way.
 
-Query planning utilities (`filter`, `find`, `sortBy`, `groupBy`, `join`) are specified, but runtime coverage is partial in v0.1.
+**MVP limitations (v0.1):** queries are executed **in memory** — all rows are loaded
+from the store first, then predicates and projections run in the AIVI runtime.  True
+SQL pushdown (WHERE / SELECT compilation) is planned for a later phase.
+
+```aivi
+-- Compose a query value
+activeNames : Query Text
+activeNames = do Query {
+  user <- db.from userTable    -- bind each row
+  db.guard_ user.active        -- skip inactive rows
+  db.queryOf user.name         -- project the name field
+}
+
+-- Execute it against a connection
+main = do Effect {
+  conn  <- db.connect { driver: Sqlite, url: "app.db" }
+  names <- db.runQueryOn conn activeNames
+  ...
+}
+```
+
+`do Query` desugars via `queryChain`/`queryOf` (not the generic monad `chain`/`of`), so
+the result type is always `Query A`.  You can also compose queries with the functional
+pipeline helpers if you prefer:
+
+```aivi
+activeNames : Query Text
+activeNames =
+  db.from userTable
+  |> db.where_ _.active
+  |> db.select _.name
+```
+<!-- /quick-info -->
 
 <<< ../../snippets/from_md/stdlib/system/database/querying.aivi{aivi}
 
@@ -81,9 +115,9 @@ Use `db.connect` / `db.close` as the pool's acquire/release functions when you w
 
 ## Notes
 
-- `Database` compiles predicate expressions into `WHERE` clauses and patch instructions into `SET` clauses.
-- Joins are translated into single SQL queries to avoid N+1 patterns.
-- Advanced SQL remains available via `db.query` in [External Sources](../../syntax/external_sources.md).
+- In v0.1, `Query A` executes **in memory**: `db.from tbl` loads all rows from the store, then predicates and projections run in the AIVI runtime.  SQL pushdown is not yet implemented.
+- Advanced SQL strings remain available via the external-source `db.query` mechanism described in [External Sources](../../syntax/external_sources.md).
+- `db.applyDelta` / `db.applyDeltas` do compile predicates to `WHERE` and patches to `SET` for the underlying store, but `do Query` predicates do not yet benefit from this.
 - Transactions are scoped to a single `DbConnection`. `db.beginTxOn conn` never affects any other connection in the same pool.
 - The ambient helpers (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.savepoint`, ...) are compatibility sugar over the current default connection selected by `db.configure`.
 - Nested `beginTxOn` calls are not part of the transaction model; use savepoints for inner rollback boundaries.
@@ -168,6 +202,22 @@ When `use aivi.database (domain Database)` is in scope, these are available in d
 - `ftsDoc : Text -> List Text -> FtsDoc`
 - `ftsMatchAny : List Text -> FtsQuery`
 - `ftsMatchAll : List Text -> FtsQuery`
+
+### Query DSL (v0.1 MVP)
+
+`Query A` is an in-memory query that produces `List A` when run against a `DbConnection`.
+Use `do Query { ... }` to compose queries; `do Query` desugars via `queryChain`/`queryOf`.
+
+| Function | Explanation |
+| --- | --- |
+| **db.from** tbl<br><code>Table A -> Query A</code> | Lifts a table into a query that loads all rows. |
+| **db.where\_** pred q<br><code>(A -> Bool) -> Query A -> Query A</code> | Filters rows by a predicate (runs in memory). |
+| **db.guard\_** cond<br><code>Bool -> Query Unit</code> | In a `do Query` block: passes through when `cond` is `True`, otherwise short-circuits to empty. |
+| **db.select** f q<br><code>(A -> B) -> Query A -> Query B</code> | Projects each row. |
+| **db.queryOf** value<br><code>A -> Query A</code> | Wraps a single value in a singleton query. |
+| **db.emptyQuery**<br><code>Query A</code> | A query that always returns an empty list. |
+| **db.queryChain** f q<br><code>(A -> Query B) -> Query A -> Query B</code> | Monadic bind for `Query`; used by `do Query` desugaring. |
+| **db.runQueryOn** conn q<br><code>DbConnection -> Query A -> Effect DbError (List A)</code> | Executes the query against the given connection. |
 
 ### Pooling (`aivi.database.pool`)
 

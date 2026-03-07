@@ -714,6 +714,10 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
 /// - `e; rest`        →  `chain (λ_. <rest>) e`
 /// - `e`  (final)     →  `e`
 /// - `{}`  (empty)    →  `of Unit`
+///
+/// For `do Query { ... }`, `chain`→`queryChain` and `of`→`queryOf` so that the
+/// desugared calls resolve through the `aivi.database` Query helpers rather than
+/// the generic monad typeclass dispatch.
 fn desugar_generic_do_block(
     items: Vec<BlockItem>,
     surface_kind: &BlockKind,
@@ -721,13 +725,15 @@ fn desugar_generic_do_block(
     id_gen: &mut IdGen,
     ctx: &mut LowerCtx<'_>,
 ) -> HirExpr {
+    let (chain_fn, of_fn) = do_block_ops(surface_kind);
+
     if items.is_empty() {
-        // `do M {}` → `of Unit`
+        // `do M {}` → `of Unit`  (or `queryOf Unit` for do Query)
         return HirExpr::Call {
             id: id_gen.next(),
             func: Box::new(HirExpr::Var {
                 id: id_gen.next(),
-                name: "of".to_string(),
+                name: of_fn.to_string(),
             }),
             args: vec![HirExpr::Var {
                 id: id_gen.next(),
@@ -736,7 +742,20 @@ fn desugar_generic_do_block(
         };
     }
 
-    desugar_do_items(&items, 0, surface_kind, hir_kind, id_gen, ctx)
+    desugar_do_items(&items, 0, surface_kind, hir_kind, chain_fn, of_fn, id_gen, ctx)
+}
+
+/// Returns the `(chain, of)` function names for a generic do-block.
+///
+/// `do Query { ... }` uses `queryChain`/`queryOf`; all other monads use
+/// the standard typeclass-dispatched `chain`/`of`.
+fn do_block_ops(surface_kind: &BlockKind) -> (&'static str, &'static str) {
+    if let BlockKind::Do { ref monad } = surface_kind {
+        if monad.name == "Query" {
+            return ("queryChain", "queryOf");
+        }
+    }
+    ("chain", "of")
 }
 
 /// Recursively desugar do-block items starting at `index`.
@@ -745,6 +764,8 @@ fn desugar_do_items(
     index: usize,
     surface_kind: &BlockKind,
     hir_kind: &HirBlockKind,
+    chain_fn: &str,
+    of_fn: &str,
     id_gen: &mut IdGen,
     ctx: &mut LowerCtx<'_>,
 ) -> HirExpr {
@@ -771,7 +792,7 @@ fn desugar_do_items(
                     id: id_gen.next(),
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
-                        name: "of".to_string(),
+                        name: of_fn.to_string(),
                     }),
                     args: vec![body],
                 };
@@ -781,12 +802,12 @@ fn desugar_do_items(
                     id: id_gen.next(),
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
-                        name: "chain".to_string(),
+                        name: chain_fn.to_string(),
                     }),
                     args: vec![continuation, rhs],
                 }
             } else {
-                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
+                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, chain_fn, of_fn, id_gen, ctx);
                 let param = format!("__do_bind{}", id_gen.next());
                 let continuation = make_pattern_lambda(pattern.clone(), rest, &param, id_gen);
                 // chain continuation rhs
@@ -794,7 +815,7 @@ fn desugar_do_items(
                     id: id_gen.next(),
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
-                        name: "chain".to_string(),
+                        name: chain_fn.to_string(),
                     }),
                     args: vec![continuation, rhs],
                 }
@@ -810,12 +831,12 @@ fn desugar_do_items(
                     id: id_gen.next(),
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
-                        name: "of".to_string(),
+                        name: of_fn.to_string(),
                     }),
                     args: vec![rhs],
                 }
             } else {
-                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
+                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, chain_fn, of_fn, id_gen, ctx);
                 let param = format!("__do_let{}", id_gen.next());
                 let body = make_pattern_lambda(pattern.clone(), rest, &param, id_gen);
                 // (λpat. rest) rhs
@@ -833,7 +854,7 @@ fn desugar_do_items(
                 // Final expression: must have type `M A`, returned directly.
                 rhs
             } else {
-                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
+                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, chain_fn, of_fn, id_gen, ctx);
                 let param = format!("__do_seq{}", id_gen.next());
                 let continuation = HirExpr::Lambda {
                     id: id_gen.next(),
@@ -845,7 +866,7 @@ fn desugar_do_items(
                     id: id_gen.next(),
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
-                        name: "chain".to_string(),
+                        name: chain_fn.to_string(),
                     }),
                     args: vec![continuation, rhs],
                 }

@@ -22,6 +22,7 @@ export savepointOn, releaseSavepointOn, rollbackToSavepointOn
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export ins, upd, del, ups
 export domain Database
+export Query, queryOf, queryChain, emptyQuery, from, where_, select, runQueryOn
 
 use aivi
 use aivi.list (length, reverse)
@@ -72,6 +73,79 @@ FtsQuery = {
   expression: Text
   matchMode: Text
 }
+
+// ---------------------------------------------------------------------------
+// Query DSL — MVP
+//
+// `Query A` is an in-memory query over a `DbConnection`.  It is not true SQL
+// pushdown; predicates and projections run in the AIVI runtime after loading
+// rows from the underlying store.  Future phases may lower `do Query` blocks
+// to SQL WHERE/SELECT clauses.
+//
+// Use `do Query { ... }` notation to compose queries; call `runQueryOn conn q`
+// to execute.  The `do Query` block desugars using `queryChain`/`queryOf`
+// (rather than the generic monad `chain`/`of`) so the types resolve through
+// the helpers below.
+//
+// Example:
+//
+//   activeNames : Query Text
+//   activeNames = do Query {
+//     user <- from userTable
+//     guard_ user.active
+//     queryOf user.name
+//   }
+//
+//   main = do Effect {
+//     conn    <- connect { driver: Sqlite, url: ":memory:" }
+//     names   <- runQueryOn conn activeNames
+//     ...
+//   }
+// ---------------------------------------------------------------------------
+
+Query A = { run: DbConnection -> Effect DbError (List A) }
+
+emptyQuery : Query A
+emptyQuery = { run: _conn => pure [] }
+
+queryOf : A -> Query A
+queryOf = value => { run: _conn => pure [value] }
+
+queryBindAll : DbConnection -> List A -> (A -> Query B) -> Effect DbError (List B)
+queryBindAll = conn xs f => xs match
+  | []           => pure []
+  | [x, ...rest] => do Effect {
+      ys <- (f x).run conn
+      zs <- queryBindAll conn rest f
+      pure [...ys, ...zs]
+    }
+
+queryChain : (A -> Query B) -> Query A -> Query B
+queryChain = f q => { run: conn => do Effect {
+  xs <- q.run conn
+  queryBindAll conn xs f
+}}
+
+from : Table A -> Query A
+from = tbl => { run: conn => loadOn conn tbl }
+
+where_ : (A -> Bool) -> Query A -> Query A
+where_ = pred q => { run: conn => do Effect {
+  xs <- q.run conn
+  pure (List.filter pred xs)
+}}
+
+guard_ : Bool -> Query Unit
+guard_ = cond => if cond then queryOf Unit else emptyQuery
+
+select : (A -> B) -> Query A -> Query B
+select = f q => { run: conn => do Effect {
+  xs <- q.run conn
+  pure (List.map f xs)
+}}
+
+runQueryOn : DbConnection -> Query A -> Effect DbError (List A)
+runQueryOn = conn q => q.run conn
 
 configure : DbConfig -> Effect DbError Unit
 configure = config => database.configure config
