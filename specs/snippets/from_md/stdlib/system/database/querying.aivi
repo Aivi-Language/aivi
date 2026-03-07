@@ -43,9 +43,99 @@ runActiveUserNames = do Effect {
   pure names
 }
 
+// Ambient form — use db.runQuery when a default connection has been configured
+// with db.configure.  Same in-memory semantics as runQueryOn in v0.1.
+runActiveUserNamesDefault : Effect DbError (List Text)
+runActiveUserNamesDefault = do Effect {
+  _     <- db.configure dbDefault
+  _     <- db.runMigrations [userTable]
+  names <- db.runQuery activeUserNames
+  pure names
+}
+
 // Functional pipeline form (no do-block) composes with |>
 cheapActiveNames : Query Text
 cheapActiveNames =
   db.from userTable
   |> db.where_ _.active
   |> db.select _.name
+
+// Sorting and paging — all run in memory in v0.1 (no SQL pushdown yet)
+// orderBy : (A -> B) -> Query A -> Query A
+// limit   : Int -> Query A -> Query A
+// offset  : Int -> Query A -> Query A
+recentActiveNames : Query Text
+recentActiveNames =
+  db.from userTable
+  |> db.where_ _.active
+  |> db.orderBy _.createdAt   -- sort ascending by creation time (in memory)
+  |> db.offset 10             -- skip the first 10 rows
+  |> db.limit 5               -- then take at most 5
+  |> db.select _.name
+
+runRecentActiveNames : Effect DbError (List Text)
+runRecentActiveNames = do Effect {
+  conn  <- db.connect dbDefault
+  _     <- db.runMigrationsOn conn [userTable]
+  names <- db.runQueryOn conn recentActiveNames
+  _     <- db.close conn
+  pure names
+}
+
+// ── Multi-table join (in-memory, v0.1) ──────────────────────────────────────
+// SQL JOIN pushdown is not yet available.  Use repeated `from` binds with
+// `guard_` to correlate rows from two tables.  Both tables are fully loaded
+// before the predicate runs in the AIVI runtime.
+
+Order = { id: Int, userId: Int, total: Int }
+
+@static
+orderTable : Table Order
+orderTable = db.table "orders" [
+  { name: "id",     type: IntType, constraints: [AutoIncrement, NotNull], default: None }
+  { name: "userId", type: IntType, constraints: [NotNull],                default: None }
+  { name: "total",  type: IntType, constraints: [NotNull],                default: None }
+]
+
+activeUserOrders : Query { user: User, order: Order }
+activeUserOrders = do Query {
+  user  <- db.from userTable
+  db.guard_ user.active
+  order <- db.from orderTable
+  db.guard_ (order.userId == user.id)
+  db.queryOf { user: user, order: order }
+}
+
+runActiveUserOrders : Effect DbError (List { user: User, order: Order })
+runActiveUserOrders = do Effect {
+  conn  <- db.connect dbDefault
+  _     <- db.runMigrationsOn conn [userTable, orderTable]
+  pairs <- db.runQueryOn conn activeUserOrders
+  _     <- db.close conn
+  pure pairs
+}
+
+// ── Count and exists (v0.1) ────────────────────────────────────────────────
+// db.count and db.exists aggregate queries; both run in memory (no SQL pushdown yet).
+
+countActive : Query Int
+countActive = db.count (db.from userTable |> db.where_ _.active)
+
+activeCount : Effect DbError Int
+activeCount = do Effect {
+  conn  <- db.connect dbDefault
+  [n]   <- db.runQueryOn conn countActive
+  _     <- db.close conn
+  pure n
+}
+
+anyActive : Query Bool
+anyActive = db.exists (db.from userTable |> db.where_ _.active)
+
+hasActiveUsers : Effect DbError Bool
+hasActiveUsers = do Effect {
+  conn <- db.connect dbDefault
+  [found] <- db.runQueryOn conn anyActive
+  _    <- db.close conn
+  pure found
+}

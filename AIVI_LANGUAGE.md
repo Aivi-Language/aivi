@@ -946,7 +946,12 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 explicit `DbConnection` handles (`connect`, `open`, `loadOn`, `applyDeltaOn`). Prefer
 `beginTxOn` / `inTransactionOn` / savepoint `...On` helpers for transaction-safe pooled code.
 
-**Query DSL (v0.1 MVP):** `aivi.database` also exports a `Query A` type and `do Query { ... }` notation for composing typed, composable queries. In v0.1 queries execute in memory (rows are loaded from the store first; SQL pushdown is not yet implemented). Use `runQueryOn conn q` to execute.
+**Typed mutation helpers:** `db.insertOn`, `db.deleteWhereOn`, `db.updateWhereOn`, `db.upsertOn`
+(and ambient `db.insert`, `db.deleteWhere`, `db.updateWhere`, `db.upsert`) are convenience
+wrappers that construct the appropriate `Delta A` and call `applyDeltaOn` / `applyDelta` in one
+step.  In v0.1 they execute **in memory** — they do not compile to SQL DML statements.
+
+**Query DSL (v0.1 MVP):** `aivi.database` also exports a `Query A` type and `do Query { ... }` notation for composing typed, composable queries. In v0.1 queries execute in memory (rows are loaded from the store first; SQL pushdown is not yet implemented). Use `runQueryOn conn q` to execute against an explicit connection, or `runQuery q` to execute against the default connection configured with `db.configure`.
 
 ```aivi
 // Build a typed query
@@ -960,9 +965,47 @@ expensiveItems = do Query {
 expensiveItems2 : Query Text
 expensiveItems2 = db.from itemTable |> db.where_ (_.price > 100) |> db.select _.name
 
-// Execute
+// Execute against an explicit connection
 names <- db.runQueryOn conn expensiveItems
+
+// Execute against the default connection (configured with db.configure)
+names <- db.runQuery expensiveItems
 ```
+
+**Sorting and paging (v0.1 MVP, in-memory only):** `orderBy`, `limit`, and `offset` sort and
+slice the result set *after* all rows are fetched from the store.  They do **not** compile to
+SQL `ORDER BY` / `LIMIT` / `OFFSET` clauses in v0.1.
+
+```aivi
+// Take 5 active users sorted by creation time, skipping the first 10
+page : Query Text
+page =
+  db.from userTable
+  |> db.where_ _.active
+  |> db.orderBy _.createdAt
+  |> db.offset 10
+  |> db.limit 5
+  |> db.select _.name
+```
+
+**Multi-table join (v0.1, in-memory):** SQL `JOIN` pushdown is not yet available.  Use
+repeated `from` binds with `guard_` in a `do Query` block.  Both tables are fully loaded
+before the predicate runs in the AIVI runtime; avoid on large datasets.
+
+```aivi
+activeUserOrders : Query { user: User, order: Order }
+activeUserOrders = do Query {
+  user  <- db.from userTable
+  db.guard_ user.active
+  order <- db.from orderTable
+  db.guard_ (order.userId == user.id)
+  db.queryOf { user: user, order: order }
+}
+```
+
+**`db.count` / `db.exists` (planned, not in v0.1):** these aggregate helpers will land in
+a future phase.  Today use `List.length (db.runQueryOn conn q)` for counting and
+`db.limit 1` + `List.length > 0` for existence checks.
 
 **Network** (`aivi.net.*`):
 `http`, `https`, `httpServer`, `sockets`, `streams`

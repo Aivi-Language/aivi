@@ -1,0 +1,43 @@
+@no_prelude
+module integrationTests.runtime.effectfulTupleLoopState
+
+use aivi
+use aivi.map
+use aivi.testing
+
+@test "tuple loop carries effectful record state"
+tupleLoopCarriesEffectfulRecordState = do Effect {
+  handle = {
+    cancel: pure Unit
+    reusable: True
+    signature: "tick"
+  }
+  total <- do Effect {
+    loop state = (0, handle) => {
+      (n, currentHandle) = state
+      if n >= 200
+        then pure n
+        else recurse (n + 1, currentHandle)
+    }
+  }
+  assertEq total 200
+}
+
+@test "tuple loop carries maps of effectful records"
+tupleLoopCarriesEffectfulHandleMaps = do Effect {
+  handle = {
+    cancel: pure Unit
+    reusable: True
+    signature: "tick"
+  }
+  handles = Map.insert "tick" handle Map.empty
+  total <- do Effect {
+    loop state = (0, handles) => {
+      (n, currentHandles) = state
+      if n >= 200
+        then pure n
+        else recurse (n + 1, currentHandles)
+    }
+  }
+  assertEq total 200
+}

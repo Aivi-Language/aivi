@@ -58,13 +58,31 @@ activeNames = do Query {
   db.queryOf user.name         -- project the name field
 }
 
--- Execute it against a connection
+-- Execute against an explicit connection
 main = do Effect {
   conn  <- db.connect { driver: Sqlite, url: "app.db" }
   names <- db.runQueryOn conn activeNames
   ...
 }
 ```
+
+When you have already called `db.configure` to set a default connection, you can skip the
+explicit handle and use `db.runQuery` instead:
+
+```aivi
+-- Execute against the default configured connection
+main = do Effect {
+  _ <- db.configure { driver: Sqlite, url: "app.db" }
+  _ <- db.runMigrations [userTable]
+  names <- db.runQuery activeNames   -- uses the default connection; same in-memory semantics
+  ...
+}
+```
+
+> **v0.1 note:** `db.runQuery` has the same in-memory execution model as `db.runQueryOn` —
+> rows are loaded from the store and filtered in the AIVI runtime.  Neither helper pushes
+> predicates down to SQL in v0.1.  Prefer `db.runQueryOn` when you hold an explicit
+> `DbConnection` (e.g. from a pool) so that transaction ownership stays local and explicit.
 
 `do Query` desugars via `queryChain`/`queryOf` (not the generic monad `chain`/`of`), so
 the result type is always `Query A`.  You can also compose queries with the functional
@@ -77,6 +95,130 @@ activeNames =
   |> db.where_ _.active
   |> db.select _.name
 ```
+
+### Sorting, paging, and slicing (v0.1)
+
+Three additional helpers let you sort and page the in-memory result set:
+
+- **`db.orderBy key q`** — sorts rows by the projection `key`; equivalent to
+  `List.sortBy key` applied after all rows are loaded.
+- **`db.limit n q`** — keeps the first `n` rows of the (optionally sorted) result.
+- **`db.offset n q`** — skips the first `n` rows.
+
+> **v0.1 limitation:** all three run in the AIVI runtime *after* the full row set has
+> been fetched from the store.  They do **not** compile to SQL `ORDER BY`, `LIMIT`, or
+> `OFFSET` clauses.  Avoid them on large tables until SQL pushdown lands in a future
+> phase.
+
+Combine them with the pipeline style:
+
+```aivi
+recentTopNames : Query Text
+recentTopNames =
+  db.from userTable
+  |> db.where_ _.active
+  |> db.orderBy _.createdAt   -- sort ascending by creation time
+  |> db.offset 10             -- skip the first 10
+  |> db.limit 5               -- then take the next 5
+  |> db.select _.name
+```
+
+Or inside a `do Query` block, apply the helpers directly to the source query with `|>`:
+
+```aivi
+recentTopNames : Query Text
+recentTopNames = do Query {
+  user <-
+    db.from userTable
+    |> db.where_ _.active
+    |> db.orderBy _.createdAt
+    |> db.offset 10
+    |> db.limit 5
+  db.queryOf user.name
+}
+```
+
+> **Prefer the pipeline form** for sorting and paging — it is more readable and
+> composes without re-querying the table.  When writing a `do Query` block, apply
+> `db.orderBy`, `db.offset`, and `db.limit` with `|>` to the *source* query on the
+> right-hand side of `<-`; do **not** bind a sorted query to a new name and then
+> discard it.
+<!-- /quick-info -->
+
+### Multi-table joins (in-memory, v0.1)
+
+<!-- quick-info: {"kind":"feature","name":"Multi-table join"} -->
+Full SQL `JOIN` pushdown is not yet available in v0.1.  Cross-table queries are written
+as **nested `do Query` binds with `guard_`**: bind rows from each table in turn, then
+use `db.guard_` to apply the join predicate.  All rows from both tables are loaded into
+memory first; the predicate runs in the AIVI runtime.
+
+```aivi
+-- Schema
+Order = { id: Int, userId: Int, total: Int }
+
+orderTable : Table Order
+orderTable = db.table "orders" [
+  { name: "id",     type: IntType, constraints: [AutoIncrement, NotNull], default: None }
+  { name: "userId", type: IntType, constraints: [NotNull],                default: None }
+  { name: "total",  type: IntType, constraints: [NotNull],                default: None }
+]
+
+-- Cross-table query: active users paired with their orders
+activeUserOrders : Query { user: User, order: Order }
+activeUserOrders = do Query {
+  user  <- db.from userTable
+  db.guard_ user.active
+  order <- db.from orderTable
+  db.guard_ (order.userId == user.id)
+  db.queryOf { user: user, order: order }
+}
+
+-- Execute
+runActiveUserOrders : Effect DbError (List { user: User, order: Order })
+runActiveUserOrders = do Effect {
+  conn  <- db.connect { driver: Sqlite, url: "app.db" }
+  pairs <- db.runQueryOn conn activeUserOrders
+  _     <- db.close conn
+  pure pairs
+}
+```
+
+> **v0.1 limitation:** each `db.from` inside the block loads **all rows** for that
+> table from the store.  Two `db.from` binds = two full table scans + an in-memory
+> nested-loop join.  This is fine for small tables; avoid it on large datasets until
+> SQL `JOIN` pushdown lands in a future phase.
+<!-- /quick-info -->
+
+### Aggregate helpers: `count` and `exists`
+
+<!-- quick-info: {"kind":"feature","name":"db.count / db.exists"} -->
+`db.count` and `db.exists` are available in v0.1.  Both run **in memory** after
+loading all rows — the same in-memory limitation as the rest of the Query DSL.
+SQL-aggregate pushdown (`COUNT(*)` / `EXISTS(...)`) is planned for a later phase.
+
+```aivi
+-- Count matching rows
+activeCount : Query Int
+activeCount = db.count (db.from userTable |> db.where_ _.active)
+
+-- Test whether any row matches
+hasActiveUsers : Query Bool
+hasActiveUsers = db.exists (db.from userTable |> db.where_ _.active)
+
+-- Execute (same runQueryOn interface)
+main = do Effect {
+  conn    <- db.connect { driver: Sqlite, url: "app.db" }
+  [n]     <- db.runQueryOn conn activeCount     -- Query Int produces a singleton list
+  [found] <- db.runQueryOn conn hasActiveUsers
+  ...
+}
+```
+
+> **v0.1 limitation:** `db.count` and `db.exists` load all matching rows into memory
+> before counting or testing.  On large tables, add a `db.where_` filter to reduce
+> the working set, and consider pairing `db.exists` with `db.limit 1` to stop after
+> the first match.
 <!-- /quick-info -->
 
 <<< ../../snippets/from_md/stdlib/system/database/querying.aivi{aivi}
@@ -118,6 +260,7 @@ Use `db.connect` / `db.close` as the pool's acquire/release functions when you w
 - In v0.1, `Query A` executes **in memory**: `db.from tbl` loads all rows from the store, then predicates and projections run in the AIVI runtime.  SQL pushdown is not yet implemented.
 - Raw SQL strings via an external-source `db.query` mechanism are **not part of v0.1**; use `db.from` / `do Query` for typed in-memory queries instead.
 - `db.applyDelta` / `db.applyDeltas` run predicates and patches **in memory** (in the AIVI runtime) — they do not compile to SQL `WHERE` / `SET` clauses in v0.1.
+- The typed mutation helpers (`db.insertOn`, `db.deleteWhereOn`, `db.updateWhereOn`, `db.upsertOn`, and their ambient variants `db.insert`, `db.deleteWhere`, `db.updateWhere`, `db.upsert`) are convenience wrappers that construct and apply a delta in one step.  They carry the same in-memory limitation as `db.applyDelta` in v0.1.
 - Transactions are scoped to a single `DbConnection`. `db.beginTxOn conn` never affects any other connection in the same pool.
 - The ambient helpers (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.savepoint`, ...) are compatibility sugar over the current default connection selected by `db.configure`.
 - Nested `beginTxOn` calls are not part of the transaction model; use savepoints for inner rollback boundaries.
@@ -126,7 +269,7 @@ Use `db.connect` / `db.close` as the pool's acquire/release functions when you w
 
 - `db.configure`, `db.configureSqlite`, pool creation / acquisition → `db.connect`
 - `db.load` and read-only query helpers → `db.query`
-- `db.applyDelta`, `db.applyDeltas`, transactions, savepoints → `db.mutate`
+- `db.applyDelta`, `db.applyDeltas`, `db.insert`, `db.insertOn`, `db.deleteWhere`, `db.deleteWhereOn`, `db.updateWhere`, `db.updateWhereOn`, `db.upsert`, `db.upsertOn`, transactions, savepoints → `db.mutate`
 - `db.runMigrations`, `db.runMigrationSql` → `db.migrate`
 - the broader `db` family shorthand covers all database capabilities
 
@@ -195,6 +338,50 @@ backward compatibility, but explicit `...On` forms are the canonical transaction
 
 When `use aivi.database (domain Database)` is in scope, these are available in delta expressions such as `table + upd (...) (...)` and `table + ups (...) value (...)`.
 
+### Typed mutation helpers
+
+<!-- quick-info: {"kind":"feature","name":"Typed mutation helpers"} -->
+The typed mutation helpers are **convenience wrappers over the delta machinery**.
+Each one constructs the appropriate `Delta A` and calls `db.applyDeltaOn` (or
+`db.applyDelta` for the ambient form) in a single step, so you do not need to
+name the intermediate delta value when the operation is straightforward.
+
+**v0.1 behaviour:** Like `db.applyDelta` / `db.applyDeltaOn`, these helpers
+execute entirely **in memory** — predicates and patches run in the AIVI runtime;
+they do **not** compile to SQL `INSERT`, `DELETE`, `UPDATE`, or `INSERT … ON
+CONFLICT` statements in v0.1.  SQL pushdown for mutations is planned for a later
+phase.
+<!-- /quick-info -->
+
+<<< ../../snippets/from_md/stdlib/system/database/typed_mutations.aivi{aivi}
+
+#### Explicit (`…On`) forms
+
+| Function | Equivalent delta expression |
+| --- | --- |
+| **db.insertOn** conn table row<br><code>DbConnection -> Table A -> A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Insert row)` |
+| **db.deleteWhereOn** conn table pred<br><code>DbConnection -> Table A -> (A -> Bool) -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Delete pred)` |
+| **db.updateWhereOn** conn table pred patch<br><code>DbConnection -> Table A -> (A -> Bool) -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Update pred patch)` |
+| **db.upsertOn** conn table pred value patch<br><code>DbConnection -> Table A -> (A -> Bool) -> A -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Upsert pred value patch)` |
+
+#### Ambient forms
+
+The ambient forms omit the `conn` argument and operate on the default connection
+configured with `db.configure`.  They exist for convenience and mirror the
+explicit forms exactly.
+
+| Function | Equivalent delta expression |
+| --- | --- |
+| **db.insert** table row<br><code>Table A -> A -> Effect DbError (Table A)</code> | `db.applyDelta table (Insert row)` |
+| **db.deleteWhere** table pred<br><code>Table A -> (A -> Bool) -> Effect DbError (Table A)</code> | `db.applyDelta table (Delete pred)` |
+| **db.updateWhere** table pred patch<br><code>Table A -> (A -> Bool) -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDelta table (Update pred patch)` |
+| **db.upsert** table pred value patch<br><code>Table A -> (A -> Bool) -> A -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDelta table (Upsert pred value patch)` |
+
+> **When to prefer the typed helpers vs. raw deltas:** Use the helpers for
+> one-shot mutations where you do not need to compose or batch multiple deltas.
+> Use `db.applyDeltas` / `db.applyDeltasOn` when you need to apply several
+> mutations in a single call, or when you are building delta values programmatically.
+
 ### FTS helpers
 
 `aivi.database` now includes typed helpers for preparing FTS payloads and queries:
@@ -218,6 +405,12 @@ Use `do Query { ... }` to compose queries; `do Query` desugars via `queryChain`/
 | **db.emptyQuery**<br><code>Query A</code> | A query that always returns an empty list. |
 | **db.queryChain** f q<br><code>(A -> Query B) -> Query A -> Query B</code> | Monadic bind for `Query`; used by `do Query` desugaring. |
 | **db.runQueryOn** conn q<br><code>DbConnection -> Query A -> Effect DbError (List A)</code> | Executes the query against the given connection. |
+| **db.runQuery** q<br><code>Query A -> Effect DbError (List A)</code> | Executes the query against the **default connection** configured with `db.configure`. Rows are still loaded and filtered in memory (v0.1). Prefer `runQueryOn` when you hold an explicit handle or a pool-acquired connection. |
+| **db.orderBy** key q<br><code>(A -> B) -> Query A -> Query A</code> | Sorts rows by the given key function. Runs in memory after all rows are loaded; does **not** compile to a SQL `ORDER BY` clause in v0.1. |
+| **db.limit** n q<br><code>Int -> Query A -> Query A</code> | Keeps at most `n` rows. Applied **after** filtering and sorting in memory. Does not push a SQL `LIMIT` to the backend in v0.1. |
+| **db.offset** n q<br><code>Int -> Query A -> Query A</code> | Skips the first `n` rows. Applied **after** filtering and sorting in memory. Does not push a SQL `OFFSET` to the backend in v0.1. |
+| **db.count** q<br><code>Query A -> Query Int</code> | Returns a singleton `Query Int` with the number of rows produced by `q`. Runs in memory in v0.1; does not push a SQL `COUNT(*)` to the backend. |
+| **db.exists** q<br><code>Query A -> Query Bool</code> | Returns a singleton `Query Bool` that is `True` when `q` produces at least one row. Runs in memory in v0.1; does not push a SQL `EXISTS(...)` to the backend. |
 
 ### Pooling (`aivi.database.pool`)
 

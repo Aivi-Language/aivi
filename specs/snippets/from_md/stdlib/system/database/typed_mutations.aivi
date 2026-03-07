@@ -1,0 +1,39 @@
+-- Typed mutation helpers — convenience wrappers over the delta machinery.
+-- Each function constructs the appropriate Delta and calls db.applyDeltaOn
+-- (or db.applyDelta for the ambient form) in one step.
+
+-- db.insertOn: insert a single row through an explicit connection
+createUser : DbConnection -> User -> Effect DbError (Table User)
+createUser = conn => newUser =>
+  db.insertOn conn userTable newUser
+
+-- db.deleteWhereOn: delete all rows matching a predicate
+removeInactiveUsers : DbConnection -> Effect DbError (Table User)
+removeInactiveUsers = conn =>
+  db.deleteWhereOn conn userTable (!_.active)
+
+-- db.updateWhereOn: update all rows matching a predicate
+promoteAdmin : DbConnection -> Int -> Effect DbError (Table User)
+promoteAdmin = conn => userId =>
+  db.updateWhereOn conn userTable (_.id == userId) (u => u <| { role: "admin" })
+
+-- db.upsertOn: patch matching rows; insert the seed row when none match
+syncUser : DbConnection -> User -> Effect DbError (Table User)
+syncUser = conn => user =>
+  db.upsertOn conn userTable (_.id == user.id) user (u => u <| { name: user.name, active: user.active })
+
+-- Ambient variants use the default connection from db.configure
+-- and mirror the explicit forms exactly:
+--
+--   db.insert        table row
+--   db.deleteWhere   table pred
+--   db.updateWhere   table pred patch
+--   db.upsert        table pred value patch
+
+addUserAmbient : User -> Effect DbError (Table User)
+addUserAmbient = newUser =>
+  db.insert userTable newUser
+
+deleteStaleAmbient : Instant -> Effect DbError (Table User)
+deleteStaleAmbient = cutoff =>
+  db.deleteWhere userTable (_.createdAt < cutoff)
