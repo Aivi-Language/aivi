@@ -22,7 +22,7 @@ export savepointOn, releaseSavepointOn, rollbackToSavepointOn
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export ins, upd, del, ups
 export domain Database
-export Query, queryOf, queryChain, emptyQuery, from, where_, select, runQueryOn
+export Query, queryOf, queryChain, emptyQuery, from, where_, guard_, select, runQueryOn
 
 use aivi
 use aivi.list (length, reverse)
