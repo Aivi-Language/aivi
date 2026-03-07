@@ -101,7 +101,7 @@ No callback spaghetti. Signal handlers are typed ADT constructors — the compil
 
 ### Blessed app loop with `gtkApp`
 
-The primary public UI story is `Model -> View -> Msg -> Update` hosted by `gtkApp`. Timers become subscriptions, post-update work becomes commands, and expensive pure reads can be memoized with `computed`:
+The primary public UI story is `Model -> View -> Msg -> Update` hosted by `gtkApp`. Timers become subscriptions, post-update work becomes commands, and expensive pure reads can be memoized with `computed` and embedded directly into GTK sigils:
 
 ```ocaml
 Msg = Increment | Tick
@@ -131,7 +131,7 @@ main = gtkApp {
   subscriptions: subscriptions,
   view: state => ~<gtk>
     <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
-      <GtkLabel label={countLabel state} />
+      <GtkLabel label={countLabel} />
       <GtkButton id="incrementBtn" label="Increment" onClick={ Increment } />
     </GtkBox>
   </gtk>,
@@ -144,7 +144,7 @@ main = gtkApp {
 }
 ```
 
-Lower-level `signalStream`, `buildFromNode`, and `reconcileNode` still exist for custom loops and library code, but `gtkApp` is the single blessed host for standard applications. `demos/snake.aivi` shows this pattern with `subscriptionEvery` and reactive `computed` helpers in a complete app.
+Lower-level `signalStream`, `buildFromNode`, and `reconcileNode` still exist for custom loops and library code, but `gtkApp` is the single blessed host for standard applications. Inside a GTK sigil, `label={countLabel}` and `<each items={visibleRows}>` auto-read reactive signal helpers against the committed model. `demos/snake.aivi` shows this pattern with `subscriptionEvery` and reactive `computed` helpers in a complete app.
 
 ### Dynamic lists with `<each>`
 

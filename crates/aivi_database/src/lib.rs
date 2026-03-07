@@ -14,6 +14,45 @@ pub enum Driver {
     Mysql,
 }
 
+#[derive(Clone, Debug)]
+pub enum QueryCell {
+    Null,
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Text(String),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum QueryColumnType {
+    Int,
+    Bool,
+    Float,
+    Text,
+    Timestamp,
+}
+
+#[derive(Clone, Debug)]
+pub struct QueryColumn {
+    pub name: String,
+    pub column_type: QueryColumnType,
+    pub not_null: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct QueryRow {
+    pub row_index: i64,
+    pub row_json: String,
+    pub values: Vec<QueryCell>,
+}
+
+#[derive(Clone, Debug)]
+pub struct QueryTable {
+    pub name: String,
+    pub columns: Vec<QueryColumn>,
+    pub rows: Vec<QueryRow>,
+}
+
 type DbResp<T> = mpsc::Sender<Result<T, String>>;
 
 enum DbRequest {
@@ -86,6 +125,16 @@ enum DbRequest {
         connection_id: u64,
         statements: Vec<String>,
         resp: DbResp<()>,
+    },
+    SyncQueryTable {
+        connection_id: u64,
+        table: QueryTable,
+        resp: DbResp<()>,
+    },
+    QuerySql {
+        connection_id: u64,
+        sql: String,
+        resp: DbResp<Vec<Vec<QueryCell>>>,
     },
 }
 
@@ -212,6 +261,22 @@ impl DbConnection {
             resp,
         })
     }
+
+    pub fn sync_query_table(&self, table: QueryTable) -> Result<(), String> {
+        self.request(|connection_id, resp| DbRequest::SyncQueryTable {
+            connection_id,
+            table,
+            resp,
+        })
+    }
+
+    pub fn query_sql(&self, sql: String) -> Result<Vec<Vec<QueryCell>>, String> {
+        self.request(|connection_id, resp| DbRequest::QuerySql {
+            connection_id,
+            sql,
+            resp,
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -325,6 +390,189 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
 
     fn backend_err(ctx: &str, err: impl std::fmt::Display) -> String {
         format!("{ctx}: {err}")
+    }
+
+    fn is_sql_identifier(name: &str) -> bool {
+        !name.is_empty()
+            && name
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    }
+
+    fn require_sql_identifier(name: &str, ctx: &str) -> Result<(), String> {
+        if is_sql_identifier(name) {
+            Ok(())
+        } else {
+            Err(format!("{ctx}: invalid SQL identifier '{name}'"))
+        }
+    }
+
+    fn escape_sql_text(value: &str) -> String {
+        value.replace('\'', "''")
+    }
+
+    fn sql_type_name(column_type: QueryColumnType) -> &'static str {
+        match column_type {
+            QueryColumnType::Int => "BIGINT",
+            QueryColumnType::Bool => "BOOLEAN",
+            QueryColumnType::Float => "DOUBLE PRECISION",
+            QueryColumnType::Text | QueryColumnType::Timestamp => "TEXT",
+        }
+    }
+
+    fn sql_literal(cell: &QueryCell) -> String {
+        match cell {
+            QueryCell::Null => "NULL".to_string(),
+            QueryCell::Int(value) => value.to_string(),
+            QueryCell::Float(value) => value.to_string(),
+            QueryCell::Bool(value) => {
+                if *value {
+                    "TRUE".to_string()
+                } else {
+                    "FALSE".to_string()
+                }
+            }
+            QueryCell::Text(value) => format!("'{}'", escape_sql_text(value)),
+        }
+    }
+
+    fn create_query_table_sql(table: &QueryTable) -> Result<String, String> {
+        require_sql_identifier(&table.name, "database.query.create_table")?;
+        let mut parts = vec![
+            "__aivi_rowid BIGINT NOT NULL".to_string(),
+            "__aivi_row_json TEXT NOT NULL".to_string(),
+        ];
+        for column in &table.columns {
+            require_sql_identifier(&column.name, "database.query.create_table")?;
+            let mut part = format!("{} {}", column.name, sql_type_name(column.column_type));
+            if column.not_null {
+                part.push_str(" NOT NULL");
+            }
+            parts.push(part);
+        }
+        Ok(format!(
+            "CREATE TABLE {} ({})",
+            table.name,
+            parts.join(", ")
+        ))
+    }
+
+    fn insert_row_sql(table: &QueryTable, row: &QueryRow) -> Result<String, String> {
+        require_sql_identifier(&table.name, "database.query.insert")?;
+        if row.values.len() != table.columns.len() {
+            return Err(format!(
+                "database.query.insert: row for '{}' has {} values but schema has {} columns",
+                table.name,
+                row.values.len(),
+                table.columns.len()
+            ));
+        }
+        let mut column_names = vec!["__aivi_rowid".to_string(), "__aivi_row_json".to_string()];
+        let mut value_parts = vec![
+            row.row_index.to_string(),
+            format!("'{}'", escape_sql_text(&row.row_json)),
+        ];
+        for (column, value) in table.columns.iter().zip(row.values.iter()) {
+            require_sql_identifier(&column.name, "database.query.insert")?;
+            column_names.push(column.name.clone());
+            value_parts.push(sql_literal(value));
+        }
+        Ok(format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            table.name,
+            column_names.join(", "),
+            value_parts.join(", ")
+        ))
+    }
+
+    fn sqlite_cell_from_value_ref(value: rusqlite::types::ValueRef<'_>) -> QueryCell {
+        match value {
+            rusqlite::types::ValueRef::Null => QueryCell::Null,
+            rusqlite::types::ValueRef::Integer(value) => QueryCell::Int(value),
+            rusqlite::types::ValueRef::Real(value) => QueryCell::Float(value),
+            rusqlite::types::ValueRef::Text(value) => {
+                QueryCell::Text(String::from_utf8_lossy(value).into_owned())
+            }
+            rusqlite::types::ValueRef::Blob(value) => {
+                QueryCell::Text(String::from_utf8_lossy(value).into_owned())
+            }
+        }
+    }
+
+    fn postgres_cell_from_row(row: &postgres::Row, index: usize) -> Result<QueryCell, String> {
+        use postgres::types::Type;
+
+        let ty = row.columns()[index].type_();
+        if *ty == Type::BOOL {
+            let value: Option<bool> = row
+                .try_get(index)
+                .map_err(|e| backend_err("postgres.query_row.bool", e))?;
+            return Ok(value.map(QueryCell::Bool).unwrap_or(QueryCell::Null));
+        }
+        if *ty == Type::INT2 {
+            let value: Option<i16> = row
+                .try_get(index)
+                .map_err(|e| backend_err("postgres.query_row.int2", e))?;
+            return Ok(value
+                .map(|value| QueryCell::Int(value as i64))
+                .unwrap_or(QueryCell::Null));
+        }
+        if *ty == Type::INT4 {
+            let value: Option<i32> = row
+                .try_get(index)
+                .map_err(|e| backend_err("postgres.query_row.int4", e))?;
+            return Ok(value
+                .map(|value| QueryCell::Int(value as i64))
+                .unwrap_or(QueryCell::Null));
+        }
+        if *ty == Type::INT8 {
+            let value: Option<i64> = row
+                .try_get(index)
+                .map_err(|e| backend_err("postgres.query_row.int8", e))?;
+            return Ok(value.map(QueryCell::Int).unwrap_or(QueryCell::Null));
+        }
+        if *ty == Type::FLOAT4 {
+            let value: Option<f32> = row
+                .try_get(index)
+                .map_err(|e| backend_err("postgres.query_row.float4", e))?;
+            return Ok(value
+                .map(|value| QueryCell::Float(value as f64))
+                .unwrap_or(QueryCell::Null));
+        }
+        if *ty == Type::FLOAT8 {
+            let value: Option<f64> = row
+                .try_get(index)
+                .map_err(|e| backend_err("postgres.query_row.float8", e))?;
+            return Ok(value.map(QueryCell::Float).unwrap_or(QueryCell::Null));
+        }
+
+        let value: Option<String> = row
+            .try_get(index)
+            .map_err(|e| backend_err("postgres.query_row.text", e))?;
+        Ok(value.map(QueryCell::Text).unwrap_or(QueryCell::Null))
+    }
+
+    fn mysql_cell_from_value(value: mysql::Value) -> QueryCell {
+        match value {
+            mysql::Value::NULL => QueryCell::Null,
+            mysql::Value::Int(value) => QueryCell::Int(value),
+            mysql::Value::UInt(value) => QueryCell::Int(value as i64),
+            mysql::Value::Float(value) => QueryCell::Float(value as f64),
+            mysql::Value::Double(value) => QueryCell::Float(value),
+            mysql::Value::Bytes(value) => {
+                QueryCell::Text(String::from_utf8_lossy(&value).into_owned())
+            }
+            mysql::Value::Date(year, month, day, hour, min, sec, micros) => {
+                QueryCell::Text(format!(
+                    "{year:04}-{month:02}-{day:02} {hour:02}:{min:02}:{sec:02}.{:06}",
+                    micros
+                ))
+            }
+            mysql::Value::Time(_, days, hours, mins, secs, micros) => QueryCell::Text(format!(
+                "{days}:{hours:02}:{mins:02}:{secs:02}.{:06}",
+                micros
+            )),
+        }
     }
 
     impl Backend {
@@ -603,6 +851,69 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
             }
             Ok(())
         }
+
+        fn sync_query_table(&mut self, table: &QueryTable) -> Result<(), String> {
+            let drop_sql = format!("DROP TABLE IF EXISTS {}", table.name);
+            self.execute_statement(&drop_sql)?;
+            self.execute_statement(&create_query_table_sql(table)?)?;
+            for row in &table.rows {
+                self.execute_statement(&insert_row_sql(table, row)?)?;
+            }
+            Ok(())
+        }
+
+        fn query_sql(&mut self, sql: &str) -> Result<Vec<Vec<QueryCell>>, String> {
+            match self {
+                Backend::Sqlite(conn) => {
+                    let mut stmt = conn
+                        .prepare(sql)
+                        .map_err(|e| backend_err("sqlite.query.prepare", e))?;
+                    let column_count = stmt.column_count();
+                    let mut rows = stmt
+                        .query([])
+                        .map_err(|e| backend_err("sqlite.query.query", e))?;
+                    let mut out = Vec::new();
+                    while let Some(row) = rows
+                        .next()
+                        .map_err(|e| backend_err("sqlite.query.next", e))?
+                    {
+                        let mut result_row = Vec::with_capacity(column_count);
+                        for index in 0..column_count {
+                            let value = row
+                                .get_ref(index)
+                                .map_err(|e| backend_err("sqlite.query.get_ref", e))?;
+                            result_row.push(sqlite_cell_from_value_ref(value));
+                        }
+                        out.push(result_row);
+                    }
+                    Ok(out)
+                }
+                Backend::Postgresql(client) => {
+                    let rows = client
+                        .query(sql, &[])
+                        .map_err(|e| backend_err("postgres.query", e))?;
+                    let mut out = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        let mut result_row = Vec::with_capacity(row.len());
+                        for index in 0..row.len() {
+                            result_row.push(postgres_cell_from_row(&row, index)?);
+                        }
+                        out.push(result_row);
+                    }
+                    Ok(out)
+                }
+                Backend::Mysql(conn) => {
+                    let rows: Vec<mysql::Row> =
+                        conn.query(sql).map_err(|e| backend_err("mysql.query", e))?;
+                    let mut out = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        let values = row.unwrap();
+                        out.push(values.into_iter().map(mysql_cell_from_value).collect());
+                    }
+                    Ok(out)
+                }
+            }
+        }
     }
 
     fn backend_mut(
@@ -766,6 +1077,24 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
             } => {
                 let result = backend_mut(&mut backends, connection_id)
                     .and_then(|backend| backend.run_migration_sql(&statements));
+                let _ = resp.send(result);
+            }
+            DbRequest::SyncQueryTable {
+                connection_id,
+                table,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.sync_query_table(&table));
+                let _ = resp.send(result);
+            }
+            DbRequest::QuerySql {
+                connection_id,
+                sql,
+                resp,
+            } => {
+                let result = backend_mut(&mut backends, connection_id)
+                    .and_then(|backend| backend.query_sql(&sql));
                 let _ = resp.send(result);
             }
         }

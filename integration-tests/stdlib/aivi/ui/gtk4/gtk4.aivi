@@ -22,8 +22,10 @@ getFocusPair = event => event match
   | GtkFocusIn wid name => (wid, name)
   | _                   => (0, "")
 
-TestMsg  = Save | NameChanged Text | ToggledMsg Bool
-TestMsg2 = TitleChanged Text | BodyChanged Text
+TestMsg     = Save | NameChanged Text | ToggledMsg Bool
+TestMsg2    = TitleChanged Text | BodyChanged Text
+SignalRow   = { name: Text }
+SignalModel = { title: Text, rows: List SignalRow }
 
 toTestMsg = event => event match
   | GtkClicked _ _          => Some Save
@@ -35,6 +37,27 @@ toTestMsg2 = event => event match
   | GtkInputChanged _ "titleInput" txt => Some (TitleChanged txt)
   | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
   | _                                  => None
+
+titleSignal : SignalModel -> Text
+titleSignal =
+  computed "gtk4.tests.titleSignal" (state =>
+    "Title: {state.title}"
+  )
+
+rowSignal : SignalModel -> List SignalRow
+rowSignal =
+  signal (state => state.rows)
+
+signalView : SignalModel -> GtkNode
+signalView = _ =>
+  ~<gtk>
+    <GtkBox orientation="vertical" spacing="4">
+      <GtkLabel label={titleSignal} />
+      <each items={rowSignal} as={row}>
+        <GtkLabel label={row.name} />
+      </each>
+    </GtkBox>
+  </gtk>
 
 @test "GtkClicked carries widget name"
 signal_clicked = do Effect {
@@ -141,4 +164,18 @@ computed_subscription_shape = do Effect {
   assertEq (List.length second) 1
   assertEq (tickMillis { fast: True }) 50
   assertEq (tickMillis { fast: False }) 120
+}
+
+@test "signal remains callable and readSignal is explicit"
+signal_pure_helper = do Effect {
+  title = signal (state => state.title)
+  state = { title: "hello" }
+  assertEq (title state) "hello"
+  assertEq (readSignal title state) "hello"
+}
+
+@test "signal bindings compile inside gtk sigils"
+signal_bindings_compile = do Effect {
+  _ = signalView
+  assertEq True True
 }

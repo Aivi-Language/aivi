@@ -119,6 +119,25 @@ Phase 4 adds a pure reactive layer on top of the committed model described above
 
 This keeps the architecture single-loop: reactive values help reuse pure work inside `view`, `subscriptions`, and command construction, but they never mutate the model on their own and they never start effects implicitly.
 
+In the current shipped milestone, GTK sigils may read reactive helpers directly in common binding positions:
+
+```aivi
+titleText = computed "counter.title" (state => "Count: {toText state.count}")
+visibleRows = signal (state => state.rows)
+
+view = _ =>
+  ~<gtk>
+    <GtkBox orientation="vertical">
+      <GtkLabel label={titleText} />
+      <each items={visibleRows} as={row}>
+        <GtkLabel label={row.name} />
+      </each>
+    </GtkBox>
+  </gtk>
+```
+
+Those bindings are evaluated against the committed model inside `gtkApp`; outside the sigil, use `readSignal` or ordinary function application.
+
 ## Forms and validation
 
 Form-heavy screens stay inside the same GTK app loop:

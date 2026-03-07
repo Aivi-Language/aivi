@@ -170,11 +170,11 @@ view : State -> GtkNode
 view = state =>
   ~<gtk>
     <GtkBox orientation="vertical" spacing="0" marginTop="8" marginStart="8" marginEnd="8" marginBottom="8">
-      <GtkLabel label={scoreText state} cssClass="snakeheader" />
-      <each items={gridRows state} as={row}>
+      <GtkLabel label={scoreText} cssClass="snakeheader" />
+      <each items={gridRows} as={row}>
         <GtkLabel label={row} cssClass="snakerow" />
       </each>
-      <GtkLabel label={statusText state} cssClass="snakestatus" />
+      <GtkLabel label={statusText} cssClass="snakestatus" />
     </GtkBox>
   </gtk>
 

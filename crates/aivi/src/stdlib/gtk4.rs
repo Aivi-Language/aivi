@@ -40,7 +40,7 @@ export shortcutNew, widgetAddShortcut
 export notificationNew, notificationSetBody, appSendNotification, appWithdrawNotification
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
-export gtkElement, gtkTextNode, gtkAttr, gtkSignalAttr
+export gtkElement, gtkTextNode, gtkAttr, gtkSignalAttr, gtkEachItems
 export buildFromNode, buildWithIds, reconcileNode
 export signalPoll, signalEmit, signalStream, dbusServerStart
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
@@ -55,7 +55,7 @@ export subscriptionNone, subscriptionBatch, subscriptionEvery, subscriptionSourc
 export gtkApp
 export gtkAppFull
 export gtkSetInterval
-export computed
+export signal, computed, readSignal
 
 use aivi
 use aivi.concurrency as concurrent
@@ -170,6 +170,12 @@ noSubscriptions = _ => []
 
 computed : Text -> (model -> a) -> model -> a
 computed = key derive => gtk4.computed key derive
+
+signal : (model -> a) -> model -> a
+signal = derive => gtk4.signal derive
+
+readSignal : (model -> a) -> model -> a
+readSignal = signalValue => model => signalValue model
 
 commandNone : Command msg
 commandNone = CommandNone
@@ -433,11 +439,14 @@ gtkElement = tag attrs children => GtkElement tag attrs children
 gtkTextNode : Text -> GtkNode
 gtkTextNode = t => GtkTextNode t
 
-gtkAttr : Text -> Text -> GtkAttr
-gtkAttr = name value => GtkAttribute name value
+gtkAttr : Text -> a -> GtkAttr
+gtkAttr = name value => GtkAttribute name (gtk4.serializeAttr value)
 
 gtkSignalAttr : Text -> A -> GtkAttr
 gtkSignalAttr = name value => GtkAttribute name (gtk4.serializeSignal value)
+
+gtkEachItems : a -> (b -> GtkNode) -> List GtkNode
+gtkEachItems = items template => gtk4.eachItems items template
 
 buildFromNode : GtkNode -> Effect GtkError WidgetId
 buildFromNode = gtk4.buildFromNode

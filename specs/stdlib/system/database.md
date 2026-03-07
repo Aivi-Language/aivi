@@ -45,9 +45,14 @@ works cleanly with pooling.
 `aivi.database` ships a typed `Query A` type and a `do Query { ... }` notation for
 composing queries in a readable, composable way.
 
-**MVP limitations (v0.1):** queries are executed **in memory** — all rows are loaded
-from the store first, then predicates and projections run in the AIVI runtime.  True
-SQL pushdown (WHERE / SELECT compilation) is planned for a later phase.
+**Current v0.1 behavior:** the portable subset (`db.from`, `db.where_`, `db.guard_`,
+`db.select`, `db.orderBy`, `db.limit`, `db.offset`, `db.count`, `db.exists`, and
+`do Query` blocks composed from those forms) is lowered to a structured SQL-backed
+plan when every participating table has an explicit column list.  Those same static
+schemas let the checker catch missing row fields and obvious bad projected/joined
+field references before runtime.  Helper-built queries that fall outside the lowered
+subset still use the older in-memory `Query` runtime, while unsupported `do Query`
+shapes surface a query error when run instead of silently falling back.
 
 ```aivi
 -- Compose a query value
@@ -74,15 +79,16 @@ explicit handle and use `db.runQuery` instead:
 main = do Effect {
   _ <- db.configure { driver: Sqlite, url: "app.db" }
   _ <- db.runMigrations [userTable]
-  names <- db.runQuery activeNames   -- uses the default connection; same in-memory semantics
+  names <- db.runQuery activeNames   -- uses the default connection; same lowered-query semantics
   ...
 }
 ```
 
-> **v0.1 note:** `db.runQuery` has the same in-memory execution model as `db.runQueryOn` —
-> rows are loaded from the store and filtered in the AIVI runtime.  Neither helper pushes
-> predicates down to SQL in v0.1.  Prefer `db.runQueryOn` when you hold an explicit
-> `DbConnection` (e.g. from a pool) so that transaction ownership stays local and explicit.
+> **v0.1 note:** `db.runQuery` and `db.runQueryOn` both use the same lowered query engine.
+> When a query is inside the supported SQL subset, predicates/order/paging/aggregates are
+> pushed into SQL.  When a query stays outside that subset, it keeps the older in-memory
+> behavior.  Prefer `db.runQueryOn` when you hold an explicit `DbConnection` (e.g. from a
+> pool) so that transaction ownership stays local and explicit.
 
 `do Query` desugars via `queryChain`/`queryOf` (not the generic monad `chain`/`of`), so
 the result type is always `Query A`.  You can also compose queries with the functional
@@ -96,19 +102,21 @@ activeNames =
   |> db.select _.name
 ```
 
+> **Current subset boundary:** helper pipelines keep the legacy runtime path when they do
+> not lower cleanly.  `do Query` lowering is stricter: today the supported shape is plain
+> `db.from` binds, `db.guard_` filters, simple `=` let-bindings, and a final `db.queryOf`
+> or helper wrapped around it.
+
 ### Sorting, paging, and slicing (v0.1)
 
-Three additional helpers let you sort and page the in-memory result set:
+Three additional helpers let you sort and page query results:
 
-- **`db.orderBy key q`** — sorts rows by the projection `key`; equivalent to
-  `List.sortBy key` applied after all rows are loaded.
+- **`db.orderBy key q`** — sorts rows by the projection `key`.
 - **`db.limit n q`** — keeps the first `n` rows of the (optionally sorted) result.
 - **`db.offset n q`** — skips the first `n` rows.
 
-> **v0.1 limitation:** all three run in the AIVI runtime *after* the full row set has
-> been fetched from the store.  They do **not** compile to SQL `ORDER BY`, `LIMIT`, or
-> `OFFSET` clauses.  Avoid them on large tables until SQL pushdown lands in a future
-> phase.
+> **v0.1 note:** inside the lowered subset these map directly to SQL `ORDER BY`, `LIMIT`,
+> and `OFFSET`.  Queries outside the lowered subset keep the legacy in-memory behavior.
 
 Combine them with the pipeline style:
 
@@ -145,13 +153,14 @@ recentTopNames = do Query {
 > discard it.
 <!-- /quick-info -->
 
-### Multi-table joins (in-memory, v0.1)
+### Multi-table joins (portable subset, v0.1)
 
 <!-- quick-info: {"kind":"feature","name":"Multi-table join"} -->
-Full SQL `JOIN` pushdown is not yet available in v0.1.  Cross-table queries are written
-as **nested `do Query` binds with `guard_`**: bind rows from each table in turn, then
-use `db.guard_` to apply the join predicate.  All rows from both tables are loaded into
-memory first; the predicate runs in the AIVI runtime.
+Cross-table queries are written as **nested `do Query` binds with `guard_`**: bind rows
+from each table in turn, then use `db.guard_` to apply the join predicate.  In the
+lowered subset, this repeated-`db.from` pattern becomes a SQL cross join plus pushed-down
+`WHERE` predicates, preserving the left-to-right row order with deterministic hidden row
+ids.
 
 ```aivi
 -- Schema
@@ -184,18 +193,18 @@ runActiveUserOrders = do Effect {
 }
 ```
 
-> **v0.1 limitation:** each `db.from` inside the block loads **all rows** for that
-> table from the store.  Two `db.from` binds = two full table scans + an in-memory
-> nested-loop join.  This is fine for small tables; avoid it on large datasets until
-> SQL `JOIN` pushdown lands in a future phase.
+> **v0.1 limitation:** only the repeated-`db.from` + `db.guard_` join shape is lowered
+> today, and each bind must still be a plain table source.  Explicit join syntax, outer
+> joins, grouping, and correlated subqueries are still outside the shipped subset.
 <!-- /quick-info -->
 
 ### Aggregate helpers: `count` and `exists`
 
 <!-- quick-info: {"kind":"feature","name":"db.count / db.exists"} -->
-`db.count` and `db.exists` are available in v0.1.  Both run **in memory** after
-loading all rows — the same in-memory limitation as the rest of the Query DSL.
-SQL-aggregate pushdown (`COUNT(*)` / `EXISTS(...)`) is planned for a later phase.
+`db.count` and `db.exists` are available in v0.1.  Inside the lowered subset `db.count`
+compiles to SQL `COUNT(*)`, while `db.exists` compiles to a SQL existence probe
+(`SELECT 1 ... LIMIT 1`-style).  Outside the lowered subset they keep the legacy
+in-memory behavior.
 
 ```aivi
 -- Count matching rows
@@ -215,10 +224,8 @@ main = do Effect {
 }
 ```
 
-> **v0.1 limitation:** `db.count` and `db.exists` load all matching rows into memory
-> before counting or testing.  On large tables, add a `db.where_` filter to reduce
-> the working set, and consider pairing `db.exists` with `db.limit 1` to stop after
-> the first match.
+> **v0.1 limitation:** aggregate pushdown only applies when the input query is itself in
+> the lowered subset; `db.count` / `db.exists` do not make an arbitrary query lowerable.
 <!-- /quick-info -->
 
 <<< ../../snippets/from_md/stdlib/system/database/querying.aivi{aivi}
@@ -257,8 +264,8 @@ Use `db.connect` / `db.close` as the pool's acquire/release functions when you w
 
 ## Notes
 
-- In v0.1, `Query A` executes **in memory**: `db.from tbl` loads all rows from the store, then predicates and projections run in the AIVI runtime.  SQL pushdown is not yet implemented.
-- Raw SQL strings via an external-source `db.query` mechanism are **not part of v0.1**; use `db.from` / `do Query` for typed in-memory queries instead.
+- In v0.1, the portable `Query` subset is SQL-backed when every participating table has an explicit column list.  Helper-built queries outside that subset still keep the older in-memory behavior, while unsupported `do Query` shapes surface a query error when run.
+- Raw SQL strings via an external-source `db.query` mechanism are **not part of v0.1**; use `db.from` / `do Query` for typed queries instead.
 - `db.applyDelta` / `db.applyDeltas` run predicates and patches **in memory** (in the AIVI runtime) — they do not compile to SQL `WHERE` / `SET` clauses in v0.1.
 - The typed mutation helpers (`db.insertOn`, `db.deleteWhereOn`, `db.updateWhereOn`, `db.upsertOn`, and their ambient variants `db.insert`, `db.deleteWhere`, `db.updateWhere`, `db.upsert`) are convenience wrappers that construct and apply a delta in one step.  They carry the same in-memory limitation as `db.applyDelta` in v0.1.
 - Transactions are scoped to a single `DbConnection`. `db.beginTxOn conn` never affects any other connection in the same pool.
@@ -392,25 +399,26 @@ explicit forms exactly.
 
 ### Query DSL (v0.1 MVP)
 
-`Query A` is an in-memory query that produces `List A` when run against a `DbConnection`.
-Use `do Query { ... }` to compose queries; `do Query` desugars via `queryChain`/`queryOf`.
+`Query A` produces `List A` when run against a `DbConnection`.  `do Query` still desugars
+via `queryChain`/`queryOf`, but the compiler recognizes the portable subset and attaches a
+structured SQL-backed plan alongside the ordinary runtime representation.
 
 | Function | Explanation |
 | --- | --- |
-| **db.from** tbl<br><code>Table A -> Query A</code> | Lifts a table into a query that loads all rows. |
-| **db.where\_** pred q<br><code>(A -> Bool) -> Query A -> Query A</code> | Filters rows by a predicate (runs in memory). |
+| **db.from** tbl<br><code>Table A -> Query A</code> | Lifts a table into a query source. With explicit columns, the lowered subset plans SQL directly against the mirrored table. |
+| **db.where\_** pred q<br><code>(A -> Bool) -> Query A -> Query A</code> | Filters rows by a predicate. Lowered queries push the predicate into SQL; unsupported shapes keep the legacy in-memory behavior. |
 | **db.guard\_** cond<br><code>Bool -> Query Unit</code> | In a `do Query` block: passes through when `cond` is `True`, otherwise short-circuits to empty. |
-| **db.select** f q<br><code>(A -> B) -> Query A -> Query B</code> | Projects each row. |
+| **db.select** f q<br><code>(A -> B) -> Query A -> Query B</code> | Projects each row. Lowered queries support scalar projections, whole-row projections, and record projections built from those pieces. |
 | **db.queryOf** value<br><code>A -> Query A</code> | Wraps a single value in a singleton query. |
 | **db.emptyQuery**<br><code>Query A</code> | A query that always returns an empty list. |
 | **db.queryChain** f q<br><code>(A -> Query B) -> Query A -> Query B</code> | Monadic bind for `Query`; used by `do Query` desugaring. |
-| **db.runQueryOn** conn q<br><code>DbConnection -> Query A -> Effect DbError (List A)</code> | Executes the query against the given connection. |
-| **db.runQuery** q<br><code>Query A -> Effect DbError (List A)</code> | Executes the query against the **default connection** configured with `db.configure`. Rows are still loaded and filtered in memory (v0.1). Prefer `runQueryOn` when you hold an explicit handle or a pool-acquired connection. |
-| **db.orderBy** key q<br><code>(A -> B) -> Query A -> Query A</code> | Sorts rows by the given key function. Runs in memory after all rows are loaded; does **not** compile to a SQL `ORDER BY` clause in v0.1. |
-| **db.limit** n q<br><code>Int -> Query A -> Query A</code> | Keeps at most `n` rows. Applied **after** filtering and sorting in memory. Does not push a SQL `LIMIT` to the backend in v0.1. |
-| **db.offset** n q<br><code>Int -> Query A -> Query A</code> | Skips the first `n` rows. Applied **after** filtering and sorting in memory. Does not push a SQL `OFFSET` to the backend in v0.1. |
-| **db.count** q<br><code>Query A -> Query Int</code> | Returns a singleton `Query Int` with the number of rows produced by `q`. Runs in memory in v0.1; does not push a SQL `COUNT(*)` to the backend. |
-| **db.exists** q<br><code>Query A -> Query Bool</code> | Returns a singleton `Query Bool` that is `True` when `q` produces at least one row. Runs in memory in v0.1; does not push a SQL `EXISTS(...)` to the backend. |
+| **db.runQueryOn** conn q<br><code>DbConnection -> Query A -> Effect DbError (List A)</code> | Executes the query against the given connection. Lowered queries execute as SQL; other queries fall back to the older runtime path. |
+| **db.runQuery** q<br><code>Query A -> Effect DbError (List A)</code> | Executes the query against the **default connection** configured with `db.configure`, using the same lowered-vs-legacy behavior as `runQueryOn`. Prefer `runQueryOn` when you hold an explicit handle or a pool-acquired connection. |
+| **db.orderBy** key q<br><code>(A -> B) -> Query A -> Query A</code> | Sorts rows by the given key function. Lowered queries emit SQL `ORDER BY`; other queries keep the older in-memory sort. |
+| **db.limit** n q<br><code>Int -> Query A -> Query A</code> | Keeps at most `n` rows. Lowered queries emit SQL `LIMIT`; other queries keep the older in-memory slice. |
+| **db.offset** n q<br><code>Int -> Query A -> Query A</code> | Skips the first `n` rows. Lowered queries emit SQL `OFFSET`; other queries keep the older in-memory slice. |
+| **db.count** q<br><code>Query A -> Query Int</code> | Returns a singleton `Query Int` with the number of rows produced by `q`. Lowered queries emit SQL `COUNT(*)`; other queries keep the older in-memory count. |
+| **db.exists** q<br><code>Query A -> Query Bool</code> | Returns a singleton `Query Bool` that is `True` when `q` produces at least one row. Lowered queries emit a SQL existence probe; other queries keep the older in-memory check. |
 
 ### Pooling (`aivi.database.pool`)
 

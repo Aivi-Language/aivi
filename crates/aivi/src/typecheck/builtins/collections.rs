@@ -8,6 +8,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let map_k = checker.fresh_var_id();
     let map_v = checker.fresh_var_id();
     let map_v2 = checker.fresh_var_id();
+    let map_acc = checker.fresh_var_id();
     let map_ty = Type::con("Map").app(vec![Type::Var(map_k), Type::Var(map_v)]);
     let map_ty_v2 = Type::con("Map").app(vec![Type::Var(map_k), Type::Var(map_v2)]);
     let map_tuple_ty = Type::Tuple(vec![Type::Var(map_k), Type::Var(map_v)]);
@@ -149,6 +150,95 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::Func(
                         Box::new(map_ty.clone()),
                         Box::new(map_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "getOrElse".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(map_k)),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(map_v)),
+                        Box::new(Type::Func(
+                            Box::new(map_ty.clone()),
+                            Box::new(Type::Var(map_v)),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "alter".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(map_k)),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::con("Option").app(vec![Type::Var(map_v)])),
+                            Box::new(Type::con("Option").app(vec![Type::Var(map_v)])),
+                        )),
+                        Box::new(Type::Func(
+                            Box::new(map_ty.clone()),
+                            Box::new(map_ty.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "mergeWith".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(map_k)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(map_v)),
+                            Box::new(Type::Func(
+                                Box::new(Type::Var(map_v)),
+                                Box::new(Type::Var(map_v)),
+                            )),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(map_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(map_ty.clone()),
+                            Box::new(map_ty.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "filterWithKey".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(map_k)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(map_v)),
+                            Box::new(bool_ty.clone()),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(map_ty.clone()),
+                        Box::new(map_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "foldWithKey".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(map_acc)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(map_k)),
+                            Box::new(Type::Func(
+                                Box::new(Type::Var(map_v)),
+                                Box::new(Type::Var(map_acc)),
+                            )),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(map_acc)),
+                        Box::new(Type::Func(
+                            Box::new(map_ty.clone()),
+                            Box::new(Type::Var(map_acc)),
+                        )),
                     )),
                 ),
             ),
@@ -737,7 +827,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert(
         "collections".to_string(),
         Scheme {
-            vars: vec![map_k, map_v, map_v2, set_a, queue_a, deque_a, heap_a],
+            vars: vec![
+                map_k, map_v, map_v2, map_acc, set_a, queue_a, deque_a, heap_a,
+            ],
             ty: collections_record,
             capabilities: Default::default(),
             origin: None,
@@ -746,7 +838,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert(
         "Map".to_string(),
         Scheme {
-            vars: vec![map_k, map_v, map_v2],
+            vars: vec![map_k, map_v, map_v2, map_acc],
             ty: map_record_value,
             capabilities: Default::default(),
             origin: None,

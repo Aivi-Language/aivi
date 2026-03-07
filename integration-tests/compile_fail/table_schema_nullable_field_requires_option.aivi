@@ -1,0 +1,13 @@
+// EXPECT-ERROR: is nullable but row field 'email' is not Option
+module integrationTests.compileFail.tableSchemaNullableFieldRequiresOption
+
+use aivi
+use aivi.database
+
+User = { id: Int, email: Text }
+
+userTable : Table User
+userTable = table "users" [
+  { name: "id",    type: IntType,     constraints: [NotNull], default: None }
+  { name: "email", type: Varchar 120, constraints: [],        default: None }
+]

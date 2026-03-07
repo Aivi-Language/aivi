@@ -791,8 +791,17 @@ impl TypeChecker {
         }
 
         let applied_base = self.apply(base_ty.clone());
-        if let Some(ty) = self.try_resolve_field_path(&applied_base, path) {
+        let expanded_base = self.expand_alias(applied_base);
+        if let Some(ty) = self.try_resolve_field_path(&expanded_base, path) {
             return Ok(ty);
+        }
+        if let Some(message) = self.missing_record_field_message(&expanded_base, path) {
+            return Err(TypeError {
+                span,
+                message,
+                expected: None,
+                found: None,
+            });
         }
         let field_ty = self.fresh_var();
         let requirement = self.record_from_path(path, field_ty.clone());

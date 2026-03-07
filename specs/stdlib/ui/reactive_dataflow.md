@@ -71,7 +71,21 @@ visibleRows =
   )
 ```
 
-`computed "visibleRows" ...` is conceptual Phase 4 surface: the stable key names the memoized node in the reactive graph. The exact helper spelling may ship as `computed`, `Signal.memo`, or equivalent, but the semantics on this page are normative.
+`computed "visibleRows" ...` is the shipped Phase 4 helper: the stable key names the memoized node in the reactive graph.
+
+The current public surface is:
+
+```aivi
+signal : (model -> a) -> model -> a
+computed : Text -> (model -> a) -> model -> a
+readSignal : (model -> a) -> model -> a
+```
+
+- `signal` marks a plain derived reader intended for reactive reuse,
+- `computed` marks a memoized reader with a stable key,
+- `readSignal` is the explicit non-GTK way to evaluate a signal value.
+
+Inside GTK sigils hosted by `gtkApp`, attribute splices and `<each items={...}>` auto-read `signal`/`computed` helpers against the current committed model. Outside the sigil, signals remain explicit function values.
 
 ## Memoization and invalidation
 
@@ -111,6 +125,8 @@ Reactive dataflow does not bypass `Msg` or `update`. External sources still upda
 6. `reconcileNode` patches the live widget tree.
 
 That means subscription-fed data such as search results, file-watch payloads, sensor readings, or database notifications become **source values only after `update` commits them**. No subscription or effect may write into a signal cache directly.
+
+In the current milestone, the host still reevaluates the `view` function after each committed update; signal-aware GTK bindings make those reads ergonomic and allow computed memoization to remove duplicate pure work inside a turn. Finer-grained widget-slot invalidation remains a follow-up optimization.
 
 ## Boundaries: reactive values vs effects vs subscriptions
 

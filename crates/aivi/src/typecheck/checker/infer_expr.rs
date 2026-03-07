@@ -341,6 +341,7 @@ impl TypeChecker {
         } else {
             None
         };
+        let mut resolved_arg_tys = Vec::with_capacity(args.len());
         for arg in args {
             let param_ty = self.fresh_var();
             let result_ty = self.fresh_var();
@@ -365,9 +366,11 @@ impl TypeChecker {
                 }
                 Err(err) => return Err(err),
             };
-            self.unify_with_span(arg_ty, param_ty, expr_span(arg))?;
+            self.unify_with_span(arg_ty, param_ty.clone(), expr_span(arg))?;
+            resolved_arg_tys.push(self.apply(param_ty));
             func_ty = result_ty;
         }
+        self.validate_query_call_args(func, args, &resolved_arg_tys, env)?;
         if let (Some(qname), Some(orig_ty)) = (poly_call_info, original_func_ty) {
             let resolved = self.apply(orig_ty.clone());
             // Record source schemas for `load` calls: extract the inner type `A`

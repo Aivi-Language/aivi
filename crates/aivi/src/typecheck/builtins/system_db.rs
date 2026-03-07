@@ -178,6 +178,23 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "set".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
+                    )),
+                ),
+            ),
+            (
+                "remove".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
+                ),
+            ),
+            (
                 "decode".to_string(),
                 Type::Func(
                     Box::new(Type::Var(env_decode_arg)),
@@ -329,6 +346,11 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     ]);
     let gtk4_model = checker.fresh_var_id();
     let gtk4_value = checker.fresh_var_id();
+    let gtk4_signal_model = checker.fresh_var_id();
+    let gtk4_signal_value = checker.fresh_var_id();
+    let gtk4_attr_value = checker.fresh_var_id();
+    let gtk4_each_source = checker.fresh_var_id();
+    let gtk4_each_item = checker.fresh_var_id();
     let gtk4_record = Type::Record {
         fields: vec![
             (
@@ -361,6 +383,39 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                             Box::new(Type::Var(gtk4_model)),
                             Box::new(Type::Var(gtk4_value)),
                         )),
+                    )),
+                ),
+            ),
+            (
+                "signal".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(gtk4_signal_model)),
+                        Box::new(Type::Var(gtk4_signal_value)),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(gtk4_signal_model)),
+                        Box::new(Type::Var(gtk4_signal_value)),
+                    )),
+                ),
+            ),
+            (
+                "serializeAttr".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(gtk4_attr_value)),
+                    Box::new(text_ty.clone()),
+                ),
+            ),
+            (
+                "eachItems".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(gtk4_each_source)),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(gtk4_each_item)),
+                            Box::new(Type::con("GtkNode")),
+                        )),
+                        Box::new(Type::con("List").app(vec![Type::con("GtkNode")])),
                     )),
                 ),
             ),

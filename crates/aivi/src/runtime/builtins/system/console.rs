@@ -1,6 +1,9 @@
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::sync::Arc;
+
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
 
 use super::super::util::{builtin, expect_record, expect_text, make_err, make_ok};
 use crate::runtime::{format_value, EffectValue, RuntimeError, Value};
@@ -70,8 +73,13 @@ pub(in crate::runtime::builtins) fn build_console_record() -> Value {
         builtin("console.readLine", 1, |_, _| {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
+                    let stdin = std::io::stdin();
+                    if !stdin.is_terminal() && !stdin_is_ready(&stdin) {
+                        return Ok(make_err(Value::Text("stdin is not ready".to_string())));
+                    }
                     let mut buffer = String::new();
-                    match std::io::stdin().read_line(&mut buffer) {
+                    match stdin.read_line(&mut buffer) {
+                        Ok(0) => Ok(make_err(Value::Text("end of input".to_string()))),
                         Ok(_) => Ok(make_ok(Value::Text(
                             buffer.trim_end_matches(&['\n', '\r'][..]).to_string(),
                         ))),
@@ -115,6 +123,25 @@ pub(in crate::runtime::builtins) fn build_console_record() -> Value {
         }),
     );
     Value::Record(Arc::new(fields))
+}
+
+fn stdin_is_ready(stdin: &std::io::Stdin) -> bool {
+    #[cfg(unix)]
+    {
+        let fd = stdin.as_raw_fd();
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        unsafe { libc::poll(&mut poll_fd, 1, 0) > 0 && (poll_fd.revents & (libc::POLLIN | libc::POLLHUP)) != 0 }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = stdin;
+        true
+    }
 }
 
 fn ansi_color(value: Value, is_bg: bool, ctx: &str) -> Result<i64, RuntimeError> {

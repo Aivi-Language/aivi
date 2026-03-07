@@ -4,6 +4,9 @@ fn lower_expr_inner_ctx(
     ctx: &mut LowerCtx<'_>,
     in_pipe_left: bool,
 ) -> HirExpr {
+    if let Some(lowered) = maybe_lower_query_expr(&expr, id_gen, ctx) {
+        return lowered;
+    }
     match expr {
         Expr::Ident(name) => HirExpr::Var {
             id: id_gen.next(),
@@ -943,6 +946,104 @@ fn make_pattern_lambda(
                 body: Box::new(match_expr),
             }
         }
+    }
+}
+
+fn maybe_lower_query_expr(
+    expr: &Expr,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> Option<HirExpr> {
+    if is_query_do_block(expr) {
+        return Some(match compile_static_query(expr) {
+            Ok(compiled) => build_static_query_hir(compiled, id_gen, ctx),
+            Err(message) => build_query_error_hir(message, id_gen),
+        });
+    }
+
+    if let Ok(compiled) = compile_static_query(expr) {
+        return Some(build_static_query_hir(compiled, id_gen, ctx));
+    }
+
+    match expr {
+        Expr::Call { func, args, .. } if is_database_helper(func, "count") && args.len() == 1 => {
+            Some(HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: DB_QUERY_COUNT_BUILTIN.to_string(),
+                }),
+                args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
+            })
+        }
+        Expr::Call { func, args, .. } if is_database_helper(func, "exists") && args.len() == 1 => {
+            Some(HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: DB_QUERY_EXISTS_BUILTIN.to_string(),
+                }),
+                args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
+            })
+        }
+        _ => None,
+    }
+}
+
+fn build_static_query_hir(
+    compiled: StaticCompiledQuery,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    let plan_json = match serde_json::to_string(&compiled.plan) {
+        Ok(json) => json,
+        Err(err) => {
+            return build_query_error_hir(
+                format!("failed to serialize lowered query plan: {err}"),
+                id_gen,
+            )
+        }
+    };
+
+    let sources = HirExpr::List {
+        id: id_gen.next(),
+        items: compiled
+            .source_exprs
+            .into_iter()
+            .map(|expr| HirListItem {
+                expr: lower_expr_ctx(expr, id_gen, ctx, false),
+                spread: false,
+            })
+            .collect(),
+    };
+
+    HirExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(HirExpr::Var {
+            id: id_gen.next(),
+            name: DB_QUERY_COMPILED_BUILTIN.to_string(),
+        }),
+        args: vec![
+            HirExpr::LitString {
+                id: id_gen.next(),
+                text: plan_json,
+            },
+            sources,
+        ],
+    }
+}
+
+fn build_query_error_hir(message: String, id_gen: &mut IdGen) -> HirExpr {
+    HirExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(HirExpr::Var {
+            id: id_gen.next(),
+            name: DB_QUERY_ERROR_BUILTIN.to_string(),
+        }),
+        args: vec![HirExpr::LitString {
+            id: id_gen.next(),
+            text: message,
+        }],
     }
 }
 
