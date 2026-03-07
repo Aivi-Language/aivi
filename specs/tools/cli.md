@@ -2,6 +2,8 @@
 
 The `aivi` command-line tool is the main entry point for creating projects, running programs, inspecting compiler output, formatting code, and starting editor-facing services.
 
+If you are new to AIVI, most day-to-day work fits into five commands: `init`, `run`, `check`, `fmt`, and `test`. Later sections cover packaging, editor services, and compiler-inspection commands that are more useful to contributors and tooling authors.
+
 A good mental model is:
 
 - `aivi` handles AIVI-specific tasks such as parsing, formatting, checking, and code generation.
@@ -225,7 +227,7 @@ aivi run [--release] [--watch|-w] [-- <cargo args...>]
 aivi run <path|dir/...> [--debug-trace] [--target native] [--watch|-w]
 ```
 
-- uses the Cranelift JIT runtime
+- uses the Cranelift JIT runtime, meaning it compiles to native code in memory and runs it immediately instead of producing a standalone binary first
 - `--target native` is the supported direct-run target
 - `--debug-trace` enables verbose compiler tracing
 - `--watch` recompiles and re-runs when `.aivi` files change

@@ -2,6 +2,8 @@
 
 This guide explains how AIVI turns typed source code into native machine code. It covers the compilation pipeline, runtime value layout, memory management, typed code generation, and the bridge between generated code and the runtime.
 
+It is mainly contributor-facing, but the opening sections aim to give a readable high-level picture before the page gets into backend-specific detail.
+
 ## Compilation pipeline at a glance
 
 ```text
@@ -26,16 +28,16 @@ Cranelift IR  →  native machine code
 
 If you are new to compiler terminology, the stages mean roughly this:
 
-- **Surface AST**: a structured form close to what the programmer wrote
-- **HIR**: a cleaned-up representation used for name resolution and typechecking
+- **Surface AST** (**abstract syntax tree**): a structured form close to what the programmer wrote
+- **HIR** (**high-level intermediate representation**): a cleaned-up form used for name resolution and typechecking
 - **Block-free HIR**: the same program after block sugar such as `do` and `resource` has been lowered away
-- **RustIR**: a backend-oriented, monomorphised representation where generic code has been specialized
-- **Cranelift IR**: low-level SSA-based code that can be turned into machine instructions
+- **RustIR**: a backend-oriented, monomorphised representation where generic code has been specialized to concrete types
+- **Cranelift IR**: a low-level **static single assignment (SSA)** representation that can be turned into machine instructions
 
 The CLI uses that same pipeline in two different output modes:
 
-- **`aivi run`** uses Cranelift JIT compilation: code is compiled to native instructions in memory and executed immediately.
-- **`aivi build`** uses Cranelift AOT compilation: code is compiled to an object file, wrapped in a thin Rust harness, and linked into a standalone executable.
+- **`aivi run`** uses Cranelift **JIT** (**just-in-time**) compilation: code is compiled to native instructions in memory and executed immediately.
+- **`aivi build`** uses Cranelift **AOT** (**ahead-of-time**) compilation: code is compiled to an object file, wrapped in a thin Rust harness, and linked into a standalone executable.
 
 ## Incremental frontend checkpoints
 
@@ -45,7 +47,7 @@ The ownership, invalidation, and LSP snapshot rules for that reuse are specified
 
 ## Runtime value representation
 
-At runtime, AIVI uses a single tagged `Value` enum for dynamically represented values. Composite values are shared through `Arc`, which keeps immutable data cheap to clone.
+At runtime, AIVI uses a single tagged `Value` enum for dynamically represented values. Composite values are shared through `Arc` (Rust's atomically reference-counted shared pointer), which keeps immutable data cheap to clone.
 
 | Category | Representation |
 | --- | --- |
@@ -57,7 +59,7 @@ At runtime, AIVI uses a single tagged `Value` enum for dynamically represented v
 | Closures | `Value::Closure { .. }`, `Value::Builtin(..)` |
 | Effects | `Value::Effect(..)` — suspended computations |
 
-### Boxed-pointer ABI
+### Boxed-pointer calling convention (ABI)
 
 At the Cranelift boundary, values cross as `*mut Value` pointers. Runtime helpers such as `box_value()` and `unbox_value()` bridge between heap-allocated `Value` boxes and owned values.
 
@@ -83,7 +85,7 @@ AIVI uses reference counting via Rust's `Arc`. There is no tracing garbage colle
 
 ### Perceus-style RC reuse analysis
 
-The Cranelift backend performs a Perceus-inspired reuse analysis so it can recycle heap allocations instead of always freeing and allocating new boxes.
+The Cranelift backend performs a Perceus-inspired reuse analysis so it can recycle heap allocations instead of always freeing and allocating new boxes. Perceus is a reference-counting optimization approach from functional-language implementation research; the important practical point here is that the compiler tries to reuse boxes when it can prove an old value is at its last use.
 This is especially valuable for functional code that pattern matches on a value and then builds a closely related replacement.
 
 The core observation is that every `Value` variant occupies the same boxed heap footprint, so a reusable `Box<Value>` allocation can be repurposed for any new `Value`. No constructor-specific shape matching is needed at the box level.
@@ -109,7 +111,7 @@ Strict immutability prevents ordinary data-structure cycles. The main remaining 
 
 ## `CgType`: typed code generation
 
-`CgType` is the backend's compact notion of runtime layout. It tells code generation when a value can stay in a specialized representation and when it must fall back to generic boxed `Value` handling.
+`CgType` is the backend's compact notion of runtime layout. In plain language, it tells code generation whether a value can stay in a specialized form such as an unboxed integer in a CPU register, or whether it must fall back to the generic boxed `Value` representation.
 
 ```rust
 pub enum CgType {
@@ -198,6 +200,6 @@ A function is an inline candidate when:
 
 ### Interaction with later passes
 
-- **Monomorphization** happens first, so inlined bodies are already ground-typed.
+- **Monomorphization** happens first, so inlined bodies are already specialized to concrete types.
 - **Perceus-style reuse analysis** runs after inlining, which means larger visible bodies can expose more reuse opportunities.
 - **`CgType` propagation** also benefits, because an unboxed scalar can sometimes stay unboxed all the way through the inlined body.

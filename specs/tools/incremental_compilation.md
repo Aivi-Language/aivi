@@ -3,7 +3,7 @@
 This guide explains how AIVI reuses compiler work across repeated checks without sacrificing correctness.
 It applies to `aivi check`, `aivi build`, `aivi lsp`, and any other tool that needs to answer the same questions many times as files change.
 
-The key idea is simple: reuse work only when the exact inputs still match, and only publish results that belong to one coherent workspace snapshot, meaning one complete view of files, unsaved editor text, and relevant settings at a moment in time.
+The key idea is simple: every request sees one complete **workspace snapshot**—one coherent view of files, unsaved editor text, and relevant settings at a moment in time. The compiler may reuse cached work only when the exact inputs still match that snapshot, and it may publish only results that belong to that same snapshot.
 
 ## Start here
 
@@ -13,6 +13,8 @@ If you want the shortest reliable mental model, keep these four rules in mind:
 2. caches may be reused only when they still match that snapshot
 3. private-body edits stay local unless they change public facts
 4. public API edits dirty importing modules
+
+The early sections on this page are meant to give any contributor a reliable mental model. Later sections become more implementation-oriented and spell out the cache-ownership and invalidation rules in detail.
 
 ## Mental model first
 
@@ -29,6 +31,7 @@ In this document, that “photo” is called a **workspace snapshot**.
 | Term | Plain meaning |
 | --- | --- |
 | **workspace snapshot** | the full input for one check or editor request: workspace root, current file contents, open unsaved overlays, and relevant settings |
+| **fingerprint** | a content-based cache key for an input or checkpoint; if the fingerprint changes, cached results from the old fingerprint are stale |
 | **open-document overlay** | unsaved editor text that temporarily overrides the file on disk for the current LSP session |
 | **definition group** | the chunk of top-level definitions that must be checked together because they refer to one another |
 | **strongly connected component (SCC)** | graph terminology for “a set of definitions where each one can reach the others through references,” so the compiler cannot safely split them apart; if `a` calls `b` and `b` calls `a`, they are in the same SCC |
@@ -49,7 +52,7 @@ Incremental compilation is what makes these workflows practical:
 - running repeated checks during development without rebuilding every unchanged module
 - sharing frontend results between tooling features while still keeping saved and unsaved state separate
 
-Reactive runtime dataflow is a different system. This document is about compile-time and editor-time reuse only.
+Reactive runtime dataflow is a different system: it tracks runtime values and UI updates after a program is running. This document is only about compile-time and editor-time reuse.
 
 ## Design goals
 
