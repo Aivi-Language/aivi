@@ -25,33 +25,32 @@ Use the one-shot source for simple inbox ingestion. Use the session API when you
 
 ### Session lifecycle
 
-- `email.imapOpen : ImapConfig -> Effect Text ImapSessionHandle`
-- `email.imapClose : ImapSessionHandle -> Effect Text Unit`
-- `email.imapSelect : Text -> ImapSessionHandle -> Effect Text MailboxInfoRecord`
-- `email.imapExamine : Text -> ImapSessionHandle -> Effect Text MailboxInfoRecord`
-- `email.imapIdle : Int -> ImapSessionHandle -> Effect Text IdleResultValue`
+- `email.imapOpen : ImapConfig -> Resource Text ImapSession`
+- `email.imapSelect : Text -> ImapSession -> Effect Text MailboxInfo`
+- `email.imapExamine : Text -> ImapSession -> Effect Text MailboxInfo`
+- `email.imapIdle : Int -> ImapSession -> Effect Text IdleResult`
 
 ### Search and fetch
 
-- `email.imapSearch : Text -> ImapSessionHandle -> Effect Text (List Int)`
-- `email.imapFetch : List Int -> ImapSessionHandle -> Effect Text (List A)`
+- `email.imapSearch : Text -> ImapSession -> Effect Text (List Int)`
+- `email.imapFetch : List Int -> ImapSession -> Effect Text (List A)`
 
 ### Flags and message changes
 
-- `email.imapSetFlags : List Int -> List Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapAddFlags : List Int -> List Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapRemoveFlags : List Int -> List Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapExpunge : ImapSessionHandle -> Effect Text Unit`
-- `email.imapCopy : List Int -> Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapMove : List Int -> Text -> ImapSessionHandle -> Effect Text Unit`
+- `email.imapSetFlags : List Int -> List Text -> ImapSession -> Effect Text Unit`
+- `email.imapAddFlags : List Int -> List Text -> ImapSession -> Effect Text Unit`
+- `email.imapRemoveFlags : List Int -> List Text -> ImapSession -> Effect Text Unit`
+- `email.imapExpunge : ImapSession -> Effect Text Unit`
+- `email.imapCopy : List Int -> Text -> ImapSession -> Effect Text Unit`
+- `email.imapMove : List Int -> Text -> ImapSession -> Effect Text Unit`
 
 ### Mailbox administration
 
-- `email.imapListMailboxes : ImapSessionHandle -> Effect Text (List MailboxInfoRecord)`
-- `email.imapCreateMailbox : Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapDeleteMailbox : Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapRenameMailbox : Text -> Text -> ImapSessionHandle -> Effect Text Unit`
-- `email.imapAppend : Text -> Text -> ImapSessionHandle -> Effect Text Unit`
+- `email.imapListMailboxes : ImapSession -> Effect Text (List MailboxInfo)`
+- `email.imapCreateMailbox : Text -> ImapSession -> Effect Text Unit`
+- `email.imapDeleteMailbox : Text -> ImapSession -> Effect Text Unit`
+- `email.imapRenameMailbox : Text -> Text -> ImapSession -> Effect Text Unit`
+- `email.imapAppend : Text -> Text -> ImapSession -> Effect Text Unit`
 
 ## Authentication
 
@@ -102,19 +101,19 @@ do Effect {
   _ <- email.imapSelect "INBOX" session
   messageIds <- email.imapSearch "UNSEEN" session
   messages <- email.imapFetch messageIds session
-  _ <- email.imapClose session
   pure messages
 }
 ```
 
-This pattern is useful when you want custom search strings or you want to decide yourself when the mailbox session opens and closes.
+This pattern is useful when you want custom search strings or you want to decide yourself where the mailbox session scope begins and ends.
 
 ## Example — session with IDLE
 
 ```aivi
 use aivi.email
 
-processInbox = token => resource {
+processInbox : Text -> Effect Text (List InboxMessage)
+processInbox = token => do Effect {
   session <- imapOpen {
     host: "imap.gmail.com"
     user: "user@gmail.com"
@@ -125,21 +124,21 @@ processInbox = token => resource {
     filter: None
     limit: None
   }
-  yield session
+  _ <- imapSelect "INBOX" session
+  result <- imapIdle 300 session         -- wait for mailbox changes for up to 300 seconds
+  messages <- result match
+    | MailboxChanged => do Effect {
+        uids <- imapSearch "UNSEEN" session
+        msgs <- imapFetch uids session
+        _ <- imapAddFlags uids ["\\Seen"] session
+        pure msgs
+      }
+    | TimedOut => pure []
+  pure messages
 }
-  |> withResource (session => do Effect {
-    _ <- imapSelect "INBOX" session
-    result <- imapIdle 300 session         -- wait for mailbox changes for up to 300 seconds
-    result match
-      | MailboxChanged => do Effect {
-          uids <- imapSearch "UNSEEN" session
-          msgs <- imapFetch uids session
-          _ <- imapAddFlags uids ["\\Seen"] session
-          pure msgs
-        }
-      | TimedOut => pure []
-  })
 ```
+
+Because `imapOpen` is acquired with `<-`, the session is released automatically when the surrounding `do Effect` block exits.
 
 Use the session API when you need:
 

@@ -12,6 +12,6 @@ processOrder = order => do Effect {
 pipeline : List Int -> Int
 pipeline = xs =>
   xs
-|> list.filter (_ > 0)
-|> list.map (_ * 2)
-|> list.fold 0 (+)
+  |> filter (_ > 0)
+  |> map (_ * 2)
+  |> fold 0 (+)

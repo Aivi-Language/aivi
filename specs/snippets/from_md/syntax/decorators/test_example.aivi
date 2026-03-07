@@ -1,10 +1,12 @@
 @test "addition is commutative"
-addCommutative =
-  assert.equal (add 2 3) (add 3 2)
+addCommutative = do Effect {
+  assertEq (add 2 3) (add 3 2)
+}
 
 @test "empty list has length zero"
-emptyLen =
-  assert.equal (list.length []) 0
+emptyLen = do Effect {
+  assertEq (length []) 0
+}
 
 // Test-only module: excluded from production builds entirely
 @test module OrderTests
@@ -12,5 +14,6 @@ emptyLen =
 use aivi
 
 @test "discount rounds down"
-discountFloor =
-  assert.equal (applyDiscount 100.0 0.15) 85.0
+discountFloor = do Effect {
+  assertEq (applyDiscount 100.0 0.15) 85.0
+}

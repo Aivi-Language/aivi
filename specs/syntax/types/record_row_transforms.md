@@ -35,9 +35,9 @@ User = {
   isAdmin: Bool
 }
 
-PublicUser = User |> Omit ("isAdmin")
-PatchUser = User |> Optional ("email", "name")
-RenamedUser = User |> Rename { email: "loginEmail" }
+PublicUser = User |> Omit (isAdmin)
+PatchUser = User |> Optional (email, name)
+RenamedUser = User |> Rename { email: loginEmail }
 ```
 
 The example above keeps a single source-of-truth record type and derives narrower or more convenient variants from it.

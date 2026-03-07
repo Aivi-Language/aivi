@@ -102,7 +102,7 @@ Pass `--update-snapshots` when you intentionally want to re-record the expected 
 ```aivi
 @test "user formatting"
 testFormat = do Effect {
-  formatted <- pure (formatUserTable [{ id: 1, name: "Ada" }])
+  formatted = formatUserTable [{ id: 1, name: "Ada" }]
   assertSnapshot "user_table" formatted   // compare against the stored golden result
 }
 ```

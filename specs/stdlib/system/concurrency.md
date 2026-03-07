@@ -46,23 +46,23 @@ One side sends values, the other side receives them, and the type system keeps b
 
 | Function | What it does |
 | --- | --- |
-| **make** sample<br><code>A -> Effect E (Sender A, Receiver A)</code> | Creates a new channel and returns a sender/receiver pair. |
-| **makeBounded** capacity<br><code>Int -> Effect E (Sender A, Receiver A)</code> | Creates a channel with a bounded buffer. When the buffer is full, sends wait until space becomes available. |
+| **make** sample<br><code>A -> Effect E (Send A, Recv A)</code> | Creates a new channel and returns a send/receive pair. |
+| **makeBounded** capacity<br><code>Int -> Effect E (Send A, Recv A)</code> | Creates a channel with a bounded buffer. When the buffer is full, sends wait until space becomes available. |
 
 ### Sending and receiving
 
 | Function | What it does |
 | --- | --- |
-| **send** sender value<br><code>Sender A -> A -> Effect E Unit</code> | Sends `value` into the channel. |
-| **recv** receiver<br><code>Receiver A -> Effect E (Result ChannelError A)</code> | Waits for the next value. Returns `Ok value`, or `Err Closed` after the channel is closed and drained. |
-| **close** sender<br><code>Sender A -> Effect E Unit</code> | Closes the sending side so receivers can finish cleanly. |
+| **send** sender value<br><code>Send A -> A -> Effect E Unit</code> | Sends `value` into the channel. |
+| **recv** receiver<br><code>Recv A -> Effect E (Result ChannelError A)</code> | Waits for the next value. Returns `Ok value`, or `Err Closed` after the channel is closed and drained. |
+| **close** sender<br><code>Send A -> Effect E Unit</code> | Closes the sending side so receivers can finish cleanly. |
 
 ### Consuming a stream of values
 
 | Function | What it does | Why you might prefer it |
 | --- | --- | --- |
-| **fold** init fn receiver<br><code>S -> (S -> A -> Effect E S) -> Receiver A -> Effect E S</code> | Reads values until the channel closes, threading state through each step, and returns the final state. | Good for reducers, aggregations, and event loops. |
-| **forEach** receiver fn<br><code>Receiver A -> (A -> Effect E Unit) -> Effect E Unit</code> | Reads every value and runs an effectful action on it until the channel closes. | Good for consumers that only perform side effects. |
+| **fold** init fn receiver<br><code>S -> (S -> A -> Effect E S) -> Recv A -> Effect E S</code> | Reads values until the channel closes, threading state through each step, and returns the final state. | Good for reducers, aggregations, and event loops. |
+| **forEach** receiver fn<br><code>Recv A -> (A -> Effect E Unit) -> Effect E Unit</code> | Reads every value and runs an effectful action on it until the channel closes. | Good for consumers that only perform side effects. |
 
 ## Structured concurrency in practice
 

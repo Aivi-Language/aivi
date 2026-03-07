@@ -32,7 +32,7 @@ Most people reach for `@static` in one of three situations:
 | `file.json "path"` | inferred from use | Load typed JSON data at build time |
 | `file.csv "path"` | `List { ... }` | Ship CSV data as records |
 | `env.get "KEY"` | `Text` | Bake an environment value into the build |
-| `openapi.fromUrl url` | typed module | Generate an API client from a remote OpenAPI spec |
+| `openapi.fromUrl ~url(...)` | typed module | Generate an API client from a remote OpenAPI spec |
 | `openapi.fromFile "path"` | typed module | Generate an API client from a local OpenAPI spec |
 | `type.jsonSchema TypeName` | `Text` | Generate OpenAI-compatible JSON Schema from a type |
 
@@ -87,26 +87,33 @@ You pass it a configuration record, and it returns a record of endpoint function
 @static
 petStoreApi = openapi.fromFile "./petstore.json"
 
-client = petStoreApi {
-  bearerToken: Some "sk-...",
-  baseUrl: None,
-  headers: None,
-  timeoutMs: None,
-  retryCount: None,
-  strictStatus: None
+listSomePets = do Effect {
+  client = petStoreApi {
+    bearerToken: Some "sk-...",
+    baseUrl: None,
+    headers: None,
+    timeoutMs: None,
+    retryCount: None,
+    strictStatus: None
+  }
+
+  pets <- client.listPets { limit: Some 10 }
+  pure pets
 }
 
-pets <- client.listPets { limit: Some 10 }   // generated endpoint function
+listPetsWithDestructuring = do Effect {
+  { listPets } = petStoreApi {
+    bearerToken: None,
+    baseUrl: None,
+    headers: None,
+    timeoutMs: None,
+    retryCount: None,
+    strictStatus: None
+  }
 
-{ listPets, createPets } = petStoreApi {
-  bearerToken: None,
-  baseUrl: None,
-  headers: None,
-  timeoutMs: None,
-  retryCount: None,
-  strictStatus: None
+  result <- listPets {}
+  pure result
 }
-result <- listPets {}
 ```
 
 ### Config record fields
@@ -142,7 +149,7 @@ Required parameters stay direct fields; optional parameters become `Option T`.
 | `oneOf` / `anyOf` | sum type (ADT) |
 | string `enum` | sum type |
 | `string` with `format: date` | `Date` |
-| `string` with `format: date-time` | `DateTime` |
+| `string` with `format: date-time` | `Instant` |
 
 Generated endpoint names come from `operationId` when present; otherwise they are derived from HTTP method and path.
 OpenAPI results are cached in `.aivi-cache/openapi/`; pass `--refresh-static` to force a refresh.

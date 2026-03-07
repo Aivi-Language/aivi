@@ -143,10 +143,10 @@ Ordinary resource cleanup is still cancellation-protected automatically. You do 
 GTK commands and subscriptions reuse the same capability vocabulary.
 
 - `gtkApp` is the coarse-grained `ui` entry point
-- `Command.perform` and `Command.startTask` inherit the capabilities of the enclosed `Effect`
-- `Command.after` and `Subscription.every` consume `clock.sleep` or `clock.schedule`
-- keyed task or subscription cancellation uses `cancellation.propagate`
-- `Subscription.source` inherits the capabilities of its underlying `Resource`
+- `commandPerform` inherits the capabilities of the enclosed `Effect`
+- `commandAfter` and `subscriptionEvery` consume `clock.sleep` or `clock.schedule`
+- keyed timer or subscription cancellation uses `cancellation.propagate`
+- `subscriptionSource` inherits the capabilities of its underlying `Resource`
 
 This keeps UI code aligned with the rest of the language instead of introducing a separate permission model.
 
@@ -174,9 +174,9 @@ This keeps UI code aligned with the rest of the language instead of introducing 
 | `scope`, `spawn`, `race`, explicit task cancellation | `cancellation.propagate` |
 | `crypto.randomUuid`, `crypto.randomBytes`, salted password hashing | `randomness.secure` |
 | `gtkApp`, `signalStream`, `reconcileNode`, clipboard helpers, notification helpers | `ui` |
-| `Command.after`, `Subscription.every` | `clock.sleep` / `clock.schedule` |
-| keyed `Command.startTask`, `Command.cancel`, subscription replacement/removal | `cancellation.propagate` |
-| `Subscription.source` over files, sockets, db notifications, or custom feeds | capabilities required by the underlying `Resource` |
+| `commandAfter`, `subscriptionEvery` | `clock.sleep` / `clock.schedule` |
+| `commandCancel`, subscription replacement/removal | `cancellation.propagate` |
+| `subscriptionSource` over files, sockets, db notifications, or custom feeds | capabilities required by the underlying `Resource` |
 | `@static` embedded sources | no runtime capability after compilation |
 
 ## Practical rules of thumb
