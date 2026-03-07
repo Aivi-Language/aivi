@@ -10,7 +10,12 @@ Instead of only writing:
 
 ```aivi
 do Effect {
-  users : List User <- load (file.json "./users.json")
+  users <- load (
+    file.json {
+      path: "./users.json"
+      schema: source.schema.derive
+    }
+  )
   pure users
 }
 ```
@@ -52,8 +57,8 @@ Illustratively:
 ```aivi
 // illustrative shape; exact runtime representation is not part of the public contract
 SourceDecl K A = {
-  config: ConnectorConfig K A,
-  schema: SourceSchema A,
+  config: ConnectorConfig K A
+  schema: SourceSchema A
   contract: Option SourceContract
 }
 ```
@@ -212,7 +217,12 @@ Before:
 
 ```aivi
 do Effect {
-  users : List User <- load (file.json "./users.json")
+  users <- load (
+    file.json {
+      path: "./users.json"
+      schema: source.schema.derive
+    }
+  )
   pure users
 }
 ```
@@ -239,7 +249,12 @@ Before:
 
 ```aivi
 do Effect {
-  cfg : AppConfig <- load (env.decode "AIVI_APP")
+  cfg <- load (
+    env.decode {
+      prefix: "AIVI_APP"
+      schema: source.schema.derive
+    }
+  )
   pure cfg
 }
 ```
@@ -266,7 +281,12 @@ Before:
 
 ```aivi
 do Effect {
-  users : List User <- load (rest.get ~u(https://api.example.com/users))
+  users <- load (
+    rest.get {
+      url: ~u(https://api.example.com/users)
+      schema: source.schema.derive
+    }
+  )
   pure users
 }
 ```
