@@ -80,6 +80,7 @@ If you are new to AIVI, use this simple path first: **[Language at a Glance](lan
 - [Grammar Reference](syntax/grammar.md)
 
 ### Build Native Apps
+#### Getting Started
 - [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md)
 - [App Architecture](stdlib/ui/app_architecture.md)
 - [GTK & libadwaita Runtime](stdlib/ui/gtk4.md)
