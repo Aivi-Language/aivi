@@ -6,6 +6,8 @@ Effect handlers let the same capability-based `Effect` or `Resource` code run ag
 
 If a capability says **what code may do**, a handler says **who performs that work here**.
 
+In plain language, a handler is the value that actually performs a capability such as `file.read` or `clock.now` in the current scope.
+
 If you come from another ecosystem, this is similar in spirit to dependency injection or swapping service implementations in tests. The difference is that AIVI does it with capability syntax, so the authority requirements stay visible in the type.
 
 ## Start with one example
@@ -39,6 +41,8 @@ Handlers do **not** change the meaning of `Effect E A` or `Resource E A`.
 - `A` is still the success value
 - capability clauses still describe the minimum authority required
 - handlers only choose the interpreter used for that authority in one scope
+
+With that mental model in place, the surface syntax stays small.
 
 ## Basic syntax
 

@@ -3,7 +3,7 @@
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.scheduler"} -->
 The `Scheduler` domain models durable scheduling primitives for cron, interval, and one-shot jobs.
 
-It is meant for work that should survive process restarts or be coordinated across workers. Plan keys are idempotent, leases and heartbeats are explicit values, retries can include exponential backoff and jitter, and tenant limits can be reasoned about as typed data.
+It is meant for work that should survive process restarts or be coordinated across workers. Here, **durable** means the schedule survives restarts, **idempotent plan keys** mean the same job can be recognised safely if it is submitted twice, **leases** mean temporary ownership by one worker, and **heartbeats** are periodic “I am still alive” updates from that worker. Retries can include exponential backoff and jitter, where **jitter** means small random variation so many workers do not retry at the exact same instant.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.scheduler<span class="domain-badge">domain</span></div>
 
@@ -22,7 +22,7 @@ It is meant for work that should survive process restarts or be coordinated acro
 Use this domain when a simple in-process timer is not enough. Typical cases include:
 
 - recurring jobs that must survive application restarts,
-- scheduled work handled by a worker fleet,
+- scheduled work handled by a worker fleet (a group of workers running the same job logic),
 - retry planning with backoff,
 - concurrency control per tenant,
 - explicit lease and heartbeat management.
@@ -32,6 +32,8 @@ If the timing only matters while one GUI app is running, lighter tools such as `
 ## Mental model
 
 `Scheduler` answers **“how should this work keep happening over time?”**
+
+More concretely: store the plan as data, let workers claim runs with leases, and keep retry rules explicit instead of burying them in ad-hoc timers.
 
 A good rule is:
 

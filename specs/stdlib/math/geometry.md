@@ -12,7 +12,7 @@ Use it when your program needs to work with points, segments, rays, polygons, or
 
 Reach for this domain when you need to answer questions such as:
 
-- “Did the pointer land inside this rectangle?”
+- “Did the pointer (mouse or touch input) land inside this rectangle?”
 - “How far apart are these two points?”
 - “Does this ray hit the shape in front of it?”
 
@@ -49,7 +49,7 @@ You can always build values with full record syntax, but the short constructors 
 | **distance** a b<br><code>Point2 -> Point2 -> Float</code> | Returns the Euclidean distance between two 2D points. |
 | **distance** a b<br><code>Point3 -> Point3 -> Float</code> | Returns the Euclidean distance between two 3D points. |
 | **midpoint** segment<br><code>Segment2 -> Point2</code> | Returns the point halfway between a segment's start and end. |
-| **area** polygon<br><code>Polygon -> Float</code> | Returns the signed polygon area; counter-clockwise winding is positive. |
+| **area** polygon<br><code>Polygon -> Float</code> | Returns the signed polygon area. “Signed” means the value is positive for counter-clockwise vertex order and negative for clockwise order; the absolute value is the ordinary area. |
 | **intersect** ray shape<br><code>Ray -> Shape -> Bool</code> | Returns `True` when the ray intersects the given shape. |
 
 ## Usage Examples

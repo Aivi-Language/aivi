@@ -19,7 +19,7 @@ Use `aivi.concurrency` when a program needs to:
 - communicate safely between tasks,
 - or stop child work automatically when a parent operation ends.
 
-If you are new to functional concurrency, the key idea is simple: instead of sharing variables between threads, start tasks and let them talk through typed channels.
+If you are new to functional concurrency, the key idea is simple: instead of sharing mutable variables between threads, start tasks and let them talk through typed channels.
 
 ## Types
 
@@ -76,6 +76,12 @@ That gives you predictable cleanup:
 Use `scope` when a task should live only as long as the surrounding operation.
 Use explicit detachment only when a task truly must outlive its creator.
 
+A tiny mental model:
+
+- `spawn` starts background work,
+- `Task` lets you join or cancel it,
+- `scope` makes sure child work is cleaned up with its parent operation.
+
 ### Explicit detachment
 
 <<< ../../snippets/from_md/runtime/concurrency/explicit_detachment.aivi{aivi}
@@ -83,7 +89,7 @@ Use explicit detachment only when a task truly must outlive its creator.
 ## Waiting on whichever event happens first
 
 Some workflows need to react to the first available result, message, or timeout.
-Selection helpers model that pattern directly.
+Selection helpers model that pattern directly. “Select” here means “wait for whichever event happens first, then continue with that winner”.
 
 <<< ../../snippets/from_md/runtime/concurrency/non_deterministic_selection_select.aivi{aivi}
 

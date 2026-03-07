@@ -1,6 +1,6 @@
 # Operators and Context
 
-Operators in AIVI are small pieces of syntax with fixed precedence and meaning at the parser level. This page shows what each token does in practice and where domains can supply type-directed behavior.
+Operators in AIVI are small pieces of syntax with fixed precedence and meaning at the parser level. For example, `subtotal + tax` is always parsed as `+`, but a domain can decide what `+` means for a type such as `Distance` or `Money`. This page shows what each token does in practice and where domains can supply type-directed behavior.
 
 > AIVI fixes the operator tokens and their precedence. Domains can define what some operators mean for their own carrier types, but they do not change how an expression is parsed.
 
@@ -91,6 +91,8 @@ Precedence is still fixed by the language, so `×` and `*` share the same preced
 
 ## 11.5 Units, suffix literals, and template functions
 
+A **suffix literal** is a number with a unit-like suffix, such as `10ms`, `5km`, or `100%`.
+
 Suffix literals are not strings. They elaborate to an in-scope template function.
 
 Typical examples:
@@ -133,7 +135,7 @@ Limitations:
 
 ## 11.8 Sigils
 
-Sigils are custom literal syntaxes for values that are awkward to write as plain text or records.
+Sigils are named literal forms for values that would be awkward to write as plain text or records.
 
 <<< ../snippets/syntax/sigils/basic.aivi{aivi}
 
@@ -183,6 +185,8 @@ The `Collections` domain defines:
 The `Matrix` domain defines `~mat[...]`; see [Matrix](../stdlib/math/matrix.md).
 
 ### HTML and GTK sigils
+
+If you only need the headline idea, read this section as: `~<html>` builds typed UI tree values, and `~<gtk>` builds typed GTK node values. The UI reference pages go deeper into runtime behaviour; this section focuses on how to read the syntax.
 
 The UI layer defines two structured sigils:
 

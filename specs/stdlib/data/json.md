@@ -19,6 +19,15 @@ If you are new to `Validation`, the important idea is simple: decoding can retur
 use aivi.json
 ```
 
+## Start here
+
+For most apps, the shortest useful path is:
+
+1. decode raw JSON into a typed value,
+2. inspect the returned `Validation`,
+3. only write a custom decoder when plain structure is not enough,
+4. add schema checks only when you must match an external contract exactly.
+
 ## Decode JSON directly into the type you want
 
 A common pattern in AIVI is to state the type you want and let the JSON layer check the input against that type. This keeps the code close to the data model you actually care about.
@@ -43,6 +52,8 @@ This pattern is helpful when you want early failures with good error messages. O
 ## Add custom decoders for values that need special rules
 
 Some values cannot be derived from structure alone. Enums, constrained strings, and custom tagged formats often need a small decoder that explains the allowed cases.
+
+Choose a custom decoder when the question is not just “does the JSON shape match?” but also “does this value obey my domain rules?”.
 
 <<< ../../snippets/from_md/stdlib/data/json/custom_decoders_for_enums_complex_types.aivi{aivi}
 
@@ -115,6 +126,14 @@ SchemaIssue = { path: Text, message: Text }
 ```
 
 ## API reference
+
+Use the tables below by workflow:
+
+- parse or render raw JSON,
+- build `JsonValue` values manually,
+- extract fields from existing JSON,
+- validate or migrate objects,
+- format errors for people.
 
 ### Parse and serialise JSON
 

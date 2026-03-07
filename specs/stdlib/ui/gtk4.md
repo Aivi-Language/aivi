@@ -2,7 +2,7 @@
 ## GTK & libadwaita Runtime for Native Apps
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui.gtk4"} -->
-`aivi.ui.gtk4` is the runtime module for native desktop apps built with GTK4 and libadwaita. It provides the types and functions behind widget trees, GTK signal events, reconciliation, and the `gtkApp` host.
+`aivi.ui.gtk4` is the runtime module for native desktop apps built with GTK4 and libadwaita. In plain language, it is the layer that turns `GtkNode` trees and `GtkSignalEvent` values into a running desktop app.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.ui.gtk4</div>
@@ -21,7 +21,7 @@ GTK runtime operations use the `ui` capability family:
 
 These capabilities describe where native UI effects live in AIVI's effect system. They do not create a separate “special UI language”.
 
-## Essential API for first apps
+## Start here
 
 Most single-window GTK apps only need this smaller subset:
 
@@ -44,13 +44,35 @@ The rest of this page is still important reference material, but you do not need
 | inspect the signal queue one event at a time | `signalPoll` |
 | grab widget ids for direct low-level access | `buildWithIds` |
 
+## Minimal `gtkApp` example
+
+If you want one tiny anchor before the reference sections, start here:
+
+```aivi
+main = gtkApp {
+  id: "docs.hello",
+  title: "Hello",
+  size: (400, 240),
+  model: { count: 0 },
+  onStart: _ _ => pure Unit,
+  subscriptions: noSubscriptions,
+  view: model => ~<gtk>
+    <GtkBox orientation="vertical" spacing="12">
+      <GtkLabel label="Count: {toText model.count}" />
+    </GtkBox>
+  </gtk>,
+  toMsg: auto,
+  update: _ model => pure { model, commands: [] }
+}
+```
+
 ## Public API
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/public_api.aivi{aivi}
 
 ## Native mapping table
 
-The runtime forwards these AIVI functions to their native GTK or libadwaita counterparts:
+Treat this table as a reference shelf, not a first-read tutorial. The runtime forwards these AIVI functions to their native GTK or libadwaita counterparts:
 
 | AIVI function | Native target |
 | --- | --- |

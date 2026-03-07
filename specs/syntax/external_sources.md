@@ -45,6 +45,10 @@ Nothing is read when `usersFromFile` is defined. The read happens when `load use
 - [Image Sources](external_sources/image.md)
 - [Compile-Time Sources](external_sources/compile_time.md)
 
+If you already know which connector you need, jump straight to the guide above. If you want the big picture first, keep reading this page in order: start with `Source K A`, skim the common source kinds, then finish with error handling and composition.
+
+The section numbers below match the broader language reference.
+
 ## 12.1 The Source Type
 
 <<< ../snippets/from_md/syntax/external_sources/the_source_type.aivi{aivi}
@@ -154,6 +158,8 @@ A source is loaded through an effect:
 ```aivi
 load : Source K A -> Effect (SourceError K) A
 ```
+
+Here `K` is still the source kind from earlier sections, such as `File`, `RestApi`, `Env`, or `Imap`.
 
 `SourceError K` tells you whether the failure happened while reaching the source or while decoding its data:
 

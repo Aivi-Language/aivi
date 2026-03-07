@@ -4,6 +4,12 @@
 
 ## 9.1 The `Effect E A` Type
 
+Think of `Effect E A` as a computation with three important properties:
+
+- it may do observable work such as file I/O, HTTP calls, or UI actions,
+- it may fail with a typed error `E`,
+- if it succeeds, it produces a value `A`.
+
 Effectful operations in AIVI use the type `Effect E A`, where:
 
 - `E` is the **error domain**, describing what could go wrong
@@ -23,6 +29,8 @@ Effect sequencing is usually written with `do Effect { ... }`, but the underlyin
 - `bind : Effect E A -> (A -> Effect E B) -> Effect E B` — sequence one effect after another
 - `fail : E -> Effect E A` — stop with an error value
 
+In everyday code, most people mainly use `do Effect { ... }`, `pure`, and `attempt`. The lower-level names are still worth knowing because they explain what the block syntax expands to.
+
 For handling an effect error as data, the standard library provides:
 
 - `attempt : Effect E A -> Effect F (Result E A)`
@@ -30,6 +38,8 @@ For handling an effect error as data, the standard library provides:
 `attempt` runs the inner effect and captures success or failure as a `Result E A`. The outer effect uses a different error type `F`, because the original `E` has been converted into data.
 
 ### Capability requirements
+
+After you understand the basic `Effect E A` shape, the next refinement is authority: which outside operations this effect is allowed to use.
 
 Capabilities refine `Effect E A` without turning it into a different effect type. Write a minimum-authority clause after the effect type:
 
@@ -81,6 +91,8 @@ When a source value carries composition metadata, `load` runs the source's canon
 See [External Sources](external_sources.md) and [Capabilities](capabilities.md) for the full mapping.
 
 ## 9.2 `do Effect` blocks
+
+A `do Effect { ... }` block is the everyday way to write effectful code. This section starts with the basic block rules, then covers fallback and branching, and finally shows advanced patterns such as loops and transition hooks.
 
 <<< ../snippets/from_md/syntax/effects/do_effect_blocks.aivi{aivi}
 

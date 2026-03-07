@@ -6,7 +6,7 @@ It is especially useful for graphics, geometry, and simulation code where you wa
 <!-- /quick-info -->
 <div class="import-badge">use aivi.matrix<span class="domain-badge">domain</span></div>
 
-A good mental model is: a matrix is a recipe for changing a vector or point. One value can represent scaling, rotation, translation, or a combination of them.
+A good mental model is: a matrix encodes a transformation you can reuse. One value can represent scaling, rotation, translation, or a combination of them.
 
 ## Overview
 
@@ -23,6 +23,11 @@ A good mental model is: a matrix is a recipe for changing a vector or point. One
 ## `×` operator overloads
 
 The `Matrix` domain overloads `×` based on the right-hand side type, so the same operator can mean matrix-by-matrix composition or matrix-by-vector transformation.
+
+Read it this way:
+
+- matrix `×` matrix = combine two transforms into one,
+- matrix `×` vector = apply the transform to a point or direction.
 
 | Expression | Resolved as | Returns |
 | --- | --- | --- |
@@ -57,7 +62,7 @@ For concise literals, use the structured `~mat` sigil.
 
 <<< ../../snippets/from_md/stdlib/math/matrix/sigil_constructors.aivi{aivi}
 
-Rows are separated by newlines and columns by whitespace. The formatter aligns columns for readability. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row and column count.
+Rows are separated by newlines and columns by whitespace. The formatter aligns columns for readability, so the literal stays easy to scan like a small grid. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row and column count.
 
 ## Usage Examples
 

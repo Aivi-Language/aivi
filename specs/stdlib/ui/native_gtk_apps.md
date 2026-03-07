@@ -14,9 +14,11 @@ Read this page when you want the big picture before diving into API reference de
 - “Where should timers, background work, and form state live?”
 - “What does `gtkApp` own for me?”
 
-A lightweight mental model is: **`gtkApp` is the conductor, your `Model` is the score, and `Msg` values are the cues that move the app forward.**
+A simpler mental model is: **`gtkApp` runs the app loop, your `Model` is the source of truth, and `Msg` values describe what just happened.**
 
 ## Two different meanings of “signal”
+
+If the word **signal** feels ambiguous, this is the quick disambiguation. For the fuller explanation, see [Reactive Signals](./reactive_signals.md#two-different-meanings-of-signal).
 
 AIVI UI docs use the word **signal** in two different ways:
 
@@ -130,12 +132,7 @@ Use subscriptions for long-lived sources that should stay active while the model
 
 ### 5. Know the two meanings of “signal”
 
-In GTK docs, “signal” can mean two different things:
-
-- **GTK signals** are widget events such as clicks, input changes, and focus changes,
-- **reactive signals** are pure derived readers created with `signal` or `computed`.
-
-The first kind flows **into** your app as `GtkSignalEvent`. The second kind is read **inside** your app from the committed model.
+GTK signals are widget events coming **into** the app. Reactive signals are pure derived values read **inside** the app from the committed model. If you want the longer explanation or examples, jump to [Reactive Signals](./reactive_signals.md).
 
 ### 6. Use reactive dataflow for pure derived values
 
@@ -182,7 +179,7 @@ There is no separate form runtime and no hidden widget-owned field state.
 
 ## Guided example
 
-The examples below build up the full pattern in smaller, easier-to-scan steps.
+The examples below build up the full pattern in smaller, easier-to-scan steps. Example 1 is the minimum useful `gtkApp`; Examples 2 and 3 add one extra concept each.
 
 ### Example 1: minimal `gtkApp`
 

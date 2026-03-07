@@ -53,7 +53,7 @@ Typical uses include:
 | **dfs** graph start<br><code>Graph -> NodeId -> List NodeId</code> | Returns nodes visited by depth-first search starting at `start`. |
 | **shortestPathUnweighted** graph start goal<br><code>Graph -> NodeId -> NodeId -> List NodeId</code> | Returns the shortest path when all edges have equal cost. |
 | **shortestPath** graph start goal<br><code>Graph -> NodeId -> NodeId -> List NodeId</code> | Returns the path computed by Dijkstra's algorithm. |
-| **topoSort** graph<br><code>Graph -> List NodeId</code> | Returns a topological ordering for DAGs, or `[]` when the graph has a cycle. |
+| **topoSort** graph<br><code>Graph -> List NodeId</code> | Returns a topological ordering for DAGs (directed acyclic graphs, meaning graphs with no directed cycles), or `[]` when the graph has a cycle. |
 | **hasCycle** graph<br><code>Graph -> Bool</code> | Returns `True` when the directed graph contains a cycle. |
 
 ## Usage Examples

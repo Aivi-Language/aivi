@@ -6,7 +6,11 @@ Use it when “pick a random number” is too vague and you want a named distrib
 <!-- /quick-info -->
 <div class="import-badge">use aivi.probability<span class="domain-badge">domain</span></div>
 
-This domain is for simulations, experiments, sampling, randomized testing, and statistical code where the shape of randomness matters.
+This domain is for simulations, experiments, sampling, randomized testing, and statistical code where the shape of randomness matters. In plain language, the “shape” is the pattern of likely outcomes: equal chance everywhere, a weighted coin flip, or values clustered around a center.
+
+## Start here
+
+Choose a named distribution when you want readers to understand *what kind* of randomness you mean, not just that “something random” happened.
 
 ## What it is for
 
@@ -35,7 +39,7 @@ A few examples:
 | **clamp** p<br><code>Probability -> Probability</code> | Restricts `p` to the valid probability range `[0.0, 1.0]`. |
 | **bernoulli** p<br><code>Probability -> Distribution Bool</code> | Creates a two-outcome distribution that succeeds with probability `p`. |
 | **uniform** lo hi<br><code>Float -> Float -> Distribution Float</code> | Creates a uniform distribution over `[lo, hi]`. |
-| **expectation** dist x<br><code>Distribution Float -> Float -> Float</code> | Returns the contribution of `x` to the expected value of `dist`. |
+| **expectation** dist x<br><code>Distribution Float -> Float -> Float</code> | Returns the contribution of `x` to the expected value of `dist`. The expected value is the long-run average you would get if you sampled the distribution many times. |
 
 ## Usage Examples
 

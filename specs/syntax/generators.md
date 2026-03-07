@@ -2,7 +2,7 @@
 
 Generators are **pure sequence builders**. They let you describe a stream of values without mutation, manual iterator state, or I/O.
 
-A helpful mental model is: a generator describes how to produce the next value when a consumer asks for it. That is what “pull-based” means here.
+A helpful mental model is: a generator describes how to produce the next value when a consumer asks for it. That is what **pull-based** means here: the consumer asks for the next item, and the generator tells it how to compute that item.
 
 They:
 
@@ -58,6 +58,8 @@ Predicate rules are identical to `filter`.
 
 ### Comparisons to other languages
 
+If you are translating an idea from another language, this quick note can help. If not, feel free to skip to the next section.
+
 **From Python or JavaScript:** the `yield` spelling may look familiar, but AIVI generators are pure values, not mutable iterators with hidden local state.
 
 **From Haskell or Scala:** AIVI does **not** use list-comprehension syntax.
@@ -85,6 +87,8 @@ Generators are a concise way to express sequence logic without intermediate coll
 
 ### Cartesian products
 
+A **Cartesian product** is the combination of every item from one sequence with every item from another sequence.
+
 <<< ../snippets/from_md/syntax/generators/cartesian_products.aivi{aivi}
 
 ### Filtering and transformation together
@@ -100,6 +104,7 @@ Generators are a concise way to express sequence logic without intermediate coll
 `loop (pattern) = initialState => { ... }` introduces a local tail-recursive loop for generators. Inside the loop body, `recurse nextState` continues with the next iteration and updated state.
 
 This is the generator-friendly way to express “keep going with new state” without mutation.
+If you only need the practical rule, remember: `recurse` means “run the loop again with this new state”.
 
 ### Syntax
 

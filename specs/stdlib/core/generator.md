@@ -32,7 +32,7 @@ Read that top to bottom as: “describe a sequence, adjust it, then finally mate
 - **transform** it with helpers such as `map`, `filter`, or `zip`
 - **consume** it with helpers such as `toList`, `foldl`, `find`, or `count`
 
-### Advanced note: representation
+### Optional deep dive: representation
 
 The underlying encoding is:
 
@@ -65,6 +65,8 @@ Because generators are pure values, you can pass them around, transform them, an
 
 ### Construction
 
+These helpers answer “where do the values come from?”.
+
 | Function | Explanation |
 | --- | --- |
 | **range** start end<br><code>Int -> Int -> Generator Int</code> | Produces integers in `[start, end)`. When `end <= start`, the generator is empty. |
@@ -75,6 +77,12 @@ Because generators are pure values, you can pass them around, transform them, an
 | **empty**<br><code>Generator a</code> | A generator that yields nothing. |
 
 ### Transformation
+
+Use this group when you want to reshape a sequence without forcing it into memory. A simple mental model:
+
+- `map`, `filter`, `take`, `drop` reshape one generator
+- `zip`, `zipWith`, `concat`, `intersperse` combine or coordinate generators
+- `scan`, `chunk`, `enumerate`, `dedup` add structure to the stream of values
 
 | Function | Explanation |
 | --- | --- |
@@ -95,6 +103,8 @@ Because generators are pure values, you can pass them around, transform them, an
 | **dedup** gen<br><code>Generator a -> Generator a</code> | Removes consecutive duplicate values. |
 
 ### Consumption
+
+These helpers are the finish line: they answer “what final result do I want from this generator?”.
 
 | Function | Explanation |
 | --- | --- |

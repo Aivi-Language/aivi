@@ -18,6 +18,14 @@ The `Http` domain gives your program the basic building blocks for making HTTP r
 
 If you want a higher-level client for conventional JSON APIs, automatic bearer-token support, and built-in decoding into your target type, look at `aivi.rest`.
 
+## Mental model
+
+`aivi.net.http` is the “show me the raw envelope” tool:
+
+- you build or inspect methods, headers, and bodies yourself,
+- you decide what the response status means,
+- you decide how to decode the body.
+
 ## HTTP vs REST in one minute
 
 HTTP is the wire protocol: requests, methods, status codes, headers, and bodies. REST is a common style of API built on top of HTTP, usually with JSON payloads and predictable resource-oriented endpoints.
@@ -117,18 +125,20 @@ Typical examples:
 Body = Plain Text | Form (List Header) | Json JsonValue
 ```
 
-- `Plain Text` sends raw text.
-- `Form (List Header)` sends form-style name/value fields.
-- `Json JsonValue` sends JSON data.
+Think of the variants like this:
 
-When the expected type is `Body`, a plain record literal is automatically coerced to `Json (toJson record)`, so you can write:
+- `Plain Text` sends raw text exactly as written.
+- `Form (List Header)` sends form-style name/value fields.
+- `Json JsonValue` sends structured JSON data.
+
+When the expected type is `Body`, a plain record literal is automatically coerced to `Json (toJson record)`. That means you can stay focused on the data you want to send:
 
 ```aivi
 // This record is automatically turned into JSON.
 body: Some { grant_type: "authorization_code", code: code }
 ```
 
-The `Json` variant automatically adds `Content-Type: application/json` when the request does not already define a `Content-Type` header.
+Header rule: the `Json` variant automatically adds `Content-Type: application/json` when the request does not already define a `Content-Type` header.
 
 ### `Request`
 
@@ -194,7 +204,7 @@ Choose [`aivi.rest`](./rest.md) when:
 ## HTTPS Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.net.https"} -->
-`aivi.net.https` mirrors `aivi.net.http` but always uses TLS. Choose it when you need encrypted connections, which is the normal choice for production APIs and any request carrying private data.
+`aivi.net.https` mirrors `aivi.net.http` but always uses TLS. TLS (Transport Layer Security) is the standard encryption layer behind `https://` URLs. Choose it when you need encrypted connections, which is the normal choice for production APIs and any request carrying private data.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.https</div>
 
