@@ -1,10 +1,10 @@
 # GTK App Architecture
 
 > **Status: Phase 2 command/subscription surface specified, runtime subset landed**  
-> `gtkApp` remains the single blessed host for standard GTK applications. The runtime now hosts `AppStep`, `subscriptions`, timer subscriptions, direct-message source subscriptions, and the command subset needed for the blessed loop via the concrete helpers `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, and `commandCancel`. The richer mapper-based `Command.perform` / `Command.startTask` target shape below is still the direction of travel. Forms and validation layer on top of the same host via [`aivi.ui.forms`](./forms.md), rather than introducing a second UI architecture.
+> `gtkApp` remains the single blessed host for standard GTK applications. The runtime now hosts `AppStep`, `subscriptions`, timer subscriptions, direct-message source subscriptions, the memoized `computed` helper for reactive reads over committed models, and the command subset needed for the blessed loop via the concrete helpers `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, and `commandCancel`. The richer mapper-based `Command.perform` / `Command.startTask` target shape below is still the direction of travel. Forms and validation layer on top of the same host via [`aivi.ui.forms`](./forms.md), rather than introducing a second UI architecture.
 
 <!-- quick-info: {"kind":"topic","name":"gtk app architecture"} -->
-AIVI GTK applications have one public architecture: `Model` / `View` / `Msg` / `Update` hosted by `gtkApp`, extended with typed commands and subscriptions and paired with lightweight form helpers from `aivi.ui.forms`. Lower-level primitives such as `signalStream`, `buildFromNode`, and `reconcileNode` remain escape hatches and implementation building blocks, not competing top-level app patterns.
+AIVI GTK applications have one public architecture: `Model` / `View` / `Msg` / `Update` hosted by `gtkApp`, extended with typed commands and subscriptions, paired with lightweight form helpers from `aivi.ui.forms`, and compatible with the pure reactive layer defined in [Reactive Dataflow](./reactive_dataflow.md). Lower-level primitives such as `signalStream`, `buildFromNode`, and `reconcileNode` remain escape hatches and implementation building blocks, not competing top-level app patterns.
 <!-- /quick-info -->
 
 ## Blessed shape
@@ -20,6 +20,7 @@ Every standard single-window GTK app should be organized around these parts:
 7. **`gtkApp`** — the runtime host that wires startup, rendering, event ingestion, commands, subscriptions, and reconciliation together.
 
 The command/subscription extension is additive: it keeps the same mental model and adds an official place for post-update work and non-GTK event feeds.
+Reactive values are additive in the same way: they are pure memoized helpers layered between committed model snapshots and code that reads them, not a second update loop.
 
 ## Core types
 
@@ -91,18 +92,32 @@ Two compatibility notes are part of this spec:
 6. translate each incoming event into `Msg`,
 7. call `update`,
 8. commit the returned `model`,
-9. reconcile the new `view`,
-10. diff `subscriptions` against the new model and update them,
-11. launch the returned `commands`.
+9. assign fresh revisions to changed source snapshots and invalidate affected computed values,
+10. evaluate the new `view` against the committed model (dirty computed values recalculate lazily on first read),
+11. reconcile the new `view`,
+12. diff `subscriptions` against the new model and update them,
+13. launch the returned `commands`.
 
 This preserves one official mental model:
 
 - **signals, timers, and external feeds produce `Msg`**
 - **`update` computes the next `Model` and requested work**
-- **`view` re-renders from that committed `Model`**
+- **reactive invalidation happens from that committed `Model`, never from ambient observers**
+- **`view` re-renders from that committed `Model` and pulls derived data synchronously**
 - **`gtkApp` hosts the side effects after the state transition**
 
 Commands and subscriptions never replace `Msg`; they only decide **where messages come from** and **what work starts after a message**.
+
+## Reactive dataflow layer
+
+Phase 4 adds a pure reactive layer on top of the committed model described above; see [Reactive Dataflow](./reactive_dataflow.md) for the full semantics.
+
+- authoritative source snapshots remain ordinary model fields,
+- plain helper functions are derived values and may recompute whenever read,
+- named computed signals are memoized host-tracked projections with stable identity,
+- commands and subscriptions still own all effectful work and can influence reactive values only by emitting `Msg` that update model sources.
+
+This keeps the architecture single-loop: reactive values help reuse pure work inside `view`, `subscriptions`, and command construction, but they never mutate the model on their own and they never start effects implicitly.
 
 ## Forms and validation
 

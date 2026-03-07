@@ -1,0 +1,107 @@
+================================================================================
+AIVI PHASE 4 REACTIVE IMPLEMENTATION - QUICK REFERENCE
+================================================================================
+
+SPEC LOCATIONS:
+  • Primary spec: specs/stdlib/ui/reactive_dataflow.md (159 lines)
+  • Integration: specs/stdlib/ui/app_architecture.md (lines 83-100)
+  • Forms: specs/stdlib/ui/forms.md (lines 140-148)
+
+PUBLIC API (to implement in aivi.ui.gtk4):
+  Signal a                                    -- opaque memoized value
+  computed : Text -> (Model -> a) -> Signal a -- create named signal
+  readSignal : Signal a -> Model -> a         -- evaluate with memoization
+
+CURRENT IMPLEMENTATION:
+  • gtkApp: crates/aivi/src/stdlib/gtk4.rs (lines 870-880)
+  • Runtime loop: crates/aivi/src/runtime/builtins/gtk4_real.rs (lines 821-867)
+  • Event loop state: Model, rootId, commands, subscriptions (add: signalRegistry)
+
+INTEGRATION POINTS (app_architecture.md lines 95-99):
+  8. commit model
+  9. [MISSING] assign fresh revisions & invalidate computed signals
+  10. [MISSING] evaluate view; dirty signals recalculate lazily on first read
+  11. reconcile widgets
+  12. diff subscriptions
+  13. launch commands
+
+INVALIDATION SEMANTICS (reactive_dataflow.md lines 76-92):
+  1. After update commits model, increment revisions for changed sources
+  2. Mark computed signals that read changed revisions as dirty
+  3. Propagate dirty transitively through signal→signal dependencies
+  4. Do NOT reevaluate immediately
+  5. On first readSignal call in new turn: reevaluate if dirty, cache result
+  6. Later reads in same turn reuse cache
+
+MINIMAL IMPLEMENTATION SCOPE:
+  • Add Signal type & computed/readSignal to gtk4.rs stdlib (~50-100 LOC)
+  • Add SignalRegistry data structure (~100-150 LOC)
+  • Implement invalidateAndMarkDirty function (~100-150 LOC)
+  • Integrate into gtkApp loop step 9-10 (~30-50 LOC)
+  • Implement builtin_computed/builtin_readSignal (~100-150 LOC)
+  • Add dependency tracking context (~50-100 LOC)
+  • Typecheck: signal function signatures (~20-40 LOC)
+  TOTAL: ~400-640 LOC implementation, ~60-120 LOC testing/demo
+
+BOUNDARY RULES (must preserve):
+  ✓ Purity: signals are pure functions, no Effect/Resource/Msg/mutation
+  ✓ Turn-local: evaluated inside app turn, synchronously
+  ✓ Turn-boundary caching: cache lasts one turn; invalidates on model changes
+  ✓ Source-driven: subscriptions use signals to decide membership, not to live
+  ✓ Effects capture snapshots: not live signals
+  ✓ No hidden mutation: subscriptions/effects cannot mutate signal caches
+  ✓ Single host: no separate scheduler; runs inside gtkApp event loop
+
+KEY FILES TO MODIFY:
+  crates/aivi/src/stdlib/gtk4.rs              (+50-100 LOC)
+  crates/aivi/src/typecheck/builtins/system_db.rs  (+20-40 LOC)
+  crates/aivi/src/runtime/builtins/gtk4_real.rs   (+250-400 LOC)
+  crates/aivi/src/runtime/builtins/gtk4.rs    (+100-150 LOC)
+  integration-tests/stdlib/aivi/ui/gtk4/gtk4.aivi  (+50-100 LOC tests)
+  demos/snake.aivi                             (+10-20 LOC demo)
+
+EXAMPLE USAGE:
+  -- Define computed signal with stable key
+  visibleRows = computed "visibleRows" (state =>
+    state.rows
+      |> filter (matchesQuery state.query)
+      |> filter (matchesTags state.selectedTags)
+  )
+  
+  -- Read in view; memoized if dependencies unchanged
+  view : State -> GtkNode
+  view = state =>
+    ~<gtk>
+      <each items={readSignal visibleRows state} as={row}>
+        ...
+      </each>
+    </gtk>
+  
+  -- Use in subscriptions to decide membership
+  subscriptions : State -> List (Subscription Msg)
+  subscriptions = state => [
+    subscriptionEvery { key: "poll", millis: 1000, tag: Poll }
+    if readSignal shouldPoll state  -- computed signal decides
+  ]
+
+TESTING NEEDED:
+  1. Memoization within single turn
+  2. Invalidation on source change
+  3. Transitive dirty propagation
+  4. Signal→signal dependencies
+  5. Subscriptions using computed signals
+  6. Cycle detection
+  7. Snake demo with computed signals
+
+RISK/DIFFICULTY PROFILE:
+  HIGH: dependency tracking during function evaluation (novel approach)
+  HIGH: invalidation propagation through signal graph (correctness critical)
+  MEDIUM: event loop integration (careful state threading)
+  LOW: public API and typecheck additions
+
+NEXT PHASES (out of scope):
+  • Signal cascades (signal reading signal)
+  • Async computed signals
+  • Signal groups/named caches beyond simple keys
+  • Subscription automatic binding via signals
+================================================================================

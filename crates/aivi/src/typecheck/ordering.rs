@@ -2,6 +2,36 @@ use std::collections::HashMap;
 
 use crate::surface::Module;
 
+pub fn ordered_module_names(modules: &[Module]) -> Vec<String> {
+    ordered_module_indices(modules)
+        .into_iter()
+        .map(|idx| modules[idx].name.name.clone())
+        .collect()
+}
+
+pub fn reverse_module_dependencies(modules: &[Module]) -> HashMap<String, Vec<String>> {
+    let mut reverse = HashMap::new();
+    for module in modules {
+        reverse
+            .entry(module.name.name.clone())
+            .or_insert_with(Vec::new);
+    }
+    for module in modules {
+        for use_decl in &module.uses {
+            let dep = use_decl.module.name.clone();
+            reverse
+                .entry(dep)
+                .or_insert_with(Vec::new)
+                .push(module.name.name.clone());
+        }
+    }
+    for dependents in reverse.values_mut() {
+        dependents.sort();
+        dependents.dedup();
+    }
+    reverse
+}
+
 pub(super) fn ordered_modules(modules: &[Module]) -> Vec<&Module> {
     let mut name_to_index = HashMap::new();
     for (idx, module) in modules.iter().enumerate() {

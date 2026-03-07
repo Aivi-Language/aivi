@@ -21,6 +21,7 @@ mod number;
 mod regex;
 mod secrets;
 mod sockets;
+mod source;
 mod streams;
 mod system;
 mod text;
@@ -31,4 +32,3 @@ mod util;
 
 pub(crate) use core::register_builtins;
 pub(crate) use util::builtin;
-

@@ -31,6 +31,16 @@ Cranelift IR  →  native machine code
   (`.o`), generates a thin Rust harness, and links via `cargo build` to produce
   a standalone executable.
 
+## Incremental frontend checkpoints
+
+The pipeline above describes the conceptual end-to-end compilation flow. In
+practice, repeated checks and editor requests may reuse frontend artefacts at
+module, export-surface, definition-group, and schema-artefact granularity
+before continuing to later lowering stages.
+
+The normative ownership, invalidation, and LSP snapshot rules for that reuse are
+specified in [Incremental Compilation & Workspace Checking](/tools/incremental_compilation).
+
 ## Value Representation
 
 All runtime values share a single tagged enum (`Value`). Composite values are

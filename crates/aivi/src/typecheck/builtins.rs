@@ -44,7 +44,7 @@ impl TypeChecker {
             "DbConfig",
             "DbConnection",
             "DbError",
-            // Source kinds (used at type-level only; v0.1 keeps SourceError as Text).
+            // Source kinds used at type-level only.
             "File",
             "Http",
             "Https",
@@ -128,6 +128,10 @@ impl TypeChecker {
         );
         self.builtin_types
             .insert("SourceError".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types.insert(
+            "SourceSchema".to_string(),
+            arrow(star.clone(), star.clone()),
+        );
 
         self.type_constructors = self.builtin_types.clone();
     }

@@ -25,4 +25,33 @@ buildEnv = env.get "AIVI_BUILD_ENV"
 
 Compilation fails early if a static source cannot be read or decoded.
 
+## Schema-first validation
+
+Phase 3 uses `@static` as the explicit path for compile-time schema validation of source declarations.
+
+```aivi
+use aivi.json
+
+@static
+userSchema : JsonSchema
+userSchema = file.json "./schemas/users.schema.json"
+
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json",
+    schema: source.schema.json userSchema
+  }
+```
+
+When a source declaration's config record and schema artifacts are compile-time stable, the compiler must:
+
+- load and validate the schema artifact,
+- compare it with the declaration's result type,
+- surface mismatches at the declaration site before code generation.
+
+Compile-time schema validation does **not** introduce implicit remote discovery. Any remote schema fetch must itself be an explicit `@static` source such as `openapi.fromUrl`.
+
+See [Schema-First Source Definitions](schema_first.md) for the full Phase 3 model.
+
 See the full [`@static` decorator reference](/syntax/decorators/static#static-compile-time-evaluation) for details.

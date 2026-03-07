@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 use crate::diagnostics::FileDiagnostic;
-use crate::surface::{DomainItem, Module, ModuleItem};
+use crate::surface::{DomainDecl, DomainItem, Module, ModuleItem, ScopeItemKind};
 
 use super::checker::TypeChecker;
 use super::setup_module;
@@ -27,6 +28,12 @@ pub struct CheckTypesCheckpoint {
     module_domain_exports: HashMap<String, HashMap<String, Vec<String>>>,
     module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>>,
     module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModuleExportSurfaceSummary {
+    pub fingerprint: u64,
+    pub body_sensitive: bool,
 }
 
 /// Build a checkpoint by running type setup on stdlib (embedded) modules only.
@@ -130,6 +137,181 @@ pub fn check_types_with_checkpoint(
     }
 
     diagnostics
+}
+
+pub fn summarize_module_export_surface(module: &Module) -> ModuleExportSurfaceSummary {
+    let exported_values: HashSet<&str> = module
+        .exports
+        .iter()
+        .filter(|export| export.kind == ScopeItemKind::Value)
+        .map(|export| export.name.name.as_str())
+        .collect();
+    let exported_domains: HashSet<&str> = module
+        .exports
+        .iter()
+        .filter(|export| export.kind == ScopeItemKind::Domain)
+        .map(|export| export.name.name.as_str())
+        .collect();
+    let declared_value_sigs: HashSet<&str> = module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            ModuleItem::TypeSig(sig) => Some(sig.name.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    let body_sensitive = exported_values
+        .iter()
+        .any(|name| !declared_value_sigs.contains(name))
+        || module.items.iter().any(|item| match item {
+            ModuleItem::DomainDecl(domain)
+                if exported_domains.contains(domain.name.name.as_str()) =>
+            {
+                exported_domain_is_body_sensitive(domain)
+            }
+            _ => false,
+        });
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    module.name.name.hash(&mut hasher);
+    module.exports.len().hash(&mut hasher);
+    format!("{:?}", module.exports).hash(&mut hasher);
+    format!("{:?}", module.uses).hash(&mut hasher);
+    format!("{:?}", module.annotations).hash(&mut hasher);
+
+    if body_sensitive {
+        format!("{:?}", module.items).hash(&mut hasher);
+    } else {
+        for item in &module.items {
+            match item {
+                ModuleItem::TypeSig(sig) if exported_values.contains(sig.name.name.as_str()) => {
+                    format!("value-sig:{sig:?}").hash(&mut hasher);
+                }
+                ModuleItem::TypeDecl(decl) => format!("type-decl:{decl:?}").hash(&mut hasher),
+                ModuleItem::TypeAlias(alias) => format!("type-alias:{alias:?}").hash(&mut hasher),
+                ModuleItem::ClassDecl(class_decl) => {
+                    format!("class-decl:{class_decl:?}").hash(&mut hasher)
+                }
+                ModuleItem::InstanceDecl(instance_decl) => {
+                    format!("instance-decl:{instance_decl:?}").hash(&mut hasher)
+                }
+                ModuleItem::DomainDecl(domain)
+                    if exported_domains.contains(domain.name.name.as_str()) =>
+                {
+                    format!("domain:{domain:?}").hash(&mut hasher);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    ModuleExportSurfaceSummary {
+        fingerprint: hasher.finish(),
+        body_sensitive,
+    }
+}
+
+fn exported_domain_is_body_sensitive(domain: &DomainDecl) -> bool {
+    let declared_sigs: HashSet<&str> = domain
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            DomainItem::TypeSig(sig) => Some(sig.name.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    domain.items.iter().any(|item| match item {
+        DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+            !declared_sigs.contains(def.name.name.as_str())
+        }
+        DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => false,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use crate::parse_modules;
+
+    use super::summarize_module_export_surface;
+
+    fn module_export_summary(source: &str) -> super::ModuleExportSurfaceSummary {
+        let (modules, diagnostics) = parse_modules(Path::new("summary_test.aivi"), source);
+        assert!(
+            diagnostics.is_empty(),
+            "expected parse success for summary test, got: {diagnostics:?}"
+        );
+        let module = modules
+            .into_iter()
+            .next()
+            .expect("summary test should contain one module");
+        summarize_module_export_surface(&module)
+    }
+
+    #[test]
+    fn export_surface_summary_ignores_private_body_changes_for_annotated_exports() {
+        let before = r#"
+module test.summary
+export value
+
+helper = 1
+
+value : Text
+value = "ok"
+"#;
+        let after = r#"
+module test.summary
+export value
+
+helper = 2
+
+value : Text
+value = "ok"
+"#;
+
+        let before_summary = module_export_summary(before);
+        let after_summary = module_export_summary(after);
+
+        assert!(
+            !before_summary.body_sensitive && !after_summary.body_sensitive,
+            "annotated exports should not force body-sensitive invalidation"
+        );
+        assert_eq!(
+            before_summary.fingerprint, after_summary.fingerprint,
+            "private body-only edits should not perturb the export surface fingerprint"
+        );
+    }
+
+    #[test]
+    fn export_surface_summary_stays_conservative_for_inferred_exports() {
+        let before = r#"
+module test.summary
+export value
+
+helper = "ok"
+value = helper
+"#;
+        let after = r#"
+module test.summary
+export value
+
+helper = "still ok"
+value = helper
+"#;
+
+        let before_summary = module_export_summary(before);
+        let after_summary = module_export_summary(after);
+
+        assert!(
+            before_summary.body_sensitive && after_summary.body_sensitive,
+            "inferred exports should stay body-sensitive for correctness"
+        );
+        assert_ne!(
+            before_summary.fingerprint, after_summary.fingerprint,
+            "body-sensitive modules should invalidate dependents on private body edits"
+        );
+    }
 }
 
 fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<FileDiagnostic> {

@@ -546,3 +546,34 @@ fn eval_order_and_tco_tests_execute_without_failures() {
     );
     eprintln!("eval-order / TCO: {total_passed} passed, {skipped_files} file(s) skipped");
 }
+
+#[test]
+fn source_pipeline_tests_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = ["integration-tests/runtime/source_pipeline.aivi"]
+        .iter()
+        .map(|p| root.join(p))
+        .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected source pipeline tests to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(
+        total_failed, 0,
+        "{total_failed} source pipeline test(s) failed"
+    );
+    eprintln!("source pipeline: {total_passed} passed, {skipped_files} file(s) skipped");
+}

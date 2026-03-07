@@ -6,8 +6,13 @@ use csv::ReaderBuilder;
 use image::ImageReader;
 use serde_json::Value as JsonValue;
 
-use super::super::util::{builtin, expect_text};
-use super::{json_to_runtime_with_schema, scalar_text_to_value, source_decode_error, source_transport_error};
+use super::super::util::{
+    builtin, expect_text, json_mismatch_to_decode_error, make_decode_error,
+    make_source_decode_error, make_source_io_error,
+};
+use super::{
+    json_to_runtime_with_schema, scalar_text_to_value, source_decode_error, source_transport_error,
+};
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 
 pub(in crate::runtime::builtins) fn build_file_record() -> Value {
@@ -32,13 +37,16 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("File".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "File".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
         "json".to_string(),
         builtin("file.json", 1, |mut args, _| {
-            let path = expect_text(args.remove(0), "file.json")?;
+            let path = file_json_path(args.remove(0))?;
             let schema_slot: Arc<Mutex<Option<crate::runtime::json_schema::JsonSchema>>> =
                 Arc::new(Mutex::new(None));
             let raw_text_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -47,23 +55,19 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let raw = std::fs::read_to_string(&path).map_err(|err| {
-                        RuntimeError::Error(Value::Text(source_transport_error(
-                            "File",
-                            &format!("path={path}"),
-                            &err.to_string(),
+                        RuntimeError::Error(make_source_io_error(format!(
+                            "file.json path={path}: {err}"
                         )))
                     })?;
                     let parsed: JsonValue = serde_json::from_str(&raw).map_err(|err| {
-                        RuntimeError::Error(Value::Text(source_decode_error(
-                            "File",
-                            "$",
-                            "valid JSON",
-                            "invalid JSON text",
-                            &raw,
-                            err.line(),
-                            err.column(),
-                            &format!("failed to parse file {path}"),
-                        )))
+                        RuntimeError::Error(make_source_decode_error(vec![make_decode_error(
+                            Vec::new(),
+                            format!(
+                                "failed to parse JSON in {path} at line {}, column {}: {err}",
+                                err.line(),
+                                err.column()
+                            ),
+                        )]))
                     })?;
 
                     // Validate against schema if set
@@ -71,13 +75,17 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                         if let Some(ref schema) = *guard {
                             let mut errors = Vec::new();
                             crate::runtime::json_schema::validate_json(
-                                &parsed, schema, "$", &mut errors,
+                                &parsed,
+                                schema,
+                                "$",
+                                &mut errors,
                             );
                             if !errors.is_empty() {
-                                let msg = crate::runtime::json_schema::format_json_validation_errors(
-                                    &raw, "File", &errors,
-                                );
-                                return Err(RuntimeError::Error(Value::Text(msg)));
+                                let decode_errors =
+                                    errors.iter().map(json_mismatch_to_decode_error).collect();
+                                return Err(RuntimeError::Error(make_source_decode_error(
+                                    decode_errors,
+                                )));
                             }
                         }
                     }
@@ -87,14 +95,8 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     }
 
                     // Use the schema (if set) to produce proper Option wrappers.
-                    let schema_opt = schema_ref
-                        .lock()
-                        .ok()
-                        .and_then(|g| g.clone());
-                    Ok(json_to_runtime_with_schema(
-                        &parsed,
-                        schema_opt.as_ref(),
-                    ))
+                    let schema_opt = schema_ref.lock().ok().and_then(|g| g.clone());
+                    Ok(json_to_runtime_with_schema(&parsed, schema_opt.as_ref()))
                 }),
             };
             let mut source = SourceValue::new("File".to_string(), Arc::new(effect));
@@ -163,7 +165,10 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Ok(Value::List(Arc::new(rows)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("File".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "File".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -214,7 +219,10 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Ok(Value::Record(Arc::new(meta)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("Image".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "Image".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -267,7 +275,10 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                     Ok(Value::Record(Arc::new(image)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("Image".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "Image".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -320,9 +331,10 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
             };
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let mut file = handle
-                        .lock()
-                        .map_err(|_| RuntimeError::IOError { context: "file.readAll".to_string(), cause: "file handle poisoned".to_string() })?;
+                    let mut file = handle.lock().map_err(|_| RuntimeError::IOError {
+                        context: "file.readAll".to_string(),
+                        cause: "file handle poisoned".to_string(),
+                    })?;
                     let _ = std::io::Seek::seek(&mut *file, std::io::SeekFrom::Start(0));
                     let mut buffer = String::new();
                     std::io::Read::read_to_string(&mut *file, &mut buffer)
@@ -449,4 +461,26 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
         }),
     );
     Value::Record(Arc::new(fields))
+}
+
+fn file_json_path(arg: Value) -> Result<String, RuntimeError> {
+    match arg {
+        Value::Text(path) => Ok(path),
+        Value::Record(record) => match record.get("path") {
+            Some(Value::Text(path)) => Ok(path.clone()),
+            Some(other) => Err(RuntimeError::TypeError {
+                context: "file.json".to_string(),
+                expected: "Text".to_string(),
+                got: super::super::util::value_type_name(other).to_string(),
+            }),
+            None => Err(RuntimeError::Message(
+                "file.json expects config.path".to_string(),
+            )),
+        },
+        other => Err(RuntimeError::TypeError {
+            context: "file.json".to_string(),
+            expected: "Text or Record".to_string(),
+            got: super::super::util::value_type_name(&other).to_string(),
+        }),
+    }
 }

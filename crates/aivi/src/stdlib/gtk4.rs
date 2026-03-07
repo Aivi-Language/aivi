@@ -55,6 +55,7 @@ export subscriptionNone, subscriptionBatch, subscriptionEvery, subscriptionSourc
 export gtkApp
 export gtkAppFull
 export gtkSetInterval
+export computed
 
 use aivi
 use aivi.concurrency as concurrent
@@ -166,6 +167,9 @@ appStepWith = model commands => { model, commands }
 
 noSubscriptions : s -> List (Subscription msg)
 noSubscriptions = _ => []
+
+computed : Text -> (model -> a) -> model -> a
+computed = key derive => gtk4.computed key derive
 
 commandNone : Command msg
 commandNone = CommandNone
@@ -827,6 +831,7 @@ runGtkAppHost = config =>
     _ <- windowSetDecorated win config.decorated
     _ <- windowSetHideOnClose win config.hideOnClose
     _ <- config.onStart appId win
+    _ <- gtk4.reactiveInit config.model
     initialView = config.view config.model
     root <- buildFromNode initialView
     _ <- windowSetChild win root
@@ -852,6 +857,7 @@ runGtkAppHost = config =>
         | Err _ => pure Unit
         | Ok msg => do Effect {
             step <- config.update appId win msg acc.st
+            _ <- gtk4.reactiveCommit acc.st step.model
             newView = config.view step.model
             newRoot <- reconcileNode acc.rootId newView
             _ <- if newRoot == acc.rootId then pure Unit else windowSetChild win newRoot

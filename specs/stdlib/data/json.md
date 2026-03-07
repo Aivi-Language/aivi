@@ -20,6 +20,28 @@ A large part of the AIVI vision is that `Source` declarations automatically perf
 
 <<< ../../snippets/from_md/stdlib/data/json/integrating_decode_with_external_sources.aivi{aivi}
 
+## 2.1 Schema values in source declarations
+
+Phase 3 source declarations can carry a checked `JsonSchema` value instead of relying only on the eventual `load` site.
+
+```aivi
+@static
+userSchema : JsonSchema
+userSchema = file.json "./schemas/users.schema.json"
+
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json",
+    schema: source.schema.json userSchema
+  }
+```
+
+When the schema artifact is compile-time stable, the compiler compares `JsonSchema` with the declaration's result type before runtime.
+At runtime, `load` still uses the existing `aivi.json` decode pipeline and surfaces accumulated `DecodeError` values if live data diverges from the contract.
+
+`validateSchema` and `migrateObject` remain the standard library hooks for explaining or repairing JSON shape changes; schema-first source migration guidance builds on those APIs rather than replacing them.
+
 ## 3. Custom Decoders for Enums / Complex Types
 
 Developers can supply custom decoders for types that cannot be structurally derived automatically. A decoder is any function returning a `Validation (List DecodeError) A`.

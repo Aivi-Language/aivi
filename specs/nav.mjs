@@ -62,6 +62,8 @@ export const sidebar = [
         items: [
           { text: 'Modules', link: '/syntax/modules' },
           { text: 'External Sources', link: '/syntax/external_sources' },
+          { text: 'Schema-First Source Definitions', link: '/syntax/external_sources/schema_first' },
+          { text: 'Source Composition', link: '/syntax/external_sources/composition' },
           { text: 'File Sources', link: '/syntax/external_sources/file' },
           { text: 'REST/HTTP Sources', link: '/syntax/external_sources/rest_http' },
           { text: 'Environment Sources', link: '/syntax/external_sources/environment' },
@@ -198,6 +200,7 @@ export const sidebar = [
           collapsed: true,
           items: [
             { text: 'App Architecture', link: '/stdlib/ui/app_architecture' },
+            { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' },
             { text: 'Forms', link: '/stdlib/ui/forms' },
             { text: 'GTK4', link: '/stdlib/ui/gtk4' },
             { text: 'Layout', link: '/stdlib/ui/layout' },
@@ -222,6 +225,7 @@ export const sidebar = [
     items: [
       { text: 'CLI', link: '/tools/cli' },
       { text: 'LSP Server', link: '/tools/lsp_server' },
+      { text: 'Incremental Compilation', link: '/tools/incremental_compilation' },
       { text: 'VSCode Extension', link: '/tools/vscode_extension' },
       { text: 'Package Manager', link: '/tools/package_manager' }
     ]

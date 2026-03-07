@@ -302,6 +302,7 @@ impl Backend {
         &self,
         uri: Url,
         text: String,
+        version: i32,
     ) -> Vec<aivi::FileDiagnostic> {
         let path = PathBuf::from(Self::path_from_uri(&uri));
         let text_clone = text.clone();
@@ -315,12 +316,17 @@ impl Backend {
         if let Some(existing) = state.open_modules_by_uri.remove(&uri) {
             for module_name in existing {
                 state.open_module_index.remove(&module_name);
+                state.module_export_summaries.remove(&module_name);
             }
         }
 
         let mut module_names = Vec::new();
         for module in modules {
             module_names.push(module.name.name.clone());
+            state.module_export_summaries.insert(
+                module.name.name.clone(),
+                aivi::summarize_module_export_surface(&module),
+            );
             state.open_module_index.insert(
                 module.name.name.clone(),
                 IndexedModule {
@@ -335,6 +341,7 @@ impl Backend {
             uri,
             DocumentState {
                 text,
+                version,
                 parse_diags: parse_diags.clone(),
             },
         );
@@ -347,6 +354,7 @@ impl Backend {
         if let Some(existing) = state.open_modules_by_uri.remove(uri) {
             for module_name in existing {
                 state.open_module_index.remove(&module_name);
+                state.module_export_summaries.remove(&module_name);
             }
         }
     }

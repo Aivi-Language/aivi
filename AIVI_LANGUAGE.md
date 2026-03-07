@@ -1181,7 +1181,9 @@ main = gtkApp {
 }
 ```
 
-`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`, and `liftAppUpdateFull` compatibility helpers.
+`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `computed`, `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`, and `liftAppUpdateFull` compatibility helpers.
+
+The Phase 4 reactive model keeps authoritative source snapshots inside the committed model. Plain derived helpers stay pure, while computed values are memoized pure projections invalidated when committed source snapshots change and reevaluated lazily on the next read. Commands and subscriptions remain the only effectful boundaries: they may capture derived values by value, but they never mutate reactive values directly.
 
 `onStart` is for one-time startup work such as registering CSS and actions. `signalStream`, `buildFromNode`, `reconcileNode`, and the deprecated `gtkSetInterval` remain available as lower-level primitives for custom loops and legacy code, but they are not a competing blessed architecture. `gtkAppFull` remains as a deprecated compatibility shim for advanced window flags and legacy code that still needs raw handles during `update`.
 

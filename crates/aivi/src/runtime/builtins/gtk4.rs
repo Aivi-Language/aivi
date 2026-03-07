@@ -1,16 +1,74 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::util::{builtin, expect_text};
 use crate::runtime::{EffectValue, RuntimeError, Value};
 
 /// Create a stub gtk4 builtin that returns an error effect.
 fn gtk4_stub(name: &'static str, arity: usize) -> Value {
     let full_name = format!("gtk4.{name}");
-    super::util::builtin(&full_name, arity, move |_args, _| {
+    builtin(&full_name, arity, move |_args, _| {
         let msg = format!("gtk4.{name}: GTK4 runtime is not available");
         Ok(Value::Effect(Arc::new(EffectValue::Thunk {
             func: Arc::new(move |_| Err(RuntimeError::Error(Value::Text(msg.clone())))),
         })))
+    })
+}
+
+fn reactive_init_builtin() -> Value {
+    builtin("gtk4.reactiveInit", 1, |mut args, _| {
+        let model = args.remove(0);
+        Ok(Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |runtime| {
+                runtime.reactive_init_host(model.clone());
+                Ok(Value::Unit)
+            }),
+        })))
+    })
+}
+
+fn reactive_commit_builtin() -> Value {
+    builtin("gtk4.reactiveCommit", 2, |mut args, _| {
+        let next = args.remove(1);
+        let previous = args.remove(0);
+        Ok(Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |runtime| {
+                runtime.reactive_commit_host(previous.clone(), next.clone());
+                Ok(Value::Unit)
+            }),
+        })))
+    })
+}
+
+fn computed_builtin() -> Value {
+    builtin("gtk4.computed", 2, |mut args, _| {
+        let derive = args.remove(1);
+        let key = expect_text(args.remove(0), "gtk4.computed key")?;
+        Ok(builtin("gtk4.computed.read", 1, move |mut args, runtime| {
+            let model = args.remove(0);
+            runtime.reactive_read_computed(&key, derive.clone(), model)
+        }))
+    })
+}
+
+fn serialize_signal_builtin() -> Value {
+    builtin("gtk4.serializeSignal", 1, |mut args, _| {
+        let value = args.remove(0);
+        Ok(Value::Text(match value {
+            Value::Text(text) => text,
+            Value::Int(value) => value.to_string(),
+            Value::Bool(value) => value.to_string(),
+            Value::Float(value) => value.to_string(),
+            Value::Constructor { name, args } if args.is_empty() => name,
+            Value::Constructor { name, args } => {
+                let values = args
+                    .iter()
+                    .map(crate::runtime::format_value)
+                    .collect::<Vec<_>>();
+                format!("{}({})", name, values.join(","))
+            }
+            _ => String::new(),
+        }))
     })
 }
 
@@ -154,6 +212,10 @@ fn build_gtk4_stubs() -> Value {
     ];
 
     let mut fields = HashMap::new();
+    fields.insert("reactiveInit".to_string(), reactive_init_builtin());
+    fields.insert("reactiveCommit".to_string(), reactive_commit_builtin());
+    fields.insert("computed".to_string(), computed_builtin());
+    fields.insert("serializeSignal".to_string(), serialize_signal_builtin());
     for &(name, arity) in stubs {
         fields.insert(name.to_string(), gtk4_stub(name, arity));
     }

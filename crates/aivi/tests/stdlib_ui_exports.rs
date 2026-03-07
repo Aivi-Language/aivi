@@ -52,3 +52,35 @@ fn stdlib_ui_exports_v_element() {
 
     let _def = v_element_def.expect("vElement def");
 }
+
+#[test]
+fn stdlib_gtk4_exports_computed() {
+    let modules = embedded_stdlib_modules();
+    let gtk4 = modules
+        .iter()
+        .find(|m| m.name.name == "aivi.ui.gtk4")
+        .expect("aivi.ui.gtk4 module exists");
+
+    assert!(
+        gtk4.exports.iter().any(|e| e.name.name == "computed"),
+        "expected aivi.ui.gtk4 to export computed, exports={:?}",
+        gtk4.exports
+            .iter()
+            .map(|e| e.name.name.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    let def_names: Vec<&str> = gtk4
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            ModuleItem::Def(def) => Some(def.name.name.as_str()),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        def_names.contains(&"computed"),
+        "expected aivi.ui.gtk4 to define computed; defs={def_names:?}"
+    );
+}
