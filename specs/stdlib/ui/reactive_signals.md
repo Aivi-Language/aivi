@@ -63,6 +63,14 @@ rowNames =
 
 Use a plain helper when the value is small and local. Use `signal` when a named reader makes the code easier to follow. Use `computed` when the same pure work is read repeatedly and should be cached until its dependencies change.
 
+### Decision guide
+
+| Reach for... | When it is usually the best choice |
+| --- | --- |
+| plain helper | the derivation is local, short, and only read in one place |
+| `signal` | the same derived value deserves a name or is reused in a couple of places |
+| `computed` | the derivation is reused heavily or expensive enough that caching clearly helps |
+
 ## How they fit into a GTK app
 
 Reactive signals read from the app model and fit into the normal `gtkApp` loop:
@@ -135,7 +143,7 @@ Inside `~<gtk>...</gtk>` hosted by `gtkApp`, signal values are read automaticall
 - attribute splices like `label={headline}`,
 - `<each items={rowNames} as={name}>`.
 
-Outside the sigil, signals stay ordinary function values, so use `readSignal` or plain function application.
+Outside the sigil, signals stay ordinary function values of shape `Model -> A`, so use `readSignal` or plain function application.
 
 ## When not to use reactive signals
 

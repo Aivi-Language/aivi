@@ -52,7 +52,7 @@ For more control, build a `Request` value:
 use aivi.rest
 
 savePost : Url -> Text -> Effect Text SavedPost
-savePost = url => token =>
+savePost = url => token => do Effect {
   request = {
     method: "POST"
     url: url
@@ -63,7 +63,9 @@ savePost = url => token =>
     bearerToken: Some token   // Adds Authorization: Bearer <token>.
     strictStatus: Some True   // Treat non-2xx responses as errors.
   }
-  fetch request
+  savedPost <- fetch request
+  pure savedPost
+}
 ```
 
 ## Types

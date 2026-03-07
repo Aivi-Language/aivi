@@ -20,6 +20,18 @@ Most single-window GTK apps can be organized around these pieces:
 
 If you are familiar with Elm, Redux-style reducers, or unidirectional UI architectures, the mental model is similar: input becomes a message, the message updates state, and the UI is redrawn from that state.
 
+## Start here
+
+Before reading the full API surface, keep this short checklist in mind:
+
+1. put all authoritative screen state in `Model`
+2. turn widget input into a small `Msg` type
+3. let `update` compute the next `Model`
+4. let `view` redraw from that model
+5. add commands or subscriptions only when the screen needs effects
+
+Everything else on this page explains how `gtkApp` hosts that loop.
+
 ## Core types
 
 The architecture is built around these conceptual types:
@@ -147,7 +159,7 @@ view = _ =>
   </gtk>
 ```
 
-Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application.
+Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction to these helpers first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed).
 
 ## Forms and validation stay in the same architecture
 
@@ -343,20 +355,16 @@ AIVI still exposes the lower-level building blocks behind this architecture:
 
 Reach for them when you need custom hosting, experiments, or multi-window flows. For standard single-window apps, let `gtkApp` own the event loop.
 
-## Example
+## Example 1: local state plus a repeating timer
+
+This first example keeps one query string in the model and adds a repeating timer only while polling is enabled:
 
 ```aivi
-Msg
-  = QueryChanged Text
-  | SearchProgress Int
-  | SearchFinished (List Text)
-  | SearchFailed Text
-  | SearchCancelled
-  | Tick
+Msg = QueryChanged Text | Tick
 
 subscriptions : Model -> List (Subscription Msg)
-subscriptions = state =>
-  if state.pollingEnabled
+subscriptions = model =>
+  if model.pollingEnabled
     then [
       Subscription.every {
         key: "clock",
@@ -367,49 +375,75 @@ subscriptions = state =>
     else []
 
 update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
-update = msg => state =>
-  msg match
-    | QueryChanged txt =>
-        pure {
-          // Commit the new query immediately so the UI reflects it now.
-          model: state <| { query: txt, searching: True, progress: 0 },
-          commands: [
-            Command.startTask {
-              key: "search",
-              run: progress => searchCatalog progress txt,
-              onProgress: SearchProgress,
-              onOk: SearchFinished,
-              onError: SearchFailed,
-              onCancelled: Some SearchCancelled
-            }
-          ]
-        }
-    | Tick =>
-        pure {
-          model: state,
-          commands: []
-        }
-    | SearchProgress n =>
-        pure {
-          model: state <| { progress: n },
-          commands: []
-        }
-    | SearchFinished results =>
-        pure {
-          model: state <| { searching: False, results },
-          commands: []
-        }
-    | SearchFailed err =>
-        pure {
-          model: state <| { searching: False, error: Some err },
-          commands: []
-        }
-    | SearchCancelled =>
-        pure {
-          model: state <| { searching: False },
-          commands: []
-        }
+update = msg => model =>
+  pure (
+    msg match
+      | QueryChanged newQuery =>
+          {
+            model: model <| { query: newQuery }
+            commands: []
+          }
+      | Tick =>
+          {
+            model: model <| { secondsVisible: model.secondsVisible + 1 }
+            commands: []
+          }
+  )
 ```
+
+## Example 2: add background work without changing the loop
+
+When a message should launch asynchronous work, return a command from `update`:
+
+```aivi
+Msg
+  = QueryChanged Text
+  | SearchProgress Int
+  | SearchFinished (List Text)
+  | SearchFailed Text
+  | SearchCancelled
+
+update = msg => model =>
+  pure (
+    msg match
+      | QueryChanged newQuery =>
+          {
+            model: model <| { query: newQuery, searching: True, progress: 0 }
+            commands: [
+              Command.startTask {
+                key: "search"
+                run: progress => searchCatalog progress newQuery
+                onProgress: SearchProgress
+                onOk: SearchFinished
+                onError: SearchFailed
+                onCancelled: Some SearchCancelled
+              }
+            ]
+          }
+      | SearchProgress n =>
+          {
+            model: model <| { progress: n }
+            commands: []
+          }
+      | SearchFinished results =>
+          {
+            model: model <| { searching: False, results }
+            commands: []
+          }
+      | SearchFailed err =>
+          {
+            model: model <| { searching: False, error: Some err }
+            commands: []
+          }
+      | SearchCancelled =>
+          {
+            model: model <| { searching: False }
+            commands: []
+          }
+  )
+```
+
+The important part is that nothing creates a second event loop. Even background work still feeds results back as ordinary `Msg` values.
 
 ## See it in action
 
