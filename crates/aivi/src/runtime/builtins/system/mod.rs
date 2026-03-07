@@ -17,7 +17,10 @@ pub(super) fn build_clock_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
         "now".to_string(),
-        builtin("clock.now", 1, |_, _| {
+        builtin("clock.now", 1, |args, runtime| {
+            if let Some(value) = runtime.dispatch_capability_handler("clock.now", &args)? {
+                return Ok(value);
+            }
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let now = SystemTime::now()
@@ -136,7 +139,10 @@ fn build_env_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
         "get".to_string(),
-        builtin("system.env.get", 1, |mut args, _| {
+        builtin("system.env.get", 1, |mut args, runtime| {
+            if let Some(value) = runtime.dispatch_capability_handler("process.env.read", &args)? {
+                return Ok(value);
+            }
             let key = expect_text(args.pop().unwrap(), "system.env.get")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| match std::env::var(&key) {
@@ -151,7 +157,10 @@ fn build_env_record() -> Value {
     );
     fields.insert(
         "decode".to_string(),
-        builtin("system.env.decode", 1, |mut args, _| {
+        builtin("system.env.decode", 1, |mut args, runtime| {
+            if let Some(value) = runtime.dispatch_capability_handler("process.env.read", &args)? {
+                return Ok(value);
+            }
             let prefix = expect_text(args.pop().unwrap(), "system.env.decode")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
@@ -219,7 +228,10 @@ pub(super) fn build_env_source_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
         "get".to_string(),
-        builtin("env.get", 1, |mut args, _| {
+        builtin("env.get", 1, |mut args, runtime| {
+            if let Some(value) = runtime.dispatch_capability_handler("process.env.read", &args)? {
+                return Ok(value);
+            }
             let key = expect_text(args.pop().unwrap(), "env.get")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| match std::env::var(&key) {
@@ -234,7 +246,10 @@ pub(super) fn build_env_source_record() -> Value {
     );
     fields.insert(
         "decode".to_string(),
-        builtin("env.decode", 1, |mut args, _| {
+        builtin("env.decode", 1, |mut args, runtime| {
+            if let Some(value) = runtime.dispatch_capability_handler("process.env.read", &args)? {
+                return Ok(value);
+            }
             let prefix = expect_text(args.pop().unwrap(), "env.decode")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
@@ -422,4 +437,3 @@ fn source_decode_error(
     }
     out
 }
-

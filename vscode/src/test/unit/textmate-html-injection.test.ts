@@ -153,14 +153,14 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
     expect(tok).toMatchSnapshot();
 
     const tokens = tokensForLine(tok, 0, line);
-    const div = findToken(tokens, (t) => t.text === 'div' && t.scopes.join(' ').includes('entity.name.tag.html'));
-    expect(div.scopes.join(' ')).toContain('entity.name.tag.html');
+    const div = findToken(tokens, (t) => t.text === '<div' && t.scopes.join(' ').includes('entity.name.tag.aivi'));
+    expect(div.scopes.join(' ')).toContain('entity.name.tag.aivi');
 
     const classAttr = findFirstTokenIncluding(tokens, 'class');
-    expect(classAttr.scopes.join(' ')).toContain('entity.other.attribute-name.html');
+    expect(classAttr.scopes.join(' ')).toContain('entity.other.attribute-name.aivi');
 
-    const strA = findToken(tokens, (t) => t.text === 'a' && t.scopes.join(' ').includes('string.quoted.double.html'));
-    expect(strA.scopes.join(' ')).toContain('string.quoted.double.html');
+    const strA = findToken(tokens, (t) => t.text === 'a' && t.scopes.join(' ').includes('string.quoted.double.xml'));
+    expect(strA.scopes.join(' ')).toContain('string.quoted.double.xml');
   });
 
   it('tokenizes nested tags and returns to AIVI scopes outside the sigil', () => {
@@ -172,8 +172,8 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
     const useKw = findFirstTokenIncluding(tokens, 'use');
     expect(useKw.scopes.join(' ')).toContain('keyword.other.aivi');
 
-    const section = findToken(tokens, (t) => t.text === 'section' && t.scopes.join(' ').includes('entity.name.tag.html'));
-    expect(section.scopes.join(' ')).toContain('entity.name.tag.html');
+    const section = findToken(tokens, (t) => t.text === '<section' && t.scopes.join(' ').includes('entity.name.tag.aivi'));
+    expect(section.scopes.join(' ')).toContain('entity.name.tag.aivi');
 
     const after = findFirstTokenIncluding(tokens, 'z');
     expect(after.scopes.join(' ')).not.toContain('.html');
@@ -187,11 +187,13 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
 
     const tokens = tokensForLine(tok, 0, line);
     const onClick = findFirstTokenIncluding(tokens, 'onClick');
-    expect(onClick.scopes.join(' ')).toContain('.html');
-    expect(onClick.scopes.join(' ')).toContain('attribute');
+    expect(onClick.scopes.join(' ')).toContain('entity.other.attribute-name.aivi');
 
-    const attrValue = findFirstTokenIncluding(tokens, '{doAiviFn}');
-    expect(attrValue.scopes.join(' ')).toContain('string.unquoted.html');
+    const attrOpen = findToken(tokens, (t) => t.text === '{');
+    expect(attrOpen.scopes.join(' ')).toContain('punctuation.section.interpolation.begin.aivi');
+
+    const attrValue = findToken(tokens, (t) => t.text === 'doAiviFn' && t.scopes.join(' ').includes('meta.interpolation.aivi'));
+    expect(attrValue.scopes.join(' ')).toContain('meta.interpolation.aivi');
     expect(attrValue.scopes.join(' ')).not.toContain('source.js');
   });
 
@@ -201,13 +203,13 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
     expect(tok).toMatchSnapshot();
 
     const tokens = tokensForLine(tok, 0, line);
-    const img = findToken(tokens, (t) => t.text === 'img' && t.scopes.join(' ').includes('entity.name.tag.html'));
-    expect(img.scopes.join(' ')).toContain('entity.name.tag.html');
+    const img = findToken(tokens, (t) => t.text === '<img' && t.scopes.join(' ').includes('entity.name.tag.aivi'));
+    expect(img.scopes.join(' ')).toContain('entity.name.tag.aivi');
 
     // The `<` in `2 < 3` should *not* be parsed as a tag start.
     const textLtIndex = line.indexOf('2 < 3') + 2; // points at `<`
     const lt = tokenAt(tokens, textLtIndex);
     expect(lt.text).toContain('<');
-    expect(lt.scopes.join(' ')).not.toContain('entity.name.tag.html');
+    expect(lt.scopes.join(' ')).not.toContain('entity.name.tag.aivi');
   });
 });

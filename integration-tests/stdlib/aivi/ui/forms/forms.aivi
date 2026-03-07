@@ -1,0 +1,134 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.forms.tests
+
+use aivi
+use aivi.testing
+use aivi.validation
+use aivi.ui.forms
+use aivi.ui.gtk4
+
+Contact = {
+  name: Text
+  email: Text
+}
+
+Model = {
+  submitted: Bool
+  name: Field Text
+  email: Field Text
+}
+
+Msg =
+  | NameChanged Text
+  | NameBlurred
+  | EmailChanged Text
+  | EmailBlurred
+  | Submit
+
+initialModel : Model
+initialModel = {
+  submitted: False
+  name: field ""
+  email: field ""
+}
+
+nameRule : Text -> Validation (List Text) Text
+nameRule = allOf [required, minLength 2]
+
+emailRule : Text -> Validation (List Text) Text
+emailRule = allOf [required, email]
+
+toMsg : GtkSignalEvent -> Option Msg
+toMsg = event => event match
+  | GtkInputChanged _ "nameInput" txt  => Some (NameChanged txt)
+  | GtkFocusOut _ "nameInput"          => Some NameBlurred
+  | GtkInputChanged _ "emailInput" txt => Some (EmailChanged txt)
+  | GtkFocusOut _ "emailInput"         => Some EmailBlurred
+  | GtkClicked _ "submitBtn"           => Some Submit
+  | _                                  => None
+
+update : Msg -> Model -> Effect GtkError Model
+update = msg model => msg match
+  | NameChanged txt =>
+      pure (model <| { name: setValue txt model.name })
+  | NameBlurred =>
+      pure (model <| { name: touch model.name })
+  | EmailChanged txt =>
+      pure (model <| { email: setValue txt model.email })
+  | EmailBlurred =>
+      pure (model <| { email: touch model.email })
+  | Submit =>
+      pure (model <| { submitted: True })
+
+nameErrors : Model -> List Text
+nameErrors = model => visibleErrors model.submitted nameRule model.name
+
+emailErrors : Model -> List Text
+emailErrors = model => visibleErrors model.submitted emailRule model.email
+
+MkContact : Text -> Text -> Contact
+MkContact = name email => {
+  name: name
+  email: email
+}
+
+contactValidation : Model -> Validation (List Text) Contact
+contactValidation = model => ap (ap (Valid MkContact) (validate nameRule model.name)) (validate emailRule model.email)
+
+@test "fields start pristine and hide errors"
+fields_start_pristine = do Effect {
+  assertEq initialModel.name (field "")
+  assertEq initialModel.email (field "")
+  assertEq (nameErrors initialModel) []
+  assertEq (emailErrors initialModel) []
+}
+
+@test "input change marks field dirty but not touched"
+input_change_marks_dirty = do Effect {
+  model <- update (NameChanged "A") initialModel
+  assertEq model.name.value "A"
+  assertEq model.name.dirty True
+  assertEq model.name.touched False
+  assertEq (nameErrors model) []
+}
+
+@test "blur reveals field validation"
+blur_reveals_validation = do Effect {
+  changed <- update (NameChanged "A") initialModel
+  blurred <- update NameBlurred changed
+  assertEq blurred.name.touched True
+  assertEq (nameErrors blurred) ["Must be at least 2 characters"]
+}
+
+@test "submit reveals untouched field errors"
+submit_reveals_errors = do Effect {
+  submitted <- update Submit initialModel
+  assertEq submitted.submitted True
+  assertEq (nameErrors submitted) ["This field is required"]
+  assertEq (emailErrors submitted) ["This field is required"]
+}
+
+@test "valid form produces typed payload"
+valid_form_payload = do Effect {
+  nameModel  <- update (NameChanged "Alice") initialModel
+  emailModel <- update (EmailChanged "alice@example.com") nameModel
+  result = contactValidation emailModel
+  assertEq result (Valid { name: "Alice", email: "alice@example.com" })
+}
+
+@test "form validation accumulates field errors"
+form_validation_accumulates_errors = do Effect {
+  nameModel  <- update (NameChanged "A") initialModel
+  emailModel <- update (EmailChanged "not-an-email") nameModel
+  result = contactValidation emailModel
+  assertEq result (Invalid ["Must be at least 2 characters", "Enter a valid email address"])
+}
+
+@test "toMsg maps GTK input blur and submit events"
+gtk_events_map_to_messages = do Effect {
+  assertEq (toMsg (GtkInputChanged 1 "nameInput" "Ada")) (Some (NameChanged "Ada"))
+  assertEq (toMsg (GtkFocusOut 1 "nameInput")) (Some NameBlurred)
+  assertEq (toMsg (GtkInputChanged 2 "emailInput" "ada@example.com")) (Some (EmailChanged "ada@example.com"))
+  assertEq (toMsg (GtkFocusOut 2 "emailInput")) (Some EmailBlurred)
+  assertEq (toMsg (GtkClicked 3 "submitBtn")) (Some Submit)
+}

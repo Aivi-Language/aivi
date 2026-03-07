@@ -209,6 +209,7 @@ fn expr_span(expr: &Expr) -> Span {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Mock { span, .. }
+        | Expr::CapabilityScope { span, .. }
         | Expr::Block { span, .. } => span.clone(),
         Expr::Raw { span, .. } => span.clone(),
     }
@@ -253,20 +254,18 @@ fn literal_span(literal: &Literal) -> Span {
 }
 
 fn parse_sigil_text(text: &str) -> Option<(String, String, String)> {
-    let mut iter = text.chars();
-    if iter.next()? != '~' {
+    if !text.starts_with('~') {
         return None;
     }
 
     // Backtick raw-text sigil: ~`...`
-    let mut peekable = iter.peekable();
-    if peekable.peek() == Some(&'`') {
-        peekable.next(); // consume opening backtick
-        let rest: String = peekable.collect();
-        let body = rest.strip_suffix('`').unwrap_or(&rest).to_string();
-        return Some(("raw".to_string(), body, String::new()));
+    if text.starts_with("~`") {
+        let raw = crate::raw_text_sigil::parse_raw_text_sigil(text)?;
+        return Some(("raw".to_string(), raw.body, String::new()));
     }
-    let mut iter = peekable;
+
+    let mut iter = text.chars();
+    iter.next();
 
     let mut tag = String::new();
     let mut open = None;
@@ -474,11 +473,7 @@ fn is_adjacent(left: &Span, right: &Span) -> bool {
 
 /// Desugar a pattern predicate `Pat (when Guard)?` to a lambda:
 /// `__pred => __pred match | Pat (when Guard)? => True | _ => False`
-fn build_pattern_predicate(
-    pattern: Pattern,
-    guard: Option<Expr>,
-    span: Span,
-) -> Expr {
+fn build_pattern_predicate(pattern: Pattern, guard: Option<Expr>, span: Span) -> Expr {
     let param = SpannedName {
         name: "__pred".to_string(),
         span: span.clone(),
@@ -487,13 +482,19 @@ fn build_pattern_predicate(
     let true_arm = MatchArm {
         pattern,
         guard,
-        body: Expr::Literal(Literal::Bool { value: true, span: span.clone() }),
+        body: Expr::Literal(Literal::Bool {
+            value: true,
+            span: span.clone(),
+        }),
         span: span.clone(),
     };
     let false_arm = MatchArm {
         pattern: Pattern::Wildcard(span.clone()),
         guard: None,
-        body: Expr::Literal(Literal::Bool { value: false, span: span.clone() }),
+        body: Expr::Literal(Literal::Bool {
+            value: false,
+            span: span.clone(),
+        }),
         span: span.clone(),
     };
     let match_expr = Expr::Match {

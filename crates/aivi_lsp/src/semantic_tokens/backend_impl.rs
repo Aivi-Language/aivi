@@ -4,4 +4,5 @@ include!("html_sigil.rs");
 include!("gtk_sigil.rs");
 include!("i18n_sigil.rs");
 include!("paren_sigil.rs");
+include!("raw_text_sigil.rs");
 include!("build.rs");

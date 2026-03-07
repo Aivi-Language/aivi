@@ -8,6 +8,7 @@ impl Runtime {
             ctx,
             cancel,
             cancel_mask: 0,
+            capability_handlers: Vec::new(),
             fuel: None,
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
             check_counter: 0,
@@ -62,6 +63,166 @@ impl Runtime {
         let result = f(self);
         self.cancel_mask = self.cancel_mask.saturating_sub(1);
         result
+    }
+
+    pub(crate) fn push_capability_scope(&mut self, scope: CapabilityHandlerScope) {
+        self.capability_handlers.push(scope);
+    }
+
+    pub(crate) fn pop_capability_scope(&mut self) {
+        self.capability_handlers.pop();
+    }
+
+    pub(crate) fn capture_capability_scopes(&self) -> Vec<CapabilityHandlerScope> {
+        self.capability_handlers.clone()
+    }
+
+    pub(crate) fn with_capability_scope<T>(
+        &mut self,
+        scope: CapabilityHandlerScope,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        self.push_capability_scope(scope);
+        let result = f(self);
+        self.pop_capability_scope();
+        result
+    }
+
+    pub(crate) fn with_capability_scopes<T>(
+        &mut self,
+        scopes: &[CapabilityHandlerScope],
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let start = self.capability_handlers.len();
+        self.capability_handlers.extend(scopes.iter().cloned());
+        let result = f(self);
+        self.capability_handlers.truncate(start);
+        result
+    }
+
+    pub(crate) fn wrap_value_with_capability_scope(
+        &self,
+        value: Value,
+        scope: CapabilityHandlerScope,
+    ) -> Value {
+        match value {
+            Value::Builtin(builtin) if builtin.imp.arity == 0 && builtin.args.is_empty() => {
+                let wrapped_builtin = BuiltinValue {
+                    imp: Arc::new(BuiltinImpl {
+                        name: format!("{}|capabilityScope", builtin.imp.name),
+                        arity: 0,
+                        func: Arc::new(move |_, runtime| {
+                            let value = runtime.with_capability_scope(scope.clone(), |runtime| {
+                                runtime.force_value(Value::Builtin(builtin.clone()))
+                            })?;
+                            Ok(runtime.wrap_value_with_capability_scope(value, scope.clone()))
+                        }),
+                    }),
+                    args: Vec::new(),
+                    tagged_args: Some(Vec::new()),
+                };
+                Value::Builtin(wrapped_builtin)
+            }
+            Value::Effect(effect) => {
+                let wrapped = EffectValue::Thunk {
+                    func: Arc::new(move |runtime| {
+                        runtime.with_capability_scope(scope.clone(), |runtime| {
+                            runtime.run_effect_value(Value::Effect(effect.clone()))
+                        })
+                    }),
+                };
+                Value::Effect(Arc::new(wrapped))
+            }
+            Value::Source(source) => {
+                let source_for_effect = source.clone();
+                Value::Source(Arc::new(SourceValue {
+                    kind: source.kind.clone(),
+                    effect: Arc::new(EffectValue::Thunk {
+                        func: Arc::new(move |runtime| {
+                            runtime.with_capability_scope(scope.clone(), |runtime| {
+                                runtime.run_effect_value(Value::Source(source_for_effect.clone()))
+                            })
+                        }),
+                    }),
+                    schema: source.schema.clone(),
+                    raw_text: source.raw_text.clone(),
+                }))
+            }
+            Value::Resource(resource) => {
+                let resource_for_acquire = resource.clone();
+                Value::Resource(Arc::new(ResourceValue {
+                    acquire: Arc::new({
+                        let scope = scope.clone();
+                        move |runtime| {
+                            runtime.with_capability_scope(scope.clone(), |runtime| {
+                                (resource_for_acquire.acquire)(runtime)
+                            })
+                        }
+                    }),
+                    cleanup: Arc::new(move |runtime| {
+                        runtime.with_capability_scope(scope.clone(), |runtime| {
+                            (resource.cleanup)(runtime)
+                        })
+                    }),
+                }))
+            }
+            other => other,
+        }
+    }
+
+    pub(crate) fn dispatch_capability_handler(
+        &mut self,
+        capability: &str,
+        args: &[Value],
+    ) -> Result<Option<Value>, RuntimeError> {
+        let Some(handler) = self.resolve_capability_handler(capability)? else {
+            return Ok(None);
+        };
+        let mut value = handler;
+        for arg in args.iter().cloned() {
+            value = self.apply(value, arg)?;
+        }
+        Ok(Some(value))
+    }
+
+    fn resolve_capability_handler(&mut self, capability: &str) -> Result<Option<Value>, RuntimeError> {
+        let segments: Vec<&str> = capability.split('.').collect();
+        for index in (0..self.capability_handlers.len()).rev() {
+            let scope = self.capability_handlers[index].clone();
+            if let Some(handler) = scope.get(capability) {
+                return Ok(Some(handler.clone()));
+            }
+            for prefix_len in (1..segments.len()).rev() {
+                let prefix = segments[..prefix_len].join(".");
+                let remainder = &segments[prefix_len..];
+                let Some(handler) = scope.get(&prefix) else {
+                    continue;
+                };
+                if let Some(resolved) = self.resolve_handler_member(handler.clone(), remainder)? {
+                    return Ok(Some(resolved));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn resolve_handler_member(
+        &mut self,
+        handler: Value,
+        remainder: &[&str],
+    ) -> Result<Option<Value>, RuntimeError> {
+        let mut current = handler;
+        for segment in remainder {
+            let value = self.force_value(current)?;
+            let Value::Record(fields) = value else {
+                return Ok(None);
+            };
+            let Some(next) = fields.get(*segment).cloned() else {
+                return Ok(None);
+            };
+            current = next;
+        }
+        Ok(Some(current))
     }
 
     fn next_u64(&mut self) -> u64 {

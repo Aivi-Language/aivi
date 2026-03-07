@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use aivi::raw_text_sigil::RAW_TEXT_EMBEDDED_LANGUAGES;
 use aivi::syntax;
 use serde_json::json;
 
@@ -82,12 +83,206 @@ fn operator_regex() -> String {
     format!("({})", escaped.join("|"))
 }
 
+fn raw_text_sigil_patterns() -> Vec<serde_json::Value> {
+    let mut patterns = Vec::new();
+    let mut seen_tags = std::collections::BTreeSet::new();
+
+    for language in RAW_TEXT_EMBEDDED_LANGUAGES {
+        if !seen_tags.insert(language.tag) {
+            continue;
+        }
+
+        patterns.push(json!({
+            "name": format!("meta.sigil.raw.{}.aivi", language.tag),
+            "begin": format!("(~`)({})([ \\t]*$)", regex_escape(language.tag)),
+            "beginCaptures": {
+                "1": { "name": "storage.type.sigil.aivi" },
+                "2": { "name": "entity.name.language.aivi" }
+            },
+            "end": "(`)",
+            "endCaptures": {
+                "1": { "name": "storage.type.sigil.aivi" }
+            },
+            "contentName": language.embedded_scope,
+            "patterns": [
+                { "include": language.grammar_scope }
+            ]
+        }));
+    }
+
+    patterns.push(json!({
+        "name": "meta.sigil.raw.aivi",
+        "begin": "(~`)",
+        "beginCaptures": {
+            "1": { "name": "storage.type.sigil.aivi" }
+        },
+        "end": "(`)",
+        "endCaptures": {
+            "1": { "name": "storage.type.sigil.aivi" }
+        },
+        "contentName": "string.quoted.other.backtick.aivi"
+    }));
+
+    patterns
+}
+
 fn aivi_tmlanguage() -> serde_json::Value {
     let keyword_control = keyword_regex(syntax::KEYWORDS_CONTROL);
     let keyword_other = keyword_regex(syntax::KEYWORDS_OTHER);
     let boolean = keyword_regex(syntax::BOOLEAN_LITERALS);
     let constructors_common = keyword_regex(syntax::CONSTRUCTORS_COMMON);
     let operators = operator_regex();
+    let mut sigil_patterns = vec![
+        json!({
+            // Special-case: `~<html> ... </html>` is an HTML sigil. We give it a distinct scope
+            // so VS Code can inject HTML highlighting and treat `{ ... }` as embedded AIVI.
+            "name": "string.quoted.other.sigil.html.aivi",
+            "begin": "(~<html>)",
+            "beginCaptures": {
+              "1": { "name": "storage.type.sigil.aivi" }
+            },
+            "end": "(</html>)",
+            "endCaptures": {
+              "1": { "name": "storage.type.sigil.aivi" }
+            },
+            "patterns": [
+              { "include": "#sigil_splice" },
+              { "include": "#xml_tags" }
+            ]
+        }),
+        json!({
+            "name": "string.quoted.other.sigil.gtk.aivi",
+            "begin": "(~<gtk>)",
+            "beginCaptures": {
+              "1": { "name": "storage.type.sigil.aivi" }
+            },
+            "end": "(</gtk>)",
+            "endCaptures": {
+              "1": { "name": "storage.type.sigil.aivi" }
+            },
+            "patterns": [
+              { "include": "#sigil_splice" },
+              { "include": "#xml_tags" }
+            ]
+        }),
+    ];
+    sigil_patterns.extend(raw_text_sigil_patterns());
+    sigil_patterns.extend([
+        json!({
+            "name": "meta.sigil.structured.aivi",
+            "begin": "(~map)(\\{)",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.section.bracket.aivi" }
+            },
+            "end": "(\\})",
+            "endCaptures": {
+              "1": { "name": "punctuation.section.bracket.aivi" }
+            },
+            "patterns": [{ "include": "#sigil_inner" }]
+        }),
+        json!({
+            "name": "meta.sigil.structured.aivi",
+            "begin": "(~set)(\\[)",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.section.bracket.aivi" }
+            },
+            "end": "(\\])",
+            "endCaptures": {
+              "1": { "name": "punctuation.section.bracket.aivi" }
+            },
+            "patterns": [{ "include": "#sigil_inner" }]
+        }),
+        json!({
+            "name": "meta.sigil.structured.aivi",
+            "begin": "(~mat)(\\[)",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.section.bracket.aivi" }
+            },
+            "end": "(\\])",
+            "endCaptures": {
+              "1": { "name": "punctuation.section.bracket.aivi" }
+            },
+            "patterns": [{ "include": "#sigil_inner" }]
+        }),
+        json!({
+            "name": "string.quoted.other.sigil.aivi",
+            "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(/)",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.definition.string.begin.aivi" }
+            },
+            "end": "(?<!\\\\)/(?:[a-zA-Z]*)",
+            "endCaptures": {
+              "0": { "name": "punctuation.definition.string.end.aivi" }
+            },
+            "patterns": [
+              { "name": "constant.character.escape.aivi", "match": "\\\\." }
+            ]
+        }),
+        json!({
+            "name": "string.quoted.other.sigil.aivi",
+            "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\\")",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.definition.string.begin.aivi" }
+            },
+            "end": "(?<!\\\\)\\\"(?:[a-zA-Z]*)",
+            "endCaptures": {
+              "0": { "name": "punctuation.definition.string.end.aivi" }
+            },
+            "patterns": [
+              { "name": "constant.character.escape.aivi", "match": "\\\\." }
+            ]
+        }),
+        json!({
+            "name": "string.quoted.other.sigil.aivi",
+            "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\()",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.definition.string.begin.aivi" }
+            },
+            "end": "(?<!\\\\)\\)(?:[a-zA-Z]*)",
+            "endCaptures": {
+              "0": { "name": "punctuation.definition.string.end.aivi" }
+            },
+            "patterns": [
+              { "name": "constant.character.escape.aivi", "match": "\\\\." }
+            ]
+        }),
+        json!({
+            "name": "string.quoted.other.sigil.aivi",
+            "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\[)",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.definition.string.begin.aivi" }
+            },
+            "end": "(?<!\\\\)\\](?:[a-zA-Z]*)",
+            "endCaptures": {
+              "0": { "name": "punctuation.definition.string.end.aivi" }
+            },
+            "patterns": [
+              { "name": "constant.character.escape.aivi", "match": "\\\\." }
+            ]
+        }),
+        json!({
+            "name": "string.quoted.other.sigil.aivi",
+            "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\{)",
+            "beginCaptures": {
+              "1": { "name": "entity.name.function.sigil.aivi" },
+              "2": { "name": "punctuation.definition.string.begin.aivi" }
+            },
+            "end": "(?<!\\\\)\\}(?:[a-zA-Z]*)",
+            "endCaptures": {
+              "0": { "name": "punctuation.definition.string.end.aivi" }
+            },
+            "patterns": [
+              { "name": "constant.character.escape.aivi", "match": "\\\\." }
+            ]
+        }),
+    ]);
 
     json!({
       "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
@@ -214,155 +409,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
           ]
         },
         "sigil": {
-          "patterns": [
-            {
-              // Special-case: `~<html> ... </html>` is an HTML sigil. We give it a distinct scope
-              // so VS Code can inject HTML highlighting and treat `{ ... }` as embedded AIVI.
-              "name": "string.quoted.other.sigil.html.aivi",
-              "begin": "(~<html>)",
-              "beginCaptures": {
-                "1": { "name": "storage.type.sigil.aivi" }
-              },
-              "end": "(</html>)",
-              "endCaptures": {
-                "1": { "name": "storage.type.sigil.aivi" }
-              },
-              "patterns": [
-                { "include": "#sigil_splice" },
-                { "include": "#xml_tags" }
-              ]
-            },
-            {
-              "name": "string.quoted.other.sigil.gtk.aivi",
-              "begin": "(~<gtk>)",
-              "beginCaptures": {
-                "1": { "name": "storage.type.sigil.aivi" }
-              },
-              "end": "(</gtk>)",
-              "endCaptures": {
-                "1": { "name": "storage.type.sigil.aivi" }
-              },
-              "patterns": [
-                { "include": "#sigil_splice" },
-                { "include": "#xml_tags" }
-              ]
-            },
-            // Structured sigils: content is parsed as AIVI expressions
-            {
-              "name": "meta.sigil.structured.aivi",
-              "begin": "(~map)(\\{)",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.section.bracket.aivi" }
-              },
-              "end": "(\\})",
-              "endCaptures": {
-                "1": { "name": "punctuation.section.bracket.aivi" }
-              },
-              "patterns": [{ "include": "#sigil_inner" }]
-            },
-            {
-              "name": "meta.sigil.structured.aivi",
-              "begin": "(~set)(\\[)",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.section.bracket.aivi" }
-              },
-              "end": "(\\])",
-              "endCaptures": {
-                "1": { "name": "punctuation.section.bracket.aivi" }
-              },
-              "patterns": [{ "include": "#sigil_inner" }]
-            },
-            {
-              "name": "meta.sigil.structured.aivi",
-              "begin": "(~mat)(\\[)",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.section.bracket.aivi" }
-              },
-              "end": "(\\])",
-              "endCaptures": {
-                "1": { "name": "punctuation.section.bracket.aivi" }
-              },
-              "patterns": [{ "include": "#sigil_inner" }]
-            },
-            {
-              "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(/)",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.definition.string.begin.aivi" }
-              },
-              "end": "(?<!\\\\)/(?:[a-zA-Z]*)",
-              "endCaptures": {
-                "0": { "name": "punctuation.definition.string.end.aivi" }
-              },
-              "patterns": [
-                { "name": "constant.character.escape.aivi", "match": "\\\\." }
-              ]
-            },
-            {
-              "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\\")",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.definition.string.begin.aivi" }
-              },
-              "end": "(?<!\\\\)\\\"(?:[a-zA-Z]*)",
-              "endCaptures": {
-                "0": { "name": "punctuation.definition.string.end.aivi" }
-              },
-              "patterns": [
-                { "name": "constant.character.escape.aivi", "match": "\\\\." }
-              ]
-            },
-            {
-              "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\()",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.definition.string.begin.aivi" }
-              },
-              "end": "(?<!\\\\)\\)(?:[a-zA-Z]*)",
-              "endCaptures": {
-                "0": { "name": "punctuation.definition.string.end.aivi" }
-              },
-              "patterns": [
-                { "name": "constant.character.escape.aivi", "match": "\\\\." }
-              ]
-            },
-            {
-              "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\[)",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.definition.string.begin.aivi" }
-              },
-              "end": "(?<!\\\\)\\](?:[a-zA-Z]*)",
-              "endCaptures": {
-                "0": { "name": "punctuation.definition.string.end.aivi" }
-              },
-              "patterns": [
-                { "name": "constant.character.escape.aivi", "match": "\\\\." }
-              ]
-            },
-            {
-              "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\{)",
-              "beginCaptures": {
-                "1": { "name": "entity.name.function.sigil.aivi" },
-                "2": { "name": "punctuation.definition.string.begin.aivi" }
-              },
-              "end": "(?<!\\\\)\\}(?:[a-zA-Z]*)",
-              "endCaptures": {
-                "0": { "name": "punctuation.definition.string.end.aivi" }
-              },
-              "patterns": [
-                { "name": "constant.character.escape.aivi", "match": "\\\\." }
-              ]
-            }
-          ]
+          "patterns": sigil_patterns
         },
             "comment": {
               "patterns": [
@@ -422,11 +469,6 @@ fn aivi_tmlanguage() -> serde_json::Value {
                   ]
                 }
               ]
-            },
-            {
-              "name": "string.quoted.other.backtick.aivi",
-              "begin": "`",
-              "end": "`"
             },
             {
               "name": "string.quoted.single.aivi",

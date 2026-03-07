@@ -2,6 +2,7 @@
 module integrationTests.stdlib.aivi.ui.gtk4.tests
 
 use aivi
+use aivi.list as List
 use aivi.testing
 use aivi.ui.gtk4
 
@@ -85,4 +86,33 @@ type_signatures = do Effect {
   assert (buildFromNode == buildFromNode)
   assert (reconcileNode == reconcileNode)
   assert (buildWithIds == buildWithIds)
+}
+
+@test "app step helpers build blessed update values"
+app_step_helpers = do Effect {
+  bare        = appStep 3
+  withCommand = appStepWith 4 [commandEmit Save]
+
+  assertEq bare.model 3
+  assertEq bare.commands []
+  assertEq withCommand.model 4
+  assertEq (List.length withCommand.commands) 1
+}
+
+@test "command and subscription helper constructors are available"
+command_and_subscription_shapes = do Effect {
+  command = commandAfter {
+    key: "tick"
+    millis: 100
+    msg: Save
+  }
+  subscription = subscriptionEvery {
+    key: "clock"
+    millis: 250
+    tag: Save
+  }
+
+  step = appStepWith 1 [command]
+  assertEq (List.length step.commands) 1
+  assertEq (List.length [subscription]) 1
 }

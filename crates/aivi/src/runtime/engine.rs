@@ -25,8 +25,8 @@ use self::constructors::{core_constructor_ordinals, insert_constructor_ordinal};
 use self::environment::{Env, MachineEdge, RuntimeContext};
 use self::machines::{bind_module_machine_values, make_machine_on_builtin};
 use self::values::{
-    BuiltinImpl, BuiltinValue, EffectValue,
-    SourceValue, ThunkFunc, ThunkValue, Value,
+    BuiltinImpl, BuiltinValue, EffectValue, ResourceValue, SourceValue, ThunkFunc, ThunkValue,
+    Value,
 };
 
 pub use self::constructors::{TestFailure, TestReport, TestSuccess};
@@ -79,6 +79,7 @@ pub(crate) struct Runtime {
     pub(crate) ctx: Arc<RuntimeContext>,
     cancel: Arc<CancelToken>,
     cancel_mask: usize,
+    capability_handlers: Vec<CapabilityHandlerScope>,
     pub(crate) fuel: Option<u64>,
     rng_state: u64,
     /// Counter used to amortize cancel-token checks (checked every 64 evals).
@@ -127,10 +128,20 @@ pub(crate) struct Runtime {
     /// mode when a mismatch is detected. Checked by the test runner after the
     /// test Effect completes, since the JIT cannot propagate Effect errors.
     pub(crate) snapshot_failure: Option<String>,
-    /// Stack of resource cleanup closures. Each entry is a ThunkFunc that runs
-    /// the resource's cleanup phase. Cleanups are run in LIFO order when a
-    /// do-block scope exits. Scope boundaries are marked by `None` entries.
-    pub(crate) resource_cleanups: Vec<Option<Arc<ThunkFunc>>>,
+    /// Stack of resource cleanup closures with the handler scopes captured at
+    /// acquisition time. Cleanups are run in LIFO order when a do-block scope
+    /// exits. Scope boundaries are explicit markers.
+    pub(crate) resource_cleanups: Vec<ResourceCleanupEntry>,
+}
+
+type CapabilityHandlerScope = HashMap<String, Value>;
+
+pub(crate) enum ResourceCleanupEntry {
+    ScopeBoundary,
+    Cleanup {
+        cleanup: Arc<ThunkFunc>,
+        handlers: Vec<CapabilityHandlerScope>,
+    },
 }
 
 #[derive(Clone)]

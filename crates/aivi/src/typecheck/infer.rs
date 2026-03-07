@@ -243,7 +243,7 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
                         .query_cache
                         .get_binding_type(&module.name.name, &name)
                         .map(|s| s.to_string())
-                        .unwrap_or_else(|| checker.type_to_string(&schemes[0].ty));
+                        .unwrap_or_else(|| checker.scheme_to_string(&schemes[0]));
                     checker.query_cache.store_binding_type(
                         module.name.name.clone(),
                         name.clone(),
@@ -267,7 +267,7 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
                                 if idx > 0 {
                                     rendered.push_str(" | ");
                                 }
-                                rendered.push_str(&checker.type_to_string(&scheme.ty));
+                                rendered.push_str(&checker.scheme_to_string(scheme));
                             }
                             rendered
                         });

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::diagnostics::{Diagnostic, FileDiagnostic, Span};
+use crate::diagnostics::{Diagnostic, DiagnosticLabel, FileDiagnostic, Span};
 use crate::surface::{
     BlockItem, BlockKind, Def, DomainItem, Expr, ListItem, Literal, Module, ModuleItem,
     PathSegment, Pattern, RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias,
@@ -8,8 +8,8 @@ use crate::surface::{
 };
 
 use super::types::{
-    number_kind, split_suffixed_number, AliasInfo, Kind, NumberKind, Scheme, SchemeOrigin, Type,
-    TypeContext, TypeEnv, TypeError, TypePrinter, TypeVarId,
+    number_kind, split_suffixed_number, AliasInfo, CapabilitySet, Kind, NumberKind, Scheme,
+    SchemeOrigin, Type, TypeContext, TypeEnv, TypeError, TypePrinter, TypeVarId,
 };
 use super::{constraints::ConstraintState, query_engine::TypeQueryCache};
 use super::{ClassDeclInfo, InstanceDeclInfo};
@@ -59,6 +59,8 @@ pub(super) struct TypeChecker {
     /// the inner type `A` of `Source K A` is concrete. Used to inject JSON validation
     /// schemas at source boundaries.
     load_source_schemas: Vec<(String, String, CgType)>,
+    /// Records inferred or declared capabilities for definitions checked in the current module.
+    pub(super) def_capabilities: HashMap<String, CapabilitySet>,
 }
 
 impl TypeChecker {
@@ -93,6 +95,7 @@ impl TypeChecker {
             compact_subst_between_defs: false,
             current_def_name: String::new(),
             load_source_schemas: Vec::new(),
+            def_capabilities: HashMap::new(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -135,6 +138,7 @@ impl TypeChecker {
         self.query_cache.clear_module(&_module.name.name);
         self.poly_instantiations.clear();
         self.span_types.clear();
+        self.def_capabilities.clear();
     }
 
     fn collect_enabled_record_default_types(module: &Module) -> HashSet<String> {
@@ -176,9 +180,9 @@ impl TypeChecker {
     /// is **not** the defining module. Returns `None` if the type is not opaque or if
     /// the current module *is* the defining module (transparent access).
     pub(super) fn is_opaque_from_here(&self, type_name: &str) -> Option<&String> {
-        self.opaque_types.get(type_name).filter(|defining_module| {
-            *defining_module != &self.current_module_name
-        })
+        self.opaque_types
+            .get(type_name)
+            .filter(|defining_module| *defining_module != &self.current_module_name)
     }
 
     /// Extract the top-level type constructor name from a (possibly applied) type,
@@ -234,6 +238,39 @@ impl TypeChecker {
                 (span, rendered)
             })
             .collect()
+    }
+
+    pub(super) fn capabilities_from_type_expr(&self, ty: &TypeExpr) -> CapabilitySet {
+        match ty {
+            TypeExpr::CapabilityClause { capabilities, .. } => {
+                capabilities.iter().map(|cap| cap.name.clone()).collect()
+            }
+            TypeExpr::Func { result, .. } => self.capabilities_from_type_expr(result),
+            _ => CapabilitySet::default(),
+        }
+    }
+
+    pub(super) fn strip_capability_clause<'a>(&self, ty: &'a TypeExpr) -> &'a TypeExpr {
+        match ty {
+            TypeExpr::CapabilityClause { base, .. } => base,
+            _ => ty,
+        }
+    }
+
+    pub(super) fn format_capabilities(&self, capabilities: &CapabilitySet) -> String {
+        if capabilities.is_empty() {
+            return String::new();
+        }
+        format!(
+            " with {{ {} }}",
+            capabilities.iter().cloned().collect::<Vec<_>>().join(", ")
+        )
+    }
+
+    pub(super) fn scheme_to_string(&mut self, scheme: &Scheme) -> String {
+        let mut rendered = self.type_to_string(&scheme.ty);
+        rendered.push_str(&self.format_capabilities(&scheme.capabilities));
+        rendered
     }
 
     /// Clear accumulated type-variable state after checking a single def.

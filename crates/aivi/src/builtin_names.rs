@@ -56,6 +56,7 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "__assertSnapshot",
     "__asGenerator",
     "__makeResource",
+    "__withCapabilityHandlers",
     "__withResourceScope",
     "__fix",
     "__openapi_call",

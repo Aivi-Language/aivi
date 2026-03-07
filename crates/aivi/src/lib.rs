@@ -3,6 +3,7 @@ mod cranelift_backend;
 mod i18n;
 mod i18n_codegen;
 pub mod intern;
+pub mod raw_text_sigil;
 // mod mcp; (moved to aivi_mcp)
 mod pm;
 mod runtime;
@@ -32,10 +33,10 @@ pub mod surface {
         ArenaModule, ArenaModuleItem, ArenaPathSegment, ArenaPattern, ArenaRecordField,
         ArenaRecordPatternField, ArenaScopeItem, ArenaTextPart, ArenaTypeAlias, ArenaTypeCtor,
         ArenaTypeDecl, ArenaTypeExpr, ArenaTypeSig, ArenaTypeVarConstraint, ArenaUseDecl, AstArena,
-        BlockItem, BlockKind, ClassDecl, Decorator, Def, DomainDecl, DomainItem, Expr,
-        InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment, Pattern,
-        RecordField, RecordPatternField, ScopeItemKind, SpannedName, SpannedSymbol, TextPart,
-        TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
+        BlockItem, BlockKind, CapabilityHandlerBinding, ClassDecl, Decorator, Def, DomainDecl,
+        DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem,
+        PathSegment, Pattern, RecordField, RecordPatternField, ScopeItemKind, SpannedName,
+        SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
     };
 }
 
@@ -101,10 +102,11 @@ pub use aivi_core::{
     ArenaMachineTransition, ArenaMatchArm, ArenaModule, ArenaModuleItem, ArenaPathSegment,
     ArenaPattern, ArenaRecordField, ArenaRecordPatternField, ArenaScopeItem, ArenaTextPart,
     ArenaTypeAlias, ArenaTypeCtor, ArenaTypeDecl, ArenaTypeExpr, ArenaTypeSig,
-    ArenaTypeVarConstraint, ArenaUseDecl, AstArena, BlockItem, BlockKind, ClassDecl, Decorator,
-    Def, DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module,
-    ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField, SpannedName, SpannedSymbol,
-    TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
+    ArenaTypeVarConstraint, ArenaUseDecl, AstArena, BlockItem, BlockKind, CapabilityHandlerBinding,
+    ClassDecl, Decorator, Def, DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal,
+    MatchArm, Module, ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField,
+    SpannedName, SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig,
+    UseDecl,
 };
 pub use aivi_core::{
     file_diagnostics_have_errors, render_diagnostics, Diagnostic, DiagnosticLabel,

@@ -33,6 +33,10 @@ impl Backend {
                 continue;
             }
 
+            if Self::emit_raw_text_sigil_tokens(token, &mut data, &mut last_line, &mut last_start) {
+                continue;
+            }
+
             if Self::emit_html_sigil_tokens(token, &mut data, &mut last_line, &mut last_start) {
                 continue;
             }
@@ -49,15 +53,12 @@ impl Backend {
                 continue;
             }
 
-            let token_type = dotted_paths
-                .get(&token_index)
-                .copied()
-                .or_else(|| {
-                    if lambda_params.contains(&token_index) {
-                        return Some(Self::SEM_TOKEN_PARAMETER);
-                    }
-                    Self::classify_semantic_token(prev, token, next)
-                });
+            let token_type = dotted_paths.get(&token_index).copied().or_else(|| {
+                if lambda_params.contains(&token_index) {
+                    return Some(Self::SEM_TOKEN_PARAMETER);
+                }
+                Self::classify_semantic_token(prev, token, next)
+            });
             let Some(token_type) = token_type else {
                 continue;
             };

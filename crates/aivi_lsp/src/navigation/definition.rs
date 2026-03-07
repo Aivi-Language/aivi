@@ -34,6 +34,9 @@ impl Backend {
                 // For `Foo A B`, field declarations live on `Foo` if it's a record alias.
                 Self::record_field_definition_range_for_type(module, base, field_name)
             }
+            TypeExpr::CapabilityClause { base, .. } => {
+                Self::record_field_definition_range_for_type(module, base, field_name)
+            }
             TypeExpr::And { .. }
             | TypeExpr::Func { .. }
             | TypeExpr::Tuple { .. }

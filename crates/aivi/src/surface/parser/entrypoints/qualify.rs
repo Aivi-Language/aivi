@@ -82,6 +82,24 @@ fn qualify_expr(
             right: Box::new(qualify_expr(*right, import_map, scope)),
             span,
         },
+        Expr::CapabilityScope {
+            capabilities,
+            handlers,
+            body,
+            span,
+        } => Expr::CapabilityScope {
+            capabilities,
+            handlers: handlers
+                .into_iter()
+                .map(|handler| crate::surface::CapabilityHandlerBinding {
+                    capability: handler.capability,
+                    handler: qualify_expr(handler.handler, import_map, scope),
+                    span: handler.span,
+                })
+                .collect(),
+            body: Box::new(qualify_expr(*body, import_map, scope)),
+            span,
+        },
         Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
             base: Box::new(qualify_expr(*base, import_map, scope)),
             field,
@@ -335,4 +353,3 @@ fn qualify_block_items(
         })
         .collect()
 }
-

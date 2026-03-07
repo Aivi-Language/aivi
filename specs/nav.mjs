@@ -198,6 +198,7 @@ export const sidebar = [
           collapsed: true,
           items: [
             { text: 'App Architecture', link: '/stdlib/ui/app_architecture' },
+            { text: 'Forms', link: '/stdlib/ui/forms' },
             { text: 'GTK4', link: '/stdlib/ui/gtk4' },
             { text: 'Layout', link: '/stdlib/ui/layout' },
             { text: 'VDOM', link: '/stdlib/ui/vdom' },

@@ -4,7 +4,7 @@ The **AIVI Language Support** extension for Visual Studio Code provides a compre
 
 ## Features
 
-- **Syntax Highlighting**: Robust TextMate-based grammar for `.aivi` files with HTML injection support for AIVI sigils containing HTML.
+- **Syntax Highlighting**: Robust TextMate-based grammar for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting inside tagged raw-text sigils such as `` ~`css ...` ``.
 - **Semantic Highlighting**: Custom semantic token types for fine-grained coloring (arrows, pipes, brackets, dots, units, sigils, path segments).
 - **LSP Integration**: Automatically starts the `aivi lsp` server to provide advanced features like:
   - Go to Definition / Declaration / Implementation / References

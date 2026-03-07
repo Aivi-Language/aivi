@@ -147,9 +147,25 @@ json  = ~`{"id": 1, "name": "Alice"}`
 query = ~`SELECT *
           FROM users
           WHERE id = 1`
+poem  = ~`
+          | Hallo
+          | Andreas
+`
 ```
 
-Use this when the content contains `{`, `}`, or backslashes that would need escaping in a regular `"..."` string literal.
+If every non-empty line in a multiline backtick sigil starts with optional indentation followed by `|`, AIVI strips the indentation, strips the `|`, and also drops one optional space after the `|`. A leading blank line immediately after ``~` `` and a trailing blank line immediately before the closing backtick are also removed in that margin mode.
+
+The VSCode extension also recognizes an optional embedded-language header on the first line of a multiline raw-text sigil. When the first line is one of `css`, `html`, `xml`, `json`, `sql`, `js`, `javascript`, `ts`, or `typescript`, that header is metadata only — it is not part of the resulting `Text` value — and the extension injects the matching syntax highlighter into the body:
+
+```aivi
+styles = ~`css
+  | .myClass {
+  |   color: red;
+  | }
+`
+```
+
+Use raw-text sigils when the content contains `{`, `}`, or backslashes that would need escaping in a regular `"..."` string literal.
 
 ### Structured sigils
 

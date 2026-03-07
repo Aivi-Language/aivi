@@ -133,6 +133,12 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                 collect_expr(left, env, bound, out);
                 collect_expr(right, env, bound, out);
             }
+            Expr::CapabilityScope { handlers, body, .. } => {
+                for handler in handlers {
+                    collect_expr(&handler.handler, env, bound, out);
+                }
+                collect_expr(body, env, bound, out);
+            }
             Expr::UnaryNeg { expr, .. } => {
                 collect_expr(expr, env, bound, out);
             }
@@ -368,6 +374,28 @@ fn rewrite_implicit_field_vars(
             right: Box::new(rewrite_implicit_field_vars(*right, implicit_param, unbound)),
             span,
         },
+        Expr::CapabilityScope {
+            capabilities,
+            handlers,
+            body,
+            span,
+        } => Expr::CapabilityScope {
+            capabilities,
+            handlers: handlers
+                .into_iter()
+                .map(|handler| crate::surface::CapabilityHandlerBinding {
+                    capability: handler.capability,
+                    handler: rewrite_implicit_field_vars(
+                        handler.handler,
+                        implicit_param,
+                        unbound,
+                    ),
+                    span: handler.span,
+                })
+                .collect(),
+            body: Box::new(rewrite_implicit_field_vars(*body, implicit_param, unbound)),
+            span,
+        },
         Expr::Block { kind, items, span } => Expr::Block {
             kind,
             items: items
@@ -492,6 +520,12 @@ fn expr_contains_placeholder(expr: &Expr) -> bool {
         }
         Expr::Binary { left, right, .. } => {
             expr_contains_placeholder(left) || expr_contains_placeholder(right)
+        }
+        Expr::CapabilityScope { handlers, body, .. } => {
+            handlers
+                .iter()
+                .any(|handler| expr_contains_placeholder(&handler.handler))
+                || expr_contains_placeholder(body)
         }
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. }

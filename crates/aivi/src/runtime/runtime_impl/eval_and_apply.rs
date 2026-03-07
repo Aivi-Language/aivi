@@ -99,8 +99,10 @@ impl Runtime {
             Value::Resource(r) => {
                 // Run acquire phase and push cleanup onto the resource stack
                 let cleanup = r.cleanup.clone();
+                let handlers = self.capture_capability_scopes();
                 let result = (r.acquire)(self)?;
-                self.resource_cleanups.push(Some(cleanup));
+                self.resource_cleanups
+                    .push(ResourceCleanupEntry::Cleanup { cleanup, handlers });
                 Ok(result)
             }
             _ => {
@@ -125,7 +127,7 @@ impl Runtime {
     /// Push a scope marker onto the resource cleanup stack.
     /// Called at the start of a do-block.
     pub(crate) fn push_resource_scope(&mut self) {
-        self.resource_cleanups.push(None); // None = scope boundary
+        self.resource_cleanups.push(ResourceCleanupEntry::ScopeBoundary);
     }
 
     /// Run all resource cleanups registered since the last scope marker (LIFO).
@@ -137,11 +139,14 @@ impl Runtime {
         let saved_error = self.jit_pending_error.take();
         while let Some(entry) = self.resource_cleanups.pop() {
             match entry {
-                None => break, // reached scope boundary
-                Some(cleanup) => {
-                    let _ = cleanup(self); // suppress cleanup errors
-                    // Discard any pending error from cleanup itself
-                    self.jit_pending_error = None;
+                ResourceCleanupEntry::ScopeBoundary => break,
+                ResourceCleanupEntry::Cleanup { cleanup, handlers } => {
+                    self.uncancelable(|runtime| {
+                        runtime.with_capability_scopes(&handlers, |runtime| {
+                            let _ = cleanup(runtime);
+                            runtime.jit_pending_error = None;
+                        });
+                    });
                 }
             }
         }

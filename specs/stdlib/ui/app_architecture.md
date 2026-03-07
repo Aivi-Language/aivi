@@ -1,10 +1,10 @@
 # GTK App Architecture
 
-> **Status: Phase 2 command/subscription surface specified**  
-> `gtkApp` remains the single blessed host for standard GTK applications. The runtime already implements the core `Model` / `View` / `Msg` / `Update` loop; this page now specifies how typed commands and subscriptions extend that loop. Until the runtime surface lands, treat the command/subscription APIs below as the target public shape and keep using the currently implemented subset.
+> **Status: Phase 2 command/subscription surface specified, runtime subset landed**  
+> `gtkApp` remains the single blessed host for standard GTK applications. The runtime now hosts `AppStep`, `subscriptions`, timer subscriptions, direct-message source subscriptions, and the command subset needed for the blessed loop via the concrete helpers `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, and `commandCancel`. The richer mapper-based `Command.perform` / `Command.startTask` target shape below is still the direction of travel. Forms and validation layer on top of the same host via [`aivi.ui.forms`](./forms.md), rather than introducing a second UI architecture.
 
 <!-- quick-info: {"kind":"topic","name":"gtk app architecture"} -->
-AIVI GTK applications have one public architecture: `Model` / `View` / `Msg` / `Update` hosted by `gtkApp`, extended with typed commands and subscriptions. Lower-level primitives such as `signalStream`, `buildFromNode`, and `reconcileNode` remain escape hatches and implementation building blocks, not competing top-level app patterns.
+AIVI GTK applications have one public architecture: `Model` / `View` / `Msg` / `Update` hosted by `gtkApp`, extended with typed commands and subscriptions and paired with lightweight form helpers from `aivi.ui.forms`. Lower-level primitives such as `signalStream`, `buildFromNode`, and `reconcileNode` remain escape hatches and implementation building blocks, not competing top-level app patterns.
 <!-- /quick-info -->
 
 ## Blessed shape
@@ -54,7 +54,7 @@ update : msg -> model -> Effect GtkError (AppStep model msg)
 update = msg => model => pure { model, commands: [] }
 ```
 
-Likewise, until the `subscriptions` field lands in the runtime, the implemented behavior is equivalent to `subscriptions = _ => []`.
+Likewise, code that does not need long-lived external feeds can still use the implemented shorthand `subscriptions = noSubscriptions` (equivalent to `subscriptions = _ => []`).
 
 ## `gtkApp` host surface
 
@@ -103,6 +103,19 @@ This preserves one official mental model:
 - **`gtkApp` hosts the side effects after the state transition**
 
 Commands and subscriptions never replace `Msg`; they only decide **where messages come from** and **what work starts after a message**.
+
+## Forms and validation
+
+Form-heavy screens stay inside the same GTK app loop:
+
+- keep editable input in `Field A` values from [`aivi.ui.forms`](./forms.md),
+- map `GtkInputChanged` messages to `setValue`,
+- map `GtkFocusOut` messages to `touch`,
+- flip a `submitted: Bool` flag in your model on submit,
+- render inline errors with `visibleErrors`,
+- build the typed submit payload with the existing `Validation` applicative.
+
+This keeps field state, validation, commands, and subscriptions in one vocabulary: GTK signals still become `Msg`, `update` still owns the state transition, and later command work consumes the validated result instead of bypassing the app architecture.
 
 ## Commands
 
@@ -394,6 +407,10 @@ update = msg => state =>
         }
 ```
 
-## Deferred documentation
+## Proof surfaces
 
-This milestone intentionally updates the canonical specs first. `AIVI_LANGUAGE.md` should gain a concise quick-reference for `AppStep`, `Command`, and `Subscription` once the runtime surface settles enough to avoid repeated merge churn.
+The quick-reference layer is now propagated in `AIVI_LANGUAGE.md`, and the flagship proof surfaces for this architecture are:
+
+- `demos/snake.aivi` for the blessed `gtkApp` + `Subscription.every` story,
+- `integration-tests/stdlib/aivi/ui/gtk4/gtk4.aivi` for `AppStep`, command, and subscription helpers,
+- `integration-tests/stdlib/aivi/ui/forms/` for the lightweight forms and validation flow.

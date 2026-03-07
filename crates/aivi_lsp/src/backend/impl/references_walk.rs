@@ -71,16 +71,21 @@ impl Backend {
             | BlockItem::Expr { expr, .. } => {
                 Self::collect_expr_references(expr, ident, text, uri, locations);
             }
-            BlockItem::When { cond, effect, .. }
-            | BlockItem::Unless { cond, effect, .. } => {
+            BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
                 Self::collect_expr_references(cond, ident, text, uri, locations);
                 Self::collect_expr_references(effect, ident, text, uri, locations);
             }
-            BlockItem::Given { cond, fail_expr, .. } => {
+            BlockItem::Given {
+                cond, fail_expr, ..
+            } => {
                 Self::collect_expr_references(cond, ident, text, uri, locations);
                 Self::collect_expr_references(fail_expr, ident, text, uri, locations);
             }
-            BlockItem::On { transition, handler, .. } => {
+            BlockItem::On {
+                transition,
+                handler,
+                ..
+            } => {
                 Self::collect_expr_references(transition, ident, text, uri, locations);
                 Self::collect_expr_references(handler, ident, text, uri, locations);
             }
@@ -173,6 +178,20 @@ impl Backend {
                 .map(Self::type_expr_to_string)
                 .collect::<Vec<_>>()
                 .join(" with "),
+            TypeExpr::CapabilityClause {
+                base, capabilities, ..
+            } => {
+                let caps = capabilities
+                    .iter()
+                    .map(|cap| cap.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if caps.is_empty() {
+                    Self::type_expr_to_string(base)
+                } else {
+                    format!("{} with {{ {} }}", Self::type_expr_to_string(base), caps)
+                }
+            }
             TypeExpr::Apply { base, args, .. } => {
                 let base_str = match **base {
                     TypeExpr::Func { .. } => format!("({})", Self::type_expr_to_string(base)),

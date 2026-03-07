@@ -313,6 +313,12 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                 collect_expr(left, out);
                 collect_expr(right, out);
             }
+            Expr::CapabilityScope { handlers, body, .. } => {
+                for handler in handlers {
+                    collect_expr(&handler.handler, out);
+                }
+                collect_expr(body, out);
+            }
             Expr::Block { items, .. } => {
                 for item in items {
                     match item {

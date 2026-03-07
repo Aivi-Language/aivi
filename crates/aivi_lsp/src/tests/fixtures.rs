@@ -360,6 +360,30 @@ fn build_hover_reports_type_signature() {
 }
 
 #[test]
+fn build_hover_highlights_required_capabilities() {
+    let text = r#"module examples.capability_hover
+
+readConfig : Text -> Effect (SourceError File) Text with { file.read, network.http }
+readConfig = path => do Effect {
+  pure path
+}
+
+run = readConfig "config.json"
+"#;
+    let uri = sample_uri();
+    let position = position_for(text, "readConfig \"config.json\"");
+    let doc_index = DocIndex::default();
+    let hover = Backend::build_hover(text, &uri, position, &doc_index).expect("hover found");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("with { file.read, network.http }"));
+    assert!(markup.value.contains("**Required capabilities:**"));
+    assert!(markup.value.contains("`file.read`"));
+    assert!(markup.value.contains("`network.http`"));
+}
+
+#[test]
 fn build_hover_reports_type_signature_across_files_via_use() {
     let math_text = r#"@no_prelude
 module examples.compiler.math

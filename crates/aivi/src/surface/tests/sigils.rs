@@ -699,3 +699,51 @@ fn parses_sigil_with_escape_in_slash() {
         other => panic!("expected Sigil, got {other:?}"),
     }
 }
+
+#[test]
+fn parses_raw_text_sigil_embedded_language_header() {
+    let src = "module Example\n\nx = ~`css\nbody`\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diags: {:?}",
+        diag_codes(&diags)
+    );
+
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x");
+
+    assert!(
+        matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, body, .. }) if tag == "raw" && body == "body")
+    );
+}
+
+#[test]
+fn parses_raw_text_sigil_pipe_margin() {
+    let src = "module Example\n\nx = ~`\n    | Hallo\n    | Andreas\n`\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diags: {:?}",
+        diag_codes(&diags)
+    );
+
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x");
+
+    assert!(
+        matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, body, .. }) if tag == "raw" && body == "Hallo\nAndreas")
+    );
+}

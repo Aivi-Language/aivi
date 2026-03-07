@@ -38,28 +38,17 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "start": 13,
       },
       {
-        "end": 15,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 14,
-      },
-      {
         "end": 18,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "entity.name.tag.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 15,
+        "start": 14,
       },
       {
         "end": 19,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
         ],
         "start": 18,
       },
@@ -67,9 +56,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 22,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "meta.attribute.alt.html",
-          "entity.other.attribute-name.html",
+          "entity.other.attribute-name.aivi",
         ],
         "start": 19,
       },
@@ -77,9 +64,6 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 23,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "meta.attribute.alt.html",
-          "punctuation.separator.key-value.html",
         ],
         "start": 22,
       },
@@ -87,10 +71,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 24,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "meta.attribute.alt.html",
-          "string.quoted.double.html",
-          "punctuation.definition.string.begin.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 23,
       },
@@ -98,9 +79,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 25,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "meta.attribute.alt.html",
-          "string.quoted.double.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 24,
       },
@@ -108,10 +87,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 26,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "meta.attribute.alt.html",
-          "string.quoted.double.html",
-          "punctuation.definition.string.end.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 25,
       },
@@ -119,7 +95,6 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 27,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
         ],
         "start": 26,
       },
@@ -127,8 +102,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "end": 29,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.object.img.void.html",
-          "punctuation.definition.tag.end.html",
+          "punctuation.definition.tag.aivi",
         ],
         "start": 27,
       },
@@ -140,29 +114,18 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "start": 29,
       },
       {
-        "end": 31,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 30,
-      },
-      {
         "end": 34,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "entity.name.tag.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 31,
+        "start": 30,
       },
       {
         "end": 35,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "punctuation.definition.tag.end.html",
+          "punctuation.definition.tag.aivi",
         ],
         "start": 34,
       },
@@ -174,31 +137,12 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "start": 35,
       },
       {
-        "end": 42,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.end.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 40,
-      },
-      {
-        "end": 45,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.end.html",
-          "entity.name.tag.html",
-        ],
-        "start": 42,
-      },
-      {
         "end": 46,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.end.html",
-          "punctuation.definition.tag.end.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 45,
+        "start": 40,
       },
       {
         "end": 47,
@@ -258,28 +202,17 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "start": 11,
       },
       {
-        "end": 13,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 12,
-      },
-      {
         "end": 16,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "entity.name.tag.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 13,
+        "start": 12,
       },
       {
         "end": 17,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
         ],
         "start": 16,
       },
@@ -287,9 +220,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "end": 22,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "meta.attribute.class.html",
-          "entity.other.attribute-name.html",
+          "entity.other.attribute-name.aivi",
         ],
         "start": 17,
       },
@@ -297,9 +228,6 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "end": 23,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "meta.attribute.class.html",
-          "punctuation.separator.key-value.html",
         ],
         "start": 22,
       },
@@ -307,10 +235,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "end": 24,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "meta.attribute.class.html",
-          "string.quoted.double.html",
-          "punctuation.definition.string.begin.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 23,
       },
@@ -318,9 +243,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "end": 25,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "meta.attribute.class.html",
-          "string.quoted.double.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 24,
       },
@@ -328,10 +251,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "end": 26,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "meta.attribute.class.html",
-          "string.quoted.double.html",
-          "punctuation.definition.string.end.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 25,
       },
@@ -339,8 +259,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "end": 27,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.start.html",
-          "punctuation.definition.tag.end.html",
+          "punctuation.definition.tag.aivi",
         ],
         "start": 26,
       },
@@ -352,31 +271,12 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "start": 27,
       },
       {
-        "end": 34,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.end.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 32,
-      },
-      {
-        "end": 37,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.end.html",
-          "entity.name.tag.html",
-        ],
-        "start": 34,
-      },
-      {
         "end": 38,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.div.end.html",
-          "punctuation.definition.tag.end.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 37,
+        "start": 32,
       },
       {
         "end": 39,
@@ -481,55 +381,33 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "start": 35,
       },
       {
-        "end": 37,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.section.start.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 36,
-      },
-      {
         "end": 44,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.section.start.html",
-          "entity.name.tag.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 37,
+        "start": 36,
       },
       {
         "end": 45,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.section.start.html",
-          "punctuation.definition.tag.end.html",
+          "punctuation.definition.tag.aivi",
         ],
         "start": 44,
-      },
-      {
-        "end": 46,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 45,
       },
       {
         "end": 50,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "entity.name.tag.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 46,
+        "start": 45,
       },
       {
         "end": 51,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
         ],
         "start": 50,
       },
@@ -537,9 +415,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "end": 53,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "meta.attribute.id.html",
-          "entity.other.attribute-name.html",
+          "entity.other.attribute-name.aivi",
         ],
         "start": 51,
       },
@@ -547,9 +423,6 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "end": 54,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "meta.attribute.id.html",
-          "punctuation.separator.key-value.html",
         ],
         "start": 53,
       },
@@ -557,10 +430,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "end": 55,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "meta.attribute.id.html",
-          "string.quoted.double.html",
-          "punctuation.definition.string.begin.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 54,
       },
@@ -568,9 +438,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "end": 56,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "meta.attribute.id.html",
-          "string.quoted.double.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 55,
       },
@@ -578,10 +446,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "end": 57,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "meta.attribute.id.html",
-          "string.quoted.double.html",
-          "punctuation.definition.string.end.html",
+          "string.quoted.double.xml.aivi",
         ],
         "start": 56,
       },
@@ -589,8 +454,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "end": 58,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.start.html",
-          "punctuation.definition.tag.end.html",
+          "punctuation.definition.tag.aivi",
         ],
         "start": 57,
       },
@@ -602,58 +466,20 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "start": 58,
       },
       {
-        "end": 61,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.end.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 59,
-      },
-      {
-        "end": 65,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.end.html",
-          "entity.name.tag.html",
-        ],
-        "start": 61,
-      },
-      {
         "end": 66,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.inline.span.end.html",
-          "punctuation.definition.tag.end.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 65,
-      },
-      {
-        "end": 68,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.section.end.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 66,
-      },
-      {
-        "end": 75,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.section.end.html",
-          "entity.name.tag.html",
-        ],
-        "start": 68,
+        "start": 59,
       },
       {
         "end": 76,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.section.end.html",
-          "punctuation.definition.tag.end.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 75,
+        "start": 66,
       },
       {
         "end": 77,
@@ -761,28 +587,17 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
         "start": 35,
       },
       {
-        "end": 37,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 36,
-      },
-      {
         "end": 43,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
-          "entity.name.tag.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 37,
+        "start": 36,
       },
       {
         "end": 44,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
         ],
         "start": 43,
       },
@@ -790,9 +605,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
         "end": 51,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
-          "meta.attribute.unrecognized.onClick.html",
-          "entity.other.attribute-name.html",
+          "entity.other.attribute-name.aivi",
         ],
         "start": 44,
       },
@@ -800,28 +613,40 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
         "end": 52,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
-          "meta.attribute.unrecognized.onClick.html",
-          "punctuation.separator.key-value.html",
         ],
         "start": 51,
+      },
+      {
+        "end": 53,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.interpolation.aivi",
+          "punctuation.section.interpolation.begin.aivi",
+        ],
+        "start": 52,
+      },
+      {
+        "end": 61,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.interpolation.aivi",
+        ],
+        "start": 53,
       },
       {
         "end": 62,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
-          "meta.attribute.unrecognized.onClick.html",
-          "string.unquoted.html",
+          "meta.interpolation.aivi",
+          "punctuation.section.interpolation.end.aivi",
         ],
-        "start": 52,
+        "start": 61,
       },
       {
         "end": 63,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.start.html",
-          "punctuation.definition.tag.end.html",
+          "punctuation.definition.tag.aivi",
         ],
         "start": 62,
       },
@@ -833,31 +658,12 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
         "start": 63,
       },
       {
-        "end": 67,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.end.html",
-          "punctuation.definition.tag.begin.html",
-        ],
-        "start": 65,
-      },
-      {
-        "end": 73,
-        "scopes": [
-          "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.end.html",
-          "entity.name.tag.html",
-        ],
-        "start": 67,
-      },
-      {
         "end": 74,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
-          "meta.tag.structure.button.end.html",
-          "punctuation.definition.tag.end.html",
+          "entity.name.tag.aivi",
         ],
-        "start": 73,
+        "start": 65,
       },
       {
         "end": 75,

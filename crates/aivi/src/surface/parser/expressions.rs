@@ -121,7 +121,9 @@ impl Parser {
         let checkpoint = self.pos;
         self.consume_newlines();
         if self.consume_ident_text("with").is_some() {
-            if let Some(capabilities) = self.try_parse_capability_list() {
+            if let Some((capabilities, handlers, start_span)) =
+                self.try_parse_capability_scope_entries()
+            {
                 self.consume_newlines();
                 if self.consume_ident_text("in").is_none() {
                     self.emit_diag("E1532", "expected `in` after capability clause", self.previous_span());
@@ -131,13 +133,10 @@ impl Parser {
                     span: self.previous_span(),
                 });
                 let end_span = expr_span(&body);
-                let start_span = capabilities
-                    .first()
-                    .map(|cap| cap.span.clone())
-                    .unwrap_or_else(|| self.previous_span());
                 let span = merge_span(start_span, end_span);
                 return Some(Expr::CapabilityScope {
                     capabilities,
+                    handlers,
                     body: Box::new(body),
                     span,
                 });
@@ -145,6 +144,67 @@ impl Parser {
         }
         self.pos = checkpoint;
         self.parse_lambda_or_binary()
+    }
+
+    fn try_parse_capability_scope_entries(
+        &mut self,
+    ) -> Option<(
+        Vec<SpannedName>,
+        Vec<crate::surface::CapabilityHandlerBinding>,
+        crate::diagnostics::Span,
+    )> {
+        let checkpoint = self.pos;
+        self.consume_newlines();
+        if !self.consume_symbol("{") {
+            return None;
+        }
+        let open_span = self.previous_span();
+        self.consume_newlines();
+        let mut capabilities = Vec::new();
+        let mut handlers = Vec::new();
+        let mut first_span = None;
+        while !self.check_symbol("}") && self.pos < self.tokens.len() {
+            let capability = self.parse_dotted_name()?;
+            first_span.get_or_insert_with(|| capability.span.clone());
+            self.consume_newlines();
+            if self.consume_symbol("=") {
+                self.consume_newlines();
+                let handler = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: self.previous_span(),
+                });
+                let span = merge_span(capability.span.clone(), expr_span(&handler));
+                handlers.push(crate::surface::CapabilityHandlerBinding {
+                    capability: capability.clone(),
+                    handler,
+                    span,
+                });
+            }
+            capabilities.push(capability);
+            self.consume_newlines();
+            if self.consume_symbol(",") {
+                self.consume_newlines();
+                continue;
+            }
+            if self.check_symbol("}") {
+                break;
+            }
+            if self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|token| token.kind == TokenKind::Ident)
+            {
+                continue;
+            }
+            self.pos = checkpoint;
+            return None;
+        }
+        self.expect_symbol("}", "expected '}' to close capability scope")?;
+        Some((
+            capabilities,
+            handlers,
+            first_span.unwrap_or(open_span),
+        ))
     }
 
     fn parse_result_or_suffix(&mut self, base: Expr) -> Option<Expr> {

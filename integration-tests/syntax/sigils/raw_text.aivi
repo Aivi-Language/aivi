@@ -10,11 +10,28 @@ multiline = ~`line one
 line two
 line three`
 
+margin = ~`
+         | Hallo
+         | Andreas
+`
+
+css = ~`css
+  | .myClass {
+  |   color: red;
+  | }
+`
+
 withBraces = ~`no {interpolation} here`
 
 @test "raw text sigil produces Text"
 rawTextSigil = do Effect {
-  assertEq json "\{\"id\": 1, \"name\": \"Alice\"\}"
+  assertEq json ~`{"id": 1, "name": "Alice"}`
   assert (text.contains "line two" multiline)
-  assertEq withBraces "no \{interpolation\} here"
+  assertEq margin "Hallo\nAndreas"
+  assertEq css ~`
+    | .myClass {
+    |   color: red;
+    | }
+  `
+  assertEq withBraces ~`no {interpolation} here`
 }

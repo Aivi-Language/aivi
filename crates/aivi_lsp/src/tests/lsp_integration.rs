@@ -88,6 +88,7 @@ mod lsp_integration {
             "integration-tests/syntax/domains/import_and_suffix_literals.aivi",
             "integration-tests/syntax/sigils/basic.aivi",
             "integration-tests/syntax/sigils/collections_structured.aivi",
+            "integration-tests/syntax/sigils/raw_text.aivi",
             "integration-tests/syntax/effects/attempt_and_match.aivi",
             // Stdlib-import-only microtests
             "integration-tests/stdlib/aivi/text/text.aivi",

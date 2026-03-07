@@ -122,11 +122,11 @@ describe('TextMate: AIVI + injected XML (~gtk sigil)', () => {
     const tok = tokenizeText(grammar, line);
 
     const tokens = tokensForLine(tok, 0, line);
-    const objectTag = findToken(tokens, (t) => t.text === 'object' && t.scopes.join(' ').includes('entity.name.tag.xml'));
-    expect(objectTag.scopes.join(' ')).toContain('entity.name.tag.xml');
+    const objectTag = findToken(tokens, (t) => t.text === '<object' && t.scopes.join(' ').includes('entity.name.tag.aivi'));
+    expect(objectTag.scopes.join(' ')).toContain('entity.name.tag.aivi');
 
     const classAttr = findFirstTokenIncluding(tokens, 'class');
-    expect(classAttr.scopes.join(' ')).toContain('entity.other.attribute-name.xml');
+    expect(classAttr.scopes.join(' ')).toContain('entity.other.attribute-name.aivi');
 
     const strGtkBox = findToken(tokens, (t) => t.text === 'GtkBox' && t.scopes.join(' ').includes('string.quoted.double.xml'));
     expect(strGtkBox.scopes.join(' ')).toContain('string.quoted.double.xml');
@@ -138,8 +138,8 @@ describe('TextMate: AIVI + injected XML (~gtk sigil)', () => {
 
     const tokens = tokensForLine(tok, 0, line);
 
-    const open = findToken(tokens, (t) => t.text === '{' && t.scopes.join(' ').includes('punctuation.section.embedded.begin.aivi'));
-    expect(open.scopes.join(' ')).toContain('punctuation.section.embedded.begin.aivi');
+    const open = findToken(tokens, (t) => t.text === '{' && t.scopes.join(' ').includes('punctuation.section.interpolation.begin.aivi'));
+    expect(open.scopes.join(' ')).toContain('punctuation.section.interpolation.begin.aivi');
 
     const msg = findFirstTokenIncluding(tokens, 'Msg');
     expect(msg.scopes.join(' ')).toContain('entity.name.type.aivi');

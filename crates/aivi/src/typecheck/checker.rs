@@ -8,4 +8,5 @@ include!("checker/unify_and_substitute.rs");
 include!("checker/type_expr_and_rows.rs");
 include!("checker/unbound_names.rs");
 include!("checker/spans_and_holes.rs");
+include!("checker/capabilities.rs");
 include!("checker/cg_type_lowering.rs");

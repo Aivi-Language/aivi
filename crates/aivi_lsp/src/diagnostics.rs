@@ -180,25 +180,25 @@ impl Backend {
     }
 
     fn file_diag_to_lsp(uri: &Url, file_diag: aivi::FileDiagnostic) -> Diagnostic {
-        let related_information = (!file_diag.diagnostic.labels.is_empty()).then(|| {
-            file_diag
-                .diagnostic
+        let diagnostic = file_diag.diagnostic;
+        let related_information = (!diagnostic.labels.is_empty()).then(|| {
+            diagnostic
                 .labels
-                .into_iter()
+                .iter()
                 .map(|label| DiagnosticRelatedInformation {
                     location: Location {
                         uri: uri.clone(),
-                        range: Self::span_to_range(label.span),
+                        range: Self::span_to_range(label.span.clone()),
                     },
-                    message: label.message,
+                    message: label.message.clone(),
                 })
                 .collect()
         });
 
-        let code = file_diag.diagnostic.code.clone();
+        let code = diagnostic.code.clone();
         Diagnostic {
-            range: Self::span_to_range(file_diag.diagnostic.span),
-            severity: Some(match file_diag.diagnostic.severity {
+            range: Self::span_to_range(diagnostic.span.clone()),
+            severity: Some(match diagnostic.severity {
                 aivi::DiagnosticSeverity::Error => DiagnosticSeverity::ERROR,
                 aivi::DiagnosticSeverity::Warning => DiagnosticSeverity::WARNING,
                 aivi::DiagnosticSeverity::Hint => DiagnosticSeverity::HINT,
@@ -206,11 +206,51 @@ impl Backend {
             code: Some(NumberOrString::String(code.clone())),
             code_description: None,
             source: Some(format!("aivi.{}", category_for_code(&code))),
-            message: file_diag.diagnostic.message,
+            message: Self::lsp_message_for_compiler_diagnostic(&diagnostic),
             related_information,
             tags: None,
-            data: None,
+            data: Self::lsp_data_for_compiler_diagnostic(&diagnostic),
         }
+    }
+
+    fn lsp_message_for_compiler_diagnostic(diagnostic: &aivi::Diagnostic) -> String {
+        if diagnostic.hints.is_empty() {
+            return diagnostic.message.clone();
+        }
+
+        let mut message = diagnostic.message.clone();
+        message.push_str("\n\nHelp:");
+        for hint in &diagnostic.hints {
+            message.push_str("\n- ");
+            message.push_str(hint);
+        }
+        message
+    }
+
+    fn lsp_data_for_compiler_diagnostic(
+        diagnostic: &aivi::Diagnostic,
+    ) -> Option<serde_json::Value> {
+        let mut data = serde_json::Map::new();
+
+        if !diagnostic.hints.is_empty() {
+            data.insert("aiviHints".to_string(), serde_json::json!(diagnostic.hints));
+        }
+
+        if let Some(suggestion) = &diagnostic.suggestion {
+            data.insert(
+                "aiviQuickFix".to_string(),
+                serde_json::json!({
+                    "title": suggestion.message,
+                    "is_preferred": true,
+                    "edits": [{
+                        "range": Self::span_to_range(suggestion.span.clone()),
+                        "newText": suggestion.replacement,
+                    }],
+                }),
+            );
+        }
+
+        (!data.is_empty()).then_some(serde_json::Value::Object(data))
     }
 
     pub(super) fn end_position(text: &str) -> Position {

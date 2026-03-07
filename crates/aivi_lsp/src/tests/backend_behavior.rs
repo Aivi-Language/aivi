@@ -5,12 +5,10 @@ fn build_diagnostics_reports_error() {
     let diagnostics = Backend::build_diagnostics(text, &uri);
     assert!(!diagnostics.is_empty());
     assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
-    assert!(
-        diagnostics[0]
-            .source
-            .as_deref()
-            .is_some_and(|s| s.starts_with("aivi."))
-    );
+    assert!(diagnostics[0]
+        .source
+        .as_deref()
+        .is_some_and(|s| s.starts_with("aivi.")));
 }
 
 #[test]
@@ -197,8 +195,13 @@ main = magnitude { x: 3.0, y: 4.0 }
         map
     };
 
-    let actions =
-        Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &stdlib_workspace, tower_lsp::lsp_types::Range::default());
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &diagnostics,
+        &stdlib_workspace,
+        tower_lsp::lsp_types::Range::default(),
+    );
 
     // We should offer a quickfix that inserts `use aivi.vector (magnitude)`.
     let mut saw_import_fix = false;
@@ -279,6 +282,40 @@ find = pred xs => xs
             .iter()
             .any(|diag| diag.message.contains("unknown name 'take'")),
         "embedded stdlib should win over workspace shadow for aivi.list"
+    );
+}
+
+#[test]
+fn diagnostics_missing_capability_include_help_and_related_scope() {
+    let text = r#"module test.capabilities
+
+loadConfig : Text -> Effect (SourceError File) Text with { network.http }
+loadConfig = path => do Effect {
+  text <- load (file.read path)
+  pure text
+}
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    let diag = diagnostics
+        .iter()
+        .find(|d| matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "E3310"))
+        .expect("expected E3310 missing capability diagnostic");
+
+    assert!(
+        diag.message.contains("Help:\n- add `file.read`"),
+        "expected capability help text in message, got: {}",
+        diag.message
+    );
+    let related = diag
+        .related_information
+        .as_ref()
+        .expect("expected related information for restrictive scope");
+    assert!(
+        related
+            .iter()
+            .any(|info| info.message.contains("missing capability `file.read`")),
+        "expected related info to mention restrictive signature, got: {related:?}"
     );
 }
 
@@ -489,6 +526,54 @@ y = ~m"Hello, {name:Text}!"
 }
 
 #[test]
+fn semantic_tokens_split_raw_text_sigils_into_delimiters_and_string_content() {
+    let text = "module Test.raw\nx = ~`line one`\n";
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "~`"),
+        "expected `~`` prefix to be a sigil token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "line one"),
+        "expected raw body to be a string token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "`"),
+        "expected closing backtick to be a sigil token, got: {tokens:?}"
+    );
+}
+
+#[test]
+fn semantic_tokens_leave_embedded_raw_text_body_for_textmate() {
+    let text = "module Test.raw\nstyle = ~`css\n  .myClass { color: red; }\n`\n";
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "~`"),
+        "expected raw prefix to stay a sigil token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "css"),
+        "expected embedded language tag to be a sigil token, got: {tokens:?}"
+    );
+    assert!(
+        !tokens.iter().any(|(_, s)| s.contains(".myClass")),
+        "expected embedded body to be left for TextMate injection, got: {tokens:?}"
+    );
+}
+
+#[test]
 fn semantic_tokens_highlight_html_inside_html_sigil() {
     let text = r#"module Test.html
 x = ~<html><div class="a">{ foo }</div></html>
@@ -679,7 +764,13 @@ add = x y => x + y
             _ => false,
         }),
         "expected add-type-annotation action, got: {:?}",
-        actions.iter().map(|a| match a { CodeActionOrCommand::CodeAction(c) => c.title.as_str(), _ => "" }).collect::<Vec<_>>(),
+        actions
+            .iter()
+            .map(|a| match a {
+                CodeActionOrCommand::CodeAction(c) => c.title.as_str(),
+                _ => "",
+            })
+            .collect::<Vec<_>>(),
     );
 }
 
@@ -703,8 +794,7 @@ add = x y => x + y
     );
     assert!(
         !actions.iter().any(|action| match action {
-            CodeActionOrCommand::CodeAction(a) =>
-                a.title.contains("Add type annotation for 'add'"),
+            CodeActionOrCommand::CodeAction(a) => a.title.contains("Add type annotation for 'add'"),
             _ => false,
         }),
         "should not offer add-type-annotation when signature already exists"
@@ -722,9 +812,9 @@ main = "hello"
     let uri = sample_uri();
     let diagnostics = Backend::build_diagnostics(text, &uri);
     // There should be a W2100 diagnostic for the unused import.
-    let has_w2100 = diagnostics.iter().any(|d| {
-        matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "W2100")
-    });
+    let has_w2100 = diagnostics
+        .iter()
+        .any(|d| matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "W2100"));
     assert!(has_w2100, "expected W2100 unused-import diagnostic");
 
     let actions = Backend::build_code_actions_with_workspace(
@@ -736,8 +826,7 @@ main = "hello"
     );
     assert!(
         actions.iter().any(|action| match action {
-            CodeActionOrCommand::CodeAction(a) =>
-                a.title.contains("Remove unused import 'format'"),
+            CodeActionOrCommand::CodeAction(a) => a.title.contains("Remove unused import 'format'"),
             _ => false,
         }),
         "expected remove-unused-import action"
@@ -839,9 +928,7 @@ export extractionRunPlan = emailId => schemaVer => promptVer => modelId => exist
 
     // No signature modifier on record body tokens.
     for (_, text, mods) in &details {
-        if ["CachePolicy", "projections", "extractionDecision"]
-            .contains(&text.as_str())
-        {
+        if ["CachePolicy", "projections", "extractionDecision"].contains(&text.as_str()) {
             assert_eq!(
                 *mods, 0,
                 "token '{text}' should NOT have signature modifier"
@@ -866,22 +953,30 @@ fn semantic_tokens_text_interpolation_with_nested_string_literal() {
 
     // The prefix text segment "Re: " (or including the opening quote) is a string.
     assert!(
-        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s.contains("Re:")),
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s.contains("Re:")),
         "expected prefix text 'Re: ' to be a string token, got: {tokens:?}"
     );
     // The opening { is an operator.
     assert!(
-        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_OPERATOR && s == "{"),
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_OPERATOR && s == "{"),
         "expected '{{' to be an operator token, got: {tokens:?}"
     );
     // The closing } is an operator.
     assert!(
-        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_OPERATOR && s == "}"),
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_OPERATOR && s == "}"),
         "expected '}}' to be an operator token, got: {tokens:?}"
     );
     // The nested string literal " " inside {…} is emitted as a string token.
     assert!(
-        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\" \""),
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\" \""),
         "expected nested string '\" \"' inside interpolation to be a string token, got: {tokens:?}"
     );
 }
@@ -889,12 +984,17 @@ fn semantic_tokens_text_interpolation_with_nested_string_literal() {
 #[test]
 fn semantic_tokens_multiline_typedef_brackets_get_signature_modifier() {
     // Both { and } of a multi-line type signature should carry the signature modifier.
-    let text = "module test\nuser : {\n  id: Int\n  name: Text\n}\nuser = { id: 1, name: \"Alice\" }\n";
+    let text =
+        "module test\nuser : {\n  id: Int\n  name: Text\n}\nuser = { id: 1, name: \"Alice\" }\n";
     let sig_mod = 1u32 << Backend::SEM_MOD_SIGNATURE;
     let details = collect_semantic_token_details(text);
 
-    let open_brace = details.iter().find(|(tt, t, _)| t == "{" && *tt == Backend::SEM_TOKEN_BRACKET);
-    let close_brace = details.iter().rfind(|(_, t, mods)| t == "}" && *mods == sig_mod);
+    let open_brace = details
+        .iter()
+        .find(|(tt, t, _)| t == "{" && *tt == Backend::SEM_TOKEN_BRACKET);
+    let close_brace = details
+        .iter()
+        .rfind(|(_, t, mods)| t == "}" && *mods == sig_mod);
 
     assert!(
         open_brace.map(|(.., m)| *m == sig_mod).unwrap_or(false),
@@ -904,6 +1004,9 @@ fn semantic_tokens_multiline_typedef_brackets_get_signature_modifier() {
     assert!(
         close_brace.is_some(),
         "closing }} of typedef should have signature modifier, details: {:?}",
-        details.iter().filter(|(_, t, _)| t == "}").collect::<Vec<_>>()
+        details
+            .iter()
+            .filter(|(_, t, _)| t == "}")
+            .collect::<Vec<_>>()
     );
 }

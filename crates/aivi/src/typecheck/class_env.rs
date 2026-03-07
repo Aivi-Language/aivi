@@ -173,6 +173,25 @@ fn type_expr_eq(left: &TypeExpr, right: &TypeExpr) -> bool {
                     .all(|(left_item, right_item)| type_expr_eq(left_item, right_item))
         }
         (
+            TypeExpr::CapabilityClause {
+                base: left_base,
+                capabilities: left_caps,
+                ..
+            },
+            TypeExpr::CapabilityClause {
+                base: right_base,
+                capabilities: right_caps,
+                ..
+            },
+        ) => {
+            left_caps.len() == right_caps.len()
+                && left_caps
+                    .iter()
+                    .zip(right_caps.iter())
+                    .all(|(left_cap, right_cap)| left_cap.name == right_cap.name)
+                && type_expr_eq(left_base, right_base)
+        }
+        (
             TypeExpr::Apply {
                 base: left_base,
                 args: left_args,
@@ -252,6 +271,21 @@ fn rewrite_type_expr(ty: &TypeExpr, from: &TypeExpr, to: &TypeExpr) -> (TypeExpr
     }
     match ty {
         TypeExpr::Name(_) | TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => (ty.clone(), false),
+        TypeExpr::CapabilityClause {
+            base,
+            capabilities,
+            span,
+        } => {
+            let (rewritten, changed) = rewrite_type_expr(base, from, to);
+            (
+                TypeExpr::CapabilityClause {
+                    base: Box::new(rewritten),
+                    capabilities: capabilities.clone(),
+                    span: span.clone(),
+                },
+                changed,
+            )
+        }
         TypeExpr::And { items, span } => {
             let mut changed = false;
             let items = items

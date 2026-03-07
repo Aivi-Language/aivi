@@ -65,6 +65,12 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
         Expr::Binary { left, right, .. } => {
             expr_contains_ident(left, target) || expr_contains_ident(right, target)
         }
+        Expr::CapabilityScope { handlers, body, .. } => {
+            handlers
+                .iter()
+                .any(|handler| expr_contains_ident(&handler.handler, target))
+                || expr_contains_ident(body, target)
+        }
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             crate::surface::BlockItem::Bind { expr, .. }
             | crate::surface::BlockItem::Let { expr, .. }
@@ -175,6 +181,12 @@ fn expr_contains_string(expr: &Expr, target: &str) -> bool {
         }
         Expr::Binary { left, right, .. } => {
             expr_contains_string(left, target) || expr_contains_string(right, target)
+        }
+        Expr::CapabilityScope { handlers, body, .. } => {
+            handlers
+                .iter()
+                .any(|handler| expr_contains_string(&handler.handler, target))
+                || expr_contains_string(body, target)
         }
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             crate::surface::BlockItem::Bind { expr, .. }
