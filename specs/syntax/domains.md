@@ -33,7 +33,7 @@ To use a domain, import it with `use`. This brings its operator functions and li
 ```aivi
 use aivi.chronos.calendar (domain Calendar)
 
-dueDate = issuedOn + 30d   -- Calendar provides both `+` and the `d` suffix here
+dueDate = issuedOn + 30d   // Calendar provides both `+` and the `d` suffix here
 ```
 
 ### Importing a domain explicitly

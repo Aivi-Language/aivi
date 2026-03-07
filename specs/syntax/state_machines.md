@@ -62,12 +62,12 @@ This says:
 sync = do Effect {
   { boot, lease, run, done, currentState, can } = AccountSyncMachine
 
-  _ <- boot {}                                      -- Initialize the workflow
+  _ <- boot {}                                      // Initialize the workflow
   _ <- if can.lease Unit then lease {} else fail "lease not available"
-  _ <- run { batchId: 42 }                          -- Transition with typed data
-  _ <- done {}                                      -- Return to Idle
+  _ <- run { batchId: 42 }                          // Transition with typed data
+  _ <- done {}                                      // Return to Idle
 
-  pure (currentState Unit)                          -- Inspect the current state if needed
+  pure (currentState Unit)                          // Inspect the current state if needed
 }
 ```
 
@@ -95,7 +95,7 @@ Machines can trigger follow-up work when a transition succeeds.
 
 ```aivi
 on run => do Effect {
-  _ <- log.info "sync started"   -- Runs after the transition changed state
+  _ <- log.info "sync started"   // Runs after the transition changed state
   pure Unit
 }
 ```

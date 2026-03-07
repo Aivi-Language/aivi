@@ -28,9 +28,9 @@ sync = do Effect {
   { boot, lease, run, done, currentState, can } = AccountSyncMachine
 
   _ <- boot {}
-  _ <- assertEq (constructorName (currentState Unit)) "Idle"   -- Read the current state
-  _ <- assertEq (can.lease Unit) True                           -- Guard says lease is legal
-  _ <- assertEq (can.run Unit) False                            -- run is not legal yet
+  _ <- assertEq (constructorName (currentState Unit)) "Idle"   // Read the current state
+  _ <- assertEq (can.lease Unit) True                           // Guard says lease is legal
+  _ <- assertEq (can.run Unit) False                            // run is not legal yet
   pure Unit
 }
 ```
@@ -75,7 +75,7 @@ When a transition succeeds, runtime behavior is:
 
 ```aivi
 on run => do Effect {
-  _ <- log.info "sync run started"   -- Observes the transition after the state change
+  _ <- log.info "sync run started"   // Observes the transition after the state change
   pure Unit
 }
 ```
@@ -99,7 +99,7 @@ machineFlow = do Effect {
     | Err _ => pure Unit
     | Ok _  => fail "expected handler failure"
 
-  _ <- assertEq (constructorName (currentState Unit)) "Syncing"   -- State change remains applied
+  _ <- assertEq (constructorName (currentState Unit)) "Syncing"   // State change remains applied
   pure Unit
 }
 ```

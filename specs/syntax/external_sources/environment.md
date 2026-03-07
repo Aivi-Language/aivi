@@ -26,7 +26,7 @@ Loading from `env.get` or `env.decode` requires `process.env.read`.
 
 ```aivi
 do Effect {
-  mode <- load (env.get "AIVI_MODE")  -- reads exactly one environment variable
+  mode <- load (env.get "AIVI_MODE")  // reads exactly one environment variable
   pure mode
 }
 ```
@@ -39,7 +39,7 @@ do Effect {
 AppConfig = { port: Int, debug: Bool }
 
 do Effect {
-  cfg <- load (env.decode "AIVI_APP")  -- looks for variables under the AIVI_APP prefix
+  cfg <- load (env.decode "AIVI_APP")  // looks for variables under the AIVI_APP prefix
   pure cfg
 }
 ```
