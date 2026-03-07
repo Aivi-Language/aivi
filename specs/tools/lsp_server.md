@@ -19,7 +19,7 @@ In practice, the language server is what powers “editor intelligence”: navig
 - **Hover**: shows type information and documentation. The server first tries definition-based lookup, then falls back to span-type lookup so hover still works for expressions that do not have a named definition.
 - **Signature Help**: shows function signatures and parameter information while you type.
 - **Schema and source help**: hover content also documents source-oriented helpers such as `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
-- **GTK architecture help**: hover content documents `gtkApp`, `gtkAppFull`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
+- **GTK architecture help**: hover content documents `gtkApp`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
 
 ### Editing support
 

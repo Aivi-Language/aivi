@@ -59,10 +59,6 @@ impl Backend {
                 "function",
                 "`gtkApp`\n\nHosts the blessed GTK `Model → View → Msg → Update` architecture.\n\nUse `toMsg` for the primary GTK signal stream, `subscriptions` for long-lived feeds, and `appStep` / `appStepWith` to return the next model plus any post-update commands.",
             ),
-            "gtkAppFull" => (
-                "function",
-                "`gtkAppFull`\n\nDeprecated compatibility shim for advanced window flags and update-time handles.\n\nPrefer `gtkApp` for new code; keep lower-level signal APIs as escape hatches rather than alternate app architectures.",
-            ),
             "AppStep" => (
                 "type",
                 "`AppStep model msg = { model: model, commands: List (Command msg) }`\n\nThe committed model renders first; commands run afterwards. Use `appStep` for render-only turns and `appStepWith` when `update` needs to schedule post-update work.",
@@ -201,7 +197,7 @@ impl Backend {
         Some(Self::hover_badge_markdown(badge, body.to_string()))
     }
 
-    fn gtk_app_field_doc(field_name: &str, full_host: bool) -> Option<String> {
+    fn gtk_app_field_doc(field_name: &str) -> Option<String> {
         let body = match field_name {
             "id" => "`id` : `Text`\n\nApplication identifier passed to GTK during startup.",
             "title" => {
@@ -224,11 +220,7 @@ impl Backend {
                 "`toMsg` : `GtkSignalEvent -> Option msg`\n\nTranslate the primary GTK signal stream into domain messages. Match by widget `id=\"...\"`, feed `GtkInputChanged` into `setValue`, and use `GtkFocusOut` to drive `touch`."
             }
             "update" => {
-                if full_host {
-                    "`update` : `AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)`\n\nAdvanced compatibility shape for `gtkAppFull`. New code should prefer `gtkApp`'s simpler `msg -> s` update and return `appStep` / `appStepWith`."
-                } else {
-                    "`update` : `msg -> s -> Effect GtkError (AppStep s msg)`\n\nCommit the next model and any post-update commands. Return `appStep` for render-only turns and `appStepWith` when you need commands such as `commandAfter`."
-                }
+                "`update` : `msg -> s -> Effect GtkError (AppStep s msg)`\n\nCommit the next model and any post-update commands. Return `appStep` for render-only turns and `appStepWith` when you need commands such as `commandAfter`."
             }
             _ => return None,
         };
@@ -264,7 +256,7 @@ impl Backend {
     fn find_gtk_app_record_at_position_in_expr(
         expr: &aivi::Expr,
         position: Position,
-    ) -> Option<(&aivi::Expr, bool)> {
+    ) -> Option<&aivi::Expr> {
         if !Self::expr_contains_position_for_hover(expr, position) {
             return None;
         }
@@ -274,17 +266,12 @@ impl Backend {
         match expr {
             Expr::Call { func, args, .. } => {
                 if let Expr::Ident(name) = func.as_ref() {
-                    let full_host = match name.name.as_str() {
-                        "gtkApp" => Some(false),
-                        "gtkAppFull" => Some(true),
-                        _ => None,
-                    };
-                    if let Some(full_host) = full_host {
+                    if name.name == "gtkApp" {
                         for arg in args {
                             if Self::expr_contains_position_for_hover(arg, position)
                                 && matches!(arg, Expr::Record { .. } | Expr::PatchLit { .. })
                             {
-                                return Some((arg, full_host));
+                                return Some(arg);
                             }
                         }
                     }
@@ -401,10 +388,9 @@ impl Backend {
         let module = Self::module_at_position(modules, position)?;
 
         let scan_expr = |expr: &aivi::Expr| {
-            let (record_expr, full_host) =
-                Self::find_gtk_app_record_at_position_in_expr(expr, position)?;
+            let record_expr = Self::find_gtk_app_record_at_position_in_expr(expr, position)?;
             let field_name = Self::direct_record_field_name_at_position(record_expr, position)?;
-            Self::gtk_app_field_doc(&field_name.name, full_host)
+            Self::gtk_app_field_doc(&field_name.name)
         };
 
         for item in &module.items {

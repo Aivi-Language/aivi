@@ -80,6 +80,10 @@ Use the table of contents as a map:
 - [Effect Handlers](syntax/effect_handlers)
 - [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
+#### State Machines
+- [Overview](syntax/state_machines)
+- [Machine Syntax](syntax/machines)
+- [Machine Runtime](syntax/machines_runtime)
 #### Modules & Interop
 - [Modules](syntax/modules)
 - [External Sources](syntax/external_sources)
@@ -102,11 +106,6 @@ Use the table of contents as a map:
 #### Syntax Details
 - [Operators & Context](syntax/operators)
 - [Grammar Reference](syntax/grammar)
-
-### State Machines
-- [Overview](syntax/state_machines)
-- [Machine Syntax](syntax/machines)
-- [Machine Runtime](syntax/machines_runtime)
 
 ### Standard Library
 #### Core

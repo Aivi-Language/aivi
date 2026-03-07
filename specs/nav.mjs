@@ -77,6 +77,15 @@ export const sidebar = [
         ]
       },
       {
+        text: 'State Machines',
+        collapsed: true,
+        items: [
+          { text: 'Overview', link: '/syntax/state_machines' },
+          { text: 'Machine Syntax', link: '/syntax/machines' },
+          { text: 'Machine Runtime', link: '/syntax/machines_runtime' }
+        ]
+      },
+      {
         text: 'Modules & Interop',
         collapsed: true,
         items: [
@@ -113,15 +122,6 @@ export const sidebar = [
           { text: 'Grammar Reference', link: '/syntax/grammar' }
         ]
       }
-    ]
-  },
-  {
-    text: 'State Machines',
-    collapsed: true,
-    items: [
-      { text: 'Overview', link: '/syntax/state_machines' },
-      { text: 'Machine Syntax', link: '/syntax/machines' },
-      { text: 'Machine Runtime', link: '/syntax/machines_runtime' }
     ]
   },
   {

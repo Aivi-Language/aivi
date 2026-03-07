@@ -201,7 +201,7 @@ channel.fold initState (state => event =>
 **Rules for agents:**
 
 - **Prefer `gtkApp`** for standard single-window apps; use manual `signalStream` only when you need multi-window or custom lifecycle control.
-- Treat `gtkAppFull` as a deprecated compatibility shim, not the public architecture for new apps.
+- Use `gtkApp` for the host loop and lower-level window helpers/manual signal primitives only as escape hatches.
 - `gtkApp` automatically reconciles the widget tree on state changes — no manual `buildFromNode`/`windowSetChild` needed.
 - `reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId` patches the live tree in place. Returns the (possibly new) root id.
 - Signal events carry both `WidgetId` and the widget's `id="..."` name (e.g., `GtkClicked widgetId "saveBtn"`). Match by name string instead of comparing integer IDs.

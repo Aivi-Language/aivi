@@ -49,11 +49,10 @@ export trayNotifyPersonalEmail, traySetEmailSuggestions
 export CommandKey, SubscriptionKey, AppStep
 export Command, CommandNone, CommandBatch, CommandEmit, CommandPerform, CommandAfter, CommandCancel
 export Subscription, SubscriptionNone, SubscriptionBatch, SubscriptionEvery, SubscriptionSource
-export appStep, appStepWith, noSubscriptions, liftAppUpdate, liftAppUpdateFull
+export appStep, appStepWith, noSubscriptions, liftAppUpdate
 export commandNone, commandBatch, commandEmit, commandPerform, commandAfter, commandCancel
 export subscriptionNone, subscriptionBatch, subscriptionEvery, subscriptionSource
 export gtkApp
-export gtkAppFull
 export gtkSetInterval
 export signal, computed, readSignal
 
@@ -215,12 +214,6 @@ subscriptionSource = spec => SubscriptionSource spec
 liftAppUpdate : (msg -> s -> Effect GtkError s) -> msg -> s -> Effect GtkError (AppStep s msg)
 liftAppUpdate = update => msg => state => do Effect {
   next <- update msg state
-  pure (appStep next)
-}
-
-liftAppUpdateFull : (AppId -> WindowId -> msg -> s -> Effect GtkError s) -> AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)
-liftAppUpdateFull = update => appId => winId => msg => state => do Effect {
-  next <- update appId winId msg state
   pure (appStep next)
 }
 
@@ -897,34 +890,5 @@ gtkApp = config =>
     view: config.view
     toMsg: config.toMsg
     update: _ _ msg state => config.update msg state
-  }
-
-@deprecated "use gtkApp; gtkAppFull is a compatibility shim for advanced window flags and update-time handles"
-gtkAppFull : {
-  id: Text
-  title: Text
-  size: (Int, Int)
-  decorated: Bool
-  hideOnClose: Bool
-  model: s
-  onStart: AppId -> WindowId -> Effect GtkError Unit
-  subscriptions: s -> List (Subscription msg)
-  view: s -> GtkNode
-  toMsg: GtkSignalEvent -> Option msg
-  update: AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)
-} -> Effect GtkError Unit
-gtkAppFull = config =>
-  runGtkAppHost {
-    id: config.id
-    title: config.title
-    size: config.size
-    decorated: config.decorated
-    hideOnClose: config.hideOnClose
-    model: config.model
-    onStart: config.onStart
-    subscriptions: config.subscriptions
-    view: config.view
-    toMsg: config.toMsg
-    update: config.update
   }
 "#;
