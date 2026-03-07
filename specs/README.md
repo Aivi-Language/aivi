@@ -113,6 +113,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Email](stdlib/system/email.md)
 #### UI
 - [App Architecture](stdlib/ui/app_architecture.md)
+- [Forms](stdlib/ui/forms.md)
 - [GTK4](stdlib/ui/gtk4.md)
 - [Layout](stdlib/ui/layout.md)
 - [VDOM](stdlib/ui/vdom.md)
