@@ -1,39 +1,61 @@
 # Domains
 
-Domains are AIVI's mechanism for context-aware semantics. They allow the language to adapt to specific problem spaces like time, geometry, or UI styling by providing custom interpretations for operators, literals, and type interactions.
+Domains let AIVI give familiar syntax a domain-specific meaning. Instead of teaching the core language every rule about calendars, units, geometry, or colors, a domain says how operators and suffix literals should behave for a particular kind of value.
 
-Instead of baking specific logic (like "days often have 24 hours but not always") into the core compiler, AIVI delegates this to **Domains**.
+## What a domain is
 
-## Using Domains
+A domain is a bundle of semantics for a **carrier type** such as a date, duration, vector, or color. A domain may provide:
 
-To use a domain, you `use` it. This brings its **operator functions** and **literal templates** into scope.
+- operator meanings such as `+`, `-`, `*`, or `×`
+- typed suffix literals such as `10ms`, `2h`, or `30deg`
+- helper types for changes or measurements, often called **deltas**
+- compile-time validation for domain-owned syntax
+
+That means code can stay concise without becoming untyped. For example, `30d` is not a string; it is a typed value supplied by an active domain.
+
+## What domains are for
+
+Domains are useful when plain numbers are not enough. Reach for them when you want:
+
+- **typed units** instead of “magic numbers”
+- **readable operators** for a specific problem space
+- **literal suffixes** that compile into real values
+- **clear separation** between the core language and specialized rules
+
+Typical examples include time and calendar arithmetic, geometry, matrices, angles, and UI color adjustment.
+
+## Using an existing domain
+
+To use a domain, import it with `use`. This brings its operator functions and literal templates into scope.
 
 <<< ../snippets/from_md/syntax/domains/using_domains.aivi{aivi}
 
+```aivi
+use aivi.chronos.calendar (domain Calendar)
+
+dueDate = issuedOn + 30d   -- Calendar provides both `+` and the `d` suffix here
+```
+
 ### Importing a domain explicitly
 
-Domains are exported/imported separately from normal values and types.
+Domains are imported separately from ordinary values and types.
 
-- Export: `export domain Calendar`
-- Import domain members: `use aivi.chronos.calendar (domain Calendar)`
+- Export a domain with `export domain Calendar`
+- Import it with `use aivi.chronos.calendar (domain Calendar)`
 
-Importing a domain brings its members (operator definitions like `(+)` and literal templates like `1d`) into the current scope.
+Importing the domain activates its members, including operator definitions like `(+)` and literal templates like `1d`.
 
-> Domain names are not values; you do not refer to a domain as `Calendar` at term level. You import it to activate its operators and templates.
+> Domain names are not ordinary runtime values. You do not pass `Calendar` around as a term-level value; you import it so its syntax becomes available in the current module.
 
-## Units and Deltas
+## Typed deltas and suffix literals
 
-Domains often introduce **Units** (measurements) and **Deltas** (changes).
-
-### Delta Literals (Suffixes)
-
-Deltas represent a relative change or a typed quantity. They are written as numeric literals with a suffix.
+Domains often introduce **delta** values: typed changes such as “three days”, “five meters”, or “twenty degrees”. These are commonly written as numeric literals with a suffix.
 
 <<< ../snippets/from_md/syntax/domains/delta_literals_suffixes_01.aivi{aivi}
 
-These are **not** strings; they are typed values. `10m` might compile to a `Duration` struct or a float tagged as `Meters`, depending on the active domain.
+These literals are fully typed. Depending on the active domain, `10m` might mean a duration, a distance, or something else entirely.
 
-Common stdlib suffix examples:
+Common standard-library suffixes include:
 
 | Suffix | Domain | Type | Module |
 | --- | --- | --- | --- |
@@ -44,97 +66,114 @@ Common stdlib suffix examples:
 
 <<< ../snippets/from_md/syntax/domains/delta_literals_suffixes_02.aivi{aivi}
 
-### Suffix Application (Variables)
+## Applying suffixes to computed values
 
-Suffix literals can also be applied to a parenthesized expression, allowing variables and computed values:
+You can also attach a suffix to a parenthesized expression. This is the form to use when the numeric part is stored in a variable or computed first.
 
 <<< ../snippets/from_md/syntax/domains/suffix_application_variables.aivi{aivi}
 
-This form requires parentheses and the suffix must be **adjacent** to the closing `)` (write `(x)kg`, not `(x) kg`).
+Write the suffix immediately after the closing `)`:
 
-### Domain-Owned Operators (Including `×`)
+- correct: `(x)kg`
+- incorrect: `(x) kg`
 
-Domains may define semantics for operators beyond plain numeric arithmetic, including the `×` operator for transform/matrix-multiplication style operations.
+## Domain-owned operators
 
-### Within-Domain Operator Overloads (RHS-Typed)
+Domains may define operator behavior that goes beyond plain integer arithmetic. That includes familiar operators such as `+` and `*`, and also `×` for transform-style multiplication.
 
-A single domain body may contain **multiple entries for the same operator token** (e.g. two `(*)` definitions), provided their full function types differ. The compiler selects among them by matching the inferred RHS type after the LHS carrier is resolved.
+### Overloading the same operator inside one domain
+
+A single domain body may contain multiple entries for the same operator token as long as the full function types are different. In practice, the compiler resolves the operator by looking at the carrier type on the left-hand side and the inferred type on the right-hand side.
 
 <<< ../snippets/from_md/syntax/domains/within_domain_operator_overloads_rhs_typed.aivi{aivi}
 
-**Convention**: Use `×` for structural products (matrix-matrix, matrix-vector), and `*` for scalar scaling. This reserves `×` as the visual signal for "transform-style" multiplication.
+A good convention is:
+
+- use `×` for structural products such as matrix-matrix or matrix-vector multiplication
+- use `*` for scalar scaling
 
 Rules:
 
-1. Domain declarations remain `domain D over Carrier`   exactly **one** carrier type per declaration.
-2. Multiple operator entries with the **same token** are allowed as long as their full `LHS -> RHS -> Result` types are pairwise distinct.
-3. Resolution requires that exactly **one** overload matches the inferred `(LHS, RHS)` pair.
+1. A domain declaration still has exactly one carrier type: `domain D over Carrier`
+2. Reusing the same operator token is allowed only when the full `LHS -> RHS -> Result` types are pairwise distinct
+3. Resolution succeeds only when exactly one overload matches the inferred operand types
 
-## Supported operator hooks (v0.1)
+## Supported operator hooks in v0.1
 
-In v0.1, the surface language has built-in syntax for operators, and domains may supply semantics for a subset of them.
+In v0.1, the surface language has built-in syntax for operators, and domains may supply the meaning for part of that syntax.
 
-| Operator | Built-in meaning | Domain meaning (when non-`Int` carrier involved) |
+| Operator | Built-in meaning | Domain meaning (when a non-`Int` carrier is involved) |
 | --- | --- | --- |
-| `+`, `-`, `*`, `×`, `/`, `%` | `Int` arithmetic | Resolved to an in-scope operator function like `(+)` |
-| `<`, `<=`, `>`, `>=` | `Int` ordering | Resolved to an in-scope operator function like `(<)` returning `Bool` |
+| `+`, `-`, `*`, `×`, `/`, `%` | `Int` arithmetic | Resolved to an in-scope operator function such as `(+)` |
+| `<`, `<=`, `>`, `>=` | `Int` ordering | Resolved to an in-scope operator function such as `(<)` returning `Bool` |
 
-Not domain-resolved in v0.1 (always built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
+These operators are **not** domain-resolved in v0.1 and always keep their built-in meaning: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 
 See also: [Operators and Context](operators.md#114-domains-and-operator-meaning).
 
-## Literal templates, suffixes, and collisions
+## Literal templates and name collisions
 
-Suffix literals are implemented as template functions named `1{suffix}` that must be in scope:
+Suffix literals are implemented through template functions named `1{suffix}`:
 
 - `10ms` uses `1ms`
-- `(x)ms` uses `1ms`
+- `(x)ms` also uses `1ms`
 
-Domains commonly define these templates in their body (e.g. the `Duration` domain defines `1ms`, `1s`, `1min`, `1h`).
+Domains usually define these templates in the domain body.
 
-If two imported domains define the same template name (for example, both define `1m`), the current compiler does not provide carrier-based disambiguation. Prefer:
+If two imported domains define the same template name, the compiler does not currently disambiguate them by carrier type. In practice, avoid collisions by:
 
-- importing only one of the conflicting domains in a module,
-- using selective imports/hiding to avoid bringing conflicting templates into scope, or
-- using explicit constructors/functions instead of suffix literals.
+- importing only one conflicting domain in a module
+- using selective imports or hiding
+- calling an explicit constructor or helper function instead of using the suffix literal
 
+## Defining your own domain
 
-## Defining Domains
-
-You can define your own domains to encapsulate logic. A domain relates a **Carrier Type** (the data) with **Delta Types** (changes) and **Operators**.
+Define a domain when you want problem-specific syntax that stays type-safe and predictable.
 
 ### Syntax
 
 <<< ../snippets/from_md/syntax/domains/syntax.aivi{aivi}
 
-### Example: A Simple Color Domain
+### Example: a simple color domain
 
 <<< ../snippets/from_md/syntax/domains/example_a_simple_color_domain.aivi{aivi}
 
-### Interpretation
+### How the compiler reads a domain expression
 
-When you write:
+When you write a domain-owned expression, the compiler starts from the carrier type and then resolves the operator and any suffix literals through the domain currently in scope.
 
 <<< ../snippets/from_md/syntax/domains/interpretation.aivi{aivi}
 
-The compiler sees `red` is type `Rgb`. It looks for a domain over `Rgb` (the `Color` domain). It then desugars `10l` using the domain's rules into `Lightness 10`, and maps `+` to the domain's `(+)` function.
+For a value like `red + 10l`, the flow is:
 
-This requires the domain to be in scope (e.g. `use aivi.color (domain Color)`), not just the carrier type.
+1. infer that `red` has the carrier type, for example `Rgb`
+2. find an in-scope domain declared over that carrier, for example `Color`
+3. desugar `10l` using the domain’s template for that suffix
+4. resolve `+` to the domain’s `(+)` definition
 
-## Multi-Carrier Domains
+This only works when the domain itself is in scope, for example `use aivi.color (domain Color)`. Importing only the carrier type is not enough.
 
-Some domains cover multiple types (e.g., `Vector` over `Vec2` and `Vec3`). In v0.1, this is handled by defining the domain multiple times, once for each carrier.
+## Multi-carrier domains
+
+Sometimes one idea applies to several carrier types, such as both `Vec2` and `Vec3`. In v0.1, write one domain declaration per carrier type.
 
 <<< ../snippets/from_md/syntax/domains/multi_carrier_domains.aivi{aivi}
 
-## Interaction with Sigils
+## Domains and sigils
 
-Domains may define **sigils** (see [Operators & Sigils](operators.md#118-sigils)) that produce domain-typed values. For example, the `Url` domain provides `~u(https://example.com)` and the `Path` domain provides `~path[/usr/local/bin]`. These sigils are validated at compile time and construct typed values, not raw strings.
+Some standard-library domains also expose sigils. For example, a URL domain may offer `~u(https://example.com)` and a path domain may offer `~path[/usr/local/bin]`. These sigils are compile-time validated constructors for typed values, not raw strings.
 
-In v0.1, domains do not support defining custom sigils via the `domain` block. Sigils are compiler-provided for stdlib domains.
+In v0.1, custom sigils are compiler-provided for standard-library domains only. They are not declared inside a `domain` block.
 
-## Interaction with type coercion
+## Domains are not implicit casts
 
-Domains are not an implicit-cast mechanism. They supply operator semantics and literal templates, but do not introduce global coercions.
+Domains define operator semantics and literal templates. They do **not** act as a global implicit-conversion system.
 
-The only implicit conversions in v0.1 are expected-type coercions authorized by in-scope instances (see [Types: Expected-Type Coercions](types/expected_type_coercions.md)).
+The only implicit conversions in v0.1 are expected-type coercions authorized by in-scope instances. See [Types: Expected-Type Coercions](types/expected_type_coercions.md).
+
+## Practical rules of thumb
+
+- Import the domain anywhere you want its operators or suffixes to be active
+- Prefer domains when units or operator meaning matter to correctness
+- Keep suffix names unambiguous inside one module
+- Use explicit constructors if a suffix literal would be unclear to a reader

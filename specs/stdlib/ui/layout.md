@@ -1,20 +1,25 @@
 # Layout Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui.layout"} -->
-The `Layout` domain provides type-safe units for UI dimensions.
+The `Layout` domain gives common UI units a real type, so values such as `10px`, `50%`, and `2rem` are more than just strings.
 
-This prevents mixing up "10 pixels" with "10 percent" or "10 apples".
-
+That makes layout code easier to read and helps the compiler catch unit mix-ups early.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.ui.layout<span class="domain-badge">domain</span></div>
+
+## Why this domain exists
+
+In untyped UI systems, layout values often travel around as strings like `"12px"` or `"80%"`. That is flexible, but it is also easy to mix incompatible units or accidentally treat a count as a length.
+
+`aivi.ui.layout` gives those values structure. Writing `100px` is not a magic string; it constructs a typed layout value that downstream code can inspect and render deliberately.
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/ui/layout/overview.aivi{aivi}
 
-The layout domain uses AIVI's [domain](../../syntax/domains.md) system to give numeric literals physical meaning. Writing `100px` is not a magic string — it constructs a typed `Length (Px 100)` value that the compiler can check.
+## Domain definition
 
-## Domain Definition
+If you want to see the concrete shapes behind the sigils, start here:
 
 <<< ../../snippets/from_md/stdlib/ui/layout/domain_definition.aivi{aivi}
 
@@ -27,10 +32,10 @@ The layout domain uses AIVI's [domain](../../syntax/domains.md) system to give n
 | Constructor | Meaning |
 | --- | --- |
 | `Px Int` | Pixels |
-| `Em Int` | Relative to parent font size |
-| `Rem Int` | Relative to root font size |
-| `Vh Int` | Viewport height percentage |
-| `Vw Int` | Viewport width percentage |
+| `Em Int` | Relative to the parent font size |
+| `Rem Int` | Relative to the root font size |
+| `Vh Int` | Percentage of viewport height |
+| `Vw Int` | Percentage of viewport width |
 
 ### Percentage
 
@@ -38,15 +43,15 @@ The layout domain uses AIVI's [domain](../../syntax/domains.md) system to give n
 
 | Constructor | Meaning |
 | --- | --- |
-| `Pct Int` | Percentage (e.g. `50%` → `Pct 50`) |
+| `Pct Int` | Percentage, for example `50%` → `Pct 50` |
 
 ### Underlying representation
 
 <<< ../../snippets/from_md/stdlib/ui/layout/underlying_representation.aivi{aivi}
 
-## Sigils
+## Literal sigils
 
-The domain provides the following literal sigils:
+The domain provides these literal forms:
 
 | Literal | Constructs |
 | --- | --- |
@@ -57,4 +62,6 @@ The domain provides the following literal sigils:
 | `1vw` | `Vw 1` |
 | `1%` | `Pct 1` |
 
-Numeric multipliers are applied automatically: `100px` evaluates to `Px 100`.
+Numeric multipliers are applied automatically, so `100px` becomes `Px 100`.
+
+In practice, the domain is most helpful when you pass layout values into style records, widget properties, or helper functions and want the code to stay self-explanatory.

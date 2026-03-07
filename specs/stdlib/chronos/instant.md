@@ -1,33 +1,49 @@
 # Instant Domain
 
-> **Status: Implemented**   available in the stdlib and runtime.
-
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.instant"} -->
-The `Instant` domain represents **a specific moment in time** on the timeline, independent of time zones or calendars.
+The `Instant` domain represents a specific moment on the timeline, independent of calendars and time zones.
 
-It corresponds to a UTC timestamp (Unix epoch). While `DateTime` (in `Calendar`) is about "Human Time" (what the clock says on the wall), `Instant` is about "Physics Time" (when the event actually happened).
+Use it when you care about *when something actually happened* rather than *what the local wall clock said*. That makes it a good fit for timestamps, logs, ordering, and precise scheduling boundaries.
 
-**Implementation note (v0.1):** `Timestamp` is represented as `DateTime` (RFC3339 text) at runtime, and Instant operations parse/format that representation. Durations use `Span` from `aivi.chronos.duration` (millisecond precision).
+`Instant` corresponds to a UTC timestamp. By contrast, the calendar and timezone domains are about human-facing date and local-time concepts.
 
+**Implementation note:** `Timestamp` is represented as `DateTime` (RFC3339 text) at runtime, and Instant operations parse and format that representation. Durations use `Span` from `aivi.chronos.duration` with millisecond precision.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.instant<span class="domain-badge">domain</span></div>
+
+## When to use `Instant`
+
+Reach for `Instant` when you need:
+
+- an audit timestamp,
+- a stable ordering key for events,
+- “run after this exact moment” logic,
+- duration math against a point on the UTC timeline.
+
+If you need calendar-friendly dates, use [`aivi.chronos.calendar`](./calendar.md). If you need local time with daylight-saving rules, use [`aivi.chronos.timezone`](./timezone.md).
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/overview.aivi{aivi}
 
-## Features
+## Common operations
+
+These examples show how to create, compare, and offset instants:
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/features.aivi{aivi}
 
-## Domain Definition
+## Domain definition
+
+The domain definition shows the concrete timestamp shape and the operations built around it:
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/domain_definition.aivi{aivi}
 
-## Capability mapping (Phase 1 surface)
+## Reading the current time
 
-Effectful wall-clock reads such as `now` require `clock.now` (or the broader `clock` family shorthand).
+Effectful wall-clock reads such as `now` require the `clock.now` capability, or the broader `clock` shorthand.
 
-## Usage Examples
+## Usage examples
+
+A practical pattern is to store or compare `Instant` values internally, then format them into calendar or time-zone-aware values for display.
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/usage_examples.aivi{aivi}

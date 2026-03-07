@@ -1,19 +1,16 @@
 # Matrix Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.matrix"} -->
-The `Matrix` domain provides grids of numbers (`Mat3`, `Mat4`) used primarily for **Transformations**.
-
-Think of a Matrix as a "teleporter instruction set" for points. A single 4x4 grid can bundle up a complex recipe of movements: "Rotate 30 degrees, scale up by 200%, and move 5 units left."
-
-Manually calculating the new position of a 3D point after it's been rotated, moved, and scaled is incredibly complex algebra. Matrices simplify this to `Point * Matrix`. They are the mathematical engine behind every 3D game and renderer.
-
+The `Matrix` domain provides fixed-size matrices used for transforms, coordinate changes, and other grid-shaped linear algebra operations.
+It is especially useful for graphics, geometry, and simulation code where you want to combine multiple transforms into one reusable value.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.matrix<span class="domain-badge">domain</span></div>
+
+A good mental model is: a matrix is a recipe for changing a vector or point. One value can represent scaling, rotation, translation, or a combination of them.
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/math/matrix/sigil_constructors.aivi{aivi}
-
 
 ## Features
 
@@ -23,9 +20,9 @@ Manually calculating the new position of a 3D point after it's been rotated, mov
 
 <<< ../../snippets/from_md/stdlib/math/matrix/domain_definition.aivi{aivi}
 
-## `×` Operator Overloads
+## `×` operator overloads
 
-The `Matrix` domain provides two overloads of `×` per carrier, selected by the RHS type (see [Domains: Within-Domain Operator Overloads](../../syntax/domains.md#within-domain-operator-overloads-rhs-typed)):
+The `Matrix` domain overloads `×` based on the right-hand side type, so the same operator can mean matrix-by-matrix composition or matrix-by-vector transformation.
 
 | Expression | Resolved as | Returns |
 | --- | --- | --- |
@@ -36,32 +33,31 @@ The `Matrix` domain provides two overloads of `×` per carrier, selected by the 
 | `mat4 × mat4` | `multiply4 mat4 mat4` | `Mat4` |
 | `mat4 × vec4` | `transform4 mat4 vec4` | `Vec4` |
 
-**Convention**: `×` is for structural products; `*` remains for scalar scaling.
+`×` is reserved for structural products; `*` stays available for scalar scaling.
 
-Requires `use aivi.matrix (domain Matrix)` (or `use aivi.matrix`) and `use aivi.vector` for the `Vec*` types to be in scope.
+Requires `use aivi.matrix (domain Matrix)` or `use aivi.matrix`, plus `use aivi.vector` if you want the `Vec*` types in scope.
 
-## Helper Functions
+## Core helpers
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
-| **identity2**<br><code>Mat2</code> | Identity matrix for 2x2. |
-| **identity3**<br><code>Mat3</code> | Identity matrix for 3x3. |
-| **identity4**<br><code>Mat4</code> | Identity matrix for 4x4. |
-| **transpose2** m<br><code>Mat2 -> Mat2</code> | Flips rows and columns of a 2x2. |
-| **transpose3** m<br><code>Mat3 -> Mat3</code> | Flips rows and columns of a 3x3. |
-| **transpose4** m<br><code>Mat4 -> Mat4</code> | Flips rows and columns of a 4x4. |
-| **multiply2** a b<br><code>Mat2 -> Mat2 -> Mat2</code> | Multiplies two 2x2 matrices. |
-| **multiply3** a b<br><code>Mat3 -> Mat3 -> Mat3</code> | Multiplies two 3x3 matrices. |
-| **multiply4** a b<br><code>Mat4 -> Mat4 -> Mat4</code> | Multiplies two 4x4 matrices. |
+| **identity2**<br><code>Mat2</code> | Identity matrix for 2×2 work. |
+| **identity3**<br><code>Mat3</code> | Identity matrix for 3×3 work. |
+| **identity4**<br><code>Mat4</code> | Identity matrix for 4×4 work. |
+| **transpose2** m<br><code>Mat2 -> Mat2</code> | Swaps rows and columns of a 2×2 matrix. |
+| **transpose3** m<br><code>Mat3 -> Mat3</code> | Swaps rows and columns of a 3×3 matrix. |
+| **transpose4** m<br><code>Mat4 -> Mat4</code> | Swaps rows and columns of a 4×4 matrix. |
+| **multiply2** a b<br><code>Mat2 -> Mat2 -> Mat2</code> | Multiplies two 2×2 matrices. |
+| **multiply3** a b<br><code>Mat3 -> Mat3 -> Mat3</code> | Multiplies two 3×3 matrices. |
+| **multiply4** a b<br><code>Mat4 -> Mat4 -> Mat4</code> | Multiplies two 4×4 matrices. |
 
-## Sigil Constructors
+## Sigil constructors
 
-For concise matrix literals, use the `~mat` structured sigil:
+For concise literals, use the structured `~mat` sigil.
 
 <<< ../../snippets/from_md/stdlib/math/matrix/sigil_constructors.aivi{aivi}
 
-
-Rows are separated by newlines; columns by spaces (any whitespace). The formatter aligns columns for readability. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row/column count.
+Rows are separated by newlines and columns by whitespace. The formatter aligns columns for readability. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row and column count.
 
 ## Usage Examples
 

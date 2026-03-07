@@ -1,79 +1,70 @@
 # VSCode Extension
 
-The **AIVI Language Support** extension for Visual Studio Code provides a comprehensive development environment for AIVI.
+The **AIVI Language Support** extension turns Visual Studio Code into an AIVI-aware editor. It combines TextMate syntax highlighting, semantic tokens, formatter integration, test commands, and the AIVI language server.
 
-## Features
+## What the extension adds
 
-- **Syntax Highlighting**: Robust TextMate-based grammar for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting inside tagged raw-text sigils such as `` ~`css ...` ``.
-- **Semantic Highlighting**: Custom semantic token types for fine-grained coloring (arrows, pipes, brackets, dots, units, sigils, path segments).
-- **LSP Integration**: Automatically starts the `aivi lsp` server to provide advanced features like:
-  - Go to Definition / Declaration / Implementation / References
-  - Hover information
-  - Autocomplete
-  - Signature Help
-  - Renaming
-  - Code Actions
-  - Real-time Error Reporting
-- **Formatting**: Integrated formatter support (`Shift + Alt + F` or Format on Save).
-- **Test Runner**: Run AIVI `@test` definitions from the editor via commands.
-- **Theme**: Bundled "AIVI Dark Modern" color theme optimized for AIVI syntax.
-- **EBNF Support**: Syntax highlighting for `.ebnf` files (used in AIVI development).
+- **Syntax highlighting** for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting inside tagged raw-text sigils such as `` ~`css ...` ``.
+- **Semantic highlighting** with custom token types for arrows, pipes, brackets, dots, units, sigils, and dotted-path segments.
+- **Language server integration** so features such as hover, rename, go-to-definition, diagnostics, and completion work automatically.
+- **Formatting** through the built-in formatter (`Shift + Alt + F` or Format on Save).
+- **Test commands** for running AIVI `@test` definitions from the editor.
+- **Theme support** through the bundled “AIVI Dark Modern” color theme.
+- **EBNF syntax highlighting** for `.ebnf` files used in AIVI development.
 
-## Commands
+## Editor commands
 
-| Command               | Title                          | Description                                    |
-|:--------------------- |:------------------------------ |:---------------------------------------------- |
-| `aivi.restartServer`  | AIVI: Restart Language Server  | Restarts the LSP server.                       |
-| `aivi.runTests`       | AIVI: Run Tests                | Runs all `@test` definitions in the workspace. |
-| `aivi.runTestsFile`   | AIVI: Run Tests (Current File) | Runs tests in the current `.aivi` file.        |
-| `aivi.runTestsFolder` | AIVI: Run Tests (Folder)       | Runs tests in a selected folder.               |
+| Command | Title | What it does |
+|:-------- |:----- |:------------ |
+| `aivi.restartServer` | AIVI: Restart Language Server | Restarts the LSP server used by the extension. |
+| `aivi.runTests` | AIVI: Run Tests | Runs all `@test` definitions in the workspace. |
+| `aivi.runTestsFile` | AIVI: Run Tests (Current File) | Runs tests in the current `.aivi` file. |
+| `aivi.runTestsFolder` | AIVI: Run Tests (Folder) | Runs tests in a selected folder. |
 
 ## Configuration
 
-This extension contributes the following settings to VSCode:
+### Server settings
 
-### Server Settings
+| Setting | Type | Default | Description |
+|:-------- |:---- |:------- |:----------- |
+| `aivi.server.command` | string | `""` | Override the language server command. If unset, the extension prefers the bundled `aivi-lsp`, then `aivi-lsp` on `PATH`, then `aivi lsp`. |
+| `aivi.server.args` | string[] | `[]` | Extra arguments for `aivi.server.command`. |
 
-| Setting               | Type     | Default | Description                                                                                                                             |
-|:--------------------- |:-------- |:------- |:--------------------------------------------------------------------------------------------------------------------------------------- |
-| `aivi.server.command` | string   | `""`    | Override the language server command. If unset, the extension prefers the bundled `aivi-lsp`, then `aivi-lsp` on PATH, then `aivi lsp`. |
-| `aivi.server.args`    | string[] | `[]`    | Extra arguments for `aivi.server.command`.                                                                                              |
+### Format settings
 
-### Format Settings
+| Setting | Type | Default | Description |
+|:-------- |:---- |:------- |:----------- |
+| `aivi.format.indentSize` | number | `2` | Number of spaces used for indentation (`1`–`8`). |
+| `aivi.format.maxBlankLines` | number | `1` | Maximum number of consecutive blank lines allowed by the formatter (`0`–`5`). |
 
-| Setting                     | Type   | Default | Description                                                               |
-|:--------------------------- |:------ |:------- |:------------------------------------------------------------------------- |
-| `aivi.format.indentSize`    | number | `2`     | Number of spaces to use for indentation (1–8).                            |
-| `aivi.format.maxBlankLines` | number | `1`     | Maximum number of consecutive blank lines allowed by the formatter (0–5). |
+### CLI settings
 
-### CLI Settings
+| Setting | Type | Default | Description |
+|:-------- |:---- |:------- |:----------- |
+| `aivi.cli.command` | string | `"aivi"` | Command used to invoke the AIVI CLI for test-related editor actions. |
 
-| Setting            | Type   | Default  | Description                                                   |
-|:------------------ |:------ |:-------- |:------------------------------------------------------------- |
-| `aivi.cli.command` | string | `"aivi"` | Command used to invoke the AIVI CLI (used for running tests). |
+## Semantic token types
 
-## Semantic Token Types
+The extension registers custom semantic token types so themes can style AIVI constructs more precisely.
 
-The extension registers custom semantic token types for precise highlighting:
-
-| Token Type     | Super Type | Description                         |
-|:-------------- |:---------- |:----------------------------------- |
-| `aiviArrow`    | `operator` | Arrow operators (`=>`, `<-`, `->`)  |
-| `aiviPipe`     | `operator` | Pipe operators (`\|>`, `<\|`, `\|`) |
-| `aiviBracket`  | `operator` | Brackets and parentheses            |
-| `aiviDot`      | `operator` | Dot separator in dotted paths       |
-| `aiviUnit`     | `keyword`  | Domain unit suffixes                |
-| `aiviSigil`    | `string`   | Sigil prefix markers                |
-| `aiviPathHead` | `variable` | First segment of a dotted path      |
-| `aiviPathMid`  | `variable` | Middle segment of a dotted path     |
-| `aiviPathTail` | `variable` | Last segment of a dotted path       |
+| Token Type | Super Type | Description |
+|:---------- |:---------- |:----------- |
+| `aiviArrow` | `operator` | Arrow operators such as `=>`, `<-`, and `->` |
+| `aiviPipe` | `operator` | Pipe operators such as `|>`, `<|`, and `|` |
+| `aiviBracket` | `operator` | Brackets and parentheses |
+| `aiviDot` | `operator` | Dot separators in dotted paths |
+| `aiviUnit` | `keyword` | Domain unit suffixes |
+| `aiviSigil` | `string` | Sigil prefix markers |
+| `aiviPathHead` | `variable` | First segment of a dotted path |
+| `aiviPathMid` | `variable` | Middle segment of a dotted path |
+| `aiviPathTail` | `variable` | Last segment of a dotted path |
 
 ## Installation
 
-The extension is currently distributed as a `.vsix` file. You can install it manually in VSCode:
+The extension is distributed as a `.vsix` package.
 
 1. Open the Command Palette (`Ctrl+Shift+P`).
-2. Type "Extensions: Install from VSIX...".
+2. Run **Extensions: Install from VSIX...**.
 3. Select the `aivi-vscode-x.y.z.vsix` file.
 
-Distribution is currently via `.vsix`; Marketplace publication is out of scope for v0.1.
+This distribution path keeps installation simple even when the extension is not being published through the Marketplace.

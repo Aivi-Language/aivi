@@ -1,19 +1,24 @@
 # Linear Algebra Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.linearAlgebra"} -->
-The `LinearAlgebra` domain solves massive **Systems of Equations**.
-
-While `Vector` and `Matrix` are for 3D graphics, this domain is for "hard" science and engineering. It answers questions like: "If `3x + 2y = 10` and `x - y = 5`, what are `x` and `y`?"... but for systems with *thousands* of variables.
-
-Whether you're simulating heat flow across a computer chip, calculating structural loads on a bridge, or training a neural network, you are solving systems of linear equations. This domain wraps industrial-grade solvers (like LAPACK) to do the heavy lifting for you.
-
+The `LinearAlgebra` domain collects helpers for vector and matrix calculations that show up in simulation, graphics, optimization, and scientific code.
+Use it when you want algebraic operations such as dot products, matrix multiplication, or solving small linear systems as first-class library functions.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.linearAlgebra<span class="domain-badge">domain</span></div>
+
+If `aivi.vector` and `aivi.matrix` are about data shapes, `aivi.linearAlgebra` is about the calculations you perform with those shapes.
+
+## What it is for
+
+This domain is useful when you need to:
+
+- compare directions with a dot product
+- combine transformations with matrix multiplication
+- solve small systems like `m * x = v`
 
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/math/linear_algebra/overview.aivi{aivi}
-
 
 ## Features
 
@@ -23,13 +28,13 @@ Whether you're simulating heat flow across a computer chip, calculating structur
 
 <<< ../../snippets/from_md/stdlib/math/linear_algebra/domain_definition.aivi{aivi}
 
-## Helper Functions
+## Core helpers
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
 | **dot** a b<br><code>Vec -> Vec -> Float</code> | Returns the dot product of two vectors. |
-| **matMul** a b<br><code>Mat -> Mat -> Mat</code> | Multiplies matrices (rows of `a` by columns of `b`). |
-| **solve2x2** m v<br><code>Mat -> Vec -> Vec</code> | Solves the system `m * x = v`. |
+| **matMul** a b<br><code>Mat -> Mat -> Mat</code> | Multiplies matrices by combining rows of `a` with columns of `b`. |
+| **solve2x2** m v<br><code>Mat -> Vec -> Vec</code> | Solves the 2×2 system `m * x = v`. |
 
 ## Usage Examples
 

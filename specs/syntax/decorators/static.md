@@ -4,6 +4,9 @@
 `@static` evaluates deterministic source reads at compile time and embeds the value into the program as a constant. No runtime overhead.
 <!-- /quick-info -->
 
+Use `@static` when a value should be fetched, read, or generated during compilation instead of at runtime.
+Typical uses include bundling configuration files, generating clients from schemas, and baking build-time data into the executable.
+
 ## Syntax
 
 ```aivi
@@ -11,17 +14,19 @@
 binding = source.call "argument"
 ```
 
-## Supported Sources (v0.1)
+The binding must be parameterless because the compiler evaluates it before the program runs.
 
-| Source call                    | Result type       | Description                                        |
-|:------------------------------ |:----------------- |:-------------------------------------------------- |
-| `file.read "path"`             | `Text`            | Embed file contents as text                        |
-| `file.json "path"`             | inferred from use | Parse JSON, embed as typed value                   |
-| `file.csv "path"`              | `List { ... }`    | Parse CSV, embed as list of records                |
-| `env.get "KEY"`                | `Text`            | Embed environment variable value                   |
-| `openapi.fromUrl url`          | typed module      | Generate typed API client from an OpenAPI spec URL |
-| `openapi.fromFile "path"`      | typed module      | Generate typed API client from a local spec file   |
-| `type.jsonSchema TypeName`     | `Text`            | Generate OpenAI-compatible JSON Schema from a type |
+## Supported sources (v0.1)
+
+| Source call | Result type | Practical use |
+|:----------- |:----------- |:------------- |
+| `file.read "path"` | `Text` | Embed a text file directly |
+| `file.json "path"` | inferred from use | Load typed JSON data at build time |
+| `file.csv "path"` | `List { ... }` | Ship CSV data as records |
+| `env.get "KEY"` | `Text` | Bake an environment value into the build |
+| `openapi.fromUrl url` | typed module | Generate an API client from a remote OpenAPI spec |
+| `openapi.fromFile "path"` | typed module | Generate an API client from a local OpenAPI spec |
+| `type.jsonSchema TypeName` | `Text` | Generate OpenAI-compatible JSON Schema from a type |
 
 ## Examples
 
@@ -29,7 +34,7 @@ binding = source.call "argument"
 
 ```aivi
 @static
-buildEnv = env.get "AIVI_BUILD_ENV"
+buildEnv = env.get "AIVI_BUILD_ENV"   // captured once during compilation
 
 @static
 petStore = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
@@ -40,87 +45,105 @@ internalApi = openapi.fromFile "./specs/internal-api.yaml"
 
 ## Semantics
 
-- Compilation **fails early** if a static source cannot be read, fetched, or decoded.
-- The embedded value is a **constant** — no I/O happens at runtime.
+- Compilation fails early if the static source cannot be read, fetched, or decoded.
+- The embedded value is a constant, so the running program performs no I/O for that binding.
 - File paths are resolved relative to the source file first, then the workspace root.
-- `@static` bindings must be **parameterless** (no function parameters).
+- `@static` bindings must be parameterless.
 
-## Compile-Time Errors
+## Compile-time errors
 
-| Code  | Condition                                      |
-|:----- |:---------------------------------------------- |
-| E1514 | `@static` applied to a parameterised binding   |
-| E1515 | File read failure                              |
-| E1516 | JSON parse failure                             |
-| E1517 | CSV parse failure                              |
-| E1518 | OpenAPI spec fetch/read failure                |
-| E1519 | OpenAPI spec parse failure (invalid schema)    |
-| E1520 | Unsupported OpenAPI feature in type mapping    |
+| Code | Condition |
+|:---- |:--------- |
+| E1514 | `@static` applied to a parameterised binding |
+| E1515 | File read failure |
+| E1516 | JSON parse failure |
+| E1517 | CSV parse failure |
+| E1518 | OpenAPI spec fetch/read failure |
+| E1519 | OpenAPI spec parse failure |
+| E1520 | Unsupported OpenAPI feature in type mapping |
 | E1554 | `type.jsonSchema` missing or invalid type name |
-| E1555 | `type.jsonSchema` type not found in module     |
+| E1555 | `type.jsonSchema` type not found in module |
 
-## OpenAPI Source
+## OpenAPI source
 
 <!-- quick-info: {"kind":"topic","name":"openapi compile-time source"} -->
 `openapi.fromUrl` and `openapi.fromFile` parse an [OpenAPI 3.x](https://spec.openapis.org/oas/v3.1.1.html) spec at compile time and generate a typed, callable API client.
 <!-- /quick-info -->
 
-The generated value is a **factory function** that takes a configuration record and returns a record of callable endpoint functions:
+The generated value is a factory function.
+You pass it a configuration record, and it returns a record of endpoint functions.
 
 ```aivi
 @static
 petStoreApi = openapi.fromFile "./petstore.json"
 
-// Create a client with config
-client = petStoreApi { bearerToken: Some "sk-...", baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
+client = petStoreApi {
+  bearerToken: Some "sk-...",
+  baseUrl: None,
+  headers: None,
+  timeoutMs: None,
+  retryCount: None,
+  strictStatus: None
+}
 
-// Call an endpoint — returns Source RestApi (Result Error Response)
-pets <- client.listPets { limit: Some 10 }
+pets <- client.listPets { limit: Some 10 }   // generated endpoint function
 
-// Destructuring also works
-{ listPets, createPets } = petStoreApi { bearerToken: None, baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
+{ listPets, createPets } = petStoreApi {
+  bearerToken: None,
+  baseUrl: None,
+  headers: None,
+  timeoutMs: None,
+  retryCount: None,
+  strictStatus: None
+}
 result <- listPets {}
 ```
 
-**Config Record Fields:**
+### Config record fields
 
-| Field          | Type            | Description                                          |
-|:-------------- |:--------------- |:---------------------------------------------------- |
-| `bearerToken`  | `Option Text`   | Bearer token for `Authorization` header              |
-| `headers`      | `Option (List (Text, Text))` | Additional HTTP headers (key-value pairs) |
-| `timeoutMs`    | `Option Int`    | Request timeout in milliseconds                      |
-| `retryCount`   | `Option Int`    | Number of retries on failure                         |
-| `strictStatus` | `Option Bool`   | Treat non-2xx responses as errors                    |
-| `baseUrl`      | `Option Text`   | Override the base URL from the spec                  |
+| Field | Type | Description |
+|:----- |:---- |:----------- |
+| `bearerToken` | `Option Text` | Bearer token for the `Authorization` header |
+| `headers` | `Option (List (Text, Text))` | Additional HTTP headers |
+| `timeoutMs` | `Option Int` | Request timeout in milliseconds |
+| `retryCount` | `Option Int` | Number of retries on failure |
+| `strictStatus` | `Option Bool` | Treat non-2xx responses as errors |
+| `baseUrl` | `Option Text` | Override the base URL from the spec |
 
-**Endpoint Parameters:**
+### Endpoint parameters
 
-Each endpoint function takes a record of parameters. Parameters from the OpenAPI spec (path, query, header) are mapped by name. For `POST`/`PUT`/`PATCH` endpoints, any extra fields become the JSON request body. Required parameters are direct fields; optional parameters are `Option T`.
+Each generated endpoint function takes a record of parameters.
+Path, query, and header parameters are mapped by name.
+For `POST`, `PUT`, and `PATCH` endpoints, extra fields become the JSON request body.
+Required parameters stay direct fields; optional parameters become `Option T`.
 
-**Type Mapping:**
+### Type mapping
 
-| OpenAPI Type                      | AIVI Type     |
-|:--------------------------------- |:------------- |
-| `string`                          | `Text`        |
-| `integer` / `int32` / `int64`     | `Int`         |
-| `number` / `float` / `double`     | `Float`       |
-| `boolean`                         | `Bool`        |
-| `array` of `T`                    | `List T`      |
-| `object` (with properties)        | closed record |
-| `$ref`                            | named type    |
-| nullable / not required           | `Option T`    |
-| `oneOf` / `anyOf`                 | sum type (ADT)|
-| `enum` (strings)                  | sum type      |
-| `string` with `format: date`      | `Date`        |
-| `string` with `format: date-time` | `DateTime`    |
+| OpenAPI type | AIVI type |
+|:------------ |:--------- |
+| `string` | `Text` |
+| `integer` / `int32` / `int64` | `Int` |
+| `number` / `float` / `double` | `Float` |
+| `boolean` | `Bool` |
+| `array` of `T` | `List T` |
+| `object` with properties | closed record |
+| `$ref` | named type |
+| nullable or not required | `Option T` |
+| `oneOf` / `anyOf` | sum type (ADT) |
+| string `enum` | sum type |
+| `string` with `format: date` | `Date` |
+| `string` with `format: date-time` | `DateTime` |
 
-Endpoint functions are named from `operationId` (lowerCamelCase); if absent, derived from method + path. Cached in `.aivi-cache/openapi/`; pass `--refresh-static` to force re-fetch. Accepts `.json`, `.yaml`, `.yml`, and Swagger 2.0 (auto-converted).
+Generated endpoint names come from `operationId` when present; otherwise they are derived from HTTP method and path.
+OpenAPI results are cached in `.aivi-cache/openapi/`; pass `--refresh-static` to force a refresh.
 
-## JSON Schema Generation
+## JSON Schema generation
 
 <!-- quick-info: {"kind":"topic","name":"type.jsonSchema compile-time source"} -->
 `type.jsonSchema` converts an AIVI type alias into an [OpenAI-compatible JSON Schema](https://platform.openai.com/docs/guides/structured-outputs) at compile time. The result is a `Text` value containing the JSON schema string.
 <!-- /quick-info -->
+
+Use this when an external system, such as an LLM API, expects a JSON Schema description of structured output.
 
 ### Syntax
 
@@ -129,7 +152,8 @@ Endpoint functions are named from `operationId` (lowerCamelCase); if absent, der
 schemaBinding = type.jsonSchema TypeName
 ```
 
-`TypeName` must be a type alias defined in the same module. The type is converted to a JSON Schema wrapped in the OpenAI structured-output format:
+`TypeName` must be a type alias defined in the same module.
+The generated schema is wrapped in the OpenAI structured-output envelope:
 
 ```json
 {
@@ -146,32 +170,30 @@ schemaBinding = type.jsonSchema TypeName
 
 ```aivi
 ExtractionResult = {
-  title:    Text,
-  summary:  Text,
-  tags:     List Text,
-  score:    Option Float
+  title: Text,
+  summary: Text,
+  tags: List Text,
+  score: Option Float
 }
 
 @static
-extractionSchema = type.jsonSchema ExtractionResult
+extractionSchema = type.jsonSchema ExtractionResult   // becomes a compile-time `Text` constant
 ```
 
-`extractionSchema` becomes a `Text` constant at compile time containing the full JSON schema. This is useful for passing to LLM APIs that require a response format specification.
+### Type mapping
 
-### Type Mapping
+| AIVI type | JSON Schema |
+|:--------- |:----------- |
+| `Text` | `{"type": "string"}` |
+| `Int` | `{"type": "integer"}` |
+| `Float` | `{"type": "number"}` |
+| `Bool` | `{"type": "boolean"}` |
+| `List T` | `{"type": "array", "items": ...}` |
+| `{ field: T, ... }` | `{"type": "object", "properties": ...}` |
+| `Option T` | inner schema with `"nullable": true` |
+| `(A, B, C)` | `{"type": "array", "prefixItems": [...]}` |
+| ADT with only named cases | `{"type": "string", "enum": [...]}` |
+| mixed-form ADT | `{"anyOf": [...]}` |
+| unresolved or function type | `{"type": "string"}` fallback |
 
-| AIVI Type              | JSON Schema                                  |
-|:---------------------- |:-------------------------------------------- |
-| `Text`                 | `{"type": "string"}`                         |
-| `Int`                  | `{"type": "integer"}`                        |
-| `Float`                | `{"type": "number"}`                         |
-| `Bool`                 | `{"type": "boolean"}`                        |
-| `List T`               | `{"type": "array", "items": ...}`            |
-| `{ field: T, ... }`    | `{"type": "object", "properties": ...}`      |
-| `Option T`             | inner schema with `"nullable": true`         |
-| `(A, B, C)`            | `{"type": "array", "prefixItems": [...]}`    |
-| ADT (all-name union)   | `{"type": "string", "enum": [...]}`          |
-| ADT (mixed)            | `{"anyOf": [...]}`                           |
-| Unresolved / function  | `{"type": "string"}` (fallback)              |
-
-Records set `"additionalProperties": false` and list all non-optional fields in `"required"`.
+Records set `"additionalProperties": false` and include all non-optional fields in `"required"`.

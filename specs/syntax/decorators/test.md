@@ -4,6 +4,9 @@
 `@test` marks a definition as a test case or a module as test-only. Tests are collected by `aivi test` and excluded from production builds.
 <!-- /quick-info -->
 
+Use `@test` to mark executable checks that belong in the test runner, not in the shipping application.
+You can apply it to individual definitions or to a whole module.
+
 ## Syntax
 
 ```aivi
@@ -19,64 +22,69 @@ testName = ...
 
 <<< ../../snippets/from_md/syntax/decorators/test_example.aivi{aivi}
 
-## Rules
+## Practical rules
 
-- A description string is **mandatory** for test cases.
-- When applied to a module, the entire module is test-only.
+- A description string is mandatory for test cases.
+- When applied to a module, the whole module becomes test-only.
 - Tests are discovered and executed by `aivi test`.
 - Test-only modules are stripped from production builds.
 
 ---
 
-## Mock Expressions
+## Mock expressions
 
 <!-- quick-info: {"kind":"syntax","name":"mock expression"} -->
 Mock expressions provide **scoped binding substitution** for testing and isolation. A `mock ... in` expression temporarily replaces a module-level binding within a lexical scope.
 <!-- /quick-info -->
 
+Use `mock ... in` when you want a test to replace a dependency for one expression without permanently changing the program.
+This is useful for HTTP calls, clocks, file access, and other bindings that should behave differently in tests.
+
 ### Syntax
 
-```
+```text
 mock <qualified.path> = <expr>
 ( mock <qualified.path> = <expr> )*
 in <body>
 ```
 
-- `<qualified.path>` — a dotted identifier referencing an imported binding (e.g. `rest.get`).
-- `<expr>` — replacement expression; must type-check against the original binding's type.
-- Multiple `mock` lines may precede a single `in`.
+- `<qualified.path>` is a dotted identifier for an imported binding such as `rest.get`.
+- `<expr>` is the replacement value or function, and it must type-check against the original binding.
+- Multiple `mock` lines may appear before one `in` body.
 
-### Basic Example
+### Basic example
 
 <<< ../../snippets/from_md/syntax/mock_expression/basic.aivi{aivi}
 
-### Multiple Mocks
+### Multiple mocks
 
 <<< ../../snippets/from_md/syntax/mock_expression/multiple.aivi{aivi}
 
-### Scoping Rules
+### Scoping rules
 
 | Rule | Behaviour |
-|:-----|:----------|
-| **Lexical** | Active only inside the `in <body>` expression |
-| **Deep** | Transitive calls see the mock (runtime environment override) |
-| **Nestable** | Inner `mock` blocks can re-shadow an outer mock |
-| **Restore** | Original binding is restored after `body` completes (even on error) |
+|:---- |:--------- |
+| **Lexical** | The mock is active only inside the `in <body>` expression |
+| **Deep** | Functions called from inside the body also see the mocked binding |
+| **Nestable** | An inner `mock` block can shadow an outer one |
+| **Restore** | The original binding is restored after `body` finishes, even on error |
 | **Qualified only** | Only qualified imported names can be mocked |
 
-Capability handlers in [Effect Handlers](/syntax/effect_handlers) solve a different problem: they install interpreters for capability scopes via `with { capability = handler } in`. Prefer handlers for capability-polymorphic business logic; keep `mock ... in` for binding-level substitution and snapshot capture.
+Capability handlers in [Effect Handlers](/syntax/effect_handlers) solve a different problem: they install interpreters for capability scopes via `with { capability = handler } in`.
+Prefer handlers for capability-polymorphic business logic, and use `mock ... in` for direct binding substitution.
 
-### Snapshot Mocks
+### Snapshot mocks
 
-The `mock snapshot` variant **records real responses** on first run and **replays from snapshot files** on subsequent runs:
+The `mock snapshot` form records real responses on the first run and replays them from snapshot files on later runs.
+That gives you repeatable tests without keeping the real dependency online every time.
 
 <<< ../../snippets/from_md/syntax/mock_expression/snapshot.aivi{aivi}
 
 | Mode | What happens |
-|:-----|:-------------|
-| **First run** (or `aivi test --update-snapshots`) | Calls real function, serializes to `__snapshots__/<test>/<binding>.snap` |
-| **Subsequent runs** | Deserializes from `.snap` — no real call, deterministic |
-| **Snapshot missing** | Fails: "run with `--update-snapshots`" |
+|:---- |:------------ |
+| **First run** or `aivi test --update-snapshots` | Calls the real function and stores the response in `__snapshots__/<test>/<binding>.snap` |
+| **Later runs** | Replays the stored `.snap` file instead of calling the real function |
+| **Snapshot missing** | Fails and tells you to run with `--update-snapshots` |
 
 ### `assertSnapshot`
 
@@ -84,26 +92,27 @@ The `mock snapshot` variant **records real responses** on first run and **replay
 assertSnapshot : Text -> A -> Effect Text Unit
 ```
 
-Compares a serialized value against a stored snapshot. Pass `--update-snapshots` to re-record.
+`assertSnapshot` compares a serialized value against a stored snapshot.
+Pass `--update-snapshots` when you intentionally want to re-record the expected output.
 
 ```aivi
 @test "user formatting"
 testFormat = do Effect {
   formatted <- pure (formatUserTable [{ id: 1, name: "Ada" }])
-  assertSnapshot "user_table" formatted
+  assertSnapshot "user_table" formatted   // compare against the stored golden result
 }
 ```
 
-### Compile-Time Errors
+### Compile-time errors
 
 | Code | Condition |
-|:-----|:----------|
+|:---- |:--------- |
 | E1540 | `mock` target is not a qualified path |
 | E1541 | `mock` target does not resolve to a known binding |
-| E1542 | Mock expression type does not match original type |
-| E1543 | `mock snapshot` used with `= expr` (mutually exclusive) |
-| E1544 | Expected `in` keyword after mock binding(s) |
+| E1542 | Mock expression type does not match the original binding |
+| E1543 | `mock snapshot` used with `= expr` |
+| E1544 | Expected `in` after the mock binding list |
 
 ## Related
 
-- [Testing Module](/stdlib/core/testing) — assertions, test runner, snapshot assertions
+- [Testing Module](/stdlib/core/testing) — assertions, test runner, and snapshot assertions

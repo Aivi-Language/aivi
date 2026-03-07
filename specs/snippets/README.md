@@ -1,16 +1,38 @@
 # Doc Snippets
 
-This folder holds canonical AIVI snippets that are embedded into the docs.
+This folder contains canonical AIVI code snippets that the documentation can embed directly.
 
-Goals:
+The goal is practical: write an example once, reuse it in the docs, and keep it close enough to the real language that it stays trustworthy.
 
-- Docs never drift from the parser/formatter/compiler.
-- Snippets are the source of truth; markdown embeds them rather than duplicating code.
+## Why snippets exist
 
-Workflow:
+Using shared snippets helps in two ways:
 
-- Embed snippets in markdown using VitePress `<<<` includes.
-- Verify with `pnpm -C specs snippets:check` (CI) or `pnpm -C specs snippets:fix` (autofmt).
+- **Readers get realistic examples.** The code shown in the docs comes from dedicated snippet files instead of being copied by hand into many markdown pages.
+- **Docs stay easier to maintain.** When an example changes, you update the snippet once instead of chasing duplicates.
 
-See `specs/snippets/manifest.json` for per-snippet verification configuration.
+## How snippets are used
 
+Markdown pages include snippets with VitePress `<<<` includes.
+
+```md
+<<< ./snippets/example.aivi
+```
+
+That keeps longer examples readable in the docs while preserving a single source of truth for the code itself.
+
+## Checking snippets
+
+Use the existing snippet commands when you want to verify or normalize them locally:
+
+```bash
+pnpm -C specs snippets:check
+pnpm -C specs snippets:fix
+```
+
+- `snippets:check` verifies snippet formatting and consistency.
+- `snippets:fix` rewrites snippets into the expected form when possible.
+
+## Configuration
+
+See `specs/snippets/manifest.json` for per-snippet verification settings and other snippet metadata.

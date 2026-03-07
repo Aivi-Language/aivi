@@ -1,52 +1,63 @@
-# 3.6 Expected-Type Coercions (Instance-Driven)
+# 3.6 Expected-Type Coercions
 
-In some positions, the surrounding syntax provides an **expected type** (for example, function arguments,
-record fields when a record literal is checked against a known record type, or annotated bindings).
+AIVI sometimes inserts a conversion automatically when the surrounding code already makes the destination type clear.
+This keeps boundary code tidy without turning the language into a general implicit-cast system.
 
-In these expected-type positions only, the compiler may insert a conversion call when needed.
-This is **not** a global implicit cast mechanism: conversions are only inserted when there is an
-in-scope instance that authorizes the coercion.
+## Where coercions can happen
+
+Expected-type coercions only happen in places where the compiler already knows the target type, such as:
+
+- function arguments
+- record fields checked against a known record type
+- bindings with an explicit type annotation
+
+Outside those positions, no conversion is inserted.
 
 ## `ToText`
 
-The standard library provides:
+The standard library provides a `ToText` class for converting values into `Text`.
 
 <<< ../../snippets/from_md/syntax/types/totext_01.aivi{aivi}
 
-Rule (informal):
+Informally, when `Text` is expected and an expression has type `A`, the compiler may rewrite that expression to `toText expr` if a matching `ToText A` instance is in scope.
 
-- When a `Text` is expected and an expression has type `A`, the compiler may rewrite the expression to
-  `toText expr` if a `ToText A` instance is in scope.
-
-This supports ergonomic boundary code such as HTTP requests:
+This is especially useful at program boundaries such as logging, headers, URLs, or templated output:
 
 <<< ../../snippets/from_md/syntax/types/totext_02.aivi{aivi}
 
-## Record Instances
+## Record instances
 
-With closed structural records, `{}` denotes only the empty record.
-Record-to-text coercions should therefore be provided for concrete record types (or wrappers),
-rather than a single catch-all `{}` instance.
+With closed structural records, `{}` means only the empty record.
+That is why record-to-text coercions should be defined for concrete record shapes or wrapper types, not through one catch-all record instance.
 
-## Opt-in Record Defaults (`ToDefault`)
+## Opt-in record defaults (`ToDefault`)
 
-When a module imports markers from `aivi.defaults`, record literals in expected-type positions may
-be completed with missing fields:
+When a module imports defaults from `aivi.defaults`, record literals in expected-type positions may be completed with missing fields.
+This is opt-in, so the behaviour is visible at the import site.
+
+Available built-in defaults include:
 
 - `use aivi.defaults (Option)` enables `Option _ -> None`
 - `use aivi.defaults (List)` enables `List _ -> []`
 - `use aivi.defaults (Bool)` enables `Bool -> False`
-- `use aivi.defaults (Int, Float, Text)` enables `0`, `0.0`, and `""` respectively
+- `use aivi.defaults (Int, Float, Text)` enables `0`, `0.0`, and `""`
 
-For other types, importing `ToDefault` enables instance-driven filling through `toDefault()` when
-`ToDefault` instances are in scope.
+For other types, importing `ToDefault` enables instance-driven filling through `toDefault()` when matching instances are in scope.
 
-Defaults are prepended before user-written fields, so explicit fields and later spreads still
-override synthesized defaults.
+Defaults are prepended before user-written fields, so explicit fields and later spreads still win.
 
-## `Body` Coercions
+```aivi
+use aivi.defaults (Option, Text)
 
-When `Body` is expected (e.g. in an HTTP request), the compiler inserts constructor wrapping:
+request : { token: Option Text, note: Text }
+request = {
+  note: "hello"
+}   // `token` is filled with `None` because the expected type is known
+```
+
+## `Body` coercions
+
+When `Body` is expected, such as in an HTTP request, the compiler inserts the following wrappers:
 
 | Expression type | Rewritten to |
 | --- | --- |
@@ -54,30 +65,33 @@ When `Body` is expected (e.g. in an HTTP request), the compiler inserts construc
 | `Text` | `Plain text` |
 | `JsonValue` | `Json jv` |
 
-This enables ergonomic HTTP code:
+That lets request-building code stay focused on the payload you mean to send:
 
 ```aivi
 fetch {
-  method: "POST"
-  url: url
-  headers: []
-  body: Some { grant_type: "authorization_code", code: code }
+  method: "POST",
+  url: url,
+  headers: [],
+  body: Some { grant_type: "authorization_code", code: code }   // record becomes JSON body
 }
 ```
 
-## `Option` Coercion
+## `Option` coercion
 
-When `Option A` is expected and the expression does not directly unify, the compiler attempts to
-coerce the expression to type `A` using the rules above, then wraps the result in `Some`.
+When `Option A` is expected and the expression does not already unify, the compiler first tries to coerce the expression to `A` using the rules above and then wraps the result in `Some`.
 
-This chains with other coercions. For example, when `Option Body` is expected, a bare record
-literal is rewritten to `Some (Json (toJson { ... }))`:
+This composes with other coercions. For example, when `Option Body` is expected, a bare record literal becomes `Some (Json (toJson { ... }))`:
 
 ```aivi
 fetch {
-  method: "POST"
-  url: url
-  headers: []
-  body: { grant_type: "authorization_code", code: code }
+  method: "POST",
+  url: url,
+  headers: [],
+  body: { grant_type: "authorization_code", code: code }   // rewritten to `Some (...)`
 }
 ```
+
+## Practical guideline
+
+If a call site becomes easier to understand when written explicitly, write the conversion explicitly.
+The coercion rules are there for convenience at common boundaries, not to hide important transformations.

@@ -1,30 +1,112 @@
 # HTTP Server Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.net.httpServer"} -->
-The `HttpServer` domain provides a scalable HTTP/1.1 + HTTP/2 server with optional WebSocket upgrades. The server is designed to run across multiple CPU cores.
+The `HttpServer` domain lets an AIVI program receive HTTP requests and send HTTP responses. Use it to build APIs, local tools, webhooks, or services that need to keep running and respond to network traffic.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.httpServer</div>
 
 <<< ../../snippets/from_md/stdlib/network/http_server/http_server_domain.aivi{aivi}
 
+## What this module is for
+
+`aivi.net.httpServer` provides a runtime-managed HTTP server with support for HTTP/1.1, HTTP/2, and optional WebSocket upgrades. The runtime handles the server lifecycle; your code focuses on describing how to answer each request.
+
+Because `listen` returns a `Resource Server`, the server shuts down automatically when the surrounding resource scope ends. That makes it a natural fit for services that need clean startup and cleanup.
+
+## Typical workflow
+
+1. Create a `ServerConfig` with an address to bind.
+2. Pass a handler function to `listen`.
+3. Inspect the incoming `Request`.
+4. Return either:
+   - `Http response` for a normal HTTP response, or
+   - `Ws handler` to upgrade the connection to WebSocket mode.
+
+```aivi
+use aivi.net.httpServer
+
+startServer = resource {
+  server <- listen { address: "127.0.0.1:8080" } (request =>
+    pure (Http {
+      status: 200
+      headers: [{ name: "Content-Type", value: "text/plain" }]
+      body: [72, 101, 108, 108, 111] // "Hello" encoded as UTF-8 bytes: H e l l o
+    })
+  )
+
+  pure server
+}
+```
+
+> `Response.body` uses raw bytes (`List Int`), so text responses are typically encoded before sending.
+> In other words, `"Hello"` is shown here as the byte values the server actually writes to the socket.
+
 ## Types
 
 <<< ../../snippets/from_md/stdlib/network/http_server/types.aivi{aivi}
 
-`Server` and `WebSocket` are opaque handle types returned by the runtime:
+`Server` and `WebSocket` are opaque runtime-managed handles:
 
 | Type | Description |
 | --- | --- |
-| `Server` | An active HTTP server instance, returned by `listen` and consumed by `stop`. |
-| `WebSocket` | An open WebSocket connection, passed to the `Ws` handler inside `ServerReply`. |
+| `Server` | A running server instance returned by `listen`. Pass it to `stop` when you want to shut it down explicitly. |
+| `WebSocket` | An active WebSocket connection. You use it with `wsRecv`, `wsSend`, and `wsClose`. |
+
+### Request and response records
+
+The included snippet defines the data you will work with most often:
+
+- `Request` describes the incoming HTTP request.
+- `Response` describes the reply you want to send back.
+- `ServerReply` tells the runtime whether to send a normal HTTP response or upgrade to WebSocket handling.
+
+Important fields:
+
+| Record | Field | Meaning |
+| --- | --- | --- |
+| `Request` | `method` | The request method, such as `GET` or `POST`. |
+| `Request` | `path` | The request path, such as `/health` or `/users/42`. |
+| `Request` | `headers` | Request headers from the client. |
+| `Request` | `body` | Raw request body bytes. |
+| `Request` | `remoteAddr` | The client address when the runtime can provide it. |
+| `Response` | `status` | The HTTP status code to return. |
+| `Response` | `headers` | Response headers. |
+| `Response` | `body` | Raw response body bytes. |
 
 ## Functions
 
 | Function | Explanation |
 | --- | --- |
-| **listen** config handler<br><code>ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server</code> | Starts a server and yields a `Server` resource that stops on cleanup. |
-| **stop** server<br><code>Server -> Effect HttpError Unit</code> | Stops a running server instance. |
-| **wsRecv** socket<br><code>WebSocket -> Effect WsError WsMessage</code> | Receives the next WebSocket message. |
-| **wsSend** socket message<br><code>WebSocket -> WsMessage -> Effect WsError Unit</code> | Sends a WebSocket message. |
+| **listen** config handler<br><code>ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server</code> | Starts a server with `config` and uses `handler` to answer each request. The returned resource cleans up the server when the scope ends. |
+| **stop** server<br><code>Server -> Effect HttpError Unit</code> | Stops a running server. You can use this for explicit shutdown, though resource cleanup often makes it unnecessary. |
+| **wsRecv** socket<br><code>WebSocket -> Effect WsError WsMessage</code> | Waits for the next WebSocket message from the client. |
+| **wsSend** socket message<br><code>WebSocket -> WsMessage -> Effect WsError Unit</code> | Sends a WebSocket message back to the client. |
 | **wsClose** socket<br><code>WebSocket -> Effect WsError Unit</code> | Closes the WebSocket connection. |
+
+## WebSocket handling
+
+To accept a WebSocket connection, return `Ws ...` instead of `Http ...` from your request handler:
+
+```aivi
+use aivi.net.httpServer
+
+echoSocket = socket => do Effect {
+  message <- wsRecv socket
+  wsSend socket message
+  wsClose socket
+}
+```
+
+This is a good pattern for chat-style features, live updates, or custom protocols that need a long-lived two-way connection.
+
+## Errors
+
+Both HTTP server operations and WebSocket operations use simple error records:
+
+```aivi
+HttpError = { message: Text }
+WsError   = { message: Text }
+```
+
+In a production application, it is common to log `message` and return a fallback response when a request handler cannot complete normally.

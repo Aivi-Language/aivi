@@ -3,12 +3,37 @@ title: AIVI Language Specification
 ---
 
 <p>
-    <img src="/aivi-logo.png" alt="AIVI Logo" width="256" height="auto">
+    <img src="/aivi-logo.png" alt="AIVI Logo" width="256">
 </p>
 
-# domain-driven & purely functional
+# AIVI language guide
 
-A high-integrity purely functional language  with on top of the Rust eco system.
+AIVI is a statically typed, purely functional language for software that has to handle real data carefully: APIs, data pipelines, automation, services, and user interfaces.
+
+If you can already program but terms like *algebraic data type*, *effect tracking*, or *domain-driven design* are not everyday tools for you, start here. These docs explain what AIVI is for, how its pieces fit together, and where to look when you want a concrete answer.
+
+## Start here
+
+- **New to AIVI?** Read [Language at a Glance](language-overview) for a quick tour of the syntax and the most important ideas.
+- **Want the bigger picture?** Read [Introduction](introduction) to understand the language model, what problems AIVI is designed to solve, and how it approaches effects, data, and boundaries.
+- **Need a precise rule?** Jump into the reference sections below.
+
+## What makes AIVI different?
+
+- **Immutable data by default** — you build new values instead of mutating old ones.
+- **Explicit effects** — code that talks to files, networks, or the system is marked in the type system.
+- **No `null` or unchecked exceptions** — use `Option` and `Result` so missing data and failures stay visible.
+- **Closed records and strong typing** — data shapes are explicit and checked.
+- **Domain-oriented syntax** — units, operators, and literals can carry meaning from the problem domain rather than being treated as raw numbers or strings.
+
+## How to use this specification
+
+Use the table of contents as a map:
+
+- **Language Reference** explains the core syntax and semantics.
+- **Standard Library** documents the built-in modules you use in everyday code.
+- **Tooling** covers the CLI, language server, and editor support.
+- **Internals** is useful when you want to understand how the compiler and backend are structured.
 
 ## Table of Contents
 
@@ -17,6 +42,19 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 ### Getting Started
 - [Language at a Glance](language-overview)
 - [Introduction](introduction)
+
+### Native Apps
+- [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps)
+- [App Architecture](stdlib/ui/app_architecture)
+#### Signals & Dataflow
+- [Reactive Signals](stdlib/ui/reactive_signals)
+- [Reactive Dataflow](stdlib/ui/reactive_dataflow)
+- [GTK & libadwaita Runtime](stdlib/ui/gtk4)
+- [Forms](stdlib/ui/forms)
+- [Layout](stdlib/ui/layout)
+- [Color](stdlib/ui/color)
+- [HTML Sigil](stdlib/ui/html)
+- [Virtual DOM](stdlib/ui/vdom)
 
 ### Language Reference
 #### Foundations
@@ -42,15 +80,13 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Effect Handlers](syntax/effect_handlers)
 - [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
-- [Machines](syntax/machines)
-- [Machine Runtime](syntax/machines_runtime)
 #### Modules & Interop
 - [Modules](syntax/modules)
 - [External Sources](syntax/external_sources)
 - [Schema-First Source Definitions](syntax/external_sources/schema_first)
 - [Source Composition](syntax/external_sources/composition)
 - [File Sources](syntax/external_sources/file)
-- [REST/HTTP Sources](syntax/external_sources/rest_http)
+- [REST / HTTP Sources](syntax/external_sources/rest_http)
 - [Environment Sources](syntax/external_sources/environment)
 - [IMAP Email Sources](syntax/external_sources/imap_email)
 - [Image Sources](syntax/external_sources/image)
@@ -63,9 +99,14 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [@debug](syntax/decorators/debug)
 - [@test](syntax/decorators/test)
 - [@no_prelude](syntax/decorators/no_prelude)
-#### Notation
-- [Operators & Sigils](syntax/operators)
-- [Grammar](syntax/grammar)
+#### Syntax Details
+- [Operators & Context](syntax/operators)
+- [Grammar Reference](syntax/grammar)
+
+### State Machines
+- [Overview](syntax/state_machines)
+- [Machine Syntax](syntax/machines)
+- [Machine Runtime](syntax/machines_runtime)
 
 ### Standard Library
 #### Core
@@ -90,6 +131,8 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Matrix](stdlib/math/matrix)
 - [Linear Algebra](stdlib/math/linear_algebra)
 - [Geometry](stdlib/math/geometry)
+- [Probability](stdlib/math/probability)
+- [Signal Processing](stdlib/math/signal)
 - [Graph](stdlib/math/graph)
 - [Tree](stdlib/math/tree)
 #### Time
@@ -119,19 +162,10 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Streams](stdlib/network/streams)
 #### Email
 - [Email](stdlib/system/email)
-#### UI
-- [App Architecture](stdlib/ui/app_architecture)
-- [Reactive Dataflow](stdlib/ui/reactive_dataflow)
-- [Forms](stdlib/ui/forms)
-- [GTK4](stdlib/ui/gtk4)
-- [Layout](stdlib/ui/layout)
-- [VDOM](stdlib/ui/vdom)
-- [HTML Sigil](stdlib/ui/html)
-- [Color](stdlib/ui/color)
 
 ### Testing
 - [Testing Module](stdlib/core/testing)
-- [@test & Mocks](syntax/decorators/test)
+- [Test Decorator & Mocking](syntax/decorators/test)
 
 ### Tooling
 - [CLI](tools/cli)

@@ -1,116 +1,101 @@
 # Concurrency Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.concurrency"} -->
-The `Concurrency` domain unlocks the power of doing multiple things at once.
+The `Concurrency` domain gives you the tools to run independent work at the same time without sharing mutable state.
 
-It provides **Fibers** (lightweight threads) and **Channels** for safe communication. Whether you're fetching two APIs in parallel or building a background worker, this domain gives you the high-level tools (`par`, `scope`) to write concurrent code that doesn't melt your brain.
+It provides lightweight tasks, channels for communication, and structured concurrency helpers so background work stays tied to the part of your program that created it.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.concurrency</div>
 
 <<< ../../snippets/from_md/stdlib/system/concurrency/concurrency_domain.aivi{aivi}
 
+## When to reach for it
+
+Use `aivi.concurrency` when a program needs to:
+
+- wait for several slow operations at once,
+- race two strategies and keep whichever finishes first,
+- communicate safely between tasks,
+- or stop child work automatically when a parent operation ends.
+
+If you are new to functional concurrency, the key idea is simple: instead of sharing variables between threads, start tasks and let them talk through typed channels.
+
 ## Types
 
 <<< ../../snippets/from_md/stdlib/system/concurrency/types.aivi{aivi}
 
-## Functions
+## Running work concurrently
 
-| Function | Explanation |
-| --- | --- |
-| **par** left right<br><code>Effect E A -> Effect E B -> Effect E (A, B)</code> | Runs both effects concurrently and returns both results; fails if either fails. |
-| **race** left right<br><code>Effect E A -> Effect E A -> Effect E A</code> | Runs two effects and resolves with the first completion; cancels the loser. |
-| **scope** run<br><code>(Scope -> Effect E A) -> Effect E A</code> | Creates a structured concurrency scope. The `Scope` handle is passed to `run` and can be used to spawn child tasks that are guaranteed to complete (or be cancelled) before `scope` returns. |
-| **spawn** effect<br><code>Effect Text A -> Effect Text (Task A)</code> | Starts an effect in the background and returns a `Task` handle with `join`, `cancel`, and `isCancelled`. |
-| **timeoutWith** ms timeoutError effect<br><code>Int -> E -> Effect E A -> Effect E A</code> | Races an effect with a timer and fails with `timeoutError` when the timer wins. |
-| **retry** attempts effect<br><code>Int -> Effect E A -> Effect E A</code> | Retries a failing effect up to `attempts` times. |
-| **sleep** millis<br><code>Int -> Effect Text Unit</code> | Suspends the current effect for `millis` milliseconds. |
-
-Code reference: `crates/aivi/src/stdlib/concurrency.rs` — `aivi.concurrency` exports `par`, `scope`, `make`, `send`, `recv`, `close`
-
-## Capability mapping (Phase 1 surface)
-
-- `sleep` → `clock.sleep`
-- wall-clock reads such as `Instant.now` (see `aivi.chronos.instant`) → `clock.now`
-- `scope`, `spawn`, `race`, `select`, explicit task cancellation → `cancellation.propagate`
-- `timeoutWith` → `clock.sleep` + `cancellation.propagate`
-- ordinary resource cleanup remains cancellation-protected without requiring an explicit `cancellation.mask` clause
-
-## GTK app architecture alignment
-
-The blessed GTK command/subscription model is intentionally layered on this concurrency domain rather than inventing a UI-only scheduler:
-
-- `Command.startTask` is a structured child task hosted by `gtkApp`,
-- `Command.cancel` and subscription replacement/removal reuse ordinary task cancellation,
-- `Subscription.source` is the declarative UI wrapper over a `Resource` that yields a `Receiver`,
-- typed progress reporting is modeled by sending app-defined values over a channel and mapping them back into `Msg`.
-
-This means the same guarantees apply in UI code:
-
-- cancellation is cooperative at effect bind points,
-- finalizers still run on task/subscription shutdown,
-- progress ordering is preserved per producer channel,
-- shutting down the host scope cancels all child work.
+| Function | What it does | When it helps |
+| --- | --- | --- |
+| **par** left right<br><code>Effect E A -> Effect E B -> Effect E (A, B)</code> | Runs both effects at the same time and returns both results. If either side fails, the combined effect fails. | Fetching two independent resources in parallel. |
+| **race** left right<br><code>Effect E A -> Effect E A -> Effect E A</code> | Starts both effects and keeps the one that completes first. The other one is cancelled. | Trying two mirrors or fallback services and taking the fastest response. |
+| **scope** run<br><code>(Scope -> Effect E A) -> Effect E A</code> | Creates a structured scope for child tasks. Work started inside the scope is guaranteed to finish or be cancelled before the scope returns. | Any operation that starts background work you do not want to leak. |
+| **spawn** effect<br><code>Effect Text A -> Effect Text (Task A)</code> | Starts an effect in the background and gives you a `Task` handle that can be joined or cancelled. | Long-running work such as polling, indexing, or background imports. |
+| **timeoutWith** ms timeoutError effect<br><code>Int -> E -> Effect E A -> Effect E A</code> | Runs `effect` with a time limit and fails with `timeoutError` if the timer wins. | Network calls or external processes that should not hang forever. |
+| **retry** attempts effect<br><code>Int -> Effect E A -> Effect E A</code> | Re-runs a failing effect up to `attempts` times. | Temporary failures such as flaky I/O. |
+| **sleep** millis<br><code>Int -> Effect Text Unit</code> | Pauses the current effect for a number of milliseconds. | Backoff, scheduling, and simple polling loops. |
 
 ## Channels
 
-Channels provide a mechanism for synchronization and communication between concurrent fibers.
+Channels let tasks pass values to each other safely.
+One side sends values, the other side receives them, and the type system keeps both sides aligned.
 
-### `make`
+### Creating channels
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
-| **make** sample<br><code>A -> Effect E (Sender A, Receiver A)</code> | Creates a new channel and returns `(Sender, Receiver)`. |
-| **makeBounded** capacity<br><code>Int -> Effect E (Sender A, Receiver A)</code> | Creates a bounded channel with backpressure when the buffer is full. |
+| **make** sample<br><code>A -> Effect E (Sender A, Receiver A)</code> | Creates a new channel and returns a sender/receiver pair. |
+| **makeBounded** capacity<br><code>Int -> Effect E (Sender A, Receiver A)</code> | Creates a channel with a bounded buffer. When the buffer is full, sends wait until space becomes available. |
 
-### `send`
+### Sending and receiving
 
-| Function | Explanation |
+| Function | What it does |
 | --- | --- |
-| **send** sender value<br><code>Sender A -> A -> Effect E Unit</code> | Sends `value` to the channel; may block if buffered and full or no receiver is ready. |
+| **send** sender value<br><code>Sender A -> A -> Effect E Unit</code> | Sends `value` into the channel. |
+| **recv** receiver<br><code>Receiver A -> Effect E (Result ChannelError A)</code> | Waits for the next value. Returns `Ok value`, or `Err Closed` after the channel is closed and drained. |
+| **close** sender<br><code>Sender A -> Effect E Unit</code> | Closes the sending side so receivers can finish cleanly. |
 
-### `recv`
+### Consuming a stream of values
 
-| Function | Explanation |
-| --- | --- |
-| **recv** receiver<br><code>Receiver A -> Effect E (Result ChannelError A)</code> | Waits for the next value; returns `Ok value` or `Err Closed`. |
+| Function | What it does | Why you might prefer it |
+| --- | --- | --- |
+| **fold** init fn receiver<br><code>S -> (S -> A -> Effect E S) -> Receiver A -> Effect E S</code> | Reads values until the channel closes, threading state through each step, and returns the final state. | Good for reducers, aggregations, and event loops. |
+| **forEach** receiver fn<br><code>Receiver A -> (A -> Effect E Unit) -> Effect E Unit</code> | Reads every value and runs an effectful action on it until the channel closes. | Good for consumers that only perform side effects. |
 
-### `close`
+## Structured concurrency in practice
 
-| Function | Explanation |
-| --- | --- |
-| **close** sender<br><code>Sender A -> Effect E Unit</code> | Closes the channel from the sender side; receivers observe `Err Closed`. |
+Structured concurrency means a child task belongs to the scope that created it.
+That gives you predictable cleanup:
 
-### `fold`
+- when the scope finishes, its child tasks are not left running accidentally,
+- if a child fails, the surrounding operation can fail in a controlled way,
+- and cleanup code still runs when work is cancelled.
 
-| Function | Explanation |
-| --- | --- |
-| **fold** init fn receiver<br><code>S -> (S -> A -> Effect E S) -> Receiver A -> Effect E S</code> | Consumes values from the channel, threading state through each step. Returns the final state when the channel closes. Eliminates the need for manual `recv` + `Err`/`Ok` matching + `recurse`. |
+Use `scope` when a task should live only as long as the surrounding operation.
+Use explicit detachment only when a task truly must outlive its creator.
 
-### `forEach`
-
-| Function | Explanation |
-| --- | --- |
-| **forEach** receiver fn<br><code>Receiver A -> (A -> Effect E Unit) -> Effect E Unit</code> | Consumes all values from the channel, running an effectful action on each. Returns `Unit` when the channel closes. |
-
-## Structural Concurrency Model
-
-Structural concurrency means: concurrent tasks are children of the scope that spawned them. When the scope ends, all children have either completed or been cancelled (with cleanup).
-
-- `scope` bounds task lifetime to a lexical scope.
-- Tasks spawned with `spawn` inside a scope are joined before `scope` returns.
-- Errors propagate: if any child fails, the scope fails.
-
-### Explicit Detachment
-
-When a task must outlive its creator (e.g., a background daemon), it must be explicitly detached from the structural tree.
+### Explicit detachment
 
 <<< ../../snippets/from_md/runtime/concurrency/explicit_detachment.aivi{aivi}
 
-## Non-Deterministic Selection (`select`)
+## Waiting on whichever event happens first
 
-Selecting across multiple concurrent operations is essential for channel-based code.
+Some workflows need to react to the first available result, message, or timeout.
+Selection helpers model that pattern directly.
 
 <<< ../../snippets/from_md/runtime/concurrency/non_deterministic_selection_select.aivi{aivi}
 
-The first operation to succeed is chosen; all other pending operations are cancelled.
+The first successful operation wins, and the remaining pending work is cancelled.
+
+## Capabilities
+
+- `sleep` uses clock access.
+- Task creation, racing, cancellation, and timeouts rely on concurrency and cancellation support in the runtime.
+- Resource cleanup still runs when a task is cancelled.
+
+## How this fits GTK apps
+
+The same concurrency model is used by the GTK app architecture.
+Commands and subscriptions are built on ordinary tasks and channels, which means UI code gets the same guarantees around cancellation, ordering, and cleanup as non-UI code.

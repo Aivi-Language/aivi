@@ -4,7 +4,14 @@
 Email integration is available through IMAP as a typed source for one-shot mailbox reads, and as a session-based resource for full IMAP interaction including OAuth2, message management, and IDLE push notifications.
 <!-- /quick-info -->
 
-## APIs (v0.1)
+IMAP support comes in two styles:
+
+1. a **one-shot source** when you want to load messages as typed data,
+2. a **session API** when you need a longer conversation with the mailbox.
+
+Use the one-shot source for simple inbox ingestion. Use the session API when you need to select mailboxes, manage flags, move messages, or listen for changes with IDLE.
+
+## APIs
 
 ### One-shot source
 
@@ -33,15 +40,15 @@ Email integration is available through IMAP as a typed source for one-shot mailb
 
 ## Authentication
 
-Both password and OAuth2 (XOAUTH2) authentication are supported via the `EmailAuth` type:
+Both password and OAuth2 (XOAUTH2) authentication are supported through `EmailAuth`:
 
 ```aivi
 EmailAuth = Password Text | OAuth2 Text
 ```
 
-OAuth2 uses the XOAUTH2 SASL mechanism, compatible with Gmail, Outlook, and other providers that support it.
+OAuth2 uses the XOAUTH2 SASL mechanism, which is commonly supported by providers such as Gmail and Outlook.
 
-## Example — One-shot
+## Example — one-shot mailbox read
 
 ```aivi
 InboxMessage = {
@@ -58,9 +65,9 @@ do Effect {
     host: "imap.gmail.com"
     user: "user@gmail.com"
     auth: OAuth2 myToken
-    mailbox: Some "INBOX"
-    filter: Some "UNSEEN"
-    limit: Some 50
+    mailbox: Some "INBOX"   -- read from the inbox
+    filter: Some "UNSEEN"   -- only unread messages
+    limit: Some 50          -- cap the batch size
     port: None
     starttls: None
   })
@@ -68,7 +75,9 @@ do Effect {
 }
 ```
 
-## Example — Session with IDLE
+This is a good fit for batch-style jobs such as importing unread support messages or extracting invoices from a mailbox.
+
+## Example — session with IDLE
 
 ```aivi
 use aivi.email
@@ -88,7 +97,7 @@ processInbox = token => resource {
 }
   |> withResource (session => do Effect {
     _ <- imapSelect "INBOX" session
-    result <- imapIdle 300 session
+    result <- imapIdle 300 session         -- wait for mailbox changes for up to 300 seconds
     result match
       | MailboxChanged => do Effect {
           uids <- imapSearch "UNSEEN" session
@@ -99,3 +108,11 @@ processInbox = token => resource {
       | TimedOut => pure []
   })
 ```
+
+Use the session API when you need:
+
+- mailbox lifecycle control,
+- explicit searches and fetches,
+- flag management,
+- append, copy, move, or delete operations,
+- push-style workflows through `imapIdle`.

@@ -1,9 +1,9 @@
 # URL Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.url"} -->
-The `Url` domain handles **Uniform Resource Locators** without the string-mashing headaches.
+The `Url` domain treats web addresses as structured values instead of plain text.
 
-A URL isn't just text; it's a structured address with protocols, hosts, and queries. Concatenating strings to build URLs leads to bugs (missing `/`, double `?`, unescaped spaces). This domain treats URLs as safe, structured records, letting you modify protocols or add query parameters without breaking the address.
+This helps you parse, inspect, and render URLs without relying on fragile string concatenation.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.url<span class="domain-badge">domain</span></div>
@@ -20,12 +20,24 @@ A URL isn't just text; it's a structured address with protocols, hosts, and quer
 
 <<< ../../snippets/from_md/stdlib/system/url/domain_definition.aivi{aivi}
 
-## Helper Functions
+## Why use structured URLs
 
-| Function | Explanation |
+URLs contain several parts—scheme, host, path, query, and sometimes a fragment.
+Building them by hand as text often leads to small mistakes such as double slashes, missing separators, or unescaped values.
+Working with a structured `Url` value makes those operations clearer.
+
+## Helper functions
+
+| Function | What it does |
 | --- | --- |
-| **parse** text<br><code>Text -> Result UrlError Url</code> | Converts a URL string into a structured `Url`. |
-| **toString** url<br><code>Url -> Text</code> | Renders a `Url` back into its string form. |
+| **parse** text<br><code>Text -> Result UrlError Url</code> | Parses a URL string into a structured `Url` value. |
+| **toString** url<br><code>Url -> Text</code> | Renders a `Url` value back into its string form. |
+
+## Common patterns
+
+- Parse incoming URLs before you inspect or modify them.
+- Keep values as `Url` while your program is transforming them.
+- Render with `toString` only when you need to display or send the final address.
 
 ## Usage Examples
 

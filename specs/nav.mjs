@@ -8,6 +8,28 @@ export const sidebar = [
     ]
   },
   {
+    text: 'Native Apps',
+    collapsed: false,
+    items: [
+      { text: 'GTK & libadwaita Apps', link: '/stdlib/ui/native_gtk_apps' },
+      { text: 'App Architecture', link: '/stdlib/ui/app_architecture' },
+      {
+        text: 'Signals & Dataflow',
+        collapsed: false,
+        items: [
+          { text: 'Reactive Signals', link: '/stdlib/ui/reactive_signals' },
+          { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' }
+        ]
+      },
+      { text: 'GTK & libadwaita Runtime', link: '/stdlib/ui/gtk4' },
+      { text: 'Forms', link: '/stdlib/ui/forms' },
+      { text: 'Layout', link: '/stdlib/ui/layout' },
+      { text: 'Color', link: '/stdlib/ui/color' },
+      { text: 'HTML Sigil', link: '/stdlib/ui/html' },
+      { text: 'Virtual DOM', link: '/stdlib/ui/vdom' }
+    ]
+  },
+  {
     text: 'Language Reference',
     collapsed: true,
     items: [
@@ -51,9 +73,7 @@ export const sidebar = [
           { text: 'Capabilities', link: '/syntax/capabilities' },
           { text: 'Effect Handlers', link: '/syntax/effect_handlers' },
           { text: 'do Notation', link: '/syntax/do_notation' },
-          { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Machines', link: '/syntax/machines' },
-          { text: 'Machine Runtime', link: '/syntax/machines_runtime' }
+          { text: 'Resources', link: '/syntax/resources' }
         ]
       },
       {
@@ -65,7 +85,7 @@ export const sidebar = [
           { text: 'Schema-First Source Definitions', link: '/syntax/external_sources/schema_first' },
           { text: 'Source Composition', link: '/syntax/external_sources/composition' },
           { text: 'File Sources', link: '/syntax/external_sources/file' },
-          { text: 'REST/HTTP Sources', link: '/syntax/external_sources/rest_http' },
+          { text: 'REST / HTTP Sources', link: '/syntax/external_sources/rest_http' },
           { text: 'Environment Sources', link: '/syntax/external_sources/environment' },
           { text: 'IMAP Email Sources', link: '/syntax/external_sources/imap_email' },
           { text: 'Image Sources', link: '/syntax/external_sources/image' },
@@ -86,13 +106,22 @@ export const sidebar = [
         ]
       },
       {
-        text: 'Notation',
+        text: 'Syntax Details',
         collapsed: true,
         items: [
-          { text: 'Operators & Sigils', link: '/syntax/operators' },
-          { text: 'Grammar', link: '/syntax/grammar' }
+          { text: 'Operators & Context', link: '/syntax/operators' },
+          { text: 'Grammar Reference', link: '/syntax/grammar' }
         ]
       }
+    ]
+  },
+  {
+    text: 'State Machines',
+    collapsed: true,
+    items: [
+      { text: 'Overview', link: '/syntax/state_machines' },
+      { text: 'Machine Syntax', link: '/syntax/machines' },
+      { text: 'Machine Runtime', link: '/syntax/machines_runtime' }
     ]
   },
   {
@@ -134,6 +163,8 @@ export const sidebar = [
           { text: 'Matrix', link: '/stdlib/math/matrix' },
           { text: 'Linear Algebra', link: '/stdlib/math/linear_algebra' },
           { text: 'Geometry', link: '/stdlib/math/geometry' },
+          { text: 'Probability', link: '/stdlib/math/probability' },
+          { text: 'Signal Processing', link: '/stdlib/math/signal' },
           { text: 'Graph', link: '/stdlib/math/graph' },
           { text: 'Tree', link: '/stdlib/math/tree' }
         ]
@@ -194,20 +225,6 @@ export const sidebar = [
         items: [
           { text: 'Email', link: '/stdlib/system/email' }
         ]
-      },
-        {
-          text: 'UI',
-          collapsed: true,
-          items: [
-            { text: 'App Architecture', link: '/stdlib/ui/app_architecture' },
-            { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' },
-            { text: 'Forms', link: '/stdlib/ui/forms' },
-            { text: 'GTK4', link: '/stdlib/ui/gtk4' },
-            { text: 'Layout', link: '/stdlib/ui/layout' },
-            { text: 'VDOM', link: '/stdlib/ui/vdom' },
-            { text: 'HTML Sigil', link: '/stdlib/ui/html' },
-            { text: 'Color', link: '/stdlib/ui/color' }
-        ]
       }
     ]
   },
@@ -216,7 +233,7 @@ export const sidebar = [
     collapsed: true,
     items: [
       { text: 'Testing Module', link: '/stdlib/core/testing' },
-      { text: '@test & Mocks', link: '/syntax/decorators/test' }
+      { text: 'Test Decorator & Mocking', link: '/syntax/decorators/test' }
     ]
   },
   {

@@ -1,32 +1,33 @@
 # Generic Monadic `do` Blocks
 
-> **Status**: Implemented (v0.1)   `do M { ... }` works for any type constructor with a `Chain` instance (including `Option`, `Result`, and `List`). Blocks are desugared to nested `chain`/lambda calls during HIR lowering. Native codegen is stubbed.  
-> **Depends on**: Type classes ([§ 3.5](types/classes_and_hkts.md)), `Monad` hierarchy ([aivi.logic](../stdlib/core/logic.md)), effects ([§ 9](effects.md)), instance resolution (compiler).
+Most everyday AIVI code uses `do Effect { ... }` for side effects. This page covers the more general form: `do M { ... }`, which works with any type constructor `M` that has the right type class instances.
+
+If you do not spend much time with FP terminology, you can read “monadic” here as “a type that supports chaining one step into the next”. `Option`, `Result`, and `List` are common examples.
 
 ## Overview
 
-`do M { ... }` generalizes the existing `do Effect { ... }` block to work with **any type constructor `M` that has a `Monad` instance**. The `<-` and `=` syntax remains identical; the compiler resolves `chain`/`of` from the `Monad` dictionary for `M` instead of hardcoding `Effect` primitives.
+`do M { ... }` reuses the convenient block syntax of `do Effect { ... }`, but the compiler resolves `chain` and `of` from the `Monad`-style type class instances for `M` instead of hardcoding effect behavior.
 
 ### Design Principles
 
-1. **`do Effect { ... }` remains the primary form**   it is the most common and retains its special features (`or` fallback, `resource` acquisition, `when`/`unless`/`given`, `loop`/`recurse`, `on`).
-2. **`generate { ... }` stays separate**   generators have fundamentally different semantics (`yield`, guards, pull-based), and are not monadic in the standard sense.
-3. **Generic `do M` supports only the common monadic subset**   `<-` (bind), `=` (let), final expression. Effect-specific statements are not available in generic blocks.
-4. **Instance-driven**   the compiler uses the existing class/instance resolution to find `Chain M` (for `chain`) and `Applicative M` (for `of`).
+1. **`do Effect { ... }` is the everyday form.** It supports the extra statements that make sense for typed effects, such as `or` fallback, resource acquisition, `when` / `unless`, `given`, `loop` / `recurse`, and `on`.
+2. **`generate { ... }` stays separate.** Generators have pull-based sequence semantics and `yield`; they are not described by the same surface rules.
+3. **Generic `do M` uses the common subset.** It supports `<-` for binding, `=` for pure local names, expression sequencing, and a final expression.
+4. **Instances drive the meaning.** The compiler finds `Chain M` and `Applicative M` instances to determine how the block chains computations and produces values.
 
 ## Syntax
 
 ### Grammar extension
 
-The existing grammar rule:
+The parser rule is already broad enough:
 
 ```text
 DoBlock := "do" UpperIdent "{" { DoStmt } "}"
 ```
 
-is **unchanged**   the parser already accepts any `UpperIdent` after `do`. The change is semantic: the type checker and desugaring must handle the monad name generically.
+The parser accepts any `UpperIdent` after `do`. The difference is semantic: the type checker and desugaring treat `Effect` specially and treat every other `M` through instances.
 
-### Statement subset by monad
+### Statement subset by block kind
 
 | Statement             | `do Effect` | `do M` (generic) | `generate`          |
 |:--------------------- |:-----------:|:----------------:|:-------------------:|
@@ -35,15 +36,15 @@ is **unchanged**   the parser already accepts any `UpperIdent` after `do`. The c
 | `expr` (sequencing)   | yes         | yes              | no                  |
 | `yield expr`          | no          | no               | yes                 |
 | `x -> pred` (guard)   | no          | no               | yes                 |
-| `or` fallback         | yes         | **no**           | no                  |
-| `when cond <- eff`    | yes         | **no**           | no                  |
-| `unless cond <- eff`  | yes         | **no**           | no                  |
-| `given cond or expr`  | yes         | **no**           | no                  |
-| `on Event => handler` | yes         | **no**           | no                  |
-| `loop`/`recurse`      | yes         | **no** (v1)      | yes                 |
-| resource `<-`         | yes         | **no**           | no                  |
+| `or` fallback         | yes         | no               | no                  |
+| `when cond <- eff`    | yes         | no               | no                  |
+| `unless cond <- eff`  | yes         | no               | no                  |
+| `given cond or expr`  | yes         | no               | no                  |
+| `on Event => handler` | yes         | no               | no                  |
+| `loop`/`recurse`      | yes         | no               | yes                 |
+| resource `<-`         | yes         | no               | no                  |
 
-Rationale: `or`, `when`/`unless`/`given`, `on`, and resource acquisition are tightly coupled to the `Effect E A` type (error handling, cancellation, cleanup). Generic monadic blocks use only the universal monadic operations.
+Those missing features are effect-specific because they depend on typed errors, cancellation, or cleanup.
 
 ## Desugaring
 
@@ -61,7 +62,7 @@ desugars to:
 chain (λx. ⟦do M { body }⟧) ⟦expr⟧
 ```
 
-(using `chain : (A -> M B) -> M A -> M B` from `Chain M`)
+using `chain : (A -> M B) -> M A -> M B` from `Chain M`.
 
 #### Pure let-binding
 
@@ -93,40 +94,43 @@ desugars to `⟦expr⟧`. It must have type `M A`.
 
 <<< ../snippets/from_md/syntax/do_notation/empty_block.aivi{aivi}
 
-desugars to `of Unit` (using `of : A -> M A` from `Applicative M`).
+desugars to `of Unit` using `of : A -> M A` from `Applicative M`.
 
 ### `do Effect { ... }` as a specialization
 
-`do Effect { ... }` becomes sugar for `do (Effect E) { ... }` **plus** the effect-specific extensions (fallback, guards, resources, etc). In terms of desugaring:
+`do Effect { ... }` follows the same overall idea, but with the effect-specific extensions described in [Effects § 9](effects.md).
+
+In desugaring terms:
 
 - `chain` for `Effect E` is `bind : Effect E A -> (A -> Effect E B) -> Effect E B`
 - `of` for `Effect E` is `pure : A -> Effect E A`
-- The additional statements (`or`, `when`, `given`, `on`, `loop`, resource `<-`) are desugared as specified in [Effects § 9](effects.md).
+- statements such as `or`, `when`, `given`, `on`, `loop`, and resource acquisition use the extra rules from the effects and resources specifications
 
-The compiler detects `do Effect` specifically (by name) to enable the extended statement set. All other `do M` blocks get the generic subset only.
+The compiler recognizes `do Effect` specifically to enable that extended statement set. All other `do M` blocks use the generic subset only.
 
 ## Type Checking
 
 Generic `do M` blocks are checked against in-scope type class instances:
 
-- `Chain M` provides `chain` for `<-` binds and sequencing.
-- `Applicative M` provides `of` for empty blocks / unit returns.
-- For `M ≠ Effect`, effect-only statements (`or`, `when`, `unless`, `given`, `on`, resource binds, `loop`/`recurse`) are rejected.
+- `Chain M` provides `chain` for `<-` binds and sequencing
+- `Applicative M` provides `of` for empty blocks and value injection
+- for `M ≠ Effect`, effect-only statements (`or`, `when`, `unless`, `given`, `on`, resource binds, `loop` / `recurse`) are rejected
 
-When no suitable instance is found, compilation fails with an instance-resolution diagnostic for the target monad constructor.
+When no suitable instance is found, compilation fails with an instance-resolution diagnostic for the target constructor.
 
 ## Runtime Behavior
 
-`do M { ... }` lowers to nested `chain`/lambda calls, with `of` for empty blocks.
-`do Effect { ... }` keeps the effect-specific statement set and runtime machinery described in [Effects § 9](effects.md).
+`do M { ... }` lowers to nested `chain` / lambda calls, with `of` for empty blocks.
 
-## Common v0.1 Uses
+`do Effect { ... }` keeps the effect-specific runtime machinery described in [Effects § 9](effects.md).
 
-| Type         | `do` block use case                                  |
-|:------------ |:---------------------------------------------------- |
-| `Option A`   | Short-circuit chaining when any step returns `None`. |
-| `Result E A` | Pure error chaining without effects.                 |
-| `List A`     | Non-deterministic computation / cartesian products.  |
+## Common Uses
+
+| Type         | `do` block use case |
+|:------------ |:-------------------- |
+| `Option A`   | Stop early when any step returns `None`. |
+| `Result E A` | Chain computations that may fail, without using effects. |
+| `List A`     | Describe non-deterministic combinations such as cartesian products. |
 
 ## References
 

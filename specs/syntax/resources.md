@@ -1,22 +1,21 @@
 # Resource Management
 
-AIVI provides a dedicated `Resource` type to manage lifecycles (setup and teardown) in a declarative way. This ensures that resources like files, sockets, and database connections are always reliably released, even in the event of errors or task cancellation.
-
+AIVI provides a dedicated `Resource` type for values that need reliable setup and teardown. Use it for things like files, sockets, database connections, or any other handle that must be released even when work fails or gets cancelled.
 
 ## 15.1 The `Resource E A` Type
 
-`Resource E A` is a value that describes how to **acquire** a handle of type `A`, **use** it, and **release** it. Like `Effect E A`, it carries an error type `E` representing what can go wrong during acquisition.
+`Resource E A` is a value that describes how to **acquire** a handle of type `A`, **use** it, and **release** it.
 
 ```text
 Resource E A
 ```
 
-- `E`   the error type for acquisition failures (e.g. `FileError`, `SocketError`).
-- `A`   the type of the acquired handle (e.g. `Handle`, `Socket`).
+- `E` is the error type for acquisition failures, such as `FileError` or `SocketError`
+- `A` is the type of the acquired handle, such as `Handle` or `Socket`
 
-A `Resource` is **not** a handle itself   it is a *recipe* for obtaining one. The handle only exists within the scope where the resource is acquired.
+A `Resource` is **not** a handle itself. It is a recipe for obtaining one. The handle exists only within the scope where the resource is acquired.
 
-### Capability requirements (Phase 1 surface)
+### Capability requirements
 
 `Resource` carries the same optional capability clause as `Effect`:
 
@@ -24,7 +23,7 @@ A `Resource` is **not** a handle itself   it is a *recipe* for obtaining one. Th
 openStore : DbConfig -> Resource DbError DbConn with { db.connect }
 ```
 
-The clause covers acquisition and cleanup as well as any helper effects used inside the resource block. Resource safety itself does not need extra user syntax: cleanup remains cancellation-protected automatically. See [Capabilities](capabilities.md) for the shared vocabulary.
+The clause covers acquisition, cleanup, and any helper effects used inside the resource block. Resource safety itself does not need extra user syntax: cleanup remains cancellation-protected automatically. See [Capabilities](capabilities.md) for the shared vocabulary.
 
 Scoped interpreters use the same lexical form as capability narrowing:
 
@@ -39,61 +38,60 @@ See [Effect Handlers](effect_handlers.md) for the binding rules and precedence m
 
 ## 15.2 Defining Resources
 
-Resources are defined using `resource` blocks. The syntax is analogous to generators: you perform setup, `yield` the resource, and then perform cleanup.
+Define a resource with a `resource` block. The shape is simple: perform setup, `yield` the resource, then write cleanup after `yield`.
 
 The code after `yield` is guaranteed to run when the resource goes out of scope.
 
 <<< ../snippets/from_md/syntax/resources/defining_resources.aivi{aivi}
 
-This declarative approach hides the complexity of error handling and cancellation checks.
+Think of `yield` as the boundary between “make the handle available” and “clean it up later”.
 
 ### Rules
 
-- A `resource` block must contain exactly **one** `yield` statement. This separates the acquisition phase (before `yield`) from the cleanup phase (after `yield`).
-- If `yield` is never reached (e.g. acquisition fails with an error), no cleanup code runs   there is nothing to clean up.
-- The cleanup phase runs as a finalizer and **may perform effects** (e.g. closing a file handle, flushing a buffer). Cleanup effects use the same error type `E`; if cleanup itself fails, the error is logged but does not override the original error.
-
+- a `resource` block must contain exactly **one** `yield` statement
+- if `yield` is never reached, such as when acquisition fails, no cleanup runs because there is nothing to release
+- the cleanup phase runs as a finalizer and **may perform effects**
+- cleanup effects use the same error type `E`; if cleanup itself fails, the error is logged but does not override the original error
 
 ## 15.3 Using Resources
 
-Inside a `do Effect { ... }` block, you use the `<-` binder to acquire a resource. This scopes the resource handle to the enclosing block.
+Inside a `do Effect { ... }` block, use `<-` to acquire a resource. This scopes the handle to the enclosing block.
 
 <<< ../snippets/from_md/syntax/resources/using_resources.aivi{aivi}
 
-When the `do Effect { ... }` block exits   whether by normal completion, an error in `E`, or **cancellation**   all acquired resources are released in reverse order.
+When the surrounding `do Effect { ... }` block exits, whether by normal completion, an error in `E`, or cancellation, all acquired resources are released in reverse order.
 
 ### Multiple Resources
 
-You can acquire multiple resources in sequence. They will be released in reverse order of acquisition (LIFO).
+You can acquire multiple resources in sequence. They are released in reverse order of acquisition (LIFO).
 
 <<< ../snippets/from_md/syntax/resources/multiple_resources.aivi{aivi}
 
-
 ## 15.4 Error Semantics
 
-- If **acquisition** fails (the code before `yield` raises `E`), the resource is never yielded and no cleanup runs.
-- If **use** fails (the code after `<-` acquisition raises an error), cleanup runs normally. The original error propagates after cleanup completes.
-- If **cleanup** fails, the cleanup error is suppressed (logged to diagnostics). The original error (if any) takes priority.
+- if **acquisition** fails, the resource is never yielded and no cleanup runs
+- if **use** fails after acquisition, cleanup still runs and the original error propagates afterward
+- if **cleanup** fails, the cleanup error is suppressed to diagnostics and the original error, if any, takes priority
 
-All guarantees hold regardless of whether the failure is a typed error (`E`) or a cancellation signal.
-
+All of these guarantees hold for typed errors and for cancellation.
 
 ## 15.5 Cancellation
 
 Resources interact with the cancellation system (see [Concurrency](/stdlib/system/concurrency)):
 
-- Cancellation is checked at `<-` bind points. If a task is cancelled before a resource is acquired, acquisition does not run.
-- If cancellation arrives **during use** of an acquired resource, cleanup still runs. The resource block's finalizer is registered at acquisition time and cannot be skipped.
-- Cleanup code itself runs in a **cancellation-protected** context   it will not be interrupted by a second cancellation signal.
-- This automatic masking is structural. Authors do **not** add `cancellation.mask` merely to obtain ordinary finalizer guarantees; explicit cancellation-control APIs are the place where `cancellation.*` appears in public signatures.
+- cancellation is checked at `<-` bind points; if a task is cancelled before acquisition, acquisition does not run
+- if cancellation arrives **during use** of an acquired resource, cleanup still runs
+- cleanup code itself runs in a **cancellation-protected** context and is not interrupted by a second cancellation signal
+- this masking is structural, so ordinary finalizer safety does not require explicit `cancellation.mask`
 
 ## 15.6 Composability and Nesting
 
 Resources compose naturally:
 
-- A `resource` block can acquire other resources internally. Inner resources are released before the outer resource's cleanup runs.
-- Resources can be returned from functions and passed as values   they are inert descriptions until acquired with `<-`.
-- You can build higher-level resources from lower-level ones by combining acquisition and cleanup steps.
+- a `resource` block can acquire other resources internally
+- inner resources are released before the outer resource's cleanup runs
+- resources can be returned from functions and passed as values; they stay inert until acquired with `<-`
+- higher-level resources can be built by combining lower-level acquisition and cleanup steps
 
 ## 15.7 Handlers and cleanup scope
 
