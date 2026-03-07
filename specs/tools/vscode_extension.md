@@ -1,11 +1,11 @@
 # VSCode Extension
 
-The **AIVI Language Support** extension turns Visual Studio Code into an AIVI-aware editor. It combines TextMate syntax highlighting, semantic tokens, formatter integration, test commands, and the AIVI language server.
+The **AIVI Language Support** extension turns Visual Studio Code into an AIVI-aware editor. It combines grammar-based syntax highlighting, language-aware semantic tokens, formatter integration, test commands, and the AIVI language server.
 
 ## What the extension adds
 
-- **Syntax highlighting** for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting inside tagged raw-text sigils such as `` ~`css ...` ``.
-- **Semantic highlighting** with custom token types for arrows, pipes, brackets, dots, units, sigils, and dotted-path segments.
+- **Syntax highlighting** for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting inside tagged raw-text sigils such as `` ~`css color: red;` ``.
+- **Semantic highlighting** with custom token types for arrows, pipes, brackets, dots, units, sigils, and dotted-path segments. This is extra language-aware coloring on top of the grammar-based highlighting.
 - **Language server integration** so features such as hover, rename, go-to-definition, diagnostics, and completion work automatically.
 - **Formatting** through the built-in formatter (`Shift + Alt + F` or Format on Save).
 - **Test commands** for running AIVI `@test` definitions from the editor.

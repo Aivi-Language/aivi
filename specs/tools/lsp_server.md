@@ -2,7 +2,7 @@
 
 The AIVI Language Server (`aivi-lsp`) implements the Language Server Protocol so editors such as VS Code, Neovim, Zed, and other LSP clients can understand AIVI code.
 
-In practice, the language server is what powers “editor intelligence”: navigation, hover information, diagnostics, formatting, and code-aware completion.
+In practice, the language server is what powers “editor intelligence”: navigation, hover information, diagnostics, formatting, and code-aware completion. If you mainly want the user-facing picture, the first half of this page is enough; later sections are more contributor-facing and focus on cache ownership and incremental rechecking.
 
 ## Start here
 
@@ -30,7 +30,7 @@ In a typical edit loop, the flow is:
 3. the server rechecks the necessary slice of the workspace
 4. the editor updates squiggles, hovers, completions, and navigation data
 
-When this page mentions a **workspace snapshot**, it means that full per-request view of the workspace: open editor buffers, on-disk files, and active settings taken together.
+When this page mentions a **workspace snapshot**, it means the full per-request view of the workspace: open editor buffers, on-disk files, and active settings taken together.
 
 ## What the server provides
 
@@ -84,7 +84,7 @@ One concrete example:
 - if you change a public type or exported function in `Module A`, importing modules also need to be rechecked
 - if you have unsaved changes in the editor, those changes belong only to the current LSP session and must not leak into persistent build caches
 
-The full ownership, invalidation, and publish rules are defined in [Incremental Compilation & Workspace Checking](incremental_compilation.md).
+The full ownership, invalidation, and publish rules are defined in [Incremental Compilation & Workspace Checking](incremental_compilation.md), which explains how the server reuses cached work without letting unsaved edits leak into persistent build state.
 
 ## Configuration
 

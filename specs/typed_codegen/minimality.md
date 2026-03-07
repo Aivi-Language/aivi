@@ -2,6 +2,15 @@
 
 AIVI has a rich surface language, but the compiler lowers it to a much smaller core. This is useful for both implementers and advanced users: once lowering is complete, the backend only needs to understand a compact set of building blocks.
 
+This page is mainly for contributors and curious advanced readers. The point is not that AIVI source code is tiny; it is that many different source features end up using the same small implementation core.
+
+A few terms used on this page:
+
+- **λ** means an anonymous function
+- **currying** means representing a multi-argument function as a chain of one-argument functions
+- **`let rec`** means a recursive binding in the core language
+- **HKT** means a higher-kinded type, a type constructor that itself takes type parameters
+
 ## Surface feature → kernel building block
 
 | Surface feature | Kernel primitive |
@@ -28,9 +37,9 @@ In other words, the surface language is expressive, but the core it compiles to 
 
 ## The kernel in one sentence
 
-AIVI's kernel is λ-calculus with algebraic data types, closed records with update, universal types, fold, and an opaque effect monad.
+AIVI's kernel is lambda calculus (a tiny mathematical model of functions) with algebraic data types, closed records with update, universal types, fold, and an opaque effect monad.
 
-That means features that look quite different in source code—`do Effect`, `resource`, `generate`, domains, or predicates—end up as elaborations of the same small set of primitives.
+That means features that look quite different in source code—`do Effect`, `resource`, `generate`, domains, or predicates—end up being lowered to the same small set of primitives.
 
 ## How block forms are lowered
 
@@ -44,7 +53,7 @@ The output is block-free HIR composed of nested lambdas and ordinary function ca
 | `do Effect { x <- e1; e2 }` | HIR transform | `__withResourceScope(bind e1 (λx → e2))` |
 | `do Effect { x = e; rest }` | HIR transform | `bind (pure e) (λx → rest)` |
 | `resource { acq; yield v; cleanup }` | HIR transform | `__makeResource (λ_ → acq_chain) (λ_ → cleanup_chain)` |
-| `generate { yield e; ... }` | HIR transform | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` |
+| `generate { yield e; ... }` | HIR transform | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` (represented by how the generator is consumed rather than by a dedicated runtime generator data type) |
 | `plain { x = e; body }` | HIR transform | `(λx → body) e` |
 
 By the time lowering reaches RustIR, these block forms no longer exist as separate syntax categories.

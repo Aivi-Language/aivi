@@ -1,6 +1,6 @@
 # Package Manager & Packaging
 
-AIVI packages build on top of Rust's Cargo ecosystem. In practice, an AIVI package is a Cargo package with extra AIVI metadata and an AIVI-to-Rust build step.
+AIVI packages build on top of Cargo, Rust's standard build and package manager. In practice, an AIVI package is a Cargo package (often called a crate in Rust) with extra AIVI metadata and an AIVI-to-Rust build step.
 
 That means you get familiar Cargo behavior for fetching dependencies, packaging archives, and publishing crates, while `aivi` adds language-aware validation and scaffolding.
 
@@ -42,7 +42,7 @@ native_ui_target = "portable" # Or "gnome-gtk4-libadwaita".
 
 ## Discovering packages
 
-`aivi search <query>` searches crates.io and filters the results to packages that declare themselves as AIVI packages.
+`aivi search <query>` searches crates.io, Rust's public package registry, and filters the results to packages that declare themselves as AIVI packages.
 
 ## Installing dependencies
 
