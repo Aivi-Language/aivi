@@ -267,6 +267,22 @@ Uppercase or dotted GTK tags are treated as component calls instead of intrinsic
 
 Component tags use **record-based lowering**: attributes become record fields and children become a `children` field. Signal sugar and `props` normalization do not apply there because the component function owns its own API.
 
+GTK sigils also support **function-call tags** for local lowerCamel helpers that would be awkward to spell directly inside a sigil. A simple uppercase self-closing tag with positional arguments lowers to the same helper with a lowercased first letter:
+
+```aivi
+// Equivalent to: { navRailNode model.appState.activeSection "sidebar" }
+~<gtk>
+  <NavRailNode model.appState.activeSection "sidebar" />
+</gtk>
+```
+
+Function-call tags:
+
+- only apply to simple non-`Gtk*`/`Adw*`/`Gsk*` tags,
+- use positional arguments instead of attributes,
+- must be self-closing, and
+- do not participate in component record lowering.
+
 ### Queue-based signal helpers
 
 - `signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)` reads the next queued signal event, returning `None` when the queue is empty.
@@ -506,6 +522,7 @@ main = gtkApp {
 - `E1613`: non-literal `props` field value
 - `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onToggle`, `onValueChanged`, `onFocusIn`, `onFocusOut`, and `<signal ... on={...}>` require compile-time values)
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node)
+- `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)
 
 ## UI update pattern (state machine + events + repaint)
 
