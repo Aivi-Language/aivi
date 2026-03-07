@@ -81,6 +81,7 @@ pub(crate) struct JsonMismatch {
     /// Human-readable description of what was found
     pub(crate) got: String,
     /// The raw JSON fragment that caused the mismatch
+    #[allow(dead_code)]
     pub(crate) fragment: String,
 }
 
@@ -278,6 +279,7 @@ fn fragment_str(v: &serde_json::Value) -> String {
 ///     }
 ///   }
 /// ```
+#[allow(dead_code)]
 pub(crate) fn format_json_validation_errors(
     raw_json: &str,
     kind: &str,
@@ -303,7 +305,9 @@ pub(crate) fn format_json_validation_errors(
             continue; // handled separately below
         }
         // Find the fragment in the pretty-printed JSON
-        if let Some((line_idx, col_start, col_end)) = find_fragment_location(&lines, &err.path, &err.fragment) {
+        if let Some((line_idx, col_start, col_end)) =
+            find_fragment_location(&lines, &err.path, &err.fragment)
+        {
             let msg = format!("expected {}, got {}", err.expected, err.got);
             annotations
                 .entry(line_idx)
@@ -313,15 +317,10 @@ pub(crate) fn format_json_validation_errors(
     }
 
     // Build header
-    let mut out = format!(
-        "\x1b[1;31mfailed to parse source\x1b[0m [{kind}]\n"
-    );
+    let mut out = format!("\x1b[1;31mfailed to parse source\x1b[0m [{kind}]\n");
 
     // Collect missing field errors
-    let missing: Vec<&JsonMismatch> = errors
-        .iter()
-        .filter(|e| e.got == "missing field")
-        .collect();
+    let missing: Vec<&JsonMismatch> = errors.iter().filter(|e| e.got == "missing field").collect();
     for m in &missing {
         out.push_str(&format!(
             "\x1b[31m  missing field\x1b[0m at \x1b[36m{}\x1b[0m (expected {})\n",
@@ -408,6 +407,7 @@ pub(crate) fn format_json_validation_errors(
 /// Locates a JSON fragment in the pretty-printed lines by matching the JSON path structure.
 ///
 /// Returns `(line_index, col_start, col_end)` of the value in the pretty output.
+#[allow(dead_code)]
 fn find_fragment_location(
     lines: &[&str],
     json_path: &str,
@@ -451,7 +451,12 @@ fn find_fragment_location(
             if trimmed.starts_with('[') || trimmed.starts_with('{') {
                 depth += 1;
             }
-            if (trimmed.ends_with(']') || trimmed.ends_with("],") || trimmed.ends_with('}') || trimmed.ends_with("},")) && depth > 0 {
+            if (trimmed.ends_with(']')
+                || trimmed.ends_with("],")
+                || trimmed.ends_with('}')
+                || trimmed.ends_with("},"))
+                && depth > 0
+            {
                 depth -= 1;
             }
             if depth == 1 && !trimmed.is_empty() && !trimmed.starts_with('[') {
@@ -470,6 +475,7 @@ fn find_fragment_location(
     None
 }
 
+#[allow(dead_code)]
 fn extract_last_key(path: &str) -> Option<&str> {
     let path = path.strip_prefix('$').unwrap_or(path);
     // Handle paths like ".user.age" → "age"
@@ -482,6 +488,7 @@ fn extract_last_key(path: &str) -> Option<&str> {
     }
 }
 
+#[allow(dead_code)]
 fn extract_array_index(path: &str) -> Option<usize> {
     let open = path.rfind('[')?;
     let close = path.rfind(']')?;
@@ -533,12 +540,8 @@ pub(crate) fn cg_type_to_json_schema(ty: &CgType) -> JsonSchema {
                 }
             }
             // All-nullary constructors → Enum (string matching constructor names)
-            if !constructors.is_empty()
-                && constructors.iter().all(|(_, args)| args.is_empty())
-            {
-                return JsonSchema::Enum(
-                    constructors.iter().map(|(n, _)| n.clone()).collect(),
-                );
+            if !constructors.is_empty() && constructors.iter().all(|(_, args)| args.is_empty()) {
+                return JsonSchema::Enum(constructors.iter().map(|(n, _)| n.clone()).collect());
             }
             JsonSchema::Any
         }
@@ -551,10 +554,8 @@ mod tests {
 
     #[test]
     fn validate_simple_record() {
-        let json: serde_json::Value = serde_json::from_str(
-            r#"{"id": 123, "age": "twenty", "name": "Alice"}"#,
-        )
-        .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(r#"{"id": 123, "age": "twenty", "name": "Alice"}"#).unwrap();
 
         let mut fields = BTreeMap::new();
         fields.insert("id".to_string(), JsonSchema::Int);
@@ -573,10 +574,9 @@ mod tests {
 
     #[test]
     fn validate_nested_record() {
-        let json: serde_json::Value = serde_json::from_str(
-            r#"{"user": {"id": 123, "age": "twenty", "name": "Alice"}}"#,
-        )
-        .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(r#"{"user": {"id": 123, "age": "twenty", "name": "Alice"}}"#)
+                .unwrap();
 
         let mut inner = BTreeMap::new();
         inner.insert("id".to_string(), JsonSchema::Int);
@@ -596,8 +596,7 @@ mod tests {
 
     #[test]
     fn validate_missing_field() {
-        let json: serde_json::Value =
-            serde_json::from_str(r#"{"id": 123}"#).unwrap();
+        let json: serde_json::Value = serde_json::from_str(r#"{"id": 123}"#).unwrap();
 
         let mut fields = BTreeMap::new();
         fields.insert("id".to_string(), JsonSchema::Int);
@@ -613,8 +612,7 @@ mod tests {
 
     #[test]
     fn validate_optional_allows_null() {
-        let json: serde_json::Value =
-            serde_json::from_str(r#"{"age": null}"#).unwrap();
+        let json: serde_json::Value = serde_json::from_str(r#"{"age": null}"#).unwrap();
 
         let mut fields = BTreeMap::new();
         fields.insert(
@@ -630,8 +628,7 @@ mod tests {
 
     #[test]
     fn validate_list_elements() {
-        let json: serde_json::Value =
-            serde_json::from_str(r#"[1, "two", 3]"#).unwrap();
+        let json: serde_json::Value = serde_json::from_str(r#"[1, "two", 3]"#).unwrap();
         let schema = JsonSchema::List(Box::new(JsonSchema::Int));
 
         let mut errors = Vec::new();
@@ -698,8 +695,7 @@ mod tests {
         assert!(errors.is_empty());
 
         // Validate: {"duration": "slow"} should fail
-        let bad_json: serde_json::Value =
-            serde_json::from_str(r#"{"duration": "slow"}"#).unwrap();
+        let bad_json: serde_json::Value = serde_json::from_str(r#"{"duration": "slow"}"#).unwrap();
         let mut errors = Vec::new();
         validate_json(&bad_json, &schema, "$", &mut errors);
         assert_eq!(errors.len(), 1);
@@ -730,10 +726,7 @@ mod tests {
 
     #[test]
     fn validate_enum_accepts_valid_constructor() {
-        let schema = JsonSchema::Enum(vec![
-            "Active".to_string(),
-            "Inactive".to_string(),
-        ]);
+        let schema = JsonSchema::Enum(vec!["Active".to_string(), "Inactive".to_string()]);
 
         let json: serde_json::Value = serde_json::from_str(r#""Active""#).unwrap();
         let mut errors = Vec::new();
@@ -743,10 +736,7 @@ mod tests {
 
     #[test]
     fn validate_enum_rejects_unknown_variant() {
-        let schema = JsonSchema::Enum(vec![
-            "Active".to_string(),
-            "Inactive".to_string(),
-        ]);
+        let schema = JsonSchema::Enum(vec!["Active".to_string(), "Inactive".to_string()]);
 
         let json: serde_json::Value = serde_json::from_str(r#""Deleted""#).unwrap();
         let mut errors = Vec::new();
@@ -758,10 +748,7 @@ mod tests {
 
     #[test]
     fn validate_enum_rejects_non_string() {
-        let schema = JsonSchema::Enum(vec![
-            "Active".to_string(),
-            "Inactive".to_string(),
-        ]);
+        let schema = JsonSchema::Enum(vec!["Active".to_string(), "Inactive".to_string()]);
 
         let json: serde_json::Value = serde_json::from_str("42").unwrap();
         let mut errors = Vec::new();

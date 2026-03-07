@@ -7,9 +7,12 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 > - Implemented: `Source K A`, `load`, `file.read`/`json`/`csv`, `file.imageMeta`/`image`, `http.get`/`post`/`fetch` (and `https.*`), `rest.*`, `env.get`, and `env.decode`.
 > - Streaming sources remain out of scope in runtime v0.1.
 > - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
+> - Phase 3 adds the schema-first declaration and source-composition models specified in [Schema-First Source Definitions](external_sources/schema_first.md) and [Source Composition](external_sources/composition.md); compiler/runtime work for those models lands separately.
 
 ## Source Guides
 
+- [Schema-First Source Definitions](external_sources/schema_first.md)
+- [Source Composition](external_sources/composition.md)
 - [File Sources](external_sources/file.md)
 - [REST / HTTP Sources](external_sources/rest_http.md)
 - [Environment Sources](external_sources/environment.md)
@@ -123,3 +126,18 @@ Integration with object storage.
 Some sources are resolved at compile time and embedded into the binary. This ensures zero latency/failure at runtime.
 
 <<< ../snippets/from_md/syntax/external_sources/compile_time_sources_static.aivi{aivi}
+
+## 12.11 Source composition (Phase 3)
+
+Phase 3 treats a schema-bearing `Source K A` as a **declaration plus a canonical execution pipeline**:
+
+1. optional cache lookup,
+2. connector acquisition wrapped by timeout / retry / backoff policy,
+3. schema-driven decode,
+4. pure transform stages,
+5. accumulated validation stages,
+6. cache write + provenance / observability emission.
+
+`load` remains the only effectful step. The composition layers are pure source-description data, just like the underlying connector declaration.
+
+See [Source Composition](external_sources/composition.md) for the public stage model, policy semantics, provenance contract, and handler-based testing story.

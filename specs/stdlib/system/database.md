@@ -61,6 +61,16 @@ Schema definitions are typed values. Mark them `@static` to allow compile-time v
 
 <<< ../../snippets/from_md/stdlib/system/database/migrations.aivi{aivi}
 
+## Schema-first source declarations
+
+Phase 3 database-backed source declarations reuse table and migration values as schema carriers instead of hiding row shape only behind the eventual `db.load` / query call.
+
+- A database source declaration must carry typed connector config: connection selection, table or query/projection, and typed parameters.
+- The row contract should come from an existing `Table A` value or an equivalent explicit row schema.
+- When the table/query and migration inputs are compile-time stable, the compiler should validate the projected columns against the declared row type and surface migration guidance before runtime.
+
+`db.load table` remains valid compatibility sugar for full-table reads, but the preferred schema-first form is a named source declaration that tooling can analyze.
+
 ## Pooling
 
 Database pooling is provided by `aivi.database.pool`. The pool is configured explicitly (no hidden globals),

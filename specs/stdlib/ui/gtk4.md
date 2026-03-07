@@ -394,13 +394,14 @@ gtkApp : {
 } -> Effect GtkError Unit
 ```
 
-Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → initial `subscriptions` → `windowPresent` → event loop using an internal message queue with `toMsg`/`update` → `reconcileNode` → subscription refresh → command launch. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the committed model and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
+Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → initial `subscriptions` → `windowPresent` → event loop using an internal message queue with `toMsg`/`update` → reactive invalidation for changed source snapshots → `reconcileNode` → subscription refresh → command launch. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the committed model, any dirty computed values are recalculated lazily on first read, and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
 
 The currently implemented subset is:
 
 - `AppStep { model, commands }`
 - command helpers: `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`
 - subscription helpers: `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, `subscriptionSource`
+- reactive helper: `computed`
 - compatibility helpers: `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`, `liftAppUpdateFull`
 
 `commandPerform` and `subscriptionSource` currently operate on `Msg` directly (`run : Effect GtkError msg`, `open : Resource GtkError (Recv msg)`) so apps can ship now without waiting for the richer mapper-based target surface from the architecture spec. `Command.startTask` and the richer callback-mapper command constructors remain follow-up work.

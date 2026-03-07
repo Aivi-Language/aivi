@@ -12,17 +12,18 @@ use super::graph::build_graph_record;
 use super::gtk4::build_gtk4_record;
 use super::i18n::build_i18n_record;
 use super::instant::build_instant_record;
+use super::json::{build_json_record, value_to_json_value};
 use super::linalg::build_linalg_record;
 use super::list::build_list_record;
 use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
 use super::regex::build_regex_record;
 use super::secrets::build_secrets_record;
+use super::source::build_source_record;
 use super::system::{
     build_clock_record, build_console_record, build_env_source_record, build_file_record,
     build_random_record, build_system_record,
 };
-use super::json::{build_json_record, value_to_json_value};
 use super::text::build_text_record;
 use super::timezone::build_timezone_record;
 use super::ui::build_ui_record;
@@ -33,7 +34,9 @@ use super::url_http::{
 use super::util::{builtin, builtin_constructor, expect_list, expect_record, expect_text};
 use super::{database::build_database_record, log::build_log_record};
 use crate::runtime::http::build_http_server_record;
-use crate::runtime::{format_value, BuiltinImpl, BuiltinValue, EffectValue, Env, Runtime, RuntimeError, Value};
+use crate::runtime::{
+    format_value, BuiltinImpl, BuiltinValue, EffectValue, Env, Runtime, RuntimeError, Value,
+};
 
 pub(crate) fn register_builtins(env: &Env) {
     env.set("Unit".to_string(), Value::Unit);
@@ -51,6 +54,11 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("Err".to_string(), builtin_constructor("Err", 1));
     env.set("Valid".to_string(), builtin_constructor("Valid", 1));
     env.set("Invalid".to_string(), builtin_constructor("Invalid", 1));
+    env.set("IOError".to_string(), builtin_constructor("IOError", 1));
+    env.set(
+        "DecodeError".to_string(),
+        builtin_constructor("DecodeError", 1),
+    );
     env.set(
         "Closed".to_string(),
         Value::Constructor {
@@ -300,15 +308,11 @@ pub(crate) fn register_builtins(env: &Env) {
                                 })
                             }
                         }
-                        Err(RuntimeError::Error(value)) => {
-                            Ok(Value::Constructor {
-                                name: "Err".to_string(),
-                                args: vec![value],
-                            })
-                        }
-                        Err(err) => {
-                            Err(err)
-                        }
+                        Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
+                            name: "Err".to_string(),
+                            args: vec![value],
+                        }),
+                        Err(err) => Err(err),
                     }
                 }),
             };
@@ -374,8 +378,9 @@ pub(crate) fn register_builtins(env: &Env) {
             let source_val = args.remove(0);
             match source_val {
                 Value::Source(ref source) => {
-                    if let Ok(schema) =
-                        serde_json::from_str::<crate::runtime::json_schema::JsonSchema>(&schema_json)
+                    if let Ok(schema) = serde_json::from_str::<
+                        crate::runtime::json_schema::JsonSchema,
+                    >(&schema_json)
                     {
                         *source.schema.lock().unwrap() = Some(schema);
                     }
@@ -388,6 +393,7 @@ pub(crate) fn register_builtins(env: &Env) {
 
     env.set("file".to_string(), build_file_record());
     env.set("env".to_string(), build_env_source_record());
+    env.set("source".to_string(), build_source_record());
     env.set("system".to_string(), build_system_record());
     env.set("clock".to_string(), build_clock_record());
     env.set("random".to_string(), build_random_record());
@@ -427,10 +433,7 @@ pub(crate) fn register_builtins(env: &Env) {
         build_http_client_record(HttpClientMode::Https),
     );
     env.set("rest".to_string(), build_rest_api_record());
-    env.set(
-        "__openapi_call".to_string(),
-        build_openapi_call_builtin(),
-    );
+    env.set("__openapi_call".to_string(), build_openapi_call_builtin());
     env.set("email".to_string(), build_email_record());
     env.set(
         "sockets".to_string(),

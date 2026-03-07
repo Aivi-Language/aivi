@@ -28,6 +28,7 @@ impl Runtime {
             snapshot_replay_cursors: HashMap::new(),
             snapshot_failure: None,
             resource_cleanups: Vec::new(),
+            reactive_host: None,
         }
     }
 

@@ -9,9 +9,10 @@ use crate::doc_index::{DocIndex, DOC_INDEX_JSON};
 use crate::gtk_index::{GtkIndex, GTK_INDEX_JSON};
 use crate::strict::StrictConfig;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct DocumentState {
     pub(super) text: String,
+    pub(super) version: i32,
     /// Parse diagnostics from the last `update_document` call; avoids re-parsing in diagnostics.
     pub(super) parse_diags: Vec<aivi::FileDiagnostic>,
 }
@@ -37,10 +38,12 @@ pub(super) struct BackendState {
     pub(super) gtk_index: Arc<GtkIndex>,
     /// Pre-built stdlib typecheck checkpoint; populated lazily on first diagnostic run.
     pub(super) typecheck_checkpoint: Option<aivi::CheckTypesCheckpoint>,
+    /// Last known export-surface summaries for open modules, keyed by module name.
+    pub(super) module_export_summaries: HashMap<String, aivi::ModuleExportSurfaceSummary>,
     /// Abort handle for the in-flight diagnostic task; used for per-keystroke cancellation.
     pub(super) pending_diagnostics: Option<tokio::task::AbortHandle>,
-    /// Monotonic counter incremented on every `didChange`; guards stale diagnostic publishes.
-    pub(super) diagnostics_version: u64,
+    /// Monotonic workspace snapshot token incremented on every semantic recheck request.
+    pub(super) diagnostics_snapshot: u64,
 }
 
 impl Default for BackendState {
@@ -61,8 +64,9 @@ impl Default for BackendState {
             doc_index: Arc::new(doc_index),
             gtk_index: Arc::new(gtk_index),
             typecheck_checkpoint: None,
+            module_export_summaries: HashMap::new(),
             pending_diagnostics: None,
-            diagnostics_version: 0,
+            diagnostics_snapshot: 0,
         }
     }
 }

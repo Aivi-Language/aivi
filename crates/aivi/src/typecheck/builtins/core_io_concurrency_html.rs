@@ -59,6 +59,33 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
     env.insert("Closed".to_string(), Scheme::mono(Type::con("Closed")));
+    let source_error_k = checker.fresh_var_id();
+    env.insert(
+        "IOError".to_string(),
+        Scheme {
+            vars: vec![source_error_k],
+            ty: Type::Func(
+                Box::new(Type::con("Text")),
+                Box::new(Type::con("SourceError").app(vec![Type::Var(source_error_k)])),
+            ),
+            capabilities: Default::default(),
+            origin: None,
+        },
+    );
+    let source_decode_k = checker.fresh_var_id();
+    let source_decode_e = checker.fresh_var_id();
+    env.insert(
+        "DecodeError".to_string(),
+        Scheme {
+            vars: vec![source_decode_k, source_decode_e],
+            ty: Type::Func(
+                Box::new(Type::con("List").app(vec![Type::Var(source_decode_e)])),
+                Box::new(Type::con("SourceError").app(vec![Type::Var(source_decode_k)])),
+            ),
+            capabilities: Default::default(),
+            origin: None,
+        },
+    );
     let a = checker.fresh_var_id();
     env.insert(
         "constructorName".to_string(),
@@ -180,6 +207,101 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
 
+    let source_schema_a = checker.fresh_var_id();
+    let source_transform_k = checker.fresh_var_id();
+    let source_transform_a = checker.fresh_var_id();
+    let source_transform_b = checker.fresh_var_id();
+    let source_validate_k = checker.fresh_var_id();
+    let source_validate_a = checker.fresh_var_id();
+    let source_validate_b = checker.fresh_var_id();
+    let source_validate_e = checker.fresh_var_id();
+    let source_decode_errors_k = checker.fresh_var_id();
+    let source_decode_errors_e = checker.fresh_var_id();
+    let source_schema_record = Type::Record {
+        fields: vec![(
+            "derive".to_string(),
+            Type::con("SourceSchema").app(vec![Type::Var(source_schema_a)]),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let source_record = Type::Record {
+        fields: vec![
+            ("schema".to_string(), source_schema_record),
+            (
+                "transform".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(source_transform_a)),
+                        Box::new(Type::Var(source_transform_b)),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Source").app(vec![
+                            Type::Var(source_transform_k),
+                            Type::Var(source_transform_a),
+                        ])),
+                        Box::new(Type::con("Source").app(vec![
+                            Type::Var(source_transform_k),
+                            Type::Var(source_transform_b),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "validate".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(source_validate_a)),
+                        Box::new(Type::con("Validation").app(vec![
+                            Type::con("List").app(vec![Type::Var(source_validate_e)]),
+                            Type::Var(source_validate_b),
+                        ])),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Source").app(vec![
+                            Type::Var(source_validate_k),
+                            Type::Var(source_validate_a),
+                        ])),
+                        Box::new(Type::con("Source").app(vec![
+                            Type::Var(source_validate_k),
+                            Type::Var(source_validate_b),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "decodeErrors".to_string(),
+                Type::Func(
+                    Box::new(Type::con("SourceError").app(vec![Type::Var(source_decode_errors_k)])),
+                    Box::new(Type::con("List").app(vec![Type::Var(source_decode_errors_e)])),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert(
+        "source".to_string(),
+        Scheme {
+            vars: vec![
+                source_schema_a,
+                source_transform_k,
+                source_transform_a,
+                source_transform_b,
+                source_validate_k,
+                source_validate_a,
+                source_validate_b,
+                source_validate_e,
+                source_decode_errors_k,
+                source_decode_errors_e,
+            ],
+            ty: source_record,
+            capabilities: Default::default(),
+            origin: None,
+        },
+    );
+
+    let file_json_arg = checker.fresh_var_id();
     let file_json_a = checker.fresh_var_id();
     let file_csv_a = checker.fresh_var_id();
     let file_image_meta_a = checker.fresh_var_id();
@@ -254,7 +376,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             (
                 "json".to_string(),
                 Type::Func(
-                    Box::new(Type::con("Text")),
+                    Box::new(Type::Var(file_json_arg)),
                     Box::new(
                         Type::con("Source").app(vec![Type::con("File"), Type::Var(file_json_a)]),
                     ),
@@ -296,7 +418,13 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert(
         "file".to_string(),
         Scheme {
-            vars: vec![file_json_a, file_csv_a, file_image_meta_a, file_image_a],
+            vars: vec![
+                file_json_arg,
+                file_json_a,
+                file_csv_a,
+                file_image_meta_a,
+                file_image_a,
+            ],
             ty: file_record,
             capabilities: Default::default(),
             origin: None,

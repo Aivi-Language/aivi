@@ -16,6 +16,7 @@ pub extern "C" fn rt_record_field(
     let value = unsafe { &*value_ptr };
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
+    unsafe { (*ctx).runtime_mut() }.reactive_note_record_field_access(value, name);
     // During operator dispatch, field mismatches must be hard failures so that
     // wrong-domain clauses cannot "succeed" with garbage Unit values.
     let dispatching = unsafe { (*ctx).runtime_mut() }.jit_binary_op_dispatching;

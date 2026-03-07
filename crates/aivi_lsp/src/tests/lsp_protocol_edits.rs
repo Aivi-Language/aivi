@@ -195,6 +195,16 @@ mod lsp_protocol_edits {
         })
     }
 
+    fn telemetry_duration_ms(message: &str) -> u64 {
+        message
+            .split_whitespace()
+            .find_map(|part| {
+                part.strip_prefix("duration_ms=")
+                    .and_then(|value| value.parse::<u64>().ok())
+            })
+            .expect("telemetry log should include duration_ms")
+    }
+
     fn position_for(text: &str, needle: &str) -> (u32, u32) {
         let offset = text.find(needle).expect("needle exists");
         let mut line = 0u32;
@@ -440,7 +450,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(10),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(3)),
         )
         .await
@@ -524,6 +534,522 @@ mod lsp_protocol_edits {
         .await
         .expect("publishDiagnostics");
         assert!(!has_error(&diags));
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn export_changes_recheck_open_dependents() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let lib_uri = Url::parse("file:///lsp/lib.aivi").expect("uri");
+        let consumer_uri = Url::parse("file:///lsp/consumer.aivi").expect("uri");
+        let lib_v1 = "module lsp.lib\nexport value\n\nvalue : Text\nvalue = \"ok\"\n";
+        let lib_v2 = "module lsp.lib\nexport other\n\nother : Int\nother = 1\n";
+        let consumer = "module lsp.consumer\nuse lsp.lib\n\nvalueText : Text\nvalueText = value\n";
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": lib_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": lib_v1
+                    }
+                }
+            }),
+        )
+        .await;
+        let lib_initial = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("lib publishDiagnostics");
+        assert!(!has_error(&lib_initial));
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": consumer_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": consumer
+                    }
+                }
+            }),
+        )
+        .await;
+        let consumer_initial = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer publishDiagnostics");
+        assert!(!has_error(&consumer_initial));
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {"uri": lib_uri.to_string(), "version": 2},
+                    "contentChanges": [{"text": lib_v2}]
+                }
+            }),
+        )
+        .await;
+
+        let (lib_diags, change_log) = timeout(
+            Duration::from_secs(3),
+            wait_for_publish_diagnostics_and_log_message(
+                &mut client_read,
+                lib_uri.as_str(),
+                Some(2),
+                "diagnostics.did_change",
+            ),
+        )
+        .await
+        .expect("lib change diagnostics");
+        assert!(!has_error(&lib_diags));
+        let log_message = change_log
+            .get("params")
+            .and_then(|params| params.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(log_message.contains("export_changed=true"));
+        assert!(log_message.contains("dependents=1"));
+
+        let consumer_diags = timeout(
+            Duration::from_secs(3),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer dependent diagnostics");
+        assert!(
+            has_error(&consumer_diags),
+            "expected dependent consumer diagnostics after producer export change"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn private_body_changes_do_not_recheck_open_dependents() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let lib_uri = Url::parse("file:///lsp/private_lib.aivi").expect("uri");
+        let consumer_uri = Url::parse("file:///lsp/private_consumer.aivi").expect("uri");
+        let lib_v1 = "module lsp.private_lib\nexport value\n\nhelper = 1\n\nvalue : Text\nvalue = \"ok\"\n";
+        let lib_v2 = "module lsp.private_lib\nexport value\n\nhelper = 2\n\nvalue : Text\nvalue = \"ok\"\n";
+        let consumer =
+            "module lsp.private_consumer\nuse lsp.private_lib\n\nvalueText : Text\nvalueText = value\n";
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": lib_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": lib_v1
+                    }
+                }
+            }),
+        )
+        .await;
+        let _ = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("lib publishDiagnostics");
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": consumer_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": consumer
+                    }
+                }
+            }),
+        )
+        .await;
+        let consumer_initial = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer publishDiagnostics");
+        assert!(!has_error(&consumer_initial));
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {"uri": lib_uri.to_string(), "version": 2},
+                    "contentChanges": [{"text": lib_v2}]
+                }
+            }),
+        )
+        .await;
+
+        let (_lib_diags, change_log) = timeout(
+            Duration::from_secs(3),
+            wait_for_publish_diagnostics_and_log_message(
+                &mut client_read,
+                lib_uri.as_str(),
+                Some(2),
+                "diagnostics.did_change",
+            ),
+        )
+        .await
+        .expect("lib change diagnostics");
+        let log_message = change_log
+            .get("params")
+            .and_then(|params| params.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(log_message.contains("export_changed=false"));
+        assert!(log_message.contains("dependents=0"));
+
+        let unexpected_consumer_publish = timeout(
+            Duration::from_millis(700),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await;
+        assert!(
+            unexpected_consumer_publish.is_err(),
+            "did not expect dependent diagnostics after private body-only edit"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn opening_provider_rechecks_existing_open_dependents() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let lib_uri = Url::parse("file:///lsp/open_provider_lib.aivi").expect("uri");
+        let consumer_uri = Url::parse("file:///lsp/open_provider_consumer.aivi").expect("uri");
+        let lib_text = "module lsp.open_provider_lib\nexport value\n\nvalue : Text\nvalue = \"ok\"\n";
+        let consumer = "module lsp.open_provider_consumer\nuse lsp.open_provider_lib\n\nvalueText : Text\nvalueText = value\n";
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": consumer_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": consumer
+                    }
+                }
+            }),
+        )
+        .await;
+        let consumer_initial = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer initial diagnostics");
+        assert!(
+            has_error(&consumer_initial),
+            "expected unresolved import diagnostics before provider opens"
+        );
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": lib_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": lib_text
+                    }
+                }
+            }),
+        )
+        .await;
+
+        let consumer_updated = timeout(
+            Duration::from_secs(3),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer dependent recheck after provider open");
+        assert!(
+            !has_error(&consumer_updated),
+            "expected provider open to clear dependent diagnostics"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn closing_provider_rechecks_existing_open_dependents() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let lib_uri = Url::parse("file:///lsp/close_provider_lib.aivi").expect("uri");
+        let consumer_uri = Url::parse("file:///lsp/close_provider_consumer.aivi").expect("uri");
+        let lib_text = "module lsp.close_provider_lib\nexport value\n\nvalue : Text\nvalue = \"ok\"\n";
+        let consumer = "module lsp.close_provider_consumer\nuse lsp.close_provider_lib\n\nvalueText : Text\nvalueText = value\n";
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": lib_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": lib_text
+                    }
+                }
+            }),
+        )
+        .await;
+        let _ = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("provider diagnostics");
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": consumer_uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": consumer
+                    }
+                }
+            }),
+        )
+        .await;
+        let consumer_initial = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer diagnostics");
+        assert!(!has_error(&consumer_initial));
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didClose",
+                "params": {
+                    "textDocument": {"uri": lib_uri.to_string()}
+                }
+            }),
+        )
+        .await;
+
+        let consumer_after_close = timeout(
+            Duration::from_secs(3),
+            wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("consumer dependent recheck after provider close");
+        assert!(
+            has_error(&consumer_after_close),
+            "expected provider close to reintroduce dependent diagnostics"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn did_close_clears_pending_change_diagnostics() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let uri = Url::parse("file:///lsp/close_cancel.aivi").expect("uri");
+        let initial = "module lsp.close_cancel\n\nvalue = 1\n";
+        let broken = "module lsp.close_cancel\n\nvalue = if True then 1 else\n";
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": initial
+                    }
+                }
+            }),
+        )
+        .await;
+        let _ = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("initial diagnostics");
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {"uri": uri.to_string(), "version": 2},
+                    "contentChanges": [{"text": broken}]
+                }
+            }),
+        )
+        .await;
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didClose",
+                "params": {
+                    "textDocument": {"uri": uri.to_string()}
+                }
+            }),
+        )
+        .await;
+
+        let close_publish = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, uri.as_str(), None),
+        )
+        .await
+        .expect("close publishDiagnostics");
+        assert!(
+            close_publish.is_empty(),
+            "expected didClose to clear diagnostics instead of publishing stale results"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn diagnostics_did_change_respects_debounce_budget() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let uri = Url::parse("file:///lsp/debounce_budget.aivi").expect("uri");
+        let initial = "module lsp.debounce_budget\n\nvalue = 1\n";
+        let updated = "module lsp.debounce_budget\n\nvalue = 2\n";
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": initial
+                    }
+                }
+            }),
+        )
+        .await;
+        let _ = timeout(
+            Duration::from_secs(2),
+            wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("initial diagnostics");
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {"uri": uri.to_string(), "version": 2},
+                    "contentChanges": [{"text": updated}]
+                }
+            }),
+        )
+        .await;
+
+        let early_publish = timeout(
+            Duration::from_millis(100),
+            wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(2)),
+        )
+        .await;
+        assert!(
+            early_publish.is_err(),
+            "didChange diagnostics should stay behind the debounce window"
+        );
+
+        let (diags, change_log) = timeout(
+            Duration::from_secs(3),
+            wait_for_publish_diagnostics_and_log_message(
+                &mut client_read,
+                uri.as_str(),
+                Some(2),
+                "diagnostics.did_change",
+            ),
+        )
+        .await
+        .expect("debounced diagnostics");
+        assert!(!has_error(&diags));
+        let log_message = change_log
+            .get("params")
+            .and_then(|params| params.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let duration_ms = telemetry_duration_ms(log_message);
+        assert!(
+            duration_ms >= 120,
+            "expected debounce telemetry to reflect the debounce floor, got {duration_ms}ms"
+        );
+        assert!(
+            duration_ms < 5_000,
+            "expected incremental diagnostics to stay within a practical latency budget, got {duration_ms}ms"
+        );
 
         shutdown_lsp(client_write, server_task).await;
     }

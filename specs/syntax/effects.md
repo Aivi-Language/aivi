@@ -70,6 +70,8 @@ The capability required by `load` is determined by the source kind:
 - database-backed source loads → `db.query`
 - `@static` embedded sources → no runtime capability after compilation
 
+When the source value carries Phase 3 composition metadata, `load` executes the source's canonical pipeline (cache lookup, acquisition policy, decode, transform, validate, provenance/observability) before returning the final value.
+
 See [External Sources](external_sources.md) and [Capabilities](capabilities.md) for the full mapping.
 
 ## 9.2 `do Effect` blocks

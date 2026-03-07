@@ -35,6 +35,21 @@ The LSP server reports diagnostics (errors and warnings) in real-time as you typ
 - **Type Checking**: Ensures type safety and correctness.
 - **Scope Analysis**: Checks for undefined variables and scoping rules.
 
+## Incremental workspace checking
+
+The LSP is specified in terms of **workspace snapshots**, not one-file analysis
+in isolation.
+
+- open documents shadow the on-disk workspace for that snapshot
+- older in-flight semantic work may be cancelled or superseded
+- cached module facts may be reused only when their fingerprints match the
+  active snapshot
+- dependent modules are rechecked incrementally when an edited module's export
+  surface changes
+
+The full cache ownership, invalidation, and publish rules are defined in
+[Incremental Compilation & Workspace Checking](incremental_compilation.md).
+
 ## Configuration
 
 The LSP server reads configuration from the editor's settings (sent via `workspace/didChangeConfiguration`). The following sections are supported:

@@ -1,0 +1,295 @@
+================================================================================
+AIVI PHASE 4 REACTIVE ARCHITECTURE
+================================================================================
+
+CURRENT gtkApp LOOP (app_architecture.md lines 95-99):
+────────────────────────────────────────────────────
+
+  GTK Signal Stream
+         ↓
+   toMsg (event → Option Msg)
+         ↓
+   ┌─────────────────────────────────────────┐
+   │         Main Event Loop                 │
+   ├─────────────────────────────────────────┤
+   │ 1. Receive Msg from channel             │
+   │ 2. Call update(Msg, Model) → AppStep    │
+   │ 3. Commit step.model                    │
+   │ 4. [NEW] Invalidate computed signals    │ ← PHASE 4 STEP 9
+   │ 5. Evaluate view(Model) → GtkNode       │
+   │ 6. [NEW] Lazy recompute dirty signals   │ ← PHASE 4 STEP 10
+   │ 7. Reconcile GtkNode tree               │
+   │ 8. Sync subscriptions against Model     │
+   │ 9. Launch commands                      │
+   │ 10. Loop                                │
+   └─────────────────────────────────────────┘
+         ↓
+   Subscriptions (timers, sources, etc.)
+   Commands (effects)
+   Widget updates
+
+
+PHASE 4 ADDITIONS - Computed Signal Memoization:
+─────────────────────────────────────────────────
+
+        SignalRegistry
+        ┌────────────────────────┐
+        │ signals:               │
+        │ ├─ "visibleRows"       │
+        │ │  └─ {                │
+        │ │    key: "visibleRows"│
+        │ │    fn: (state => ...) │
+        │ │    cached: [rows],    │
+        │ │    is_dirty: false    │
+        │ │    deps:              │
+        │ │    ├─ query (rev 2)  │
+        │ │    └─ tags (rev 5)   │
+        │ │  }                    │
+        │ ├─ "searchSummary" ... │
+        │ └─ ...                 │
+        │                        │
+        │ source_revisions:      │
+        │ ├─ "query" → 2        │
+        │ ├─ "tags" → 5         │
+        │ └─ ...                 │
+        └────────────────────────┘
+               │
+               ├──→ step 9 (invalidateAndMarkDirty)
+               │    • Compare old_model, new_model
+               │    • Increment revisions for changed fields
+               │    • Mark dependent signals dirty
+               │    • Propagate dirty transitively
+               │
+               └──→ step 10 (view reads)
+                    • view calls readSignal(sig, model)
+                    • if sig.is_dirty:
+                    •   reevaluate sig.fn(model)
+                    •   track dependencies
+                    •   cache result
+                    •   mark clean
+                    • else: return cache
+
+
+DATA FLOW: Model Change → Invalidation → View Evaluation
+──────────────────────────────────────────────────────────
+
+  UPDATE PHASE                INVALIDATION PHASE        VIEW PHASE
+  ════════════                ═════════════════        ═════════════
+  
+  User clicks button
+       ↓
+  Msg = "ClickSave"
+       ↓
+  update(ClickSave, model)
+       ↓
+  AppStep {                 [New model committed]
+    model: {...             ↓
+      query: "foo",         invalidateAndMarkDirty()
+      results: [new],       ├─ "query" didn't change → rev stays 2
+      status: "done"        ├─ "results" changed → rev 7 → 8 ✓
+    },                      ├─ "status" changed → rev 3 → 4 ✓
+    commands: [...]         │
+  }                         ├─ "visibleRows" reads results (changed)
+       ↓                    │  → mark dirty
+  Commit model              │
+       ↓                    ├─ "searchSummary" reads results (changed)
+  [PHASE 4] Invalidate      │  → mark dirty
+    ├─ results changed?     │
+    │  YES → mark deps      └─ "otherSignal" reads only query
+    │       dirty              (unchanged) → stays clean
+    │
+    ├─ "visibleRows"        view(committed_model)
+    │  is_dirty ✓           ├─ label1 = readSignal(searchSummary)
+    │                       │  is_dirty? YES
+    │ "searchSummary"       │  → eval: "Showing X results"
+    │  is_dirty ✓           │  → cache result
+    │                       │
+    └─ "otherSignal"        ├─ each items={readSignal(visibleRows)}
+       is_dirty ✗              │  is_dirty? YES
+                               │  → eval: filter(results, tags)
+                               │  → cache result
+                               │  → render each
+                               │
+                               └─ label2 = {statusText state}
+                                  (inline derived, no cache)
+       
+  reconcileNode(old_tree, new_tree)
+       ↓
+  Update GtkLabel texts, re-render list
+
+
+BOUNDARY: View Can Read Signals, Subscriptions Use Them To Decide
+──────────────────────────────────────────────────────────────────
+
+  ✓ ALLOWED:
+    ─────────
+    view : State -> GtkNode
+    view = state => [
+      <label>{readSignal mySignal state}</label>  // view reads signals
+      <list items={readSignal itemsSignal state}> // view reads signals
+    ]
+
+    subscriptions : State -> List (Subscription Msg)
+    subscriptions = state => [
+      subscriptionEvery {...}
+      if readSignal shouldPoll state              // subscriptions READ signals
+    ]
+
+  ✗ NOT ALLOWED:
+    ──────────────
+    update : Msg -> State -> Effect GtkError (AppStep State Msg)
+    update = msg state => do Effect {
+      val <- readSignal mySig state                // ✗ update cannot read signals
+      ...                                          //   (no access to registry)
+    }
+
+    doCommand : Msg -> State -> Effect GtkError Msg
+    doCommand = msg state => do Effect {
+      val <- readSignal mySig state                // ✗ effects cannot read signals
+      ...                                          //   (capture snapshots instead)
+    }
+
+
+DEPENDENCY TRACKING: How We Know What Changed
+───────────────────────────────────────────────
+
+  computed "visibleRows" (state =>
+    state.rows                              // Read: "rows" field (rev 8)
+      |> filter (x => x.matches state.query)  // Read: "query" field (rev 2)
+      |> filter (x => ...)
+  )
+
+  After evaluation, cache stores:
+  {
+    key: "visibleRows",
+    last_source_revisions: {
+      "rows": 8,
+      "query": 2
+    },
+    cached_value: [row1, row2, ...],
+    is_dirty: false
+  }
+
+  Next turn, if model changes:
+  ├─ rows changed (8→9)? YES
+  │  └─ "visibleRows" read rows at rev 8
+  │     Compare: 8 < 9 → IS DIRTY ✓
+  │
+  └─ query changed (2→2)? NO
+     └─ "visibleRows" read query at rev 2
+        Compare: 2 == 2 → still fresh
+
+
+SIGNAL → SIGNAL DEPENDENCIES (Future: Signal cascades)
+──────────────────────────────────────────────────────
+
+  computed "filtered" (state =>
+    state.rows |> filter (pred)
+  )
+  
+  computed "summary" (state =>
+    "Count: {length (readSignal filtered state)}"  // reads other signal
+  )
+
+  When "rows" changes:
+  ├─ "filtered" reads "rows" → mark dirty
+  └─ "summary" reads "filtered" → mark dirty (transitive)
+
+  On first view read of "summary":
+  ├─ "summary" is dirty, eval it
+  └─ eval calls readSignal(filtered) → "filtered" is also dirty, eval it first
+     Then "summary" uses result → done
+
+
+ERROR HANDLING: Dependency Cycles Rejected
+──────────────────────────────────────────
+
+  ✗ INVALID:
+    computed "a" (state => readSignal b state + 1)
+    computed "b" (state => readSignal a state + 1)
+    
+  Detection: During invalidation, if signal A reads signal B and B reads A,
+  reject with error before attempting reevaluation.
+
+
+TURN BOUNDARY SEMANTICS: Cache Lifespan
+──────────────────────────────────────────
+
+  Turn 1:
+  ├─ Msg: Click
+  ├─ update() → new model
+  ├─ readSignal "visibleRows" state
+  │  → is_dirty? YES → eval → cache result (turn 1)
+  ├─ readSignal "visibleRows" state again
+  │  → is_dirty? NO → return cache (no re-eval in same turn)
+  └─ Render & loop
+  
+  Turn 2:
+  ├─ Msg: TypeIntoSearchBox
+  ├─ update() → model with new query
+  ├─ invalidate() → "visibleRows" marked dirty (query changed)
+  ├─ readSignal "visibleRows" state
+  │  → is_dirty? YES → eval again (new turn!) → cache result (turn 2)
+  └─ Render & loop
+  
+  Turn 3:
+  ├─ Msg: ClickCheckbox
+  ├─ update() → model with new tag filter
+  ├─ invalidate() → "visibleRows" marked dirty (filter changed)
+  ├─ readSignal "visibleRows" state
+  │  → is_dirty? YES → eval again → cache result (turn 3)
+  └─ Render & loop
+
+  CACHE INVARIANT: Within a turn, same signal returns same value.
+                  At turn boundary, cache is invalidated if dependencies changed.
+
+
+INTEGRATION POINTS IN CODE
+────────────────────────────
+
+  File: crates/aivi/src/stdlib/gtk4.rs
+  ├─ NEW: Signal type definition
+  ├─ NEW: computed, signal, readSignal function signatures
+  └─ MODIFY: AppStep loop state (add signalRegistry)
+
+  File: crates/aivi/src/runtime/builtins/gtk4_real.rs
+  ├─ NEW: SignalRegistry struct
+  ├─ NEW: invalidateAndMarkDirty() function
+  ├─ MODIFY: runGtkAppHost loop
+  │  ├─ After update: call invalidateAndMarkDirty()
+  │  └─ KEEP: view evaluation (readSignal calls happen lazily here)
+  └─ NEW: builtin_computed, builtin_readSignal functions
+
+  File: crates/aivi/src/runtime/builtins/gtk4.rs
+  ├─ NEW: Register builtin_computed, builtin_readSignal
+  └─ KEEP: Existing command/subscription builtins
+
+  File: crates/aivi/src/typecheck/builtins/system_db.rs
+  ├─ NEW: Signal type
+  ├─ NEW: computed signature: (Text -> (s -> a) -> Signal a)
+  ├─ NEW: readSignal signature: (Signal a -> s -> a)
+  └─ ENSURE: No capability requirements on signal operations
+
+
+TESTING LAYERS
+───────────────
+
+  Unit Tests (in gtk4_real.rs):
+  ├─ invalidateAndMarkDirty correctness
+  ├─ dependency tracking
+  ├─ cycle detection
+  └─ dirty propagation
+
+  Integration Tests (integration-tests/stdlib/aivi/ui/gtk4/gtk4.aivi):
+  ├─ memoization within turn
+  ├─ invalidation across turns
+  ├─ signal→signal dependencies
+  ├─ subscriptions using signals
+  └─ form field error computed signals
+
+  Demo (demos/snake.aivi):
+  ├─ computed grid rendering
+  ├─ computed score display
+  └─ verify no performance regression
+
+================================================================================

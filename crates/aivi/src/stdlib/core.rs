@@ -6,10 +6,10 @@ module aivi
 export Unit, Bool, Int, Float, Text, Char, Bytes, DateTime
 export List, Option, Result, Validation, Tuple, Map, Set, Queue, Deque, Heap
 export Source, SourceError
-export None, Some, Ok, Err, Valid, Invalid, True, False
+export None, Some, Ok, Err, Valid, Invalid, IOError, DecodeError, True, False
 export pure, fail, attempt, load, constructorName, constructorOrdinal
 
-export text, regex, math, calendar, color
+export source, text, regex, math, calendar, color
 export bigint, rational, decimal
 export json, toJson
 export url, console, crypto, env, system, logger, database, file, clock, instant, random, channel, concurrent, httpServer, ui, http, https, rest, email, sockets, streams, collections, i18n

@@ -147,15 +147,22 @@ rowText = y state =>
   joinTexts (map (x => cellChar x y state) [0.. gridW - 1])
 
 gridRows : State -> List Text
-gridRows = state =>
-  map (y => rowText y state) [0.. gridH - 1]
+gridRows =
+  computed "snake.gridRows" (state =>
+    map (y => rowText y state) [0.. gridH - 1]
+  )
 
 scoreText : State -> Text
-scoreText = state => "Snake · Score: {toText state.score}"
+scoreText =
+  computed "snake.scoreText" (state =>
+    "Snake · Score: {toText state.score}"
+  )
 
 statusText : State -> Text
-statusText = state =>
-  if state.gameOver then "Game Over — press R to restart" else "Arrow keys to move"
+statusText =
+  computed "snake.statusText" (state =>
+    if state.gameOver then "Game Over — press R to restart" else "Arrow keys to move"
+  )
 
 // View
 

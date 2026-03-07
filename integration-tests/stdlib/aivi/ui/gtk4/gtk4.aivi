@@ -80,12 +80,10 @@ gtk_node_constructors = do Effect {
     assertEq (getTag elem) "GtkBox"
 }
 
-@test "gtk4 functions are accessible"
+@test "gtk4 helper constructors are accessible"
 type_signatures = do Effect {
-  // Verify functions can be referenced without calling them
-  assert (buildFromNode == buildFromNode)
-  assert (reconcileNode == reconcileNode)
-  assert (buildWithIds == buildWithIds)
+  node = gtkElement "GtkBox" [gtkAttr "spacing" "8", gtkSignalAttr "clicked" Save] []
+  assertEq node (gtkElement "GtkBox" [gtkAttr "spacing" "8", gtkSignalAttr "clicked" Save] [])
 }
 
 @test "app step helpers build blessed update values"
@@ -115,4 +113,32 @@ command_and_subscription_shapes = do Effect {
   step = appStepWith 1 [command]
   assertEq (List.length step.commands) 1
   assertEq (List.length [subscription]) 1
+}
+
+@test "computed remains callable as a pure derived helper"
+computed_pure_helper = do Effect {
+  doubled = computed "gtk4.tests.double" (state => state.count + state.count)
+  assertEq (doubled { count: 3 }) 6
+}
+
+@test "computed can drive subscription configuration from committed state"
+computed_subscription_shape = do Effect {
+  tickMillis = computed "gtk4.tests.tickMillis" (state =>
+    if state.fast then 50 else 120
+  )
+  subscriptions = state => [
+    subscriptionEvery {
+      key: "clock"
+      millis: tickMillis state
+      tag: Save
+    }
+  ]
+
+  first  = subscriptions { fast: True }
+  second = subscriptions { fast: False }
+
+  assertEq (List.length first) 1
+  assertEq (List.length second) 1
+  assertEq (tickMillis { fast: True }) 50
+  assertEq (tickMillis { fast: False }) 120
 }

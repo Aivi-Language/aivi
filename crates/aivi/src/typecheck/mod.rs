@@ -27,13 +27,15 @@ mod infer_and_class_env_tests;
 
 pub use check::{
     check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
-    check_types_with_checkpoint, CheckTypesCheckpoint,
+    check_types_with_checkpoint, summarize_module_export_surface, CheckTypesCheckpoint,
+    ModuleExportSurfaceSummary,
 };
 pub use elaborate::{
     elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
     ElaborationCheckpoint,
 };
 pub use infer::{infer_value_types, infer_value_types_fast, infer_value_types_full, InferResult};
+pub use ordering::{ordered_module_names, reverse_module_dependencies};
 
 use checker::TypeChecker;
 use class_env::{

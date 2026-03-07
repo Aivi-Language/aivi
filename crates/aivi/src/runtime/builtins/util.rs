@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use num_bigint::BigInt;
@@ -101,6 +102,142 @@ pub(super) fn make_err(value: Value) -> Value {
         name: "Err".to_string(),
         args: vec![value],
     }
+}
+
+pub(super) fn make_source_io_error(message: impl Into<String>) -> Value {
+    Value::Constructor {
+        name: "IOError".to_string(),
+        args: vec![Value::Text(message.into())],
+    }
+}
+
+pub(super) fn make_source_decode_error(errors: Vec<Value>) -> Value {
+    Value::Constructor {
+        name: "DecodeError".to_string(),
+        args: vec![list_value(errors)],
+    }
+}
+
+pub(super) fn make_decode_error(path: Vec<String>, message: impl Into<String>) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "path".to_string(),
+        Value::List(Arc::new(
+            path.into_iter().map(Value::Text).collect::<Vec<_>>(),
+        )),
+    );
+    fields.insert("message".to_string(), Value::Text(message.into()));
+    Value::Record(Arc::new(fields))
+}
+
+pub(super) fn json_path_segments(path: &str) -> Vec<String> {
+    let chars: Vec<char> = path.chars().collect();
+    let mut index = 0usize;
+    let mut segments = Vec::new();
+    if chars.first() == Some(&'$') {
+        index += 1;
+    }
+    while index < chars.len() {
+        match chars[index] {
+            '.' => {
+                index += 1;
+                let start = index;
+                while index < chars.len() && chars[index] != '.' && chars[index] != '[' {
+                    index += 1;
+                }
+                if start < index {
+                    segments.push(chars[start..index].iter().collect());
+                }
+            }
+            '[' => {
+                index += 1;
+                let start = index;
+                while index < chars.len() && chars[index] != ']' {
+                    index += 1;
+                }
+                if start < index {
+                    segments.push(chars[start..index].iter().collect());
+                }
+                if index < chars.len() && chars[index] == ']' {
+                    index += 1;
+                }
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+    segments
+}
+
+pub(super) fn json_mismatch_to_decode_error(
+    mismatch: &crate::runtime::json_schema::JsonMismatch,
+) -> Value {
+    make_decode_error(
+        json_path_segments(&mismatch.path),
+        format!("expected {}, got {}", mismatch.expected, mismatch.got),
+    )
+}
+
+pub(super) fn decode_error_list_from_value(
+    value: &Value,
+    ctx: &str,
+) -> Result<Vec<Value>, RuntimeError> {
+    let Value::List(items) = value else {
+        return Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "List".to_string(),
+            got: value_type_name(value).to_string(),
+        });
+    };
+    for item in items.iter() {
+        let Value::Record(fields) = item else {
+            return Err(RuntimeError::TypeError {
+                context: ctx.to_string(),
+                expected: "DecodeError".to_string(),
+                got: value_type_name(item).to_string(),
+            });
+        };
+        match fields.get("path") {
+            Some(Value::List(path_items)) => {
+                for segment in path_items.iter() {
+                    if !matches!(segment, Value::Text(_)) {
+                        return Err(RuntimeError::Message(format!(
+                            "{ctx} expects DecodeError.path to be List Text"
+                        )));
+                    }
+                }
+            }
+            Some(other) => {
+                return Err(RuntimeError::TypeError {
+                    context: ctx.to_string(),
+                    expected: "List".to_string(),
+                    got: value_type_name(other).to_string(),
+                });
+            }
+            None => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects DecodeError.path"
+                )));
+            }
+        }
+        match fields.get("message") {
+            Some(Value::Text(_)) => {}
+            Some(other) => {
+                return Err(RuntimeError::TypeError {
+                    context: ctx.to_string(),
+                    expected: "Text".to_string(),
+                    got: value_type_name(other).to_string(),
+                });
+            }
+            None => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects DecodeError.message"
+                )));
+            }
+        }
+    }
+    Ok(items.iter().cloned().collect())
 }
 
 pub(super) fn list_value(items: Vec<Value>) -> Value {

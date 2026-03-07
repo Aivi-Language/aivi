@@ -132,6 +132,7 @@ pub(crate) struct Runtime {
     /// acquisition time. Cleanups are run in LIFO order when a do-block scope
     /// exits. Scope boundaries are explicit markers.
     pub(crate) resource_cleanups: Vec<ResourceCleanupEntry>,
+    pub(crate) reactive_host: Option<ReactiveHostState>,
 }
 
 type CapabilityHandlerScope = HashMap<String, Value>;
@@ -142,6 +143,44 @@ pub(crate) enum ResourceCleanupEntry {
         cleanup: Arc<ThunkFunc>,
         handlers: Vec<CapabilityHandlerScope>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ReactiveDependency {
+    WholeModel,
+    RootField(String),
+    Signal(String),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ReactiveDependencyVersion {
+    pub(crate) dependency: ReactiveDependency,
+    pub(crate) revision: u64,
+}
+
+#[derive(Clone)]
+pub(crate) struct ReactiveSignalEntry {
+    pub(crate) derive: Value,
+    pub(crate) cached: Option<Value>,
+    pub(crate) dependencies: Vec<ReactiveDependencyVersion>,
+    pub(crate) dirty: bool,
+    pub(crate) revision: u64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ReactiveEvalFrame {
+    pub(crate) key: String,
+    pub(crate) dependencies: HashSet<ReactiveDependency>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ReactiveHostState {
+    pub(crate) current_model: Value,
+    pub(crate) model_revision: u64,
+    pub(crate) root_field_revisions: HashMap<String, u64>,
+    pub(crate) signals: HashMap<String, ReactiveSignalEntry>,
+    pub(crate) dependents: HashMap<String, HashSet<String>>,
+    pub(crate) eval_stack: Vec<ReactiveEvalFrame>,
 }
 
 #[derive(Clone)]
@@ -641,5 +680,6 @@ pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
 
 include!("runtime_impl/lifecycle_and_cancel.rs");
 include!("runtime_impl/eval_and_apply.rs");
+include!("runtime_impl/reactive.rs");
 include!("runtime_impl/resources.rs");
 include!("runtime_impl/trampoline.rs");

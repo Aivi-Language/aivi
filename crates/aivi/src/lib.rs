@@ -64,7 +64,9 @@ pub mod typecheck {
     pub use aivi_core::{
         check_types, check_types_including_stdlib, elaborate_expected_coercions,
         elaborate_stdlib_checkpoint, elaborate_with_checkpoint, infer_value_types,
-        infer_value_types_fast, infer_value_types_full, ElaborationCheckpoint, InferResult,
+        infer_value_types_fast, infer_value_types_full, ordered_module_names,
+        reverse_module_dependencies, summarize_module_export_surface, ElaborationCheckpoint,
+        InferResult, ModuleExportSurfaceSummary,
     };
 }
 
@@ -92,7 +94,9 @@ pub use aivi_core::desugar_blocks;
 pub use aivi_core::{
     check_types, check_types_including_stdlib, elaborate_expected_coercions,
     elaborate_stdlib_checkpoint, elaborate_with_checkpoint, infer_value_types,
-    infer_value_types_fast, infer_value_types_full, ElaborationCheckpoint, InferResult,
+    infer_value_types_fast, infer_value_types_full, ordered_module_names,
+    reverse_module_dependencies, summarize_module_export_surface, ElaborationCheckpoint,
+    InferResult, ModuleExportSurfaceSummary,
 };
 pub use aivi_core::{
     embedded_stdlib_modules, embedded_stdlib_source, lower_modules_to_arena, parse_modules,

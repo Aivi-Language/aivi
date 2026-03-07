@@ -123,6 +123,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
 
     let option_text_ty = Type::con("Option").app(vec![text_ty.clone()]);
     let system_env_decode_a = checker.fresh_var_id();
+    let system_env_decode_arg = checker.fresh_var_id();
     let env_record = Type::Record {
         fields: vec![
             (
@@ -154,7 +155,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             (
                 "decode".to_string(),
                 Type::Func(
-                    Box::new(text_ty.clone()),
+                    Box::new(Type::Var(system_env_decode_arg)),
                     Box::new(
                         Type::con("Source")
                             .app(vec![Type::con("Env"), Type::Var(system_env_decode_a)]),
@@ -166,6 +167,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .collect(),
     };
     let env_decode_a = checker.fresh_var_id();
+    let env_decode_arg = checker.fresh_var_id();
     let env_source_record = Type::Record {
         fields: vec![
             (
@@ -178,7 +180,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             (
                 "decode".to_string(),
                 Type::Func(
-                    Box::new(text_ty.clone()),
+                    Box::new(Type::Var(env_decode_arg)),
                     Box::new(
                         Type::con("Source").app(vec![Type::con("Env"), Type::Var(env_decode_a)]),
                     ),
@@ -191,7 +193,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert(
         "env".to_string(),
         Scheme {
-            vars: vec![env_decode_a],
+            vars: vec![env_decode_a, env_decode_arg],
             ty: env_source_record,
             capabilities: Default::default(),
             origin: None,
@@ -224,7 +226,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert(
         "system".to_string(),
         Scheme {
-            vars: vec![system_env_decode_a],
+            vars: vec![system_env_decode_a, system_env_decode_arg],
             ty: system_record,
             capabilities: Default::default(),
             origin: None,
@@ -325,8 +327,43 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         text_ty.clone(),
         Type::con("List").app(vec![text_ty.clone()]),
     ]);
+    let gtk4_model = checker.fresh_var_id();
+    let gtk4_value = checker.fresh_var_id();
     let gtk4_record = Type::Record {
         fields: vec![
+            (
+                "reactiveInit".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(gtk4_model)),
+                    Box::new(effect_text_unit.clone()),
+                ),
+            ),
+            (
+                "reactiveCommit".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(gtk4_model)),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(gtk4_model)),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "computed".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(gtk4_model)),
+                            Box::new(Type::Var(gtk4_value)),
+                        )),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(gtk4_model)),
+                            Box::new(Type::Var(gtk4_value)),
+                        )),
+                    )),
+                ),
+            ),
             (
                 "init".to_string(),
                 Type::Func(
@@ -1069,7 +1106,15 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
     };
-    env.insert("gtk4".to_string(), Scheme::mono(gtk4_record));
+    env.insert(
+        "gtk4".to_string(),
+        Scheme {
+            vars: vec![gtk4_model, gtk4_value],
+            ty: gtk4_record,
+            capabilities: Default::default(),
+            origin: None,
+        },
+    );
 
     let level_ty = Type::con("Level");
     let context_pair_ty = Type::Tuple(vec![text_ty.clone(), text_ty.clone()]);

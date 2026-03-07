@@ -10,7 +10,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value as JsonValue;
 
-use super::util::{builtin, expect_text, make_none, make_some};
+use super::util::{
+    builtin, expect_text, make_decode_error, make_none, make_some, make_source_decode_error,
+};
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 
 pub(super) fn build_clock_record() -> Value {
@@ -152,7 +154,10 @@ fn build_env_record() -> Value {
                     )))),
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "Env".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -161,7 +166,7 @@ fn build_env_record() -> Value {
             if let Some(value) = runtime.dispatch_capability_handler("process.env.read", &args)? {
                 return Ok(value);
             }
-            let prefix = expect_text(args.pop().unwrap(), "system.env.decode")?;
+            let prefix = env_decode_prefix(args.pop().unwrap(), "system.env.decode")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let mut map = HashMap::new();
@@ -177,21 +182,20 @@ fn build_env_record() -> Value {
                         }
                     }
                     if map.is_empty() {
-                        return Err(RuntimeError::Error(Value::Text(source_decode_error(
-                            "Env",
-                            "$",
-                            "at least one environment key",
-                            "empty environment selection",
-                            "",
-                            1,
-                            1,
-                            &format!("no environment variables found for prefix `{prefix}`"),
-                        ))));
+                        return Err(RuntimeError::Error(make_source_decode_error(vec![
+                            make_decode_error(
+                                Vec::new(),
+                                format!("no environment variables found for prefix `{prefix}`"),
+                            ),
+                        ])));
                     }
                     Ok(Value::Record(Arc::new(map)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "Env".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -241,7 +245,10 @@ pub(super) fn build_env_source_record() -> Value {
                     )))),
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "Env".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -250,7 +257,7 @@ pub(super) fn build_env_source_record() -> Value {
             if let Some(value) = runtime.dispatch_capability_handler("process.env.read", &args)? {
                 return Ok(value);
             }
-            let prefix = expect_text(args.pop().unwrap(), "env.decode")?;
+            let prefix = env_decode_prefix(args.pop().unwrap(), "env.decode")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let mut map = HashMap::new();
@@ -266,21 +273,20 @@ pub(super) fn build_env_source_record() -> Value {
                         }
                     }
                     if map.is_empty() {
-                        return Err(RuntimeError::Error(Value::Text(source_decode_error(
-                            "Env",
-                            "$",
-                            "at least one environment key",
-                            "empty environment selection",
-                            "",
-                            1,
-                            1,
-                            &format!("no environment variables found for prefix `{prefix}`"),
-                        ))));
+                        return Err(RuntimeError::Error(make_source_decode_error(vec![
+                            make_decode_error(
+                                Vec::new(),
+                                format!("no environment variables found for prefix `{prefix}`"),
+                            ),
+                        ])));
                     }
                     Ok(Value::Record(Arc::new(map)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new("Env".to_string(), Arc::new(effect)))))
+            Ok(Value::Source(Arc::new(SourceValue::new(
+                "Env".to_string(),
+                Arc::new(effect),
+            ))))
         }),
     );
     fields.insert(
@@ -331,6 +337,28 @@ fn scalar_text_to_value(raw: &str) -> Value {
         return Value::Float(float);
     }
     Value::Text(raw.to_string())
+}
+
+fn env_decode_prefix(arg: Value, ctx: &str) -> Result<String, RuntimeError> {
+    match arg {
+        Value::Text(prefix) => Ok(prefix),
+        Value::Record(record) => match record.get("prefix") {
+            Some(Value::Text(prefix)) => Ok(prefix.clone()),
+            Some(other) => Err(RuntimeError::TypeError {
+                context: ctx.to_string(),
+                expected: "Text".to_string(),
+                got: super::util::value_type_name(other).to_string(),
+            }),
+            None => Err(RuntimeError::Message(format!(
+                "{ctx} expects config.prefix"
+            ))),
+        },
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Text or Record".to_string(),
+            got: super::util::value_type_name(&other).to_string(),
+        }),
+    }
 }
 
 pub(in crate::runtime::builtins) fn json_to_runtime(value: &JsonValue) -> Value {
@@ -387,9 +415,11 @@ pub(in crate::runtime::builtins) fn json_to_runtime_with_schema(
             };
             let mut out = HashMap::new();
             for (key, value) in map {
-                let field_schema =
-                    record_schema.and_then(|fields| fields.get(key.as_str()));
-                out.insert(key.clone(), json_to_runtime_with_schema(value, field_schema));
+                let field_schema = record_schema.and_then(|fields| fields.get(key.as_str()));
+                out.insert(
+                    key.clone(),
+                    json_to_runtime_with_schema(value, field_schema),
+                );
             }
             // Emit None for Option fields that are absent from the JSON object.
             if let Some(fields) = record_schema {

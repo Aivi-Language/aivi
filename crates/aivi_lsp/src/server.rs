@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Once};
 use std::time::{Duration, Instant};
@@ -28,7 +28,7 @@ use tower_lsp::lsp_types::{
 use tower_lsp::{LanguageServer, LspService, Server};
 
 use crate::backend::Backend;
-use crate::state::BackendState;
+use crate::state::{BackendState, IndexedModule};
 use crate::strict::StrictLevel;
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +63,386 @@ struct AiviConfig {
 
 static PANIC_HOOK_INSTALLED: Once = Once::new();
 
+#[derive(Clone)]
+struct DiagnosticTarget {
+    uri: Url,
+    version: Option<i32>,
+    text: String,
+    parse_diags: Option<Vec<aivi::FileDiagnostic>>,
+}
+
 impl Backend {
+    fn changed_module_names(
+        previous: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
+        current: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
+    ) -> HashSet<String> {
+        let mut changed = HashSet::new();
+        for name in previous.keys().chain(current.keys()) {
+            if previous.get(name) != current.get(name) {
+                changed.insert(name.clone());
+            }
+        }
+        changed
+    }
+
+    async fn document_module_export_summaries(
+        &self,
+        uri: &Url,
+    ) -> HashMap<String, aivi::ModuleExportSurfaceSummary> {
+        let state = self.state.lock().await;
+        state
+            .open_modules_by_uri
+            .get(uri)
+            .into_iter()
+            .flat_map(|module_names| module_names.iter())
+            .filter_map(|module_name| {
+                state
+                    .module_export_summaries
+                    .get(module_name)
+                    .cloned()
+                    .map(|summary| (module_name.clone(), summary))
+            })
+            .collect()
+    }
+
+    fn module_export_summaries_from_workspace(
+        uri: &Url,
+        workspace: &HashMap<String, IndexedModule>,
+    ) -> HashMap<String, aivi::ModuleExportSurfaceSummary> {
+        workspace
+            .iter()
+            .filter(|(_, indexed)| indexed.uri == *uri)
+            .map(|(module_name, indexed)| {
+                (
+                    module_name.clone(),
+                    aivi::summarize_module_export_surface(&indexed.module),
+                )
+            })
+            .collect()
+    }
+
+    async fn open_dependents_for_recheck(
+        &self,
+        source_uri: &Url,
+        changed_modules: &HashSet<String>,
+        workspace: &HashMap<String, IndexedModule>,
+    ) -> Vec<DiagnosticTarget> {
+        if changed_modules.is_empty() {
+            return Vec::new();
+        }
+
+        let (documents, open_module_index) = {
+            let state = self.state.lock().await;
+            (state.documents.clone(), state.open_module_index.clone())
+        };
+
+        let all_modules: Vec<aivi::Module> = workspace
+            .values()
+            .map(|indexed| indexed.module.clone())
+            .collect();
+        let reverse_deps = aivi::reverse_module_dependencies(&all_modules);
+        let ordered_names = aivi::ordered_module_names(&all_modules);
+
+        let mut dirty_modules: HashSet<String> = HashSet::new();
+        let mut queue: VecDeque<String> = changed_modules.iter().cloned().collect();
+        while let Some(module_name) = queue.pop_front() {
+            let Some(dependents) = reverse_deps.get(&module_name) else {
+                continue;
+            };
+            for dependent in dependents {
+                if dirty_modules.insert(dependent.clone()) {
+                    queue.push_back(dependent.clone());
+                }
+            }
+        }
+
+        let mut seen_uris = HashSet::new();
+        let mut targets = Vec::new();
+        for module_name in ordered_names {
+            if !dirty_modules.contains(&module_name) {
+                continue;
+            }
+            let Some(indexed) = open_module_index.get(&module_name) else {
+                continue;
+            };
+            if &indexed.uri == source_uri || !seen_uris.insert(indexed.uri.clone()) {
+                continue;
+            }
+            let Some(document) = documents.get(&indexed.uri) else {
+                continue;
+            };
+            targets.push(DiagnosticTarget {
+                uri: indexed.uri.clone(),
+                version: Some(document.version),
+                text: document.text.clone(),
+                parse_diags: Some(document.parse_diags.clone()),
+            });
+        }
+        targets
+    }
+
+    async fn begin_diagnostics_snapshot(&self) -> u64 {
+        let mut state = self.state.lock().await;
+        if let Some(handle) = state.pending_diagnostics.take() {
+            handle.abort();
+        }
+        state.diagnostics_snapshot = state.diagnostics_snapshot.wrapping_add(1);
+        state.diagnostics_snapshot
+    }
+
+    async fn diagnostics_context(
+        &self,
+    ) -> (
+        bool,
+        StrictLevel,
+        crate::strict::StrictConfig,
+        Option<aivi::CheckTypesCheckpoint>,
+    ) {
+        let state = self.state.lock().await;
+        (
+            state.diagnostics_in_specs_snippets,
+            state.strict.level,
+            state.strict.clone(),
+            state.typecheck_checkpoint.clone(),
+        )
+    }
+
+    async fn compute_target_diagnostics(
+        client: &tower_lsp::Client,
+        operation: &str,
+        target: DiagnosticTarget,
+        workspace: HashMap<String, IndexedModule>,
+        include_specs_snippets: bool,
+        strict: crate::strict::StrictConfig,
+        checkpoint: Option<aivi::CheckTypesCheckpoint>,
+    ) -> (
+        Vec<tower_lsp::lsp_types::Diagnostic>,
+        Option<aivi::CheckTypesCheckpoint>,
+    ) {
+        match tokio::task::spawn_blocking(move || {
+            let (cp, is_new) = match checkpoint {
+                Some(cp) => (cp, false),
+                None => {
+                    let stdlib = aivi::embedded_stdlib_modules();
+                    (aivi::check_types_stdlib_checkpoint(&stdlib), true)
+                }
+            };
+            let diags = Backend::build_diagnostics_with_workspace(
+                &target.text,
+                &target.uri,
+                &workspace,
+                include_specs_snippets,
+                &strict,
+                target.parse_diags,
+                Some(&cp),
+            );
+            (diags, is_new.then_some(cp))
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(err) => {
+                Backend::log_join_error_with_client(client, operation, &err).await;
+                (Vec::new(), None)
+            }
+        }
+    }
+
+    async fn run_diagnostics_publish_task(
+        client: tower_lsp::Client,
+        state_arc: Arc<Mutex<crate::state::BackendState>>,
+        snapshot: u64,
+        operation: &'static str,
+        started: Instant,
+        telemetry_detail: String,
+        workspace: HashMap<String, IndexedModule>,
+        current_target: Option<DiagnosticTarget>,
+        dependent_targets: Vec<DiagnosticTarget>,
+        include_specs_snippets: bool,
+        strict: crate::strict::StrictConfig,
+        checkpoint: Option<aivi::CheckTypesCheckpoint>,
+    ) {
+        let mut checkpoint = checkpoint;
+        let mut published_targets = 0usize;
+        let dependent_target_count = dependent_targets.len();
+
+        if let Some(target) = current_target {
+            let (diagnostics, new_checkpoint) = Backend::compute_target_diagnostics(
+                &client,
+                operation,
+                target.clone(),
+                workspace.clone(),
+                include_specs_snippets,
+                strict.clone(),
+                checkpoint.clone(),
+            )
+            .await;
+            if checkpoint.is_none() {
+                checkpoint = new_checkpoint.clone();
+            }
+
+            tokio::task::yield_now().await;
+            let should_publish = {
+                let state = state_arc.lock().await;
+                state.diagnostics_snapshot == snapshot
+                    && target.version.map_or(true, |version| {
+                        state
+                            .documents
+                            .get(&target.uri)
+                            .map(|document| document.version == version)
+                            .unwrap_or(false)
+                    })
+            };
+            if !should_publish {
+                let mut state = state_arc.lock().await;
+                if let Some(cp) = checkpoint {
+                    state.typecheck_checkpoint.get_or_insert(cp);
+                }
+                if state.diagnostics_snapshot == snapshot {
+                    state.pending_diagnostics = None;
+                }
+                Backend::log_telemetry_with_client(
+                    &client,
+                    operation,
+                    started.elapsed(),
+                    format!(
+                        "{telemetry_detail} count={} snapshot={snapshot} published=false targets={published_targets}",
+                        diagnostics.len()
+                    ),
+                )
+                .await;
+                return;
+            }
+
+            Backend::log_telemetry_with_client(
+                &client,
+                operation,
+                started.elapsed(),
+                format!(
+                    "{telemetry_detail} count={} snapshot={snapshot} published=true targets={}",
+                    diagnostics.len(),
+                    1 + dependent_target_count
+                ),
+            )
+            .await;
+            client
+                .publish_diagnostics(target.uri, diagnostics, target.version)
+                .await;
+            published_targets += 1;
+        }
+
+        for target in dependent_targets {
+            let is_current = {
+                let state = state_arc.lock().await;
+                state.diagnostics_snapshot == snapshot
+            };
+            if !is_current {
+                break;
+            }
+
+            let (diagnostics, new_checkpoint) = Backend::compute_target_diagnostics(
+                &client,
+                operation,
+                target.clone(),
+                workspace.clone(),
+                include_specs_snippets,
+                strict.clone(),
+                checkpoint.clone(),
+            )
+            .await;
+            if checkpoint.is_none() {
+                checkpoint = new_checkpoint.clone();
+            }
+
+            tokio::task::yield_now().await;
+            let should_publish = {
+                let state = state_arc.lock().await;
+                state.diagnostics_snapshot == snapshot
+                    && target.version.map_or(true, |version| {
+                        state
+                            .documents
+                            .get(&target.uri)
+                            .map(|document| document.version == version)
+                            .unwrap_or(false)
+                    })
+            };
+            if !should_publish {
+                break;
+            }
+
+            client
+                .publish_diagnostics(target.uri, diagnostics, target.version)
+                .await;
+            published_targets += 1;
+        }
+
+        let still_current = {
+            let mut state = state_arc.lock().await;
+            if let Some(cp) = checkpoint {
+                state.typecheck_checkpoint.get_or_insert(cp);
+            }
+            let is_current = state.diagnostics_snapshot == snapshot;
+            if is_current {
+                state.pending_diagnostics = None;
+            }
+            is_current
+        };
+        Backend::log_telemetry_with_client(
+            &client,
+            operation,
+            started.elapsed(),
+            format!(
+                "{telemetry_detail} count=0 snapshot={snapshot} published={still_current} targets={published_targets}"
+            ),
+        )
+        .await;
+    }
+
+    fn spawn_diagnostics_publish_task(
+        &self,
+        snapshot: u64,
+        operation: &'static str,
+        started: Instant,
+        initial_delay: Option<Duration>,
+        telemetry_detail: String,
+        workspace: HashMap<String, IndexedModule>,
+        current_target: Option<DiagnosticTarget>,
+        dependent_targets: Vec<DiagnosticTarget>,
+        include_specs_snippets: bool,
+        strict: crate::strict::StrictConfig,
+        checkpoint: Option<aivi::CheckTypesCheckpoint>,
+    ) -> tokio::task::JoinHandle<()> {
+        let client = self.client.clone();
+        let state_arc = Arc::clone(&self.state);
+        tokio::spawn(async move {
+            if let Some(delay) = initial_delay {
+                tokio::time::sleep(delay).await;
+                let is_current = {
+                    let state = state_arc.lock().await;
+                    state.diagnostics_snapshot == snapshot
+                };
+                if !is_current {
+                    return;
+                }
+            }
+            Backend::run_diagnostics_publish_task(
+                client,
+                state_arc,
+                snapshot,
+                operation,
+                started,
+                telemetry_detail,
+                workspace,
+                current_target,
+                dependent_targets,
+                include_specs_snippets,
+                strict,
+                checkpoint,
+            )
+            .await;
+        })
+    }
+
     fn install_panic_hook(&self) {
         let client = self.client.clone();
         let runtime = tokio::runtime::Handle::current();
@@ -337,65 +716,62 @@ impl LanguageServer for Backend {
         let text = params.text_document.text;
         let version = params.text_document.version;
         let uri_display = uri.to_string();
-        self.update_document(uri.clone(), text.clone()).await;
+        let previous_workspace = self.workspace_modules_for(&uri).await;
+        let previous_summaries =
+            Self::module_export_summaries_from_workspace(&uri, &previous_workspace);
+        self.update_document(uri.clone(), text.clone(), version)
+            .await;
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-        let (include_specs_snippets, strict, parse_diags, checkpoint) = {
+        let current_summaries = Self::module_export_summaries_from_workspace(&uri, &workspace);
+        let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
+        let export_changed = !changed_modules.is_empty();
+        let dependent_targets = self
+            .open_dependents_for_recheck(&uri, &changed_modules, &workspace)
+            .await;
+        let (include_specs_snippets, strict_level, strict, checkpoint) =
+            self.diagnostics_context().await;
+        let parse_diags = {
             let state = self.state.lock().await;
-            let parse_diags = state
+            state
                 .documents
                 .get(&uri)
                 .map(|doc| doc.parse_diags.clone())
-                .unwrap_or_default();
-            (
-                state.diagnostics_in_specs_snippets,
-                state.strict.clone(),
-                parse_diags,
-                state.typecheck_checkpoint.clone(),
-            )
+                .unwrap_or_default()
         };
-        let uri2 = uri.clone();
+        let mut changed_module_names: Vec<String> = changed_modules.into_iter().collect();
+        changed_module_names.sort();
         let diagnostics_started = Instant::now();
-        let (diagnostics, new_checkpoint) = match tokio::task::spawn_blocking(move || {
-            let (cp, is_new) = match checkpoint {
-                Some(cp) => (cp, false),
-                None => {
-                    let stdlib = aivi::embedded_stdlib_modules();
-                    (aivi::check_types_stdlib_checkpoint(&stdlib), true)
-                }
-            };
-            let diags = Backend::build_diagnostics_with_workspace(
-                &text,
-                &uri2,
-                &workspace,
-                include_specs_snippets,
-                &strict,
-                Some(parse_diags),
-                Some(&cp),
-            );
-            (diags, is_new.then_some(cp))
-        })
-        .await
-        {
-            Ok(result) => result,
-            Err(err) => {
-                self.log_join_error("diagnostics.did_open", &err).await;
-                (Vec::new(), None)
-            }
+        let snapshot = self.begin_diagnostics_snapshot().await;
+        let current_target = DiagnosticTarget {
+            uri: uri.clone(),
+            version: Some(version),
+            text,
+            parse_diags: Some(parse_diags),
         };
-        if let Some(cp) = new_checkpoint {
-            let mut state = self.state.lock().await;
-            state.typecheck_checkpoint.get_or_insert(cp);
-        }
-        let diagnostic_count = diagnostics.len();
-        self.log_telemetry(
+        let handle = self.spawn_diagnostics_publish_task(
+            snapshot,
             "diagnostics.did_open",
-            diagnostics_started.elapsed(),
-            format!("uri={uri_display} version={version} count={diagnostic_count}"),
-        )
-        .await;
-        self.client
-            .publish_diagnostics(uri, diagnostics, Some(version))
-            .await;
+            diagnostics_started,
+            None,
+            format!(
+                "uri={uri_display} version={version} strict={} export_changed={export_changed} dependents={} changed_modules={}",
+                strict_level as u8,
+                dependent_targets.len(),
+                changed_module_names.join(",")
+            ),
+            workspace,
+            Some(current_target),
+            dependent_targets,
+            include_specs_snippets,
+            strict,
+            checkpoint,
+        );
+        let mut state = self.state.lock().await;
+        if state.diagnostics_snapshot == snapshot {
+            state.pending_diagnostics = Some(handle.abort_handle());
+        } else {
+            handle.abort();
+        }
     }
 
     async fn did_change(&self, params: tower_lsp::lsp_types::DidChangeTextDocumentParams) {
@@ -426,123 +802,126 @@ impl LanguageServer for Backend {
         // Capture parse diagnostics for *this* handler's text before the debounce sleep so
         // a concurrently executed stale handler cannot overwrite the document state with its
         // own (potentially broken) parse results and corrupt what we pass to the type-checker.
-        let parse_diags = self.update_document(uri.clone(), text.clone()).await;
+        let previous_summaries = self.document_module_export_summaries(&uri).await;
+        let parse_diags = self
+            .update_document(uri.clone(), text.clone(), version)
+            .await;
+        let current_summaries = self.document_module_export_summaries(&uri).await;
+        let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
+        let export_changed = !changed_modules.is_empty();
 
-        // Phase 1: debounce — cancel the previous in-flight task and start a fresh timer.
-        // Use the LSP document version (strictly monotonic per document) so that a concurrently
-        // processed older change can never "win" the race against a newer one by happening to
-        // increment the internal counter last.
-        let current_version = {
-            let mut state = self.state.lock().await;
-            let v = version as u64;
-            if v > state.diagnostics_version {
-                if let Some(handle) = state.pending_diagnostics.take() {
-                    handle.abort();
-                }
-                state.diagnostics_version = v;
-            }
-            v
-        };
+        // Phase 4: debounce against a workspace snapshot token so superseded work never publishes.
+        let current_snapshot = self.begin_diagnostics_snapshot().await;
         let diagnostics_started = Instant::now();
         let uri_display = uri.to_string();
-
-        tokio::time::sleep(Duration::from_millis(150)).await;
-
-        // If another keystroke arrived while we were sleeping, bail out.
-        {
-            let state = self.state.lock().await;
-            if state.diagnostics_version != current_version {
-                return;
-            }
-        }
-
-        let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-        let (include_specs_snippets, strict, checkpoint) = {
-            let state = self.state.lock().await;
-            (
-                state.diagnostics_in_specs_snippets,
-                state.strict.clone(),
-                state.typecheck_checkpoint.clone(),
-            )
+        let current_target = DiagnosticTarget {
+            uri: uri.clone(),
+            version: Some(version),
+            text,
+            parse_diags: Some(parse_diags),
         };
-
-        let uri2 = uri.clone();
-        let text2 = text.clone();
-        let state_arc = Arc::clone(&self.state);
-        let client = self.client.clone();
-
+        let backend = Backend {
+            client: self.client.clone(),
+            state: Arc::clone(&self.state),
+        };
+        let changed_modules_for_task = changed_modules.clone();
         let handle = tokio::spawn(async move {
-            let (diagnostics, new_checkpoint) = match tokio::task::spawn_blocking(move || {
-                let (cp, is_new) = match checkpoint {
-                    Some(cp) => (cp, false),
-                    None => {
-                        let stdlib = aivi::embedded_stdlib_modules();
-                        (aivi::check_types_stdlib_checkpoint(&stdlib), true)
-                    }
-                };
-                let diags = Backend::build_diagnostics_with_workspace(
-                    &text2,
-                    &uri2,
-                    &workspace,
-                    include_specs_snippets,
-                    &strict,
-                    Some(parse_diags),
-                    Some(&cp),
-                );
-                (diags, is_new.then_some(cp))
-            })
-            .await
+            tokio::time::sleep(Duration::from_millis(150)).await;
             {
-                Ok(result) => result,
-                Err(err) => {
-                    Backend::log_join_error_with_client(&client, "diagnostics.did_change", &err)
-                        .await;
-                    (Vec::new(), None)
+                let state = backend.state.lock().await;
+                if state.diagnostics_snapshot != current_snapshot {
+                    return;
                 }
-            };
-            let diagnostic_count = diagnostics.len();
+            }
 
-            let should_publish = {
-                let mut state = state_arc.lock().await;
-                if let Some(cp) = new_checkpoint {
-                    state.typecheck_checkpoint.get_or_insert(cp);
-                }
-                state.pending_diagnostics = None;
-                state.diagnostics_version == current_version
-            };
-
-            Backend::log_telemetry_with_client(
-                &client,
+            let workspace = backend.workspace_modules_for_diagnostics(&uri).await;
+            let dependent_targets = backend
+                .open_dependents_for_recheck(&uri, &changed_modules_for_task, &workspace)
+                .await;
+            let (include_specs_snippets, strict_level, strict, checkpoint) =
+                backend.diagnostics_context().await;
+            let mut changed_module_names: Vec<String> =
+                changed_modules_for_task.into_iter().collect();
+            changed_module_names.sort();
+            Backend::run_diagnostics_publish_task(
+                backend.client.clone(),
+                Arc::clone(&backend.state),
+                current_snapshot,
                 "diagnostics.did_change",
-                diagnostics_started.elapsed(),
+                diagnostics_started,
                 format!(
-                    "uri={uri_display} version={version} count={diagnostic_count} published={should_publish}"
+                    "uri={uri_display} version={version} strict={} export_changed={export_changed} dependents={} changed_modules={}",
+                    strict_level as u8,
+                    dependent_targets.len(),
+                    changed_module_names.join(",")
                 ),
+                workspace,
+                Some(current_target),
+                dependent_targets,
+                include_specs_snippets,
+                strict,
+                checkpoint,
             )
             .await;
-
-            if should_publish {
-                client
-                    .publish_diagnostics(uri, diagnostics, Some(version))
-                    .await;
-            }
         });
 
         // Store the abort handle so the next keystroke can cancel this task.
-        {
-            let mut state = self.state.lock().await;
-            if state.diagnostics_version == current_version {
-                state.pending_diagnostics = Some(handle.abort_handle());
-            } else {
-                handle.abort();
-            }
+        let mut state = self.state.lock().await;
+        if state.diagnostics_snapshot == current_snapshot {
+            state.pending_diagnostics = Some(handle.abort_handle());
+        } else {
+            handle.abort();
         }
     }
 
     async fn did_close(&self, params: tower_lsp::lsp_types::DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
+        let snapshot = self.begin_diagnostics_snapshot().await;
+        let previous_summaries = self.document_module_export_summaries(&uri).await;
         self.remove_document(&uri).await;
-        self.client.publish_diagnostics(uri, Vec::new(), None).await;
+        self.client.publish_diagnostics(uri.clone(), Vec::new(), None).await;
+        let workspace = self.workspace_modules_for_diagnostics(&uri).await;
+        let current_summaries = Self::module_export_summaries_from_workspace(&uri, &workspace);
+        let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
+        let dependent_targets = self
+            .open_dependents_for_recheck(&uri, &changed_modules, &workspace)
+            .await;
+        let (include_specs_snippets, strict_level, strict, checkpoint) =
+            self.diagnostics_context().await;
+        let mut changed_module_names: Vec<String> = changed_modules.into_iter().collect();
+        changed_module_names.sort();
+        if dependent_targets.is_empty() {
+            let mut state = self.state.lock().await;
+            if state.diagnostics_snapshot == snapshot {
+                state.pending_diagnostics = None;
+            }
+            return;
+        }
+
+        let handle = self.spawn_diagnostics_publish_task(
+            snapshot,
+            "diagnostics.did_close",
+            Instant::now(),
+            None,
+            format!(
+                "strict={} dependents={} changed_modules={}",
+                strict_level as u8,
+                dependent_targets.len(),
+                changed_module_names.join(",")
+            ),
+            workspace,
+            None,
+            dependent_targets,
+            include_specs_snippets,
+            strict,
+            checkpoint,
+        );
+        let mut state = self.state.lock().await;
+        if state.diagnostics_snapshot == snapshot {
+            state.pending_diagnostics = Some(handle.abort_handle());
+        } else {
+            handle.abort();
+        }
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
@@ -587,65 +966,77 @@ impl LanguageServer for Backend {
             return;
         }
 
-        let (open_uris, include_specs_snippets, strict) = {
+        let (open_targets, include_specs_snippets, strict_level, strict, checkpoint) = {
             let state = self.state.lock().await;
             (
-                state.documents.keys().cloned().collect::<Vec<_>>(),
+                state
+                    .documents
+                    .iter()
+                    .map(|(uri, document)| DiagnosticTarget {
+                        uri: uri.clone(),
+                        version: Some(document.version),
+                        text: document.text.clone(),
+                        parse_diags: Some(document.parse_diags.clone()),
+                    })
+                    .collect::<Vec<_>>(),
                 state.diagnostics_in_specs_snippets,
+                state.strict.level,
                 state.strict.clone(),
+                state.typecheck_checkpoint.clone(),
             )
         };
+        let current_snapshot = self.begin_diagnostics_snapshot().await;
+        let diagnostics_started = Instant::now();
+        let mut recheck_targets = Vec::new();
 
-        for uri in open_uris {
-            let doc_path = PathBuf::from(Self::path_from_uri(&uri));
+        for target in open_targets {
+            let doc_path = PathBuf::from(Self::path_from_uri(&target.uri));
             let Some(root) = Self::project_root_for_path(&doc_path, &workspace_folders) else {
                 continue;
             };
             if !affected_roots.contains(&root) {
                 continue;
             }
-
-            let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-            let Some(text) = self
-                .with_document_text(&uri, |content| content.to_string())
-                .await
-            else {
-                continue;
-            };
-            let uri2 = uri.clone();
-            let strict2 = strict.clone();
-            let checkpoint = {
-                let state = self.state.lock().await;
-                state.typecheck_checkpoint.clone()
-            };
-            let diagnostics = tokio::task::spawn_blocking(move || {
-                let (cp_opt, is_new) = match checkpoint {
-                    Some(cp) => (cp, false),
-                    None => {
-                        let stdlib = aivi::embedded_stdlib_modules();
-                        (aivi::check_types_stdlib_checkpoint(&stdlib), true)
-                    }
-                };
-                let diags = Self::build_diagnostics_with_workspace(
-                    &text,
-                    &uri2,
-                    &workspace,
-                    include_specs_snippets,
-                    &strict2,
-                    None,
-                    Some(&cp_opt),
-                );
-                (diags, is_new.then_some(cp_opt))
-            })
-            .await
-            .unwrap_or_default();
-            if let Some(cp) = diagnostics.1 {
-                let mut state = self.state.lock().await;
-                state.typecheck_checkpoint.get_or_insert(cp);
+            recheck_targets.push(target);
+        }
+        if recheck_targets.is_empty() {
+            let mut state = self.state.lock().await;
+            if state.diagnostics_snapshot == current_snapshot {
+                state.pending_diagnostics = None;
             }
-            self.client
-                .publish_diagnostics(uri, diagnostics.0, None)
-                .await;
+            return;
+        }
+
+        let workspace = {
+            let mut merged = HashMap::new();
+            for target in &recheck_targets {
+                merged.extend(self.workspace_modules_for_diagnostics(&target.uri).await);
+            }
+            merged
+        };
+        let handle = self.spawn_diagnostics_publish_task(
+            current_snapshot,
+            "diagnostics.did_change_watched_files",
+            diagnostics_started,
+            None,
+            format!(
+                "roots={} strict={} docs={}",
+                affected_roots.len(),
+                strict_level as u8,
+                recheck_targets.len()
+            ),
+            workspace,
+            None,
+            recheck_targets,
+            include_specs_snippets,
+            strict,
+            checkpoint,
+        );
+        let mut state = self.state.lock().await;
+        if state.diagnostics_snapshot == current_snapshot {
+            state.pending_diagnostics = Some(handle.abort_handle());
+        } else {
+            handle.abort();
         }
     }
 
