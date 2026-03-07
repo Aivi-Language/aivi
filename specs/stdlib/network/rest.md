@@ -18,6 +18,21 @@ Use `aivi.rest` when you are talking to a conventional REST API and want a frien
 
 If you need full control over raw HTTP responses, use `aivi.net.http` instead.
 
+## Start here
+
+A useful mental model is:
+
+- `aivi.net.http` = raw request/response control
+- `aivi.rest` = HTTP plus decoding, auth helpers, retry/timeouts, and optional strict status handling
+
+Choose the smallest entry point that fits:
+
+| If you need to... | Start with... |
+| --- | --- |
+| fetch and decode JSON with defaults | `get` |
+| send one simple text body and decode the response | `post` |
+| configure timeouts, retries, bearer auth, or strict status rules | `fetch` |
+
 ## Typical example
 
 This is the style of code `aivi.rest` is meant for:
@@ -38,7 +53,7 @@ use aivi.rest
 
 savePost : Url -> Text -> Effect Text SavedPost
 savePost = url => token =>
-  fetch {
+  request = {
     method: "POST"
     url: url
     headers: [{ name: "Accept", value: "application/json" }]
@@ -48,6 +63,7 @@ savePost = url => token =>
     bearerToken: Some token   // Adds Authorization: Bearer <token>.
     strictStatus: Some True   // Treat non-2xx responses as errors.
   }
+  fetch request
 ```
 
 ## Types

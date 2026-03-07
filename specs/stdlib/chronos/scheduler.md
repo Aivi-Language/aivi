@@ -7,6 +7,16 @@ It is meant for work that should survive process restarts or be coordinated acro
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.scheduler<span class="domain-badge">domain</span></div>
 
+## Quick chooser
+
+| If you need... | Use... |
+| --- | --- |
+| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
+| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
+| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
+| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
+| durable plans, cron rules, leases, or retry schedules | `aivi.chronos.scheduler` |
+
 ## When to use `Scheduler`
 
 Use this domain when a simple in-process timer is not enough. Typical cases include:

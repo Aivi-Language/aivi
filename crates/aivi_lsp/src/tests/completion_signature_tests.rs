@@ -514,8 +514,8 @@ fn gtk_arch_completion_includes_architecture_snippets() {
         .expect("gtkApp snippet");
     let insert_text = gtk_app.insert_text.as_deref().expect("gtkApp snippet body");
     assert!(insert_text.contains("subscriptions:"));
-    assert!(insert_text.contains("toMsg:"));
-    assert!(insert_text.contains("appStep state"));
+    assert!(insert_text.contains("toMsg: auto"));
+    assert!(insert_text.contains("commands: []"));
 
     let docs = gtk_app.documentation.as_ref().expect("gtkApp snippet docs");
     let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {

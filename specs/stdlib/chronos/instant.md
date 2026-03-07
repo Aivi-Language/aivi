@@ -7,9 +7,19 @@ Use it when you care about *when something actually happened* rather than *what 
 
 `Instant` corresponds to a UTC timestamp. By contrast, the calendar and timezone domains are about human-facing date and local-time concepts.
 
-**Implementation note:** `Timestamp` is represented as `DateTime` (RFC3339 text) at runtime, and Instant operations parse and format that representation. Durations use `Span` from `aivi.chronos.duration` with millisecond precision.
+**Implementation note:** `Timestamp` is represented as `DateTime` in RFC3339 text form at runtime, which means timestamps look like `2026-01-01T12:30:00Z`. Instant operations parse and format that text representation. Durations use `Span` from `aivi.chronos.duration` with millisecond precision.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.instant<span class="domain-badge">domain</span></div>
+
+## Quick chooser
+
+| If you need... | Use... |
+| --- | --- |
+| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
+| one exact UTC moment | `aivi.chronos.instant` |
+| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
+| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
+| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
 
 ## When to use `Instant`
 

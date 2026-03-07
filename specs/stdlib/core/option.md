@@ -1,7 +1,7 @@
 # Standard Library: Option Utilities
 
 <!-- quick-info: {"kind":"module","name":"aivi.option"} -->
-The `aivi.option` module provides utility functions for working with `Option A` values. These complement the `??` operator and the `Functor`/`Monad` instances from `aivi.logic`.
+The `aivi.option` module provides utility functions for working with `Option A` values. These complement the `??` operator and the shared `map`/`flatMap` style operations provided through `aivi.logic`.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.option</div>
@@ -14,6 +14,12 @@ The `aivi.option` module provides utility functions for working with `Option A` 
 - `None` means it does not.
 
 Use `Option` when absence is expected and normal, such as a missing query parameter, an empty search result, or an optional configuration value.
+
+## Quick chooser
+
+- use `Option` when “missing” is the whole story
+- use `Result` when you need to explain *why* something is missing or invalid
+- use `Validation` when you want to collect multiple independent problems at once
 
 ## Overview
 

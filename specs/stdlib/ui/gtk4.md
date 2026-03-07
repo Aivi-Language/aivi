@@ -206,6 +206,8 @@ Signal sugar works on both shorthand and verbose tags:
 
 Signal handler values must be compile-time expressions, such as constructors or constructor-like tags. Runtime lambdas are not valid here.
 
+Inside `gtkApp`, the common case can use `toMsg: auto` instead of repeating a manual `GtkSignalEvent -> Option Msg` adapter. `auto` derives constructor-style signal routing from the current view tree and works best when each signal is either unique in the view or attached to a widget with an `id="..."` name.
+
 ### Runtime coverage and dynamic children
 
 The runtime covers many common classes such as `GtkBox`, `GtkHeaderBar`, `AdwHeaderBar`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`. Additional `Adw*` classes can be created dynamically when their GType is available.
@@ -397,12 +399,13 @@ Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart`
 The helper surface includes:
 
 - `AppStep { model, commands }`
+- `auto` for common constructor-style `toMsg` routing
 - command helpers: `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`
 - subscription helpers: `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, `subscriptionSource`
 - reactive helper: `computed`
 - compatibility helpers: `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`
 
-`commandPerform` and `subscriptionSource` operate on `Msg` directly today (`run : Effect GtkError msg`, `open : Resource GtkError (Recv msg)`), which keeps many ordinary apps straightforward to write.
+`commandPerform` and `subscriptionSource` operate on `Msg` directly today (`run : Effect GtkError msg`, `open : Resource GtkError (Recv msg)`), which keeps many ordinary apps straightforward to write. `appStep` and `appStepWith` are optional shorthand for the same `{ model, commands }` record shape that `update` returns.
 
 `onStart` is the right place for one-time setup such as app CSS or action registration. Repeating timers, ongoing background work, and external feeds belong in commands or subscriptions.
 
@@ -434,24 +437,18 @@ editorView = state => ~<gtk>
   </GtkBox>
 </gtk>
 
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event =>
-  event match
-    | GtkInputChanged _ "titleInput" txt => Some (TitleChanged txt)
-    | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
-    | GtkClicked _ _                       => Some Save
-    | _                                    => None
-
 update : Msg -> { title: Text, body: Text } -> Effect GtkError (AppStep { title: Text, body: Text } Msg)
 update = msg => state =>
   msg match
-    | TitleChanged txt => pure (appStep (state <| { title: txt }))
-    | BodyChanged txt  => pure (appStep (state <| { body: txt }))
-    | Save             => do Effect {
-        // Save using the current committed model.
-        _ <- saveNote state
-        pure (appStep state)
-      }
+    | TitleChanged txt =>
+        pure { model: state <| { title: txt }, commands: [] }
+    | BodyChanged txt =>
+        pure { model: state <| { body: txt }, commands: [] }
+    | Save =>
+        do Effect {
+          _ <- saveNote state
+          pure { model: state, commands: [] }
+        }
 
 main : Effect GtkError Unit
 main = gtkApp {
@@ -462,7 +459,7 @@ main = gtkApp {
   onStart: _ _ => pure Unit,
   subscriptions: noSubscriptions,
   view: editorView,
-  toMsg: toMsg,
+  toMsg: auto,
   update: update
 }
 ```

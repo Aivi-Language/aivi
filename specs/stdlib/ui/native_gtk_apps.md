@@ -166,10 +166,10 @@ The example below shows the pieces working together:
 
 - `AdwClamp` provides a simple libadwaita layout container,
 - `GtkEntry` and `GtkButton` emit signals,
-- `toMsg` maps those signals into app messages,
-- `subscriptions` keeps a timer alive,
-- `commandAfter` schedules a delayed follow-up message,
-- `computed` derives a reusable headline from committed state.
+- `toMsg: auto` derives the simple signal routing from the current view,
+- `SubscriptionEvery` keeps a timer alive,
+- `CommandAfter` schedules a delayed follow-up message,
+- direct `{ model, commands }` records keep `update` readable.
 
 ```aivi
 use aivi
@@ -196,12 +196,10 @@ initialModel = {
 }
 
 headline : Model -> Text
-headline =
-  computed "projectSettings.headline" (state =>
-    if state.projectName == ""
-      then "Project Settings"
-      else "Project Settings · {state.projectName}"
-  )
+headline = state =>
+  if state.projectName == ""
+    then "Project Settings"
+    else "Project Settings · {state.projectName}"
 
 statusText : Model -> Text
 statusText = state => state.status
@@ -218,57 +216,67 @@ view = state =>
         marginStart="24"
         marginEnd="24"
       >
-        <GtkLabel label={headline} cssClass="title-2" />
+        <GtkLabel label={headline state} cssClass="title-2" />
         <GtkEntry
-          id="projectNameInput"
           text={state.projectName}
           placeholderText="Project name"
           onInput={ ProjectNameChanged }
         />
-        <GtkButton id="saveBtn" label="Save" onClick={ Save } />
+        <GtkButton label="Save" onClick={ Save } />
         <GtkLabel label={statusText state} />
         <GtkLabel label={"Seconds since save: {toText state.secondsSinceSave}"} />
       </GtkBox>
     </AdwClamp>
   </gtk>
 
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event => event match
-  | GtkInputChanged _ "projectNameInput" txt => Some (ProjectNameChanged txt)
-  | GtkClicked _ "saveBtn"                   => Some Save
-  | _                                         => None
-
 subscriptions : Model -> List (Subscription Msg)
 subscriptions = _ => [
-  subscriptionEvery {
+  SubscriptionEvery {
     key: "clock"
     millis: 1000
     tag: Tick
   }
 ]
 
+renameProject : Text -> Model -> AppStep Model Msg
+renameProject = txt state => {
+  model: state <| { projectName: txt }
+  commands: []
+}
+
+saveProject : Model -> AppStep Model Msg
+saveProject = state => {
+  model: state <| { secondsSinceSave: 0, status: "Saved" }
+  commands: [
+    CommandAfter {
+      key: "clear-status"
+      millis: 2000
+      msg: ClearStatus
+    }
+  ]
+}
+
+tick : Model -> AppStep Model Msg
+tick = state => {
+  model: state <| { secondsSinceSave: state.secondsSinceSave + 1 }
+  commands: []
+}
+
+clearStatus : Model -> AppStep Model Msg
+clearStatus = state => {
+  model: state <| { status: "Waiting for changes" }
+  commands: []
+}
+
 update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
 update = msg => state =>
-  msg match
-    | ProjectNameChanged txt =>
-        // Update the draft immediately so the entry and label stay in sync.
-        pure (appStep (state <| { projectName: txt }))
-    | Save =>
-        pure (appStepWith
-          (state <| { secondsSinceSave: 0, status: "Saved" })
-          [
-            // Clear the status a moment later without blocking the UI.
-            commandAfter {
-              key: "clear-status"
-              millis: 2000
-              msg: ClearStatus
-            }
-          ]
-        )
-    | Tick =>
-        pure (appStep (state <| { secondsSinceSave: state.secondsSinceSave + 1 }))
-    | ClearStatus =>
-        pure (appStep (state <| { status: "Waiting for changes" }))
+  pure (
+    msg match
+      | ProjectNameChanged txt => renameProject txt state
+      | Save                   => saveProject state
+      | Tick                   => tick state
+      | ClearStatus            => clearStatus state
+  )
 
 main : Effect GtkError Unit
 main = gtkApp {
@@ -279,10 +287,12 @@ main = gtkApp {
   onStart: _ _ => pure Unit
   subscriptions: subscriptions
   view: view
-  toMsg: toMsg
+  toMsg: auto
   update: update
 }
 ```
+
+When a screen has several unnamed widgets producing the same signal, either give them `id="..."` names or keep an explicit `toMsg`. `auto` is meant for the straightforward constructor-routing cases, not for every possible GTK event workflow.
 
 ## When to reach for lower-level primitives
 

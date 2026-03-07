@@ -49,7 +49,7 @@ export trayNotifyPersonalEmail, traySetEmailSuggestions
 export CommandKey, SubscriptionKey, AppStep
 export Command, CommandNone, CommandBatch, CommandEmit, CommandPerform, CommandAfter, CommandCancel
 export Subscription, SubscriptionNone, SubscriptionBatch, SubscriptionEvery, SubscriptionSource
-export appStep, appStepWith, noSubscriptions, liftAppUpdate
+export appStep, appStepWith, noSubscriptions, liftAppUpdate, auto
 export commandNone, commandBatch, commandEmit, commandPerform, commandAfter, commandCancel
 export subscriptionNone, subscriptionBatch, subscriptionEvery, subscriptionSource
 export gtkApp
@@ -166,6 +166,9 @@ appStepWith = model commands => { model, commands }
 
 noSubscriptions : s -> List (Subscription msg)
 noSubscriptions = _ => []
+
+auto : GtkSignalEvent -> Option msg
+auto = event => gtk4.autoToMsg event
 
 computed : Text -> (model -> a) -> model -> a
 computed = key derive => gtk4.computed key derive
@@ -418,6 +421,7 @@ runGtkAppLoop = msgTx => msgRx => appId => win => currentModel => currentRoot =>
             do Effect {
               _ <- gtk4.reactiveCommit currentModel step.model
               newView = viewFn step.model
+              _ <- gtk4.autoBindingsSet newView
               newRoot <- reconcileNode currentRoot newView
               _ <- if newRoot == currentRoot then pure Unit else windowSetChild win newRoot
               nextSubscriptions <- syncSubscriptions msgTx (subscriptionsFn step.model) currentSubscriptions
@@ -856,6 +860,7 @@ runGtkAppHost = config =>
     _ <- config.onStart appId win
     _ <- gtk4.reactiveInit config.model
     initialView = viewFn config.model
+    _ <- gtk4.autoBindingsSet initialView
     root <- buildFromNode initialView
     _ <- windowSetChild win root
     (msgTx, msgRx) <- concurrent.make Unit

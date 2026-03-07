@@ -179,3 +179,10 @@ signal_bindings_compile = do Effect {
   _ = signalView
   assertEq True True
 }
+
+@test "auto is available as a gtkApp toMsg adapter"
+auto_adapter_available = do Effect {
+  mapped : Option TestMsg
+  mapped = auto (GtkClicked 1 "")
+  assertEq mapped None
+}

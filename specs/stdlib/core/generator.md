@@ -3,13 +3,25 @@
 <!-- quick-info: {"kind":"module","name":"aivi.generator"} -->
 The `aivi.generator` module provides utilities for AIVI generators.
 
-A generator is a pure, lazy sequence encoded as:
+Think of a generator as a **lazy recipe for values**. If you know iterators or streams from other languages, that is the right mental model: the generator describes how to produce items one at a time, and nothing happens until a consumer asks for them.
+<!-- /quick-info -->
+<div class="import-badge">use aivi.generator</div>
+
+## Mental model first
+
+`Generator A` is best understood as “a reusable plan for producing `A` values on demand,” not as “a list that already exists.”
+
+- **construct** a generator with helpers such as `range`, `fromList`, or `iterate`
+- **transform** it with helpers such as `map`, `filter`, or `zip`
+- **consume** it with helpers such as `toList`, `foldl`, `find`, or `count`
+
+### Advanced note: representation
+
+The underlying encoding is:
 
 `Generator A ≡ ∀R. (R -> A -> R) -> R -> R`
 
-This makes generators easy to map/filter/fold without loops or mutation.
-<!-- /quick-info -->
-<div class="import-badge">use aivi.generator</div>
+You do not need that type equation for everyday use. It means a generator can feed its values into any fold-like consumer without exposing loops or mutable iteration state.
 
 ## What generators are for
 
@@ -31,14 +43,6 @@ A generator stays **lazy** until you consume it.
 `Generator A` is the type behind `generate { ... }`. If you have used iterators or streams in other languages, the idea is similar: it is a reusable description of how to produce values one at a time.
 
 Because generators are pure values, you can pass them around, transform them, and combine them without hidden mutation.
-
-## A typical workflow
-
-A common pattern looks like this:
-
-1. **Construct** a generator.
-2. **Transform** it with helpers such as `map`, `filter`, or `zip`.
-3. **Consume** it with `toList`, `foldl`, `find`, `count`, or another terminal operation.
 
 ## Core API (v0.1)
 

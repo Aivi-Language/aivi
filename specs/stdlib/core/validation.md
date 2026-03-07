@@ -21,6 +21,12 @@ That makes it a good fit for tasks such as:
 
 If you want the computation to stop at the first failure, use `Result` instead.
 
+## Quick chooser
+
+- use `Option` when a value may be missing and that is normal
+- use `Result` when you want the first failure reason immediately
+- use `Validation` when you want to collect several independent problems and report them together
+
 ## 1. The `Validation` type
 
 `Validation E A` looks a lot like `Result E A`, but it is designed for a different workflow.
@@ -28,13 +34,13 @@ If you want the computation to stop at the first failure, use `Result` instead.
 - `Result` is best for sequential steps where each step depends on the previous one.
 - `Validation` is best for independent checks that can all be run and then combined.
 
-`Validation` is an **Applicative** rather than a **Monad**. In plain language, that means AIVI can combine independent validations and accumulate their errors, but it does not support `chain` for dependent step-by-step validation.
+`Validation` is an **Applicative** rather than a **Monad**. In plain language, that means AIVI can combine independent validations side by side and accumulate their errors, but it does not support `chain` for workflows where each later check depends on an earlier successful value.
 
 <<< ../../snippets/from_md/stdlib/core/validation/the_validation_type.aivi{aivi}
 
 ## 2. Applicative instance
 
-When two `Validation` values are combined applicatively and both are invalid, their errors are concatenated. That requires `E` to be a `Semigroup`; a list of errors is the most common choice.
+When two `Validation` values are combined applicatively and both are invalid, their errors are concatenated. That requires `E` to be a `Semigroup`, which simply means the error type knows how to merge two error values into one. A list of errors is the most common choice.
 
 <<< ../../snippets/from_md/stdlib/core/validation/applicative_instance.aivi{aivi}
 

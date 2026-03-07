@@ -5,9 +5,19 @@ The `TimeZone` and `ZonedDateTime` domains handle geographic time offsets, dayli
 
 They are the right tools when local time matters: meeting times, user-facing schedules, region-specific deadlines, and conversions between UTC storage and local display.
 
-**Implementation note:** time zone rules come from the IANA database (via `chrono-tz`); offsets include DST, ambiguous or invalid local times are runtime errors, and `ZonedDateTime` literals use millisecond precision.
+**Implementation note:** time zone rules come from the IANA time-zone database (the standard global list of zone names such as `Europe/Berlin` and `America/New_York`, via `chrono-tz`). Offsets include DST, ambiguous or invalid local times are runtime errors, and `ZonedDateTime` literals use millisecond precision.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.timezone<span class="domain-badge">domain</span></div>
+
+## Quick chooser
+
+| If you need... | Use... |
+| --- | --- |
+| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
+| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
+| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
+| local clock time in a named region | `aivi.chronos.timezone` |
+| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
 
 ## When to use `TimeZone`
 

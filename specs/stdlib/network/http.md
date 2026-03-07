@@ -18,6 +18,16 @@ The `Http` domain gives your program the basic building blocks for making HTTP r
 
 If you want a more opinionated client for JSON APIs, automatic bearer-token support, and stricter response handling, look at `aivi.rest`.
 
+## Start here
+
+Choose the smallest entry point that matches the job:
+
+| If you need to... | Start with... |
+| --- | --- |
+| fetch a URL with default behavior | `get` |
+| send a simple text body with `POST` | `post` |
+| set headers, choose a method, or send a structured body | `fetch` |
+
 ## Capabilities
 
 `get`, `post`, and `fetch` require the `network.http` capability, or the broader `network` shorthand. The `rest` source facade uses the same capability family.
@@ -45,7 +55,7 @@ For requests that need custom headers or a request body, use `fetch`:
 use aivi.net.http
 
 submitFeedback = url => do Effect {
-  response <- fetch {
+  request = {
     method: "POST"
     url: url
     headers: [
@@ -54,8 +64,9 @@ submitFeedback = url => do Effect {
     body: Some (Plain "Great work!")
   }
 
-  response match
-    | Ok ok  => pure ok.status
+  responseResult <- fetch request
+  responseResult match
+    | Ok response => pure response.status
     | Err err => fail "Request failed: {err.message}"
 }
 ```

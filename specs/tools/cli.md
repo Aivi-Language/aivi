@@ -21,6 +21,29 @@ aivi run                     # Build and run using aivi.toml.
 
 For a library project, use `--lib` instead of `--bin`.
 
+## Command map by task
+
+If you are skimming, start from the workflow you want:
+
+| I want to... | Command to reach for |
+| --- | --- |
+| create a new project | `aivi init` / `aivi new` |
+| add a dependency | `aivi install` |
+| run my current project | `aivi run` |
+| build artefacts without running | `aivi build` |
+| type-check quickly | `aivi check` |
+| format code | `aivi fmt` |
+| run AIVI tests | `aivi test` |
+| inspect compiler stages | `aivi parse`, `aivi desugar`, `aivi kernel`, `aivi rust-ir` |
+| start editor tooling | `aivi lsp` |
+| expose tooling over MCP | `aivi mcp serve` |
+| package or publish a library | `aivi package`, `aivi publish` |
+
+Two patterns show up throughout this page:
+
+- **project mode** reads `aivi.toml` in the current project directory
+- **direct mode** works on an explicit file or directory path you pass on the command line
+
 ## Commands
 
 ### `version`

@@ -60,6 +60,13 @@ pub(crate) struct RuntimeContext {
     machine_specs: RwLock<HashMap<String, HashMap<String, Vec<MachineEdge>>>>,
     machine_states: RwLock<HashMap<String, String>>,
     machine_handlers: RwLock<HashMap<(String, String), Vec<Value>>>,
+    pub(crate) gtk_auto_bindings: RwLock<GtkAutoBindingsState>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct GtkAutoBindingsState {
+    pub(crate) named_handlers: HashMap<(String, String), String>,
+    pub(crate) unique_handlers_by_signal: HashMap<String, Option<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -109,6 +116,7 @@ impl RuntimeContext {
             machine_specs: RwLock::new(HashMap::new()),
             machine_states: RwLock::new(HashMap::new()),
             machine_handlers: RwLock::new(HashMap::new()),
+            gtk_auto_bindings: RwLock::new(GtkAutoBindingsState::default()),
         }
     }
 

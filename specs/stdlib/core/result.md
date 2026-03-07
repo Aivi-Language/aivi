@@ -1,7 +1,7 @@
 # Standard Library: Result Utilities
 
 <!-- quick-info: {"kind":"module","name":"aivi.result"} -->
-The `aivi.result` module provides utility functions for working with `Result E A` values. These complement the `Functor`/`Monad` instances from `aivi.logic` and the `attempt` effect operator.
+The `aivi.result` module provides utility functions for working with `Result E A` values. These complement the shared `map`/`flatMap` style operations from `aivi.logic` and the `attempt` effect operator.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.result</div>
@@ -14,6 +14,12 @@ The `aivi.result` module provides utility functions for working with `Result E A
 - `Err e` holds an error value.
 
 Use `Result` when failure is expected and you want to keep it explicit instead of throwing exceptions or hiding error cases.
+
+## Quick chooser
+
+- use `Option` when you only care whether a value exists
+- use `Result` when you want one explicit success-or-error path
+- use `Validation` when you want to keep going and collect several errors
 
 ## Overview
 

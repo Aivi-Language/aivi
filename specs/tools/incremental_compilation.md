@@ -5,6 +5,25 @@ It applies to `aivi check`, `aivi build`, `aivi lsp`, and any other tool that ne
 
 The key idea is simple: reuse work only when the exact inputs still match, and only publish results that belong to one coherent workspace snapshot.
 
+## Mental model first
+
+If you want the short version, think of incremental checking as taking a **fresh photo of the workspace** for each request:
+
+- the photo includes saved files, unsaved editor buffers, and active settings
+- cached work can be reused only when it still matches that exact photo
+- results from an older photo must never leak into a newer one
+
+In this document, that “photo” is called a **workspace snapshot**.
+
+## Plain-language glossary
+
+| Term | Plain meaning |
+| --- | --- |
+| **workspace snapshot** | the full input for one check or editor request: workspace root, current file contents, open unsaved overlays, and relevant settings |
+| **open-document overlay** | unsaved editor text that temporarily overrides the file on disk for the current LSP session |
+| **definition group** | the chunk of top-level definitions that must be checked together because they refer to one another |
+| **strongly connected component (SCC)** | graph terminology for “a set of definitions where each one can reach the others through references,” so the compiler cannot safely split them apart |
+
 ## Why this exists
 
 Incremental compilation is what makes these workflows practical:
@@ -58,7 +77,7 @@ In practice that means:
 ### Same-module rule
 
 Inside one module, the recheck unit is a **definition group**, not the entire module body.
-A definition group is the strongly connected component created by top-level recursive references.
+A definition group is the strongly connected component created by top-level recursive references. In plainer language: if top-level definitions call each other in a loop, they rise and fall together as one recheck unit.
 
 Therefore:
 
@@ -82,6 +101,12 @@ If any of those change, the schema artefact fingerprint changes and its consumer
 
 Every reusable artefact has an owner: the stage that can prove which inputs produced it.
 Owners may publish immutable checkpoints for reuse; consumers may read them but must not mutate them in place.
+
+A good rule of thumb is:
+
+- **LSP session state** owns unsaved editor buffers and may reuse them only inside that session
+- **saved-on-disk builds** may populate persistent caches
+- **any cache entry** is valid only for the exact snapshot family that produced it
 
 | Artefact | Owner | Lifetime | Persistence |
 | --- | --- | --- | --- |

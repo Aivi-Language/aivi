@@ -8,6 +8,32 @@ It combines familiar database ideas—tables, rows, filters, joins, migrations, 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.database<span class="domain-badge">domain</span></div>
 
+## Start here
+
+This page is intentionally broad. If you are new to `aivi.database`, do not read it as one long reference manual. Start with the beginner path, then come back for the advanced sections when you need them.
+
+### Beginner path
+
+For a first database-backed feature, this is the shortest useful route:
+
+1. define one typed `Table A`
+2. open or configure a connection
+3. run migrations
+4. load rows or run one simple query
+5. apply inserts, updates, or deletes
+
+You can safely ignore pooling, multi-table joins, savepoints, and typed mutation helpers until that flow feels familiar.
+
+### Advanced path
+
+Come back to the later sections when you need:
+
+- explicit connection ownership for larger programs
+- portable query lowering and multi-table joins
+- transactions and savepoints
+- connection pooling
+- typed mutation helpers and reusable deltas
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/system/database/overview.aivi{aivi}
@@ -21,7 +47,16 @@ A table schema is described with ordinary values. `db.table` takes a table name 
 
 Explicit `DbConnection` handles are usually the better fit for larger programs because ownership stays local and works cleanly with pooling and transactions.
 
+### Choosing a connection style
+
+| Style | Best for | Trade-off |
+| --- | --- | --- |
+| default connection helpers (`db.configure`, `db.load`, `db.beginTx`) | tutorials, small tools, one-database apps | convenient, but the active connection is ambient |
+| explicit connections (`db.connect`, `db.loadOn`, `db.beginTxOn`) | services, pooled code, transaction-heavy workflows | a little more wiring, but ownership stays obvious |
+
 ## Types
+
+If you are still on the beginner path, you can skim this section once and return later. The first overview, migration, query, and API-table examples are the faster route to a working mental model.
 
 <<< ../../snippets/from_md/stdlib/system/database/types.aivi{aivi}
 

@@ -4,6 +4,17 @@ use std::sync::Arc;
 use super::util::{builtin, expect_text};
 use crate::runtime::{EffectValue, RuntimeError, Value};
 
+fn decode_text(value: &Value) -> Option<String> {
+    match value {
+        Value::Text(text) => Some(text.clone()),
+        Value::Int(value) => Some(value.to_string()),
+        Value::Float(value) => Some(value.to_string()),
+        Value::Bool(value) => Some(value.to_string()),
+        Value::DateTime(value) => Some(value.clone()),
+        _ => None,
+    }
+}
+
 /// Create a stub gtk4 builtin that returns an error effect.
 fn gtk4_stub(name: &'static str, arity: usize) -> Value {
     let full_name = format!("gtk4.{name}");
@@ -166,6 +177,283 @@ fn serialize_signal_builtin() -> Value {
     })
 }
 
+fn collect_auto_bindings_into(
+    node: &Value,
+    named_handlers: &mut HashMap<(String, String), String>,
+    unique_handlers_by_signal: &mut HashMap<String, Option<String>>,
+) -> Result<(), RuntimeError> {
+    let Value::Constructor { name, args } = node else {
+        return Ok(());
+    };
+    match (name.as_str(), args.as_slice()) {
+        ("GtkTextNode", [_]) => Ok(()),
+        ("GtkElement", [_, attrs, children]) => {
+            let Value::List(attrs) = attrs else {
+                return Err(RuntimeError::Message(
+                    "gtk4.autoBindingsSet: GtkElement attrs must be a List".to_string(),
+                ));
+            };
+            let Value::List(children) = children else {
+                return Err(RuntimeError::Message(
+                    "gtk4.autoBindingsSet: GtkElement children must be a List".to_string(),
+                ));
+            };
+
+            let mut widget_name = String::new();
+            let mut signal_handlers = Vec::new();
+            for attr in attrs.iter() {
+                let Value::Constructor { name, args } = attr else {
+                    continue;
+                };
+                if name != "GtkAttribute" || args.len() != 2 {
+                    continue;
+                }
+                let Some(key) = decode_text(&args[0]) else {
+                    continue;
+                };
+                let Some(value) = decode_text(&args[1]) else {
+                    continue;
+                };
+                if key == "id" {
+                    widget_name = value;
+                } else if let Some(signal_name) = key.strip_prefix("signal:") {
+                    signal_handlers.push((signal_name.to_string(), value));
+                }
+            }
+
+            for (signal_name, handler) in signal_handlers {
+                if !widget_name.is_empty() {
+                    named_handlers.insert(
+                        (widget_name.clone(), signal_name.clone()),
+                        handler.clone(),
+                    );
+                }
+                unique_handlers_by_signal
+                    .entry(signal_name)
+                    .and_modify(|existing| match existing {
+                        Some(existing_handler) if existing_handler == &handler => {}
+                        _ => *existing = None,
+                    })
+                    .or_insert_with(|| Some(handler));
+            }
+
+            for child in children.iter() {
+                collect_auto_bindings_into(child, named_handlers, unique_handlers_by_signal)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn auto_bindings_set_builtin() -> Value {
+    builtin("gtk4.autoBindingsSet", 1, |mut args, _| {
+        let node = args.remove(0);
+        Ok(Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |runtime| {
+                let node = runtime.force_value(node.clone())?;
+                let mut named_handlers = HashMap::new();
+                let mut unique_handlers_by_signal = HashMap::new();
+                collect_auto_bindings_into(
+                    &node,
+                    &mut named_handlers,
+                    &mut unique_handlers_by_signal,
+                )?;
+                *runtime.ctx.gtk_auto_bindings.write() =
+                    crate::runtime::environment::GtkAutoBindingsState {
+                        named_handlers,
+                        unique_handlers_by_signal,
+                    };
+                Ok(Value::Unit)
+            }),
+        })))
+    })
+}
+
+fn parse_auto_arg(text: &str) -> Value {
+    if text == "True" {
+        return Value::Bool(true);
+    }
+    if text == "False" {
+        return Value::Bool(false);
+    }
+    if let Ok(value) = text.parse::<i64>() {
+        return Value::Int(value);
+    }
+    if let Ok(value) = text.parse::<f64>() {
+        return Value::Float(value);
+    }
+    Value::Text(text.to_string())
+}
+
+fn split_auto_args(text: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0usize;
+    for ch in text.chars() {
+        match ch {
+            '(' | '[' | '{' => {
+                depth = depth.saturating_add(1);
+                current.push(ch);
+            }
+            ')' | ']' | '}' => {
+                depth = depth.saturating_sub(1);
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    parts.push(trimmed.to_string());
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        parts.push(trimmed.to_string());
+    }
+    parts
+}
+
+fn construct_auto_message(handler: &str, payload: Option<Value>) -> Option<Value> {
+    if handler.is_empty() {
+        return None;
+    }
+    if let Some(paren_pos) = handler.find('(') {
+        if !handler.ends_with(')') {
+            return None;
+        }
+        let name = handler[..paren_pos].trim();
+        if name.is_empty() {
+            return None;
+        }
+        let inner = &handler[paren_pos + 1..handler.len().saturating_sub(1)];
+        let args = split_auto_args(inner)
+            .into_iter()
+            .map(|arg| parse_auto_arg(&arg))
+            .collect::<Vec<_>>();
+        return Some(Value::Constructor {
+            name: name.to_string(),
+            args,
+        });
+    }
+
+    let args = payload.into_iter().collect::<Vec<_>>();
+    Some(Value::Constructor {
+        name: handler.trim().to_string(),
+        args,
+    })
+}
+
+fn auto_to_msg_builtin() -> Value {
+    builtin("gtk4.autoToMsg", 1, |mut args, runtime| {
+        let event = runtime.force_value(args.remove(0))?;
+        let bindings = runtime.ctx.gtk_auto_bindings.read().clone();
+        let (signal_name, widget_name, handler_from_event, payload) = match event {
+            Value::Constructor { name, args } if name == "GtkClicked" && args.len() == 2 => (
+                "clicked".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                None,
+            ),
+            Value::Constructor { name, args } if name == "GtkInputChanged" && args.len() == 3 => (
+                "changed".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                decode_text(&args[2]).map(Value::Text),
+            ),
+            Value::Constructor { name, args } if name == "GtkActivated" && args.len() == 2 => (
+                "activate".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                None,
+            ),
+            Value::Constructor { name, args } if name == "GtkToggled" && args.len() == 3 => (
+                "toggled".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                match &args[2] {
+                    Value::Bool(value) => Some(Value::Bool(*value)),
+                    _ => None,
+                },
+            ),
+            Value::Constructor { name, args } if name == "GtkValueChanged" && args.len() == 3 => (
+                "value-changed".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                match &args[2] {
+                    Value::Float(value) => Some(Value::Float(*value)),
+                    Value::Int(value) => Some(Value::Float(*value as f64)),
+                    _ => None,
+                },
+            ),
+            Value::Constructor { name, args } if name == "GtkFocusIn" && args.len() == 2 => (
+                "focus-enter".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                None,
+            ),
+            Value::Constructor { name, args } if name == "GtkFocusOut" && args.len() == 2 => (
+                "focus-leave".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                None,
+            ),
+            Value::Constructor { name, args } if name == "GtkTick" && args.is_empty() => (
+                "tick".to_string(),
+                String::new(),
+                None,
+                None,
+            ),
+            Value::Constructor { name, args } if name == "GtkUnknownSignal" && args.len() == 5 => (
+                decode_text(&args[2]).unwrap_or_default(),
+                decode_text(&args[1]).unwrap_or_default(),
+                decode_text(&args[3]),
+                decode_text(&args[4]).filter(|text| !text.is_empty()).map(Value::Text),
+            ),
+            _ => {
+                return Ok(Value::Constructor {
+                    name: "None".to_string(),
+                    args: vec![],
+                })
+            }
+        };
+
+        let handler = handler_from_event
+            .or_else(|| {
+                if widget_name.is_empty() {
+                    None
+                } else {
+                    bindings
+                        .named_handlers
+                        .get(&(widget_name.clone(), signal_name.clone()))
+                        .cloned()
+                }
+            })
+            .or_else(|| {
+                bindings
+                    .unique_handlers_by_signal
+                    .get(&signal_name)
+                    .and_then(|handler| handler.clone())
+            });
+
+        let Some(message) = handler.and_then(|handler| construct_auto_message(&handler, payload))
+        else {
+            return Ok(Value::Constructor {
+                name: "None".to_string(),
+                args: vec![],
+            });
+        };
+
+        Ok(Value::Constructor {
+            name: "Some".to_string(),
+            args: vec![message],
+        })
+    })
+}
+
 pub(super) fn build_gtk4_record() -> Value {
     if let Some(real) = super::gtk4_real::build_gtk4_record_real(build_gtk4_stubs) {
         return real;
@@ -310,6 +598,8 @@ fn build_gtk4_stubs() -> Value {
     fields.insert("reactiveCommit".to_string(), reactive_commit_builtin());
     fields.insert("signal".to_string(), signal_builtin());
     fields.insert("computed".to_string(), computed_builtin());
+    fields.insert("autoBindingsSet".to_string(), auto_bindings_set_builtin());
+    fields.insert("autoToMsg".to_string(), auto_to_msg_builtin());
     fields.insert("serializeAttr".to_string(), serialize_attr_builtin());
     fields.insert("serializeSignal".to_string(), serialize_signal_builtin());
     fields.insert("eachItems".to_string(), each_items_builtin());

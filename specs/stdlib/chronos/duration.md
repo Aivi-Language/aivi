@@ -7,6 +7,16 @@ That is especially helpful for timeouts, retry delays, sleeps, polling intervals
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.duration<span class="domain-badge">domain</span></div>
 
+## Quick chooser
+
+| If you need... | Use... |
+| --- | --- |
+| a fixed elapsed span like `5m` or `250ms` | `aivi.chronos.duration` |
+| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
+| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
+| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
+| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
+
 ## When to use `Duration`
 
 Use this domain for fixed spans of elapsed time, such as:
