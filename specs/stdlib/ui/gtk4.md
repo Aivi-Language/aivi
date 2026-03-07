@@ -250,6 +250,22 @@ Uppercase or dotted GTK tags are treated as component calls instead of intrinsic
 
 Component tags use **record-based lowering**: attributes become record fields and children become a `children` field. Signal sugar and `props` normalization do not apply there because the component function owns its own API.
 
+GTK sigils also support **function-call tags** for local lowerCamel helpers that would be awkward to spell directly inside a sigil. A simple uppercase self-closing tag with positional arguments lowers to the same helper with a lowercased first letter:
+
+```aivi
+// Equivalent to: { navRailNode model.appState.activeSection "sidebar" }
+~<gtk>
+  <NavRailNode model.appState.activeSection "sidebar" />
+</gtk>
+```
+
+Function-call tags:
+
+- only apply to non-`Gtk*`/`Adw*`/`Gsk*` simple tags,
+- use positional arguments instead of attributes,
+- must be self-closing, and
+- do not participate in component record lowering.
+
 ### Queue-based signal helpers
 
 - `signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)` reads the next queued signal event, returning `None` when the queue is empty.
@@ -416,6 +432,8 @@ gtkApp : {
 
 Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → initial `subscriptions` → `windowPresent` → event loop with `toMsg`/`update` → reactive invalidation for changed source snapshots → `reconcileNode` → subscription refresh → command launch.
 
+The host exits when the primary window actually closes. If `onStart` switches that window to `hideOnClose`, the host keeps running and the close button just hides the window.
+
 The helper surface includes:
 
 - `AppStep { model, commands }`
@@ -496,6 +514,7 @@ main = gtkApp {
 - `E1613`: non-literal `props` field value
 - `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onToggle`, `onValueChanged`, `onFocusIn`, `onFocusOut`, and `<signal ... on={...}>` require compile-time values)
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node)
+- `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)
 
 ## UI update pattern (state machine + events + repaint)
 

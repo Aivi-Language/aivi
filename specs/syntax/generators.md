@@ -1,68 +1,76 @@
 # Generators
 
-Generators are **pure, pull-based sequence producers**. They are for describing sequences of values without mutation, manual iterator state, or I/O.
+Generators are **pure sequence builders**. They let you describe a stream of values without mutation, manual iterator state, or I/O.
+
+A helpful mental model is: a generator describes how to produce the next value when a consumer asks for it. That is what “pull-based” means here.
 
 They:
 
+- stay pure
 - do not perform effects
-- do not suspend execution stacks like coroutine systems do
 - can model finite or infinite data
 
 ## 7.1 Generator type
 
 <<< ../snippets/from_md/syntax/generators/generator_type.aivi{aivi}
 
-A generator is a value you can pass around, return from a function, and combine with other pure code.
+A generator is an ordinary value you can pass around, return from a function, and combine with other pure code.
 
 ## 7.2 Generator expressions
-
-<<< ../snippets/from_md/syntax/generators/generator_expressions.aivi{aivi}
 
 A small example shows the overall shape:
 
 ```aivi
 generate {
-  x <- xs
-  x -> x > 0 // keep only positive elements
-  yield x * 2
+  value <- xs
+  value -> value > 0
+  yield value * 2
 }
 ```
 
-### From Python/JavaScript
+Read that block top to bottom:
 
-The `yield` spelling may look familiar, but the model is different: AIVI generators are pure values, not mutable iterators with hidden local state.
+1. take values from `xs`
+2. keep only the positive ones
+3. yield each remaining value after doubling it
 
-### From Haskell/Scala (no list comprehension syntax)
+A generator expression can also be as small as a few explicit `yield` statements:
 
-AIVI does **not** use Haskell-style list comprehensions like:
+<<< ../snippets/from_md/syntax/generators/generator_expressions.aivi{aivi}
 
-<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_01.aivi{aivi}
-
-Instead, write the equivalent logic with a `generate` block:
-
-<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_02.aivi{aivi}
-
-## 7.3 Guards and predicates
+### Common statement forms
 
 Generators use three common statement forms:
 
-- `x <- xs` binds `x` to each element produced by `xs`
-- `x = e` is a plain pure local binding
-- `x -> pred` is a guard that filters the current `x`
+- `item <- xs` binds `item` to each value produced by `xs`
+- `name = expr` is a plain pure local binding
+- `item -> predicate` keeps the current `item` only when the predicate is true
 
-In a guard, `pred` is a predicate expression with the implicit `_` bound to `x`, so bare field names like `active` resolve to `x.active`.
-
-This means these are equivalent:
+In a guard, the current item is also available implicitly. That is why these forms are equivalent:
 
 <<< ../snippets/from_md/syntax/generators/guards_and_predicates_01.aivi{aivi}
 
-Note that `.email` is an accessor function (`x => x.email`). It is useful for `map .email`, but in a predicate position you usually want a value such as `email` or `_.email`, not a function.
+A small but important distinction: `.email` is an accessor function (`user => user.email`). It is useful for `map .email`, but in a guard you usually want a boolean-valued expression such as `email`, `_.email`, or `user.email`.
 
 <<< ../snippets/from_md/syntax/generators/guards_and_predicates_02.aivi{aivi}
 
 Predicate rules are identical to `filter`.
 
-## 7.4 Effectful streaming
+### Comparisons to other languages
+
+**From Python or JavaScript:** the `yield` spelling may look familiar, but AIVI generators are pure values, not mutable iterators with hidden local state.
+
+**From Haskell or Scala:** AIVI does **not** use list-comprehension syntax.
+
+Haskell-style syntax such as this is not used:
+
+<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_01.aivi{aivi}
+
+Write the same idea with a `generate` block instead:
+
+<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_02.aivi{aivi}
+
+## 7.3 Effectful streaming
 
 AIVI does not include `generate async`. Keep generators pure, and model async or I/O-backed streaming in one of these ways:
 
@@ -71,42 +79,44 @@ AIVI does not include `generate async`. Keep generators pure, and model async or
 
 This keeps a clear line between pure sequence construction and effectful work.
 
-## 7.5 Expressive Sequence Logic
+## 7.4 Building larger sequences
 
-Generators are a concise way to build complex sequences without intermediate collections or mutation.
+Generators are a concise way to express sequence logic without intermediate collections or mutation.
 
-### Cartesian Products
+### Cartesian products
 
 <<< ../snippets/from_md/syntax/generators/cartesian_products.aivi{aivi}
 
-### Complex Filtering and Transformation
+### Filtering and transformation together
 
 <<< ../snippets/from_md/syntax/generators/complex_filtering_and_transformation.aivi{aivi}
 
-### Expressive Infinity
+### Infinite sequences
 
 <<< ../snippets/from_md/syntax/generators/expressive_infinity.aivi{aivi}
 
-## 7.6 Tail-recursive loops
+## 7.5 Tail-recursive loops
 
-`loop (pat) = init => { ... }` introduces a local tail-recursive loop for generators. Inside the loop body, `recurse next` continues with the next iteration and updated state.
+`loop (pattern) = initialState => { ... }` introduces a local tail-recursive loop for generators. Inside the loop body, `recurse nextState` continues with the next iteration and updated state.
+
+This is the generator-friendly way to express “keep going with new state” without mutation.
 
 ### Syntax
 
 <<< ../snippets/from_md/syntax/generators/syntax.aivi{aivi}
 
 - **`pattern`** binds the loop state. It may be a tuple, record, or simple name.
-- **`initialValue`** is the starting state.
+- **`initialState`** is the starting state.
 - **`recurse expr`** restarts the loop with the new state `expr`. It must appear in tail position.
 - If `recurse` is never reached, the loop terminates.
 
 ### Desugaring
 
-`loop` is syntactic sugar for a local recursive function. The compiler transforms:
+“Desugaring” means the compiler rewrites the loop into an ordinary local recursive function.
 
 <<< ../snippets/from_md/syntax/generators/desugaring_01.aivi{aivi}
 
-into approximately:
+becomes approximately:
 
 <<< ../snippets/from_md/syntax/generators/desugaring_02.aivi{aivi}
 

@@ -23,6 +23,7 @@ export const sidebar = [
         text: 'Data & Types',
         collapsed: true,
         items: [
+          { text: 'Type System Overview', link: '/syntax/types' },
           { text: 'Primitive Types', link: '/syntax/types/primitive_types' },
           { text: 'Custom Data Types (ADTs)', link: '/syntax/types/algebraic_data_types' },
           { text: 'Records', link: '/syntax/types/closed_records' },

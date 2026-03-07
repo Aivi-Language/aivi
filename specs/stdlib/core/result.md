@@ -15,11 +15,18 @@ The `aivi.result` module provides utility functions for working with `Result E A
 
 Use `Result` when failure is expected and you want to keep it explicit instead of throwing exceptions or hiding error cases.
 
-## Quick chooser
+## Start here
 
-- use `Option` when you only care whether a value exists
-- use `Result` when you want one explicit success-or-error path
-- use `Validation` when you want to keep going and collect several errors
+Reach for `Result` when each step may fail and later work depends on the earlier successful value.
+That is the usual shape for parsing, loading configuration, checking permissions, opening files, and any other workflow where “stop here and return the error” is the right behavior.
+
+## Choosing between `Option`, `Result`, and `Validation`
+
+| If the situation is... | Use | Why |
+| --- | --- | --- |
+| the value may simply be absent | [`Option`](option.md) | absence is normal and needs no extra explanation |
+| the step can fail with one explicit reason | `Result` | `Err e` keeps the reason and short-circuits |
+| many independent checks should report all problems | [`Validation`](validation.md) | failures accumulate instead of stopping at the first one |
 
 ## Overview
 
@@ -60,6 +67,29 @@ A useful mental model:
 - use `map` for success-only changes,
 - use `mapErr` when you need clearer or more structured errors,
 - use `flatMap` when the next step can also fail.
+
+### A readable fallible pipeline
+
+Breaking a `Result` workflow into named steps usually reads better than deeply nested calls:
+
+```aivi
+rawConfig = readConfigFile "app.toml"
+parsedConfig = flatMap parseConfig rawConfig
+checkedConfig = flatMap validateConfig parsedConfig
+```
+
+Each binding answers one question: did the previous step succeed, and if so, what is the next fallible step?
+
+### A small `mapErr` example
+
+`mapErr` is especially useful when you want to wrap lower-level errors with domain context:
+
+```aivi
+rawPort = parseInt text
+portResult = mapErr (err => ConfigError "PORT" err) rawPort
+```
+
+That keeps the original failure information while making the error more helpful at the call site.
 
 ## Conversions
 

@@ -1,15 +1,38 @@
 # External Sources
 
-External sources are AIVI's typed way to read data that lives outside your program: files, environment variables, HTTP APIs, email, images, databases, and more.
+External sources are AIVI’s typed way to read data that lives outside your program: files, environment variables, HTTP APIs, email, images, databases, and more.
 
-If you are not used to functional programming, a helpful mental model is this:
+## Start with the mental model
 
-- a `Source K A` is a **recipe** for getting some external data,
-- `K` says **where it comes from**,
-- `A` says **what type you want after decoding**,
-- nothing is actually read until you call `load`.
+A `Source K A` is a **recipe** for obtaining outside data, not a read that has already happened.
 
-That separation keeps I/O explicit. You can define a source once, pass it around like any other value, and decide later where the actual read should happen.
+- `K` says **where the data comes from**
+- `A` says **what typed value you want after decoding**
+- `load` is the moment where the program actually touches the outside world
+
+That split keeps I/O explicit. You can define a source once, pass it around like any other value, and decide later where the actual read should happen.
+
+## A two-step example
+
+Most source-heavy code follows the same simple pattern:
+
+1. **Describe the boundary.**
+2. **Load it inside `do Effect { ... }`.**
+
+```aivi
+User = { id: Int, name: Text }
+
+usersFromFile : Source File (List User)
+usersFromFile = file.json "./users.json"
+
+loadUsers : Effect (SourceError File) (List User)
+loadUsers = do Effect {
+  users <- load usersFromFile
+  pure users
+}
+```
+
+Nothing is read when `usersFromFile` is defined. The read happens when `load usersFromFile` runs.
 
 ## Source Guides
 
@@ -26,75 +49,23 @@ That separation keeps I/O explicit. You can define a source once, pass it around
 
 <<< ../snippets/from_md/syntax/external_sources/the_source_type.aivi{aivi}
 
+Read `Source K A` as “a source of kind `K` that should decode into `A`”.
+
 - `K` is the **kind** of source, such as `File`, `RestApi`, `Env`, or `Imap`
 - `A` is the **decoded result type**
 
-In day-to-day code, a source gives you a clear boundary between "outside data" and "trusted, typed values inside the program".
-
-### A small example
-
-```aivi
-User = { id: Int, name: Text }
-
-usersSource : Source File (List User)
-usersSource = file.json "./users.json"  -- describe the boundary
-
-do Effect {
-  users <- load usersSource             -- perform the actual read
-  pure users
-}
-```
-
-### SourceError
-
-A `Source K A` is loaded through an effect:
-
-```aivi
-load : Source K A -> Effect (SourceError K) A
-```
-
-`SourceError K` separates transport problems from data-shape problems:
-
-```aivi
-SourceError K =
-  | IOError Text
-  | DecodeError (List aivi.validation.DecodeError)
-```
-
-- `IOError` means the program could not reach or read the external system
-- `DecodeError` means the read succeeded, but the payload did not match the expected shape
-
-Typical API shape:
-
-<<< ../snippets/from_md/syntax/external_sources/sourceerror_01.aivi{aivi}
-
-If you want to handle failures as ordinary data, use `attempt`:
-
-<<< ../snippets/from_md/syntax/external_sources/sourceerror_02.aivi{aivi}
-
-### Capability mapping
-
-Defining a source is pure. The capability requirement appears when the source is loaded:
-
-- `load (file.*)` / `load (file.image*)` → `file.read`
-- `load (rest.*)` / `load (http.*)` / `load (https.*)` → `network.http`
-- `load (env.*)` → `process.env.read`
-- `load (email.imap ...)` and other mail/network connectors → `network`
-- database-backed source reads → `db.query`
-- `@static` embedded sources → no runtime capability after compilation
-
-See [Capabilities](capabilities.md) for the standard vocabulary.
+In everyday code, a source gives you a clear boundary between “outside data” and “trusted, typed values inside the program”.
 
 ### A practical workflow
 
-Most source-heavy programs follow the same pattern:
+Most source-based programs follow the same four steps:
 
 1. define the data type you want,
 2. build a source that can decode into that type,
 3. call `load` inside `do Effect { ... }`,
-4. handle `SourceError` at the boundary.
+4. handle failures at the boundary.
 
-That keeps parsing, validation, and I/O at the edge of the program instead of spread throughout the business logic.
+That keeps parsing, validation, and I/O at the edge of the program instead of spreading them throughout business logic.
 
 ## 12.2 File Sources
 
@@ -148,7 +119,7 @@ For IMAP-specific guidance, see [IMAP Email Sources](external_sources/imap_email
 
 ## 12.7 LLM Sources
 
-AIVI models LLM boundaries as typed external inputs: you describe the shape you want back, then decode the response into that shape at the boundary.
+AIVI can also treat LLM boundaries as typed external inputs: you describe the shape you want back, then decode the response into that shape at the boundary.
 
 <<< ../snippets/from_md/syntax/external_sources/llm_sources.aivi{aivi}
 
@@ -176,9 +147,49 @@ Some sources are read during compilation and embedded into the program. This is 
 
 For supported patterns and caveats, see [Compile-Time Sources](external_sources/compile_time.md).
 
-## 12.11 Source Composition
+## 12.11 SourceError
 
-Sometimes "read and decode this value" is not enough. You may also want to:
+A source is loaded through an effect:
+
+```aivi
+load : Source K A -> Effect (SourceError K) A
+```
+
+`SourceError K` tells you whether the failure happened while reaching the source or while decoding its data:
+
+```aivi
+SourceError K =
+  | IOError Text
+  | DecodeError (List aivi.validation.DecodeError)
+```
+
+- `IOError` means the program could not reach or read the external system
+- `DecodeError` means the read succeeded, but the payload did not match the expected shape
+
+Typical API shape:
+
+<<< ../snippets/from_md/syntax/external_sources/sourceerror_01.aivi{aivi}
+
+If you want to handle failures as ordinary data, use `attempt`:
+
+<<< ../snippets/from_md/syntax/external_sources/sourceerror_02.aivi{aivi}
+
+## 12.12 Capability mapping
+
+Defining a source is pure. The capability requirement appears when the source is loaded:
+
+- `load (file.*)` / `load (file.image*)` → `file.read`
+- `load (rest.*)` / `load (http.*)` / `load (https.*)` → `network.http`
+- `load (env.*)` → `process.env.read`
+- `load (email.imap ...)` and other mail/network connectors → `network`
+- database-backed source reads → `db.query`
+- `@static` embedded sources → no runtime capability after compilation
+
+See [Capabilities](capabilities.md) for the standard vocabulary.
+
+## 12.13 Source Composition
+
+Sometimes “read and decode this value” is not enough. You may also want to:
 
 - normalize the payload,
 - run semantic validation,
@@ -186,6 +197,6 @@ Sometimes "read and decode this value" is not enough. You may also want to:
 - cache successful results,
 - attach provenance or observability metadata.
 
-That is what source composition is for. It keeps those policies attached to the source definition so `load` can execute them in a predictable order.
+Source composition keeps those policies attached to the source definition so `load` can execute them in a predictable order.
 
 See [Source Composition](external_sources/composition.md) for the full stage model and examples.

@@ -20,6 +20,10 @@ impl Parser {
                 attrs: Vec<GtkAttr>,
                 children: Vec<GtkNode>,
             },
+            FunctionCall {
+                tag: String,
+                args: Vec<Expr>,
+            },
             Text(String),
             Splice(Expr),
         }
@@ -216,6 +220,7 @@ impl Parser {
                 }
                 let tag: String = body_chars[start..i].iter().collect();
                 let mut attrs: Vec<GtkAttr> = Vec::new();
+                let mut positional_args: Vec<Expr> = Vec::new();
 
                 loop {
                     while i < body_chars.len() && body_chars[i].is_whitespace() {
@@ -227,22 +232,101 @@ impl Parser {
                     }
                     if body_chars[i] == '>' {
                         i += 1;
-                        stack.push((tag.clone(), attrs, Vec::new()));
+                        if positional_args.is_empty() {
+                            stack.push((tag.clone(), attrs, Vec::new()));
+                        } else {
+                            self.emit_diag(
+                                "E1617",
+                                "GTK function call sugar must use a self-closing tag: <FunctionName arg0 ... />",
+                                sigil.span.clone(),
+                            );
+                            push_node(
+                                GtkNode::FunctionCall {
+                                    tag: tag.clone(),
+                                    args: positional_args,
+                                },
+                                &mut nodes,
+                                &mut stack,
+                            );
+                        }
                         break;
                     }
                     if body_chars[i] == '/' && i + 1 < body_chars.len() && body_chars[i + 1] == '>'
                     {
                         i += 2;
-                        push_node(
-                            GtkNode::Element {
-                                tag: tag.clone(),
-                                attrs,
-                                children: Vec::new(),
-                            },
-                            &mut nodes,
-                            &mut stack,
-                        );
+                        if positional_args.is_empty() {
+                            push_node(
+                                GtkNode::Element {
+                                    tag: tag.clone(),
+                                    attrs,
+                                    children: Vec::new(),
+                                },
+                                &mut nodes,
+                                &mut stack,
+                            );
+                        } else {
+                            push_node(
+                                GtkNode::FunctionCall {
+                                    tag: tag.clone(),
+                                    args: positional_args,
+                                },
+                                &mut nodes,
+                                &mut stack,
+                            );
+                        }
                         break;
+                    }
+
+                    let attr_like = gtk_attr_name_end(&body_chars, i)
+                        .map(|name_end| {
+                            let mut look = name_end;
+                            while look < body_chars.len() && body_chars[look].is_whitespace() {
+                                look += 1;
+                            }
+                            look < body_chars.len() && body_chars[look] == '='
+                        })
+                        .unwrap_or(false);
+
+                    if function_call_tag_expr(&tag, &sigil.span).is_some() && !attr_like {
+                        if !attrs.is_empty() {
+                            self.emit_diag(
+                                "E1617",
+                                "GTK function call sugar cannot mix positional arguments with attributes",
+                                sigil.span.clone(),
+                            );
+                            if let Some((_, next_i)) = parse_function_call_arg(
+                                self,
+                                sigil,
+                                body_start_offset,
+                                &body_chars,
+                                i,
+                            ) {
+                                i = next_i;
+                            } else {
+                                i += 1;
+                            }
+                            continue;
+                        }
+
+                        if let Some((expr, next_i)) = parse_function_call_arg(
+                            self,
+                            sigil,
+                            body_start_offset,
+                            &body_chars,
+                            i,
+                        ) {
+                            positional_args.push(expr);
+                            i = next_i;
+                            continue;
+                        }
+
+                        self.emit_diag(
+                            "E1617",
+                            "invalid GTK function-call argument",
+                            sigil.span.clone(),
+                        );
+                        i += 1;
+                        continue;
                     }
 
                     // Attribute name.
@@ -404,20 +488,52 @@ impl Parser {
             call2("gtkAttr", mk_string(&attr.name), value_expr)
         }
 
+        fn gtk_attr_name_end(chars: &[char], start: usize) -> Option<usize> {
+            if start >= chars.len() || !is_name_start(chars[start]) {
+                return None;
+            }
+            let mut i = start + 1;
+            while i < chars.len() && is_name_continue(chars[i]) {
+                i += 1;
+            }
+            Some(i)
+        }
+
+        fn is_ident_segment(segment: &str) -> bool {
+            let mut chars = segment.chars();
+            let Some(head) = chars.next() else {
+                return false;
+            };
+            (head.is_ascii_alphabetic() || head == '_')
+                && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        }
+
+        fn function_call_tag_expr(tag: &str, span: &Span) -> Option<Expr> {
+            if tag.contains('.')
+                || tag.starts_with("Gtk")
+                || tag.starts_with("Adw")
+                || tag.starts_with("Gsk")
+                || !is_ident_segment(tag)
+            {
+                return None;
+            }
+            let mut chars = tag.chars();
+            let head = chars.next()?;
+            if !head.is_ascii_uppercase() {
+                return None;
+            }
+            Some(Expr::Ident(SpannedName {
+                name: format!("{}{}", head.to_ascii_lowercase(), chars.collect::<String>()),
+                span: span.clone(),
+            }))
+        }
+
         fn component_tag_expr(tag: &str, span: &Span) -> Option<Expr> {
             let mut segments = tag.split('.');
             let first = segments.next()?;
             if first.is_empty() || !first.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) {
                 return None;
             }
-            let is_ident_segment = |segment: &str| -> bool {
-                let mut chars = segment.chars();
-                let Some(head) = chars.next() else {
-                    return false;
-                };
-                (head.is_ascii_alphabetic() || head == '_')
-                    && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-            };
             if !is_ident_segment(first) {
                 return None;
             }
@@ -439,6 +555,97 @@ impl Parser {
                 };
             }
             Some(expr)
+        }
+
+        fn parse_function_call_arg(
+            this: &mut Parser,
+            sigil: &Token,
+            body_start_offset: usize,
+            body_chars: &[char],
+            start: usize,
+        ) -> Option<(Expr, usize)> {
+            let mut i = start;
+            let mut brace_depth = 0isize;
+            let mut paren_depth = 0isize;
+            let mut bracket_depth = 0isize;
+            let mut in_quote: Option<char> = None;
+
+            while i < body_chars.len() {
+                let ch = body_chars[i];
+                if let Some(quote) = in_quote {
+                    if quote != '`' && ch == '\\' && i + 1 < body_chars.len() {
+                        i += 2;
+                        continue;
+                    }
+                    if ch == quote {
+                        in_quote = None;
+                    }
+                    i += 1;
+                    continue;
+                }
+
+                match ch {
+                    '"' | '\'' | '`' => in_quote = Some(ch),
+                    '{' => brace_depth += 1,
+                    '}' => {
+                        if brace_depth == 0 {
+                            break;
+                        }
+                        brace_depth -= 1;
+                    }
+                    '(' => paren_depth += 1,
+                    ')' => {
+                        if paren_depth == 0 {
+                            break;
+                        }
+                        paren_depth -= 1;
+                    }
+                    '[' => bracket_depth += 1,
+                    ']' => {
+                        if bracket_depth == 0 {
+                            break;
+                        }
+                        bracket_depth -= 1;
+                    }
+                    '>'
+                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
+                    {
+                        break;
+                    }
+                    '/'
+                        if brace_depth == 0
+                            && paren_depth == 0
+                            && bracket_depth == 0
+                            && i + 1 < body_chars.len()
+                            && body_chars[i + 1] == '>' =>
+                    {
+                        break;
+                    }
+                    _ if ch.is_whitespace()
+                        && brace_depth == 0
+                        && paren_depth == 0
+                        && bracket_depth == 0 =>
+                    {
+                        break;
+                    }
+                    _ => {}
+                }
+
+                i += 1;
+            }
+
+            if i == start {
+                return None;
+            }
+
+            let expr_raw: String = body_chars[start..i].iter().collect();
+            let (expr_decoded, expr_raw_map) = decode_interpolation_source_with_map(&expr_raw);
+            let expr_start_offset = body_start_offset + start;
+            let (expr_line, expr_col) =
+                pos_at_char_offset(&sigil.span.start, &sigil.text, expr_start_offset);
+            let expr =
+                this.parse_embedded_expr(&expr_decoded, &expr_raw_map, expr_line, expr_col)?;
+            Some((expr, i))
         }
 
         fn lower_children(this: &mut Parser, children: Vec<GtkNode>, span: &Span) -> Expr {
@@ -591,6 +798,23 @@ impl Parser {
                     args: vec![mk_string(&t)],
                     span: span.clone(),
                 },
+                GtkNode::FunctionCall { tag, args } => {
+                    let Some(func) = function_call_tag_expr(&tag, span) else {
+                        return Expr::Ident(SpannedName {
+                            name: tag,
+                            span: span.clone(),
+                        });
+                    };
+                    if args.is_empty() {
+                        func
+                    } else {
+                        Expr::Call {
+                            func: Box::new(func),
+                            args,
+                            span: span.clone(),
+                        }
+                    }
+                }
                 GtkNode::Splice(expr) => expr,
                 GtkNode::Element {
                     tag,

@@ -4,6 +4,17 @@ The AIVI Language Server (`aivi-lsp`) implements the Language Server Protocol so
 
 In practice, the language server is what powers “editor intelligence”: navigation, hover information, diagnostics, formatting, and code-aware completion.
 
+## Start here
+
+If you only need the practical picture, read these sections in order:
+
+1. [Mental model](#mental-model)
+2. [What the server provides](#what-the-server-provides)
+3. [Diagnostics](#diagnostics)
+4. [Starting the server](#starting-the-server)
+
+You can treat the rest as implementation detail unless you are debugging editor integration or incremental-checking behavior.
+
 ## Mental model
 
 If you just want the practical picture, think of the LSP server as the background process your editor talks to while you type:
@@ -11,6 +22,13 @@ If you just want the practical picture, think of the LSP server as the backgroun
 - the editor sends the current file contents, including unsaved changes
 - the server parses, resolves, and type-checks enough of the workspace to answer the request
 - the editor shows the result as hovers, diagnostics, completion items, formatting, and navigation
+
+In a typical edit loop, the flow is:
+
+1. you type in a file
+2. the editor sends the newest text to the server
+3. the server rechecks the necessary slice of the workspace
+4. the editor updates squiggles, hovers, completions, and navigation data
 
 When this page mentions a **workspace snapshot**, it means that full per-request view of the workspace: open editor buffers, on-disk files, and active settings taken together.
 
@@ -45,11 +63,11 @@ Completion also includes scaffolds for the recommended `gtkApp` architecture so 
 
 The server reports diagnostics as you type. It checks:
 
-- syntax
-- types
-- scope and name resolution
-- structured-source ergonomics, including legacy source forms and missing schema strategies
-- GTK and app-architecture ergonomics, including the recommended `gtkApp` host and the standard command and subscription helpers
+- **syntax** — catches parse errors and malformed code early
+- **types** — catches type mismatches before runtime
+- **scope and name resolution** — catches missing imports, unknown names, and similar wiring mistakes
+- **structured-source ergonomics** — warns about source-boundary patterns such as legacy source forms or missing schema strategies
+- **GTK and app-architecture ergonomics** — guides users toward the recommended `gtkApp` host and standard command and subscription helpers
 
 ## Incremental workspace checking
 
@@ -59,6 +77,12 @@ The LSP works with **workspace snapshots**, not isolated one-file analyses.
 - older in-flight semantic work may be cancelled or superseded
 - cached module facts may be reused only when their fingerprints match the active snapshot
 - dependent modules are rechecked incrementally when an edited module's export surface changes
+
+One concrete example:
+
+- if you edit a private helper inside `Module A`, the server usually rechecks `Module A` but can keep importers clean
+- if you change a public type or exported function in `Module A`, importing modules also need to be rechecked
+- if you have unsaved changes in the editor, those changes belong only to the current LSP session and must not leak into persistent build caches
 
 The full ownership, invalidation, and publish rules are defined in [Incremental Compilation & Workspace Checking](incremental_compilation.md).
 

@@ -10,19 +10,50 @@ It combines familiar database ideas—tables, rows, filters, joins, migrations, 
 
 ## Start here
 
-This page is intentionally broad. If you are new to `aivi.database`, do not read it as one long reference manual. Start with the beginner path, then come back for the advanced sections when you need them.
+This page is intentionally broad. If you are new to `aivi.database`, do not read it as one long reference manual. Start with the beginner path, copy the first useful workflow, then come back for the advanced sections and API tables when you need them.
 
 ### Beginner path
 
 For a first database-backed feature, this is the shortest useful route:
 
-1. define one typed `Table A`
+1. define one typed `Table A` (see [Overview](#overview))
 2. open or configure a connection
-3. run migrations
-4. load rows or run one simple query
+3. run migrations (see [Migrations](#migrations))
+4. load rows or run one simple query (see [Querying](#querying))
 5. apply inserts, updates, or deletes
 
 You can safely ignore pooling, multi-table joins, savepoints, and typed mutation helpers until that flow feels familiar.
+
+### Plain-language glossary
+
+| Term | Plain meaning |
+| --- | --- |
+| **explicit connection** | you open a `DbConnection` value yourself and pass it to the helpers that need it |
+| **default / ambient connection helper** | a helper such as `db.load` that uses the process-wide connection previously configured with `db.configure` |
+| **delta** | a value that describes a write such as “insert this row” or “update rows matching this predicate” |
+| **savepoint** | a named rollback marker inside a larger transaction |
+| **portable subset** | query shapes that cleanly translate to SQL instead of falling back to older in-memory behavior |
+
+### First successful workflow
+
+If you want one concrete pattern to copy, start with an explicit connection and a single query:
+
+```aivi
+main = do Effect {
+  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
+  _      <- db.runMigrationsOn dbConn [userTable]
+
+  activeUsersQuery =
+    db.from userTable
+    |> db.where_ _.active
+
+  activeUsers <- db.runQueryOn dbConn activeUsersQuery
+  _           <- db.close dbConn
+  pure activeUsers
+}
+```
+
+That gives you a complete first loop: connect, migrate, query, clean up.
 
 ### Advanced path
 
@@ -49,10 +80,10 @@ Explicit `DbConnection` handles are usually the better fit for larger programs b
 
 ### Choosing a connection style
 
-| Style | Best for | Trade-off |
-| --- | --- | --- |
-| default connection helpers (`db.configure`, `db.load`, `db.beginTx`) | tutorials, small tools, one-database apps | convenient, but the active connection is ambient |
-| explicit connections (`db.connect`, `db.loadOn`, `db.beginTxOn`) | services, pooled code, transaction-heavy workflows | a little more wiring, but ownership stays obvious |
+| Style | Best for | Trade-off | Typical first example |
+| --- | --- | --- | --- |
+| default connection helpers (`db.configure`, `db.load`, `db.beginTx`) | tutorials, small tools, one-database apps | convenient, but the active connection is ambient | “configure once, then `db.load userTable`” |
+| explicit connections (`db.connect`, `db.loadOn`, `db.beginTxOn`) | services, pooled code, transaction-heavy workflows | a little more wiring, but ownership stays obvious | “open `dbConn`, pass it to `db.runQueryOn`, then close it” |
 
 ## Types
 
@@ -88,14 +119,22 @@ If you are approaching this domain from a traditional application background, a 
 `Query A` is a typed description of a database read that eventually produces values of type `A`.
 The `do Query { ... }` notation lets you write those reads in a step-by-step style that feels close to a SQL `SELECT` while staying inside ordinary AIVI code.
 
-Queries are translated to a structured SQL-backed form when every participating table has an explicit column list and the query stays within the portable subset. That subset includes `db.from`, `db.where_`, `db.guard_`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`, `db.count`, `db.exists`, and `do Query` blocks built from those forms.
+Queries are translated to a structured SQL-backed form when every participating table has an explicit column list and the query stays within the portable subset. Here, **portable subset** means “query shapes that cleanly translate to SQL instead of relying on the older in-memory runtime.” That subset includes `db.from`, `db.where_`, `db.guard_`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`, `db.count`, `db.exists`, and `do Query` blocks built from those forms.
 
 Helper-built queries that fall outside that subset still run through the older in-memory query runtime. Unsupported `do Query` shapes fail with a query error when executed instead of silently changing behavior.
 
+If you are learning the query DSL, read the examples in this order:
+
+1. one-table query,
+2. ambient-vs-explicit execution,
+3. pipeline helpers,
+4. joins,
+5. aggregates.
+
 ```aivi
 -- Build a query value once
-activeNames : Query Text
-activeNames = do Query {
+activeUserNamesQuery : Query Text
+activeUserNamesQuery = do Query {
   user <- db.from userTable
   db.guard_ user.active          -- keep only active users
   db.queryOf user.name           -- project one field
@@ -103,9 +142,9 @@ activeNames = do Query {
 
 -- Run it with an explicit connection
 main = do Effect {
-  conn  <- db.connect { driver: Sqlite, url: "app.db" }
-  names <- db.runQueryOn conn activeNames
-  _     <- db.close conn
+  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
+  names  <- db.runQueryOn dbConn activeUserNamesQuery
+  _      <- db.close dbConn
   pure names
 }
 ```
@@ -116,7 +155,7 @@ If you have already configured a default connection, you can use the ambient hel
 main = do Effect {
   _     <- db.configure { driver: Sqlite, url: "app.db" }
   _     <- db.runMigrations [userTable]
-  names <- db.runQuery activeNames
+  names <- db.runQuery activeUserNamesQuery
   pure names
 }
 ```
@@ -124,8 +163,8 @@ main = do Effect {
 You can also build the same query with pipeline helpers:
 
 ```aivi
-activeNames : Query Text
-activeNames =
+activeUserNamesQuery : Query Text
+activeUserNamesQuery =
   db.from userTable
   |> db.where_ _.active
   |> db.select _.name
@@ -151,7 +190,7 @@ Inside a `do Query` block, apply those helpers to the source query on the right-
 
 <!-- quick-info: {"kind":"feature","name":"Multi-table join"} -->
 Multi-table reads are written as repeated `db.from` binds plus `db.guard_` conditions that relate the rows.
-In the portable subset, that pattern lowers to a SQL cross join with pushed-down `WHERE` predicates.
+In the portable subset, that pattern lowers to a SQL cross join with pushed-down `WHERE` predicates. In practice, when the guard compares keys from the participating rows, that behaves like the inner joins most SQL users expect.
 
 ```aivi
 Order = { id: Int, userId: Int, total: Int }
@@ -183,18 +222,18 @@ This style currently covers inner-join-like workflows built from table sources a
 When their input query stays inside the lowered subset, they compile to SQL aggregate or existence checks. Otherwise, they use the older in-memory behavior.
 
 ```aivi
-activeCount : Query Int
-activeCount = db.count (db.from userTable |> db.where_ _.active)
+activeUserCountQuery : Query Int
+activeUserCountQuery = db.count (db.from userTable |> db.where_ _.active)
 
 hasActiveUsers : Query Bool
 hasActiveUsers = db.exists (db.from userTable |> db.where_ _.active)
 
 main = do Effect {
-  conn    <- db.connect { driver: Sqlite, url: "app.db" }
-  [n]     <- db.runQueryOn conn activeCount     -- singleton result
-  [found] <- db.runQueryOn conn hasActiveUsers
-  _       <- db.close conn
-  pure (n, found)
+  dbConn       <- db.connect { driver: Sqlite, url: "app.db" }
+  [userCount]  <- db.runQueryOn dbConn activeUserCountQuery
+  [foundUsers] <- db.runQueryOn dbConn hasActiveUsers
+  _            <- db.close dbConn
+  pure (userCount, foundUsers)
 }
 ```
 
@@ -230,6 +269,8 @@ A database source declaration should carry typed connector config, the table or 
 Connection pooling lives in `aivi.database.pool`.
 The pool is configured explicitly, and `withConn` guarantees a checked-out connection is released even if the work fails or is cancelled.
 
+If you are still on the beginner path, skip pooling until one process needs many short-lived database operations.
+
 <<< ../../snippets/from_md/stdlib/system/database/pooling.aivi{aivi}
 
 ## Capabilities
@@ -240,6 +281,8 @@ The pool is configured explicitly, and `withConn` guarantees a checked-out conne
 - `db.runMigrations` and `db.runMigrationSql` require database migration capability.
 
 ## Core API
+
+This section is the reference shelf. Skim it once, then come back when you need the exact helper name or type.
 
 ### Table and connection management
 

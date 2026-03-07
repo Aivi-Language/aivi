@@ -178,7 +178,6 @@ The examples below build up the full pattern in smaller steps.
 ### Example 1: minimal `gtkApp`
 
 ```aivi
-use aivi.text
 use aivi.ui.gtk4
 
 Model = {
@@ -249,7 +248,7 @@ main = gtkApp {
   size: (640, 480)
   model: initialModel
   onStart: _ _ => pure Unit
-  subscriptions: subscriptions
+  subscriptions: noSubscriptions
   view: view
   toMsg: auto
   update: update
@@ -277,7 +276,7 @@ Msg
 
 subscriptions : Model -> List (Subscription Msg)
 subscriptions = _ => [
-  SubscriptionEvery {
+  subscriptionEvery {
     key: "clock"
     millis: 1000
     tag: Tick
@@ -291,7 +290,7 @@ update = msg => model =>
           {
             model: model <| { secondsSinceSave: 0, status: "Saved" }
             commands: [
-              CommandAfter {
+              commandAfter {
                 key: "clear-status"
                 millis: 2000
                 msg: ClearStatus
@@ -318,7 +317,7 @@ update = msg => model =>
 
 ### Example 3: refactor repetitive update branches into helpers
 
-Once the screen grows, extract small helper functions so `update` stays easy to scan:
+Once the screen grows, keep the same `Model` and `Msg` from Example 2, then extract small helper functions so `update` stays easy to scan:
 
 ```aivi
 renameProject : Text -> Model -> AppStep Model Msg
@@ -331,12 +330,24 @@ saveProject : Model -> AppStep Model Msg
 saveProject = model => {
   model: model <| { secondsSinceSave: 0, status: "Saved" }
   commands: [
-    CommandAfter {
+    commandAfter {
       key: "clear-status"
       millis: 2000
       msg: ClearStatus
     }
   ]
+}
+
+tick : Model -> AppStep Model Msg
+tick = model => {
+  model: model <| { secondsSinceSave: model.secondsSinceSave + 1 }
+  commands: []
+}
+
+clearStatus : Model -> AppStep Model Msg
+clearStatus = model => {
+  model: model <| { status: "Waiting for changes" }
+  commands: []
 }
 
 update = msg => model =>

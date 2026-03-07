@@ -57,6 +57,7 @@ Use the table of contents as a map:
 - [Bindings & Scope](syntax/bindings)
 - [Functions & Pipes](syntax/functions)
 #### Data & Types
+- [Type System Overview](syntax/types)
 - [Primitive Types](syntax/types/primitive_types)
 - [Custom Data Types (ADTs)](syntax/types/algebraic_data_types)
 - [Records](syntax/types/closed_records)

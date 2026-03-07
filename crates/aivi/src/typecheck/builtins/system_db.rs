@@ -481,6 +481,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "widgetGetBoolProperty".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::effect(Type::con("Text"), Type::con("Bool"))),
+                    )),
+                ),
+            ),
+            (
                 "appRun".to_string(),
                 Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
             ),

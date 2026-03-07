@@ -1,33 +1,21 @@
 # Capabilities
 
 <!-- quick-info: {"kind":"topic","name":"capabilities"} -->
-Capabilities describe the external authority an `Effect E A` or `Resource E A` needs, without changing the meaning of `E` or `A`.
+Capabilities say which outside-world operations an `Effect E A` or `Resource E A` may use.
 <!-- /quick-info -->
 
-Capabilities answer a practical question: **what is this effectful code allowed to touch?** They describe outside-world authority such as file access, network access, clocks, UI integration, or process state.
+Capabilities answer a practical question: **what is this code allowed to touch?** They describe external authority such as file access, network access, clocks, UI integration, or process state.
 
-## What capabilities are
+## Think of capabilities as a permission list
 
-AIVI does **not** use capabilities as a second error channel. They sit on top of `Effect E A` and `Resource E A` as an authority contract:
+A capability clause sits on top of `Effect E A` or `Resource E A` as a permission list:
 
 - `E` still describes typed domain failures
 - `A` is still the success value
-- capabilities describe which external operations may be used
+- capabilities describe which external operations the code may use
 - missing capabilities are compile-time diagnostics, not runtime `E` values
 
-`attempt`, `or`, `resource`, and `do Effect { ... }` keep their existing meaning. A capability clause only narrows the external authority available inside that effectful code.
-
-## What capabilities are for
-
-Capabilities make effectful code easier to understand and review.
-
-They help you answer questions like:
-
-- “Does this function only read a file, or can it also write?”
-- “Can this helper make network calls?”
-- “Does this UI action schedule timers or spawn background work?”
-
-In practice, capabilities help keep APIs narrow, make authority creep visible during code review, and separate business failures from permission or scope mistakes.
+`attempt`, `or`, `resource`, and `do Effect { ... }` keep their existing meaning. A capability clause only narrows the external authority available inside that code.
 
 ## How capabilities look in code
 
@@ -41,41 +29,25 @@ openStore : DbConfig -> Resource DbError DbConn with { db.connect }
 launchUi : Model -> Effect GtkError Unit with { ui.window, ui.signal }
 ```
 
+Here is a slightly larger example:
+
 ```aivi
 saveProfile : Text -> Bytes -> Effect ProfileError Unit with { file.write, network.http }
 saveProfile = userId avatar => do Effect {
-  _ <- uploadAvatar userId avatar                       -- Needs network.http
-  _ <- file.writeBytes "./profile-avatar.bin" avatar    -- Needs file.write
+  _ <- uploadAvatar userId avatar
+  _ <- file.writeBytes "./profile-avatar.bin" avatar
   pure Unit
 }
 ```
 
-The capability clause is:
+That signature tells the reader two things at once:
 
-- **unordered** — `{ file.read, process.env.read }` is the same set as `{ process.env.read, file.read }`
-- **duplicate-free** — repeating the same capability does not change the meaning
-- **best kept explicit on public APIs** — readers should be able to see the minimum required authority at the function boundary
-
-Family names can act as coarse shorthands. For example, `file` covers `file.read`, `file.write`, and `file.metadata`. Public APIs should usually prefer the narrowest useful leaf name.
-
-## Common capability vocabulary
-
-| Family | Common atoms | Meaning |
-| --- | --- | --- |
-| `file` | `file.read`, `file.write`, `file.metadata`, `file.watch` | Local filesystem and path authority |
-| `network` | `network.http`, `network.socket.connect`, `network.socket.listen` | Outbound and inbound network access |
-| `db` | `db.connect`, `db.query`, `db.mutate`, `db.migrate` | Database connectivity, reads, writes, and schema changes |
-| `clock` | `clock.now`, `clock.sleep`, `clock.schedule` | Reading time and scheduling timers |
-| `randomness` | `randomness.secure`, `randomness.pseudo` | Entropy and random number generation |
-| `process` | `process.args`, `process.env.read`, `process.env.write`, `process.exit`, `process.spawn` | Interaction with the host process and environment |
-| `ui` | `ui.window`, `ui.signal`, `ui.clipboard`, `ui.notification` | Native UI creation, event delivery, and desktop integration |
-| `cancellation` | `cancellation.observe`, `cancellation.propagate`, `cancellation.mask` | Structured cancellation and cancellation control |
-
-The first segment names the family. Later segments narrow that authority to the smallest useful operation.
+- the domain error is `ProfileError`
+- the function needs permission to use `network.http` and `file.write`
 
 ## How to read a capability signature
 
-A capability clause describes the **minimum** authority a function needs. Callers may always invoke that function from a scope that has a **superset** of the listed capabilities.
+A capability clause describes the **minimum** authority a function needs. Callers may always run that function from a scope that has a **superset** of the listed capabilities.
 
 ```aivi
 loadUserCache : Text -> Effect CacheError User with { file.read }
@@ -92,6 +64,21 @@ refreshUser = url => do Effect {
 
 Pure functions carry no capability clause because they do not need outside-world authority.
 
+## Common capability vocabulary
+
+| Family | Common atoms | Meaning |
+| --- | --- | --- |
+| `file` | `file.read`, `file.write`, `file.metadata`, `file.watch` | Local filesystem and path authority |
+| `network` | `network.http`, `network.socket.connect`, `network.socket.listen` | Outbound and inbound network access |
+| `db` | `db.connect`, `db.query`, `db.mutate`, `db.migrate` | Database connectivity, reads, writes, and schema changes |
+| `clock` | `clock.now`, `clock.sleep`, `clock.schedule` | Reading time and scheduling timers |
+| `randomness` | `randomness.secure`, `randomness.pseudo` | Entropy and random number generation |
+| `process` | `process.args`, `process.env.read`, `process.env.write`, `process.exit`, `process.spawn` | Interaction with the host process and environment |
+| `ui` | `ui.window`, `ui.signal`, `ui.clipboard`, `ui.notification` | Native UI creation, event delivery, and desktop integration |
+| `cancellation` | `cancellation.observe`, `cancellation.propagate`, `cancellation.mask` | Structured cancellation and cancellation control |
+
+The first segment names the family. Later segments narrow that authority to the smallest useful operation.
+
 ## How to use capabilities
 
 ### 1. Annotate effectful public APIs
@@ -106,15 +93,15 @@ openStore : DbConfig -> Resource DbError DbConn with { db.connect }
 
 ### 2. Narrow helper bodies with `with { ... } in`
 
-`with { ... } in expr` lexically narrows the visible capability set for `expr`.
+`with { ... } in expr` narrows the visible capability set for `expr`.
 
 ```aivi
 loadBootConfig : Effect ConfigError BootConfig with { file.read, process.env.read }
 loadBootConfig =
   with { file.read, process.env.read } in do Effect {
-    cfg  <- load (file.json "./config.json")
+    config <- load (file.json "./config.json")
     mode <- load (env.get "AIVI_MODE")
-    pure { cfg, mode }
+    pure { config, mode }
   }
 ```
 
@@ -125,7 +112,7 @@ Rules:
 - this form only narrows authority; it does not install implementations by itself
 - `with { capability = handler } in expr` uses the same surface form to install scoped interpreters; see [Effect Handlers](effect_handlers.md)
 
-### 3. Keep failures and authority separate
+### 3. Keep failures and permissions separate
 
 `Effect E A` still means:
 
@@ -198,4 +185,4 @@ This keeps UI code aligned with the rest of the language instead of introducing 
 2. Prefer narrow leaves such as `file.read` over broad family names such as `file`.
 3. Use `with { ... } in` to make helper bodies’ authority explicit.
 4. Use `with { capability = handler } in` when you want a scoped interpreter for a capability.
-5. Treat capabilities as an authority contract, not as part of your domain error model.
+5. Treat capabilities as a permission list, not as part of your domain error model.

@@ -22,6 +22,80 @@ fn parse_markup_sigil(text: &str) -> Option<MarkupSigil> {
 }
 
 fn parse_open_markup_tag(tag_text: &str) -> Option<(String, Vec<String>, bool)> {
+    fn scan_markup_part_end(chars: &[char], start: usize) -> usize {
+        let mut i = start;
+        let mut brace_depth = 0isize;
+        let mut paren_depth = 0isize;
+        let mut bracket_depth = 0isize;
+        let mut in_quote: Option<char> = None;
+
+        while i < chars.len() {
+            let ch = chars[i];
+            if let Some(quote) = in_quote {
+                if quote != '`' && ch == '\\' && i + 1 < chars.len() {
+                    i += 2;
+                    continue;
+                }
+                if ch == quote {
+                    in_quote = None;
+                }
+                i += 1;
+                continue;
+            }
+
+            match ch {
+                '"' | '\'' | '`' => in_quote = Some(ch),
+                '{' => brace_depth += 1,
+                '}' => {
+                    if brace_depth == 0 {
+                        break;
+                    }
+                    brace_depth -= 1;
+                }
+                '(' => paren_depth += 1,
+                ')' => {
+                    if paren_depth == 0 {
+                        break;
+                    }
+                    paren_depth -= 1;
+                }
+                '[' => bracket_depth += 1,
+                ']' => {
+                    if bracket_depth == 0 {
+                        break;
+                    }
+                    bracket_depth -= 1;
+                }
+                '>'
+                    if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
+                {
+                    break;
+                }
+                '/'
+                    if brace_depth == 0
+                        && paren_depth == 0
+                        && bracket_depth == 0
+                        && i + 1 < chars.len()
+                        && chars[i + 1] == '>' =>
+                {
+                    break;
+                }
+                _ if ch.is_whitespace()
+                    && brace_depth == 0
+                    && paren_depth == 0
+                    && bracket_depth == 0 =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+
+            i += 1;
+        }
+
+        i
+    }
+
     let raw = tag_text.trim();
     if !raw.starts_with('<') || raw.starts_with("</") || !raw.ends_with('>') {
         return None;
@@ -58,83 +132,83 @@ fn parse_open_markup_tag(tag_text: &str) -> Option<(String, Vec<String>, bool)> 
             break;
         }
 
-        let name_start = i;
-        while i < chars.len()
-            && !chars[i].is_whitespace()
-            && chars[i] != '='
-            && chars[i] != '>'
-            && chars[i] != '/'
-        {
-            i += 1;
-        }
-        let name: String = chars[name_start..i].iter().collect();
-        if name.is_empty() {
-            i += 1;
-            continue;
-        }
-
-        while i < chars.len() && chars[i].is_whitespace() {
-            i += 1;
-        }
-
-        if i < chars.len() && chars[i] == '=' {
-            i += 1;
-            while i < chars.len() && chars[i].is_whitespace() {
-                i += 1;
+        let part_start = i;
+        let mut name_end = i;
+        if chars[i].is_ascii_alphabetic() || chars[i] == '_' || chars[i] == ':' {
+            name_end += 1;
+            while name_end < chars.len()
+                && (chars[name_end].is_ascii_alphanumeric()
+                    || matches!(chars[name_end], '-' | ':' | '_' | '.'))
+            {
+                name_end += 1;
             }
-            if i >= chars.len() {
-                attrs.push(name);
-                break;
+            let mut look = name_end;
+            while look < chars.len() && chars[look].is_whitespace() {
+                look += 1;
             }
-            let value_start = i;
-            if chars[i] == '"' || chars[i] == '\'' {
-                let quote = chars[i];
-                i += 1;
-                while i < chars.len() {
-                    if chars[i] == '\\' && i + 1 < chars.len() {
-                        i += 2;
-                        continue;
-                    }
-                    if chars[i] == quote {
-                        i += 1;
-                        break;
-                    }
+            if look < chars.len() && chars[look] == '=' {
+                let name: String = chars[part_start..name_end].iter().collect();
+                i = look + 1;
+                while i < chars.len() && chars[i].is_whitespace() {
                     i += 1;
                 }
-            } else if chars[i] == '{' {
-                let mut depth = 1isize;
-                i += 1;
-                let mut in_quote: Option<char> = None;
-                while i < chars.len() && depth > 0 {
-                    let ch = chars[i];
-                    if let Some(q) = in_quote {
-                        if q != '`' && ch == '\\' && i + 1 < chars.len() {
+                if i >= chars.len() {
+                    attrs.push(name);
+                    break;
+                }
+                let value_start = i;
+                if chars[i] == '"' || chars[i] == '\'' {
+                    let quote = chars[i];
+                    i += 1;
+                    while i < chars.len() {
+                        if chars[i] == '\\' && i + 1 < chars.len() {
                             i += 2;
                             continue;
                         }
-                        if ch == q {
-                            in_quote = None;
+                        if chars[i] == quote {
+                            i += 1;
+                            break;
                         }
                         i += 1;
-                        continue;
                     }
-                    match ch {
-                        '"' | '\'' | '`' => in_quote = Some(ch),
-                        '{' => depth += 1,
-                        '}' => depth -= 1,
-                        _ => {}
+                } else if chars[i] == '{' {
+                    let mut depth = 1isize;
+                    i += 1;
+                    let mut in_quote: Option<char> = None;
+                    while i < chars.len() && depth > 0 {
+                        let ch = chars[i];
+                        if let Some(q) = in_quote {
+                            if q != '`' && ch == '\\' && i + 1 < chars.len() {
+                                i += 2;
+                                continue;
+                            }
+                            if ch == q {
+                                in_quote = None;
+                            }
+                            i += 1;
+                            continue;
+                        }
+                        match ch {
+                            '"' | '\'' | '`' => in_quote = Some(ch),
+                            '{' => depth += 1,
+                            '}' => depth -= 1,
+                            _ => {}
+                        }
+                        i += 1;
                     }
-                    i += 1;
+                } else {
+                    i = scan_markup_part_end(&chars, value_start);
                 }
-            } else {
-                while i < chars.len() && !chars[i].is_whitespace() {
-                    i += 1;
-                }
+                let value: String = chars[value_start..i.min(chars.len())].iter().collect();
+                attrs.push(format!("{name}={value}"));
+                continue;
             }
-            let value: String = chars[value_start..i.min(chars.len())].iter().collect();
-            attrs.push(format!("{name}={value}"));
-        } else {
-            attrs.push(name);
+        }
+
+        i = scan_markup_part_end(&chars, part_start);
+        let part: String = chars[part_start..i].iter().collect();
+        if !part.trim().is_empty() {
+            attrs.push(part.trim().to_string());
         }
     }
 
@@ -515,4 +589,3 @@ fn format_markup_sigil(text: &str) -> Option<Vec<String>> {
     lines.push(close.to_string());
     Some(lines)
 }
-

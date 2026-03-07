@@ -7,6 +7,18 @@ A good mental model is:
 - `aivi` handles AIVI-specific tasks such as parsing, formatting, checking, and code generation.
 - Cargo still handles package resolution, Rust compilation, and publishing under the hood.
 
+## Start here
+
+If you are brand new, you can ignore most of the command list on your first day.
+The usual starter loop is:
+
+1. `aivi init hello-world --bin`
+2. `cd hello-world`
+3. `aivi run`
+4. `aivi check src`
+5. `aivi fmt --write src`
+6. `aivi test src`
+
 ## Installation
 
 The CLI is distributed as a binary named `aivi`. Once it is installed, `aivi --version` prints both the CLI version and the supported language version.
@@ -43,6 +55,25 @@ Two patterns show up throughout this page:
 
 - **project mode** reads `aivi.toml` in the current project directory
 - **direct mode** works on an explicit file or directory path you pass on the command line
+
+### Which mode should I use?
+
+Use **project mode** when you have an `aivi.toml` and want the command to behave like a normal project tool.
+Use **direct mode** when you want to point at one file or directory without scaffolding a full project first.
+
+| Situation | Reach for |
+| --- | --- |
+| “I am inside a normal AIVI project.” | `aivi run`, `aivi build`, `aivi package` |
+| “I want to test or inspect this file/folder quickly.” | `aivi run path/to/file.aivi`, `aivi build path/to/dir` |
+
+## Common workflows
+
+| Workflow | Commands | When to use it |
+| --- | --- | --- |
+| first-time setup | `aivi init` → `aivi install` → `aivi run` | starting a new project |
+| daily editing | `aivi run --watch` → `aivi check src` → `aivi test src` | active development |
+| before commit | `aivi fmt --write src` → `aivi check src` → `aivi test src` | local validation |
+| release a library | `aivi package --dry-run` → `aivi publish` | packaging and publishing |
 
 ## Commands
 
@@ -171,6 +202,8 @@ aivi build <path|dir/...> [--debug-trace] [--out <dir|path>]
 - `--out`: output directory for generated artefacts (default: `target/aivi-gen`)
 - `--debug-trace`: enable verbose compiler tracing via `AIVI_DEBUG_TRACE=1`
 
+Direct mode is the easiest way to experiment with one file or folder before you have a full project layout.
+
 #### `run`
 
 `run` also has project mode and direct mode.
@@ -196,6 +229,8 @@ aivi run <path|dir/...> [--debug-trace] [--target native] [--watch|-w]
 - `--target native` is the supported direct-run target
 - `--debug-trace` enables verbose compiler tracing
 - `--watch` recompiles and re-runs when `.aivi` files change
+
+Direct `run` is great for quick experiments and examples. For distributable applications and repeatable builds, prefer project mode.
 
 ### Development tools
 
@@ -267,15 +302,25 @@ Shows the Rust intermediate representation used before backend lowering.
 aivi rust-ir [--debug-trace] <path|dir/...>
 ```
 
+These inspection commands (`parse`, `desugar`, `kernel`, `rust-ir`) are mainly for debugging compiler behavior. Most application authors can ignore them until they need to understand how a program is being lowered.
+
 ### Services
 
 #### `lsp`
 
-Starts the Language Server Protocol server used by editors.
+Starts the Language Server Protocol server used by editors. If you have never launched an LSP by hand, think of this as the background service your editor talks to for hovers, type hints, completions, and diagnostics.
 
 ```bash
 aivi lsp
 ```
+
+Typical flow:
+
+1. your editor launches `aivi lsp`
+2. the editor sends the current file contents, including unsaved edits
+3. the server answers with diagnostics, completions, hover text, and navigation locations
+
+See also [LSP Server](lsp_server.md) for the feature-level behavior and incremental-checking rules.
 
 #### `mcp serve`
 

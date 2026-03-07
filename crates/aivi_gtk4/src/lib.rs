@@ -3104,6 +3104,16 @@ mod linux_impl {
         })
     }
 
+    pub(super) fn widget_get_bool_property(id: i64, prop: &str) -> Result<bool, Gtk4Error> {
+        let prop_c = CString::new(prop)
+            .map_err(|_| Gtk4Error::new("gtk4.widgetGetBoolProperty invalid prop"))?;
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "widgetGetBoolProperty")?;
+            Ok(unsafe { gobject_get_bool(widget, &prop_c) != 0 })
+        })
+    }
+
     pub(super) fn widget_set_size_request(id: i64, w: i32, h: i32) -> Result<(), Gtk4Error> {
         GTK_STATE.with(|state| {
             let state = state.borrow();
@@ -4271,6 +4281,7 @@ delegate!(window_set_decorated(win_id: i64, decorated: bool) -> Result<(), Gtk4E
 delegate!(widget_show(id: i64) -> Result<(), Gtk4Error>);
 delegate!(widget_hide(id: i64) -> Result<(), Gtk4Error>);
 delegate!(widget_set_bool_property(id: i64, prop: &str, value: bool) -> Result<(), Gtk4Error>);
+delegate!(widget_get_bool_property(id: i64, prop: &str) -> Result<bool, Gtk4Error>);
 delegate!(widget_set_size_request(id: i64, w: i32, h: i32) -> Result<(), Gtk4Error>);
 delegate!(widget_set_hexpand(id: i64, expand: bool) -> Result<(), Gtk4Error>);
 delegate!(widget_set_vexpand(id: i64, expand: bool) -> Result<(), Gtk4Error>);

@@ -15,11 +15,23 @@ The `aivi.option` module provides utility functions for working with `Option A` 
 
 Use `Option` when absence is expected and normal, such as a missing query parameter, an empty search result, or an optional configuration value.
 
-## Quick chooser
+## Start here
 
-- use `Option` when “missing” is the whole story
-- use `Result` when you need to explain *why* something is missing or invalid
-- use `Validation` when you want to collect multiple independent problems at once
+Use `Option` when:
+
+- a missing value is normal,
+- you do not need to explain the reason,
+- you are not collecting several independent failures.
+
+Do **not** use `Option` when the caller needs a real error message or error value. In those cases, move to `Result` or `Validation`.
+
+## Choosing between `Option`, `Result`, and `Validation`
+
+| If the situation is... | Use | Why |
+| --- | --- | --- |
+| the only question is “is there a value?” | `Option` | `Some` or `None` tells the whole story |
+| failure needs a reason such as `NotFound` or `BadPort` | [`Result`](result.md) | `Err e` preserves the reason |
+| several independent checks should all report problems | [`Validation`](validation.md) | failures accumulate instead of short-circuiting |
 
 ## Overview
 
@@ -67,6 +79,19 @@ A good rule of thumb:
 - use `flatMap` when your function may also return `None`,
 - use `filter` when you want to reject values that do not meet a condition.
 
+### A readable optional pipeline
+
+When an optional workflow starts to feel nested, split it into named steps:
+
+```aivi
+maybeUser = lookupUser 42
+maybeName = map (_.name) maybeUser
+maybeNamedUser = filter (name => name != "") maybeName
+displayName = maybeNamedUser ?? "Anonymous"
+```
+
+This reads better than packing all of that into one expression, and it makes the “where can this become `None`?” points obvious.
+
 ## Conversions
 
 | Function | Type | Description |
@@ -91,7 +116,7 @@ These conversions are useful when you start with “maybe there is a value” an
 
 - **`??` operator** — best for “use this default value if the left side is missing.”
 - **`aivi.logic`** — provides shared class operations such as `map`, `of`, `chain`, and `filter` where supported.
-- **`aivi.result`** — use it when you need to explain *why* a value is missing.
+- **`aivi.result`** — use it when you need to explain *why* a value is missing or invalid.
 - **`do Option { ... }`** — useful when several optional steps depend on one another.
 
 ## Example: optional pipeline

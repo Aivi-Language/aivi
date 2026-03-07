@@ -33,6 +33,7 @@ If you are new to AIVI, use this simple path first: **[Language at a Glance](lan
 - [Bindings & Scope](syntax/bindings.md)
 - [Functions & Pipes](syntax/functions.md)
 #### Data & Types
+- [Type System Overview](syntax/types.md)
 - [Primitive Types](syntax/types/primitive_types.md)
 - [Custom Data Types (ADTs)](syntax/types/algebraic_data_types.md)
 - [Records](syntax/types/closed_records.md)

@@ -336,6 +336,7 @@ impl TypeChecker {
             | "gtk4.windowSetChild"
             | "gtk4.windowPresent"
             | "gtk4.windowSetHideOnClose"
+            | "gtk4.widgetGetBoolProperty"
             | "gtk4.windowSetDefaultSize"
             | "gtk4.windowShow"
             | "gtk4.buttonNew"

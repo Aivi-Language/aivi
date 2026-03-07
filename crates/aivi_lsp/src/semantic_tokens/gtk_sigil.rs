@@ -203,8 +203,82 @@ impl Backend {
             }
         };
 
-        let mut i = prefix_len;
         let end_limit = chars.len().saturating_sub(suffix_len);
+        let scan_tag_expr_end = |start: usize| -> usize {
+            let mut i = start;
+            let mut brace_depth = 0isize;
+            let mut paren_depth = 0isize;
+            let mut bracket_depth = 0isize;
+            let mut in_quote: Option<char> = None;
+
+            while i < end_limit {
+                let ch = chars[i];
+                if let Some(quote) = in_quote {
+                    if quote != '`' && ch == '\\' && i + 1 < end_limit {
+                        i += 2;
+                        continue;
+                    }
+                    if ch == quote {
+                        in_quote = None;
+                    }
+                    i += 1;
+                    continue;
+                }
+
+                match ch {
+                    '"' | '\'' | '`' => in_quote = Some(ch),
+                    '{' => brace_depth += 1,
+                    '}' => {
+                        if brace_depth == 0 {
+                            break;
+                        }
+                        brace_depth -= 1;
+                    }
+                    '(' => paren_depth += 1,
+                    ')' => {
+                        if paren_depth == 0 {
+                            break;
+                        }
+                        paren_depth -= 1;
+                    }
+                    '[' => bracket_depth += 1,
+                    ']' => {
+                        if bracket_depth == 0 {
+                            break;
+                        }
+                        bracket_depth -= 1;
+                    }
+                    '>'
+                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
+                    {
+                        break;
+                    }
+                    '/'
+                        if brace_depth == 0
+                            && paren_depth == 0
+                            && bracket_depth == 0
+                            && i + 1 < end_limit
+                            && chars[i + 1] == '>' =>
+                    {
+                        break;
+                    }
+                    _ if ch.is_whitespace()
+                        && brace_depth == 0
+                        && paren_depth == 0
+                        && bracket_depth == 0 =>
+                    {
+                        break;
+                    }
+                    _ => {}
+                }
+
+                i += 1;
+            }
+
+            i
+        };
+
+        let mut i = prefix_len;
 
         while i < end_limit {
             // Skip AIVI interpolation blocks in GTK/XML attributes/content: `{ ... }`.
@@ -325,100 +399,110 @@ impl Backend {
                 }
 
                 let attr_start = j;
-                if !chars[j].is_ascii_alphabetic() && chars[j] != '_' && chars[j] != ':' {
+                if chars[j].is_ascii_alphabetic() || chars[j] == '_' || chars[j] == ':' {
+                    j += 1;
+                    while j < end_limit
+                        && (chars[j].is_ascii_alphanumeric()
+                            || matches!(chars[j], '-' | ':' | '_' | '.'))
+                    {
+                        j += 1;
+                    }
+                    let attr_end = j;
+                    let mut look = j;
+                    while look < end_limit && chars[look].is_whitespace() {
+                        look += 1;
+                    }
+                    if look < end_limit && chars[look] == '=' {
+                        let attr_is_class = slice_eq(attr_start, attr_end, "class");
+                        push(
+                            data,
+                            last_line,
+                            last_start,
+                            &pos,
+                            attr_start,
+                            attr_end,
+                            Self::SEM_TOKEN_PROPERTY,
+                            0,
+                        );
+
+                        j = look + 1;
+                        while j < end_limit && chars[j].is_whitespace() {
+                            j += 1;
+                        }
+                        if j < end_limit && matches!(chars[j], '"' | '\'') {
+                            let quote = chars[j];
+                            let value_start = j;
+                            j += 1;
+                            while j < end_limit {
+                                if chars[j] == '\\' {
+                                    j = j.saturating_add(2);
+                                    continue;
+                                }
+                                if chars[j] == quote {
+                                    j += 1;
+                                    break;
+                                }
+                                j += 1;
+                            }
+                            let value_end = j.min(end_limit);
+                            let class_name_is_type = tag_is_class_container
+                                && attr_is_class
+                                && value_end > value_start.saturating_add(2)
+                                && chars[value_start.saturating_add(1)].is_ascii_uppercase();
+                            push(
+                                data,
+                                last_line,
+                                last_start,
+                                &pos,
+                                value_start,
+                                value_end,
+                                if class_name_is_type {
+                                    Self::SEM_TOKEN_TYPE
+                                } else {
+                                    Self::SEM_TOKEN_STRING
+                                },
+                                0,
+                            );
+                        } else if j < end_limit && chars[j] == '{' {
+                            // AIVI expression; skip balanced.
+                            break;
+                        } else {
+                            // Unquoted literal.
+                            let value_start = j;
+                            while j < end_limit && !chars[j].is_whitespace() && chars[j] != '>' {
+                                j += 1;
+                            }
+                            let class_name_is_type = tag_is_class_container
+                                && attr_is_class
+                                && j > value_start
+                                && chars[value_start].is_ascii_uppercase();
+                            push(
+                                data,
+                                last_line,
+                                last_start,
+                                &pos,
+                                value_start,
+                                j,
+                                if class_name_is_type {
+                                    Self::SEM_TOKEN_TYPE
+                                } else {
+                                    Self::SEM_TOKEN_STRING
+                                },
+                                0,
+                            );
+                        }
+                        continue;
+                    }
+                    j = attr_start;
+                }
+
+                let expr_end = scan_tag_expr_end(attr_start);
+                if expr_end <= attr_start {
                     j += 1;
                     continue;
                 }
-                j += 1;
-                while j < end_limit
-                    && (chars[j].is_ascii_alphanumeric() || matches!(chars[j], '-' | ':' | '_' | '.'))
-                {
-                    j += 1;
-                }
-                let attr_end = j;
-                let attr_is_class = slice_eq(attr_start, attr_end, "class");
-                push(
-                    data,
-                    last_line,
-                    last_start,
-                    &pos,
-                    attr_start,
-                    attr_end,
-                    Self::SEM_TOKEN_PROPERTY,
-                    0,
-                );
-
-                while j < end_limit && chars[j].is_whitespace() {
-                    j += 1;
-                }
-                if j < end_limit && chars[j] == '=' {
-                    j += 1;
-                    while j < end_limit && chars[j].is_whitespace() {
-                        j += 1;
-                    }
-                    if j < end_limit && matches!(chars[j], '"' | '\'') {
-                        let quote = chars[j];
-                        let value_start = j;
-                        j += 1;
-                        while j < end_limit {
-                            if chars[j] == '\\' {
-                                j = j.saturating_add(2);
-                                continue;
-                            }
-                            if chars[j] == quote {
-                                j += 1;
-                                break;
-                            }
-                            j += 1;
-                        }
-                        let value_end = j.min(end_limit);
-                        let class_name_is_type = tag_is_class_container
-                            && attr_is_class
-                            && value_end > value_start.saturating_add(2)
-                            && chars[value_start.saturating_add(1)].is_ascii_uppercase();
-                        push(
-                            data,
-                            last_line,
-                            last_start,
-                            &pos,
-                            value_start,
-                            value_end,
-                            if class_name_is_type {
-                                Self::SEM_TOKEN_TYPE
-                            } else {
-                                Self::SEM_TOKEN_STRING
-                            },
-                            0,
-                        );
-                    } else if j < end_limit && chars[j] == '{' {
-                        // AIVI expression; skip balanced.
-                        break;
-                    } else {
-                        // Unquoted literal.
-                        let value_start = j;
-                        while j < end_limit && !chars[j].is_whitespace() && chars[j] != '>' {
-                            j += 1;
-                        }
-                        let class_name_is_type = tag_is_class_container
-                            && attr_is_class
-                            && j > value_start
-                            && chars[value_start].is_ascii_uppercase();
-                        push(
-                            data,
-                            last_line,
-                            last_start,
-                            &pos,
-                            value_start,
-                            j,
-                            if class_name_is_type {
-                                Self::SEM_TOKEN_TYPE
-                            } else {
-                                Self::SEM_TOKEN_STRING
-                            },
-                            0,
-                        );
-                    }
-                }
+                emit_embedded_aivi_tokens(data, last_line, last_start, attr_start, expr_end);
+                j = expr_end;
             }
 
             i = j;
