@@ -26,7 +26,7 @@ export deleteWhere, deleteWhereOn
 export updateWhere, updateWhereOn
 export upsert, upsertOn
 export domain Database
-export Query, queryOf, queryChain, emptyQuery, from, where_, guard_, select, runQueryOn
+export Query, queryOf, queryChain, emptyQuery, from, where_, guard_, select, runQueryOn, runQuery
 export orderBy, limit, offset, count, exists
 
 use aivi
@@ -151,6 +151,9 @@ select = f q => { run: conn => do Effect {
 
 runQueryOn : DbConnection -> Query A -> Effect DbError (List A)
 runQueryOn = conn q => q.run conn
+
+runQuery : Query A -> Effect DbError (List A)
+runQuery = q => database.runQuery q
 
 orderBy : (A -> B) -> Query A -> Query A
 orderBy = key q => { run: conn => do Effect {
