@@ -1327,18 +1327,19 @@ main = gtkApp {
   view:   state => ~<gtk>
     <GtkBox orientation="vertical" spacing="8">
       <GtkLabel label={ Int.toString state.count } />
-      <GtkButton id="incrementBtn" label="Increment" onClick={ Increment } />
+      <GtkButton label="Increment" onClick={ Increment } />
     </GtkBox>
   </gtk>,
-  toMsg:  event => event match
-    | GtkClicked _ "incrementBtn" => Some Increment
-    | _                           => None,
+  toMsg:  auto,
   update: msg => state =>
-    pure (appStep (state <| { count: state.count + 1 }))
+    pure {
+      model: state <| { count: state.count + 1 }
+      commands: []
+    }
 }
 ```
 
-`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `computed`, `noSubscriptions`, `appStep`, `appStepWith`, and `liftAppUpdate` compatibility helpers.
+`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `auto` for common constructor-style signal routing, `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `computed`, `noSubscriptions`, `appStep`, `appStepWith`, and `liftAppUpdate` compatibility helpers. `appStep` and `appStepWith` are just shorthand for the same record shape shown above.
 
 The Phase 4 reactive model keeps authoritative source snapshots inside the committed model. Plain derived helpers stay pure, while computed values are memoized pure projections invalidated when committed source snapshots change and reevaluated lazily on the next read. Commands and subscriptions remain the only effectful boundaries: they may capture derived values by value, but they never mutate reactive values directly.
 

@@ -4,6 +4,16 @@ The AIVI Language Server (`aivi-lsp`) implements the Language Server Protocol so
 
 In practice, the language server is what powers “editor intelligence”: navigation, hover information, diagnostics, formatting, and code-aware completion.
 
+## Mental model
+
+If you just want the practical picture, think of the LSP server as the background process your editor talks to while you type:
+
+- the editor sends the current file contents, including unsaved changes
+- the server parses, resolves, and type-checks enough of the workspace to answer the request
+- the editor shows the result as hovers, diagnostics, completion items, formatting, and navigation
+
+When this page mentions a **workspace snapshot**, it means that full per-request view of the workspace: open editor buffers, on-disk files, and active settings taken together.
+
 ## What the server provides
 
 ### Navigation

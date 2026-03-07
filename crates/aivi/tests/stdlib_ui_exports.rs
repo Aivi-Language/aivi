@@ -79,7 +79,7 @@ fn stdlib_gtk4_exports_reactive_helpers() {
         })
         .collect();
 
-    for expected in ["signal", "computed", "readSignal"] {
+    for expected in ["signal", "computed", "readSignal", "auto"] {
         assert!(
             gtk4.exports.iter().any(|e| e.name.name == expected),
             "expected aivi.ui.gtk4 to export {expected}, exports={:?}",

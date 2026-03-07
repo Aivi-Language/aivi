@@ -4,6 +4,12 @@ This page is the fastest way to get comfortable reading AIVI code.
 
 It is written for people who already know how to program, but may be new to functional programming. You do not need to memorize everything here; use it as a guided cheat sheet and follow the linked reference pages when you want more depth.
 
+## Suggested first pass
+
+1. Skim this page once without trying to learn every rule.
+2. Read [Introduction](introduction.md) for the bigger picture and the plain-language explanation of effects, data, and boundaries.
+3. Then move through the **Learn AIVI** track in the sidebar, starting with Basics and Data & Types.
+
 ---
 
 ## The short version
@@ -107,9 +113,9 @@ names = ["Ada", "Linus", "Grace"]
 pair = (1, "ready")
 ```
 
-AIVI makes data shapes explicit. `User` is a record type with exactly those fields. `Option Text` means the email may be missing, but that possibility is part of the type.
+AIVI makes data shapes explicit. `User` is a record type with exactly those fields. `Option Text` means the email may be missing, but that possibility is part of the type. A custom data type such as `Option` is often called an **algebraic data type (ADT)**, which simply means a type made from named cases like `Some` and `None`.
 
-See [Primitive Types](syntax/types/primitive_types), [Closed Records](syntax/types/closed_records), and [Algebraic Data Types](syntax/types/algebraic_data_types).
+See [Primitive Types](syntax/types/primitive_types), [Records](syntax/types/closed_records), and [Custom Data Types (ADTs)](syntax/types/algebraic_data_types).
 
 ---
 
@@ -306,7 +312,8 @@ This single example shows much of the language style:
 
 ## Where to go next
 
-- Read [Introduction](introduction) for the bigger picture.
-- Read [Bindings & Scope](syntax/bindings) if you want to start writing AIVI code.
-- Read [Effects](syntax/effects) if you care most about I/O and error handling.
-- Read [External Sources](syntax/external_sources) if you want to work with files, APIs, or environment data.
+- **Start writing code:** continue with [Bindings & Scope](syntax/bindings) and [Functions & Pipes](syntax/functions).
+- **Learn how AIVI models data:** read [Primitive Types](syntax/types/primitive_types), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types), and [Records](syntax/types/closed_records).
+- **Work with I/O and failures:** read [Effects](syntax/effects), [do Notation](syntax/do_notation), and [Resources](syntax/resources).
+- **Connect to files and services:** read [Modules](syntax/modules) and [External Sources](syntax/external_sources).
+- **Need the big picture first?** Read [Introduction](introduction).

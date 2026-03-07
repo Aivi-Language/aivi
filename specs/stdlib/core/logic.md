@@ -1,7 +1,7 @@
 # Standard Library: Logic (Algebraic Hierarchy)
 
 <!-- quick-info: {"kind":"module","name":"aivi.logic"} -->
-The `aivi.logic` module defines the standard algebraic hierarchy for AIVI, based on the **Fantasy Land Specification**. These classes provide a universal language for data transformation, equality, and composition.
+The `aivi.logic` module defines the shared interface hierarchy used across the AIVI standard library. It follows the **Fantasy Land** naming conventions—a widely used community agreement about names and laws for functional-programming interfaces—so operations like `map`, `chain`, and `concat` mean the same thing across many types.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.logic</div>
 
@@ -24,6 +24,19 @@ If terms such as *Functor*, *Monad*, or *Monoid* are new to you, think of `aivi.
 - Can I fold this structure into a summary value?
 
 When a type implements one of these classes, you can use the same operation names across many different data types.
+
+### Quick chooser
+
+If you only need the everyday mental model, start here:
+
+| If you want to... | Reach for... | Plain-language idea |
+| --- | --- | --- |
+| compare values | `Setoid`, `Ord` | equality and sorting |
+| combine values of the same type | `Semigroup`, `Monoid` | append or merge, sometimes with an “empty” starting value |
+| change values inside a wrapper | `Functor` | `map` over the inside without changing the wrapper |
+| combine several independent wrapped steps | `Applicative` | prepare several inputs separately, then combine them |
+| sequence wrapped steps that depend on earlier results | `Monad` | later steps can inspect earlier results |
+| collapse many values into one summary | `Foldable` | reduce or fold |
 
 ## Why this matters in everyday code
 
@@ -57,7 +70,7 @@ A `Semigroup` provides an associative way to combine two values of the same type
 
 ### Monoid
 
-A `Monoid` is a `Semigroup` that also has an identity value called `empty`.
+A `Monoid` is a `Semigroup` that also has an identity value called `empty`. In practice, `empty` is the “combine with nothing” value: `""` for text concatenation, `[]` for list concatenation, and similar neutral starting points.
 
 <<< ../../snippets/from_md/stdlib/core/logic/monoid.aivi{aivi}
 
@@ -95,7 +108,7 @@ A `Functor` lets you transform values **inside** another structure without chang
 
 ### Apply
 
-`Apply` lets you apply wrapped functions to wrapped values.
+`Apply` lets you apply wrapped functions to wrapped values. A useful mental model is: both the function and the input are already “inside the same kind of box,” and `Apply` knows how to line them up.
 
 <<< ../../snippets/from_md/stdlib/core/logic/apply.aivi{aivi}
 

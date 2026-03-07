@@ -57,19 +57,23 @@ impl Backend {
         let (badge, body) = match ident {
             "gtkApp" => (
                 "function",
-                "`gtkApp`\n\nHosts the blessed GTK `Model → View → Msg → Update` architecture.\n\nUse `toMsg` for the primary GTK signal stream, `subscriptions` for long-lived feeds, and `appStep` / `appStepWith` to return the next model plus any post-update commands.",
+                "`gtkApp`\n\nHosts the blessed GTK `Model → View → Msg → Update` architecture.\n\nUse `toMsg: auto` for common constructor-style signal bindings, keep explicit `toMsg` for richer routing, and return the next `{ model, commands }` step from `update`.",
             ),
             "AppStep" => (
                 "type",
-                "`AppStep model msg = { model: model, commands: List (Command msg) }`\n\nThe committed model renders first; commands run afterwards. Use `appStep` for render-only turns and `appStepWith` when `update` needs to schedule post-update work.",
+                "`AppStep model msg = { model: model, commands: List (Command msg) }`\n\nThe committed model renders first; commands run afterwards. You can return this record directly, or use `appStep` / `appStepWith` as shorthand.",
+            ),
+            "auto" => (
+                "function",
+                "`auto : GtkSignalEvent -> Option msg`\n\nAutomatic `gtkApp` signal routing for common constructor bindings such as `onInput={ NameChanged }` and `onClick={ Save }`.\n\n`auto` works best when each signal is unique in the current view or attached to a widget with an `id=\"...\"` name.",
             ),
             "appStep" => (
                 "function",
-                "`appStep : s -> AppStep s msg`\n\nLift the next model into a render-only step with no commands.",
+                "`appStep : s -> AppStep s msg`\n\nOptional shorthand for `{ model, commands: [] }`.",
             ),
             "appStepWith" => (
                 "function",
-                "`appStepWith : s -> List (Command msg) -> AppStep s msg`\n\nReturn the next model together with post-update commands such as timers or one-shot effects.",
+                "`appStepWith : s -> List (Command msg) -> AppStep s msg`\n\nOptional shorthand for returning the next model together with post-update commands such as timers or one-shot effects.",
             ),
             "noSubscriptions" => (
                 "function",
@@ -217,10 +221,10 @@ impl Backend {
                 "`view` : `s -> GtkNode`\n\nPure projection from the current model into the GTK node tree. Keep rendering here and leave effects to commands/subscriptions."
             }
             "toMsg" => {
-                "`toMsg` : `GtkSignalEvent -> Option msg`\n\nTranslate the primary GTK signal stream into domain messages. Match by widget `id=\"...\"`, feed `GtkInputChanged` into `setValue`, and use `GtkFocusOut` to drive `touch`."
+                "`toMsg` : `GtkSignalEvent -> Option msg`\n\nTranslate the primary GTK signal stream into domain messages. Start with `auto` for common constructor bindings; match by widget `id=\"...\"` when you need explicit routing, feed `GtkInputChanged` into `setValue`, and use `GtkFocusOut` to drive `touch`."
             }
             "update" => {
-                "`update` : `msg -> s -> Effect GtkError (AppStep s msg)`\n\nCommit the next model and any post-update commands. Return `appStep` for render-only turns and `appStepWith` when you need commands such as `commandAfter`."
+                "`update` : `msg -> s -> Effect GtkError (AppStep s msg)`\n\nCommit the next model and any post-update commands. Return the `{ model, commands }` record directly, or use `appStep` / `appStepWith` as shorthand."
             }
             _ => return None,
         };

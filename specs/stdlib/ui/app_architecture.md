@@ -13,7 +13,7 @@ Most single-window GTK apps can be organized around these pieces:
 1. **`Model`** — the complete state needed to render the current window.
 2. **`view : Model -> GtkNode`** — a pure function that describes the widget tree for the current state.
 3. **`Msg`** — a closed set of events your app cares about.
-4. **`toMsg : GtkSignalEvent -> Option Msg`** — the adapter from raw GTK events to your app's messages.
+4. **`toMsg : GtkSignalEvent -> Option Msg`** — the adapter from raw GTK events to your app's messages. For common constructor bindings, `toMsg: auto` can derive this from the current view tree.
 5. **`update : Msg -> Model -> Effect GtkError (AppStep Model Msg)`** — the function that decides the next model and any follow-up work.
 6. **`subscriptions : Model -> List (Subscription Msg)`** — long-lived event sources that should stay active while the current model says they are needed.
 7. **`gtkApp`** — the host that wires startup, rendering, event ingestion, reconciliation, commands, and subscriptions together.
@@ -56,6 +56,8 @@ update = msg => model => pure {
 }
 ```
 
+`appStep` and `appStepWith` are just shorthand constructors for that same record shape. Use them when they help; direct `{ model, commands }` records are equally valid.
+
 Likewise, if an app has no long-lived external feeds, `subscriptions = noSubscriptions` is equivalent to `subscriptions = _ => []`.
 
 ## `gtkApp` in one sentence
@@ -88,6 +90,8 @@ gtkApp : {
 ```
 
 For older code or very simple examples, the host can also lift `update : msg -> s -> Effect GtkError s` into an `AppStep` automatically.
+
+For common constructor-style signal bindings such as `onInput={ ProjectNameChanged }` and `onClick={ Save }`, `gtkApp` also ships `toMsg: auto`. `auto` works best when a signal is either unique in the current view or attached to a widget with an `id="..."` name. Keep an explicit `toMsg` when routing depends on richer event matching or when several unnamed widgets emit the same signal.
 
 ## How one app turn works
 

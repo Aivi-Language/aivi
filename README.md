@@ -109,10 +109,7 @@ Msg = Increment | Tick
 Model = { count: Int, ticking: Bool }
 
 countLabel : Model -> Text
-countLabel =
-  computed "counter.label" (state =>
-    "Count: { Int.toString state.count }"
-  )
+countLabel = state => "Count: { Int.toString state.count }"
 
 subscriptions : Model -> List (Subscription Msg)
 subscriptions = state =>
@@ -131,16 +128,16 @@ main = gtkApp {
   subscriptions: subscriptions,
   view: state => ~<gtk>
     <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
-      <GtkLabel label={countLabel} />
-      <GtkButton id="incrementBtn" label="Increment" onClick={ Increment } />
+      <GtkLabel label={countLabel state} />
+      <GtkButton label="Increment" onClick={ Increment } />
     </GtkBox>
   </gtk>,
-  toMsg: event => event match
-    | GtkClicked _ "incrementBtn" => Some Increment
-    | _                           => None,
-  update: msg => state => msg match
-    | Increment => pure (appStep (state <| { count: state.count + 1 }))
-    | Tick      => pure (appStep (state <| { count: state.count + 1 }))
+  toMsg: auto,
+  update: msg => state => pure (
+    msg match
+      | Increment => { model: state <| { count: state.count + 1 }, commands: [] }
+      | Tick      => { model: state <| { count: state.count + 1 }, commands: [] }
+  )
 }
 ```
 

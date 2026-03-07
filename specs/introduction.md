@@ -4,6 +4,15 @@ AIVI is a statically typed, purely functional language for building software tha
 
 That description can sound abstract if you do not already live in functional-programming terminology, so here is the practical version: AIVI is built for codebases where you want the compiler to help you keep track of data shape, missing values, failures, units, and system boundaries before the program runs.
 
+## A simple learning path
+
+If this is your first pass through the docs, use this order:
+
+1. Read [Language at a Glance](language-overview.md) for a short syntax tour.
+2. Continue into the **Learn AIVI** track: [Bindings & Scope](syntax/bindings.md), [Functions & Pipes](syntax/functions.md), then the core data and effects pages.
+3. Read [Modules](syntax/modules.md) and [External Sources](syntax/external_sources.md) when you are ready to work with files, APIs, or other outside data.
+4. Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md) if your goal is desktop UI work.
+
 ## What AIVI is for
 
 AIVI is a good fit when your program spends a lot of time doing things like:
@@ -170,7 +179,7 @@ If some of the formal terms are new, this is the shortest useful translation:
 
 ## Where to go next
 
-- Read [Language at a Glance](language-overview.md) for a quick syntax tour.
-- Read [Bindings & Scope](syntax/bindings.md) and [Functions & Pipes](syntax/functions.md) to start writing simple code.
-- Read [Effects](syntax/effects.md) when you want to interact with files, networks, or the runtime.
-- Read [Primitive Types](syntax/types/primitive_types.md), [Algebraic Data Types](syntax/types/algebraic_data_types.md), and [Closed Records](syntax/types/closed_records.md) to understand everyday data modeling.
+- **Just learning the language?** Follow the **Learn AIVI** track in this order: [Bindings & Scope](syntax/bindings.md), [Functions & Pipes](syntax/functions.md), [Primitive Types](syntax/types/primitive_types.md), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types.md), [Records](syntax/types/closed_records.md), then [Effects](syntax/effects.md).
+- **Working with real-world inputs?** Continue with [Modules](syntax/modules.md) and [External Sources](syntax/external_sources.md).
+- **Building desktop apps?** Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md) and [App Architecture](stdlib/ui/app_architecture.md).
+- **Need exact rules or advanced features?** Use the rest of the sidebar as a reference, especially Advanced Features, Standard Library, and Internals.

@@ -1,78 +1,74 @@
 # AIVI Language Specification
 
-AIVI is a statically typed, purely functional language with a Rust-based compiler toolchain. This folder is the main guide to the language: it explains the ideas, defines the syntax and semantics, and documents the standard library and tooling.
+AIVI is a statically typed, purely functional language with a Rust-based compiler toolchain. This folder is the main guide to the language: it explains the big ideas, defines the syntax and semantics, and documents the standard library and tooling.
 
-If you are reading the spec in a browser, start with **[Language at a Glance](language-overview.md)** and **[Introduction](introduction.md)**. If you are editing or reviewing the docs in the repository, this README also shows how to preview the site locally.
+If you are new to AIVI, use this simple path first: **[Language at a Glance](language-overview.md)** for the fast tour, **[Introduction](introduction.md)** for the plain-language overview, then the **Learn AIVI** section in the table of contents from top to bottom. If you are editing or reviewing the docs in the repository, this README also shows how to preview the site locally.
+
+## A simple reading path
+
+1. **Start Here** to learn the feel of the language before you read detailed rules.
+2. **Learn AIVI** in order: Basics → Data & Types → Effects & Workflows → Modules & External Data.
+3. **Build Native Apps** if you are working on GTK or libadwaita applications.
+4. Use **Standard Library**, **Testing & Tooling**, and **Internals** as lookup sections once you know what you need.
 
 ## How to read the spec
 
-- **Language at a Glance** is the short tour. It is the fastest way to learn the feel of the language.
-- **Introduction** explains the design in plain language, including how AIVI handles data, effects, errors, and external systems.
-- **Language Reference** is the precise reference for syntax and behavior.
+- **Start Here** gives you the shortest path into the language.
+- **Learn AIVI** is the main learning track for everyday language features.
+- **Build Native Apps** collects the GTK and UI material in one place.
 - **Standard Library** is where you look up the modules you will actually import in code.
-- **Tooling** covers the CLI, LSP, and editor integration.
+- **Testing & Tooling** covers tests, the CLI, the language server, and editor integration.
+- **Internals** is for compiler and spec contributors.
 
 ## Table of Contents
 
 <!-- toc:start -->
 
-### Getting Started
+### Start Here
 - [Language at a Glance](language-overview.md)
 - [Introduction](introduction.md)
 
-### Native Apps
-- [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md)
-- [App Architecture](stdlib/ui/app_architecture.md)
-#### Signals & Dataflow
-- [Reactive Signals](stdlib/ui/reactive_signals.md)
-- [Reactive Dataflow](stdlib/ui/reactive_dataflow.md)
-- [GTK & libadwaita Runtime](stdlib/ui/gtk4.md)
-- [Forms](stdlib/ui/forms.md)
-- [Layout](stdlib/ui/layout.md)
-- [Color](stdlib/ui/color.md)
-- [HTML Sigil](stdlib/ui/html.md)
-- [Virtual DOM](stdlib/ui/vdom.md)
-
-### Language Reference
-#### Foundations
+### Learn AIVI
+#### Basics
 - [Bindings & Scope](syntax/bindings.md)
 - [Functions & Pipes](syntax/functions.md)
-#### Types
+#### Data & Types
 - [Primitive Types](syntax/types/primitive_types.md)
-- [Algebraic Data Types](syntax/types/algebraic_data_types.md)
-- [Closed Records](syntax/types/closed_records.md)
-- [Record Row Transforms](syntax/types/record_row_transforms.md)
-- [Higher Kinded Types](syntax/types/classes_and_hkts.md)
-- [Expected-Type Coercions](syntax/types/expected_type_coercions.md)
-- [Opaque Types](syntax/types/opaque_types.md)
-#### Data & Patterns
+- [Custom Data Types (ADTs)](syntax/types/algebraic_data_types.md)
+- [Records](syntax/types/closed_records.md)
+- [Extending & Reshaping Records](syntax/types/record_row_transforms.md)
 - [Pattern Matching](syntax/pattern_matching.md)
 - [Predicates](syntax/predicates.md)
-- [Patching Records](syntax/patching.md)
+- [Updating Records](syntax/patching.md)
+- [Helpful Type Conversions](syntax/types/expected_type_coercions.md)
+- [Opaque Types](syntax/types/opaque_types.md)
 - [Domains & Units](syntax/domains.md)
-- [Generators](syntax/generators.md)
-#### Effects & Control
+#### Effects & Workflows
 - [Effects](syntax/effects.md)
-- [Capabilities](syntax/capabilities.md)
-- [Effect Handlers](syntax/effect_handlers.md)
 - [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
-#### State Machines
+- [Generators](syntax/generators.md)
+- [Capabilities](syntax/capabilities.md)
+- [Effect Handlers](syntax/effect_handlers.md)
+##### State Machines
 - [Overview](syntax/state_machines.md)
 - [Machine Syntax](syntax/machines.md)
 - [Machine Runtime](syntax/machines_runtime.md)
-#### Modules & Interop
+#### Modules & External Data
 - [Modules](syntax/modules.md)
-- [External Sources](syntax/external_sources.md)
-- [Schema-First Source Definitions](syntax/external_sources/schema_first.md)
-- [Source Composition](syntax/external_sources/composition.md)
+##### External Sources
+- [Overview](syntax/external_sources.md)
+- [Define Sources from Schemas](syntax/external_sources/schema_first.md)
+- [Combine Sources](syntax/external_sources/composition.md)
 - [File Sources](syntax/external_sources/file.md)
 - [REST / HTTP Sources](syntax/external_sources/rest_http.md)
 - [Environment Sources](syntax/external_sources/environment.md)
 - [IMAP Email Sources](syntax/external_sources/imap_email.md)
 - [Image Sources](syntax/external_sources/image.md)
 - [Compile-Time Sources](syntax/external_sources/compile_time.md)
-#### Decorators
+#### Advanced Features
+- [Reusable Type Patterns (Classes & HKTs)](syntax/types/classes_and_hkts.md)
+##### Decorators
 - [Overview](syntax/decorators/index.md)
 - [@static](syntax/decorators/static.md)
 - [@native](syntax/decorators/native.md)
@@ -80,27 +76,40 @@ If you are reading the spec in a browser, start with **[Language at a Glance](la
 - [@debug](syntax/decorators/debug.md)
 - [@test](syntax/decorators/test.md)
 - [@no_prelude](syntax/decorators/no_prelude.md)
-#### Syntax Details
 - [Operators & Context](syntax/operators.md)
 - [Grammar Reference](syntax/grammar.md)
 
+### Build Native Apps
+- [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md)
+- [App Architecture](stdlib/ui/app_architecture.md)
+- [GTK & libadwaita Runtime](stdlib/ui/gtk4.md)
+#### Reactive UI
+- [Reactive Signals](stdlib/ui/reactive_signals.md)
+- [Reactive Dataflow](stdlib/ui/reactive_dataflow.md)
+#### UI Building Blocks
+- [Forms](stdlib/ui/forms.md)
+- [Layout](stdlib/ui/layout.md)
+- [Color](stdlib/ui/color.md)
+- [HTML Sigil](stdlib/ui/html.md)
+- [Virtual DOM](stdlib/ui/vdom.md)
+
 ### Standard Library
-#### Core
+#### Core Building Blocks
 - [Prelude](stdlib/core/prelude.md)
 - [Option](stdlib/core/option.md)
 - [Result](stdlib/core/result.md)
-- [Text](stdlib/core/text.md)
 - [Logic](stdlib/core/logic.md)
 - [Collections](stdlib/core/collections.md)
 - [Generator](stdlib/core/generator.md)
-- [Regex](stdlib/core/regex.md)
 - [Validation](stdlib/core/validation.md)
+#### Text & Data
+- [Text](stdlib/core/text.md)
+- [Regex](stdlib/core/regex.md)
 - [I18n](stdlib/core/i18n.md)
-- [Units](stdlib/core/units.md)
-#### Data
-- [Bits](stdlib/data/bits.md)
 - [JSON](stdlib/data/json.md)
-#### Math & Science
+- [Bits](stdlib/data/bits.md)
+#### Math, Units & Models
+- [Units](stdlib/core/units.md)
 - [Math](stdlib/math/math.md)
 - [Numbers](stdlib/math/number.md)
 - [Vector](stdlib/math/vector.md)
@@ -111,13 +120,13 @@ If you are reading the spec in a browser, start with **[Language at a Glance](la
 - [Signal Processing](stdlib/math/signal.md)
 - [Graph](stdlib/math/graph.md)
 - [Tree](stdlib/math/tree.md)
-#### Time
+#### Time & Scheduling
 - [Instant](stdlib/chronos/instant.md)
 - [Calendar](stdlib/chronos/calendar.md)
 - [Duration](stdlib/chronos/duration.md)
 - [TimeZone](stdlib/chronos/timezone.md)
 - [Scheduler](stdlib/chronos/scheduler.md)
-#### System & IO
+#### Files, System & Security
 - [File](stdlib/system/file.md)
 - [Console](stdlib/system/console.md)
 - [Path](stdlib/system/path.md)
@@ -125,36 +134,31 @@ If you are reading the spec in a browser, start with **[Language at a Glance](la
 - [System](stdlib/system/system.md)
 - [Log](stdlib/system/log.md)
 - [Concurrency](stdlib/system/concurrency.md)
-#### Security
 - [Crypto](stdlib/system/crypto.md)
 - [Secrets](stdlib/system/secrets.md)
-#### Database
-- [Database](stdlib/system/database.md)
-#### Networking
+#### Network, Services & Storage
 - [HTTP & HTTPS](stdlib/network/http.md)
 - [HTTP Server](stdlib/network/http_server.md)
 - [REST](stdlib/network/rest.md)
 - [Sockets](stdlib/network/sockets.md)
 - [Streams](stdlib/network/streams.md)
-#### Email
+- [Database](stdlib/system/database.md)
 - [Email](stdlib/system/email.md)
 
-### Testing
+### Testing & Tooling
+#### Testing
 - [Testing Module](stdlib/core/testing.md)
 - [Test Decorator & Mocking](syntax/decorators/test.md)
-
-### Tooling
+#### Developer Tools
 - [CLI](tools/cli.md)
-- [LSP Server](tools/lsp_server.md)
-- [Incremental Compilation](tools/incremental_compilation.md)
-- [VSCode Extension](tools/vscode_extension.md)
 - [Package Manager](tools/package_manager.md)
+- [LSP Server](tools/lsp_server.md)
+- [VSCode Extension](tools/vscode_extension.md)
+- [Incremental Compilation](tools/incremental_compilation.md)
 
 ### Internals
 - [Compiler & Backend](typed_codegen/design.md)
 - [Minimality Proof](typed_codegen/minimality.md)
-
-### Appendix
 - [Spec Doc Markers](doc-markers-spec.md)
 
 <!-- toc:end -->

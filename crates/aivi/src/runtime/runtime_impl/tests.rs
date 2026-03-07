@@ -119,6 +119,72 @@ mod handler_scope_tests {
         ])))
     }
 
+    fn gtk_attr(name: &str, value: Value) -> Value {
+        Value::Constructor {
+            name: "GtkAttribute".to_string(),
+            args: vec![Value::Text(name.to_string()), value],
+        }
+    }
+
+    fn gtk_element(tag: &str, attrs: Vec<Value>, children: Vec<Value>) -> Value {
+        Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text(tag.to_string()),
+                Value::List(Arc::new(attrs)),
+                Value::List(Arc::new(children)),
+            ],
+        }
+    }
+
+    fn set_auto_bindings(runtime: &mut Runtime, node: Value) {
+        let auto_bindings_set = gtk4_field(runtime, "autoBindingsSet");
+        let effect = ok(
+            runtime.apply(auto_bindings_set, node),
+            "gtk4.autoBindingsSet application",
+        );
+        run_effect(runtime, effect);
+    }
+
+    fn auto_to_msg(runtime: &mut Runtime, event: Value) -> Value {
+        let auto_to_msg = gtk4_field(runtime, "autoToMsg");
+        ok(runtime.apply(auto_to_msg, event), "gtk4.autoToMsg application")
+    }
+
+    fn expect_some_text_arg(value: Value, expected_ctor: &str, expected_text: &str) {
+        match value {
+            Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+                match &args[0] {
+                    Value::Constructor { name, args }
+                        if name == expected_ctor
+                            && matches!(args.as_slice(), [Value::Text(text)] if text == expected_text) =>
+                    {}
+                    other => panic!("expected Some ({expected_ctor} {expected_text}), got {other:?}"),
+                }
+            }
+            other => panic!("expected Some, got {other:?}"),
+        }
+    }
+
+    fn expect_some_unit_ctor(value: Value, expected_ctor: &str) {
+        match value {
+            Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+                match &args[0] {
+                    Value::Constructor { name, args } if name == expected_ctor && args.is_empty() => {}
+                    other => panic!("expected Some {expected_ctor}, got {other:?}"),
+                }
+            }
+            other => panic!("expected Some, got {other:?}"),
+        }
+    }
+
+    fn expect_none(value: Value) {
+        match value {
+            Value::Constructor { name, args } if name == "None" && args.is_empty() => {}
+            other => panic!("expected None, got {other:?}"),
+        }
+    }
+
     #[test]
     fn computed_reuses_cache_until_a_dep_changes() {
         let mut runtime = test_runtime();
@@ -376,5 +442,157 @@ mod handler_scope_tests {
         assert!(matches!(changed_dep, Value::Text(ref text) if text == "summary:beta"));
         assert_eq!(*child_reads.lock().expect("child reads"), 2);
         assert_eq!(*parent_reads.lock().expect("parent reads"), 2);
+    }
+
+    #[test]
+    fn auto_to_msg_uses_unique_signal_bindings_without_widget_ids() {
+        let mut runtime = test_runtime();
+        let node = gtk_element(
+            "GtkBox",
+            vec![],
+            vec![
+                gtk_element(
+                    "GtkEntry",
+                    vec![gtk_attr(
+                        "signal:changed",
+                        Value::Text("ProjectNameChanged".to_string()),
+                    )],
+                    vec![],
+                ),
+                gtk_element(
+                    "GtkButton",
+                    vec![gtk_attr(
+                        "signal:clicked",
+                        Value::Text("Save".to_string()),
+                    )],
+                    vec![],
+                ),
+            ],
+        );
+        set_auto_bindings(&mut runtime, node);
+
+        let changed = auto_to_msg(
+            &mut runtime,
+            Value::Constructor {
+                name: "GtkInputChanged".to_string(),
+                args: vec![
+                    Value::Int(1),
+                    Value::Text(String::new()),
+                    Value::Text("alpha".to_string()),
+                ],
+            },
+        );
+        let clicked = auto_to_msg(
+            &mut runtime,
+            Value::Constructor {
+                name: "GtkClicked".to_string(),
+                args: vec![Value::Int(2), Value::Text(String::new())],
+            },
+        );
+
+        expect_some_text_arg(changed, "ProjectNameChanged", "alpha");
+        expect_some_unit_ctor(clicked, "Save");
+    }
+
+    #[test]
+    fn auto_to_msg_prefers_named_widget_bindings_when_signals_repeat() {
+        let mut runtime = test_runtime();
+        let node = gtk_element(
+            "GtkBox",
+            vec![],
+            vec![
+                gtk_element(
+                    "GtkEntry",
+                    vec![
+                        gtk_attr("id", Value::Text("titleInput".to_string())),
+                        gtk_attr(
+                            "signal:changed",
+                            Value::Text("TitleChanged".to_string()),
+                        ),
+                    ],
+                    vec![],
+                ),
+                gtk_element(
+                    "GtkEntry",
+                    vec![
+                        gtk_attr("id", Value::Text("bodyInput".to_string())),
+                        gtk_attr(
+                            "signal:changed",
+                            Value::Text("BodyChanged".to_string()),
+                        ),
+                    ],
+                    vec![],
+                ),
+            ],
+        );
+        set_auto_bindings(&mut runtime, node);
+
+        let title = auto_to_msg(
+            &mut runtime,
+            Value::Constructor {
+                name: "GtkInputChanged".to_string(),
+                args: vec![
+                    Value::Int(1),
+                    Value::Text("titleInput".to_string()),
+                    Value::Text("hello".to_string()),
+                ],
+            },
+        );
+        let body = auto_to_msg(
+            &mut runtime,
+            Value::Constructor {
+                name: "GtkInputChanged".to_string(),
+                args: vec![
+                    Value::Int(2),
+                    Value::Text("bodyInput".to_string()),
+                    Value::Text("world".to_string()),
+                ],
+            },
+        );
+
+        expect_some_text_arg(title, "TitleChanged", "hello");
+        expect_some_text_arg(body, "BodyChanged", "world");
+    }
+
+    #[test]
+    fn auto_to_msg_returns_none_for_ambiguous_unnamed_signal_bindings() {
+        let mut runtime = test_runtime();
+        let node = gtk_element(
+            "GtkBox",
+            vec![],
+            vec![
+                gtk_element(
+                    "GtkEntry",
+                    vec![gtk_attr(
+                        "signal:changed",
+                        Value::Text("TitleChanged".to_string()),
+                    )],
+                    vec![],
+                ),
+                gtk_element(
+                    "GtkEntry",
+                    vec![gtk_attr(
+                        "signal:changed",
+                        Value::Text("BodyChanged".to_string()),
+                    )],
+                    vec![],
+                ),
+            ],
+        );
+        set_auto_bindings(&mut runtime, node);
+
+        let result = auto_to_msg(
+            &mut runtime,
+            Value::Constructor {
+                name: "GtkInputChanged".to_string(),
+                args: vec![
+                    Value::Int(1),
+                    Value::Text(String::new()),
+                    Value::Text("hello".to_string()),
+                ],
+            },
+        );
+
+        expect_none(result);
     }
 }

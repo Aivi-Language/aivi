@@ -558,7 +558,7 @@ impl Backend {
         ),
         (
             "gtkApp architecture",
-            "gtkApp {\n  id: \"${1:com.example.app}\",\n  title: \"${2:Example}\",\n  size: (${3:960}, ${4:640}),\n  model: ${5:initialModel},\n  onStart: ${6:_ _ => pure Unit},\n  subscriptions: ${7:noSubscriptions},\n  view: ${8:state => ~<gtk>\n    <GtkBox orientation=\"vertical\" spacing=\"12\">\n      <GtkLabel label=\"${9:Hello}\" />\n    </GtkBox>\n  </gtk>},\n  toMsg: ${10:event =>\n    event match\n      | GtkClicked _ \"${11:saveBtn}\" => Some ${12:Save}\n      | _ => None\n  },\n  update: ${13:msg => state =>\n    msg match\n      | ${12:Save} => pure (appStep state)\n      | _ => pure (appStep state)\n  }\n}",
+            "gtkApp {\n  id: \"${1:com.example.app}\",\n  title: \"${2:Example}\",\n  size: (${3:960}, ${4:640}),\n  model: ${5:initialModel},\n  onStart: ${6:_ _ => pure Unit},\n  subscriptions: ${7:noSubscriptions},\n  view: ${8:state => ~<gtk>\n    <GtkBox orientation=\"vertical\" spacing=\"12\">\n      <GtkButton label=\"${9:Save}\" onClick={ ${10:Save} } />\n    </GtkBox>\n  </gtk>},\n  toMsg: auto,\n  update: ${11:msg => state =>\n    pure {\n      model: state\n      commands: []\n    }\n  }\n}",
             "blessed GTK app architecture snippet",
         ),
         (
@@ -595,7 +595,7 @@ impl Backend {
                  Pass the resulting `Query A` to `runQueryOn conn query` to execute it.",
             ),
             "gtkApp architecture" => Some(
-                "Scaffold the blessed `gtkApp` loop with `subscriptions`, `view`, `toMsg`, and `update` in one place.\n\nUse `appStep`/`appStepWith` in `update`, prefer `noSubscriptions` when idle, and keep `signalStream` as a lower-level escape hatch rather than the primary app architecture.",
+                "Scaffold the blessed `gtkApp` loop with `subscriptions`, `view`, `toMsg`, and `update` in one place.\n\nStart with `toMsg: auto` for common constructor bindings and return direct `{ model, commands }` records in `update`. `appStep` and `appStepWith` remain optional shorthands, while `signalStream` stays the lower-level escape hatch.",
             ),
             "gtk toMsg" => Some(
                 "Match typed `GtkSignalEvent` constructors inside `toMsg`.\n\nUse `GtkInputChanged` to feed `setValue`, `GtkFocusOut` to trigger `touch`, and `GtkClicked` to raise domain messages from named widgets.",
@@ -1288,11 +1288,11 @@ impl Backend {
         };
 
         let guidance = match sugar {
-            "onInput" => "Use this with `toMsg` arms that feed `setValue` for `Field A` state.",
+            "onInput" => "Use this with `toMsg: auto` for the simple one-input case, or with explicit `toMsg` arms that feed `setValue` for `Field A` state.",
             "onFocusOut" => {
                 "Use this with `toMsg` arms that emit a blur message and call `touch` in `update`."
             }
-            "onClick" => "Prefer matching by the widget `id=\"...\"` name in `toMsg`.",
+            "onClick" => "Use `toMsg: auto` for straightforward constructor bindings; otherwise prefer matching by the widget `id=\"...\"` name in `toMsg`.",
             _ => "Map the resulting typed event into a domain `Msg` from `toMsg`.",
         };
 
