@@ -47,6 +47,8 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 #### Modules & Interop
 - [Modules](syntax/modules)
 - [External Sources](syntax/external_sources)
+- [Schema-First Source Definitions](syntax/external_sources/schema_first)
+- [Source Composition](syntax/external_sources/composition)
 - [File Sources](syntax/external_sources/file)
 - [REST/HTTP Sources](syntax/external_sources/rest_http)
 - [Environment Sources](syntax/external_sources/environment)
@@ -119,6 +121,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Email](stdlib/system/email)
 #### UI
 - [App Architecture](stdlib/ui/app_architecture)
+- [Reactive Dataflow](stdlib/ui/reactive_dataflow)
 - [Forms](stdlib/ui/forms)
 - [GTK4](stdlib/ui/gtk4)
 - [Layout](stdlib/ui/layout)
@@ -133,6 +136,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 ### Tooling
 - [CLI](tools/cli)
 - [LSP Server](tools/lsp_server)
+- [Incremental Compilation](tools/incremental_compilation)
 - [VSCode Extension](tools/vscode_extension)
 - [Package Manager](tools/package_manager)
 

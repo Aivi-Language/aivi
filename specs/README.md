@@ -41,6 +41,8 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 #### Modules & Interop
 - [Modules](syntax/modules.md)
 - [External Sources](syntax/external_sources.md)
+- [Schema-First Source Definitions](syntax/external_sources/schema_first.md)
+- [Source Composition](syntax/external_sources/composition.md)
 - [File Sources](syntax/external_sources/file.md)
 - [REST/HTTP Sources](syntax/external_sources/rest_http.md)
 - [Environment Sources](syntax/external_sources/environment.md)
@@ -113,6 +115,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Email](stdlib/system/email.md)
 #### UI
 - [App Architecture](stdlib/ui/app_architecture.md)
+- [Reactive Dataflow](stdlib/ui/reactive_dataflow.md)
 - [Forms](stdlib/ui/forms.md)
 - [GTK4](stdlib/ui/gtk4.md)
 - [Layout](stdlib/ui/layout.md)
@@ -127,6 +130,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 ### Tooling
 - [CLI](tools/cli.md)
 - [LSP Server](tools/lsp_server.md)
+- [Incremental Compilation](tools/incremental_compilation.md)
 - [VSCode Extension](tools/vscode_extension.md)
 - [Package Manager](tools/package_manager.md)
 
