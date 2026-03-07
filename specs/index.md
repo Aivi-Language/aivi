@@ -39,6 +39,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 #### Effects & Control
 - [Effects](syntax/effects)
 - [Capabilities](syntax/capabilities)
+- [Effect Handlers](syntax/effect_handlers)
 - [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
 - [Machines](syntax/machines)
