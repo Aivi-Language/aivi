@@ -411,8 +411,12 @@ fn lower_expr_inner_ctx(
                 items: items
                     .into_iter()
                     .map(|item| lower_block_item_ctx(item, &kind, &block_kind, id_gen, ctx))
-                    .collect(),
+                .collect(),
             }
+        }
+        Expr::CapabilityScope { handlers, body, .. } => {
+            let lowered_body = lower_expr_inner_ctx(*body, id_gen, ctx, false);
+            lower_capability_scope(handlers, lowered_body, id_gen, ctx)
         }
         Expr::Raw { text, .. } => HirExpr::Raw {
             id: id_gen.next(),
@@ -434,6 +438,60 @@ fn lower_expr_inner_ctx(
                 .collect(),
             body: Box::new(lower_expr_inner_ctx(*body, id_gen, ctx, false)),
         },
+    }
+}
+
+fn lower_capability_scope(
+    handlers: Vec<crate::surface::CapabilityHandlerBinding>,
+    body: HirExpr,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    if handlers.is_empty() {
+        return body;
+    }
+
+    let bindings = HirExpr::List {
+        id: id_gen.next(),
+        items: handlers
+            .into_iter()
+            .map(|handler| HirListItem {
+                spread: false,
+                expr: HirExpr::Record {
+                    id: id_gen.next(),
+                    fields: vec![
+                        HirRecordField {
+                            spread: false,
+                            path: vec![HirPathSegment::Field("capability".to_string())],
+                            value: HirExpr::LitString {
+                                id: id_gen.next(),
+                                text: handler.capability.name,
+                            },
+                        },
+                        HirRecordField {
+                            spread: false,
+                            path: vec![HirPathSegment::Field("handler".to_string())],
+                            value: lower_expr_ctx(handler.handler, id_gen, ctx, false),
+                        },
+                    ],
+                },
+            })
+            .collect(),
+    };
+    let thunk_param = format!("__with_capability_scope_{}", id_gen.next());
+    let body_thunk = HirExpr::Lambda {
+        id: id_gen.next(),
+        param: thunk_param,
+        body: Box::new(body),
+    };
+
+    HirExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(HirExpr::Var {
+            id: id_gen.next(),
+            name: "__withCapabilityHandlers".to_string(),
+        }),
+        args: vec![bindings, body_thunk],
     }
 }
 
@@ -462,6 +520,7 @@ fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
         | Expr::Match { span, .. }
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
+        | Expr::CapabilityScope { span, .. }
         | Expr::Block { span, .. }
         | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),

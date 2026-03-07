@@ -272,6 +272,9 @@ impl Backend {
                     Self::collect_type_expr_references(item, ident, uri, locations);
                 }
             }
+            TypeExpr::CapabilityClause { base, .. } => {
+                Self::collect_type_expr_references(base, ident, uri, locations);
+            }
             TypeExpr::Apply { base, args, .. } => {
                 Self::collect_type_expr_references(base, ident, uri, locations);
                 for arg in args.iter() {
@@ -550,7 +553,14 @@ impl Backend {
                     Self::collect_block_item_references(item, ident, text, uri, locations);
                 }
             }
-            Expr::Mock { substitutions, body, .. } => {
+            Expr::CapabilityScope { body, .. } => {
+                Self::collect_expr_references(body, ident, text, uri, locations);
+            }
+            Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(val) = &sub.value {
                         Self::collect_expr_references(val, ident, text, uri, locations);

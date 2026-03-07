@@ -314,6 +314,238 @@
           ]
         },
         {
+          "begin": "(~`)(css)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.css.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.css.aivi",
+          "patterns": [
+            {
+              "include": "source.css"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(html)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.html.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.html.aivi",
+          "patterns": [
+            {
+              "include": "text.html.basic"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(xml)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.xml.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.xml.aivi",
+          "patterns": [
+            {
+              "include": "text.xml"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(json)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.json.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.json.aivi",
+          "patterns": [
+            {
+              "include": "source.json"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(sql)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.sql.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.sql.aivi",
+          "patterns": [
+            {
+              "include": "source.sql"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(javascript)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.javascript.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.javascript.aivi",
+          "patterns": [
+            {
+              "include": "source.js"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(js)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.javascript.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.js.aivi",
+          "patterns": [
+            {
+              "include": "source.js"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(typescript)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.typescript.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.typescript.aivi",
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)(ts)([ \\t]*$)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            },
+            "2": {
+              "name": "entity.name.language.aivi"
+            }
+          },
+          "contentName": "meta.embedded.inline.typescript.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.ts.aivi",
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        {
+          "begin": "(~`)",
+          "beginCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "contentName": "string.quoted.other.backtick.aivi",
+          "end": "(`)",
+          "endCaptures": {
+            "1": {
+              "name": "storage.type.sigil.aivi"
+            }
+          },
+          "name": "meta.sigil.raw.aivi"
+        },
+        {
           "begin": "(~map)(\\{)",
           "beginCaptures": {
             "1": {
@@ -686,11 +918,6 @@
               ]
             }
           ]
-        },
-        {
-          "begin": "`",
-          "end": "`",
-          "name": "string.quoted.other.backtick.aivi"
         },
         {
           "begin": "'",

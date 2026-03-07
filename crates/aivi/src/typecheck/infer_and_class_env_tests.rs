@@ -275,6 +275,116 @@ printIfEqual = a => b =>
 }
 
 #[test]
+fn infer_capabilities_through_load_and_calls() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+readSource = path => do Effect {
+  text <- load (file.read path)
+  pure text
+}
+
+useReadSource = path => readSource path
+"#,
+    );
+    let non_embedded: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| !d.path.starts_with("<embedded:"))
+        .cloned()
+        .collect();
+    assert!(
+        !has_errors(&non_embedded),
+        "unexpected diagnostics: {non_embedded:?}"
+    );
+
+    let types = result.type_strings.get("Test").expect("Test module");
+    let read_source = types.get("readSource").expect("readSource type");
+    let use_read_source = types.get("useReadSource").expect("useReadSource type");
+    assert!(
+        read_source.contains("with { file.read }"),
+        "expected file.read capability in {read_source}"
+    );
+    assert!(
+        use_read_source.contains("with { file.read }"),
+        "expected propagated file.read capability in {use_read_source}"
+    );
+}
+
+#[test]
+fn rejects_missing_capability_in_signature() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+loadConfig : Text -> Effect (SourceError File) Text with { network.http }
+loadConfig = path => do Effect {
+  text <- load (file.read path)
+  pure text
+}
+"#,
+    );
+    assert!(
+        diags.iter().any(|diag| diag.diagnostic.code == "E3310"),
+        "expected missing capability diagnostic, got: {diags:?}"
+    );
+}
+
+#[test]
+fn rejects_capability_use_outside_with_scope() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+loadConfig : Text -> Effect (SourceError File) Text with { file.read, network.http }
+loadConfig = path =>
+  with { network.http } in do Effect {
+    text <- load (file.read path)
+    pure text
+  }
+"#,
+    );
+    assert!(
+        diags.iter().any(|diag| {
+            diag.diagnostic.code == "E3310" && diag.diagnostic.message.contains("with { ... } in")
+        }),
+        "expected narrowed-scope capability diagnostic, got: {diags:?}"
+    );
+}
+
+#[test]
+fn infers_capabilities_for_resource_blocks() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+openHandle = path => resource {
+  handle <- file.open path
+  yield handle
+}
+"#,
+    );
+    let non_embedded: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| !d.path.starts_with("<embedded:"))
+        .cloned()
+        .collect();
+    assert!(
+        !has_errors(&non_embedded),
+        "unexpected diagnostics: {non_embedded:?}"
+    );
+
+    let types = result.type_strings.get("Test").expect("Test module");
+    let open_handle = types.get("openHandle").expect("openHandle type");
+    assert!(
+        open_handle.contains("with { file.read }"),
+        "expected file.read capability in {open_handle}"
+    );
+}
+
+#[test]
 fn class_env_exported_class_is_usable() {
     let src = r#"
 module Test

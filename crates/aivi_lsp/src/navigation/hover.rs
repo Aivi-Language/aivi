@@ -33,6 +33,353 @@ impl Backend {
         }
     }
 
+    fn append_markdown_section(contents: &mut String, extra: &str) {
+        if extra.is_empty() || contents.contains(extra) {
+            return;
+        }
+        contents.push_str("\n\n---\n\n");
+        contents.push_str(extra);
+    }
+
+    fn append_gtk_architecture_docs(contents: &mut String, ident: &str) {
+        if let Some(extra) = Self::gtk_architecture_doc_for_ident(ident) {
+            Self::append_markdown_section(contents, &extra);
+        }
+    }
+
+    fn gtk_architecture_doc_for_ident(ident: &str) -> Option<String> {
+        let (badge, body) = match ident {
+            "gtkApp" => (
+                "function",
+                "`gtkApp`\n\nHosts the blessed GTK `Model → View → Msg → Update` architecture.\n\nUse `toMsg` for the primary GTK signal stream, `subscriptions` for long-lived feeds, and `appStep` / `appStepWith` to return the next model plus any post-update commands.",
+            ),
+            "gtkAppFull" => (
+                "function",
+                "`gtkAppFull`\n\nDeprecated compatibility shim for advanced window flags and update-time handles.\n\nPrefer `gtkApp` for new code; keep lower-level signal APIs as escape hatches rather than alternate app architectures.",
+            ),
+            "AppStep" => (
+                "type",
+                "`AppStep model msg = { model: model, commands: List (Command msg) }`\n\nThe committed model renders first; commands run afterwards. Use `appStep` for render-only turns and `appStepWith` when `update` needs to schedule post-update work.",
+            ),
+            "appStep" => (
+                "function",
+                "`appStep : s -> AppStep s msg`\n\nLift the next model into a render-only step with no commands.",
+            ),
+            "appStepWith" => (
+                "function",
+                "`appStepWith : s -> List (Command msg) -> AppStep s msg`\n\nReturn the next model together with post-update commands such as timers or one-shot effects.",
+            ),
+            "noSubscriptions" => (
+                "function",
+                "`noSubscriptions : s -> List (Subscription msg)`\n\nUse this as the default `subscriptions` field when the current model does not need timers or external event feeds.",
+            ),
+            "commandAfter" => (
+                "function",
+                "`commandAfter : { key: CommandKey, millis: Int, msg: msg } -> Command msg`\n\nSchedule a one-shot delayed message after the current update commits. Prefer this for transient timers; use `subscriptionEvery` for repeating ticks.",
+            ),
+            "commandPerform" => (
+                "function",
+                "`commandPerform : { run: Effect GtkError msg, onError: Option (GtkError -> msg) } -> Command msg`\n\nRun a one-shot effect after `update` and map its result back into a `Msg` without leaving the blessed `gtkApp` loop.",
+            ),
+            "commandEmit" => (
+                "function",
+                "`commandEmit : msg -> Command msg`\n\nQueue a synthetic follow-up message after the current `update` commits.",
+            ),
+            "subscriptionEvery" => (
+                "function",
+                "`subscriptionEvery : { key: SubscriptionKey, millis: Int, tag: msg } -> Subscription msg`\n\nDescribe a repeating timer derived from the current model. `gtkApp` diffs subscriptions by key on every committed update.",
+            ),
+            "subscriptionSource" => (
+                "function",
+                "`subscriptionSource`\n\nBridge a long-lived external feed into the `gtkApp` loop. Use this for extra GTK receivers, watches, or background channels that should emit `Msg` values over time.",
+            ),
+            "GtkSignalEvent" => (
+                "type",
+                "`GtkSignalEvent`\n\nTyped event stream for the primary GTK signal feed hosted by `gtkApp`.\n\nMatch constructors in `toMsg` by widget `id=\"...\"` name strings rather than raw `WidgetId` values when possible.",
+            ),
+            "GtkClicked" => (
+                "constructor",
+                "`GtkClicked WidgetId Text`\n\nRaised for button-like click signals. The second field is the widget's `id=\"...\"` name, which is the preferred key to match in `toMsg`.",
+            ),
+            "GtkInputChanged" => (
+                "constructor",
+                "`GtkInputChanged WidgetId Text Text`\n\nRaised when editable text changes. In the blessed forms flow, map this to a domain message and call `setValue` in `update`.",
+            ),
+            "GtkFocusOut" => (
+                "constructor",
+                "`GtkFocusOut WidgetId Text`\n\nRaised when a widget loses focus. Use this with `touch` so `visibleErrors` can reveal validation messages after blur.",
+            ),
+            "GtkFocusIn" => (
+                "constructor",
+                "`GtkFocusIn WidgetId Text`\n\nRaised when a widget gains focus. Use it when the model needs explicit focus tracking.",
+            ),
+            "GtkActivated" => (
+                "constructor",
+                "`GtkActivated WidgetId Text`\n\nRaised for activation-style signals such as entry submit or row activation.",
+            ),
+            "GtkToggled" => (
+                "constructor",
+                "`GtkToggled WidgetId Text Bool`\n\nRaised for boolean toggle state changes. The final field carries the new checked state.",
+            ),
+            "GtkValueChanged" => (
+                "constructor",
+                "`GtkValueChanged WidgetId Text Float`\n\nRaised for slider or spin-button style value changes. Use it for model updates that track numeric input continuously.",
+            ),
+            "GtkUnknownSignal" => (
+                "constructor",
+                "`GtkUnknownSignal WidgetId Text Text Text Text`\n\nFallback for lower-level or not-yet-specialized signals. Prefer the typed constructors when available.",
+            ),
+            "Field" => (
+                "type",
+                "`Field A = { value: A, touched: Bool, dirty: Bool }`\n\nLightweight GTK form state. Keep `Field` values in the `gtkApp` model so validation, rendering, and commands stay in the same loop.",
+            ),
+            "field" => (
+                "function",
+                "`field : A -> Field A`\n\nCreate the initial form field state for a model.",
+            ),
+            "setValue" => (
+                "function",
+                "`setValue : A -> Field A -> Field A`\n\nUpdate a field from `GtkInputChanged` messages while marking it dirty.",
+            ),
+            "touch" => (
+                "function",
+                "`touch : Field A -> Field A`\n\nMark a field as touched after blur, usually from a `GtkFocusOut`-driven message.",
+            ),
+            "visibleErrors" => (
+                "function",
+                "`visibleErrors : Bool -> (A -> Validation (List E) B) -> Field A -> List E`\n\nShow validation errors only after submit or blur. Pair this with a `submitted` flag in the `gtkApp` model and `touch` in `update`.",
+            ),
+            _ => return None,
+        };
+
+        Some(Self::hover_badge_markdown(badge, body.to_string()))
+    }
+
+    fn gtk_app_field_doc(field_name: &str, full_host: bool) -> Option<String> {
+        let body = match field_name {
+            "id" => "`id` : `Text`\n\nApplication identifier passed to GTK during startup.",
+            "title" => "`title` : `Text`\n\nPrimary window title shown by the blessed `gtkApp` host.",
+            "size" => "`size` : `(Int, Int)`\n\nInitial window width and height.",
+            "model" => "`model` : `s`\n\nInitial application state. Keep form fields, submit flags, and subscription-driving state here.",
+            "onStart" => "`onStart` : `AppId -> WindowId -> Effect GtkError Unit`\n\nOne-time startup hook that runs before the initial render.",
+            "subscriptions" => "`subscriptions` : `s -> List (Subscription msg)`\n\nDerive long-lived timers or external feeds from the current model. Use `noSubscriptions` when the app has nothing to listen to.",
+            "view" => "`view` : `s -> GtkNode`\n\nPure projection from the current model into the GTK node tree. Keep rendering here and leave effects to commands/subscriptions.",
+            "toMsg" => "`toMsg` : `GtkSignalEvent -> Option msg`\n\nTranslate the primary GTK signal stream into domain messages. Match by widget `id=\"...\"`, feed `GtkInputChanged` into `setValue`, and use `GtkFocusOut` to drive `touch`.",
+            "update" => {
+                if full_host {
+                    "`update` : `AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)`\n\nAdvanced compatibility shape for `gtkAppFull`. New code should prefer `gtkApp`'s simpler `msg -> s` update and return `appStep` / `appStepWith`."
+                } else {
+                    "`update` : `msg -> s -> Effect GtkError (AppStep s msg)`\n\nCommit the next model and any post-update commands. Return `appStep` for render-only turns and `appStepWith` when you need commands such as `commandAfter`."
+                }
+            }
+            _ => return None,
+        };
+
+        Some(Self::hover_badge_markdown(
+            "gtk-app-field",
+            body.to_string(),
+        ))
+    }
+
+    fn direct_record_field_name_at_position(
+        expr: &aivi::Expr,
+        position: Position,
+    ) -> Option<&aivi::SpannedName> {
+        let fields = match expr {
+            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => fields,
+            _ => return None,
+        };
+
+        for field in fields {
+            for segment in &field.path {
+                if let aivi::PathSegment::Field(name) = segment {
+                    let range = Self::span_to_range(name.span.clone());
+                    if Self::range_contains_position(&range, position) {
+                        return Some(name);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn find_gtk_app_record_at_position_in_expr(
+        expr: &aivi::Expr,
+        position: Position,
+    ) -> Option<(&aivi::Expr, bool)> {
+        if !Self::expr_contains_position_for_hover(expr, position) {
+            return None;
+        }
+
+        use aivi::Expr;
+
+        match expr {
+            Expr::Call { func, args, .. } => {
+                if let Expr::Ident(name) = func.as_ref() {
+                    let full_host = match name.name.as_str() {
+                        "gtkApp" => Some(false),
+                        "gtkAppFull" => Some(true),
+                        _ => None,
+                    };
+                    if let Some(full_host) = full_host {
+                        for arg in args {
+                            if Self::expr_contains_position_for_hover(arg, position)
+                                && matches!(arg, Expr::Record { .. } | Expr::PatchLit { .. })
+                            {
+                                return Some((arg, full_host));
+                            }
+                        }
+                    }
+                }
+
+                Self::find_gtk_app_record_at_position_in_expr(func, position).or_else(|| {
+                    args.iter().find_map(|arg| {
+                        Self::find_gtk_app_record_at_position_in_expr(arg, position)
+                    })
+                })
+            }
+            Expr::Suffixed { base, .. } | Expr::UnaryNeg { expr: base, .. } => {
+                Self::find_gtk_app_record_at_position_in_expr(base, position)
+            }
+            Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => substitutions
+                .iter()
+                .find_map(|sub| {
+                    sub.value.as_ref().and_then(|value| {
+                        Self::find_gtk_app_record_at_position_in_expr(value, position)
+                    })
+                })
+                .or_else(|| Self::find_gtk_app_record_at_position_in_expr(body, position)),
+            Expr::TextInterpolate { parts, .. } => parts.iter().find_map(|part| match part {
+                aivi::TextPart::Text { .. } => None,
+                aivi::TextPart::Expr { expr, .. } => {
+                    Self::find_gtk_app_record_at_position_in_expr(expr, position)
+                }
+            }),
+            Expr::List { items, .. } => items.iter().find_map(|item| {
+                Self::find_gtk_app_record_at_position_in_expr(&item.expr, position)
+            }),
+            Expr::Tuple { items, .. } => items
+                .iter()
+                .find_map(|item| Self::find_gtk_app_record_at_position_in_expr(item, position)),
+            Expr::Index { base, index, .. } => {
+                Self::find_gtk_app_record_at_position_in_expr(base, position)
+                    .or_else(|| Self::find_gtk_app_record_at_position_in_expr(index, position))
+            }
+            Expr::Lambda { body, .. } | Expr::CapabilityScope { body, .. } => {
+                Self::find_gtk_app_record_at_position_in_expr(body, position)
+            }
+            Expr::Match {
+                scrutinee, arms, ..
+            } => scrutinee
+                .as_ref()
+                .and_then(|value| Self::find_gtk_app_record_at_position_in_expr(value, position))
+                .or_else(|| {
+                    arms.iter().find_map(|arm| {
+                        Self::find_gtk_app_record_at_position_in_expr(&arm.body, position).or_else(
+                            || {
+                                arm.guard.as_ref().and_then(|guard| {
+                                    Self::find_gtk_app_record_at_position_in_expr(guard, position)
+                                })
+                            },
+                        )
+                    })
+                }),
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => Self::find_gtk_app_record_at_position_in_expr(cond, position)
+                .or_else(|| Self::find_gtk_app_record_at_position_in_expr(then_branch, position))
+                .or_else(|| Self::find_gtk_app_record_at_position_in_expr(else_branch, position)),
+            Expr::Binary { left, right, .. } => {
+                Self::find_gtk_app_record_at_position_in_expr(left, position)
+                    .or_else(|| Self::find_gtk_app_record_at_position_in_expr(right, position))
+            }
+            Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
+                fields.iter().find_map(|field| {
+                    Self::find_gtk_app_record_at_position_in_expr(&field.value, position)
+                })
+            }
+            Expr::Block { items, .. } => items.iter().find_map(|item| match item {
+                aivi::BlockItem::Bind { expr, .. }
+                | aivi::BlockItem::Let { expr, .. }
+                | aivi::BlockItem::Filter { expr, .. }
+                | aivi::BlockItem::Yield { expr, .. }
+                | aivi::BlockItem::Recurse { expr, .. }
+                | aivi::BlockItem::Expr { expr, .. } => {
+                    Self::find_gtk_app_record_at_position_in_expr(expr, position)
+                }
+                aivi::BlockItem::When { cond, effect, .. }
+                | aivi::BlockItem::Unless { cond, effect, .. } => {
+                    Self::find_gtk_app_record_at_position_in_expr(cond, position)
+                        .or_else(|| Self::find_gtk_app_record_at_position_in_expr(effect, position))
+                }
+                aivi::BlockItem::Given {
+                    cond, fail_expr, ..
+                } => Self::find_gtk_app_record_at_position_in_expr(cond, position)
+                    .or_else(|| Self::find_gtk_app_record_at_position_in_expr(fail_expr, position)),
+                aivi::BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => Self::find_gtk_app_record_at_position_in_expr(transition, position)
+                    .or_else(|| Self::find_gtk_app_record_at_position_in_expr(handler, position)),
+            }),
+            Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {
+                None
+            }
+            Expr::FieldAccess { base, .. } => {
+                Self::find_gtk_app_record_at_position_in_expr(base, position)
+            }
+        }
+    }
+
+    fn hover_for_gtk_app_field(modules: &[Module], position: Position) -> Option<String> {
+        let module = Self::module_at_position(modules, position)?;
+
+        let scan_expr = |expr: &aivi::Expr| {
+            let (record_expr, full_host) =
+                Self::find_gtk_app_record_at_position_in_expr(expr, position)?;
+            let field_name = Self::direct_record_field_name_at_position(record_expr, position)?;
+            Self::gtk_app_field_doc(&field_name.name, full_host)
+        };
+
+        for item in &module.items {
+            match item {
+                ModuleItem::Def(def) => {
+                    if let Some(contents) = scan_expr(&def.expr) {
+                        return Some(contents);
+                    }
+                }
+                ModuleItem::InstanceDecl(instance) => {
+                    for def in &instance.defs {
+                        if let Some(contents) = scan_expr(&def.expr) {
+                            return Some(contents);
+                        }
+                    }
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    for item in &domain.items {
+                        if let aivi::DomainItem::Def(def) | aivi::DomainItem::LiteralDef(def) = item
+                        {
+                            if let Some(contents) = scan_expr(&def.expr) {
+                                return Some(contents);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
+
     /// Find the TypeExpr from a TypeSig for the given identifier in a module.
     fn find_type_sig_in_module(module: &Module, ident: &str) -> Option<aivi::TypeExpr> {
         let paren_ident = format!("({ident})");
@@ -376,6 +723,9 @@ impl Backend {
                     }
                 }
                 false
+            }
+            aivi::Expr::CapabilityScope { body, .. } => {
+                Self::local_binding_visible_in_expr(body, ident, position, in_scope)
             }
             aivi::Expr::Suffixed { base, .. } | aivi::Expr::UnaryNeg { expr: base, .. } => {
                 Self::local_binding_visible_in_expr(base, ident, position, in_scope)
@@ -848,6 +1198,9 @@ impl Backend {
                 Self::find_record_field_name_at_position(left, position)
                     .or_else(|| Self::find_record_field_name_at_position(right, position))
             }
+            Expr::CapabilityScope { body, .. } => {
+                Self::find_record_field_name_at_position(body, position)
+            }
             Expr::Block { items, .. } => items.iter().find_map(|item| match item {
                 aivi::BlockItem::Bind { expr, .. }
                 | aivi::BlockItem::Let { expr, .. }
@@ -936,13 +1289,21 @@ impl Backend {
             "build_hover: token={ident:?}, modules={}",
             modules.len()
         ));
+        if let Some(contents) = Self::hover_for_gtk_app_field(&modules, position) {
+            Self::hover_debug(format!(
+                "build_hover: resolved gtkApp field {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
         let (_, inferred, span_types) = infer_value_types(&modules);
         for module in modules.iter() {
             let doc = Self::doc_for_ident(text, module, &ident);
             let inferred = inferred.get(&module.name.name);
-            if let Some(contents) =
+            if let Some(mut contents) =
                 Self::hover_contents_for_module(module, &ident, inferred, doc.as_deref(), doc_index)
             {
+                Self::append_gtk_architecture_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover: resolved in module {} after {:?}",
                     module.name.name,
@@ -967,9 +1328,10 @@ impl Backend {
                 return Some(Self::hover_markdown(contents));
             }
             // Fallback: look up the smallest span containing the cursor position.
-            if let Some(contents) =
+            if let Some(mut contents) =
                 Self::hover_from_span_types(&ident, position, &span_types, &module.name.name)
             {
+                Self::append_gtk_architecture_docs(&mut contents, &ident);
                 Self::hover_debug(format!(
                     "build_hover: resolved from span types in {} after {:?}",
                     module.name.name,
@@ -977,6 +1339,13 @@ impl Backend {
                 ));
                 return Some(Self::hover_markdown(contents));
             }
+        }
+        if let Some(contents) = Self::gtk_architecture_doc_for_ident(&ident) {
+            Self::hover_debug(format!(
+                "build_hover: resolved gtk architecture doc {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
         }
         if let Some(contents) = Self::hover_contents_for_primitive_value(&ident) {
             Self::hover_debug(format!(
@@ -1170,6 +1539,13 @@ impl Backend {
             modules.len(),
             workspace_modules.len()
         ));
+        if let Some(contents) = Self::hover_for_gtk_app_field(&modules, position) {
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved gtkApp field {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
         let current_module = Self::module_at_position(&modules, position);
         let Some(current_module) = current_module else {
             Self::hover_debug("build_hover_ws: no module at cursor; skipping workspace hover");
@@ -1259,6 +1635,7 @@ impl Backend {
                 current_module,
                 workspace_modules,
             );
+            Self::append_gtk_architecture_docs(&mut contents, &ident);
             Self::hover_debug(format!(
                 "build_hover_ws: resolved in current module {} after {:?}",
                 current_module.name.name,
@@ -1300,6 +1677,7 @@ impl Backend {
                     current_module,
                     workspace_modules,
                 );
+                Self::append_gtk_architecture_docs(&mut contents, lookup);
                 Self::hover_debug(format!(
                     "build_hover_ws: resolved via import {} after {:?}",
                     use_decl.module.name,
@@ -1324,12 +1702,20 @@ impl Backend {
             return Some(Self::hover_markdown(contents));
         }
         // Fallback: look up the smallest span containing the cursor position.
-        if let Some(contents) =
+        if let Some(mut contents) =
             Self::hover_from_span_types(&ident, position, &span_types, &current_module.name.name)
         {
+            Self::append_gtk_architecture_docs(&mut contents, &ident);
             Self::hover_debug(format!(
                 "build_hover_ws: resolved from span types in {} after {:?}",
                 current_module.name.name,
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
+        if let Some(contents) = Self::gtk_architecture_doc_for_ident(&ident) {
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved gtk architecture doc {ident:?} after {:?}",
                 started.elapsed()
             ));
             return Some(Self::hover_markdown(contents));

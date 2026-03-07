@@ -347,6 +347,7 @@ pub enum Expr {
     },
     CapabilityScope {
         capabilities: Vec<SpannedName>,
+        handlers: Vec<CapabilityHandlerBinding>,
         body: Box<Expr>,
         span: Span,
     },
@@ -368,6 +369,13 @@ pub enum Expr {
         body: Box<Expr>,
         span: Span,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct CapabilityHandlerBinding {
+    pub capability: SpannedName,
+    pub handler: Expr,
+    pub span: Span,
 }
 
 /// A single `mock path = value` binding within a `mock ... in` expression.

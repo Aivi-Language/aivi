@@ -1065,7 +1065,20 @@ json   = ~`{"id": 1, "name": "Alice"}`
 query  = ~`SELECT *
            FROM users
            WHERE id = 1`
+indent = ~`
+           | Hallo
+           | Andreas
+`
+styles = ~`css
+  | .myClass {
+  |   color: red;
+  | }
+`
 ```
+
+If every non-empty line in a multiline raw-text sigil starts with optional indentation followed by `|`, AIVI strips that indentation, removes the `|`, and drops one optional space after it. In that margin mode, an opening blank line and the final blank line before the closing backtick are removed as well.
+
+The VSCode extension recognizes the first line of a multiline raw-text sigil as an embedded-language header when it is one of `css`, `html`, `xml`, `json`, `sql`, `js`, `javascript`, `ts`, or `typescript`. That header is editor metadata only and is not part of the resulting `Text`.
 
 GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="...">` where attributes become props automatically:
 
@@ -1153,6 +1166,7 @@ main = gtkApp {
   size:   (800, 600),
   model:  { count: 0 },
   onStart: _ _ => pure Unit,
+  subscriptions: noSubscriptions,
   view:   state => ~<gtk>
     <GtkBox orientation="vertical" spacing="8">
       <GtkLabel label={ Int.toString state.count } />
@@ -1162,11 +1176,31 @@ main = gtkApp {
   toMsg:  event => event match
     | GtkClicked _ "incrementBtn" => Some Increment
     | _                           => None,
-  update: msg => state => pure (state <| { count: state.count + 1 })
+  update: msg => state =>
+    pure (appStep (state <| { count: state.count + 1 }))
 }
 ```
 
-`onStart` is for one-time startup work such as registering CSS, timers, actions, or other boot-time GTK setup. `signalStream`, `buildFromNode`, and `reconcileNode` remain available as lower-level primitives for custom loops and libraries, but they are not a competing blessed architecture. `gtkAppFull` remains as a deprecated compatibility shim for advanced window flags and legacy code that still needs raw handles during `update`.
+`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`, and `liftAppUpdateFull` compatibility helpers.
+
+`onStart` is for one-time startup work such as registering CSS and actions. `signalStream`, `buildFromNode`, `reconcileNode`, and the deprecated `gtkSetInterval` remain available as lower-level primitives for custom loops and legacy code, but they are not a competing blessed architecture. `gtkAppFull` remains as a deprecated compatibility shim for advanced window flags and legacy code that still needs raw handles during `update`.
+
+For forms, keep editable input in `aivi.ui.forms.Field` values inside the model, map `GtkInputChanged` to `setValue`, map `GtkFocusOut` to `touch`, and flip a `submitted: Bool` flag on your submit message. Render inline errors with `visibleErrors submitted validator field`, and construct the final typed payload with the existing `Validation` applicative:
+
+```aivi
+use aivi.ui.forms
+use aivi.validation
+
+Model = {
+  submitted: Bool
+  name: Field Text
+}
+
+nameRule : Text -> Validation (List Text) Text
+nameRule = allOf [required, minLength 2]
+
+nameErrors = model => visibleErrors model.submitted nameRule model.name
+```
 
 Dynamic child lists are supported with `<each>`:
 
@@ -1477,6 +1511,7 @@ topoSmoke = do Effect {
 | Transform Option             | `opt \|> map f \|> filter pred \|> flatMap g`                           |
 | Transform Result             | `res \|> map f \|> mapErr g \|> flatMap h`                              |
 | Accumulate errors            | `ap (ap (Valid f) v1) v2` (Validation applicative)                      |
+| GTK form field state         | `use aivi.ui.forms; field ""`, `setValue txt field`, `touch field`      |
 | Check Validation state       | `isValid v`, `isInvalid v`                                              |
 | Validation to Result         | `v \|> toResult`                                                        |
 | Result to Validation         | `r \|> fromResult`                                                      |

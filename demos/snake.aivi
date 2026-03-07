@@ -180,14 +180,22 @@ toMsg = event => event match
   | GtkKeyPressed _ _ "Left" _  => Some (Arrow Left)
   | GtkKeyPressed _ _ "Right" _ => Some (Arrow Right)
   | GtkKeyPressed _ _ "r" _     => Some Restart
-  | GtkTick                     => Some Tick
   | _                           => None
 
-update : Msg -> State -> Effect GtkError State
+subscriptions : State -> List (Subscription Msg)
+subscriptions = _ => [
+  subscriptionEvery {
+    key: "snake.tick"
+    millis: 150
+    tag: Tick
+  }
+]
+
+update : Msg -> State -> Effect GtkError (AppStep State Msg)
 update = msg state => msg match
-  | Arrow dir => pure (if state.gameOver then state else state <| { dir: dir })
-  | Tick      => pure (if state.gameOver then state else step state.dir state)
-  | Restart   => pure initialState
+  | Arrow dir => pure (appStep (if state.gameOver then state else state <| { dir: dir }))
+  | Tick      => pure (appStep (if state.gameOver then state else step state.dir state))
+  | Restart   => pure (appStep initialState)
 
 // CSS for monospace grid
 
@@ -204,8 +212,9 @@ main = gtkApp {
   model: initialState
   onStart: appId _ => do Effect {
     _ <- appSetCss appId css
-    gtkSetInterval 150
+    pure Unit
   }
+  subscriptions: subscriptions
   view: view
   toMsg: toMsg
   update: update

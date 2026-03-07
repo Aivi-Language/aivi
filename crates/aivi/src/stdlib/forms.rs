@@ -9,7 +9,8 @@ export validate, errors, visibleErrors
 export allOf, rule, required, minLength, maxLength, email
 
 use aivi
-use aivi.list
+use aivi.regex
+use aivi.collections
 use aivi.text
 use aivi.validation
 
@@ -43,9 +44,8 @@ validate : (A -> Validation (List E) B) -> Field A -> Validation (List E) B
 validate = validator state => validator state.value
 
 errorsFrom : Validation (List E) A -> List E
-errorsFrom = validation => validation match
-  | Valid _      => []
-  | Invalid errs => errs
+errorsFrom = validationResult =>
+  fold (errs => errs) (_ => []) validationResult
 
 errors : (A -> Validation (List E) B) -> Field A -> List E
 errors = validator state => errorsFrom (validate validator state)
@@ -64,7 +64,7 @@ collectErrors = validators value => validators match
 allOf : List (A -> Validation (List E) B) -> A -> Validation (List E) A
 allOf = validators value => {
   errs = collectErrors validators value
-  if list.isEmpty errs
+  if List.isEmpty errs
     then Valid value
     else Invalid errs
 }
@@ -99,14 +99,14 @@ maxLength = count value => {
     else Invalid ["Must be at most {text.toText count} characters"]
 }
 
+emailPattern : Regex
+emailPattern = ~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
 email : Text -> Validation (List Text) Text
 email = value => {
   trimmed = text.trim value
-  valid = text.split "@" trimmed match
-    | [local, domain] => text.isEmpty local == False && text.contains "." domain
-    | _               => False
 
-  if text.isEmpty trimmed || valid
+  if text.isEmpty trimmed || regex.test emailPattern trimmed
     then Valid value
     else Invalid ["Enter a valid email address"]
 }

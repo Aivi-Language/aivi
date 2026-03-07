@@ -164,6 +164,7 @@ pub(super) fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<D
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => expr_uses_name_free(base, name),
             aivi::Expr::UnaryNeg { expr, .. } => expr_uses_name_free(expr, name),
+            aivi::Expr::CapabilityScope { body, .. } => expr_uses_name_free(body, name),
             aivi::Expr::TextInterpolate { parts, .. } => parts.iter().any(|p| match p {
                 aivi::TextPart::Text { .. } => false,
                 aivi::TextPart::Expr { expr, .. } => expr_uses_name_free(expr, name),
@@ -309,6 +310,7 @@ pub(super) fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<D
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
+            aivi::Expr::CapabilityScope { body, .. } => walk_expr(body, out),
             aivi::Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let aivi::TextPart::Expr { expr, .. } = part {
@@ -449,6 +451,7 @@ pub(super) fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnost
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => expr_uses_name(base, name),
             aivi::Expr::UnaryNeg { expr, .. } => expr_uses_name(expr, name),
+            aivi::Expr::CapabilityScope { body, .. } => expr_uses_name(body, name),
             aivi::Expr::TextInterpolate { parts, .. } => parts.iter().any(|p| match p {
                 aivi::TextPart::Text { .. } => false,
                 aivi::TextPart::Expr { expr, .. } => expr_uses_name(expr, name),

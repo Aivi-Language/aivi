@@ -369,6 +369,24 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 right: Box::new(rewrite_expr(*right, aliases)),
                 span,
             },
+            Expr::CapabilityScope {
+                capabilities,
+                handlers,
+                body,
+                span,
+            } => Expr::CapabilityScope {
+                capabilities,
+                handlers: handlers
+                    .into_iter()
+                    .map(|handler| crate::surface::CapabilityHandlerBinding {
+                        capability: handler.capability,
+                        handler: rewrite_expr(handler.handler, aliases),
+                        span: handler.span,
+                    })
+                    .collect(),
+                body: Box::new(rewrite_expr(*body, aliases)),
+                span,
+            },
             Expr::Block { kind, items, span } => Expr::Block {
                 kind,
                 items: items

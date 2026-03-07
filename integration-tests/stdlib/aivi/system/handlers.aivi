@@ -1,0 +1,124 @@
+@no_prelude
+module integrationTests.stdlib.aivi.system.handlers
+
+use aivi
+use aivi.testing
+use aivi.file
+use aivi.system
+use aivi.concurrency
+
+readBootConfig : Effect Text { configText: Text, token: Text } with { file.read, process.env.read }
+readBootConfig = do Effect {
+  configResult <- readText "/tmp/aivi_handler_config.txt"
+  token        <- env.get "AIVI_TOKEN"
+  configText   <- configResult match
+    | Ok txt => pure txt
+    | Err e  => fail e
+    pure { configText, token }
+}
+
+cleanupMarkerResource : Text -> Resource Text Unit with { file.read }
+cleanupMarkerResource = path => resource {
+  yield Unit
+  markerResult <- readText "/tmp/aivi_handler_cleanup_marker.txt"
+  marker <- markerResult match
+    | Ok txt => pure txt
+    | Err e  => fail e
+    _ <- writeText path marker
+    pure Unit
+}
+
+@test "handler bindings can override file and env reads"
+handler_bindings_override_file_and_env_reads = do Effect {
+  fixtureRead = _ => pure "fixture config"
+  fixtureEnv  = _ => pure "token-123"
+
+  cfg <- (with {
+      file.read        = fixtureRead
+      process.env.read = fixtureEnv
+  } in readBootConfig)
+
+  _ <- assertEq cfg.configText "fixture config"
+  assertEq cfg.token "token-123"
+}
+
+@test "exact handler bindings override broader family bindings"
+exact_handler_bindings_override_family_bindings = do Effect {
+  familyReader = {
+    read: _ => pure "family text"
+  }
+  leafReader = _ => pure "leaf text"
+
+  familyOnly <- (with {
+      file = familyReader
+  } in readText "/tmp/aivi_handler_shadowing.txt")
+
+  exactWins <- (with {
+      file      = familyReader
+      file.read = leafReader
+  } in readText "/tmp/aivi_handler_shadowing.txt")
+
+  _ <- familyOnly match
+    | Ok txt => assertEq txt "family text"
+    | Err e  => fail e
+
+    exactWins match
+      | Ok txt => assertEq txt "leaf text"
+      | Err e  => fail e
+}
+
+@test "sleep handler replaces the ambient timer"
+sleep_handler_replaces_ambient_timer = do Effect {
+  path           = "/tmp/aivi_handler_sleep_log.txt"
+  immediateSleep = millis => do Effect {
+    _ <- pure millis
+    _ <- writeText path "handled"
+    pure Unit
+  }
+
+  _ <- (with {
+      clock.sleep = immediateSleep
+  } in do Effect {
+      _ <- sleep 50
+      pure Unit
+  })
+
+  logged <- readText path
+  _      <- logged match
+    | Ok txt => assertEq txt "handled"
+    | Err e  => fail e
+    _ <- delete path
+    pure Unit
+}
+
+@test "resource cleanup keeps the acquisition handler during unwinding"
+resource_cleanup_keeps_acquisition_handler_during_unwinding = do Effect {
+  path      = "/tmp/aivi_handler_cleanup_log.txt"
+  outerRead = _ => pure "outer cleanup"
+  innerRead = _ => pure "inner cleanup"
+
+  result <- attempt (
+    with {
+      file.read = outerRead
+    } in do Effect {
+      _ <- cleanupMarkerResource path
+      _ <- (with {
+          file.read = innerRead
+      } in do Effect {
+          fail "boom"
+      })
+      pure Unit
+    }
+  )
+
+  _ <- result match
+    | Err e => assertEq e "boom"
+    | Ok _  => fail "expected failure"
+
+    logged <- readText path
+    _      <- logged match
+      | Ok txt => assertEq txt "outer cleanup"
+      | Err e  => fail e
+    _ <- delete path
+    pure Unit
+}

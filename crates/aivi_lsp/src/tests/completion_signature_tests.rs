@@ -131,7 +131,10 @@ fn diagnostic_source_field_indicates_category() {
         .find(|d| matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "E1001"))
         .expect("E1001 expected");
     assert!(
-        e1001.source.as_deref().is_some_and(|s| s.contains("Syntax")),
+        e1001
+            .source
+            .as_deref()
+            .is_some_and(|s| s.contains("Syntax")),
         "expected 'Syntax' category in source field for E1001"
     );
 
@@ -307,7 +310,9 @@ fn completion_includes_constructors_from_type_decl() {
     assert!(labels.contains(&"Green"), "Green constructor should appear");
     assert!(labels.contains(&"Blue"), "Blue constructor should appear");
     // Constructors from current module should have ENUM_MEMBER kind
-    let red_item = items.iter().find(|i| i.label == "Red" && i.kind == Some(tower_lsp::lsp_types::CompletionItemKind::ENUM_MEMBER));
+    let red_item = items.iter().find(|i| {
+        i.label == "Red" && i.kind == Some(tower_lsp::lsp_types::CompletionItemKind::ENUM_MEMBER)
+    });
     assert!(
         red_item.is_some(),
         "Red constructor should appear with ENUM_MEMBER kind"
@@ -359,7 +364,10 @@ fn completion_does_not_duplicate_items() {
     );
     // Count occurrences of "add"
     let add_count = items.iter().filter(|i| i.label == "add").count();
-    assert!(add_count <= 1, "completion 'add' should not be duplicated, count: {add_count}");
+    assert!(
+        add_count <= 1,
+        "completion 'add' should not be duplicated, count: {add_count}"
+    );
 }
 
 #[test]
@@ -375,9 +383,136 @@ fn completion_includes_aivi_snippets() {
         &GtkIndex::default(),
     );
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert!(labels.contains(&"do Effect"), "'do Effect' snippet should appear");
+    assert!(
+        labels.contains(&"do Effect"),
+        "'do Effect' snippet should appear"
+    );
     assert!(labels.contains(&"match"), "'match' snippet should appear");
     assert!(labels.contains(&"lambda"), "'lambda' snippet should appear");
+}
+
+#[test]
+fn gtk_arch_completion_includes_architecture_snippets() {
+    let text = "@no_prelude\nmodule examples.gtk_arch_snip\n";
+    let uri = sample_uri();
+    let position = position_after(text, "module examples.gtk_arch_snip\n");
+    let items = Backend::build_completion_items(
+        text,
+        &uri,
+        position,
+        &HashMap::new(),
+        &GtkIndex::default(),
+    );
+
+    let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
+    assert!(labels.contains(&"gtkApp architecture"));
+    assert!(labels.contains(&"gtk toMsg"));
+    assert!(labels.contains(&"gtk subscriptionEvery"));
+    assert!(labels.contains(&"gtk form setValue"));
+    assert!(labels.contains(&"gtk visibleErrors"));
+
+    let gtk_app = items
+        .iter()
+        .find(|item| item.label == "gtkApp architecture")
+        .expect("gtkApp snippet");
+    let insert_text = gtk_app.insert_text.as_deref().expect("gtkApp snippet body");
+    assert!(insert_text.contains("subscriptions:"));
+    assert!(insert_text.contains("toMsg:"));
+    assert!(insert_text.contains("appStep state"));
+
+    let docs = gtk_app.documentation.as_ref().expect("gtkApp snippet docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("blessed `gtkApp` loop"));
+}
+
+#[test]
+fn gtk_arch_completion_signal_sugar_docs_reference_tomsg_flow() {
+    let text = r#"@no_prelude
+module examples.gtk_signal_docs
+view = ~<gtk><GtkButton onC /></gtk>
+"#;
+    let uri = sample_uri();
+    let position = position_after(text, "onC");
+    let gtk_index =
+        GtkIndex::from_json(crate::gtk_index::GTK_INDEX_JSON).expect("embedded gtk index");
+    let items = Backend::build_completion_items(text, &uri, position, &HashMap::new(), &gtk_index);
+
+    let on_click = items
+        .iter()
+        .find(|item| item.label == "onClick")
+        .expect("onClick completion");
+    let docs = on_click.documentation.as_ref().expect("onClick docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("GtkClicked"));
+    assert!(markup.value.contains("toMsg"));
+}
+
+#[test]
+fn gtk_arch_hover_documents_signal_constructor() {
+    let text = r#"@no_prelude
+module examples.gtk_hover_signal
+toMsg = event =>
+  event match
+    | GtkInputChanged _ "nameInput" value => Some value
+    | _ => None
+"#;
+    let uri = sample_uri();
+    let position = position_for(text, "GtkInputChanged");
+    let hover = Backend::build_hover(text, &uri, position, &DocIndex::default())
+        .expect("GtkInputChanged hover");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("GtkInputChanged WidgetId Text Text"));
+    assert!(markup.value.contains("setValue"));
+}
+
+#[test]
+fn gtk_arch_hover_documents_gtk_app_field() {
+    let text = r#"@no_prelude
+module examples.gtk_hover_field
+main = gtkApp {
+  id: "com.example.app"
+  title: "Demo"
+  size: (640, 480)
+  model: 0
+  onStart: _ _ => pure Unit
+  subscriptions: noSubscriptions
+  view: _ => ~<gtk><GtkBox /></gtk>
+  toMsg: event =>
+    event match
+      | _ => None
+  update: msg => state =>
+    pure (appStep state)
+}
+"#;
+    let uri = sample_uri();
+    let position = position_for(text, "subscriptions:");
+    let hover = Backend::build_hover(text, &uri, position, &DocIndex::default())
+        .expect("subscriptions hover");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("List (Subscription msg)"));
+    assert!(markup.value.contains("noSubscriptions"));
+}
+
+#[test]
+fn gtk_arch_hover_documents_form_helper() {
+    let text = "@no_prelude\nmodule examples.gtk_forms_hover\nrun = visibleErrors\n";
+    let uri = sample_uri();
+    let position = position_for(text, "visibleErrors");
+    let hover = Backend::build_hover(text, &uri, position, &DocIndex::default())
+        .expect("visibleErrors hover");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("submit or blur"));
+    assert!(markup.value.contains("touch"));
 }
 
 #[test]
@@ -474,12 +609,7 @@ fn signature_help_local_function_single_param() {
     let text = "@no_prelude\nmodule examples.sig1\ngreet : Text -> Text\ngreet = name => \"hi\"\nresult = greet \"Alice\"\n";
     let uri = sample_uri();
     let position = position_for(text, "\"Alice\"");
-    let help = Backend::build_signature_help_with_workspace(
-        text,
-        &uri,
-        position,
-        &HashMap::new(),
-    );
+    let help = Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
     assert!(help.is_some(), "expected signature help for 'greet'");
     let help = help.unwrap();
     assert_eq!(help.active_parameter, Some(0));
@@ -494,12 +624,7 @@ fn signature_help_second_argument_position() {
     let uri = sample_uri();
     // Position at "99" — second argument
     let position = position_for(text, "99");
-    let help = Backend::build_signature_help_with_workspace(
-        text,
-        &uri,
-        position,
-        &HashMap::new(),
-    );
+    let help = Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
     assert!(help.is_some(), "expected signature help");
     let help = help.unwrap();
     assert_eq!(
@@ -515,12 +640,7 @@ fn signature_help_includes_parameter_names() {
         "@no_prelude\nmodule examples.sigparams\nrange : Int -> Int -> Int\nrange = start end => start\nresult = range 1 10\n";
     let uri = sample_uri();
     let position = position_for(text, "1 10");
-    let help = Backend::build_signature_help_with_workspace(
-        text,
-        &uri,
-        position,
-        &HashMap::new(),
-    );
+    let help = Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
     assert!(help.is_some(), "expected signature help");
     let help = help.unwrap();
     let sig = &help.signatures[0];
@@ -543,8 +663,7 @@ fn signature_help_returns_none_when_not_in_call() {
     let uri = sample_uri();
     // Position at the integer literal — not inside a call
     let position = position_for(text, "42");
-    let help =
-        Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
+    let help = Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
     // May or may not be Some, but it should not panic
     let _ = help;
 }
@@ -556,12 +675,8 @@ fn signature_help_with_inferred_type() {
     let text = "@no_prelude\nmodule examples.inferred\ndouble : Int -> Int\ndouble = x => x + x\nresult = double 5\n";
     let uri = sample_uri();
     let position = position_for(text, "5\n");
-    let help =
-        Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
-    assert!(
-        help.is_some(),
-        "expected signature help for 'double'"
-    );
+    let help = Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
+    assert!(help.is_some(), "expected signature help for 'double'");
     let help = help.unwrap();
     assert!(
         help.signatures[0].label.contains("double"),
@@ -572,7 +687,8 @@ fn signature_help_with_inferred_type() {
 #[test]
 fn signature_help_imported_function_second_param() {
     let math_text = "@no_prelude\nmodule examples.math2\nexport clamp\nclamp : Int -> Int -> Int -> Int\nclamp = lo hi x => x\n";
-    let app_text = "@no_prelude\nmodule examples.app2\nuse examples.math2 (clamp)\nresult = clamp 0 100 42\n";
+    let app_text =
+        "@no_prelude\nmodule examples.app2\nuse examples.math2 (clamp)\nresult = clamp 0 100 42\n";
 
     let math_uri = Url::parse("file:///math2.aivi").unwrap();
     let app_uri = Url::parse("file:///app2.aivi").unwrap();
@@ -592,8 +708,12 @@ fn signature_help_imported_function_second_param() {
     }
 
     let position = position_for(app_text, "42\n");
-    let help = Backend::build_signature_help_with_workspace(app_text, &app_uri, position, &workspace);
-    assert!(help.is_some(), "expected signature help for imported 'clamp'");
+    let help =
+        Backend::build_signature_help_with_workspace(app_text, &app_uri, position, &workspace);
+    assert!(
+        help.is_some(),
+        "expected signature help for imported 'clamp'"
+    );
     let help = help.unwrap();
     assert_eq!(
         help.active_parameter,
@@ -676,8 +796,7 @@ fn signature_help_active_parameter_first_arg() {
         "@no_prelude\nmodule examples.firstarg\nf : Int -> Int -> Int\nf = a b => a + b\nresult = f 1 2\n";
     let uri = sample_uri();
     let position = position_for(text, "1 2");
-    let help =
-        Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
+    let help = Backend::build_signature_help_with_workspace(text, &uri, position, &HashMap::new());
     assert!(help.is_some(), "expected signature help");
     let help = help.unwrap();
     assert_eq!(

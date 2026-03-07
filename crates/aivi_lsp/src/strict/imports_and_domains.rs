@@ -123,6 +123,7 @@ pub(super) fn strict_missing_import_suggestions(
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => collect_idents(base, out),
+            aivi::Expr::CapabilityScope { body, .. } => collect_idents(body, out),
             aivi::Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let aivi::TextPart::Expr { expr, .. } = part {
@@ -378,6 +379,7 @@ pub(super) fn strict_expected_type_coercions(
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => collect_calls(base, out),
+            aivi::Expr::CapabilityScope { body, .. } => collect_calls(body, out),
             aivi::Expr::TextInterpolate { parts, .. } => {
                 for p in parts {
                     if let aivi::TextPart::Expr { expr, .. } = p {

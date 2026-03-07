@@ -872,6 +872,7 @@ fn type_expr_to_openai_json_schema(
                 obj.insert("additionalProperties".to_string(), json!(false));
                 serde_json::Value::Object(obj)
             }
+            TypeExpr::CapabilityClause { base, .. } => te_to_schema(base, aliases, seen),
             TypeExpr::Apply { base, args, .. } => {
                 if let TypeExpr::Name(base_name) = base.as_ref() {
                     match base_name.name.as_str() {

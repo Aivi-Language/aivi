@@ -134,10 +134,10 @@ signalPoll: Unit -> Effect GtkError (Option GtkSignalEvent)
 signalStream: Unit -> Effect GtkError (Recv GtkSignalEvent)
 signalEmit: WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 
-gtkApp: { id: Text, title: Text, size: (Int, Int), model: s, onStart: AppId -> WindowId -> Effect GtkError Unit, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
+gtkApp: { id: Text, title: Text, size: (Int, Int), model: s, onStart: AppId -> WindowId -> Effect GtkError Unit, subscriptions: s -> List (Subscription msg), view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError (AppStep s msg) } -> Effect GtkError Unit
 
 @deprecated "use gtkApp; gtkAppFull is a compatibility shim for advanced window flags and update-time handles"
-gtkAppFull: { id: Text, title: Text, size: (Int, Int), decorated: Bool, hideOnClose: Bool, model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: AppId -> WindowId -> msg -> s -> Effect GtkError s, onStart: AppId -> WindowId -> Effect GtkError Unit } -> Effect GtkError Unit
+gtkAppFull: { id: Text, title: Text, size: (Int, Int), decorated: Bool, hideOnClose: Bool, model: s, onStart: AppId -> WindowId -> Effect GtkError Unit, subscriptions: s -> List (Subscription msg), view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg) } -> Effect GtkError Unit
 
 osOpenUri: AppId -> Text -> Effect GtkError Unit
 osShowInFileManager: Text -> Effect GtkError Unit

@@ -30,7 +30,7 @@ use super::url_http::{
     build_http_client_record, build_openapi_call_builtin, build_rest_api_record, build_url_record,
     HttpClientMode,
 };
-use super::util::{builtin, builtin_constructor, expect_text};
+use super::util::{builtin, builtin_constructor, expect_list, expect_record, expect_text};
 use super::{database::build_database_record, log::build_log_record};
 use crate::runtime::http::build_http_server_record;
 use crate::runtime::{format_value, BuiltinImpl, BuiltinValue, EffectValue, Env, Runtime, RuntimeError, Value};
@@ -618,6 +618,34 @@ pub(crate) fn register_builtins(env: &Env) {
                 }),
             };
             Ok(Value::Resource(Arc::new(resource)))
+        }),
+    );
+
+    env.set(
+        "__withCapabilityHandlers".to_string(),
+        builtin("__withCapabilityHandlers", 2, |mut args, runtime| {
+            let body = args.pop().unwrap();
+            let entries = expect_list(args.pop().unwrap(), "__withCapabilityHandlers")?;
+            let mut scope = std::collections::HashMap::new();
+            for entry in entries.iter() {
+                let record = expect_record(entry.clone(), "__withCapabilityHandlers")?;
+                let capability = match record.get("capability").cloned() {
+                    Some(value) => expect_text(value, "__withCapabilityHandlers.capability")?,
+                    None => {
+                        return Err(RuntimeError::Message(
+                            "handler binding missing capability".to_string(),
+                        ))
+                    }
+                };
+                let handler = record.get("handler").cloned().ok_or_else(|| {
+                    RuntimeError::Message("handler binding missing handler".to_string())
+                })?;
+                scope.insert(capability, handler);
+            }
+            let result = runtime.with_capability_scope(scope.clone(), |runtime| {
+                runtime.apply(body.clone(), Value::Unit)
+            })?;
+            Ok(runtime.wrap_value_with_capability_scope(result, scope))
         }),
     );
 

@@ -294,6 +294,7 @@ impl Backend {
                 insert_text: Some(body.to_string()),
                 insert_text_format: Some(InsertTextFormat::SNIPPET),
                 detail: Some(detail.to_string()),
+                documentation: Self::snippet_documentation(label),
                 sort_text: Some("5".to_string()),
                 ..CompletionItem::default()
             });
@@ -545,7 +546,58 @@ impl Backend {
             "given ${1:condition} or fail ${0:errorExpr}",
             "given guard (in do block)",
         ),
+        (
+            "gtkApp architecture",
+            "gtkApp {\n  id: \"${1:com.example.app}\",\n  title: \"${2:Example}\",\n  size: (${3:960}, ${4:640}),\n  model: ${5:initialModel},\n  onStart: ${6:_ _ => pure Unit},\n  subscriptions: ${7:noSubscriptions},\n  view: ${8:state => ~<gtk>\n    <GtkBox orientation=\"vertical\" spacing=\"12\">\n      <GtkLabel label=\"${9:Hello}\" />\n    </GtkBox>\n  </gtk>},\n  toMsg: ${10:event =>\n    event match\n      | GtkClicked _ \"${11:saveBtn}\" => Some ${12:Save}\n      | _ => None\n  },\n  update: ${13:msg => state =>\n    msg match\n      | ${12:Save} => pure (appStep state)\n      | _ => pure (appStep state)\n  }\n}",
+            "blessed GTK app architecture snippet",
+        ),
+        (
+            "gtk toMsg",
+            "event match\n  | GtkInputChanged _ \"${1:fieldId}\" value => Some (${2:Changed value})\n  | GtkFocusOut _ \"${1:fieldId}\" => Some ${3:Blurred}\n  | GtkClicked _ \"${4:buttonId}\" => Some ${5:Submitted}\n  | _ => None",
+            "GTK signal-to-message mapping snippet",
+        ),
+        (
+            "gtk subscriptionEvery",
+            "subscriptionEvery { key: \"${1:tick}\", millis: ${2:1000}, tag: ${0:Tick} }",
+            "repeating GTK app subscription snippet",
+        ),
+        (
+            "gtk form setValue",
+            "${1:fieldName}: setValue ${2:value} state.${1:fieldName}",
+            "map GtkInputChanged into a Field update",
+        ),
+        (
+            "gtk visibleErrors",
+            "visibleErrors ${1:state.submitted} ${2:validator} ${0:state.field}",
+            "show form validation errors after submit or blur",
+        ),
     ];
+
+    fn snippet_documentation(label: &str) -> Option<Documentation> {
+        let value = match label {
+            "gtkApp architecture" => Some(
+                "Scaffold the blessed `gtkApp` loop with `subscriptions`, `view`, `toMsg`, and `update` in one place.\n\nUse `appStep`/`appStepWith` in `update`, prefer `noSubscriptions` when idle, and keep `signalStream` as a lower-level escape hatch rather than the primary app architecture.",
+            ),
+            "gtk toMsg" => Some(
+                "Match typed `GtkSignalEvent` constructors inside `toMsg`.\n\nUse `GtkInputChanged` to feed `setValue`, `GtkFocusOut` to trigger `touch`, and `GtkClicked` to raise domain messages from named widgets.",
+            ),
+            "gtk subscriptionEvery" => Some(
+                "Create a repeating timer subscription derived from the current model.\n\nPrefer `subscriptionEvery` for long-lived ticks and `commandAfter` for one-shot delayed messages.",
+            ),
+            "gtk form setValue" => Some(
+                "Update a `Field A` from a GTK input event.\n\nThe blessed forms flow is `GtkInputChanged` → `setValue`, `GtkFocusOut` → `touch`, and `visibleErrors` for render-time feedback.",
+            ),
+            "gtk visibleErrors" => Some(
+                "Render form validation errors only after submit or blur.\n\nPair this with `touch` in `toMsg` and a `submitted` flag in the `gtkApp` model.",
+            ),
+            _ => None,
+        }?;
+
+        Some(Documentation::MarkupContent(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: value.to_string(),
+        }))
+    }
 
     /// Detect when cursor is on the RHS of a binding after `@static` and provide
     /// completions for known compile-time sources.
@@ -1086,6 +1138,13 @@ impl Backend {
                                 label: sugar.to_string(),
                                 kind: Some(CompletionItemKind::EVENT),
                                 detail: Some(format!("signal:{signal_name}")),
+                                documentation: Some(Documentation::MarkupContent(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: Self::gtk_signal_sugar_completion_doc(
+                                        sugar,
+                                        signal_name,
+                                    ),
+                                })),
                                 insert_text: Some(format!("{sugar}={{{{ ${{1:handler}} }}}}")),
                                 insert_text_format: Some(InsertTextFormat::SNIPPET),
                                 sort_text: Some("2".to_string()),
@@ -1107,5 +1166,32 @@ impl Backend {
             "gint" | "guint" | "gfloat" | "gdouble" => "0",
             _ => "",
         }
+    }
+
+    fn gtk_signal_sugar_completion_doc(sugar: &str, signal_name: &str) -> String {
+        let typed_event = match sugar {
+            "onClick" => "`GtkClicked WidgetId Text`",
+            "onInput" => "`GtkInputChanged WidgetId Text Text`",
+            "onActivate" => "`GtkActivated WidgetId Text`",
+            "onToggle" => "`GtkToggled WidgetId Text Bool`",
+            "onValueChanged" => "`GtkValueChanged WidgetId Text Float`",
+            "onFocusIn" => "`GtkFocusIn WidgetId Text`",
+            "onFocusOut" => "`GtkFocusOut WidgetId Text`",
+            "onShowSidebarChanged" => "`GtkUnknownSignal WidgetId Text Text Text Text`",
+            _ => "`GtkSignalEvent`",
+        };
+
+        let guidance = match sugar {
+            "onInput" => "Use this with `toMsg` arms that feed `setValue` for `Field A` state.",
+            "onFocusOut" => {
+                "Use this with `toMsg` arms that emit a blur message and call `touch` in `update`."
+            }
+            "onClick" => "Prefer matching by the widget `id=\"...\"` name in `toMsg`.",
+            _ => "Map the resulting typed event into a domain `Msg` from `toMsg`.",
+        };
+
+        format!(
+            "Sugar for GTK signal `{signal_name}`.\n\nThis signal feeds the typed event constructor {typed_event} inside the blessed `gtkApp` architecture.\n\n{guidance}"
+        )
     }
 }

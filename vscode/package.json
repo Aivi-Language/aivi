@@ -87,7 +87,16 @@
       {
         "language": "aivi",
         "scopeName": "source.aivi",
-        "path": "./syntaxes/aivi.tmLanguage.json"
+        "path": "./syntaxes/aivi.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.inline.css.aivi": "css",
+          "meta.embedded.inline.html.aivi": "html",
+          "meta.embedded.inline.javascript.aivi": "javascript",
+          "meta.embedded.inline.json.aivi": "json",
+          "meta.embedded.inline.sql.aivi": "sql",
+          "meta.embedded.inline.typescript.aivi": "typescript",
+          "meta.embedded.inline.xml.aivi": "xml"
+        }
       },
       {
         "language": "ebnf",
