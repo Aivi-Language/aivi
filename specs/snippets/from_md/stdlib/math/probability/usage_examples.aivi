@@ -2,4 +2,4 @@ use aivi.probability
 
 p         = clamp 0.7
 coin      = bernoulli p
-probHeads = coin.pdf true
+probHeads = coin.pdf True

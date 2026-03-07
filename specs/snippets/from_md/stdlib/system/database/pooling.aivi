@@ -20,15 +20,15 @@ cfg = {
   healthCheck: _ => pure True
 }
 
-main : Effect Text (Result Pool.PoolError Int)
+main : Effect DbError (Result Pool.PoolError Int)
 main = do Effect {
   poolRes <- Pool.create cfg
   poolRes match
     | Err e   => pure (Err e)
     | Ok pool =>
-        Pool.withConn pool (conn =>
-          db.inTransactionOn conn (do Effect {
-            pure 123
-          })
-        )
+      Pool.withConn pool (conn =>
+        db.inTransactionOn conn (do Effect {
+          pure 123
+        })
+      )
 }

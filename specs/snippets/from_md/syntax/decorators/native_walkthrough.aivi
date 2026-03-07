@@ -14,6 +14,6 @@ v5: Text -> Text -> Effect Text Text
 use aivi
 
 main = do Effect {
-  id <- uuid.v4
-  console.log ("Generated UUID: " ++ id)
+  id <- v4
+  console.log "Generated UUID: {id}"
 }

@@ -1,3 +1,5 @@
+@test module order_tests
+
 @test "addition is commutative"
 addCommutative = do Effect {
   assertEq (add 2 3) (add 3 2)
@@ -7,9 +9,6 @@ addCommutative = do Effect {
 emptyLen = do Effect {
   assertEq (length []) 0
 }
-
-// Test-only module: excluded from production builds entirely
-@test module OrderTests
 
 use aivi
 

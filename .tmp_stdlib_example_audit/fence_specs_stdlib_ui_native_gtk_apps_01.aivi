@@ -1,0 +1,9 @@
+~<gtk>
+  <AdwClamp maximumSize="480">
+    <GtkBox orientation="vertical" spacing="12">
+      <GtkLabel label="Project Settings" cssClass="title-2" />
+      <GtkEntry id="projectNameInput" placeholderText="Project name" />
+      <GtkButton id="saveButton" label="Save" />
+    </GtkBox>
+  </AdwClamp>
+</gtk>

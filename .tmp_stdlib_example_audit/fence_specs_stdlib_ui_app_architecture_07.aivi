@@ -1,0 +1,1 @@
+run : Effect GtkError msg with { ... }

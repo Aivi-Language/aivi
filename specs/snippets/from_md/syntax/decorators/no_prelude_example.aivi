@@ -1,6 +1,4 @@
-// Opt out of the implicit prelude import.
-// Useful for low-level modules that define their own primitives.
-@no_prelude module Core.Primitives
+@no_prelude module core.primitives
 
 // Nothing from the prelude is in scope here.
 // You must import everything explicitly.

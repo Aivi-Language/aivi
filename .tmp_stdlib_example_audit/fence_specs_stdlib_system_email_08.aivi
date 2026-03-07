@@ -1,0 +1,22 @@
+use aivi.email
+
+processInbox = token => resource {
+  session <- imapOpen {
+    host: "imap.gmail.com"
+    user: "user@gmail.com"
+    auth: OAuth2 token
+    port: None
+    starttls: None
+    mailbox: None
+    filter: None
+    limit: None
+  }
+  yield session
+}
+  |> withResource (session => do Effect {
+    _    <- imapSelect "INBOX" session
+    uids <- imapSearch "UNSEEN" session
+    msgs <- imapFetch uids session
+    _    <- imapAddFlags uids ["\\Seen"] session   -- mark them as processed
+    pure msgs
+  })

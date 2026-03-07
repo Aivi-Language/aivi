@@ -1,0 +1,16 @@
+projectHeading = model =>
+  if model.searchQuery == ""
+    then "All Projects"
+    else "Search · {model.searchQuery}"
+
+projectHeadingSignal =
+  signal (model =>
+    if model.searchQuery == ""
+      then "All Projects"
+      else "Search · {model.searchQuery}"
+  )
+
+visibleProjectNames =
+  computed "projects.visibleNames" (model =>
+    map (project => project.name) model.visibleProjects
+  )

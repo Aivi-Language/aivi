@@ -1,0 +1,10 @@
+Msg = Save
+
+buttonView : GtkNode
+buttonView =
+  ~<gtk>
+    <object class="GtkButton">
+      <property name="label">Save</property>
+      <signal name="clicked" on={ Save } />
+    </object>
+  </gtk>

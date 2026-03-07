@@ -12,6 +12,6 @@ in do Effect {
   users  <- fetchUsers
   posts  <- fetchPosts
   result <- submitForm {}
-  _      <- assertEq (List.length users) 1
+  _      <- assertEq (length users) 1
   assertEq result.success True
 }

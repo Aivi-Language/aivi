@@ -1,0 +1,6 @@
+main = do Effect {
+  _     <- db.configure { driver: Sqlite, url: "app.db" }
+  _     <- db.runMigrations [userTable]
+  names <- db.runQuery activeUserNamesQuery
+  pure names
+}

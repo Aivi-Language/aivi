@@ -1,4 +1,4 @@
-module examples.IdentityMonad
+module examples.identity_monad
 
 use aivi.logic (Functor, Apply, Applicative, Chain, Monad)
 

@@ -1745,4 +1745,7 @@ topoSmoke = do Effect {
 | `import X`             | No `import` keyword              | `use module.path`                                   |
 | `pure ()`              | Aivi uses Unit as ()             | `pure Unit`                                         |
 | `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |
+| `x = 1 -- init`        | No `--` comments                 | use `//` or `/* .... */`                            |
+| no \n after `=`        | Keep it on the same line         | `test = arg => arg match `                          | 
+| no semicolons          | Aivi uses newline                | Separate statement with newline                     | 
 | Deep nesting / inline lambdas in lambdas | Extract into named helpers | `step1 = ...; step2 = ...; result = step2 (step1 x)` |
