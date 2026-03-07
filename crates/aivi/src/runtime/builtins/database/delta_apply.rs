@@ -441,6 +441,38 @@ pub(super) fn build_database_record() -> Value {
     {
         let state = state.clone();
         fields.insert(
+            "runQuery".to_string(),
+            builtin("database.runQuery", 1, move |mut args, _| {
+                let query = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |runtime| {
+                            let connection = require_default_db_connection(&state)?;
+                            let fields = expect_record(query.clone(), "database.runQuery")?;
+                            let run_fn = fields
+                                .get("run")
+                                .ok_or_else(|| {
+                                    RuntimeError::Message(
+                                        "database.runQuery expects Query with 'run' field"
+                                            .to_string(),
+                                    )
+                                })?
+                                .clone();
+                            let inner_effect =
+                                runtime.apply(run_fn, Value::DbConnection(connection))?;
+                            runtime.run_effect_value(inner_effect)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    {
+        let state = state.clone();
+        fields.insert(
             "applyDelta".to_string(),
             builtin("database.applyDelta", 2, move |mut args, _| {
                 let delta = args.pop().unwrap();

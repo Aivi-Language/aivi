@@ -389,3 +389,42 @@ exists_orders_for_inactive_products = do Effect {
   _      <- close conn
   assertEq result [False]
 }
+
+// ── runQuery (ambient connection) ──────────────────────────────────────────
+
+@test "runQuery uses ambient connection to load all rows"
+run_query_ambient_all_rows = do Effect {
+  _       <- configure { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrations [productTable]
+  _       <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
+  _       <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
+  _       <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  results <- runQuery (from productTable)
+  assertEq (List.length results) 3
+}
+
+@test "runQuery with where_ filter uses ambient connection"
+run_query_ambient_with_filter = do Effect {
+  _       <- configure { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrations [productTable]
+  _       <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
+  _       <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
+  _       <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  results <- runQuery (where_ (_.active) (from productTable))
+  assertEq (List.length results) 2
+}
+
+@test "runQuery with do Query block uses ambient connection"
+run_query_ambient_do_query = do Effect {
+  _     <- configure { driver: Sqlite, url: ":memory:" }
+  _     <- runMigrations [productTable]
+  _     <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
+  _     <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
+  _     <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  names <- runQuery (do Query {
+      p     <- from productTable
+      guard_ p.active
+      queryOf p.name
+  })
+  assertEq (List.length names) 2
+}

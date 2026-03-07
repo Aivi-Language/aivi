@@ -1265,6 +1265,13 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "runQuery".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Query").app(vec![Type::Var(db_row)])),
+                    Box::new(db_effect_rows_ty.clone()),
+                ),
+            ),
+            (
                 "applyDelta".to_string(),
                 Type::Func(
                     Box::new(table_ty.clone()),
