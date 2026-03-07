@@ -402,6 +402,7 @@ impl TypeChecker {
                 match result {
                     Ok(()) => {
                         matched = true;
+                        self.validate_schema_aware_def(def, &expr, &candidate.ty, env);
                         break;
                     }
                     Err(err) => {
@@ -479,6 +480,7 @@ impl TypeChecker {
                 return;
             }
             let inferred = self.apply(inferred);
+            self.validate_schema_aware_def(def, &expr, &inferred, env);
 
             if is_repeat {
                 if let Some(sig) = prior_scheme {

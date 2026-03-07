@@ -640,8 +640,8 @@ validateAge = input => do Result {
   Ok ok
 }
 
-// do Query: compose in-memory database queries (aivi.database)
-// MVP: rows are loaded from the store first; SQL pushdown is not yet implemented.
+// do Query: compose typed database queries (aivi.database)
+// The shipped portable subset lowers to SQL; other helper-built queries keep legacy runtime semantics.
 activeNames : Query Text
 activeNames = do Query {
   user <- db.from userTable    // bind each row
@@ -951,7 +951,15 @@ explicit `DbConnection` handles (`connect`, `open`, `loadOn`, `applyDeltaOn`). P
 wrappers that construct the appropriate `Delta A` and call `applyDeltaOn` / `applyDelta` in one
 step.  In v0.1 they execute **in memory** — they do not compile to SQL DML statements.
 
-**Query DSL (v0.1 MVP):** `aivi.database` also exports a `Query A` type and `do Query { ... }` notation for composing typed, composable queries. In v0.1 queries execute in memory (rows are loaded from the store first; SQL pushdown is not yet implemented). Use `runQueryOn conn q` to execute against an explicit connection, or `runQuery q` to execute against the default connection configured with `db.configure`.
+**Query DSL (v0.1):** `aivi.database` also exports a `Query A` type and `do Query { ... }`
+notation for composing typed, composable queries. The portable subset (`db.from`,
+`db.where_`, `db.guard_`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`,
+`db.count`, `db.exists`, and `do Query` blocks built from those forms) now lowers to a
+SQL-backed plan when every participating table has an explicit column list. Those same
+static schemas also let the checker catch missing row fields and obvious bad
+projection/join field references early. Use `runQueryOn conn q` to execute against an
+explicit connection, or `runQuery q` to execute against the default connection
+configured with `db.configure`.
 
 ```aivi
 // Build a typed query
@@ -972,9 +980,14 @@ names <- db.runQueryOn conn expensiveItems
 names <- db.runQuery expensiveItems
 ```
 
-**Sorting and paging (v0.1 MVP, in-memory only):** `orderBy`, `limit`, and `offset` sort and
-slice the result set *after* all rows are fetched from the store.  They do **not** compile to
-SQL `ORDER BY` / `LIMIT` / `OFFSET` clauses in v0.1.
+Helper-built queries that do not lower still use the older in-memory `Query` runtime.
+Unsupported `do Query` shapes do not silently fall back; today they surface a query
+error when run, so keep `do Query` blocks to plain `from` binds, `guard_` filters,
+simple `=` let-bindings, and a final `queryOf`/helper around it.
+
+**Sorting and paging (v0.1):** `orderBy`, `limit`, and `offset` compile to SQL
+`ORDER BY` / `LIMIT` / `OFFSET` inside the lowered subset. Queries outside that subset
+keep the older in-memory sort/slice behavior.
 
 ```aivi
 // Take 5 active users sorted by creation time, skipping the first 10
@@ -988,9 +1001,11 @@ page =
   |> db.select _.name
 ```
 
-**Multi-table join (v0.1, in-memory):** SQL `JOIN` pushdown is not yet available.  Use
-repeated `from` binds with `guard_` in a `do Query` block.  Both tables are fully loaded
-before the predicate runs in the AIVI runtime; avoid on large datasets.
+**Multi-table join (v0.1 portable subset):** use repeated `from` binds with `guard_`
+in a `do Query` block. Inside the lowered subset this becomes a SQL cross join plus
+pushed-down `WHERE` predicates. Current limits: each bind must still be a plain table
+source; explicit join syntax, outer joins, grouping, and correlated subqueries are not
+shipped yet.
 
 ```aivi
 activeUserOrders : Query { user: User, order: Order }
@@ -1003,9 +1018,10 @@ activeUserOrders = do Query {
 }
 ```
 
-**`db.count` / `db.exists` (planned, not in v0.1):** these aggregate helpers will land in
-a future phase.  Today use `List.length (db.runQueryOn conn q)` for counting and
-`db.limit 1` + `List.length > 0` for existence checks.
+**`db.count` / `db.exists` (v0.1):** both helpers are available now. In the lowered
+subset `db.count` emits SQL `COUNT(*)`, and `db.exists` emits a SQL existence probe
+(`SELECT 1 ... LIMIT 1`-style). Outside the lowered subset they keep the older
+in-memory behavior; they do not make an arbitrary query lowerable.
 
 **Network** (`aivi.net.*`):
 `http`, `https`, `httpServer`, `sockets`, `streams`
@@ -1222,6 +1238,23 @@ GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gs
     <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
   </object>
 </gtk>
+```
+
+Inside `gtkApp`, GTK sigils may read reactive helpers directly in bindings. `signal` marks a pure derived reader, `computed "key"` adds memoization, and `readSignal` is the explicit non-sigil form:
+
+```aivi
+titleText = computed "counter.title" (state => "Count: {toText state.count}")
+rows      = signal (state => state.rows)
+
+view = _ =>
+  ~<gtk>
+    <GtkBox orientation="vertical">
+      <GtkLabel label={titleText} />
+      <each items={rows} as={row}>
+        <GtkLabel label={row.name} />
+      </each>
+    </GtkBox>
+  </gtk>
 ```
 
 GTK sigils also support signal sugar in v0.1:

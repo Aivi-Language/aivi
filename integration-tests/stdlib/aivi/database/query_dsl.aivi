@@ -138,7 +138,7 @@ do_query_let_binding = do Effect {
       queryOf doubled
   })
   _ <- close conn
-  assertEq (List.length results) 3
+  assertEq results [20, 40, 30]
 }
 
 @test "orderBy sorts rows ascending by key"
@@ -227,16 +227,16 @@ limit_and_offset_pagination = do Effect {
 
 @test "do Query with orderBy"
 do_query_with_order_by = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  prices <- runQueryOn conn (do Query {
-      p      <- from productTable
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  _    <- runMigrationsOn conn [productTable]
+  _    <- seedProducts conn
+  rows <- runQueryOn conn (do Query {
+      p    <- from productTable
       guard_ p.active
       orderBy _.price (queryOf p)
   })
   _ <- close conn
-  assertEq (List.length prices) 2
+  assertEq (List.map _.price rows) [10, 15]
 }
 
 // ── count ──────────────────────────────────────────────────────────────────
@@ -368,6 +368,15 @@ inactiveOrdersQ = do Query {
   queryOf order
 }
 
+activeOrderSummariesQ : Query { orderId: Int, productName: Text }
+activeOrderSummariesQ = do Query {
+  order   <- from orderTable
+  product <- from productTable
+  guard_ (order.productId == product.id)
+  guard_ product.active
+  queryOf { orderId: order.id, productName: product.name }
+}
+
 @test "count orders for active products via cross-join"
 count_orders_for_active_products = do Effect {
   conn   <- connect { driver: Sqlite, url: ":memory:" }
@@ -388,6 +397,20 @@ exists_orders_for_inactive_products = do Effect {
   result <- runQueryOn conn (exists inactiveOrdersQ)
   _      <- close conn
   assertEq result [False]
+}
+
+@test "do Query join projects record summary"
+do_query_join_projects_record = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable, orderTable]
+  _       <- seedProducts conn
+  _       <- seedOrders conn
+  results <- runQueryOn conn activeOrderSummariesQ
+  _       <- close conn
+  assertEq results [
+    { orderId: 1, productName: "Widget" }
+    { orderId: 2, productName: "Doohick" }
+  ]
 }
 
 // ── runQuery (ambient connection) ──────────────────────────────────────────

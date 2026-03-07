@@ -76,6 +76,9 @@ fn should_skip_file(path: &Path) -> bool {
     if p.contains("/integration-tests/stdlib/aivi/ui/gtk4/") {
         return std::env::var_os("AIVI_RUN_GTK_TESTS").is_none();
     }
+    if p.contains("/integration-tests/stdlib/aivi/console/") {
+        return std::env::var_os("AIVI_RUN_CONSOLE_TESTS").is_none();
+    }
     false
 }
 

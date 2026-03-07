@@ -54,7 +54,7 @@ fn stdlib_ui_exports_v_element() {
 }
 
 #[test]
-fn stdlib_gtk4_exports_computed() {
+fn stdlib_gtk4_exports_reactive_helpers() {
     let modules = embedded_stdlib_modules();
     let gtk4 = modules
         .iter()
@@ -79,8 +79,18 @@ fn stdlib_gtk4_exports_computed() {
         })
         .collect();
 
-    assert!(
-        def_names.contains(&"computed"),
-        "expected aivi.ui.gtk4 to define computed; defs={def_names:?}"
-    );
+    for expected in ["signal", "computed", "readSignal"] {
+        assert!(
+            gtk4.exports.iter().any(|e| e.name.name == expected),
+            "expected aivi.ui.gtk4 to export {expected}, exports={:?}",
+            gtk4.exports
+                .iter()
+                .map(|e| e.name.name.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            def_names.contains(&expected),
+            "expected aivi.ui.gtk4 to define {expected}; defs={def_names:?}"
+        );
+    }
 }

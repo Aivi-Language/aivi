@@ -236,7 +236,10 @@ fn apply_delta_on_connection(
             rows_json,
         );
         match saved {
-            Ok(_new_rev) => return Ok(make_table(name.clone(), columns.clone(), new_rows)),
+            Ok(_new_rev) => {
+                sync_query_table_if_possible(connection, name.clone(), columns.clone(), &new_rows)?;
+                return Ok(make_table(name.clone(), columns.clone(), new_rows));
+            }
             Err(err) => {
                 if err.contains("retry") {
                     continue;
@@ -262,8 +265,23 @@ fn run_migrations_on_connection(
         let (name, columns, _rows) = table_parts(table.clone(), "database.runMigrations")?;
         let columns_json = encode_json(&columns)?;
         connection
-            .migrate_table(name, columns_json)
+            .migrate_table(name.clone(), columns_json)
             .map_err(RuntimeError::Message)?;
+        let rows = match connection
+            .load_table(name.clone())
+            .map_err(RuntimeError::Message)?
+        {
+            Some((_rev, _stored_columns, rows_json)) => match decode_json(&rows_json)? {
+                Value::List(rows) => rows.iter().cloned().collect(),
+                _ => {
+                    return Err(RuntimeError::Message(
+                        "database: invalid persisted rows (expected List)".to_string(),
+                    ))
+                }
+            },
+            None => Vec::new(),
+        };
+        sync_query_table_if_possible(connection, name, columns, &rows)?;
     }
     Ok(Value::Unit)
 }

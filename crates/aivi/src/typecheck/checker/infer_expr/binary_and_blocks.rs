@@ -30,6 +30,7 @@ impl TypeChecker {
             }
             let arg_ty = self.infer_expr(left, env)?;
             let func_ty = self.infer_expr(right, env)?;
+            self.validate_query_pipe_transformer(right, &arg_ty, env)?;
             let result_ty = self.fresh_var();
             self.unify_with_span(
                 func_ty,

@@ -1,0 +1,14 @@
+// EXPECT-ERROR: column 'active' has no matching field
+module integrationTests.compileFail.tableSchemaMissingRowField
+
+use aivi
+use aivi.database
+
+Product = { id: Int, name: Text }
+
+productTable : Table Product
+productTable = table "products" [
+  { name: "id",     type: IntType,    constraints: [NotNull], default: None }
+  { name: "name",   type: Varchar 80, constraints: [NotNull], default: None }
+  { name: "active", type: BoolType,   constraints: [NotNull], default: Some (DefaultBool True) }
+]

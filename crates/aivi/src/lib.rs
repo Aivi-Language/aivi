@@ -42,9 +42,10 @@ pub mod surface {
 
 pub mod hir {
     pub use aivi_core::{
-        HirBlockItem, HirBlockKind, HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm,
-        HirMockSubstitution, HirModule, HirPathSegment, HirPattern, HirProgram, HirRecordField,
-        HirRecordPatternField, HirTextPart,
+        CompiledAggregate, CompiledOrderBy, CompiledProjection, CompiledProjectionField,
+        CompiledQueryPlan, CompiledQuerySource, CompiledScalarExpr, HirBlockItem, HirBlockKind,
+        HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirMockSubstitution, HirModule,
+        HirPathSegment, HirPattern, HirProgram, HirRecordField, HirRecordPatternField, HirTextPart,
     };
 
     pub fn desugar_modules(modules: &[crate::surface::Module]) -> crate::hir::HirProgram {
@@ -117,8 +118,11 @@ pub use aivi_core::{
     DiagnosticSeverity, FileDiagnostic, Position, Span,
 };
 pub use aivi_core::{format_text, format_text_with_options, BraceStyle, FormatOptions};
+pub use aivi_core::{
+    CompiledAggregate, CompiledOrderBy, CompiledProjection, CompiledProjectionField,
+    CompiledQueryPlan, CompiledQuerySource, CompiledScalarExpr, HirModule, HirProgram,
+};
 pub use aivi_core::{CstBundle, CstFile, CstToken};
-pub use aivi_core::{HirModule, HirProgram};
 pub use aivi_mcp::{
     bundled_specs_manifest, bundled_specs_manifest_with_ui, serve_mcp_stdio,
     serve_mcp_stdio_with_policy, McpManifest, McpPolicy, McpResource, McpTool,

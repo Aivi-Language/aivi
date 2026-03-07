@@ -189,6 +189,109 @@ mod handler_scope_tests {
     }
 
     #[test]
+    fn serialize_attr_reads_computed_against_current_model() {
+        let mut runtime = test_runtime();
+        let computed = gtk4_field(&mut runtime, "computed");
+        let reactive_init = gtk4_field(&mut runtime, "reactiveInit");
+        let reactive_commit = gtk4_field(&mut runtime, "reactiveCommit");
+        let serialize_attr = gtk4_field(&mut runtime, "serializeAttr");
+        let reads = Arc::new(Mutex::new(0usize));
+
+        let derive = test_builtin("reactive.test.attr", 1, {
+            let reads = reads.clone();
+            move |mut args: Vec<Value>, runtime: &mut Runtime| {
+                runtime.reactive_note_root_field_access("query");
+                *reads.lock().expect("read counter") += 1;
+                Ok(Value::Text(text_field(args.remove(0), "query")))
+            }
+        });
+
+        let signal = apply2(
+            &mut runtime,
+            computed,
+            Value::Text("tests.attr".to_string()),
+            derive,
+        );
+        let model1 = make_model("alpha", 1);
+        let model2 = make_model("beta", 1);
+
+        let init_effect = ok(
+            runtime.apply(reactive_init, model1.clone()),
+            "reactiveInit application",
+        );
+        run_effect(&mut runtime, init_effect);
+
+        let first = ok(
+            runtime.apply(serialize_attr.clone(), signal.clone()),
+            "first attr serialization",
+        );
+        let second = ok(
+            runtime.apply(serialize_attr.clone(), signal.clone()),
+            "second attr serialization",
+        );
+        assert!(matches!(first, Value::Text(ref text) if text == "alpha"));
+        assert!(matches!(second, Value::Text(ref text) if text == "alpha"));
+        assert_eq!(*reads.lock().expect("read counter"), 1);
+
+        let commit_effect = apply2(&mut runtime, reactive_commit, model1, model2);
+        run_effect(&mut runtime, commit_effect);
+        let updated = ok(runtime.apply(serialize_attr, signal), "updated attr serialization");
+        assert!(matches!(updated, Value::Text(ref text) if text == "beta"));
+        assert_eq!(*reads.lock().expect("read counter"), 2);
+    }
+
+    #[test]
+    fn each_items_reads_signal_lists_against_current_model() {
+        let mut runtime = test_runtime();
+        let signal = gtk4_field(&mut runtime, "signal");
+        let reactive_init = gtk4_field(&mut runtime, "reactiveInit");
+        let each_items = gtk4_field(&mut runtime, "eachItems");
+
+        let rows_derive = test_builtin("reactive.test.rows", 1, {
+            move |mut args: Vec<Value>, runtime: &mut Runtime| {
+                runtime.reactive_note_root_field_access("query");
+                let query = text_field(args.remove(0), "query");
+                Ok(Value::List(Arc::new(vec![
+                    Value::Text(query),
+                    Value::Text("tail".to_string()),
+                ])))
+            }
+        });
+        let rows_signal = ok(runtime.apply(signal, rows_derive), "signal creation");
+        let template = test_builtin("reactive.test.rowTemplate", 1, |mut args, _| {
+            Ok(Value::Constructor {
+                name: "GtkTextNode".to_string(),
+                args: vec![args.remove(0)],
+            })
+        });
+
+        let model = make_model("alpha", 1);
+        let init_effect = ok(
+            runtime.apply(reactive_init, model),
+            "reactiveInit application",
+        );
+        run_effect(&mut runtime, init_effect);
+
+        let rows = apply2(&mut runtime, each_items, rows_signal, template);
+        let Value::List(rows) = rows else {
+            panic!("expected gtk4.eachItems to return a List");
+        };
+        assert_eq!(rows.len(), 2);
+        assert!(matches!(
+            &rows[0],
+            Value::Constructor { name, args }
+                if name == "GtkTextNode"
+                    && matches!(args.first(), Some(Value::Text(text)) if text == "alpha")
+        ));
+        assert!(matches!(
+            &rows[1],
+            Value::Constructor { name, args }
+                if name == "GtkTextNode"
+                    && matches!(args.first(), Some(Value::Text(text)) if text == "tail")
+        ));
+    }
+
+    #[test]
     fn computed_tracks_nested_signal_dependencies() {
         let mut runtime = test_runtime();
         let computed = gtk4_field(&mut runtime, "computed");

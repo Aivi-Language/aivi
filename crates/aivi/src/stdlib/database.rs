@@ -80,15 +80,17 @@ FtsQuery = {
 }
 
 // ---------------------------------------------------------------------------
-// Query DSL — MVP
+// Query DSL — portable subset
 //
-// `Query A` is an in-memory query over a `DbConnection`.  It is not true SQL
-// pushdown; predicates and projections run in the AIVI runtime after loading
-// rows from the underlying store.  Future phases may lower `do Query` blocks
-// to SQL WHERE/SELECT clauses.
+// `Query A` still has an ordinary runtime representation, but the compiler now
+// recognizes the portable subset (`from`/`where_`/`guard_`/`select`/`orderBy`/
+// `limit`/`offset`, plus `count`/`exists`) and attaches a structured SQL-backed
+// plan when every participating table has an explicit column list.
 //
-// Use `do Query { ... }` notation to compose queries; call `runQueryOn conn q`
-// to execute.  The `do Query` block desugars using `queryChain`/`queryOf`
+// Helper-built queries that do not lower still execute with the legacy
+// in-memory runtime. Unsupported `do Query` shapes do not silently fall back;
+// they become query errors when run. Use `runQueryOn conn q` or `runQuery q`
+// to execute. The `do Query` block still desugars using `queryChain`/`queryOf`
 // (rather than the generic monad `chain`/`of`) so the types resolve through
 // the helpers below.
 //

@@ -536,18 +536,11 @@ impl Parser {
                     span: span.clone(),
                 };
                 let mapped_expr = Expr::Call {
-                    func: Box::new(Expr::FieldAccess {
-                        base: Box::new(Expr::Ident(SpannedName {
-                            name: "List".into(),
-                            span: span.clone(),
-                        })),
-                        field: SpannedName {
-                            name: "map".into(),
-                            span: span.clone(),
-                        },
+                    func: Box::new(Expr::Ident(SpannedName {
+                        name: "gtkEachItems".into(),
                         span: span.clone(),
-                    }),
-                    args: vec![lambda_expr, items_expr],
+                    })),
+                    args: vec![items_expr, lambda_expr],
                     span: span.clone(),
                 };
                 lowered_items.push(ListItem {
