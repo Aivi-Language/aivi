@@ -13,13 +13,13 @@ Use it when you care about *when something actually happened* rather than *what 
 
 ## Quick chooser
 
-| If you need... | Use... |
+| If your main question is... | Use... |
 | --- | --- |
-| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
-| one exact UTC moment | `aivi.chronos.instant` |
-| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
-| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
-| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
+| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
+| “Exactly when did this happen?” | `aivi.chronos.instant` |
+| “What calendar date should users see?” | [`aivi.chronos.calendar`](./calendar.md) |
+| “What local time is this in Berlin or New York?” | [`aivi.chronos.timezone`](./timezone.md) |
+| “How should jobs keep happening over time?” | [`aivi.chronos.scheduler`](./scheduler.md) |
 
 ## When to use `Instant`
 
@@ -32,13 +32,23 @@ Reach for `Instant` when you need:
 
 If you need calendar-friendly dates, use [`aivi.chronos.calendar`](./calendar.md). If you need local time with daylight-saving rules, use [`aivi.chronos.timezone`](./timezone.md).
 
+## Mental model
+
+`Instant` answers **“exactly when?”**
+
+A good rule of thumb is:
+
+- store `Instant` values in databases and event logs,
+- compare `Instant` values when ordering matters,
+- convert to calendar or time-zone values only when you need a human-facing display.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/overview.aivi{aivi}
 
 ## Common operations
 
-These examples show how to create, compare, and offset instants:
+These examples show how to create, compare, and offset instants. Read them as a three-step story: create an exact timestamp, compare it with another timestamp, then combine it with a duration when you need a deadline or timeout boundary.
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/features.aivi{aivi}
 

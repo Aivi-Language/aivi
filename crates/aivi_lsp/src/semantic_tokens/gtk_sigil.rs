@@ -39,10 +39,7 @@ impl Backend {
             if end.saturating_sub(start) != expected_chars.len() || end > chars.len() {
                 return false;
             }
-            chars[start..end]
-                .iter()
-                .copied()
-                .eq(expected_chars)
+            chars[start..end].iter().copied().eq(expected_chars)
         };
 
         let push = |data: &mut Vec<SemanticToken>,
@@ -72,27 +69,13 @@ impl Backend {
             if start_line == pos[end].0 {
                 let len = (end - start) as u32;
                 Self::push_semantic_token(
-                    data,
-                    last_line,
-                    last_start,
-                    start_line,
-                    start_col,
-                    len,
-                    token_type,
-                    modifiers,
+                    data, last_line, last_start, start_line, start_col, len, token_type, modifiers,
                 );
             } else {
                 // Should not happen for our tag/attr tokens; keep safe.
                 let len = (i - start) as u32;
                 Self::push_semantic_token(
-                    data,
-                    last_line,
-                    last_start,
-                    start_line,
-                    start_col,
-                    len,
-                    token_type,
-                    modifiers,
+                    data, last_line, last_start, start_line, start_col, len, token_type, modifiers,
                 );
             }
         };
@@ -248,17 +231,14 @@ impl Backend {
                         }
                         bracket_depth -= 1;
                     }
-                    '>'
-                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
-                    {
+                    '>' if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
                         break;
                     }
-                    '/'
-                        if brace_depth == 0
-                            && paren_depth == 0
-                            && bracket_depth == 0
-                            && i + 1 < end_limit
-                            && chars[i + 1] == '>' =>
+                    '/' if brace_depth == 0
+                        && paren_depth == 0
+                        && bracket_depth == 0
+                        && i + 1 < end_limit
+                        && chars[i + 1] == '>' =>
                     {
                         break;
                     }
@@ -361,7 +341,9 @@ impl Backend {
                 continue;
             }
             j += 1;
-            while j < end_limit && (chars[j].is_ascii_alphanumeric() || matches!(chars[j], '-' | ':' | '_')) {
+            while j < end_limit
+                && (chars[j].is_ascii_alphanumeric() || matches!(chars[j], '-' | ':' | '_'))
+            {
                 j += 1;
             }
             let tag_end = j;

@@ -336,6 +336,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     );
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
     let effect_text_int = Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]);
+    let effect_text_bool = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Bool")]);
     let effect_text_text = Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()]);
     let css_record_ty = Type::Record {
         fields: vec![].into_iter().collect(),
@@ -486,7 +487,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(text_ty.clone()),
-                        Box::new(Type::effect(Type::con("Text"), Type::con("Bool"))),
+                        Box::new(effect_text_bool.clone()),
                     )),
                 ),
             ),

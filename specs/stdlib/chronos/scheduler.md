@@ -9,13 +9,13 @@ It is meant for work that should survive process restarts or be coordinated acro
 
 ## Quick chooser
 
-| If you need... | Use... |
+| If your main question is... | Use... |
 | --- | --- |
-| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
-| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
-| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
-| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
-| durable plans, cron rules, leases, or retry schedules | `aivi.chronos.scheduler` |
+| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
+| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
+| “What calendar date comes next?” | [`aivi.chronos.calendar`](./calendar.md) |
+| “What local time should this show in a region?” | [`aivi.chronos.timezone`](./timezone.md) |
+| “How should jobs keep happening, even across restarts?” | `aivi.chronos.scheduler` |
 
 ## When to use `Scheduler`
 
@@ -29,13 +29,22 @@ Use this domain when a simple in-process timer is not enough. Typical cases incl
 
 If the timing only matters while one GUI app is running, lighter tools such as `commandAfter` or `subscriptionEvery` are usually a better fit.
 
+## Mental model
+
+`Scheduler` answers **“how should this work keep happening over time?”**
+
+A good rule is:
+
+- use UI timers for short-lived in-process behavior,
+- use `Scheduler` when the plan itself needs to be stored, retried, leased, or coordinated.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/overview.aivi{aivi}
 
 ## Common operations
 
-These examples show how plans, triggers, retries, and execution state fit together:
+These examples show how plans, triggers, retries, and execution state fit together. Read them as a pipeline: define a plan, decide when it should run, then hand it to worker-side logic that tracks retries and leases.
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/features.aivi{aivi}
 

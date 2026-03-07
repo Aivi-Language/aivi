@@ -22,11 +22,18 @@ The important boundary is this: reactive dataflow stays on the **pure** side of 
 
 ## Quick mental model
 
+If the app architecture is a message loop, reactive dataflow is the spreadsheet layer inside that loop:
+
+- model fields are the input cells,
+- `signal` values are named formulas,
+- `computed` values are named formulas with caching,
+- commands and subscriptions are everything that touches the outside world.
+
 Use reactive dataflow when:
 
-- the app already has the right source data in its `Model`
-- a derived value is reused, expensive, or easier to understand when named
-- you want caching for pure calculations, not a second effect system
+- the app already has the right source data in its `Model`,
+- a derived value is reused, expensive, or easier to understand when named,
+- you want caching for pure calculations, not a second effect system.
 
 If all you need is one short expression inside `view`, an ordinary helper is still the simplest choice.
 
@@ -34,10 +41,11 @@ If all you need is one short expression inside `view`, an ordinary helper is sti
 
 | Term | Meaning | Example |
 | --- | --- | --- |
-| **source value** | An authoritative snapshot that may change between app turns. In a standard GTK app, source values are ordinary fields inside the committed `Model`. | `state.rows`, `state.query`, `state.loading` |
-| **derived value** | Any pure projection over source values or other derived values. | `length state.rows`, `filter isVisible state.rows` |
-| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects and no capability clauses. | `headline = signal (state => ...)` |
-| **computed value** | A signal with stable identity and memoization. The host tracks what it read last time and reuses the cached result until one of those dependencies changes. | `visibleRows = computed "rows.visible" (state => ...)` |
+| **source value** | An authoritative snapshot that may change between app turns. In a standard GTK app, source values are ordinary fields inside the committed `Model`. | `model.projects`, `model.query`, `model.loading` |
+| **derived value** | Any pure projection over source values or other derived values. | `length model.projects`, `filter isVisible model.projects` |
+| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects and no capability clauses. | `headerText = signal (model => ...)` |
+| **computed value** | A signal with stable identity and memoization. The host tracks what it read last time and reuses the cached result until one of those dependencies changes. | `visibleProjects = computed "projects.visible" (model => ...)` |
+| **dirty** | Marked for recomputation because one of the inputs changed. Dirty values recompute only when read. | `visibleProjects` after `model.query` changes |
 
 A plain helper is correct by default. Promote it to `signal` or `computed` only when the extra structure helps.
 
@@ -63,15 +71,15 @@ There are three common levels of reuse:
 Conceptual examples:
 
 ```aivi
-visibleRows = state =>
-  state.rows
-    |> filter (matchesQuery state.query)
-    |> filter (matchesTags state.selectedTags)
+visibleProjects = model =>
+  model.projects
+    |> filter (matchesQuery model.searchQuery)
+    |> filter (matchesTags model.selectedTags)
 
-searchSummary = state =>
-  if state.loading
+resultsSummary = model =>
+  if model.loading
     then "Searching..."
-    else "Showing {length (visibleRows state)} rows"
+    else "Showing {length (visibleProjects model)} projects"
 ```
 
 Both helpers above are already derived values. They stay pure and may be recomputed whenever read.
@@ -79,12 +87,11 @@ Both helpers above are already derived values. They stay pure and may be recompu
 When the same derivation is expensive or widely reused, promote it:
 
 ```aivi
-visibleRows =
-  computed "visibleRows" (state =>
-    // Cache the filtered list until one of the inputs changes.
-    state.rows
-      |> filter (matchesQuery state.query)
-      |> filter (matchesTags state.selectedTags)
+visibleProjects =
+  computed "projects.visible" (model =>
+    model.projects
+      |> filter (matchesQuery model.searchQuery)
+      |> filter (matchesTags model.selectedTags)
   )
 ```
 

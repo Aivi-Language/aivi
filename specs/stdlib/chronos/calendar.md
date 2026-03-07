@@ -9,13 +9,13 @@ It exists because calendar arithmetic is full of edge cases. Months have differe
 
 ## Quick chooser
 
-| If you need... | Use... |
+| If your main question is... | Use... |
 | --- | --- |
-| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
-| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
-| human date math such as “next month” or “end of month” | `aivi.chronos.calendar` |
-| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
-| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
+| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
+| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
+| “What calendar date comes next?” | `aivi.chronos.calendar` |
+| “What local time should this show in a region?” | [`aivi.chronos.timezone`](./timezone.md) |
+| “How should work repeat durably?” | [`aivi.chronos.scheduler`](./scheduler.md) |
 
 ## When to use `Calendar`
 
@@ -29,13 +29,19 @@ Reach for `aivi.chronos.calendar` when your logic cares about what people see on
 
 If you need a precise moment on the UTC timeline, use [`aivi.chronos.instant`](./instant.md). If you need time-zone-aware local time, use [`aivi.chronos.timezone`](./timezone.md).
 
+## Mental model
+
+`Calendar` answers **“which human date?”**
+
+Use it when you want the meaning people expect from a calendar, not the meaning of a fixed number of seconds. For example, “one month later” belongs here even though months are different lengths.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/calendar/overview.aivi{aivi}
 
 ## Common operations
 
-These examples show the kinds of calendar questions the domain is built to answer:
+These examples show the kinds of calendar questions the domain is built to answer. Read them in order: start from a date, apply calendar-aware adjustments, then inspect helper functions such as leap-year and end-of-month handling.
 
 <<< ../../snippets/from_md/stdlib/chronos/calendar/features.aivi{aivi}
 

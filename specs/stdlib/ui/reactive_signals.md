@@ -24,13 +24,15 @@ They do different jobs:
 
 Use reactive signals when a GTK app has pure derived values that deserve a name:
 
-- a title derived from the current model,
+- a heading derived from the current model,
 - a filtered or grouped view of rows,
 - a status label,
 - a timer interval derived from settings,
 - a summary reused in several places.
 
 Reactive signals do **not** perform IO, do **not** mutate state, and do **not** emit messages.
+
+A good mental model is: a reactive signal is a named read of the current model, not a background listener.
 
 ## Start simple: helper first, then `signal`, then `computed`
 
@@ -41,23 +43,21 @@ There are three common levels:
 3. `computed` for a named reader with memoization.
 
 ```aivi
-headline = state =>
-  if state.query == ""
+projectHeading = model =>
+  if model.searchQuery == ""
     then "All Projects"
-    else "Search · {state.query}"
+    else "Search · {model.searchQuery}"
 
-headlineSignal =
-  signal (state =>
-    // Same logic, but named explicitly as a reactive reader.
-    if state.query == ""
+projectHeadingSignal =
+  signal (model =>
+    if model.searchQuery == ""
       then "All Projects"
-      else "Search · {state.query}"
+      else "Search · {model.searchQuery}"
   )
 
-rowNames =
-  computed "projects.rowNames" (state =>
-    // Memoize the mapped list when it is reused.
-    map (row => row.name) state.rows
+visibleProjectNames =
+  computed "projects.visibleNames" (model =>
+    map (project => project.name) model.visibleProjects
   )
 ```
 
@@ -78,53 +78,52 @@ Reactive signals read from the app model and fit into the normal `gtkApp` loop:
 ```aivi
 use aivi.ui.gtk4
 
-Row = { name: Text }
+Project = { name: Text }
 
 Model = {
-  query: Text
-  rows: List Row
-  fastMode: Bool
+  searchQuery: Text
+  visibleProjects: List Project
+  fastRefresh: Bool
 }
 
-Msg = QueryChanged Text | Tick
+Msg = SearchQueryChanged Text | Tick
 
-headline : Model -> Text
-headline =
-  signal (state =>
-    if state.query == ""
+heading : Model -> Text
+heading =
+  signal (model =>
+    if model.searchQuery == ""
       then "All Projects"
-      else "Search · {state.query}"
+      else "Search · {model.searchQuery}"
   )
 
-rowNames : Model -> List Text
-rowNames =
-  computed "projects.rowNames" (state =>
-    map (row => row.name) state.rows
+projectNames : Model -> List Text
+projectNames =
+  computed "projects.names" (model =>
+    map (project => project.name) model.visibleProjects
   )
 
-tickMillis : Model -> Int
-tickMillis =
-  signal (state =>
-    // Let the timer speed depend on the current model.
-    if state.fastMode then 250 else 1000
+refreshMillis : Model -> Int
+refreshMillis =
+  signal (model =>
+    if model.fastRefresh then 250 else 1000
   )
 
 view : Model -> GtkNode
 view = _ =>
   ~<gtk>
     <GtkBox orientation="vertical" spacing="8">
-      <GtkLabel label={headline} />
-      <each items={rowNames} as={name}>
-        <GtkLabel label={name} />
+      <GtkLabel label={heading} />
+      <each items={projectNames} as={projectName}>
+        <GtkLabel label={projectName} />
       </each>
     </GtkBox>
   </gtk>
 
 subscriptions : Model -> List (Subscription Msg)
-subscriptions = state => [
+subscriptions = model => [
   subscriptionEvery {
     key: "tick"
-    millis: readSignal tickMillis state
+    millis: readSignal refreshMillis model
     tag: Tick
   }
 ]
@@ -132,16 +131,16 @@ subscriptions = state => [
 
 This shows the usual pattern:
 
-- `view` reads `headline` and `rowNames`,
-- `rowNames` is memoized because it may be reused,
+- `view` reads `heading` and `projectNames`,
+- `projectNames` is memoized because it may be reused,
 - `subscriptions` uses `readSignal` explicitly outside the GTK sigil.
 
 ## GTK sigils auto-read signals
 
 Inside `~<gtk>...</gtk>` hosted by `gtkApp`, signal values are read automatically in common binding positions such as:
 
-- attribute splices like `label={headline}`,
-- `<each items={rowNames} as={name}>`.
+- attribute splices like `label={heading}`,
+- `<each items={projectNames} as={projectName}>`.
 
 Outside the sigil, signals stay ordinary function values of shape `Model -> A`, so use `readSignal` or plain function application.
 

@@ -2,7 +2,6 @@
 
 <!-- quick-info: {"kind":"module","name":"aivi.net.http"} -->
 The `Http` domain gives your program the basic building blocks for making HTTP requests. Use it when you want direct control over request methods, headers, and bodies while still working with a small, predictable API.
-
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.http</div>
 
@@ -12,11 +11,21 @@ The `Http` domain gives your program the basic building blocks for making HTTP r
 
 `aivi.net.http` is the low-level HTTP client for AIVI programs. It is a good fit when you want to:
 
-- fetch data from an API with `GET`
-- send form or JSON data with `POST`
-- build a fully custom request with headers, methods, and optional bodies
+- fetch data from an API with `GET`,
+- send form or JSON data with `POST`,
+- build a fully custom request with headers, methods, and optional bodies,
+- inspect the raw status code, headers, and text body yourself.
 
-If you want a more opinionated client for JSON APIs, automatic bearer-token support, and stricter response handling, look at `aivi.rest`.
+If you want a higher-level client for conventional JSON APIs, automatic bearer-token support, and built-in decoding into your target type, look at `aivi.rest`.
+
+## HTTP vs REST in one minute
+
+HTTP is the wire protocol: requests, methods, status codes, headers, and bodies. REST is a common style of API built on top of HTTP, usually with JSON payloads and predictable resource-oriented endpoints.
+
+A practical chooser is:
+
+- use **`aivi.net.http`** when you want to work with the raw request/response envelope,
+- use **`aivi.rest`** when you mainly want “call endpoint, decode JSON, handle auth/timeouts/retries”.
 
 ## Start here
 
@@ -27,10 +36,11 @@ Choose the smallest entry point that matches the job:
 | fetch a URL with default behavior | `get` |
 | send a simple text body with `POST` | `post` |
 | set headers, choose a method, or send a structured body | `fetch` |
+| call a JSON API and decode directly into a value | [`aivi.rest`](./rest.md) |
 
 ## Capabilities
 
-`get`, `post`, and `fetch` require the `network.http` capability, or the broader `network` shorthand. The `rest` source facade uses the same capability family.
+`get`, `post`, and `fetch` require the `network.http` capability, or the broader `network` shorthand. The `rest` helper module uses the same capability family.
 
 ## Quick start
 
@@ -39,11 +49,13 @@ This example fetches a page and checks whether the request succeeded:
 ```aivi
 use aivi.net.http
 
-loadHomePage = url => do Effect {
-  result <- get url
-  result match
+loadHomePage : Url -> Effect Text Text
+loadHomePage = homePageUrl => do Effect {
+  responseResult <- get homePageUrl
+  responseResult match
     | Ok response =>
-        pure response.body
+        homePageBody = response.body
+        pure homePageBody
     | Err err =>
         fail "Could not load page: {err.message}"
 }
@@ -54,17 +66,18 @@ For requests that need custom headers or a request body, use `fetch`:
 ```aivi
 use aivi.net.http
 
-submitFeedback = url => do Effect {
-  request = {
+submitFeedback : Url -> Effect Text Int
+submitFeedback = feedbackUrl => do Effect {
+  requestOptions = {
     method: "POST"
-    url: url
+    url: feedbackUrl
     headers: [
       { name: "Accept", value: "application/json" }
     ]
     body: Some (Plain "Great work!")
   }
 
-  responseResult <- fetch request
+  responseResult <- fetch requestOptions
   responseResult match
     | Ok response => pure response.status
     | Err err => fail "Request failed: {err.message}"
@@ -121,6 +134,13 @@ The `Json` variant automatically adds `Content-Type: application/json` when the 
 
 <<< ../../snippets/from_md/stdlib/network/http/request.aivi{aivi}
 
+`Request` is the full request envelope. A useful way to read it is:
+
+- `method` says what kind of action you want,
+- `url` says where to send it,
+- `headers` add metadata,
+- `body` carries optional content.
+
 | Field | Type | Explanation |
 | --- | --- | --- |
 | `method` | `Text` | The HTTP method, such as `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, or `HEAD`. |
@@ -134,9 +154,9 @@ The `Json` variant automatically adds `Content-Type: application/json` when the 
 
 `Response` contains three things:
 
-- `status`: the numeric HTTP status code, such as `200` or `404`
-- `headers`: the response headers returned by the server
-- `body`: the response body as text
+- `status`: the numeric HTTP status code, such as `200` or `404`,
+- `headers`: the response headers returned by the server,
+- `body`: the response body as text.
 
 This makes it easy to inspect the status code first and then decide how to handle the body.
 
@@ -150,9 +170,24 @@ Error = { message: Text }
 
 In practice, this is the value you inspect when:
 
-- a connection cannot be opened
-- the remote server is unavailable
-- TLS or transport setup fails before a normal response is returned
+- a connection cannot be opened,
+- the remote server is unavailable,
+- TLS or transport setup fails before a normal response is returned.
+
+## Choosing between `http` and `rest`
+
+Choose `aivi.net.http` when:
+
+- you need raw response metadata,
+- you want to decide yourself how to decode or inspect the body,
+- the remote service does not behave like a typical JSON REST API,
+- you are debugging at the protocol level.
+
+Choose [`aivi.rest`](./rest.md) when:
+
+- the service is a conventional JSON API,
+- you want to decode directly into a typed value,
+- bearer auth, retries, timeouts, or strict status rules are part of the normal call path.
 
 ---
 
@@ -172,7 +207,8 @@ If an API gives you an `https://...` URL, import `aivi.net.https` and use it the
 ```aivi
 use aivi.net.https
 
-loadProfile = url => get url
+loadProfile : Url -> Effect Text (Result Error Response)
+loadProfile = profileUrl => get profileUrl
 ```
 
 ### Functions

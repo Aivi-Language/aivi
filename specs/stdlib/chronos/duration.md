@@ -9,13 +9,13 @@ That is especially helpful for timeouts, retry delays, sleeps, polling intervals
 
 ## Quick chooser
 
-| If you need... | Use... |
+| If your main question is... | Use... |
 | --- | --- |
-| a fixed elapsed span like `5m` or `250ms` | `aivi.chronos.duration` |
-| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
-| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
-| local clock time in a named region | [`aivi.chronos.timezone`](./timezone.md) |
-| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
+| “How long should I wait?” | `aivi.chronos.duration` |
+| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
+| “What calendar date comes next?” | [`aivi.chronos.calendar`](./calendar.md) |
+| “What local time should this show in a region?” | [`aivi.chronos.timezone`](./timezone.md) |
+| “How should jobs keep happening over time?” | [`aivi.chronos.scheduler`](./scheduler.md) |
 
 ## When to use `Duration`
 
@@ -29,13 +29,19 @@ Use this domain for fixed spans of elapsed time, such as:
 
 If your logic is about calendar concepts like months, years, or “next business day”, use [`aivi.chronos.calendar`](./calendar.md) instead.
 
+## Mental model
+
+`Duration` answers **“how long?”**
+
+It is the right tool when you would otherwise be tempted to pass around a bare integer and hope everyone remembers whether it means seconds, milliseconds, or minutes.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/overview.aivi{aivi}
 
 ## Common operations
 
-These examples show the basic shapes and conversions you will use most often:
+These examples show the basic shapes and conversions you will use most often. A common pattern is: choose a named duration such as a `requestTimeout`, then combine it with an `Instant` when you need a precise deadline.
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/features.aivi{aivi}
 

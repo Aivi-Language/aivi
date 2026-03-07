@@ -66,17 +66,14 @@ fn parse_open_markup_tag(tag_text: &str) -> Option<(String, Vec<String>, bool)> 
                     }
                     bracket_depth -= 1;
                 }
-                '>'
-                    if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
-                {
+                '>' if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
                     break;
                 }
-                '/'
-                    if brace_depth == 0
-                        && paren_depth == 0
-                        && bracket_depth == 0
-                        && i + 1 < chars.len()
-                        && chars[i + 1] == '>' =>
+                '/' if brace_depth == 0
+                    && paren_depth == 0
+                    && bracket_depth == 0
+                    && i + 1 < chars.len()
+                    && chars[i + 1] == '>' =>
                 {
                     break;
                 }
@@ -381,9 +378,7 @@ fn format_markup_sigil(text: &str) -> Option<Vec<String>> {
                 let start = i;
                 i += 4;
                 while i + 2 < body_chars.len() {
-                    if body_chars[i] == '-'
-                        && body_chars[i + 1] == '-'
-                        && body_chars[i + 2] == '>'
+                    if body_chars[i] == '-' && body_chars[i + 1] == '-' && body_chars[i + 2] == '>'
                     {
                         i += 3;
                         break;
@@ -567,7 +562,9 @@ fn format_markup_sigil(text: &str) -> Option<Vec<String>> {
                 i += 1;
             }
             let end = i.min(body_chars.len());
-            let inner: String = body_chars[start + 1..end.saturating_sub(1)].iter().collect();
+            let inner: String = body_chars[start + 1..end.saturating_sub(1)]
+                .iter()
+                .collect();
             let inner = inner.trim();
             if !inner.is_empty() {
                 lines.push(format!("{}{{ {inner} }}", " ".repeat(depth * 2)));

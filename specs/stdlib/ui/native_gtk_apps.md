@@ -6,6 +6,16 @@ AIVI's main desktop-app story is native GTK4 and libadwaita software. Use `gtkAp
 
 This page is the broad guide. If you want the details afterward, follow up with [`aivi.ui.gtk4`](./gtk4.md), [GTK App Architecture](./app_architecture.md), [Reactive Signals](./reactive_signals.md), [Reactive Dataflow](./reactive_dataflow.md), and [`aivi.ui.forms`](./forms.md).
 
+## When to use this page
+
+Read this page when you want the big picture before diving into API reference details. It answers questions like:
+
+- “What is the normal structure of an AIVI desktop app?”
+- “Where should timers, background work, and form state live?”
+- “What does `gtkApp` own for me?”
+
+A lightweight mental model is: **`gtkApp` is the conductor, your `Model` is the score, and `Msg` values are the cues that move the app forward.**
+
 ## Two different meanings of “signal”
 
 AIVI UI docs use the word **signal** in two different ways:
@@ -70,8 +80,8 @@ Use `~<gtk>` and prefer shorthand widget tags:
   <AdwClamp maximumSize="480">
     <GtkBox orientation="vertical" spacing="12">
       <GtkLabel label="Project Settings" cssClass="title-2" />
-      <GtkEntry id="nameInput" placeholderText="Project name" />
-      <GtkButton id="saveBtn" label="Save" />
+      <GtkEntry id="projectNameInput" placeholderText="Project name" />
+      <GtkButton id="saveButton" label="Save" />
     </GtkBox>
   </AdwClamp>
 </gtk>
@@ -81,12 +91,12 @@ Use `~<gtk>` and prefer shorthand widget tags:
 
 ### 2. Turn GTK signals into domain messages
 
-Signal sugar such as `onClick={ Save }` or `onInput={ NameChanged }` is the clearest way to bind widget events. Those events arrive as typed `GtkSignalEvent` values, and `toMsg` decides which ones matter to your app.
+Signal sugar such as `onClick={ Save }` or `onInput={ ProjectNameChanged }` is the clearest way to bind widget events. Those events arrive as typed `GtkSignalEvent` values, and `toMsg` decides which ones matter to your app.
 
 This separation keeps the code readable:
 
 - GTK knows about clicks, focus, and text edits,
-- your app knows about `Save`, `NameChanged`, `SearchFinished`, and other domain messages.
+- your app knows about `Save`, `ProjectNameChanged`, `ProjectsLoaded`, and other domain messages.
 
 ### 3. Keep authoritative state in the model
 
@@ -146,9 +156,8 @@ Use [`aivi.chronos.scheduler`](/stdlib/chronos/scheduler) when the work should s
 ```aivi
 use aivi.chronos.scheduler
 
-invoiceRollup = {
-  // This plan value can be stored or handed to a worker later.
-  key: planKey "invoice-rollup" 2026-01-01T00:00:00Z
+nightlyReportPlan = {
+  key: planKey "nightly-report" 2026-01-01T00:00:00Z
   tenantId: "tenant-apac"
   trigger: once 2026-01-01T00:00:00Z
   scheduledAt: 2026-01-01T00:00:00Z
@@ -173,7 +182,7 @@ There is no separate form runtime and no hidden widget-owned field state.
 
 ## Guided example
 
-The examples below build up the full pattern in smaller steps.
+The examples below build up the full pattern in smaller, easier-to-scan steps.
 
 ### Example 1: minimal `gtkApp`
 
@@ -182,7 +191,7 @@ use aivi.ui.gtk4
 
 Model = {
   projectName: Text
-  status: Text
+  saveStatus: Text
 }
 
 Msg
@@ -192,11 +201,11 @@ Msg
 initialModel : Model
 initialModel = {
   projectName: ""
-  status: "Waiting for changes"
+  saveStatus: "Waiting for changes"
 }
 
-pageTitle : Model -> Text
-pageTitle = model =>
+pageHeading : Model -> Text
+pageHeading = model =>
   if model.projectName == ""
     then "Project Settings"
     else "Project Settings · {model.projectName}"
@@ -213,14 +222,14 @@ view = model =>
         marginStart="24"
         marginEnd="24"
       >
-        <GtkLabel label={pageTitle model} cssClass="title-2" />
+        <GtkLabel label={pageHeading model} cssClass="title-2" />
         <GtkEntry
           text={model.projectName}
           placeholderText="Project name"
           onInput={ ProjectNameChanged }
         />
         <GtkButton label="Save" onClick={ Save } />
-        <GtkLabel label={model.status} />
+        <GtkLabel label={model.saveStatus} />
       </GtkBox>
     </AdwClamp>
   </gtk>
@@ -229,14 +238,14 @@ update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
 update = msg => model =>
   pure (
     msg match
-      | ProjectNameChanged newName =>
+      | ProjectNameChanged updatedName =>
           {
-            model: model <| { projectName: newName }
+            model: model <| { projectName: updatedName }
             commands: []
           }
       | Save =>
           {
-            model: model <| { status: "Saved" }
+            model: model <| { saveStatus: "Saved" }
             commands: []
           }
   )
@@ -257,22 +266,21 @@ main = gtkApp {
 
 This is enough for many simple settings and editor screens.
 
-### Example 2: add a repeating timer and delayed follow-up
+### Example 2: add a repeating timer
 
-Now extend the same app with a timer and a one-shot command:
+Here the same app gains one extra live value: “how long since the last save?”
 
 ```aivi
 Model = {
   projectName: Text
   secondsSinceSave: Int
-  status: Text
+  saveStatus: Text
 }
 
 Msg
   = ProjectNameChanged Text
   | Save
   | Tick
-  | ClearStatus
 
 subscriptions : Model -> List (Subscription Msg)
 subscriptions = _ => [
@@ -288,7 +296,47 @@ update = msg => model =>
     msg match
       | Save =>
           {
-            model: model <| { secondsSinceSave: 0, status: "Saved" }
+            model: model <| {
+              secondsSinceSave: 0
+              saveStatus: "Saved"
+            }
+            commands: []
+          }
+      | Tick =>
+          {
+            model: model <| {
+              secondsSinceSave: model.secondsSinceSave + 1
+            }
+            commands: []
+          }
+      | ProjectNameChanged updatedName =>
+          {
+            model: model <| { projectName: updatedName }
+            commands: []
+          }
+  )
+```
+
+### Example 3: add a delayed follow-up
+
+A one-shot command is the right tool when the app should do something later exactly once.
+
+```aivi
+Msg
+  = ProjectNameChanged Text
+  | Save
+  | Tick
+  | ClearStatus
+
+update = msg => model =>
+  pure (
+    msg match
+      | Save =>
+          {
+            model: model <| {
+              secondsSinceSave: 0
+              saveStatus: "Saved"
+            }
             commands: [
               commandAfter {
                 key: "clear-status"
@@ -297,38 +345,43 @@ update = msg => model =>
               }
             ]
           }
-      | Tick =>
-          {
-            model: model <| { secondsSinceSave: model.secondsSinceSave + 1 }
-            commands: []
-          }
       | ClearStatus =>
           {
-            model: model <| { status: "Waiting for changes" }
+            model: model <| { saveStatus: "Waiting for changes" }
             commands: []
           }
-      | ProjectNameChanged newName =>
+      | Tick =>
           {
-            model: model <| { projectName: newName }
+            model: model <| {
+              secondsSinceSave: model.secondsSinceSave + 1
+            }
+            commands: []
+          }
+      | ProjectNameChanged updatedName =>
+          {
+            model: model <| { projectName: updatedName }
             commands: []
           }
   )
 ```
 
-### Example 3: refactor repetitive update branches into helpers
+### Example 4: refactor repetitive update branches into helpers
 
-Once the screen grows, keep the same `Model` and `Msg` from Example 2, then extract small helper functions so `update` stays easy to scan:
+Once the screen grows, keep the same `Model` and `Msg`, then extract small helper functions so `update` stays easy to scan:
 
 ```aivi
 renameProject : Text -> Model -> AppStep Model Msg
-renameProject = newName model => {
-  model: model <| { projectName: newName }
+renameProject = updatedName model => {
+  model: model <| { projectName: updatedName }
   commands: []
 }
 
-saveProject : Model -> AppStep Model Msg
-saveProject = model => {
-  model: model <| { secondsSinceSave: 0, status: "Saved" }
+markSaved : Model -> AppStep Model Msg
+markSaved = model => {
+  model: model <| {
+    secondsSinceSave: 0
+    saveStatus: "Saved"
+  }
   commands: [
     commandAfter {
       key: "clear-status"
@@ -338,29 +391,31 @@ saveProject = model => {
   ]
 }
 
-tick : Model -> AppStep Model Msg
-tick = model => {
-  model: model <| { secondsSinceSave: model.secondsSinceSave + 1 }
+advanceClock : Model -> AppStep Model Msg
+advanceClock = model => {
+  model: model <| {
+    secondsSinceSave: model.secondsSinceSave + 1
+  }
   commands: []
 }
 
-clearStatus : Model -> AppStep Model Msg
-clearStatus = model => {
-  model: model <| { status: "Waiting for changes" }
+clearSaveStatus : Model -> AppStep Model Msg
+clearSaveStatus = model => {
+  model: model <| { saveStatus: "Waiting for changes" }
   commands: []
 }
 
 update = msg => model =>
   pure (
     msg match
-      | ProjectNameChanged newName => renameProject newName model
-      | Save                       => saveProject model
-      | Tick                       => tick model
-      | ClearStatus                => clearStatus model
+      | ProjectNameChanged updatedName => renameProject updatedName model
+      | Save                            => markSaved model
+      | Tick                            => advanceClock model
+      | ClearStatus                     => clearSaveStatus model
   )
 ```
 
-When a screen has several unnamed widgets producing the same signal, either give them `id="..."` names or keep an explicit `toMsg`. `auto` is meant for the straightforward constructor-routing cases, not for every possible GTK event workflow.
+When a screen has several unnamed widgets producing the same signal, either give them `id="..."` names or keep an explicit `toMsg`. `auto` is meant for straightforward constructor-routing cases, not for every possible GTK event workflow.
 
 ## When to reach for lower-level primitives
 
