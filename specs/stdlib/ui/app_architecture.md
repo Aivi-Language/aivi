@@ -198,42 +198,36 @@ Think of a command as a receipt for future work: `update` does not perform the w
 
 | Constructor | Meaning | When to reach for it |
 | --- | --- | --- |
-| `Command.none` | No follow-up work. | The message only changes local state. |
-| `Command.batch cmds` | Run several commands as one step. | A single update should trigger multiple follow-ups. |
-| `Command.emit msg` | Enqueue another message immediately after the current update commits. | A message should expand into another app-level message. |
-| `Command.perform { run, onOk, onError }` | Run a one-shot effect and map its result back into `Msg`. | Saving, loading, or any single-result task. |
-| `Command.after { key, millis, msg }` | Emit `msg` once after a delay. | Short in-process delays such as clearing a toast. |
-| `Command.startTask { key, run, onProgress, onOk, onError, onCancelled }` | Start cancellable background work with typed progress events. | Search, sync, imports, exports, uploads. |
-| `Command.cancel key` | Cancel a keyed task or keyed one-shot timer. | The model says earlier work is no longer relevant. |
+| `commandNone` | No follow-up work. | The message only changes local state. |
+| `commandBatch cmds` | Run several commands as one step. | A single update should trigger multiple follow-ups. |
+| `commandEmit msg` | Enqueue another message immediately after the current update commits. | A message should expand into another app-level message. |
+| `commandPerform { run, onError }` | Run a one-shot effect that yields the next `Msg`; optionally map `GtkError` into a fallback `Msg`. | Saving, loading, or any single-result task. |
+| `commandAfter { key, millis, msg }` | Emit `msg` once after a delay. | Short in-process delays such as clearing a toast. |
+| `commandCancel key` | Cancel a keyed one-shot timer. | The model says an earlier delayed action is no longer relevant. |
 
-`Command.perform` is for work with one terminal outcome. `Command.startTask` is for work that may report progress before it finishes.
+`commandPerform` is for work with one terminal outcome. `commandAfter` is for a transient delayed message. Both stay inside the same `gtkApp` loop.
 
-### Background task shape
+### One-shot effect shape
 
 ```aivi
-Command.startTask {
-  key: "catalog-search",
-  run: progress => searchCatalog progress model.searchQuery,
-  onProgress: SearchProgress,
-  onOk: SearchFinished,
-  onError: SearchFailed,
-  onCancelled: Some SearchCancelled
+commandPerform {
+  run: searchCatalog model.searchQuery
+  onError: Some SearchFailed
 }
 ```
 
 Conceptually, `run` has this shape:
 
 ```aivi
-run : Sender progress -> Effect err a with { ... }
+run : Effect GtkError msg with { ... }
 ```
 
 Semantics:
 
-- `run` executes as a child task hosted by `gtkApp`,
-- each `send progress value` becomes `onProgress value`,
-- exactly one terminal path wins: `onOk`, `onError`, or `onCancelled`,
-- after a terminal message, later progress for that task key is ignored,
-- starting a new task with the same key replaces the old one.
+- `run` executes after the update commits,
+- if `run` succeeds, the produced `Msg` is fed back into the app loop,
+- if `run` fails and `onError` is `Some mapError`, `gtkApp` emits `mapError err`,
+- if `run` fails and `onError` is `None`, the command stops without an app-level recovery message.
 
 Commands are always **post-update**. The new model becomes current before a command can feed a new `Msg` back into the app.
 
@@ -247,27 +241,26 @@ A subscription is a standing request that says, “while the model looks like th
 
 | Constructor | Meaning | Typical use |
 | --- | --- | --- |
-| `Subscription.none` | No external feed. | Screens with only direct user input. |
-| `Subscription.batch subs` | Merge several subscriptions. | Combine timers, streams, and watchers. |
-| `Subscription.every { key, millis, tag }` | Repeating timer that emits `tag`. | Clocks, heartbeats, auto-refresh. |
-| `Subscription.source { key, open, onEvent, onError, onClosed }` | Acquire a typed receiver/resource and forward values into `Msg`. | File watchers, network streams, device feeds. |
+| `subscriptionNone` | No external feed. | Screens with only direct user input. |
+| `subscriptionBatch subs` | Merge several subscriptions. | Combine timers, streams, and watchers. |
+| `subscriptionEvery { key, millis, tag }` | Repeating timer that emits `tag`. | Clocks, heartbeats, auto-refresh. |
+| `subscriptionSource { key, open, onError, onClosed }` | Acquire a typed receiver/resource and forward emitted `Msg` values into the app. | File watchers, network streams, device feeds. |
 
-`Subscription.source` is the general bridge for any long-lived producer that can be opened, cleaned up, and read over time.
+`subscriptionSource` is the general bridge for any long-lived producer that can be opened, cleaned up, and read over time.
 
 ```aivi
-Subscription.source {
+subscriptionSource {
   key: "config-watch",
-  open: watchConfigFile "./config.json",
-  onEvent: ConfigChanged,
+  open: watchConfigMessages "./config.json",
   onError: Some ConfigWatchFailed,
-  onClosed: None
+  onClosed: Some ConfigWatchClosed
 }
 ```
 
 Conceptually, `open` has this shape:
 
 ```aivi
-open : Resource err (Receiver event) with { ... }
+open : Resource GtkError (Recv msg) with { ... }
 ```
 
 That `Resource` boundary matters because replacing or removing a subscription should trigger structured cleanup automatically.
@@ -289,8 +282,8 @@ For example, if `clockRunning` changes from `True` to `False`, the `"clock"` sub
 
 ### Timers
 
-- Use `Command.after` for a **one-shot** delayed message requested by `update`.
-- Use `Subscription.every` for a **repeating** tick that should stay alive while the current model needs it.
+- Use `commandAfter` for a **one-shot** delayed message requested by `update`.
+- Use `subscriptionEvery` for a **repeating** tick that should stay alive while the current model needs it.
 - Use [`aivi.chronos.scheduler`](/stdlib/chronos/scheduler) when the timing must survive app shutdown, be coordinated with workers, or follow durable plans such as cron and retry rules.
 
 ### GTK signals
@@ -301,21 +294,21 @@ Your app's primary GTK signal flow still goes through:
 toMsg : GtkSignalEvent -> Option Msg
 ```
 
-That is already hosted by the built-in `signalStream` inside `gtkApp`. If you need extra GTK-driven feeds beyond that primary stream, wrap them in `Subscription.source` instead of starting a second top-level loop.
+That is already hosted by the built-in `signalStream` inside `gtkApp`. If you need extra GTK-driven feeds beyond that primary stream, wrap them in `subscriptionSource` instead of starting a second top-level loop.
 
 ### Background work
 
-Use `Command.perform` for quick one-shot work and `Command.startTask` for cancellable long-running jobs. Typical examples include:
+Use `commandPerform` for quick one-shot work. For long-lived or repeating async feeds, expose a `Recv Msg` and bridge it with `subscriptionSource`. Typical examples include:
 
-- search and indexing,
-- network fetches with progress,
+- one-shot search or indexing,
+- save/load requests,
 - database sync,
 - image processing,
 - any operation that should keep the UI responsive while it works.
 
 ### External feeds
 
-Anything that can be represented as `Resource err (Receiver event)` fits the subscription model:
+Anything that can be represented as `Resource GtkError (Recv msg)` fits the subscription model:
 
 - file-watch APIs,
 - long-lived HTTP or event streams,
@@ -323,11 +316,10 @@ Anything that can be represented as `Resource err (Receiver event)` fits the sub
 - IPC or device feeds,
 - custom channel-based library integrations.
 
-## Cancellation and progress semantics
+## Cancellation semantics
 
 `gtkApp` owns a structured-concurrency scope for:
 
-- keyed background commands,
 - keyed one-shot timers,
 - active subscriptions.
 
@@ -339,13 +331,11 @@ When the window or app shuts down, that scope is cancelled. Child tasks and subs
 
 A few rules are especially useful in practice:
 
-- `Command.cancel key` is a no-op when nothing with that key is running,
+- `commandCancel key` is a no-op when nothing with that key is running,
 - removing or replacing a subscription key cancels the earlier instance,
-- starting a keyed task or keyed timer replaces the previous instance,
-- when provided, `onCancelled` fires at most once for a task instance,
-- progress ordering is preserved **per command key**, not globally across all tasks.
+- starting a keyed timer with the same key replaces the previous instance.
 
-Apps should model progress explicitly in `Msg` and `Model`, just like any other domain event.
+Apps should model asynchronous results explicitly in `Msg` and `Model`, just like any other domain event.
 
 ## Startup hooks and advanced options
 
@@ -392,7 +382,7 @@ subscriptions : Model -> List (Subscription Msg)
 subscriptions = model =>
   if model.clockRunning
     then [
-      Subscription.every {
+      subscriptionEvery {
         key: "clock"
         millis: 1000
         tag: Tick
@@ -425,17 +415,14 @@ When a message should launch asynchronous work, return a command from `update`:
 Model = {
   searchQuery: Text
   searchInFlight: Bool
-  searchProgressPercent: Int
   searchResults: List Text
-  searchError: Option Text
+  searchError: Option GtkError
 }
 
 Msg
   = SearchQueryChanged Text
-  | SearchProgress Int
   | SearchFinished (List Text)
-  | SearchFailed Text
-  | SearchCancelled
+  | SearchFailed GtkError
 
 update = msg => model =>
   pure (
@@ -445,24 +432,14 @@ update = msg => model =>
             model: model <| {
               searchQuery: updatedQuery
               searchInFlight: True
-              searchProgressPercent: 0
               searchError: None
             }
             commands: [
-              Command.startTask {
-                key: "catalog-search"
-                run: progress => searchCatalog progress updatedQuery
-                onProgress: SearchProgress
-                onOk: SearchFinished
-                onError: SearchFailed
-                onCancelled: Some SearchCancelled
+              commandPerform {
+                run: searchCatalog updatedQuery
+                onError: Some SearchFailed
               }
             ]
-          }
-      | SearchProgress percent =>
-          {
-            model: model <| { searchProgressPercent: percent }
-            commands: []
           }
       | SearchFinished foundResults =>
           {
@@ -472,23 +449,18 @@ update = msg => model =>
             }
             commands: []
           }
-      | SearchFailed errorMessage =>
+      | SearchFailed error =>
           {
             model: model <| {
               searchInFlight: False
-              searchError: Some errorMessage
+              searchError: Some error
             }
-            commands: []
-          }
-      | SearchCancelled =>
-          {
-            model: model <| { searchInFlight: False }
             commands: []
           }
   )
 ```
 
-The important part is that nothing creates a second event loop. Even background work still feeds results back as ordinary `Msg` values.
+Here `searchCatalog : Text -> Effect GtkError Msg` can return `SearchFinished results` on success. The important part is that nothing creates a second event loop. Even background work still feeds results back as ordinary `Msg` values.
 
 ## See it in action
 

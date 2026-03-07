@@ -105,8 +105,7 @@ AIVI separates pure calculations from operations that interact with the outside 
 ```aivi
 loadConfig : Path -> Effect ConfigError Config
 loadConfig = path => do Effect {
-  raw <- file.read path                // effect: read a file
-  cfg <- json.decode raw               // effectful decode that may fail
+  cfg <- load (file.json path)         // effect: read and decode a config file
   pure cfg                             // return the final value
 }
 ```
