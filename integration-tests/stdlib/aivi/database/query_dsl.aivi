@@ -19,9 +19,9 @@ productTable = table "products" [
 
 seedProducts : DbConnection -> Effect DbError Unit
 seedProducts = conn => do Effect {
-  _ <- applyDeltaOn conn productTable (ins { id: 1, name: "Widget",  price: 10, active: True  })
-  _ <- applyDeltaOn conn productTable (ins { id: 2, name: "Gadget",  price: 20, active: False })
-  _ <- applyDeltaOn conn productTable (ins { id: 3, name: "Doohick", price: 15, active: True  })
+  _ <- applyDeltaOn conn productTable (ins { id: 1, name: "Widget", price: 10, active: True })
+  _ <- applyDeltaOn conn productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
+  _ <- applyDeltaOn conn productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
   pure Unit
 }
 
@@ -63,10 +63,10 @@ do_query_from_single_bind = do Effect {
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
   results <- runQueryOn conn (do Query {
-    p <- from productTable
-    queryOf p
+      p       <- from productTable
+      queryOf p
   })
-  _       <- close conn
+  _ <- close conn
   assertEq (List.length results) 3
 }
 
@@ -76,11 +76,11 @@ do_query_guard_filters = do Effect {
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
   results <- runQueryOn conn (do Query {
-    p <- from productTable
-    guard_ p.active
-    queryOf p
+      p       <- from productTable
+      guard_ p.active
+      queryOf p
   })
-  _       <- close conn
+  _ <- close conn
   assertEq (List.length results) 2
 }
 
@@ -90,10 +90,10 @@ do_query_projects_field = do Effect {
   _     <- runMigrationsOn conn [productTable]
   _     <- seedProducts conn
   names <- runQueryOn conn (do Query {
-    p <- from productTable
-    queryOf p.name
+      p     <- from productTable
+      queryOf p.name
   })
-  _     <- close conn
+  _ <- close conn
   assertEq (List.length names) 3
 }
 
@@ -103,11 +103,11 @@ do_query_guard_and_project = do Effect {
   _     <- runMigrationsOn conn [productTable]
   _     <- seedProducts conn
   names <- runQueryOn conn (do Query {
-    p <- from productTable
-    guard_ p.active
-    queryOf p.name
+      p     <- from productTable
+      guard_ p.active
+      queryOf p.name
   })
-  _     <- close conn
+  _ <- close conn
   assertEq (List.length names) 2
 }
 
@@ -133,10 +133,10 @@ do_query_let_binding = do Effect {
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
   results <- runQueryOn conn (do Query {
-    p       <- from productTable
-    doubled = p.price * 2
-    queryOf doubled
+      p       <- from productTable
+      doubled = p.price * 2
+      queryOf doubled
   })
-  _       <- close conn
+  _ <- close conn
   assertEq (List.length results) 3
 }
