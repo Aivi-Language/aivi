@@ -11,13 +11,13 @@ They are the right tools when local time matters: meeting times, user-facing sch
 
 ## Quick chooser
 
-| If you need... | Use... |
+| If your main question is... | Use... |
 | --- | --- |
-| a fixed elapsed span like `5m` or `250ms` | [`aivi.chronos.duration`](./duration.md) |
-| one exact UTC moment | [`aivi.chronos.instant`](./instant.md) |
-| human date math such as “next month” or “end of month” | [`aivi.chronos.calendar`](./calendar.md) |
-| local clock time in a named region | `aivi.chronos.timezone` |
-| durable plans, cron rules, or retry schedules | [`aivi.chronos.scheduler`](./scheduler.md) |
+| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
+| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
+| “What calendar date comes next?” | [`aivi.chronos.calendar`](./calendar.md) |
+| “What local time is this in a named place?” | `aivi.chronos.timezone` |
+| “How should jobs keep happening over time?” | [`aivi.chronos.scheduler`](./scheduler.md) |
 
 ## When to use `TimeZone`
 
@@ -30,13 +30,23 @@ Reach for this module when you need to:
 
 For raw UTC moments, use [`aivi.chronos.instant`](./instant.md). For human calendar arithmetic without zone conversion, use [`aivi.chronos.calendar`](./calendar.md).
 
+## Mental model
+
+`TimeZone` answers **“what clock time is this in that place?”**
+
+A common workflow is:
+
+1. store or receive an `Instant`,
+2. choose a named zone such as `Europe/Berlin`,
+3. convert only when you need a local display or local-time interpretation.
+
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/timezone/overview.aivi{aivi}
 
 ## Common operations
 
-These examples show how to work with named zones and zoned local date-times:
+These examples show how to work with named zones and zoned local date-times. Pay special attention to where the examples move between UTC storage and local display, because that is the safest default pattern.
 
 <<< ../../snippets/from_md/stdlib/chronos/timezone/features.aivi{aivi}
 

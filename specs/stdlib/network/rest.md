@@ -2,28 +2,29 @@
 
 <!-- quick-info: {"kind":"module","name":"aivi.rest"} -->
 The `rest` module is a higher-level HTTP client for JSON-based APIs. It is designed for the common case where you want to call a REST endpoint, decode the response into a value, and let the module handle details like bearer tokens, timeouts, retries, and status checks.
-
 <!-- /quick-info -->
 <div class="import-badge">use aivi.rest</div>
 
 ## What this module is for
 
-Use `aivi.rest` when you are talking to a conventional REST API and want a friendlier interface than raw HTTP requests. Compared to `aivi.net.http`, this module adds:
+Use `aivi.rest` when you are talking to a conventional REST API and want a friendlier interface than raw HTTP requests. In everyday API work, “REST” usually means resource-style HTTP endpoints that send and receive JSON.
 
-- automatic response decoding into the type you expect
-- optional bearer-token authentication
-- optional request timeouts
-- optional retry counts for transient failures
-- optional strict handling of non-2xx status codes
+Compared to [`aivi.net.http`](./http.md), this module adds:
 
-If you need full control over raw HTTP responses, use `aivi.net.http` instead.
+- automatic response decoding into the type you expect,
+- optional bearer-token authentication,
+- optional request timeouts,
+- optional retry counts for transient failures,
+- optional strict handling of non-2xx status codes.
+
+If you need full control over raw HTTP responses, use [`aivi.net.http`](./http.md) instead.
 
 ## Start here
 
 A useful mental model is:
 
-- `aivi.net.http` = raw request/response control
-- `aivi.rest` = HTTP plus decoding, auth helpers, retry/timeouts, and optional strict status handling
+- [`aivi.net.http`](./http.md) = raw request/response control,
+- `aivi.rest` = HTTP plus decoding, auth helpers, retry/timeouts, and optional strict status handling.
 
 Choose the smallest entry point that fits:
 
@@ -32,6 +33,7 @@ Choose the smallest entry point that fits:
 | fetch and decode JSON with defaults | `get` |
 | send one simple text body and decode the response | `post` |
 | configure timeouts, retries, bearer auth, or strict status rules | `fetch` |
+| inspect raw headers and bodies yourself | [`aivi.net.http`](./http.md) |
 
 ## Typical example
 
@@ -41,32 +43,40 @@ This is the style of code `aivi.rest` is meant for:
 use aivi.rest
 
 loadUser : Url -> Effect Text User
-loadUser = url => get url
+loadUser = userUrl => get userUrl
 ```
 
 The expected result type (`User` here) tells the module what to decode from the response body.
 
-For more control, build a `Request` value:
+For more control, build a `Request` value step by step:
 
 ```aivi
 use aivi.rest
 
 savePost : Url -> Text -> Effect Text SavedPost
-savePost = url => token => do Effect {
-  request = {
+savePost = postUrl => accessToken => do Effect {
+  requestOptions = {
     method: "POST"
-    url: url
+    url: postUrl
     headers: [{ name: "Accept", value: "application/json" }]
     body: Some (Plain "{\"title\":\"Hello\"}")
-    timeoutMs: Some 5000      // Fail reasonably quickly if the API stops responding.
-    retryCount: Some 2        // Retry a couple of transient failures automatically.
-    bearerToken: Some token   // Adds Authorization: Bearer <token>.
-    strictStatus: Some True   // Treat non-2xx responses as errors.
+    timeoutMs: Some 5000
+    retryCount: Some 2
+    bearerToken: Some accessToken
+    strictStatus: Some True
   }
-  savedPost <- fetch request
+
+  savedPost <- fetch requestOptions
   pure savedPost
 }
 ```
+
+Read the extra fields as policy choices:
+
+- `timeoutMs` says how long you are willing to wait,
+- `retryCount` says how many transient failures should be retried,
+- `bearerToken` adds `Authorization: Bearer ...`,
+- `strictStatus` turns non-2xx responses into errors.
 
 ## Types
 
@@ -120,12 +130,14 @@ Request = {
 
 Choose `aivi.rest` when:
 
-- the remote service behaves like a conventional REST API
-- you want the result decoded directly into a value
-- you want built-in support for bearer auth, retries, or stricter status handling
+- the remote service behaves like a conventional JSON API,
+- you want the result decoded directly into a value,
+- you want built-in support for bearer auth, retries, or stricter status handling,
+- your main question is “what typed value did I get back?” rather than “what exact HTTP response came back?”.
 
-Choose `aivi.net.http` when:
+Choose [`aivi.net.http`](./http.md) when:
 
-- you need to inspect raw headers and response bodies yourself
-- you want lower-level control over how requests are built and handled
-- the remote service does not fit the usual REST pattern
+- you need to inspect raw headers and response bodies yourself,
+- you want lower-level control over how requests are built and handled,
+- the remote service does not fit the usual REST pattern,
+- you are debugging transport or protocol details.

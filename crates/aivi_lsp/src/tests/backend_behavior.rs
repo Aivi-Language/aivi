@@ -5,12 +5,10 @@ fn build_diagnostics_reports_error() {
     let diagnostics = Backend::build_diagnostics(text, &uri);
     assert!(!diagnostics.is_empty());
     assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
-    assert!(
-        diagnostics[0]
-            .source
-            .as_deref()
-            .is_some_and(|s| s.starts_with("aivi."))
-    );
+    assert!(diagnostics[0]
+        .source
+        .as_deref()
+        .is_some_and(|s| s.starts_with("aivi.")));
 }
 
 #[test]
@@ -384,10 +382,9 @@ cfg =
         .expect("expected derive signature hint");
 
     assert_eq!(diag.severity, Some(DiagnosticSeverity::HINT));
-    assert!(
-        diag.message
-            .contains("explicit `Source ...` type signature")
-    );
+    assert!(diag
+        .message
+        .contains("explicit `Source ...` type signature"));
 }
 
 #[test]

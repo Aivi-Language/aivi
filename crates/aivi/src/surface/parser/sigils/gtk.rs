@@ -308,13 +308,9 @@ impl Parser {
                             continue;
                         }
 
-                        if let Some((expr, next_i)) = parse_function_call_arg(
-                            self,
-                            sigil,
-                            body_start_offset,
-                            &body_chars,
-                            i,
-                        ) {
+                        if let Some((expr, next_i)) =
+                            parse_function_call_arg(self, sigil, body_start_offset, &body_chars, i)
+                        {
                             positional_args.push(expr);
                             i = next_i;
                             continue;
@@ -531,7 +527,12 @@ impl Parser {
         fn component_tag_expr(tag: &str, span: &Span) -> Option<Expr> {
             let mut segments = tag.split('.');
             let first = segments.next()?;
-            if first.is_empty() || !first.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) {
+            if first.is_empty()
+                || !first
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_ascii_uppercase())
+            {
                 return None;
             }
             if !is_ident_segment(first) {
@@ -607,17 +608,14 @@ impl Parser {
                         }
                         bracket_depth -= 1;
                     }
-                    '>'
-                        if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 =>
-                    {
+                    '>' if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
                         break;
                     }
-                    '/'
-                        if brace_depth == 0
-                            && paren_depth == 0
-                            && bracket_depth == 0
-                            && i + 1 < body_chars.len()
-                            && body_chars[i + 1] == '>' =>
+                    '/' if brace_depth == 0
+                        && paren_depth == 0
+                        && bracket_depth == 0
+                        && i + 1 < body_chars.len()
+                        && body_chars[i + 1] == '>' =>
                     {
                         break;
                     }
@@ -708,11 +706,7 @@ impl Parser {
                 }
 
                 let Some(items_expr) = each_items else {
-                    this.emit_diag(
-                        "E1615",
-                        "<each> requires `items={...}`",
-                        span.clone(),
-                    );
+                    this.emit_diag("E1615", "<each> requires `items={...}`", span.clone());
                     continue;
                 };
                 let Some(item_binder) = each_binder else {
@@ -824,19 +818,14 @@ impl Parser {
                     // GTK widget shorthand: tags starting with Gtk/Adw/Gsk are
                     // lowered as `<object class="WidgetName">` where all
                     // non-signal attributes become props automatically.
-                    let is_gtk_shorthand = tag.starts_with("Gtk")
-                        || tag.starts_with("Adw")
-                        || tag.starts_with("Gsk");
+                    let is_gtk_shorthand =
+                        tag.starts_with("Gtk") || tag.starts_with("Adw") || tag.starts_with("Gsk");
 
                     if is_gtk_shorthand {
                         // Rewrite: <GtkButton label="Hello" onClick={handler}>
                         // → <object class="GtkButton" props={{ label: "Hello" }} onClick={handler}>
                         let mut lowered_attrs = Vec::new();
-                        lowered_attrs.push(call2(
-                            "gtkAttr",
-                            mk_string("class"),
-                            mk_string(&tag),
-                        ));
+                        lowered_attrs.push(call2("gtkAttr", mk_string("class"), mk_string(&tag)));
 
                         let attr_handler_text =
                             |attr_name: &str, value: GtkAttrValue| -> Option<String> {
@@ -921,10 +910,9 @@ impl Parser {
                         let mut kept_children = Vec::new();
                         for child in children {
                             let (child_tag, child_has_type) = match &child {
-                                GtkNode::Element { tag, attrs, .. } => (
-                                    tag.clone(),
-                                    attrs.iter().any(|a| a.name == "type"),
-                                ),
+                                GtkNode::Element { tag, attrs, .. } => {
+                                    (tag.clone(), attrs.iter().any(|a| a.name == "type"))
+                                }
                                 _ => {
                                     kept_children.push(child);
                                     continue;
@@ -936,11 +924,8 @@ impl Parser {
                                 if let GtkNode::Element { attrs, .. } = child {
                                     for attr in attrs {
                                         if attr.name == "name" {
-                                            signal_name =
-                                                attr_handler_text("name", attr.value);
-                                        } else if attr.name == "handler"
-                                            || attr.name == "on"
-                                        {
+                                            signal_name = attr_handler_text("name", attr.value);
+                                        } else if attr.name == "handler" || attr.name == "on" {
                                             signal_handler =
                                                 attr_handler_text(&attr.name, attr.value);
                                         }
@@ -991,8 +976,7 @@ impl Parser {
                         }
 
                         let attrs_expr = list(lowered_attrs);
-                        let children_expr =
-                            lower_children(this, kept_children, span);
+                        let children_expr = lower_children(this, kept_children, span);
                         return Expr::Call {
                             func: Box::new(mk_ui("gtkElement")),
                             args: vec![mk_string("object"), attrs_expr, children_expr],
@@ -1117,7 +1101,7 @@ impl Parser {
                                                     field.value
                                                 }
                                             }
-                                            _ => field.value
+                                            _ => field.value,
                                         };
                                         lowered_attrs.push(call2(
                                             "gtkAttr",
@@ -1176,10 +1160,9 @@ impl Parser {
                     let mut kept_children = Vec::new();
                     for child in children {
                         let (child_tag, child_has_type) = match &child {
-                            GtkNode::Element { tag, attrs, .. } => (
-                                tag.clone(),
-                                attrs.iter().any(|a| a.name == "type"),
-                            ),
+                            GtkNode::Element { tag, attrs, .. } => {
+                                (tag.clone(), attrs.iter().any(|a| a.name == "type"))
+                            }
                             _ => {
                                 kept_children.push(child);
                                 continue;
@@ -1193,8 +1176,7 @@ impl Parser {
                                     if attr.name == "name" {
                                         signal_name = attr_handler_text("name", attr.value);
                                     } else if attr.name == "handler" || attr.name == "on" {
-                                        signal_handler =
-                                            attr_handler_text(&attr.name, attr.value);
+                                        signal_handler = attr_handler_text(&attr.name, attr.value);
                                     }
                                 }
                             }
@@ -1230,7 +1212,10 @@ impl Parser {
                                     "bare <child> wrapper is not allowed; nest <object> elements directly inside the parent",
                                     span.clone(),
                                 );
-                                if let GtkNode::Element { children: inner, .. } = child {
+                                if let GtkNode::Element {
+                                    children: inner, ..
+                                } = child
+                                {
                                     kept_children.extend(inner);
                                 }
                             }

@@ -10,7 +10,7 @@ If you want the broad overview first, read [Native GTK & libadwaita Apps](./nati
 
 Most single-window GTK apps can be organized around these pieces:
 
-1. **`Model`** — the complete state needed to render the current window.
+1. **`Model`** — the complete state needed to render the current window. “Authoritative state” means this is the version of the truth your app trusts most.
 2. **`view : Model -> GtkNode`** — a pure function that describes the widget tree for the current state.
 3. **`Msg`** — a closed set of events your app cares about.
 4. **`toMsg : GtkSignalEvent -> Option Msg`** — the adapter from raw GTK events to your app's messages. For common constructor bindings, `toMsg: auto` can derive this from the current view tree.
@@ -18,11 +18,19 @@ Most single-window GTK apps can be organized around these pieces:
 6. **`subscriptions : Model -> List (Subscription Msg)`** — long-lived event sources that should stay active while the current model says they are needed.
 7. **`gtkApp`** — the host that wires startup, rendering, event ingestion, reconciliation, commands, and subscriptions together.
 
-If you are familiar with Elm, Redux-style reducers, or unidirectional UI architectures, the mental model is similar: input becomes a message, the message updates state, and the UI is redrawn from that state.
+If you are familiar with Elm, Redux-style reducers, or other unidirectional UI architectures, the shape is similar: input becomes a message, the message updates state, and the UI is redrawn from that state.
+
+A lightweight mental model is:
+
+- the **model** is your app's notebook,
+- a **message** is a small note saying what just happened,
+- **update** writes the next notebook state,
+- **view** redraws the screen from that notebook,
+- **commands** and **subscriptions** are the safe ways to do work outside pure rendering.
 
 ## Start here
 
-Before reading the full API surface, keep this short checklist in mind:
+Before reading the full API surface, keep this checklist in mind:
 
 1. put all authoritative screen state in `Model`
 2. turn widget input into a small `Msg` type
@@ -51,6 +59,16 @@ AppStep model msg = {
 - `model` is the next committed model,
 - `commands` are follow-up effects to start **after** that model becomes current,
 - an empty command list means “render only; no extra work right now”.
+
+A few terms appear often on this page:
+
+| Term | Meaning in plain language |
+| --- | --- |
+| **committed model** | the official `Model` value after `update` succeeds |
+| **reconciliation** | patching the live widget tree instead of rebuilding everything from scratch |
+| **command** | one-shot follow-up work launched after an update commits |
+| **subscription** | a long-lived event source that can keep emitting messages over time |
+| **keyed** | identified by a stable text key so the host can replace, cancel, or keep work running |
 
 Some apps do not need explicit commands yet. In that case, the simpler update shape still works as shorthand:
 
@@ -107,6 +125,8 @@ For common constructor-style signal bindings such as `onInput={ ProjectNameChang
 
 ## How one app turn works
 
+A **turn** is one pass through the main loop: one incoming event, one `update`, one committed model, and one render.
+
 A normal turn through `gtkApp` looks like this:
 
 1. initialize GTK and create the application/window,
@@ -141,25 +161,24 @@ Reactive helpers such as `signal` and `computed` are useful when you want named 
 A small example:
 
 ```aivi
-titleText = computed "counter.title" (state =>
-  // Memoize a title that may be read more than once in the same render.
-  "Count: {toText state.count}"
+headerLabel = computed "projects.header" (model =>
+  "Projects: {toText model.projectCount}"
 )
 
-visibleRows = signal (state => state.rows)
+visibleProjects = signal (model => model.visibleProjects)
 
 view = _ =>
   ~<gtk>
     <GtkBox orientation="vertical">
-      <GtkLabel label={titleText} />
-      <each items={visibleRows} as={row}>
-        <GtkLabel label={row.name} />
+      <GtkLabel label={headerLabel} />
+      <each items={visibleProjects} as={project}>
+        <GtkLabel label={project.name} />
       </each>
     </GtkBox>
   </gtk>
 ```
 
-Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction to these helpers first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed).
+Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed).
 
 ## Forms and validation stay in the same architecture
 
@@ -177,6 +196,8 @@ This keeps form state, validation, and effects in one place instead of splitting
 ## Commands
 
 `Command msg` is a pure description of work that `gtkApp` interprets after a successful update.
+
+Think of a command as a receipt for future work: `update` does not perform the work directly, it returns an instruction telling the host what to do next.
 
 ### Standard command constructors
 
@@ -196,8 +217,8 @@ This keeps form state, validation, and effects in one place instead of splitting
 
 ```aivi
 Command.startTask {
-  key: "search",
-  run: progress => searchCatalog progress state.query,
+  key: "catalog-search",
+  run: progress => searchCatalog progress model.searchQuery,
   onProgress: SearchProgress,
   onOk: SearchFinished,
   onError: SearchFailed,
@@ -225,6 +246,8 @@ Commands are always **post-update**. The new model becomes current before a comm
 
 `Subscription msg` describes a long-lived event source derived from the current model.
 
+A subscription is a standing request that says, “while the model looks like this, keep listening to this thing for me.”
+
 ### Standard subscription constructors
 
 | Constructor | Meaning | Typical use |
@@ -238,7 +261,7 @@ Commands are always **post-update**. The new model becomes current before a comm
 
 ```aivi
 Subscription.source {
-  key: "file-watch",
+  key: "config-watch",
   open: watchConfigFile "./config.json",
   onEvent: ConfigChanged,
   onError: Some ConfigWatchFailed,
@@ -342,7 +365,7 @@ Apps should model progress explicitly in `Msg` and `Model`, just like any other 
 
 ### Advanced window setup
 
-`gtkApp` is the only high-level host API. Closing the primary window ends the host loop by default, while `windowSetHideOnClose win True` keeps the loop alive and hides the window instead. When an app needs extra one-time window configuration such as `windowSetDecorated` or `windowSetHideOnClose`, do that work in `onStart`.
+`gtkApp` is the only high-level host API. When an app needs extra one-time window configuration such as `windowSetDecorated` or `windowSetHideOnClose`, do that work in `onStart`.
 
 ## Relation to lower-level primitives
 
@@ -357,24 +380,24 @@ Reach for them when you need custom hosting, experiments, or multi-window flows.
 
 ## Example 1: local state plus a repeating timer
 
-This first example keeps one query string in the model and adds a repeating timer only while polling is enabled:
+This first example keeps one search query in the model and adds a repeating timer only while the screen says it should be active:
 
 ```aivi
 Model = {
-  query: Text
-  pollingEnabled: Bool
-  secondsVisible: Int
+  searchQuery: Text
+  clockRunning: Bool
+  visibleSeconds: Int
 }
 
-Msg = QueryChanged Text | Tick
+Msg = SearchQueryChanged Text | Tick
 
 subscriptions : Model -> List (Subscription Msg)
 subscriptions = model =>
-  if model.pollingEnabled
+  if model.clockRunning
     then [
       Subscription.every {
-        key: "clock",
-        millis: 1000,
+        key: "clock"
+        millis: 1000
         tag: Tick
       }
     ]
@@ -384,14 +407,14 @@ update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
 update = msg => model =>
   pure (
     msg match
-      | QueryChanged newQuery =>
+      | SearchQueryChanged updatedQuery =>
           {
-            model: model <| { query: newQuery }
+            model: model <| { searchQuery: updatedQuery }
             commands: []
           }
       | Tick =>
           {
-            model: model <| { secondsVisible: model.secondsVisible + 1 }
+            model: model <| { visibleSeconds: model.visibleSeconds + 1 }
             commands: []
           }
   )
@@ -403,15 +426,15 @@ When a message should launch asynchronous work, return a command from `update`:
 
 ```aivi
 Model = {
-  query: Text
-  searching: Bool
-  progress: Int
-  results: List Text
-  error: Option Text
+  searchQuery: Text
+  searchInFlight: Bool
+  searchProgressPercent: Int
+  searchResults: List Text
+  searchError: Option Text
 }
 
 Msg
-  = QueryChanged Text
+  = SearchQueryChanged Text
   | SearchProgress Int
   | SearchFinished (List Text)
   | SearchFailed Text
@@ -420,13 +443,18 @@ Msg
 update = msg => model =>
   pure (
     msg match
-      | QueryChanged newQuery =>
+      | SearchQueryChanged updatedQuery =>
           {
-            model: model <| { query: newQuery, searching: True, progress: 0 }
+            model: model <| {
+              searchQuery: updatedQuery
+              searchInFlight: True
+              searchProgressPercent: 0
+              searchError: None
+            }
             commands: [
               Command.startTask {
-                key: "search"
-                run: progress => searchCatalog progress newQuery
+                key: "catalog-search"
+                run: progress => searchCatalog progress updatedQuery
                 onProgress: SearchProgress
                 onOk: SearchFinished
                 onError: SearchFailed
@@ -434,24 +462,30 @@ update = msg => model =>
               }
             ]
           }
-      | SearchProgress n =>
+      | SearchProgress percent =>
           {
-            model: model <| { progress: n }
+            model: model <| { searchProgressPercent: percent }
             commands: []
           }
-      | SearchFinished results =>
+      | SearchFinished foundResults =>
           {
-            model: model <| { searching: False, results }
+            model: model <| {
+              searchInFlight: False
+              searchResults: foundResults
+            }
             commands: []
           }
-      | SearchFailed err =>
+      | SearchFailed errorMessage =>
           {
-            model: model <| { searching: False, error: Some err }
+            model: model <| {
+              searchInFlight: False
+              searchError: Some errorMessage
+            }
             commands: []
           }
       | SearchCancelled =>
           {
-            model: model <| { searching: False }
+            model: model <| { searchInFlight: False }
             commands: []
           }
   )
