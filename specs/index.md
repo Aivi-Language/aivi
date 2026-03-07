@@ -119,6 +119,7 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Email](stdlib/system/email)
 #### UI
 - [App Architecture](stdlib/ui/app_architecture)
+- [Forms](stdlib/ui/forms)
 - [GTK4](stdlib/ui/gtk4)
 - [Layout](stdlib/ui/layout)
 - [VDOM](stdlib/ui/vdom)
