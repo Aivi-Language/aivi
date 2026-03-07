@@ -301,30 +301,6 @@ launchCommand = sender => command => handles =>
       }
     | CommandCancel key => cancelHostedCommand key handles
 
-subscriptionKey : Subscription msg -> SubscriptionKey
-subscriptionKey = subscription =>
-  subscription match
-    | SubscriptionEvery { key, millis: _, tag: _ } => key
-    | SubscriptionSource { key, open: _, onError: _, onClosed: _ } => key
-    | SubscriptionNone => ""
-    | SubscriptionBatch _ => ""
-
-subscriptionSignature : Subscription msg -> Text
-subscriptionSignature = subscription =>
-  subscription match
-    | SubscriptionEvery { key: _, millis, tag: _ } => "every:{millis}"
-    | SubscriptionSource { key: _, open: _, onError: _, onClosed: _ } => "source"
-    | SubscriptionNone => ""
-    | SubscriptionBatch _ => ""
-
-subscriptionReusable : Subscription msg -> Bool
-subscriptionReusable = subscription =>
-  subscription match
-    | SubscriptionEvery _  => True
-    | SubscriptionSource _ => False
-    | SubscriptionNone     => False
-    | SubscriptionBatch _  => False
-
 startEverySubscription : Sender msg -> Int -> msg -> Effect GtkError HostedSubscription
 startEverySubscription = sender => millis => tag => do Effect {
   task <- concurrent.spawn (do Effect {
@@ -357,14 +333,6 @@ startSourceSubscription = sender => open => onError => onClosed => do Effect {
   }
 }
 
-startPassiveSubscription : Effect GtkError HostedSubscription
-startPassiveSubscription =
-  pure {
-    cancel: pure Unit
-    signature: ""
-    reusable: False
-  }
-
 cancelSubscriptionMap : Map SubscriptionKey HostedSubscription -> Effect GtkError Unit
 cancelSubscriptionMap = subscriptions =>
   cancelSubscriptionEntries (Map.entries subscriptions)
@@ -390,37 +358,74 @@ syncSubscriptionList = sender => subscriptions => current => next =>
         pure next
       }
     | [subscription, ...rest] =>
-        Map.get (subscriptionKey subscription) current match
-          | None => do Effect {
-              handle <- subscription match
-                | SubscriptionEvery { key: _, millis, tag } =>
-                    startEverySubscription sender millis tag
-                | SubscriptionSource { key: _, open, onError, onClosed } =>
-                    startSourceSubscription sender open onError onClosed
-                | SubscriptionNone =>
-                    startPassiveSubscription
-                | SubscriptionBatch _ =>
-                    startPassiveSubscription
-              syncSubscriptionList sender rest current (Map.insert (subscriptionKey subscription) handle next)
-            }
-          | Some handle =>
-              if handle.reusable && subscriptionReusable subscription && handle.signature == subscriptionSignature subscription
-                then
-                  syncSubscriptionList sender rest (Map.remove (subscriptionKey subscription) current) (Map.insert (subscriptionKey subscription) handle next)
-                else
-                  do Effect {
-                    _ <- handle.cancel
-                    replacement <- subscription match
-                      | SubscriptionEvery { key: _, millis, tag } =>
-                          startEverySubscription sender millis tag
-                      | SubscriptionSource { key: _, open, onError, onClosed } =>
-                          startSourceSubscription sender open onError onClosed
-                      | SubscriptionNone =>
-                          startPassiveSubscription
-                      | SubscriptionBatch _ =>
-                          startPassiveSubscription
-                    syncSubscriptionList sender rest (Map.remove (subscriptionKey subscription) current) (Map.insert (subscriptionKey subscription) replacement next)
+        subscription match
+          | SubscriptionEvery { key, millis, tag } =>
+              Map.get key current match
+                | None => do Effect {
+                    handle <- startEverySubscription sender millis tag
+                    syncSubscriptionList sender rest current (Map.insert key handle next)
                   }
+                | Some handle =>
+                    if handle.reusable && handle.signature == "every:{millis}"
+                      then
+                        syncSubscriptionList sender rest (Map.remove key current) (Map.insert key handle next)
+                      else
+                        do Effect {
+                          _ <- handle.cancel
+                          replacement <- startEverySubscription sender millis tag
+                          syncSubscriptionList sender rest (Map.remove key current) (Map.insert key replacement next)
+                        }
+          | SubscriptionSource { key, open, onError, onClosed } =>
+              Map.get key current match
+                | None => do Effect {
+                    handle <- startSourceSubscription sender open onError onClosed
+                    syncSubscriptionList sender rest current (Map.insert key handle next)
+                  }
+                | Some handle =>
+                    if handle.reusable && handle.signature == "source"
+                      then
+                        syncSubscriptionList sender rest (Map.remove key current) (Map.insert key handle next)
+                      else
+                        do Effect {
+                          _ <- handle.cancel
+                          replacement <- startSourceSubscription sender open onError onClosed
+                          syncSubscriptionList sender rest (Map.remove key current) (Map.insert key replacement next)
+                        }
+          | SubscriptionNone =>
+              syncSubscriptionList sender rest current next
+          | SubscriptionBatch nested =>
+              syncSubscriptionList sender [...flattenSubscriptions nested, ...rest] current next
+
+forwardGtkMessages : Sender msg -> Recv GtkSignalEvent -> (GtkSignalEvent -> Option msg) -> Effect GtkError Unit
+forwardGtkMessages = msgTx => signalRx => toMsgFn =>
+  concurrent.forEach signalRx (event =>
+    toMsgFn event match
+      | None     => pure Unit
+      | Some msg => concurrent.send msgTx msg
+  )
+
+runGtkAppLoop : Sender msg -> Recv msg -> AppId -> WindowId -> s -> WidgetId -> Map CommandKey HostedCommand -> Map SubscriptionKey HostedSubscription -> (s -> GtkNode) -> (s -> List (Subscription msg)) -> (AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)) -> Effect GtkError Unit
+runGtkAppLoop = msgTx => msgRx => appId => win => currentModel => currentRoot => currentCommands => currentSubscriptions => viewFn => subscriptionsFn => updateFn => do Effect {
+  result <- concurrent.recv msgRx
+  result match
+    | Err _ => pure Unit
+    | Ok msg => do Effect {
+        step <- updateFn appId win msg currentModel
+        nextCommands <- launchCommands msgTx (flattenCommands step.commands) currentCommands
+        if step.model == currentModel
+          then
+            runGtkAppLoop msgTx msgRx appId win currentModel currentRoot nextCommands currentSubscriptions viewFn subscriptionsFn updateFn
+          else
+            do Effect {
+              _ <- gtk4.reactiveCommit currentModel step.model
+              newView = viewFn step.model
+              newRoot <- reconcileNode currentRoot newView
+              _ <- if newRoot == currentRoot then pure Unit else windowSetChild win newRoot
+              nextSubscriptions <- syncSubscriptions msgTx (subscriptionsFn step.model) currentSubscriptions
+              runGtkAppLoop msgTx msgRx appId win step.model newRoot nextCommands nextSubscriptions viewFn subscriptionsFn updateFn
+            }
+      }
+}
 
 gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode
 gtkElement = tag attrs children => GtkElement tag attrs children
@@ -853,52 +858,10 @@ runGtkAppHost = config =>
     _ <- windowSetChild win root
     (msgTx, msgRx) <- concurrent.make Unit
     signalRx <- signalStream {}
-    _ <- concurrent.spawn (do Effect {
-      concurrent.forEach signalRx (event =>
-        toMsgFn event match
-          | None     => pure Unit
-          | Some msg => concurrent.send msgTx msg
-      )
-    })
+    _ <- concurrent.spawn (forwardGtkMessages msgTx signalRx toMsgFn)
     activeSubscriptions <- syncSubscriptions msgTx (subscriptionsFn config.model) emptyHostedSubscriptions
     _ <- windowPresent win
-    loop acc = {
-      st: config.model
-      rootId: root
-      commands: emptyHostedCommands
-      subscriptions: activeSubscriptions
-    } => {
-      result <- concurrent.recv msgRx
-      result match
-        | Err _ => pure Unit
-        | Ok msg => do Effect {
-            step <- updateFn appId win msg acc.st
-            if step.model == acc.st
-              then do Effect {
-                nextCommands <- launchCommands msgTx (flattenCommands step.commands) acc.commands
-                recurse {
-                  st: acc.st
-                  rootId: acc.rootId
-                  commands: nextCommands
-                  subscriptions: acc.subscriptions
-                }
-              }
-              else do Effect {
-                _ <- gtk4.reactiveCommit acc.st step.model
-                newView = viewFn step.model
-                newRoot <- reconcileNode acc.rootId newView
-                _ <- if newRoot == acc.rootId then pure Unit else windowSetChild win newRoot
-                nextSubscriptions <- syncSubscriptions msgTx (subscriptionsFn step.model) acc.subscriptions
-                nextCommands <- launchCommands msgTx (flattenCommands step.commands) acc.commands
-                recurse {
-                  st: step.model
-                  rootId: newRoot
-                  commands: nextCommands
-                  subscriptions: nextSubscriptions
-                }
-              }
-          }
-    }
+    runGtkAppLoop msgTx msgRx appId win config.model root emptyHostedCommands activeSubscriptions viewFn subscriptionsFn updateFn
   })
 
 gtkApp : {

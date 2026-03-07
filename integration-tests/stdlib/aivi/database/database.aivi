@@ -188,3 +188,112 @@ fts_helpers = do Effect {
   assertEq anyQuery.matchMode "any"
   assertEq allQuery.matchMode "all"
 }
+
+@test "insert convenience"
+insert_convenience = do Effect {
+  users0 = table "insert_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice" }
+  users2 <- insert users1 { id: 2, name: "Bob" }
+  rows   <- load users2
+  assertEq (List.length rows) 2
+}
+
+@test "insertOn convenience"
+insertOn_convenience = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "insertOn_users"[]
+  _      <- runMigrationsOn conn [users0]
+  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
+  rows   <- loadOn conn users1
+  _      <- close conn
+  assertEq (List.length rows) 1
+}
+
+@test "deleteWhere convenience"
+deleteWhere_convenience = do Effect {
+  users0 = table "deleteWhere_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice" }
+  users2 <- insert users1 { id: 2, name: "Bob" }
+  users3 <- deleteWhere users2 (u => u.id == 1)
+  rows   <- load users3
+  assertEq (List.length rows) 1
+  rows match
+    | [row] => assertEq row.name "Bob"
+    | _     => assert False
+}
+
+@test "deleteWhereOn convenience"
+deleteWhereOn_convenience = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "deleteWhereOn_users"[]
+  _      <- runMigrationsOn conn [users0]
+  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
+  users2 <- insertOn conn users1 { id: 2, name: "Bob" }
+  users3 <- deleteWhereOn conn users2 (u => u.id == 1)
+  rows   <- loadOn conn users3
+  _      <- close conn
+  assertEq (List.length rows) 1
+}
+
+@test "updateWhere convenience"
+updateWhere_convenience = do Effect {
+  users0 = table "updateWhere_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice" }
+  users2 <- updateWhere users1 (u => u.id == 1) (u => u <| { name: "Alicia" })
+  rows   <- load users2
+  rows match
+    | [row] => assertEq row.name "Alicia"
+    | _     => assert False
+}
+
+@test "updateWhereOn convenience"
+updateWhereOn_convenience = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "updateWhereOn_users"[]
+  _      <- runMigrationsOn conn [users0]
+  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
+  users2 <- updateWhereOn conn users1 (u => u.id == 1) (u => u <| { name: "Alicia" })
+  rows   <- loadOn conn users2
+  _      <- close conn
+  rows match
+    | [row] => assertEq row.name "Alicia"
+    | _     => assert False
+}
+
+@test "upsert convenience inserts when missing"
+upsert_convenience_inserts = do Effect {
+  users0 = table "upsert_ins_users"[]
+  users1 <- upsert users0 (u => u.id == 99) { id: 99, name: "New" } (u => u)
+  rows   <- load users1
+  assertEq (List.length rows) 1
+  rows match
+    | [row] => assertEq row.name "New"
+    | _     => assert False
+}
+
+@test "upsert convenience updates when present"
+upsert_convenience_updates = do Effect {
+  users0 = table "upsert_upd_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice" }
+  users2 <- upsert users1 (u => u.id == 1) { id: 1, name: "Alice" } (u => u <| { name: "Updated" })
+  rows   <- load users2
+  assertEq (List.length rows) 1
+  rows match
+    | [row] => assertEq row.name "Updated"
+    | _     => assert False
+}
+
+@test "upsertOn convenience"
+upsertOn_convenience = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "upsertOn_users"[]
+  _      <- runMigrationsOn conn [users0]
+  users1 <- upsertOn conn users0 (u => u.id == 1) { id: 1, name: "Alice" } (u => u <| { name: "Updated" })
+  users2 <- upsertOn conn users1 (u => u.id == 1) { id: 1, name: "Alice" } (u => u <| { name: "Updated" })
+  rows   <- loadOn conn users2
+  _      <- close conn
+  assertEq (List.length rows) 1
+  rows match
+    | [row] => assertEq row.name "Updated"
+    | _     => assert False
+}

@@ -506,5 +506,28 @@ pub(super) fn build_list_record() -> Value {
         }),
     );
 
+    fields.insert(
+        "sortBy".to_string(),
+        builtin("list.sortBy", 2, |mut args, runtime| {
+            let items = expect_list(args.pop().unwrap(), "List.sortBy")?;
+            let key_fn = expect_callable(args.pop().unwrap(), "List.sortBy")?;
+            let mut keyed: Vec<(KeyValue, Value)> = Vec::with_capacity(items.len());
+            for item in items.iter().cloned() {
+                let key_val = runtime.apply(key_fn.clone(), item.clone())?;
+                let key = KeyValue::try_from_value(&key_val).ok_or_else(|| {
+                    RuntimeError::Message(
+                        "List.sortBy key must be a comparable value (Int, Text, Bool, Float, \
+                         DateTime, Tuple, or Record of comparable values)"
+                            .to_string(),
+                    )
+                })?;
+                keyed.push((key, item));
+            }
+            keyed.sort_by(|a, b| a.0.cmp(&b.0));
+            let out = keyed.into_iter().map(|(_, v)| v).collect();
+            Ok(list_value(out))
+        }),
+    );
+
     Value::Record(Arc::new(fields))
 }

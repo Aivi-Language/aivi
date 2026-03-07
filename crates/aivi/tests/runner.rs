@@ -517,6 +517,7 @@ fn eval_order_and_tco_tests_execute_without_failures() {
     let files: Vec<PathBuf> = [
         "integration-tests/runtime/eval_order_args.aivi",
         "integration-tests/runtime/eval_order_record_fields.aivi",
+        "integration-tests/runtime/effectful_tuple_loop_state.aivi",
         "integration-tests/runtime/short_circuit_and_or.aivi",
         "integration-tests/runtime/tco_deep_recursion.aivi",
         "integration-tests/runtime/tco_mutual_recursion_deep.aivi",
