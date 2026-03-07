@@ -29,10 +29,10 @@ In practical terms, `@static` fixes data at build time. That gives you simpler d
 
 ```aivi
 @static
-schema = file.json "./schema.json"        -- bundled into the compiled program
+schema = file.json "./schema.json"        // bundled into the compiled program
 
 @static
-buildEnv = env.get "AIVI_BUILD_ENV"       -- resolved when compiling, not at runtime
+buildEnv = env.get "AIVI_BUILD_ENV"       // resolved when compiling, not at runtime
 ```
 
 Use this style when you want the compiled binary to carry the value directly.
@@ -56,13 +56,13 @@ use aivi.json
 
 @static
 userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json"  -- checked while compiling
+userSchema = file.json "./schemas/users.schema.json"  // checked while compiling
 
 usersSource : Source File (List User)
 usersSource =
   file.json {
     path: "./users.json",
-    schema: source.schema.json userSchema              -- runtime reads must match this contract
+    schema: source.schema.json userSchema              // runtime reads must match this contract
   }
 ```
 

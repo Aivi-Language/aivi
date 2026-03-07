@@ -41,10 +41,10 @@ User = { id: Int, name: Text, enabled: Bool }
 AppConfig = { port: Int, debug: Bool }
 
 usersSource : Source File (List User)
-usersSource = file.csv "./users.csv"      -- each CSV row decodes to User
+usersSource = file.csv "./users.csv"      // each CSV row decodes to User
 
 configSource : Source File AppConfig
-configSource = file.json "./config.json"  -- the JSON object decodes to AppConfig
+configSource = file.json "./config.json"  // the JSON object decodes to AppConfig
 
 do Effect {
   users <- load usersSource
@@ -59,7 +59,7 @@ This style keeps parsing rules close to the file boundary instead of spreading a
 
 ```aivi
 do Effect {
-  template <- load (file.read "./email-template.txt")  -- no decoding beyond Text
+  template <- load (file.read "./email-template.txt")  // no decoding beyond Text
   pure template
 }
 ```

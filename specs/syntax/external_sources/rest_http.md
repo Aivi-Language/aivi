@@ -39,7 +39,7 @@ Loading a REST or HTTP source requires `network.http` (or the broader `network` 
 User = { name: Text, age: Int, gender: Text }
 
 usersSource : Source RestApi (List User)
-usersSource = rest.get ~u(https://api.example.com/users)  -- decode the response body as a list of User
+usersSource = rest.get ~u(https://api.example.com/users)  // decode the response body as a list of User
 
 do Effect {
   users <- load usersSource
@@ -72,8 +72,8 @@ usersSource =
     body: None
     timeoutMs: Some 5_000
     retryCount: Some 2
-    bearerToken: Some apiToken       -- attach bearer auth at the request boundary
-    strictStatus: Some True          -- treat non-2xx responses as failures
+    bearerToken: Some apiToken       // attach bearer auth at the request boundary
+    strictStatus: Some True          // treat non-2xx responses as failures
   }
 ```
 

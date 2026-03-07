@@ -79,9 +79,9 @@ do Effect {
     host: "imap.gmail.com"
     user: "user@gmail.com"
     auth: OAuth2 myToken
-    mailbox: Some "INBOX"   -- read from the inbox
-    filter: Some "UNSEEN"   -- only unread messages
-    limit: Some 50          -- cap the batch size
+    mailbox: Some "INBOX"   // read from the inbox
+    filter: Some "UNSEEN"   // only unread messages
+    limit: Some 50          // cap the batch size
     port: None
     starttls: None
   })
@@ -125,7 +125,7 @@ processInbox = token => do Effect {
     limit: None
   }
   _ <- imapSelect "INBOX" session
-  result <- imapIdle 300 session         -- wait for mailbox changes for up to 300 seconds
+  result <- imapIdle 300 session         // wait for mailbox changes for up to 300 seconds
   messages <- result match
     | MailboxChanged => do Effect {
         uids <- imapSearch "UNSEEN" session

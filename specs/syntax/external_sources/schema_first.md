@@ -50,7 +50,7 @@ Conceptually, the declaration bundles:
 Illustratively:
 
 ```aivi
--- illustrative shape; exact runtime representation is not part of the public contract
+// illustrative shape; exact runtime representation is not part of the public contract
 SourceDecl K A = {
   config: ConnectorConfig K A,
   schema: SourceSchema A,
@@ -88,7 +88,7 @@ usersSource : Source File (List User)
 usersSource =
   file.json {
     path: "./users.json",
-    schema: source.schema.derive   -- the List User type drives the contract
+    schema: source.schema.derive   // the List User type drives the contract
   }
 ```
 
@@ -103,13 +103,13 @@ User = { id: Int, name: Text, enabled: Bool }
 
 @static
 userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json"  -- load the contract while compiling
+userSchema = file.json "./schemas/users.schema.json"  // load the contract while compiling
 
 usersSource : Source File (List User)
 usersSource =
   file.json {
     path: "./users.json",
-    schema: source.schema.json userSchema              -- require agreement with the declared type
+    schema: source.schema.json userSchema              // require agreement with the declared type
   }
 ```
 

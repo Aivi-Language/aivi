@@ -53,9 +53,9 @@ With that mental model in place, the surface syntax stays small.
 
 ```aivi
 with {
-  file.read = fixtureFiles,      -- Use fixture-backed file reads in this scope
-  process.env.read = fixtureEnv, -- Use deterministic environment values here
-  clock.now                      -- Keep the nearest outer/default clock.now interpreter
+  file.read = fixtureFiles,      // Use fixture-backed file reads in this scope
+  process.env.read = fixtureEnv, // Use deterministic environment values here
+  clock.now                      // Keep the nearest outer/default clock.now interpreter
 } in readBootConfig
 ```
 
