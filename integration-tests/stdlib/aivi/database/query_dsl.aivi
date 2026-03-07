@@ -140,3 +140,252 @@ do_query_let_binding = do Effect {
   _ <- close conn
   assertEq (List.length results) 3
 }
+
+@test "orderBy sorts rows ascending by key"
+order_by_sorts_ascending = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  _    <- runMigrationsOn conn [productTable]
+  _    <- seedProducts conn
+  rows <- runQueryOn conn (orderBy _.price (from productTable))
+  _    <- close conn
+  prices = List.map _.price rows
+  assertEq prices [10, 15, 20]
+}
+
+@test "orderBy sorts text field ascending"
+order_by_sorts_text = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  _    <- runMigrationsOn conn [productTable]
+  _    <- seedProducts conn
+  rows <- runQueryOn conn (orderBy _.name (from productTable))
+  _    <- close conn
+  names = List.map _.name rows
+  assertEq names ["Doohick", "Gadget", "Widget"]
+}
+
+@test "limit returns first n rows"
+limit_returns_first_n = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (limit 2 (from productTable))
+  _       <- close conn
+  assertEq (List.length results) 2
+}
+
+@test "limit 0 returns empty list"
+limit_zero_returns_empty = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (limit 0 (from productTable))
+  _       <- close conn
+  assertEq (List.length results) 0
+}
+
+@test "offset skips first n rows"
+offset_skips_first_n = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (offset 1 (from productTable))
+  _       <- close conn
+  assertEq (List.length results) 2
+}
+
+@test "offset beyond length returns empty"
+offset_beyond_length = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (offset 10 (from productTable))
+  _       <- close conn
+  assertEq (List.length results) 0
+}
+
+@test "orderBy then limit selects top n"
+order_by_then_limit = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  _    <- runMigrationsOn conn [productTable]
+  _    <- seedProducts conn
+  rows <- runQueryOn conn (limit 2 (orderBy _.price (from productTable)))
+  _    <- close conn
+  prices = List.map _.price rows
+  assertEq prices [10, 15]
+}
+
+@test "limit and offset for pagination"
+limit_and_offset_pagination = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (limit 1 (offset 1 (orderBy _.price (from productTable))))
+  _       <- close conn
+  prices = List.map _.price results
+  assertEq prices [15]
+}
+
+@test "do Query with orderBy"
+do_query_with_order_by = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  prices <- runQueryOn conn (do Query {
+      p      <- from productTable
+      guard_ p.active
+      orderBy _.price (queryOf p)
+  })
+  _ <- close conn
+  assertEq (List.length prices) 2
+}
+
+// ── count ──────────────────────────────────────────────────────────────────
+
+@test "count returns total number of rows"
+count_returns_row_count = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  result <- runQueryOn conn (count (from productTable))
+  _      <- close conn
+  assertEq result [3]
+}
+
+@test "count on filtered query returns filtered count"
+count_filtered = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  result <- runQueryOn conn (count (where_ _.active (from productTable)))
+  _      <- close conn
+  assertEq result [2]
+}
+
+@test "count on empty query returns zero"
+count_empty = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  result <- runQueryOn conn (count emptyQuery)
+  _      <- close conn
+  assertEq result [0]
+}
+
+activeProductsQ : Query Product
+activeProductsQ = do Query {
+  p <- from productTable
+  guard_ p.active
+  queryOf p
+}
+
+@test "count composes with do Query"
+count_do_query = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  result <- runQueryOn conn (count activeProductsQ)
+  _      <- close conn
+  assertEq result [2]
+}
+
+// ── exists ─────────────────────────────────────────────────────────────────
+
+@test "exists returns True when rows are present"
+exists_true_when_rows_present = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  result <- runQueryOn conn (exists (from productTable))
+  _      <- close conn
+  assertEq result [True]
+}
+
+@test "exists returns False on empty query"
+exists_false_when_empty = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  result <- runQueryOn conn (exists emptyQuery)
+  _      <- close conn
+  assertEq result [False]
+}
+
+expensiveProductsQ : Query Product
+expensiveProductsQ = where_ (p => p.price > 100) (from productTable)
+
+@test "exists returns False when filter matches nothing"
+exists_false_when_no_match = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  result <- runQueryOn conn (exists expensiveProductsQ)
+  _      <- close conn
+  assertEq result [False]
+}
+
+affordableProductsQ : Query Product
+affordableProductsQ = where_ (p => p.price > 10) (from productTable)
+
+@test "exists returns True when at least one row matches"
+exists_true_when_some_match = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable]
+  _      <- seedProducts conn
+  result <- runQueryOn conn (exists affordableProductsQ)
+  _      <- close conn
+  assertEq result [True]
+}
+
+// ── multi-table composition ────────────────────────────────────────────────
+
+Order = { id: Int, productId: Int, qty: Int }
+
+orderTable : Table Order
+orderTable = table "orders" [
+  { name: "id",        type: IntType, constraints: [AutoIncrement, NotNull], default: None }
+  { name: "productId", type: IntType, constraints: [NotNull],                default: None }
+  { name: "qty",       type: IntType, constraints: [NotNull],                default: None }
+]
+
+seedOrders : DbConnection -> Effect DbError Unit
+seedOrders = conn => do Effect {
+  _ <- applyDeltaOn conn orderTable (ins { id: 1, productId: 1, qty: 5 })
+  _ <- applyDeltaOn conn orderTable (ins { id: 2, productId: 3, qty: 2 })
+  pure Unit
+}
+
+activeOrdersQ : Query Order
+activeOrdersQ = do Query {
+  order   <- from orderTable
+  product <- from productTable
+  guard_ (order.productId == product.id)
+  guard_ product.active
+  queryOf order
+}
+
+inactiveOrdersQ : Query Order
+inactiveOrdersQ = do Query {
+  order   <- from orderTable
+  product <- from productTable
+  guard_ (order.productId == product.id)
+  guard_ (product.active == False)
+  queryOf order
+}
+
+@test "count orders for active products via cross-join"
+count_orders_for_active_products = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable, orderTable]
+  _      <- seedProducts conn
+  _      <- seedOrders conn
+  result <- runQueryOn conn (count activeOrdersQ)
+  _      <- close conn
+  assertEq result [2]
+}
+
+@test "exists for orders of inactive products is False"
+exists_orders_for_inactive_products = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable, orderTable]
+  _      <- seedProducts conn
+  _      <- seedOrders conn
+  result <- runQueryOn conn (exists inactiveOrdersQ)
+  _      <- close conn
+  assertEq result [False]
+}

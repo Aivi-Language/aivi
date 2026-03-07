@@ -21,8 +21,13 @@ export savepoint, releaseSavepoint, rollbackToSavepoint
 export savepointOn, releaseSavepointOn, rollbackToSavepointOn
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export ins, upd, del, ups
+export insert, insertOn
+export deleteWhere, deleteWhereOn
+export updateWhere, updateWhereOn
+export upsert, upsertOn
 export domain Database
 export Query, queryOf, queryChain, emptyQuery, from, where_, guard_, select, runQueryOn
+export orderBy, limit, offset, count, exists
 
 use aivi
 use aivi.list (length, reverse)
@@ -146,6 +151,38 @@ select = f q => { run: conn => do Effect {
 
 runQueryOn : DbConnection -> Query A -> Effect DbError (List A)
 runQueryOn = conn q => q.run conn
+
+orderBy : (A -> B) -> Query A -> Query A
+orderBy = key q => { run: conn => do Effect {
+  xs <- q.run conn
+  pure (List.sortBy key xs)
+}}
+
+limit : Int -> Query A -> Query A
+limit = n q => { run: conn => do Effect {
+  xs <- q.run conn
+  pure (List.take n xs)
+}}
+
+offset : Int -> Query A -> Query A
+offset = n q => { run: conn => do Effect {
+  xs <- q.run conn
+  pure (List.drop n xs)
+}}
+
+count : Query A -> Query Int
+count = q => { run: conn => do Effect {
+  xs <- q.run conn
+  pure [List.length xs]
+}}
+
+exists : Query A -> Query Bool
+exists = q => { run: conn => do Effect {
+  xs <- q.run conn
+  xs match
+    | [] => pure [False]
+    | _  => pure [True]
+}}
 
 configure : DbConfig -> Effect DbError Unit
 configure = config => database.configure config
@@ -346,6 +383,30 @@ del = pred => Delete pred
 
 ups : Pred A -> A -> Patch A -> Delta A
 ups = pred value patchFn => Upsert pred value patchFn
+
+insert : Table A -> A -> Effect DbError (Table A)
+insert = table value => applyDelta table (ins value)
+
+insertOn : DbConnection -> Table A -> A -> Effect DbError (Table A)
+insertOn = conn table value => applyDeltaOn conn table (ins value)
+
+deleteWhere : Table A -> (A -> Bool) -> Effect DbError (Table A)
+deleteWhere = table pred => applyDelta table (del pred)
+
+deleteWhereOn : DbConnection -> Table A -> (A -> Bool) -> Effect DbError (Table A)
+deleteWhereOn = conn table pred => applyDeltaOn conn table (del pred)
+
+updateWhere : Table A -> (A -> Bool) -> Patch A -> Effect DbError (Table A)
+updateWhere = table pred patchFn => applyDelta table (upd pred patchFn)
+
+updateWhereOn : DbConnection -> Table A -> (A -> Bool) -> Patch A -> Effect DbError (Table A)
+updateWhereOn = conn table pred patchFn => applyDeltaOn conn table (upd pred patchFn)
+
+upsert : Table A -> (A -> Bool) -> A -> Patch A -> Effect DbError (Table A)
+upsert = table pred value patchFn => applyDelta table (ups pred value patchFn)
+
+upsertOn : DbConnection -> Table A -> (A -> Bool) -> A -> Patch A -> Effect DbError (Table A)
+upsertOn = conn table pred value patchFn => applyDeltaOn conn table (ups pred value patchFn)
 
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)
