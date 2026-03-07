@@ -324,9 +324,9 @@ Apps should model progress explicitly in `Msg` and `Model`, just like any other 
 
 `onStart` is not a second steady-state update loop. Repeating timers, ongoing background feeds, and normal application work should still live in subscriptions or commands.
 
-### `gtkAppFull`
+### Advanced window setup
 
-For unusual window flags or older code that still needs `AppId` or `WindowId` inside `update`, `gtkAppFull` is still available. For new app code, prefer `gtkApp` so the architecture stays consistent.
+`gtkApp` is the only high-level host API. When an app needs extra one-time window configuration such as `windowSetDecorated` or `windowSetHideOnClose`, do that work in `onStart`.
 
 ## Relation to lower-level primitives
 

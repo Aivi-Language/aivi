@@ -400,13 +400,13 @@ The helper surface includes:
 - command helpers: `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`
 - subscription helpers: `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, `subscriptionSource`
 - reactive helper: `computed`
-- compatibility helpers: `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`, `liftAppUpdateFull`
+- compatibility helpers: `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`
 
 `commandPerform` and `subscriptionSource` operate on `Msg` directly today (`run : Effect GtkError msg`, `open : Resource GtkError (Recv msg)`), which keeps many ordinary apps straightforward to write.
 
 `onStart` is the right place for one-time setup such as app CSS or action registration. Repeating timers, ongoing background work, and external feeds belong in commands or subscriptions.
 
-For unusual window flags such as `decorated` or `hideOnClose`, or for older code that still needs `AppId` or `WindowId` inside `update`, `gtkAppFull` remains available. For new code, start with `gtkApp`.
+For unusual window flags such as `decorated` or `hideOnClose`, keep `gtkApp` as the host and apply those settings from `onStart` with lower-level helpers such as `windowSetDecorated` and `windowSetHideOnClose`. If you need a fully custom lifecycle, use `signalStream`, `buildFromNode`, and `reconcileNode` directly rather than reaching for a second host API.
 
 ## `reconcileNode` — patching a live widget tree
 
@@ -490,9 +490,3 @@ For non-canvas widgets, use the same model/update approach but call setters such
 ## Compatibility with typed style data
 
 `widgetSetCss` and `appSetCss` accept AIVI style records (`{ ... }`), so data from `aivi.ui` and `aivi.ui.layout` can be reused when styling GTK widgets or an entire app.
-
-## Lucide SVG workflow (GNOME GTK4 target)
-
-For production packaging, prefer `imageNewFromResource` and `imageSetResource` with compiled GResources such as `/com/example/YourApp/icons/lucide/home.svg`, and register the `.gresource` bundle before loading images.
-
-`imageNewFromFile` and `imageSetFile` are still useful for local prototyping from disk paths.

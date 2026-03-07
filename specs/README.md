@@ -57,6 +57,10 @@ If you are reading the spec in a browser, start with **[Language at a Glance](la
 - [Effect Handlers](syntax/effect_handlers.md)
 - [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
+#### State Machines
+- [Overview](syntax/state_machines.md)
+- [Machine Syntax](syntax/machines.md)
+- [Machine Runtime](syntax/machines_runtime.md)
 #### Modules & Interop
 - [Modules](syntax/modules.md)
 - [External Sources](syntax/external_sources.md)
@@ -79,11 +83,6 @@ If you are reading the spec in a browser, start with **[Language at a Glance](la
 #### Syntax Details
 - [Operators & Context](syntax/operators.md)
 - [Grammar Reference](syntax/grammar.md)
-
-### State Machines
-- [Overview](syntax/state_machines.md)
-- [Machine Syntax](syntax/machines.md)
-- [Machine Runtime](syntax/machines_runtime.md)
 
 ### Standard Library
 #### Core
