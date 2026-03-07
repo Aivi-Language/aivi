@@ -116,8 +116,8 @@ Use `db.connect` / `db.close` as the pool's acquire/release functions when you w
 ## Notes
 
 - In v0.1, `Query A` executes **in memory**: `db.from tbl` loads all rows from the store, then predicates and projections run in the AIVI runtime.  SQL pushdown is not yet implemented.
-- Advanced SQL strings remain available via the external-source `db.query` mechanism described in [External Sources](../../syntax/external_sources.md).
-- `db.applyDelta` / `db.applyDeltas` do compile predicates to `WHERE` and patches to `SET` for the underlying store, but `do Query` predicates do not yet benefit from this.
+- Raw SQL strings via an external-source `db.query` mechanism are **not part of v0.1**; use `db.from` / `do Query` for typed in-memory queries instead.
+- `db.applyDelta` / `db.applyDeltas` run predicates and patches **in memory** (in the AIVI runtime) — they do not compile to SQL `WHERE` / `SET` clauses in v0.1.
 - Transactions are scoped to a single `DbConnection`. `db.beginTxOn conn` never affects any other connection in the same pool.
 - The ambient helpers (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.savepoint`, ...) are compatibility sugar over the current default connection selected by `db.configure`.
 - Nested `beginTxOn` calls are not part of the transaction model; use savepoints for inner rollback boundaries.
