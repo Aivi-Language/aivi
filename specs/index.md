@@ -104,6 +104,7 @@ Use the table of contents as a map:
 - [Grammar Reference](syntax/grammar)
 
 ### Build Native Apps
+#### Getting Started
 - [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps)
 - [App Architecture](stdlib/ui/app_architecture)
 - [GTK & libadwaita Runtime](stdlib/ui/gtk4)
