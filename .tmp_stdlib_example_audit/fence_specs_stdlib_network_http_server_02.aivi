@@ -1,7 +1,0 @@
-use aivi.net.httpServer
-
-echoSocket = socket => do Effect {
-  message <- wsRecv socket
-  wsSend socket message
-  wsClose socket
-}

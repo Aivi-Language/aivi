@@ -1,4 +1,5 @@
-@no_prelude module core.primitives
+@no_prelude
+module core.primitives
 
 // Nothing from the prelude is in scope here.
 // You must import everything explicitly.

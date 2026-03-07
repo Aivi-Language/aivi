@@ -166,10 +166,10 @@ This section is the bridge between raw text and other value types.
 When you are parsing user input, the usual flow is: clean the text, parse it, then decide what to do with `None`.
 
 ```aivi
-rawPort = " 8080 "
+rawPort     = " 8080 "
 trimmedPort = trim rawPort
-maybePort = parseInt trimmedPort
-port = maybePort ?? 3000
+maybePort   = parseInt trimmedPort
+port        = maybePort ?? 3000
 ```
 
 ## Usage examples

@@ -1,4 +1,5 @@
-@test module order_tests
+@test
+module order_tests
 
 @test "addition is commutative"
 addCommutative = do Effect {

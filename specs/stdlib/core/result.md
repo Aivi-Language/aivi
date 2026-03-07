@@ -77,8 +77,8 @@ A useful mental model:
 Breaking a `Result` workflow into named steps usually reads better than deeply nested calls:
 
 ```aivi
-rawConfig = readConfigFile "app.toml"
-parsedConfig = flatMap parseConfig rawConfig
+rawConfig     = readConfigFile "app.toml"
+parsedConfig  = flatMap parseConfig rawConfig
 checkedConfig = flatMap validateConfig parsedConfig
 ```
 
@@ -89,7 +89,7 @@ Each binding answers one question: did the previous step succeed, and if so, wha
 `mapErr` is especially useful when the low-level error is technically correct but still needs domain context:
 
 ```aivi
-portResult = parsePort text
+portResult   = parsePort text
 configResult = mapErr (err => ConfigError "PORT" err) portResult
 ```
 

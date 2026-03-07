@@ -1,2 +1,0 @@
-{ name: "Accept", value: "application/json" }
-{ name: "Authorization", value: "Bearer <token>" }

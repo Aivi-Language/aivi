@@ -57,8 +57,8 @@ runActiveUserNamesDefault = do Effect {
 cheapActiveNames : Query Text
 cheapActiveNames =
   db.from userTable
-  |> db.where_ _.active
-  |> db.select _.name
+|> db.where_ _.active
+|> db.select _.name
 
 // Sorting and paging — all run in memory in v0.1 (no SQL pushdown yet)
 // orderBy : (A -> B) -> Query A -> Query A
@@ -67,11 +67,11 @@ cheapActiveNames =
 recentActiveNames : Query Text
 recentActiveNames =
   db.from userTable
-  |> db.where_ _.active
-  |> db.orderBy _.createdAt   -- sort ascending by creation time (in memory)
-  |> db.offset 10             -- skip the first 10 rows
-  |> db.limit 5               -- then take at most 5
-  |> db.select _.name
+|> db.where_ _.active
+|> db.orderBy _.createdAt // sort ascending by creation time (in memory)
+|> db.offset 10 // skip the first 10 rows
+|> db.limit 5 // then take at most 5
+|> db.select _.name
 
 runRecentActiveNames : Effect DbError (List Text)
 runRecentActiveNames = do Effect {
@@ -99,7 +99,7 @@ orderTable = db.table "orders" [
 
 activeUserOrders : Query { user: User, order: Order }
 activeUserOrders = do Query {
-  user  <- db.from userTable
+  user <- db.from userTable
   db.guard_ user.active
   order <- db.from orderTable
   db.guard_ (order.userId == user.id)
@@ -123,9 +123,9 @@ countActive = db.count (db.from userTable |> db.where_ _.active)
 
 activeCount : Effect DbError Int
 activeCount = do Effect {
-  conn  <- db.connect dbDefault
-  [n]   <- db.runQueryOn conn countActive
-  _     <- db.close conn
+  conn <- db.connect dbDefault
+  [n]  <- db.runQueryOn conn countActive
+  _    <- db.close conn
   pure n
 }
 
@@ -134,8 +134,8 @@ anyActive = db.exists (db.from userTable |> db.where_ _.active)
 
 hasActiveUsers : Effect DbError Bool
 hasActiveUsers = do Effect {
-  conn <- db.connect dbDefault
+  conn    <- db.connect dbDefault
   [found] <- db.runQueryOn conn anyActive
-  _    <- db.close conn
+  _       <- db.close conn
   pure found
 }

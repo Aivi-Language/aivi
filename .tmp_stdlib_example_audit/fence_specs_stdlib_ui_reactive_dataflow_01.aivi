@@ -1,9 +1,0 @@
-visibleProjects = model =>
-  model.projects
-    |> filter (matchesQuery model.searchQuery)
-    |> filter (matchesTags model.selectedTags)
-
-resultsSummary = model =>
-  if model.loading
-    then "Searching..."
-    else "Showing {length (visibleProjects model)} projects"

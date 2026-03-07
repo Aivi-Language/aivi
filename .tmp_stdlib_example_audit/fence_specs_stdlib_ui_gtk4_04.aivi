@@ -1,4 +1,0 @@
-// Equivalent to: { navRailNode model.appState.activeSection "sidebar" }
-~<gtk>
-  <NavRailNode model.appState.activeSection "sidebar" />
-</gtk>

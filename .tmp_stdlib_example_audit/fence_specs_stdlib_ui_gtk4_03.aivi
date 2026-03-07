@@ -1,7 +1,0 @@
-// Equivalent verbose form.
-~<gtk>
-  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-    <object class="AdwActionRow" props={{ title: "Save AI Settings" }} />
-    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
-  </object>
-</gtk>

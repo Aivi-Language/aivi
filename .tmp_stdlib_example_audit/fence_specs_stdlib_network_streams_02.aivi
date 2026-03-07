@@ -1,5 +1,0 @@
-use aivi.net.streams
-
-prepareInput = connection =>
-  fromSocket connection
-    |> chunks 1024 // emit blocks of up to 1024 bytes

@@ -1,7 +1,0 @@
-settingsView : GtkNode
-settingsView =
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="12" marginTop="16">
-      <GtkLabel label="Settings" />
-    </GtkBox>
-  </gtk>

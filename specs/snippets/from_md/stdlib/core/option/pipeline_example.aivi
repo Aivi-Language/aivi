@@ -1,11 +1,10 @@
 use aivi.option
 
 // Complete pipeline: find user, get email, validate format
-processUser = userId => {
+processUser = userId =>
   users
-  |> find (_.id == userId)
-  |> flatMap (_.email)
-  |> filter (text.contains "@")
-  |> map text.toLower
-  |> getOrElse "no-email@example.com"
-}
+|> find (_.id == userId)
+|> flatMap (_.email)
+|> filter (text.contains "@")
+|> map text.toLower
+|> getOrElse "no-email@example.com"
