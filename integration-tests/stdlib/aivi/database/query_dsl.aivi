@@ -1,0 +1,142 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.queryDsl
+
+use aivi
+use aivi.testing
+use aivi.database
+
+// ── shared schema ──────────────────────────────────────────────────────────
+
+Product = { id: Int, name: Text, price: Int, active: Bool }
+
+productTable : Table Product
+productTable = table "products" [
+  { name: "id",     type: IntType,    constraints: [AutoIncrement, NotNull], default: None }
+  { name: "name",   type: Varchar 80, constraints: [NotNull],                default: None }
+  { name: "price",  type: IntType,    constraints: [NotNull],                default: None }
+  { name: "active", type: BoolType,   constraints: [NotNull],                default: Some (DefaultBool True) }
+]
+
+seedProducts : DbConnection -> Effect DbError Unit
+seedProducts = conn => do Effect {
+  _ <- applyDeltaOn conn productTable (ins { id: 1, name: "Widget",  price: 10, active: True  })
+  _ <- applyDeltaOn conn productTable (ins { id: 2, name: "Gadget",  price: 20, active: False })
+  _ <- applyDeltaOn conn productTable (ins { id: 3, name: "Doohick", price: 15, active: True  })
+  pure Unit
+}
+
+// ── tests ──────────────────────────────────────────────────────────────────
+
+@test "from loads all rows"
+from_loads_all_rows = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (from productTable)
+  _       <- close conn
+  assertEq (List.length results) 3
+}
+
+@test "where_ filters rows"
+where_filters_rows = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (where_ (_.active) (from productTable))
+  _       <- close conn
+  assertEq (List.length results) 2
+}
+
+@test "select projects rows"
+select_projects_rows = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- runMigrationsOn conn [productTable]
+  _     <- seedProducts conn
+  names <- runQueryOn conn (select _.name (from productTable))
+  _     <- close conn
+  assertEq (List.length names) 3
+}
+
+@test "do Query from single bind"
+do_query_from_single_bind = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (do Query {
+    p <- from productTable
+    queryOf p
+  })
+  _       <- close conn
+  assertEq (List.length results) 3
+}
+
+@test "do Query with guard_ filters"
+do_query_guard_filters = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (do Query {
+    p <- from productTable
+    guard_ p.active
+    queryOf p
+  })
+  _       <- close conn
+  assertEq (List.length results) 2
+}
+
+@test "do Query projects field"
+do_query_projects_field = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- runMigrationsOn conn [productTable]
+  _     <- seedProducts conn
+  names <- runQueryOn conn (do Query {
+    p <- from productTable
+    queryOf p.name
+  })
+  _     <- close conn
+  assertEq (List.length names) 3
+}
+
+@test "do Query guard_ and project"
+do_query_guard_and_project = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- runMigrationsOn conn [productTable]
+  _     <- seedProducts conn
+  names <- runQueryOn conn (do Query {
+    p <- from productTable
+    guard_ p.active
+    queryOf p.name
+  })
+  _     <- close conn
+  assertEq (List.length names) 2
+}
+
+@test "emptyQuery returns empty list"
+empty_query_returns_empty = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  results <- runQueryOn conn emptyQuery
+  _       <- close conn
+  assertEq (List.length results) 0
+}
+
+@test "queryOf wraps single value"
+query_of_wraps_single_value = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  results <- runQueryOn conn (queryOf 42)
+  _       <- close conn
+  assertEq results [42]
+}
+
+@test "do Query let binding"
+do_query_let_binding = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [productTable]
+  _       <- seedProducts conn
+  results <- runQueryOn conn (do Query {
+    p       <- from productTable
+    doubled = p.price * 2
+    queryOf doubled
+  })
+  _       <- close conn
+  assertEq (List.length results) 3
+}
