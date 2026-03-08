@@ -255,7 +255,7 @@ mod tests {
         let formatted = format_text(text);
         assert_eq!(
             formatted,
-            "module demo\n\nx = ~<html>\n      <div class=\"card\">\n        <span>\n          ok\n        </span>\n      </div>\n    </html>\n"
+            "module demo\n\nx = ~<html>\n  <div class=\"card\">\n    <span>\n      ok\n    </span>\n  </div>\n</html>\n"
         );
     }
 
@@ -264,7 +264,7 @@ mod tests {
         let text = "module demo\n\nx=~<gtk><object a=\"1\" b=\"2\" c=\"3\" d=\"4\"><child><object class=\"GtkLabel\"/></child></object></gtk>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("<object a=\"1\" b=\"2\" c=\"3\" d=\"4\">"));
-        assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+        assert!(formatted.contains("\n      <object class=\"GtkLabel\" />\n"));
     }
 
     #[test]
@@ -272,8 +272,8 @@ mod tests {
         let text = "module demo\n\nx=~<gtk><object a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\"><child><object class=\"GtkLabel\"/></child></object></gtk>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("<object a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\">"));
-        assert!(formatted.contains("\n        <child>\n"));
-        assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+        assert!(formatted.contains("\n    <child>\n"));
+        assert!(formatted.contains("\n      <object class=\"GtkLabel\" />\n"));
     }
 
     #[test]
@@ -281,9 +281,9 @@ mod tests {
         let text =
             "module demo\n\nx=~<gtk><object\n  a=\"1\"\n  b=\"2\"\n  c=\"3\"></object></gtk>\n";
         let formatted = format_text(text);
-        assert!(formatted.contains("\n      <object\n"));
-        assert!(formatted.contains("\n        a=\"1\"\n"));
-        assert!(formatted.contains("\n        c=\"3\">\n"));
+        assert!(formatted.contains("\n  <object\n"));
+        assert!(formatted.contains("\n    a=\"1\"\n"));
+        assert!(formatted.contains("\n    c=\"3\">\n"));
     }
 
     #[test]
@@ -294,7 +294,7 @@ mod tests {
             formatted
                 .contains("<object class=\"GtkBox\" props={{ orientation: \"vertical\", spacing: 0, marginStart: 8 }}>")
         );
-        assert!(!formatted.contains("\n        orientation: \"vertical\",\n"));
+        assert!(!formatted.contains("\n    orientation: \"vertical\",\n"));
     }
 
     #[test]
@@ -302,12 +302,12 @@ mod tests {
         let text = "module demo\n\nx=~<gtk><object class=\"GtkBox\" props={ { orientation: \"vertical\", spacing: 0, marginStart: 8, marginEnd: 8, marginBottom: 8 } }></object></gtk>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("<object class=\"GtkBox\" props={{\n"));
-        assert!(formatted.contains("\n        orientation: \"vertical\",\n"));
-        assert!(formatted.contains("\n        spacing: 0,\n"));
-        assert!(formatted.contains("\n        marginStart: 8,\n"));
-        assert!(formatted.contains("\n        marginEnd: 8,\n"));
-        assert!(formatted.contains("\n        marginBottom: 8\n"));
-        assert!(formatted.contains("\n      }}>\n"));
+        assert!(formatted.contains("\n    orientation: \"vertical\",\n"));
+        assert!(formatted.contains("\n    spacing: 0,\n"));
+        assert!(formatted.contains("\n    marginStart: 8,\n"));
+        assert!(formatted.contains("\n    marginEnd: 8,\n"));
+        assert!(formatted.contains("\n    marginBottom: 8\n"));
+        assert!(formatted.contains("\n  }}>\n"));
     }
 
     #[test]
@@ -316,11 +316,11 @@ mod tests {
             "module demo\n\nx=~<html><div props={ { a: 1, b: 2, c: 3, d: 4 } }></div></html>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("<div props={{\n"));
-        assert!(formatted.contains("\n        a: 1,\n"));
-        assert!(formatted.contains("\n        b: 2,\n"));
-        assert!(formatted.contains("\n        c: 3,\n"));
-        assert!(formatted.contains("\n        d: 4\n"));
-        assert!(formatted.contains("\n      }}>\n"));
+        assert!(formatted.contains("\n    a: 1,\n"));
+        assert!(formatted.contains("\n    b: 2,\n"));
+        assert!(formatted.contains("\n    c: 3,\n"));
+        assert!(formatted.contains("\n    d: 4\n"));
+        assert!(formatted.contains("\n  }}>\n"));
     }
 
     #[test]

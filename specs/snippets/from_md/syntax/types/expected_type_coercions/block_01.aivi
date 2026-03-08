@@ -2,7 +2,9 @@ use aivi.ui
 
 count = 3
 
-view =
-  ~<html>
-    <p>Open tabs: { count }</p>
-  </html>
+view = ~<html>
+         <p>
+           Open tabs:
+           { count }
+         </p>
+       </html>

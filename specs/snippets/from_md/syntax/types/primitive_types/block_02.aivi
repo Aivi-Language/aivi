@@ -1,2 +1,1 @@
-DateTime Decimal BigInt
-Date TimeZone ZonedDateTime
+DateTime Decimal BigInt Date TimeZone ZonedDateTime

@@ -8,6 +8,7 @@ mod runtime_helpers;
 pub(crate) mod use_analysis;
 
 pub use compile::compile_to_object;
+pub use compile::evaluate_binding_jit;
 pub use compile::run_cranelift_jit;
 pub(crate) use compile::run_cranelift_jit_cancellable;
 pub use compile::run_test_suite_jit;

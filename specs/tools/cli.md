@@ -338,7 +338,7 @@ aivi repl [--color] [--no-color] [--plain]
 - `--no-color`: disable ANSI color output.
 - `--plain`: plain read-eval-print mode — no TUI, pipe-friendly. Automatically selected when stdin is not a terminal.
 
-With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and all stdlib symbols are immediately in scope.
+With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and all stdlib symbols are immediately in scope. Successful expression inputs are compiled and evaluated, so the transcript shows `value :: Type` instead of only a type summary.
 
 **Keyboard shortcuts (TUI mode)**
 

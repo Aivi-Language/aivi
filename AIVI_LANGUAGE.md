@@ -1702,6 +1702,7 @@ aivi repl --no-color # disable ANSI colour
 **Inside the session**
 
 - Type any AIVI expression or definition and press Enter to evaluate.
+- Successful expressions show their runtime value together with the inferred type, for example `4 :: Int`.
 - Use Shift+Enter for multi-line input; Ctrl+D (on empty input) to exit.
 - Ctrl+L clears the transcript. When you start with `/`, the TUI suggests matching slash commands; use `↑` / `↓` to move, `Tab` to accept, or let Tab toggle the symbol pane when no suggestion is shown.
 

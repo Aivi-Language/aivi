@@ -17,8 +17,8 @@ use crate::runtime::json_schema::cg_type_to_json_schema;
 use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel,
-    collect_surface_constructor_ordinals, register_machines_for_jit, run_main_effect, CancelToken,
-    Runtime, RuntimeError,
+    collect_surface_constructor_ordinals, format_runtime_error, format_value,
+    register_machines_for_jit, run_main_effect, CancelToken, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
@@ -529,6 +529,56 @@ pub fn run_cranelift_jit(
         );
     }
     run_main_effect(&mut runtime)
+}
+
+/// JIT-compile a program and return the formatted runtime value of one binding.
+pub fn evaluate_binding_jit(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
+    surface_modules: &[crate::surface::Module],
+    binding_name: &str,
+) -> Result<String, AiviError> {
+    let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
+    if !crate_natives.is_empty() {
+        let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
+        return Err(AiviError::Codegen(format!(
+            "E1527: crate-native binding(s) {} require `aivi build` (AOT). \
+             They cannot run in JIT mode (`aivi run`).",
+            names.join(", ")
+        )));
+    }
+
+    let mut runtime = build_runtime_from_program(&program)?;
+    {
+        let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
+        if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
+            ctx.merge_constructor_ordinals(surface_ordinals);
+        }
+    }
+    let _module = jit_compile_into_runtime(
+        program,
+        cg_types,
+        monomorph_plan,
+        source_schemas,
+        &mut runtime,
+    )?;
+    register_machines_for_jit(&runtime, surface_modules);
+    runtime.jit_pending_error = None;
+
+    let value =
+        runtime.ctx.globals.get(binding_name).ok_or_else(|| {
+            AiviError::Runtime(format!("missing evaluated binding `{binding_name}`"))
+        })?;
+    let value = runtime
+        .force_value(value)
+        .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+    if let Some(err) = runtime.jit_pending_error.take() {
+        return Err(AiviError::Runtime(format_runtime_error(err)));
+    }
+
+    Ok(format_value(&value))
 }
 
 /// Like [`run_cranelift_jit`] but accepts an external cancel token so the
