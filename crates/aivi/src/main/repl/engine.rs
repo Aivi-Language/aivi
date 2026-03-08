@@ -8,9 +8,9 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use aivi::{
-    check_modules, check_types, embedded_stdlib_modules, file_diagnostics_have_errors,
-    infer_value_types_full, parse_modules, render_diagnostics, AiviError, FileDiagnostic, Module,
-    ModuleItem,
+    check_modules, check_types, desugar_modules, embedded_stdlib_modules, evaluate_binding_jit,
+    file_diagnostics_have_errors, infer_value_types_full, parse_modules, render_diagnostics,
+    AiviError, FileDiagnostic, Module, ModuleItem,
 };
 
 use super::{ColorMode, ReplOptions, SymbolPane};
@@ -667,11 +667,21 @@ Command Reference
                     .get("_replResult")
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
-                // Expression result value: we can't JIT-eval yet, so show type annotation.
-                self.transcript.push(TranscriptEntry {
-                    kind: TranscriptKind::ValueResult,
-                    text: format!("… :: {result_type}"),
-                });
+                let program = desugar_modules(&all_modules);
+                match evaluate_binding_jit(
+                    program,
+                    infer.cg_types,
+                    infer.monomorph_plan,
+                    infer.source_schemas,
+                    &all_modules,
+                    "_replResult",
+                ) {
+                    Ok(value_text) => self.transcript.push(TranscriptEntry {
+                        kind: TranscriptKind::ValueResult,
+                        text: format!("{value_text} :: {result_type}"),
+                    }),
+                    Err(err) => self.push_error(err.to_string()),
+                }
             }
         }
     }
@@ -1365,6 +1375,25 @@ mod tests {
             "expected 'x' in symbols, got: {:?}",
             snap.symbols.iter().map(|e| &e.name).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn expression_submit_shows_runtime_value_and_type() {
+        let mut engine = make_engine();
+        let snap = engine.submit("(Some 2 |> map (_ + 2)) ?? 0").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "4 :: Int"
+        }));
+    }
+
+    #[test]
+    fn expression_submit_can_use_prior_definitions() {
+        let mut engine = make_engine();
+        engine.submit("x = 41").unwrap();
+        let snap = engine.submit("x + 1").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "42 :: Int"
+        }));
     }
 
     #[test]

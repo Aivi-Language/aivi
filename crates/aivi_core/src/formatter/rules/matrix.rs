@@ -338,7 +338,6 @@ fn format_tokens_with_matrix(
         if t.kind == "sigil" {
             if let Some(markup_lines) = format_markup_sigil(&t.text) {
                 if !markup_lines.is_empty() {
-                    let row_start_col = current_col;
                     out.push_str(&markup_lines[0]);
                     advance_column(&mut current_col, &markup_lines[0]);
                     for line in markup_lines.iter().skip(1) {
@@ -346,9 +345,6 @@ fn format_tokens_with_matrix(
                         advance_column(&mut current_col, "\n");
                         out.push_str(base_indent);
                         advance_column(&mut current_col, base_indent);
-                        let pad = " ".repeat(row_start_col);
-                        out.push_str(&pad);
-                        advance_column(&mut current_col, &pad);
                         out.push_str(line);
                         advance_column(&mut current_col, line);
                     }

@@ -128,9 +128,9 @@ pub use aivi_mcp::{
 };
 use cranelift_backend::run_cranelift_jit_cancellable;
 pub use cranelift_backend::{
-    compile_to_object, destroy_aot_runtime, init_aot_runtime, init_aot_runtime_base,
-    register_crate_natives_on_ctx, run_cranelift_jit, run_test_suite_jit, CrateNativeRegistrar,
-    CrateNativeValue,
+    compile_to_object, destroy_aot_runtime, evaluate_binding_jit, init_aot_runtime,
+    init_aot_runtime_base, register_crate_natives_on_ctx, run_cranelift_jit, run_test_suite_jit,
+    CrateNativeRegistrar, CrateNativeValue,
 };
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
