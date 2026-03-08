@@ -1,5 +1,4 @@
 projectNames : Model -> List Text
-projectNames =
-  signal (model =>
-    model.projects |> map (project => project.name)
-  )
+projectNames = signal (model =>
+  model.projects |> map (project => project.name)
+)

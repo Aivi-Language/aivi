@@ -549,8 +549,14 @@
 
             // Binding `=` alignment groups: consecutive lines with top-level `=` at the
             // same indentation level, unbroken by blank/degraded lines.
-            if find_top_level_token(&lines[i].tokens, "=", first_idx).is_some() {
+            // Don't start a group from a `mock` or `in` line (they have their own indentation rules).
+            if lines[i].tokens[first_idx].text != "mock"
+                && lines[i].tokens[first_idx].text != "in"
+                && find_top_level_token(&lines[i].tokens, "mock", first_idx).is_none()
+                && find_top_level_token(&lines[i].tokens, "=", first_idx).is_some()
+            {
                 let this_indent = lines[i].indent_len;
+                let starting_is_mock = lines[i].tokens[first_idx].text == "mock";
                 let mut j = i;
                 let mut max_lhs = 0usize;
                 while j < lines.len() {
@@ -564,6 +570,13 @@
                         Some(v) => v,
                         None => break,
                     };
+                    // Break alignment group at mock/in keyword boundaries.
+                    let starts_mock = lines[j].tokens[first_idx_j].text == "mock";
+                    let starts_in = lines[j].tokens[first_idx_j].text == "in";
+                    let has_mock = find_top_level_token(&lines[j].tokens, "mock", first_idx_j).is_some();
+                    if starts_in || starts_mock != starting_is_mock || has_mock {
+                        break;
+                    }
                     let Some(eq_idx) =
                         find_top_level_token(&lines[j].tokens, "=", first_idx_j)
                     else {
@@ -650,6 +663,9 @@
 
     // Tracks multiline `if ... then ... else ...` indentation so nested `if`s format correctly.
     let mut if_stack: Vec<IfFrame> = Vec::new();
+    // Tracks `mock ... in` block indentation: each entry is the effective indent of the `mock` line.
+    // `in` aligns with the corresponding `mock`.
+    let mut mock_block_stack: Vec<usize> = Vec::new();
     // When a line ends with `if <cond>` (no `then` yet), record its effective indentation so the
     // following `then` / `else` lines can be indented one level deeper.
     let mut pending_then_indent: Option<usize> = None;
@@ -721,6 +737,10 @@
 
     fn looks_like_new_stmt(tokens: &[&crate::cst::CstToken], first_idx: usize) -> bool {
         let first = tokens[first_idx].text.as_str();
+        // `mock` and `in` are part of mock expressions, not new statements.
+        if matches!(first, "mock" | "in") {
+            return false;
+        }
         if matches!(
             first,
             "module" | "use" | "export" | "type" | "class" | "instance" | "domain" | "opaque"
@@ -908,11 +928,20 @@
         if let (Some(base_indent), Some(base_depth)) = (rhs_block_base_indent, rhs_block_base_depth)
         {
             let is_decorator_start = state.tokens[first_idx].text == "@";
-            if line_depth <= base_depth
+            // Don't clear the RHS block inside a `mock ... in` block: mock substitution
+            // lines (e.g. `mock rest.get = ...`) look like new statements but are part of
+            // the mock body and should stay indented.
+            if !mock_block_stack.is_empty()
+                && (state.tokens[first_idx].text == "mock"
+                    || state.tokens[first_idx].text == "in")
+            {
+                // `mock`/`in` lines inside a mock block keep the RHS block alive.
+            } else if line_depth <= base_depth
                 && line_indent_len <= base_indent
                 && (looks_like_new_stmt(&state.tokens, first_idx)
                     || (is_decorator_start && preceded_by_blank))
                 && !rhs_decorator_pending_for_this_line
+                && mock_block_stack.is_empty()
             {
                 rhs_block_base_indent = None;
                 rhs_block_base_depth = None;
@@ -1022,6 +1051,9 @@
         let in_pipe_block = !pipe_block_stack.is_empty();
         let in_pipeop_block = pipeop_block_base_indent.is_some();
         let in_rhs_block = rhs_block_base_indent.is_some();
+        let in_mock_block = !mock_block_stack.is_empty();
+        let starts_with_mock = state.tokens[first_idx].text == "mock";
+        let starts_with_in = state.tokens[first_idx].text == "in";
 
         let mut continuation_levels = 0usize;
         // A decorator on its own line conceptually belongs to the following item; it should align
@@ -1049,6 +1081,11 @@
             continuation_levels += 1;
         }
         if !inside_hang && arm_rhs_active && !starts_with_pipe && !is_decorator_only_line {
+            continuation_levels += 1;
+        }
+        // Lines inside a `mock ... in` block that are continuations of the mock substitution
+        // (not `mock` itself, not `in`) get one extra indentation level.
+        if !inside_hang && in_mock_block && !starts_with_mock && !starts_with_in {
             continuation_levels += 1;
         }
         if hang_is_close {
@@ -1117,6 +1154,15 @@
             {
                 effective_indent_len = effective_indent_len.max(min_indent);
             }
+        }
+
+        // Mock block tracking: `in` aligns with the preceding `mock`.
+        let first_token_text = state.tokens[first_idx].text.as_str();
+        if let Some(mock_indent) = if first_token_text == "in" { mock_block_stack.pop() } else { None } {
+            effective_indent_len = mock_indent;
+            // Clear RHS continuation state so `in` doesn't inherit extra indentation.
+            rhs_block_base_indent = None;
+            rhs_block_base_depth = None;
         }
 
         let effective_indent = " ".repeat(effective_indent_len);
@@ -1777,6 +1823,18 @@
         } else if starts_with_pipe {
             // Starting a new arm resets the body indent for this line.
             arm_rhs_active = false;
+        }
+
+        // Push mock block frame when a line starts with or ends with `mock` (and the `in` keyword
+        // is not on the same line). The recorded indent is used to align the matching `in`.
+        // For multi-mock blocks (`mock a = ... mock b = ... in ...`), only the first `mock`
+        // pushes a frame — subsequent `mock` lines are siblings within the same block.
+        let line_starts_mock = first_token_text == "mock"
+            && find_top_level_token(&state.tokens, "in", first_idx + 1).is_none();
+        let line_ends_mock = !line_starts_mock
+            && last_code_token(&state.tokens).as_deref() == Some("mock");
+        if (line_starts_mock && mock_block_stack.is_empty()) || line_ends_mock {
+            mock_block_stack.push(effective_indent_len);
         }
     }
 

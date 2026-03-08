@@ -4,12 +4,11 @@ RawUser = { id: Int, name: Text, enabled: Bool, legacyId: Option Text }
 User    = { id: Int, name: Text, enabled: Bool }
 
 normalizeUsers : List RawUser -> List User
-normalizeUsers =
-  users => users |> map (user => {
-      id: user.id
-      name: user.name
-      enabled: user.enabled
-  })
+normalizeUsers = users => users |> map (user => {
+    id: user.id
+    name: user.name
+    enabled: user.enabled
+})
 
 validateUsers : List User -> Validation (List DecodeError) (List User)
 validateUsers = users =>
@@ -19,11 +18,10 @@ validateUsers = users =>
     Valid users
 
 usersSource : Source RestApi (List User)
-usersSource =
-  rest.get {
-    url: ~u(https://api.example.com/users)
-    schema: source.schema.derive
-    strictStatus: True
-  }
+usersSource = rest.get {
+  url: ~u(https://api.example.com/users)
+  schema: source.schema.derive
+  strictStatus: True
+}
 |> source.transform normalizeUsers
 |> source.validate validateUsers

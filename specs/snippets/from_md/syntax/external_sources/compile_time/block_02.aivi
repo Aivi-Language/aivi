@@ -5,8 +5,7 @@ userSchema : JsonSchema
 userSchema = file.json "./schemas/users.schema.json" // checked while compiling
 
 usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    schema: source.schema.json userSchema // runtime reads must match this contract
-  }
+usersSource = file.json {
+  path: "./users.json"
+  schema: source.schema.json userSchema // runtime reads must match this contract
+}

@@ -1,11 +1,10 @@
 settingsView : GtkNode
-settingsView =
-  ~<gtk>
-    <object class="GtkBox" props={{ orientation: "vertical", spacing: 12, marginTop: 16 }}>
-      <object class="GtkLabel">
-        <property name="label">
-          Settings
-        </property>
-      </object>
+settingsView = ~<gtk>
+  <object class="GtkBox" props={{ orientation: "vertical", spacing: 12, marginTop: 16 }}>
+    <object class="GtkLabel">
+      <property name="label">
+        Settings
+      </property>
     </object>
-  </gtk>
+  </object>
+</gtk>
