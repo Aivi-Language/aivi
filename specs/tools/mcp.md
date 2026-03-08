@@ -5,8 +5,10 @@
 The MCP server is local-first:
 
 - it serves bundled language documentation as MCP resources
-- it exposes compiler and formatter tools such as `aivi.parse`, `aivi.check`, and `aivi.fmt`
-- with `--ui`, it also exposes `aivi.gtk.*` tools for live GTK inspection and interaction
+- it exposes compiler and formatter tools such as `aivi_parse`, `aivi_check`, and `aivi_fmt`
+- with `--ui`, it also exposes `aivi_gtk_*` tools for live GTK inspection and interaction
+
+Tool names are advertised with only letters, numbers, `_`, and `-` because some MCP hosts reject dotted names in `tools/list`. The server still accepts legacy dotted spellings such as `aivi.gtk.launch` on `tools/call` for backwards compatibility.
 
 ## Transport and process model
 
@@ -36,10 +38,10 @@ This lets MCP clients read the language and tooling documentation without needin
 
 Without `--ui`, the main MCP tools are:
 
-- `aivi.parse`
-- `aivi.check`
-- `aivi.fmt`
-- `aivi.fmt.write` (requires `--allow-effects`)
+- `aivi_parse`
+- `aivi_check`
+- `aivi_fmt`
+- `aivi_fmt_write` (requires `--allow-effects`)
 
 These operate on explicit `target` arguments passed per tool call.
 
@@ -47,20 +49,20 @@ These operate on explicit `target` arguments passed per tool call.
 
 With `--ui`, the server also exposes GTK session management tools:
 
-- `aivi.gtk.discover` — list candidate local GTK debug sockets
-- `aivi.gtk.attach` — connect to an existing GTK session when you already know the socket path and token
-- `aivi.gtk.launch` — start an AIVI GTK application under MCP inspection
-- `aivi.gtk.hello` — verify that a session is alive and report high-level capabilities
+- `aivi_gtk_discover` — list candidate local GTK debug sockets
+- `aivi_gtk_attach` — connect to an existing GTK session when you already know the socket path and token
+- `aivi_gtk_launch` — start an AIVI GTK application under MCP inspection
+- `aivi_gtk_hello` — verify that a session is alive and report high-level capabilities
 
-`aivi.gtk.launch`, and all mutation-style GTK tools, require `--allow-effects`.
+`aivi_gtk_launch`, and all mutation-style GTK tools, require `--allow-effects`.
 
 ## GTK inspection tools
 
 The first GTK inspection layer is read-only:
 
-- `aivi.gtk.listWidgets`
-- `aivi.gtk.inspectWidget`
-- `aivi.gtk.dumpTree`
+- `aivi_gtk_listWidgets`
+- `aivi_gtk_inspectWidget`
+- `aivi_gtk_dumpTree`
 
 These tools inspect the live reconciled widget tree kept by the GTK runtime. Inspection payloads include:
 
@@ -82,7 +84,7 @@ Use it when you want stable handles quickly.
 ### `inspectWidget`
 
 Returns the current snapshot for one widget by `name` or numeric `id`.
-Window ids reported by `aivi.gtk.hello` can also be inspected by numeric `id`.
+Window ids reported by `aivi_gtk_hello` can also be inspected by numeric `id`.
 
 This is the preferred tool for targeted inspection because clients do not need to fetch and traverse the whole tree just to read one widget's props or dimensions.
 
@@ -96,10 +98,10 @@ Each node includes its own props, dimensions, runtime state, bound signals, and 
 
 The GTK driver layer currently exposes:
 
-- `aivi.gtk.click`
-- `aivi.gtk.type`
-- `aivi.gtk.select`
-- `aivi.gtk.keyPress`
+- `aivi_gtk_click`
+- `aivi_gtk_type`
+- `aivi_gtk_select`
+- `aivi_gtk_keyPress`
 
 These operate on widgets previously discovered via `listWidgets`, `inspectWidget`, or `dumpTree`.
 
@@ -111,7 +113,7 @@ Widget targeting follows this order:
 2. numeric widget id (`id`)
 
 If both are supplied, they must refer to the same live widget or the request fails.
-`aivi.gtk.keyPress` may omit both `name` and `id`; in that case it targets the sole window when exactly one window is present, otherwise the request fails and the client must choose an explicit target.
+`aivi_gtk_keyPress` may omit both `name` and `id`; in that case it targets the sole window when exactly one window is present, otherwise the request fails and the client must choose an explicit target.
 
 ### `click`
 
@@ -157,9 +159,9 @@ There are no silent no-op fallbacks for unsupported widget actions.
 
 ```text
 1. start `aivi mcp serve --ui --allow-effects`
-2. call `aivi.gtk.launch` with a target `.aivi` app
-3. call `aivi.gtk.listWidgets`
-4. call `aivi.gtk.inspectWidget` for a named button or entry
-5. call `aivi.gtk.click`, `aivi.gtk.type`, or `aivi.gtk.select`
+2. call `aivi_gtk_launch` with a target `.aivi` app
+3. call `aivi_gtk_listWidgets`
+4. call `aivi_gtk_inspectWidget` for a named button or entry
+5. call `aivi_gtk_click`, `aivi_gtk_type`, or `aivi_gtk_select`
 6. re-read the widget or tree snapshot to observe the updated state
 ```

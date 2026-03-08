@@ -339,7 +339,7 @@ Works equally well with a local file: `openapi.fromFile "./specs/api.yaml"`. The
 - **LSP server** (`aivi-lsp`) — autocomplete, hover with inline docs, go-to-definition, rename, real-time diagnostics, semantic highlighting; works with VS Code, Neovim, Zed, and any LSP-compatible editor
 - **Formatter** — `aivi fmt` formats any `.aivi` file to canonical style; also available as a format-on-save action in the VS Code extension
 - **VS Code extension** — bundles the LSP, grammar highlighting, and formatting in one install
-- **MCP server** — `aivi mcp serve` exposes the language specs as MCP resources for AI-assisted development workflows; add `--ui` to also expose `aivi.gtk.*` GTK inspection and driver tools for widget trees, props, dimensions, local UI actions, and keypress injection (effectful tools require `--allow-effects`)
+- **MCP server** — `aivi mcp serve` exposes the language specs as MCP resources for AI-assisted development workflows; add `--ui` to also expose underscore-safe GTK inspection and driver tools such as `aivi_gtk_launch` and `aivi_gtk_keyPress` for widget trees, props, dimensions, local UI actions, and keypress injection (legacy dotted spellings remain accepted, and effectful tools require `--allow-effects`)
 
 ---
 
