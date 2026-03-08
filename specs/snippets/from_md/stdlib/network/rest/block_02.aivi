@@ -1,18 +1,1 @@
-use aivi.rest
-
-savePost : Url -> Text -> Effect Text SavedPost
-savePost = postUrl => accessToken => do Effect {
-  requestOptions = {
-    method: "POST"
-    url: postUrl
-    headers: [{ name: "Accept", value: "application/json" }]
-    body: Some (Plain "{\"title\":\"Hello\"}")
-    timeoutMs: Some 5000
-    retryCount: Some 2
-    bearerToken: Some accessToken
-    strictStatus: Some True
-  }
-
-  savedPost <- fetch requestOptions
-  pure savedPost
-}
+Header = { name: Text, value: Text }

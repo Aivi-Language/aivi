@@ -21,9 +21,8 @@ Rose trees are a good fit for menus, document outlines, comment threads, file hi
 - `node value children` creates a tree node with a value and a list of child trees.
 - `leaf value` creates a node with no children. It is shorthand for `node value []`.
 
-```aivi
-outline = node "root" [leaf "intro", node "chapter" [leaf "section"]]
-```
+<<< ../../snippets/from_md/stdlib/math/tree/block_01.aivi{aivi}
+
 
 ## Core API
 
@@ -44,13 +43,8 @@ outline = node "root" [leaf "intro", node "chapter" [leaf "section"]]
 - `dfsPostorder` visits children before the node itself.
 - `bfs` visits the tree level by level.
 
-```aivi
-sample = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
+<<< ../../snippets/from_md/stdlib/math/tree/block_02.aivi{aivi}
 
-dfsPreorder sample  // [1, 2, 3, 4, 5, 6]
-dfsPostorder sample // [2, 4, 5, 3, 6, 1]
-bfs sample          // [1, 2, 3, 6, 4, 5]
-```
 
 ## Building a tree from flat data
 
@@ -63,18 +57,8 @@ This helper is useful when your input comes from a database or API as `(id, pare
 - The result is `None` when the input does not describe exactly one root.
 - Provide unique ids and parent ids that refer to items in the same list.
 
-```aivi
-rows = [
-  { id: 1, parentId: None, label: "root" },
-  { id: 2, parentId: Some 1, label: "drafts" },
-  { id: 3, parentId: Some 1, label: "published" }
-]
+<<< ../../snippets/from_md/stdlib/math/tree/block_03.aivi{aivi}
 
-idOf = row => row.id
-parentOf = row => row.parentId
-
-tree = fromListBy idOf parentOf rows
-```
 
 ## Verification
 

@@ -48,17 +48,8 @@ The rule that starts with bare `->` is the **init transition**. It declares the 
 
 Destructure the machine value to access its transition functions and helper fields. Because the init state is already active, ordinary code starts with the first non-init transition rather than calling the init rule again.
 
-```aivi
-sync = do Effect {
-  { lease, run, done, currentState } = AccountSyncMachine
+<<< ../snippets/from_md/syntax/machines/block_01.aivi{aivi}
 
-  _ <- lease {}
-  _ <- run { batchId: 42 }
-  _ <- done {}
-
-  pure (currentState Unit)
-}
-```
 
 
 Read that block as “start in `Idle`, step through the workflow, then inspect the resulting state”.
@@ -83,11 +74,8 @@ Use `can` when you want to ask whether a transition is legal before attempting i
 
 Assuming `{ lease, can } = AccountSyncMachine` inside the same `do Effect { ... }` block:
 
-```aivi
-_ <- if can.lease Unit
-     then lease {}
-     else fail "not in Idle state"
-```
+<<< ../snippets/from_md/syntax/machines/block_02.aivi{aivi}
+
 
 This avoids an `InvalidTransition` failure when the machine is not currently in `Idle`.
 
@@ -110,12 +98,8 @@ Inside `do Effect { ... }`, use `on transition => handler` to register follow-up
 
 Assuming `run` was destructured from `AccountSyncMachine` in the same `do Effect { ... }` block:
 
-```aivi
-on run => do Effect {
-  _ <- log.info "run transition fired"
-  pure Unit
-}
-```
+<<< ../snippets/from_md/syntax/machines/block_03.aivi{aivi}
+
 
 Handlers run **after** the state has been updated. They are useful for logging, metrics, notifications, or other side effects that should happen because a transition succeeded.
 

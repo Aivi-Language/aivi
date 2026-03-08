@@ -1,0 +1,2 @@
+@native "crate_name::path::function"
+binding : TypeSig

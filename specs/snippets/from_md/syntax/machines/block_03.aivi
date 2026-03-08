@@ -1,10 +1,4 @@
-sync = do Effect {
-  { boot, lease, run, done, currentState, can } = AccountSyncMachine
-
-  _ <- boot {}
-  _ <- lease {}
-  _ <- run { batchId: 42 }
-  _ <- done {}
-
-  pure (currentState Unit)
+on run => do Effect {
+  _ <- log.info "run transition fired"
+  pure Unit
 }

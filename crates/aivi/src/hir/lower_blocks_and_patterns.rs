@@ -342,12 +342,6 @@ fn contains_placeholder(expr: &Expr) -> bool {
         Expr::Binary { left, right, .. } => {
             contains_placeholder(left) || contains_placeholder(right)
         }
-        Expr::CapabilityScope { handlers, body, .. } => {
-            handlers
-                .iter()
-                .any(|handler| contains_placeholder(&handler.handler))
-                || contains_placeholder(body)
-        }
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_placeholder(expr),
             BlockItem::Let { expr, .. } => contains_placeholder(expr),
@@ -552,24 +546,6 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                 }
             }
         }
-        Expr::CapabilityScope {
-            capabilities,
-            handlers,
-            body,
-            span,
-        } => Expr::CapabilityScope {
-            capabilities,
-            handlers: handlers
-                .into_iter()
-                .map(|handler| crate::surface::CapabilityHandlerBinding {
-                    capability: handler.capability,
-                    handler: desugar_placeholder_lambdas(handler.handler),
-                    span: handler.span,
-                })
-                .collect(),
-            body: Box::new(desugar_placeholder_lambdas(*body)),
-            span,
-        },
         Expr::Block { kind, items, span } => Expr::Block {
             kind,
             items: items
@@ -664,7 +640,6 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
         | Expr::Match { span, .. }
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
-        | Expr::CapabilityScope { span, .. }
         | Expr::Block { span, .. }
         | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),
@@ -869,24 +844,6 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             op,
             left: Box::new(replace_holes_inner(*left, counter, params)),
             right: Box::new(replace_holes_inner(*right, counter, params)),
-            span,
-        },
-        Expr::CapabilityScope {
-            capabilities,
-            handlers,
-            body,
-            span,
-        } => Expr::CapabilityScope {
-            capabilities,
-            handlers: handlers
-                .into_iter()
-                .map(|handler| crate::surface::CapabilityHandlerBinding {
-                    capability: handler.capability,
-                    handler: replace_holes_inner(handler.handler, counter, params),
-                    span: handler.span,
-                })
-                .collect(),
-            body: Box::new(replace_holes_inner(*body, counter, params)),
             span,
         },
         Expr::Block { kind, items, span } => Expr::Block {

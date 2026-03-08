@@ -16,22 +16,8 @@ If your host already injects a secret as plaintext configuration, [`aivi.system.
 
 ## Quick example
 
-```aivi
-use aivi.secrets
-use aivi.text (toBytes, Utf8)
+<<< ../../snippets/from_md/stdlib/system/secrets/block_01.aivi{aivi}
 
-loadStoredAlgorithm = do Effect {
-  keyId  = "services/github/token"
-  secret = blob keyId "aes-256-gcm" (toBytes Utf8 "ciphertext-from-kms")
-  _      <- put keyId secret
-  stored <- get keyId
-  pure (
-    stored match
-      | Some saved => Some (blobAlgorithm saved)
-      | None       => None
-  )
-}
-```
 
 This example shows the intended shape of the API: create a blob, store it, then read it back as an `Option`.
 
@@ -41,18 +27,16 @@ This example shows the intended shape of the API: create a blob, store it, then 
 
 Alias for `Text`; used as the lookup key for a stored secret.
 
-```aivi
-SecretKeyId = Text
-```
+<<< ../../snippets/from_md/stdlib/system/secrets/block_02.aivi{aivi}
+
 
 ### `SecretError`
 
 Alias for `Text`; used as the error type for backend or store failures.
 Missing secrets are reported as `None` by `get`, not as `SecretError`.
 
-```aivi
-SecretError = Text
-```
+<<< ../../snippets/from_md/stdlib/system/secrets/block_03.aivi{aivi}
+
 
 ### `EncryptedBlob`
 

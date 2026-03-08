@@ -1,0 +1,6 @@
+use aivi.probability
+
+successRate = clamp 0.7
+coin        = bernoulli successRate
+probHeads   = coin.pdf True
+probTails   = coin.pdf False

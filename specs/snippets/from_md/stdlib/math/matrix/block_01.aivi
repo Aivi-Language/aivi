@@ -1,0 +1,8 @@
+use aivi.matrix
+use aivi.vector (vec2)
+
+scale2 = ~mat[2.0 0.0
+              0.0 2.0]
+point  = vec2 1.0 3.0
+
+result = scale2 × point

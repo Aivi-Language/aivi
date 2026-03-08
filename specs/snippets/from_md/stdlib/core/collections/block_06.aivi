@@ -1,0 +1,5 @@
+use aivi.collections
+
+scores  = Map.fromList [("alice", 3), ("bob", 5)]
+updated = Map.insert "carol" 8 scores
+alice   = Map.getOrElse "alice" 0 updated

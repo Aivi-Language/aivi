@@ -200,11 +200,6 @@ pub enum TypeExpr {
         items: Vec<TypeExpr>,
         span: Span,
     },
-    CapabilityClause {
-        base: Box<TypeExpr>,
-        capabilities: Vec<SpannedName>,
-        span: Span,
-    },
     Apply {
         base: Box<TypeExpr>,
         args: Vec<TypeExpr>,
@@ -345,12 +340,6 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
-    CapabilityScope {
-        capabilities: Vec<SpannedName>,
-        handlers: Vec<CapabilityHandlerBinding>,
-        body: Box<Expr>,
-        span: Span,
-    },
     Block {
         kind: BlockKind,
         items: Vec<BlockItem>,
@@ -369,13 +358,6 @@ pub enum Expr {
         body: Box<Expr>,
         span: Span,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct CapabilityHandlerBinding {
-    pub capability: SpannedName,
-    pub handler: Expr,
-    pub span: Span,
 }
 
 /// A single `mock path = value` binding within a `mock ... in` expression.

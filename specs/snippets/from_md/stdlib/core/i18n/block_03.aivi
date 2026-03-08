@@ -1,0 +1,24 @@
+@no_prelude
+module MyApp.I18n
+export KeyId
+export keyText, key
+export locale, bundle
+export t
+
+use aivi
+
+KeyId = AppWelcome | AppGoodbye
+
+keyText : KeyId -> Text
+keyText = k => k match
+  | AppWelcome => "app.welcome"
+  | AppGoodbye => "app.goodbye"
+
+t : KeyId -> {} -> Text
+t = k args =>
+  Map.get (keyText k) bundle.entries match
+    | None => keyText k
+    | Some msg =>
+      (i18n.render msg args) match
+        | Ok txt => txt
+        | Err _  => keyText k

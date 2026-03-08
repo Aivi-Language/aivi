@@ -148,7 +148,6 @@ fn type_expr_to_aivi_type(ty: &TypeExpr) -> AiviType {
                 AiviType::Opaque("unknown".to_string())
             }
         }
-        TypeExpr::CapabilityClause { base, .. } => type_expr_to_aivi_type(base),
         TypeExpr::Record { fields, .. } => {
             let field_types: Vec<(String, AiviType)> = fields
                 .iter()

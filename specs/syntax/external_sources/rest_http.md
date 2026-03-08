@@ -40,59 +40,22 @@ Loading any REST or HTTP source requires `network.http` (or the broader `network
 
 ## Decoded REST example
 
-```aivi
-User = { name: Text, age: Int, gender: Text }
+<<< ../../snippets/from_md/syntax/external_sources/rest_http/block_01.aivi{aivi}
 
-usersSource : Source RestApi (List User)
-usersSource = rest.get ~u(https://api.example.com/users)
-
-do Effect {
-  users <- load usersSource
-  pure users
-}
-```
 
 `load` turns the reusable source into an effect. Here the expected result type, `List User`, tells the REST boundary what shape to decode from the response body.
 
 ## Raw HTTP example
 
-```aivi
-healthSource : Source Https (Result Error Response)
-healthSource = https.get ~u(https://status.example.com/health)
+<<< ../../snippets/from_md/syntax/external_sources/rest_http/block_02.aivi{aivi}
 
-do Effect {
-  result <- load healthSource
-  pure (
-    result match
-      | Ok response => response.status
-      | Err _       => 0
-  )
-}
-```
 
 Use `http.*` or `https.*` when you want to inspect `status`, `headers`, and `body` yourself instead of decoding the body immediately.
 
 ## Example with request options
 
-```aivi
-apiToken : Text
-apiToken = "demo-token"
+<<< ../../snippets/from_md/syntax/external_sources/rest_http/block_03.aivi{aivi}
 
-User = { name: Text, age: Int, gender: Text }
-
-usersSource : Source RestApi (List User)
-usersSource =
-  rest.fetch {
-    method: "GET"
-    url: ~u(https://api.example.com/users)
-    headers: []
-    body: None
-    timeoutMs: Some 5_000
-    retryCount: Some 2
-    bearerToken: Some apiToken
-    strictStatus: Some True
-  }
-```
 
 Here `apiToken` is just a normal `Text` binding supplied elsewhere in your program. The extra request fields mean:
 

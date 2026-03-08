@@ -1,0 +1,6 @@
+use aivi.collections
+
+q0 = Queue.empty
+q1 = Queue.enqueue "parse" q0
+q2 = Queue.enqueue "typecheck" q1
+next = Queue.dequeue q2

@@ -1,0 +1,7 @@
+use aivi.text (contains)
+
+isEmailLike : Text -> Bool
+isEmailLike = contains "@"
+
+keepEmailLikes : List Text -> List Text
+keepEmailLikes = filter isEmailLike

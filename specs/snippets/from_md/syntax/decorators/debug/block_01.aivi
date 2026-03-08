@@ -1,0 +1,6 @@
+@debug
+@debug()
+@debug(time)
+@debug(pipes, args, return, time)
+
+f = x => ...

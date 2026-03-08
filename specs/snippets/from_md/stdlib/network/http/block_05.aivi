@@ -1,0 +1,6 @@
+Request = {
+  method: Text
+  url: Url
+  headers: List Header
+  body: Option Body
+}

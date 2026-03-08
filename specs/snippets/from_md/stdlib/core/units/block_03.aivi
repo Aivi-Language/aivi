@@ -1,0 +1,11 @@
+use aivi.units
+
+meter     = defineUnit "m" 1.0
+kilometer = defineUnit "km" 1000.0
+
+a    = { value: 1500.0, unit: meter }
+b    = { value: 2.0, unit: kilometer }
+bInM = convert b meter
+
+total = a + bInM
+half  = total / 2.0

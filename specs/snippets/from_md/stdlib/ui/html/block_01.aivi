@@ -1,0 +1,16 @@
+use aivi.ui
+
+name = "AIVI"
+count = 3
+
+view =
+  ~<html>
+    <section class="card">
+      <h1>
+        Hello { name }
+      </h1>
+      <p>
+        Open tabs: { count }
+      </p>
+    </section>
+  </html>

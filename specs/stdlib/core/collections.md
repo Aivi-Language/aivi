@@ -29,16 +29,8 @@ A quick mental model:
 
 ## Overview
 
-```aivi
-use aivi.collections
-use aivi.list
+<<< ../../snippets/from_md/stdlib/core/collections/block_01.aivi{aivi}
 
-backlog = Queue.enqueue "typecheck" (Queue.enqueue "parse" Queue.empty)
-labels  = Set.fromList ["urgent", "docs", "urgent"]
-scores  = Map.insert "alice" 7 Map.empty
-batches = chunk 2 [1, 2, 3, 4, 5]
-next    = Heap.fromList [5, 2, 9] |> Heap.peekMin
-```
 
 ## Choosing a collection
 
@@ -58,17 +50,8 @@ Map entries use `key => value`. Keys and values can be full expressions, and `..
 
 When the same key appears more than once, the **last** value wins.
 
-```aivi
-defaults = ~map{
-  "theme" => "light"
-  "lang"  => "en"
-}
+<<< ../../snippets/from_md/stdlib/core/collections/block_02.aivi{aivi}
 
-config = ~map{
-  ...defaults
-  "theme" => "dark"
-}
-```
 
 ### Set literals
 
@@ -76,10 +59,8 @@ Set literals hold values directly. `...expr` spreads another set into the litera
 
 Duplicate values are removed automatically because sets only keep unique members.
 
-```aivi
-baseTags = ~set["docs", "release"]
-allTags  = ~set[...baseTags, "featured", "docs"]
-```
+<<< ../../snippets/from_md/stdlib/core/collections/block_03.aivi{aivi}
+
 
 ### The `++` operator
 
@@ -91,15 +72,8 @@ allTags  = ~set[...baseTags, "featured", "docs"]
 
 `++` is **not** text concatenation. For `Text`, use interpolation such as `"Hello, {name}"`.
 
-```aivi
-numbers = [1, 2] ++ [3, 4]
+<<< ../../snippets/from_md/stdlib/core/collections/block_04.aivi{aivi}
 
-defaults = ~map{"theme" => "light"}
-overrides = ~map{"theme" => "dark", "lang" => "en"}
-merged = defaults ++ overrides
-
-effectivePermissions = ~set["read"] ++ ~set["write", "read"]
-```
 
 ## List helpers (`aivi.list`)
 
@@ -111,13 +85,8 @@ Common list jobs include filtering search results, mapping over rows, chunking w
 
 Those class instances give you shared operations such as `map`, `filter`, `reduce`, `traverse`, `chain`, `concat`, `empty`, `alt`, and `zero`. The functions below are the list-specific helpers from `aivi.list` that you will use most often.
 
-```aivi
-use aivi.list
+<<< ../../snippets/from_md/stdlib/core/collections/block_05.aivi{aivi}
 
-batches  = chunk 2 [1, 2, 3, 4, 5]
-firstBig = find (n => n > 10) [3, 7, 11, 15]
-paired   = zip ["a", "b"] [1, 2, 3]
-```
 
 | Function | Explanation |
 | --- | --- |
@@ -161,13 +130,8 @@ Choose `Map` when the first question is “what value belongs to this key?” ra
 
 The shared class methods operate on map **values**. Use the functions below when you need key-aware behavior. `aivi.map` exposes these as unqualified helpers; `aivi.collections` exposes the same operations as `Map.empty`, `Map.get`, `Map.insert`, and so on.
 
-```aivi
-use aivi.collections
+<<< ../../snippets/from_md/stdlib/core/collections/block_06.aivi{aivi}
 
-scores  = Map.fromList [("alice", 3), ("bob", 5)]
-updated = Map.insert "carol" 8 scores
-alice   = Map.getOrElse "alice" 0 updated
-```
 
 | Function | Explanation |
 | --- | --- |
@@ -205,12 +169,8 @@ Use `Set` when membership matters more than order, such as tracking enabled feat
 
 There is no separate `aivi.set` helper module in v0.1; use the qualified `Set.*` names from `aivi.collections` or `aivi`.
 
-```aivi
-use aivi.collections
+<<< ../../snippets/from_md/stdlib/core/collections/block_07.aivi{aivi}
 
-selected = Set.fromList [101, 102, 101]
-visible  = Set.difference selected (Set.fromList [102])
-```
 
 | Function | Explanation |
 | --- | --- |
@@ -234,14 +194,8 @@ Choose `Queue` when “oldest item first” is the rule. If you need to add or r
 
 There is no separate `aivi.queue` helper module in v0.1; use `Queue.*` and `Deque.*` from `aivi.collections` or `aivi`.
 
-```aivi
-use aivi.collections
+<<< ../../snippets/from_md/stdlib/core/collections/block_08.aivi{aivi}
 
-q0 = Queue.empty
-q1 = Queue.enqueue "parse" q0
-q2 = Queue.enqueue "typecheck" q1
-next = Queue.dequeue q2
-```
 
 | Function | Explanation |
 | --- | --- |
@@ -256,12 +210,8 @@ A `Deque` (“double-ended queue”) lets you add or remove items from both ends
 
 That makes it useful for undo buffers, sliding windows, and algorithms that grow from either side.
 
-```aivi
-use aivi.collections
+<<< ../../snippets/from_md/stdlib/core/collections/block_09.aivi{aivi}
 
-history = Deque.pushFront "undo-2" (Deque.pushFront "undo-1" Deque.empty)
-latest  = Deque.peekFront history
-```
 
 | Function | Explanation |
 | --- | --- |
@@ -281,12 +231,8 @@ Use it when urgency or score decides what happens next: shortest path search, �
 
 There is no separate `aivi.heap` helper module in v0.1; use the qualified `Heap.*` names from `aivi.collections` or `aivi`.
 
-```aivi
-use aivi.collections
+<<< ../../snippets/from_md/stdlib/core/collections/block_10.aivi{aivi}
 
-jobs = Heap.fromList [(2, "docs"), (1, "fix build"), (3, "release")]
-next = Heap.peekMin jobs
-```
 
 | Function | Explanation |
 | --- | --- |

@@ -66,12 +66,8 @@ A common pattern is:
 
 Callers then work through the exported surface instead of the hidden representation:
 
-```aivi
-use aivi.url (Url, parse, protocol)
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_01.aivi{aivi}
 
-myUrl = parse "https://example.com" or panic "bad url"
-p     = protocol myUrl // use the exported accessor
-```
 
 If the module also exports a domain, callers must import that domain explicitly with `use some.module (domain Name)`. A plain `use some.module` does not activate domain-owned operators or suffixes.
 
@@ -80,12 +76,8 @@ If the module also exports a domain, callers must import that domain explicitly 
 Opaque types and domains fit together naturally.
 The domain implementation lives in the same module as the opaque type, so it can work with the hidden representation while callers only see the exported behavior.
 
-```aivi
-use aivi.url (parse, domain Url)
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_02.aivi{aivi}
 
-url  = parse "https://example.com" or panic "bad"
-url2 = url + ("q", "search") // `+` comes from the exported `domain Url`
-```
 
 For the full domain syntax, see [Domains](../domains.md). For the module-level `export domain ...` / `use ... (domain ...)` rules, see [Modules](../modules.md).
 
@@ -95,13 +87,8 @@ Class instances for opaque types work normally.
 Define the instance in code that can see the representation; using the instance does not reveal any internals.
 See [Classes and Higher-Kinded Types](classes_and_hkts.md) for the instance syntax.
 
-```aivi
-sameTarget : Url -> Url -> Bool
-sameTarget = left right => left == right
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_03.aivi{aivi}
 
-label : Url -> Text
-label = url => toText url
-```
 
 ## Diagnostics
 
@@ -120,9 +107,8 @@ Structural pattern matches are rejected for the same reason: destructuring would
 AIVI also has runtime-managed handle types such as [`FileHandle`](../../stdlib/system/file.md), [`Listener`](../../stdlib/network/sockets.md), [`Connection`](../../stdlib/network/sockets.md), [`DbConnection`](../../stdlib/system/database.md), [`Server`](../../stdlib/network/http_server.md), and [`WebSocket`](../../stdlib/network/http_server.md).
 They are opaque for a different reason: they wrap host-language values, so AIVI code never sees an AIVI-level definition for their internals.
 
-```aivi
-FileHandle
-```
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_04.aivi{aivi}
+
 
 By contrast, `opaque Url = { ... }` does have an AIVI-level definition, but that definition is hidden outside the module.
 

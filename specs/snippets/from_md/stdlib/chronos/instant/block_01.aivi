@@ -1,0 +1,7 @@
+use aivi.chronos.instant (domain Instant)
+
+createdAt = 2024-05-21T12:00:00Z
+processedAt = 2024-05-21T12:00:10Z
+
+inOrder = createdAt < processedAt
+elapsed = processedAt - createdAt

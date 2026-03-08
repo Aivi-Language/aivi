@@ -113,13 +113,8 @@ See [Pattern Matching](syntax/pattern_matching), [Option](stdlib/core/option), a
 
 ## Updating data without mutation
 
-```aivi
-user2 = user <| { name: "Ada Lovelace" }
-// Create a new record with one field changed.
+<<< ./snippets/from_md/language-overview/block_01.aivi{aivi}
 
-user3 = user <| { profile.avatar: "new.png" }
-// Nested fields can be updated structurally as well.
-```
 
 `<|` is a patch operator. It does not modify `user`; it produces a new value.
 

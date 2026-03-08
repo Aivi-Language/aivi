@@ -1,0 +1,13 @@
+use aivi.chronos.calendar
+use aivi.calendar (domain Calendar)
+
+today = ~d(2024-02-29)
+
+tomorrow = addDays today 1
+nextMonth = addMonths today 1
+nextYear = addYears today 1
+
+isLeap = isLeapYear today
+daysThisMonth = daysInMonth today
+monthEnd = endOfMonth today
+sameAsTomorrow = today + 1d

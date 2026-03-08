@@ -1,0 +1,2 @@
+summaryText = readSignal resultsSummary model
+saveCommand = buildSaveCommand summaryText

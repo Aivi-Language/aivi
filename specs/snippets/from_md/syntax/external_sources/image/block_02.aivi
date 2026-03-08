@@ -1,0 +1,6 @@
+{
+  width: Int,
+  height: Int,
+  format: Text,
+  pixels: List (List (Int, Int, Int))
+}

@@ -1,0 +1,3 @@
+SourceError K =
+  | IOError Text
+  | DecodeError (List aivi.validation.DecodeError)

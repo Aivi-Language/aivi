@@ -1,16 +1,14 @@
-machine AccountSyncMachine = {
-           -> Idle     : boot {}
-  Idle     -> Acquired : lease {}
-  Acquired -> Syncing  : run { batchId: Int }
-  Syncing  -> Idle     : done {}
-}
+machineRuntime = do Effect {
+  { boot, lease, run, currentState, can } = AccountSyncMachine
 
-sync = do Effect {
-  { boot, lease, run, done, currentState, can } = AccountSyncMachine
+  _ <- assertEq (constructorName (currentState Unit)) "Idle"
+  _ <- assertEq (can.lease Unit) True
+  _ <- assertEq (can.run Unit) False
 
-  _ <- boot {}
-  _ <- assertEq (constructorName (currentState Unit)) "Idle" // Read the current state
-  _ <- assertEq (can.lease Unit) True // Guard says lease is legal
-  _ <- assertEq (can.run Unit) False // run is not legal yet
+  bootAttempt <- attempt (boot {})
+  _           <- bootAttempt match
+    | Err err => assertEq (constructorName err) "InvalidTransition"
+    | Ok _    => fail "boot should fail after initialization"
+
   pure Unit
 }

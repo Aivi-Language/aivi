@@ -1,12 +1,3 @@
-User = {
-  id: Int
-  name: Text
-  email: Option Text
-}
-
-formatUser : User -> Text
-formatUser = user =>
-// `match` makes the "email might be missing" case explicit.
-user.email match
-  | Some email => "{user.name} <{email}>"
-  | None       => user.name
+cart = { total: 100, tax: 20 }
+updatedCart = cart <| { total: 120 }
+// `cart` is unchanged; `updatedCart` is the new record.

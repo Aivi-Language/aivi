@@ -9,10 +9,8 @@ This is most useful for low-level modules, generated code, teaching material, or
 
 ## Syntax
 
-```aivi
-@no_prelude
-module my.explicit.module
-```
+<<< ../../snippets/from_md/syntax/decorators/no_prelude/block_01.aivi{aivi}
+
 
 `@no_prelude` takes no argument and must appear on its own line immediately before the `module` declaration.
 

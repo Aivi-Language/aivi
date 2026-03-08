@@ -1,0 +1,2 @@
+baseTags = ~set["docs", "release"]
+allTags  = ~set[...baseTags, "featured", "docs"]

@@ -18,12 +18,8 @@ you can name that boundary once and give it an explicit result type:
 
 Then you can reuse it anywhere:
 
-```aivi
-do Effect {
-  users <- load usersSource
-  pure users
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_01.aivi{aivi}
+
 
 For many small programs, the shorter inline `load (...)` style is perfectly fine. Schema-first declarations become useful when a boundary is reused, when you want hover and diagnostics to describe it before `load`, or when you want the connector config to live in one obvious place.
 
@@ -44,9 +40,8 @@ The exact internal representation is not part of the public API. The sketch belo
 
 `load` remains the effectful step:
 
-```aivi
-load : Source K A -> Effect (SourceError K) A
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_02.aivi{aivi}
+
 
 See [External Sources](../external_sources.md#1211-sourceerror) for the shared error model.
 
@@ -54,9 +49,8 @@ See [External Sources](../external_sources.md#1211-sourceerror) for the shared e
 
 Current v0.1 public docs and tooling center on one stable schema-first field:
 
-```aivi
-schema: source.schema.derive
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_03.aivi{aivi}
+
 
 `source.schema.derive` means “use the declaration's result type as the source contract.” That is why top-level schema-first bindings should carry an explicit `Source K A` type signature.
 
@@ -131,97 +125,37 @@ The migration is usually mechanical: keep the same record-shaped source, move it
 
 Before:
 
-```aivi
-do Effect {
-  users <- load (
-    file.json {
-      path: "./users.json"
-      schema: source.schema.derive
-    }
-  )
-  pure users
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_04.aivi{aivi}
+
 
 After:
 
-```aivi
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    schema: source.schema.derive
-  }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_05.aivi{aivi}
 
-do Effect {
-  users <- load usersSource
-  pure users
-}
-```
 
 ### Environment
 
 Before:
 
-```aivi
-do Effect {
-  cfg <- load (
-    env.decode {
-      prefix: "AIVI_APP"
-      schema: source.schema.derive
-    }
-  )
-  pure cfg
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_06.aivi{aivi}
+
 
 After:
 
-```aivi
-appConfig : Source Env AppConfig
-appConfig =
-  env.decode {
-    prefix: "AIVI_APP"
-    schema: source.schema.derive
-  }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_07.aivi{aivi}
 
-do Effect {
-  cfg <- load appConfig
-  pure cfg
-}
-```
 
 ### REST / HTTP
 
 Before:
 
-```aivi
-do Effect {
-  users <- load (
-    rest.get {
-      url: ~u(https://api.example.com/users)
-      schema: source.schema.derive
-    }
-  )
-  pure users
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_08.aivi{aivi}
+
 
 After:
 
-```aivi
-usersApi : Source RestApi (List User)
-usersApi =
-  rest.get {
-    url: ~u(https://api.example.com/users)
-    schema: source.schema.derive
-  }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_09.aivi{aivi}
 
-do Effect {
-  users <- load usersApi
-  pure users
-}
-```
 
 For database-backed reads, use the current [Database Domain](../../stdlib/system/database.md) APIs until a connector guide defines a stable schema-first database record form on its own page.
 

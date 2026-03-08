@@ -45,13 +45,8 @@ For quick in-memory verification, the opening example uses `fromList` together w
 
 Assuming `connection` came from `connect` or `accept` in [`aivi.net.sockets`](./sockets.md), you can turn it into a byte stream and regroup the incoming data into fixed-size chunks:
 
-```aivi
-use aivi.net.streams
+<<< ../../snippets/from_md/stdlib/network/streams/block_01.aivi{aivi}
 
-prepareInput = connection =>
-  fromSocket connection
-    |> chunks 1024 // emit blocks of up to 1024 bytes
-```
 
 ## Functions
 

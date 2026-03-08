@@ -1,0 +1,11 @@
+use aivi.json
+
+User = { id: Int, name: Text, age: Int }
+
+userSource : Source File User
+userSource = file.json "./user.json"
+
+loadUser = do Effect {
+  user <- load userSource
+  pure user
+}

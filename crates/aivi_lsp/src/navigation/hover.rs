@@ -318,7 +318,7 @@ impl Backend {
                 Self::find_gtk_app_record_at_position_in_expr(base, position)
                     .or_else(|| Self::find_gtk_app_record_at_position_in_expr(index, position))
             }
-            Expr::Lambda { body, .. } | Expr::CapabilityScope { body, .. } => {
+            Expr::Lambda { body, .. } => {
                 Self::find_gtk_app_record_at_position_in_expr(body, position)
             }
             Expr::Match {
@@ -771,9 +771,6 @@ impl Backend {
                     }
                 }
                 false
-            }
-            aivi::Expr::CapabilityScope { body, .. } => {
-                Self::local_binding_visible_in_expr(body, ident, position, in_scope)
             }
             aivi::Expr::Suffixed { base, .. } | aivi::Expr::UnaryNeg { expr: base, .. } => {
                 Self::local_binding_visible_in_expr(base, ident, position, in_scope)
@@ -1245,9 +1242,6 @@ impl Backend {
             Expr::Binary { left, right, .. } => {
                 Self::find_record_field_name_at_position(left, position)
                     .or_else(|| Self::find_record_field_name_at_position(right, position))
-            }
-            Expr::CapabilityScope { body, .. } => {
-                Self::find_record_field_name_at_position(body, position)
             }
             Expr::Block { items, .. } => items.iter().find_map(|item| match item {
                 aivi::BlockItem::Bind { expr, .. }

@@ -1,0 +1,5 @@
+use aivi.number.bigint (fromInt)
+use aivi.number.rational
+
+half = fromBigInts (fromInt 1) (fromInt 2)
+sum  = normalize (half + half)

@@ -1,0 +1,11 @@
+use aivi.ui.layout
+use aivi.ui.layout (domain Layout)
+
+width : Length
+width = 100px
+
+height : Percentage
+height = 50%
+
+gap : Length
+gap = 2em

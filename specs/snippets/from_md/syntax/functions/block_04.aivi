@@ -1,0 +1,2 @@
+applyTwice = f x => f (f x)
+labelUser  = user => "{user.name} ({user.age})"

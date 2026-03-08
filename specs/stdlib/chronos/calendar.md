@@ -35,10 +35,8 @@ Use `aivi.chronos.calendar` for the exported types and helper functions such as 
 
 Like other domains, the operator and suffix-literal sugar is activated separately. In the current implementation, the working import pattern is:
 
-```aivi
-use aivi.chronos.calendar
-use aivi.calendar (domain Calendar)
-```
+<<< ../../snippets/from_md/stdlib/chronos/calendar/block_01.aivi{aivi}
+
 
 That gives you the named helpers from `aivi.chronos.calendar` together with the calendar-aware literals and operators shown below. For background on domain imports, see [Domains](../../syntax/domains.md).
 
@@ -50,16 +48,8 @@ Use it when you want the meaning people expect from a calendar, not the meaning 
 
 ## Overview
 
-```aivi
-use aivi.chronos.calendar
-use aivi.calendar (domain Calendar)
+<<< ../../snippets/from_md/stdlib/chronos/calendar/block_02.aivi{aivi}
 
-invoiceDate = ~d(2025-02-08)
-renewalDate = invoiceDate + 1m
-statementDate = invoiceDate + eom
-
-createdAt = ~dt(2025-02-08T12:34:56Z)
-```
 
 The `~d(...)` literal gives you a `Date`, while `~dt(...)` gives you a `DateTime` value you can pass to other chronos modules when you need a full timestamp.
 
@@ -67,21 +57,8 @@ The `~d(...)` literal gives you a `Date`, while `~dt(...)` gives you a `DateTime
 
 These examples show the kinds of calendar questions the domain is built to answer. Read them top to bottom: start from a date, apply explicit helpers, then compare those results with the domain sugar.
 
-```aivi
-use aivi.chronos.calendar
-use aivi.calendar (domain Calendar)
+<<< ../../snippets/from_md/stdlib/chronos/calendar/block_03.aivi{aivi}
 
-today = ~d(2024-02-29)
-
-tomorrow = addDays today 1
-nextMonth = addMonths today 1
-nextYear = addYears today 1
-
-isLeap = isLeapYear today
-daysThisMonth = daysInMonth today
-monthEnd = endOfMonth today
-sameAsTomorrow = today + 1d
-```
 
 These helpers are all pure. The only effectful entry point in this module is `now`.
 
@@ -91,25 +68,8 @@ These helpers are all pure. The only effectful entry point in this module is `no
 
 The underlying delta shapes and literals are:
 
-```aivi
-domain Calendar over Date = {
-  Delta = Day Int | Month Int | Year Int | End EndOfMonth
+<<< ../../snippets/from_md/stdlib/chronos/calendar/block_04.aivi{aivi}
 
-  (+) : Date -> Delta -> Date
-  (+) = date (Day n) => addDays date n
-  (+) = date (Month n) => addMonths date n
-  (+) = date (Year n) => addYears date n
-  (+) = date End => endOfMonth date
-
-  (-) : Date -> Delta -> Date
-  (-) = date delta => date + (negateDelta delta)
-
-  1d = Day 1
-  1m = Month 1
-  1y = Year 1
-  eom = End
-}
-```
 
 In other words, the domain gives you four calendar deltas today: days, months, years, and the special `eom` marker for “move to the end of this month”.
 
@@ -130,15 +90,8 @@ In other words, the domain gives you four calendar deltas today: days, months, y
 
 A good pattern is to model user-facing dates with `Calendar`, then convert to instants or zoned values only when you need execution or storage semantics.
 
-```aivi
-use aivi.chronos.calendar (addDays, addMonths)
-use aivi.calendar (domain Calendar)
+<<< ../../snippets/from_md/stdlib/chronos/calendar/block_05.aivi{aivi}
 
-issuedOn = ~d(2024-01-31)
-trialEnds = addDays issuedOn 14
-renewsOn = addMonths issuedOn 1
-statementClosesOn = issuedOn + eom
-```
 
 This style keeps the business rule readable:
 

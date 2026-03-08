@@ -1,0 +1,11 @@
+use aivi.regex
+
+emailPattern = ~r/^[\w.-]+@([\w-]+\.)+[\w-]{2,4}$/
+hasEmail     = test emailPattern "contact hello@example.com"
+
+assignment = ~r/(\w+)=(\d+)/
+firstPair  = match assignment "x=10 y=20"
+rewritten  = replaceAll assignment "x=10 y=20" "$1:$2"
+
+headerName = ~r/^content-type$/i
+isHeader   = test headerName "CONTENT-TYPE"

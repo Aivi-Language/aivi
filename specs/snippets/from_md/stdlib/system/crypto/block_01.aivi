@@ -1,0 +1,12 @@
+use aivi.crypto
+
+fingerprint = sha256 "hello world"
+
+makeSessionToken : Effect Text Text
+makeSessionToken = do Effect {
+  bytes <- randomBytes 32
+  pure (toHex bytes)
+}
+
+checkPassword : Text -> Text -> Effect Text Bool
+checkPassword = password storedHash => verifyPassword password storedHash

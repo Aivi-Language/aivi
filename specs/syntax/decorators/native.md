@@ -34,10 +34,8 @@ This is the right choice when the function is already exposed by the runtime as 
 
 ### Syntax
 
-```aivi
-@native "module.functionName"
-binding : TypeSig
-```
+<<< ../../snippets/from_md/syntax/decorators/native/block_01.aivi{aivi}
+
 
 Placing `@native` on the type signature is enough: the compiler will synthesize the forwarding definition for you.
 No dummy body is required.
@@ -45,10 +43,8 @@ If a matching body is present, the compiler replaces its expression with the nat
 
 ### Example
 
-```aivi
-@native "system.args"
-rawArgs : Unit -> Effect Text (List Text)
-```
+<<< ../../snippets/from_md/syntax/decorators/native/block_02.aivi{aivi}
+
 
 Call this binding as `rawArgs Unit`.
 The friendlier `aivi.system.args` wrapper is implemented the same way, but hides the raw `Unit` argument from normal application code.
@@ -89,10 +85,8 @@ During `aivi build`, the compiler generates a Rust bridge that converts between 
 
 ### Syntax
 
-```aivi
-@native "crate_name::path::function"
-binding : TypeSig
-```
+<<< ../../snippets/from_md/syntax/decorators/native/block_03.aivi{aivi}
+
 
 No dummy body is required here either.
 Placing `@native` on the type signature alone is enough for the compiler to generate the forwarding definition.
@@ -101,10 +95,8 @@ The AIVI function name still follows normal `lowerCamelCase` conventions.
 
 ### Example
 
-```aivi
-@native "serde_json::from_str"
-parseUser : Text -> Result Text { name: Text, age: Int }   // AOT build generates the bridge
-```
+<<< ../../snippets/from_md/syntax/decorators/native/block_04.aivi{aivi}
+
 
 This example needs `serde_json` in the project's `Cargo.toml`.
 Because it returns a record, it is also a practical case for adding `serde = { version = "1.0", features = ["derive"] }`.
@@ -195,10 +187,8 @@ How it works:
 
 Example:
 
-```aivi
-@native "serde_json::from_str"
-parseConfig : Text -> Result Text { imapHost: Text, imapPort: Int, useSsl: Bool }
-```
+<<< ../../snippets/from_md/syntax/decorators/native/block_05.aivi{aivi}
+
 
 Generates bridge code along these lines:
 

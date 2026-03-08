@@ -1,0 +1,4 @@
+numbers = range 1 6
+kept    = filter (n => n > 2) numbers
+shifted = map (n => n + 1) kept
+result  = toList shifted

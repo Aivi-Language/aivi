@@ -1,0 +1,2 @@
+msg =
+  tWithFallback [userBundle, defaultBundle] (~k"app.welcome") { name: "Alice" }

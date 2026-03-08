@@ -1,0 +1,14 @@
+use aivi.i18n
+
+props = "app.welcome = Hello, \\{name:Text\\}!\\napp.lastLogin = Last login: \\{when:Text\\}.\\n"
+
+locale =
+  parseLocale "en-US"
+  or { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+bundle =
+  bundleFromProperties locale props
+  or { locale: locale, entries: Map.empty }
+
+welcome = t bundle (~k"app.welcome") { name: "Alice" }
+lastLogin = t bundle (~k"app.lastLogin") { when: "2026-02-12" }

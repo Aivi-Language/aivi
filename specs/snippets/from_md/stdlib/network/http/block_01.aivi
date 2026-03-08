@@ -1,12 +1,1 @@
-use aivi.net.http
-
-loadHomePage : Url -> Effect Text Text
-loadHomePage = homePageUrl => do Effect {
-  responseResult <- get homePageUrl
-  responseResult match
-    | Ok response =>
-        homePageBody = response.body
-      pure homePageBody
-    | Err err =>
-        fail "Could not load page: {err.message}"
-}
+Header = { name: Text, value: Text }

@@ -106,22 +106,8 @@ A tiny mental model:
 Some workflows need to react to the first available result, message, or timeout.
 Today the stable surface uses `race` when two effects compete and `timeoutWith` when one of the competitors is simply the clock.
 
-```aivi
-do Effect {
-  slow = _ => do Effect {
-    sleep 50
-    pure "left"
-  }
-  fast = _ => do Effect {
-    sleep 0
-    pure "right"
-  }
+<<< ../../snippets/from_md/stdlib/system/concurrency/block_01.aivi{aivi}
 
-  fastest <- race (slow Unit) (fast Unit)
-  guarded <- timeoutWith 100 "timeout" (pure 9)
-  pure (fastest, guarded)
-}
-```
 
 In the example above, `race` keeps only the faster branch, and `timeoutWith` cancels the protected effect if the timer wins.
 A dedicated `select { ... }` surface form is not part of `aivi.concurrency` today.

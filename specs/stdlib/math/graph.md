@@ -35,15 +35,8 @@ Typical uses include:
 
 `Graph` currently overloads only `+`. The operator deduplicates node ids while concatenating edge lists in order, which means repeated edges are preserved until you call `dedupEdges`.
 
-```aivi
-use aivi.graph (fromEdges, dedupEdges, domain Graph)
+<<< ../../snippets/from_md/stdlib/math/graph/block_01.aivi{aivi}
 
-left = fromEdges [(1, 2)]
-right = fromEdges [(2, 3), (1, 2)]
-
-combined = left + right
-deduped = dedupEdges combined
-```
 
 ## Core helpers
 

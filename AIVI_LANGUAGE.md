@@ -16,7 +16,7 @@ apply: always
 - Use `Option A` / `Result E A` instead of null; `Validation E A` for error accumulation; recursion, folds, or generators instead of loops.
 - Pattern bindings with `=` must be **total**; refutable matches use `match`.
 - Records are structural and closed (no row polymorphism).
-- Effects are explicit: `Effect E A` (error type `E`, success type `A`), optionally refined by `with { ... }` capability clauses.
+- Effects are explicit: `Effect E A` (error type `E`, success type `A`).
 - Domains give meaning to operators and suffix literals for non-`Int` types.
 - No semicolons — bindings and block statements are separated by newlines.
 - Opening `{` always on the same line as the keyword (`do Effect {`, `generate {`, `x match`).
@@ -720,28 +720,6 @@ Invalid transition calls fail with `InvalidTransition { machine, from, event, ex
 | `bind`    | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence                |
 | `attempt` | `Effect E A -> Effect F (Result E A)`           | Catch error as `Result` |
 
-### Capability surface (Phase 1)
-
-Capabilities sit on top of `Effect E A` and `Resource E A`; they are not a third effect parameter and do not change `E` or `A`.
-
-```aivi
-readConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.read }
-
-pollUsers : Url -> Effect SyncError (List User) with { network.http, clock.sleep, cancellation.propagate }
-
-with { file.read, process.env.read } in do Effect {
-  cfg  <- load (file.json "./config.json")
-  mode <- load (env.get "AIVI_MODE")
-  pure { cfg, mode }
-}
-```
-
-- capability clauses describe the **minimum required authority**
-- callers may always have a larger capability set
-- missing capability errors are compile-time diagnostics, not values in `E`
-- family shorthands such as `file`, `network`, `db`, `clock`, `randomness`, `process`, `ui`, and `cancellation` satisfy narrower leaves
-- handler / interpreter binding lands in a later milestone; for now, keep using `mock ... in` for test substitution and read existing ambient builtins as implicitly requiring the mapped capabilities
-
 ### Error fallback with `or`
 
 ```aivi
@@ -849,8 +827,6 @@ process = input => do Effect {
 ## 11 Resources
 
 `Resource E A` - a recipe for acquiring a handle of type `A` (with error type `E`), using it, and releasing it.
-
-`Resource` can carry the same capability clause as `Effect`: `Resource FileError Handle with { file.read }`. The clause covers acquisition and cleanup; finalizers remain cancellation-protected automatically.
 
 ### Defining
 
@@ -1063,8 +1039,6 @@ do Effect {
 ```
 
 Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/decode`, `email.imap`.
-
-Capability mapping (Phase 1): `load (file.*)` -> `file.read`, `load (rest.*|http.*|https.*)` -> `network.http`, `load (env.*)` -> `process.env.read`, database-backed source reads -> `db.query`, and `@static` embedded sources require no runtime capability once compiled into the binary.
 
 ### Source pipeline helpers
 

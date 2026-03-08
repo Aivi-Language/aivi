@@ -10,10 +10,8 @@ If you want design guidance rather than decorator syntax, see [Compile-Time Sour
 
 ## Syntax
 
-```aivi
-@static
-binding = staticSource ...
-```
+<<< ../../snippets/from_md/syntax/decorators/static/block_01.aivi{aivi}
+
 
 The binding must be parameterless because the compiler evaluates it before the program runs and there are no runtime arguments to supply.
 
@@ -130,10 +128,8 @@ Use this when an external system, such as an LLM API or validation service, expe
 
 ### Syntax
 
-```aivi
-@static
-schemaBinding = type.jsonSchema TypeName
-```
+<<< ../../snippets/from_md/syntax/decorators/static/block_02.aivi{aivi}
+
 
 `TypeName` must be a type alias defined in the same module.
 The generated schema follows the OpenAI structured-output envelope:

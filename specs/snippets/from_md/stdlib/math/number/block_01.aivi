@@ -1,0 +1,7 @@
+use aivi.number.bigint
+use aivi.number.bigint (domain BigInt)
+
+seed           = fromInt 1000000
+huge           = seed * seed * seed
+next           = huge + 1n
+safeMachineInt = toInt 42n

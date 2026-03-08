@@ -1,7 +1,19 @@
-do Effect {
-  session    <- email.imapOpen config
-  _          <- email.imapSelect "INBOX" session
-  messageIds <- email.imapSearch "UNSEEN" session
-  messages   <- email.imapFetch messageIds session
-  pure messages
+use aivi.email
+
+InboxMessage = {
+  uid: Option Int
+  subject: Option Text
+  from: Option Text
+  to: Option Text
+  date: Option Text
+  body: Text
+}
+
+fetchUnread : ImapConfig -> Effect Text (List InboxMessage)
+fetchUnread = config => do Effect {
+  session <- imapOpen config
+  _       <- imapSelect "INBOX" session
+  uids    <- imapSearch "UNSEEN" session
+  msgs    <- imapFetch uids session
+  pure msgs
 }

@@ -1,0 +1,9 @@
+domain Name over CarrierType = {
+  Delta = ...
+
+  (+) : CarrierType -> Delta -> CarrierType
+  (+) = carrier delta => ...
+
+  1d : Int -> Delta
+  1d = amount => ...
+}

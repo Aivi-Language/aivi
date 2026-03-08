@@ -24,21 +24,13 @@ A few examples:
 
 ## Overview
 
-```aivi
-use aivi.probability
+<<< ../../snippets/from_md/stdlib/math/probability/block_01.aivi{aivi}
 
-distribution = uniform 0.0 1.0
-
-// For continuous distributions, pdf returns density at a value.
-densityAtHalf = distribution.pdf 0.5
-```
 
 ## Features
 
-```aivi
-Probability = Float
-Distribution A = { pdf: A -> Probability }
-```
+<<< ../../snippets/from_md/stdlib/math/probability/block_02.aivi{aivi}
+
 
 `Probability` is currently just an alias for `Float`, so the type is convenient but not range-safe by itself. Use `clamp` when a computed value may fall outside `[0.0, 1.0]`.
 
@@ -49,13 +41,8 @@ Distribution A = { pdf: A -> Probability }
 
 ## Domain Definition
 
-```aivi
-domain Probability over Probability = {
-  (+) : Probability -> Probability -> Probability
-  (-) : Probability -> Probability -> Probability
-  (*) : Probability -> Probability -> Probability
-}
-```
+<<< ../../snippets/from_md/stdlib/math/probability/block_03.aivi{aivi}
+
 
 The domain gives you convenient arithmetic on probability-typed values, but it does not enforce normalization or the `[0.0, 1.0]` invariant.
 
@@ -70,21 +57,10 @@ The domain gives you convenient arithmetic on probability-typed values, but it d
 
 ## Usage Examples
 
-```aivi
-use aivi.probability
+<<< ../../snippets/from_md/stdlib/math/probability/block_04.aivi{aivi}
 
-successRate = clamp 0.7
-coin        = bernoulli successRate
-probHeads   = coin.pdf True
-probTails   = coin.pdf False
-```
 
-```aivi
-use aivi.probability
+<<< ../../snippets/from_md/stdlib/math/probability/block_05.aivi{aivi}
 
-unitInterval     = uniform 0.0 1.0
-densityAtHalf    = unitInterval.pdf 0.5
-halfContribution = expectation unitInterval 0.5
-```
 
 In the second example, `halfContribution` is only the contribution at `0.5`, not the total expected value of the whole distribution.

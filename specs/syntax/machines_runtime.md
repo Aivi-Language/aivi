@@ -18,22 +18,8 @@ A `machine` declaration produces a record value with:
 
 Using the `AccountSyncMachine` declaration from [Machine Syntax](./machines.md):
 
-```aivi
-machineRuntime = do Effect {
-  { boot, lease, run, currentState, can } = AccountSyncMachine
+<<< ../snippets/from_md/syntax/machines_runtime/block_01.aivi{aivi}
 
-  _ <- assertEq (constructorName (currentState Unit)) "Idle"
-  _ <- assertEq (can.lease Unit) True
-  _ <- assertEq (can.run Unit) False
-
-  bootAttempt <- attempt (boot {})
-  _           <- bootAttempt match
-    | Err err => assertEq (constructorName err) "InvalidTransition"
-    | Ok _    => fail "boot should fail after initialization"
-
-  pure Unit
-}
-```
 
 The behavior above is currently verified by `integration-tests/syntax/effects/machine_runtime.aivi`.
 
@@ -49,11 +35,8 @@ The init transition name may still be present on the generated record, but it is
 
 Calling a non-init transition performs a guard check against the machine's current state. If exactly one declared edge for that transition name matches, the runtime applies the state change and then returns `Unit` unless a later handler fails.
 
-```aivi
-_ <- lease {}
-_ <- run { batchId: 42 }
-_ <- done {}
-```
+<<< ../snippets/from_md/syntax/machines_runtime/block_02.aivi{aivi}
+
 
 A transition call always runs inside `do Effect { ... }`.
 
@@ -80,12 +63,8 @@ When a transition succeeds, runtime behavior is:
 2. update the state
 3. run the registered handlers for that transition
 
-```aivi
-on run => do Effect {
-  _ <- log.info "sync run started"   // Observes the transition after the state change
-  pure Unit
-}
-```
+<<< ../snippets/from_md/syntax/machines_runtime/block_03.aivi{aivi}
+
 
 This ordering makes handlers a good fit for follow-up work such as logging, metrics, cache invalidation, or notifications. Use the transition body for the workflow step itself, and use `on` for reactions to a successful step.
 
@@ -95,23 +74,8 @@ If a registered handler fails, the transition call returns that failure, but the
 
 Using the same machine:
 
-```aivi
-machineFlow = do Effect {
-  { lease, run, currentState } = AccountSyncMachine
+<<< ../snippets/from_md/syntax/machines_runtime/block_04.aivi{aivi}
 
-  on run => fail "run handler failure"
-
-  _         <- lease {}
-  runResult <- attempt (run { batchId: 1 })
-
-  _ <- runResult match
-    | Err _ => pure Unit
-    | Ok _  => fail "expected handler failure"
-
-  _ <- assertEq (constructorName (currentState Unit)) "Syncing"
-  pure Unit
-}
-```
 
 
 This is important in real systems: once the transition itself has succeeded, post-transition observers do not rewind the workflow.

@@ -9,10 +9,8 @@ The message should tell readers what to do next, not just that the old binding i
 
 ## Syntax
 
-```aivi
-@deprecated "use newName instead"
-binding = ...
-```
+<<< ../../snippets/from_md/syntax/decorators/deprecated/block_01.aivi{aivi}
+
 
 The message argument is required and must be a string literal.
 

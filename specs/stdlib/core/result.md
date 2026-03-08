@@ -70,21 +70,8 @@ AIVI uses the shared name `chain` for “run the next fallible step if this one 
 | `mapErr` | `aivi.result` | `(E -> F) -> Result E A -> Result F A` | Transforms the error value while leaving successes alone |
 | `chain` | [`aivi.logic`](logic.md) | `(A -> Result E B) -> Result E A -> Result E B` | Chains fallible operations together |
 
-```aivi
-use aivi.logic
-use aivi.result
+<<< ../../snippets/from_md/stdlib/core/result/block_01.aivi{aivi}
 
-doubled = Ok 5 |> map (_ * 2) // Ok 10
-
-wrapped = Err "not found" |> mapErr (e => { code: 404, message: e })
-
-validateAge = age => age >= 0 match
-  | True  => Ok age
-  | False => Err "Age must be non-negative"
-
-parseAndValidate = input =>
-  parseInt input |> chain validateAge
-```
 
 A useful mental model:
 
@@ -96,11 +83,8 @@ A useful mental model:
 
 Breaking a `Result` workflow into named steps usually reads better than deeply nested calls:
 
-```aivi
-rawConfig     = readConfigFile "app.toml"
-parsedConfig  = chain parseConfig rawConfig
-checkedConfig = chain validateConfig parsedConfig
-```
+<<< ../../snippets/from_md/stdlib/core/result/block_02.aivi{aivi}
+
 
 Each binding answers one question: did the previous step succeed, and if so, what is the next fallible step?
 
@@ -108,10 +92,8 @@ Each binding answers one question: did the previous step succeed, and if so, wha
 
 `mapErr` is especially useful when the low-level error is technically correct but still needs domain context:
 
-```aivi
-portResult   = parsePort text
-configResult = mapErr (err => ConfigError "PORT" err) portResult
-```
+<<< ../../snippets/from_md/stdlib/core/result/block_03.aivi{aivi}
+
 
 That keeps the original failure information while making the error more helpful at the call site.
 
@@ -133,16 +115,8 @@ When you need fallback choice or want to collapse one nested `Result`, use the s
 | `chain (inner => inner)` | [`aivi.logic`](logic.md) | `Result E (Result E A) -> Result E A` | Removes one layer of nesting when both layers use the same error type |
 | `alt` | [`aivi.logic`](logic.md) | `Result E A -> Result E A -> Result E A` | Returns the first `Ok`, or a fallback result |
 
-```aivi
-use aivi.logic
+<<< ../../snippets/from_md/stdlib/core/result/block_04.aivi{aivi}
 
-nested = Ok (Ok 42)
-flat   = nested |> chain (inner => inner) // Ok 42
-
-primary   = Err "failed"
-secondary = Ok "backup"
-value     = primary |> alt secondary // Ok "backup"
-```
 
 ## Relationship to other tools
 
@@ -156,20 +130,7 @@ value     = primary |> alt secondary // Ok "backup"
 
 This example parses raw input, adds domain context to parse failures, then continues with later checks only when the earlier steps succeeded:
 
-```aivi
-use aivi.logic
-use aivi.result
+<<< ../../snippets/from_md/stdlib/core/result/block_05.aivi{aivi}
 
-defaultUser = { name: "Guest", role: "viewer" }
-
-validateUser = input =>
-  parseJson input
-  |> mapErr (e => { field: "body", error: e })
-  |> chain validateSchema
-  |> chain checkPermissions
-  |> map normalizeData
-
-userData = validateUser rawInput |> getOrElse defaultUser
-```
 
 Here `parseJson` can fail first, `validateSchema` and `checkPermissions` depend on the parsed value, and `getOrElse` turns the final `Result` into a plain value at the boundary where a fallback makes sense.

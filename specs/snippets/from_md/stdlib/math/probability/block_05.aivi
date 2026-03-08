@@ -1,0 +1,5 @@
+use aivi.probability
+
+unitInterval     = uniform 0.0 1.0
+densityAtHalf    = unitInterval.pdf 0.5
+halfContribution = expectation unitInterval 0.5

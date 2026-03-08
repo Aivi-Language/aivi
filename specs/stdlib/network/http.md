@@ -48,7 +48,7 @@ Choose the smallest entry point that matches the job:
 
 ## Capabilities
 
-`get`, `post`, and `fetch` require the `network.http` capability, or the broader `network` shorthand. The `rest` helper module uses the same capability family.
+`get`, `post`, and `fetch` perform network I/O when executed. The `rest` helper module covers the same runtime surface.
 
 ## Quick start
 
@@ -78,24 +78,20 @@ For JSON payloads, pass `Some (Json ...)` directly or rely on the `Body` coercio
 
 A single HTTP header as a name/value pair.
 
-```aivi
-Header = { name: Text, value: Text }
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_01.aivi{aivi}
+
 
 Typical examples:
 
-```aivi
-{ name: "Accept", value: "application/json" }
-{ name: "Authorization", value: "Bearer <token>" }
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_02.aivi{aivi}
+
 
 ### `Body`
 
 `Body` describes what you send to the server.
 
-```aivi
-Body = Plain Text | Form (List Header) | Json JsonValue
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_03.aivi{aivi}
+
 
 Think of the variants like this:
 
@@ -105,23 +101,15 @@ Think of the variants like this:
 
 When the expected type is `Body`, a plain record literal is automatically coerced to `Json (toJson record)`. See [expected-type coercions](../../syntax/types/expected_type_coercions.md#body-coercions) for the full rule. In practice, that means you can stay focused on the data you want to send:
 
-```aivi
-// This record is automatically turned into JSON.
-body: Some { grant_type: "authorization_code", code: code }
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_04.aivi{aivi}
+
 
 Header rule: the `Json` variant automatically adds `Content-Type: application/json` when the request does not already define a `Content-Type` header. If you use `Form`, set `Content-Type` yourself when the server expects it.
 
 ### `Request`
 
-```aivi
-Request = {
-  method: Text
-  url: Url
-  headers: List Header
-  body: Option Body
-}
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_05.aivi{aivi}
+
 
 `Request` is the full request envelope. A useful way to read it is:
 
@@ -139,13 +127,8 @@ Request = {
 
 ### `Response`
 
-```aivi
-Response = {
-  status: Int
-  headers: List Header
-  body: Text
-}
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_06.aivi{aivi}
+
 
 `Response` contains three things:
 
@@ -159,9 +142,8 @@ This makes it easy to inspect the status code first and then decide how to handl
 
 Returned in the `Err` branch when a request cannot be completed.
 
-```aivi
-Error = { message: Text }
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_07.aivi{aivi}
+
 
 In practice, this is the value you inspect when:
 
@@ -199,12 +181,8 @@ Choose [`aivi.rest`](./rest.md) when:
 
 If an API gives you an `https://...` URL, import `aivi.net.https` and use it the same way you would use `aivi.net.http` for `GET`, text-body, and form-encoded requests:
 
-```aivi
-use aivi.net.https
+<<< ../../snippets/from_md/stdlib/network/http/block_08.aivi{aivi}
 
-loadProfile : Url -> Effect Text (Result Error Response)
-loadProfile = profileUrl => get profileUrl
-```
 
 ### Functions
 
@@ -218,19 +196,5 @@ loadProfile = profileUrl => get profileUrl
 
 The data types are:
 
-```aivi
-Header = { name: Text, value: Text }
-Body = Plain Text | Form (List Header)
-Request = {
-  method: Text
-  url: Url
-  headers: List Header
-  body: Option Body
-}
-Response = {
-  status: Int
-  headers: List Header
-  body: Text
-}
-Error = { message: Text }
-```
+<<< ../../snippets/from_md/stdlib/network/http/block_09.aivi{aivi}
+

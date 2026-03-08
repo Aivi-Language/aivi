@@ -9,40 +9,14 @@ Individual runnable tests are always top-level definitions. `@test` on a module 
 
 ## Syntax
 
-```aivi
-// Runnable test definition
-@test "addition is commutative"
-addCommutative = do Effect {
-  assertEq (add 2 3) (add 3 2)
-}
+<<< ../../snippets/from_md/syntax/decorators/test/block_01.aivi{aivi}
 
-// Test-oriented module marker
-@test
-module order_tests
-```
 
 
 ## Example
 
-```aivi
-@test
-module order_tests
+<<< ../../snippets/from_md/syntax/decorators/test/block_02.aivi{aivi}
 
-use aivi
-use aivi.testing
-
-add = left right => left + right
-
-@test "addition is commutative"
-addCommutative = do Effect {
-  assertEq (add 2 3) (add 3 2)
-}
-
-@test "empty list has length zero"
-emptyLen = do Effect {
-  assertEq (length []) 0
-}
-```
 
 Run this file with `aivi test path/to/order_tests.aivi`. The runner reports failures by qualified name, such as `order_tests.addCommutative`.
 
@@ -115,8 +89,7 @@ Read these rules as guardrails for “replace this dependency only here, then pu
 | **Restore** | The original binding is restored after `body` finishes, even on error |
 | **Path-based** | You replace the binding named by the path, such as `rest.get` |
 
-Capability handlers in [Effect Handlers](/syntax/effect_handlers) solve a different problem: they install interpreters for capability scopes via `with { capability = handler } in`.
-Prefer handlers for capability-polymorphic business logic, and use `mock ... in` for direct binding substitution.
+Use `mock ... in` for direct binding substitution in tests and temporary overrides.
 
 ### Snapshot mocks
 
@@ -135,9 +108,8 @@ For `mock snapshot`, the `<binding_path>` part of the filename is derived from t
 
 ### `assertSnapshot`
 
-```aivi
-assertSnapshot : Text -> A -> Effect Text Unit
-```
+<<< ../../snippets/from_md/syntax/decorators/test/block_03.aivi{aivi}
+
 
 `assertSnapshot` compares a serialized value against a stored snapshot.
 Pass `--update-snapshots` when you intentionally want to re-record the expected output.
@@ -157,4 +129,3 @@ Pass `--update-snapshots` when you intentionally want to re-record the expected 
 
 - [Testing Module](/stdlib/core/testing) — assertions, test runner, and snapshot assertions
 - [`aivi test`](/tools/cli#test) — test discovery, filtering, and snapshot update mode
-- [Effect handlers](/syntax/effect_handlers) — capability-based testing without binding substitution

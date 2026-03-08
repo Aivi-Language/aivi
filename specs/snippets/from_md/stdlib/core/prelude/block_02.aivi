@@ -1,0 +1,10 @@
+@no_prelude
+module docs.explicit
+
+use aivi (Bool, Int, Result, Text, Ok, Err)
+
+isPositive : Int -> Bool
+isPositive = n => n > 0
+
+status : Result Text Int
+status = Ok 1

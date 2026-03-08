@@ -1,0 +1,2 @@
+increment = x => x + 1
+pair      = x y => (x, y)

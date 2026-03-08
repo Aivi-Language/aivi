@@ -1,14 +1,11 @@
-use aivi.json
-
-User = { id: Int, name: Text, enabled: Bool }
-
-@static
-userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json" // load the contract while compiling
-
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    schema: source.schema.json userSchema // require agreement with the declared type
+appConfig : Source Env AppConfig
+appConfig =
+  env.decode {
+    prefix: "AIVI_APP"
+    schema: source.schema.derive
   }
+
+do Effect {
+  cfg <- load appConfig
+  pure cfg
+}

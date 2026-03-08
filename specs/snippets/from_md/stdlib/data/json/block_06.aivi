@@ -1,0 +1,4 @@
+JsonSchema = {
+  required: List Text
+  strict: Bool
+}

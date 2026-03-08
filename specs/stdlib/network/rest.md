@@ -39,20 +39,14 @@ Choose the smallest entry point that fits:
 
 ## Capabilities
 
-Calling `get`, `post`, or `fetch` requires the `network.http` capability, or the broader `network` shorthand.
+`get`, `post`, and `fetch` perform network I/O when executed.
 
 ## Typical example
 
 This is the style of code `aivi.rest` is meant for:
 
-```aivi
-use aivi.rest
+<<< ../../snippets/from_md/stdlib/network/rest/block_01.aivi{aivi}
 
-User = { id: Int, name: Text }
-
-loadUser : Url -> Effect Text User
-loadUser = userUrl => get userUrl
-```
 
 The expected result type (`User` here) tells the module what to decode from the response body.
 
@@ -83,17 +77,15 @@ Read the extra fields as policy choices:
 
 A single HTTP header as a name/value pair.
 
-```aivi
-Header = { name: Text, value: Text }
-```
+<<< ../../snippets/from_md/stdlib/network/rest/block_02.aivi{aivi}
+
 
 ### `Body`
 
 `Body` describes what you send to the server.
 
-```aivi
-Body = Plain Text | Form (List Header)
-```
+<<< ../../snippets/from_md/stdlib/network/rest/block_03.aivi{aivi}
+
 
 - `Plain Text` sends text exactly as written. Use this when you already have a JSON string or another raw payload.
 - `Form (List Header)` sends form fields as `{ name, value }` pairs.
@@ -104,18 +96,8 @@ Unlike [`aivi.net.http`](./http.md), the convenience `aivi.rest` module does not
 
 `Request` gathers the options you can set for a REST call.
 
-```aivi
-Request = {
-  method: Text
-  url: Url
-  headers: List Header
-  body: Option Body
-  timeoutMs: Option Int
-  retryCount: Option Int
-  bearerToken: Option Text
-  strictStatus: Option Bool
-}
-```
+<<< ../../snippets/from_md/stdlib/network/rest/block_04.aivi{aivi}
+
 
 | Field | Type | Explanation |
 | --- | --- | --- |

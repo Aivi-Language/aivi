@@ -65,28 +65,8 @@ Validators stay as plain pure functions. The built-in helpers in this module mos
 
 Field-level checks are great for inline feedback. On submit, you usually want one typed domain value, and `Validation` lets you accumulate all field errors instead of stopping at the first one.
 
-```aivi
-Contact = {
-  name: Text
-  email: Text
-}
+<<< ../../snippets/from_md/stdlib/ui/forms/block_01.aivi{aivi}
 
-MkContact : Text -> Text -> Contact
-MkContact = name email => {
-  name: name
-  email: email
-}
-
-toContact : {
-  name: Field Text
-  email: Field Text
-} -> Validation (List Text) Contact
-toContact = model =>
-  // Validate each field, then assemble a typed Contact value.
-  ap
-    (ap (Valid MkContact) (validate (allOf [required, minLength 2]) model.name))
-    (validate (allOf [required, email]) model.email)
-```
 
 
 A good rule of thumb is:
@@ -97,91 +77,8 @@ A good rule of thumb is:
 
 ## Full GTK app example
 
-```aivi
-use aivi
-use aivi.text
-use aivi.validation
-use aivi.ui.forms
-use aivi.ui.gtk4
+<<< ../../snippets/from_md/stdlib/ui/forms/block_02.aivi{aivi}
 
-Model = {
-  submitted: Bool
-  name: Field Text
-  email: Field Text
-}
-
-Msg =
-  | NameChanged Text
-  | NameBlurred
-  | EmailChanged Text
-  | EmailBlurred
-  | Submit
-
-initialModel : Model
-initialModel = {
-  submitted: False
-  name: field ""
-  email: field ""
-}
-
-nameRule : Text -> Validation (List Text) Text
-nameRule = allOf [required, minLength 2]
-
-emailRule : Text -> Validation (List Text) Text
-emailRule = allOf [required, email]
-
-nameErrors : Model -> List Text
-nameErrors = model => visibleErrors model.submitted nameRule model.name
-
-emailErrors : Model -> List Text
-emailErrors = model => visibleErrors model.submitted emailRule model.email
-
-view : Model -> GtkNode
-view = model => ~<gtk>
-  <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
-    <GtkEntry
-      id="nameInput"
-      text={model.name.value}
-      placeholderText="Name"
-      onInput={ NameChanged }
-      onFocusOut={ NameBlurred } />
-    <GtkLabel label={text.join ", " (nameErrors model)} />
-    <GtkEntry
-      id="emailInput"
-      text={model.email.value}
-      placeholderText="Email"
-      onInput={ EmailChanged }
-      onFocusOut={ EmailBlurred } />
-    <GtkLabel label={text.join ", " (emailErrors model)} />
-    <GtkButton id="submitBtn" label="Save" onClick={ Submit } />
-  </GtkBox>
-</gtk>
-
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event => event match
-  | GtkInputChanged _ "nameInput" txt  => Some (NameChanged txt)
-  | GtkFocusOut _ "nameInput"          => Some NameBlurred
-  | GtkInputChanged _ "emailInput" txt => Some (EmailChanged txt)
-  | GtkFocusOut _ "emailInput"         => Some EmailBlurred
-  | GtkClicked _ "submitBtn"           => Some Submit
-  | _                                  => None
-
-update : Msg -> Model -> Effect GtkError Model
-update = msg model => msg match
-  | NameChanged txt =>
-      // Keep the latest draft value in the model.
-      pure (model <| { name: setValue txt model.name })
-  | NameBlurred =>
-      // Mark the field as touched so its errors can become visible.
-      pure (model <| { name: touch model.name })
-  | EmailChanged txt =>
-      pure (model <| { email: setValue txt model.email })
-  | EmailBlurred =>
-      pure (model <| { email: touch model.email })
-  | Submit =>
-      // Flip the submitted flag so every field shows its current errors.
-      pure (model <| { submitted: True })
-```
 
 
 This example stops before command execution on purpose. If submission should trigger IO, first produce the validated payload, then launch the command from `update` as described in [`gtkApp` architecture](./app_architecture.md).

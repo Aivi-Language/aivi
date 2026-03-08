@@ -1,0 +1,2 @@
+displayName : { id: Int, name: Text } -> Text
+displayName = user => user.name

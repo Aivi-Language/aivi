@@ -354,7 +354,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![to_json_a],
             ty: json_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -369,7 +368,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(to_json_standalone_a)),
                 Box::new(json_value_ty),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );

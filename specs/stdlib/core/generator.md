@@ -15,12 +15,8 @@ If you are new to generators, copy this three-stage workflow first:
 2. transform it,
 3. consume it.
 
-```aivi
-numbers = range 1 6
-kept    = filter (n => n > 2) numbers
-shifted = map (n => n + 1) kept
-result  = toList shifted
-```
+<<< ../../snippets/from_md/stdlib/core/generator/block_01.aivi{aivi}
+
 
 Read that top to bottom as: “describe a sequence, narrow it, adjust it, then finally materialize it.”
 
@@ -98,10 +94,8 @@ These helpers are the finish line: they answer “what final result do I want fr
 
 `reduce` is the clearest way to summarize a generator into one value:
 
-```aivi
-numbers = range 1 5
-sum     = reduce (total => n => total + n) 0 numbers
-```
+<<< ../../snippets/from_md/stdlib/core/generator/block_02.aivi{aivi}
+
 
 The final `sum` is `10`, because `range 1 5` produces `[1, 2, 3, 4]`.
 

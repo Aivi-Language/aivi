@@ -156,12 +156,6 @@ impl TypeChecker {
             Expr::Binary {
                 op, left, right, ..
             } => self.infer_binary(op, left, right, env),
-            Expr::CapabilityScope { handlers, body, .. } => {
-                for handler in handlers {
-                    let _ = self.infer_expr(&handler.handler, env)?;
-                }
-                self.infer_expr(body, env)
-            }
             Expr::Block { kind, items, .. } => self.infer_block(kind, items, env),
             Expr::Raw { .. } => Ok(self.fresh_var()),
             Expr::Mock { body, .. } => self.infer_expr(body, env),
@@ -514,32 +508,6 @@ impl TypeChecker {
                     span,
                 };
                 self.check_or_coerce(out, expected, env)
-            }
-            Expr::CapabilityScope {
-                capabilities,
-                handlers,
-                body,
-                span,
-            } => {
-                let mut new_handlers = Vec::with_capacity(handlers.len());
-                for handler in handlers {
-                    let (handler_expr, _ty) = self.elab_expr(handler.handler, None, env)?;
-                    new_handlers.push(crate::surface::CapabilityHandlerBinding {
-                        capability: handler.capability,
-                        handler: handler_expr,
-                        span: handler.span,
-                    });
-                }
-                let (body, body_ty) = self.elab_expr(*body, expected, env)?;
-                Ok((
-                    Expr::CapabilityScope {
-                        capabilities,
-                        handlers: new_handlers,
-                        body: Box::new(body),
-                        span,
-                    },
-                    body_ty,
-                ))
             }
             Expr::Block { kind, items, span } => {
                 // For generic do-monad blocks (do Result, do Option, etc.), skip

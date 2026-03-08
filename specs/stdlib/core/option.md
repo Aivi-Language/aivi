@@ -68,9 +68,8 @@ These helpers are most useful near the edges of your program when you need a dir
 
 For simple defaults, the `??` operator is usually the shortest choice:
 
-```aivi
-name = maybeName ?? "Anonymous"
-```
+<<< ../../snippets/from_md/stdlib/core/option/block_01.aivi{aivi}
+
 
 Use `getOrElseLazy` when building the fallback value is expensive and should happen only if needed.
 
@@ -84,18 +83,8 @@ Use `getOrElseLazy` when building the fallback value is expensive and should hap
 | `chain` | `(A -> Option B) -> Option A -> Option B` | Chains two optional steps together |
 | `filter` | `(A -> Bool) -> Option A -> Option A` | Keeps the value only when it satisfies the predicate |
 
-```aivi
-doubled = Some 5 |> map (_ * 2) // Some 10
+<<< ../../snippets/from_md/stdlib/core/option/block_02.aivi{aivi}
 
-nextPage = page =>
-  if page > 0 then Some (page + 1) else None
-
-movedForward = Some 5 |> chain nextPage // Some 6
-missingPage  = None |> chain nextPage // None
-
-adult = Some 25 |> filter (_ >= 18) // Some 25
-minor = Some 12 |> filter (_ >= 18) // None
-```
 
 A good rule of thumb:
 
@@ -107,12 +96,8 @@ A good rule of thumb:
 
 When an optional workflow starts to feel nested, split it into named steps:
 
-```aivi
-maybeUser         = lookupUser 42
-maybeName         = maybeUser |> map (user => user.name)
-maybeNonBlankName = maybeName |> filter (name => name != "")
-displayName       = maybeNonBlankName ?? "Anonymous"
-```
+<<< ../../snippets/from_md/stdlib/core/option/block_03.aivi{aivi}
+
 
 This reads better than packing all of that into one expression, and it makes the “where can this become `None`?” points obvious.
 
@@ -131,14 +116,8 @@ These conversions are useful when you start with “maybe there is a value” an
 
 For fallback choice and one-layer flattening, reach for the shared [`aivi.logic`](logic.md) operations that `Option` already implements.
 
-```aivi
-nested = Some (Some 42)
-flat   = nested |> chain (inner => inner) // Some 42
+<<< ../../snippets/from_md/stdlib/core/option/block_04.aivi{aivi}
 
-primary   = None
-secondary = Some "backup"
-value     = primary |> alt secondary // Some "backup"
-```
 
 `chain (inner => inner)` is the standard one-layer flattening pattern. `alt` is the shared fallback-choice operation that many other libraries call `orElse`.
 
@@ -153,17 +132,5 @@ value     = primary |> alt secondary // Some "backup"
 
 Assume each user record stores `email : Option Text`. This example looks up a user, keeps only email-like strings, normalizes them, and falls back to a default address.
 
-```aivi
-use aivi.list
-use aivi.logic
-use aivi.option
-use aivi.text
+<<< ../../snippets/from_md/stdlib/core/option/block_05.aivi{aivi}
 
-processUser = users userId =>
-  users
-  |> find (user => user.id == userId)
-  |> chain (user => user.email)
-  |> filter (text.contains "@")
-  |> map text.toLower
-  |> getOrElse "no-email@example.com"
-```

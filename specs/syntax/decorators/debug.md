@@ -12,14 +12,8 @@ This page therefore documents the currently implemented decorator shapes and low
 
 ## Syntax
 
-```aivi
-@debug
-@debug()
-@debug(time)
-@debug(pipes, args, return, time)
+<<< ../../snippets/from_md/syntax/decorators/debug/block_01.aivi{aivi}
 
-f = x => ...
-```
 
 `@debug` and `@debug()` both default to function-level timing only.
 When you supply one or more flags, only the named flags are enabled, so `@debug(args)` does **not** imply `time`.
@@ -30,10 +24,8 @@ Applying it to a non-function binding is a compile error (`E2010`).
 
 In the current implementation, the same `E2010` diagnostic also fires on ordinary v0.1 top-level lambda definitions such as:
 
-```aivi
-@debug
-transform = input => ...
-```
+<<< ../../snippets/from_md/syntax/decorators/debug/block_02.aivi{aivi}
+
 
 That validator behaviour is stricter than the lowering code, which still knows how to attach debug metadata to the lambda body when debug tracing is forced on internally.
 

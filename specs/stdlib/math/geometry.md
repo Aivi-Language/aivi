@@ -21,17 +21,8 @@ The current surface is intentionally small. `Ray3` is available as a data type, 
 
 ## Overview
 
-```aivi
-use aivi.geometry
+<<< ../../snippets/from_md/stdlib/math/geometry/block_01.aivi{aivi}
 
-origin   = point2 0.0 0.0
-target   = point2 3.0 4.0
-edge     = segment2 0.0 0.0 6.0 2.0
-mid      = midpoint edge
-gap      = distance origin target
-triangle = { vertices: [point2 0.0 0.0, point2 4.0 0.0, point2 0.0 3.0] }
-size     = area triangle
-```
 
 `gap` evaluates to `5.0`, `mid` evaluates to `{ x: 3.0, y: 1.0 }`, and `size` evaluates to `6.0`.
 
@@ -52,35 +43,15 @@ If you need vector-specific operations such as normalization, dot products, or m
 
 If you are new to operator overloading in AIVI, see [Domains](../../syntax/domains.md) first. `aivi.geometry` defines `domain Geometry` for `Point2` and `Point3` only:
 
-```aivi
-domain Geometry over Point2 = {
-  (+) : Point2 -> Point2 -> Point2
-  (+) = a b => { x: a.x + b.x, y: a.y + b.y }
+<<< ../../snippets/from_md/stdlib/math/geometry/block_02.aivi{aivi}
 
-  (-) : Point2 -> Point2 -> Point2
-  (-) = a b => { x: a.x - b.x, y: a.y - b.y }
-}
-
-domain Geometry over Point3 = {
-  (+) : Point3 -> Point3 -> Point3
-  (+) = a b => { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
-
-  (-) : Point3 -> Point3 -> Point3
-  (-) = a b => { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
-}
-```
 
 ## Convenience constructors
 
 You can always build values with full record syntax, but the short constructors are easier to read in examples, tests, and small calculations.
 
-```aivi
-point2 = x y => { x: x, y: y }
-point3 = x y z => { x: x, y: y, z: z }
-line2 = ox oy dx dy => { origin: point2 ox oy, direction: point2 dx dy }
-segment2 = x1 y1 x2 y2 => { start: point2 x1 y1, end: point2 x2 y2 }
-ray3 = ox oy oz dx dy dz => { origin: point3 ox oy oz, dir: point3 dx dy dz }
-```
+<<< ../../snippets/from_md/stdlib/math/geometry/block_03.aivi{aivi}
+
 
 | Constructor | Type | Equivalent |
 | --- | --- | --- |
@@ -102,24 +73,5 @@ ray3 = ox oy oz dx dy dz => { origin: point3 ox oy oz, dir: point3 dx dy dz }
 
 The typical flow is: construct named geometry values, then call helpers to ask concrete questions about them.
 
-```aivi
-use aivi.geometry
+<<< ../../snippets/from_md/stdlib/math/geometry/block_04.aivi{aivi}
 
-pathStart = point2 1.0 1.0
-pathEnd   = point2 5.0 4.0
-path      = segment2 1.0 1.0 5.0 4.0
-center    = midpoint path
-length    = distance pathStart pathEnd
-
-outline =
-  {
-    vertices:
-      [ point2 0.0 0.0
-      , point2 5.0 0.0
-      , point2 5.0 2.0
-      , point2 0.0 2.0
-      ]
-  }
-
-surfaceArea = area outline
-```

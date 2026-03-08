@@ -455,9 +455,6 @@ impl ArenaBuilder {
                 right: self.lower_expr(right),
                 span: span.clone(),
             },
-            Expr::CapabilityScope { body, .. } => {
-                return self.lower_expr(body);
-            }
             Expr::Block { kind, items, span } => ArenaExpr::Block {
                 kind: self.lower_block_kind(kind),
                 items: items.iter().map(|x| self.lower_block_item(x)).collect(),
@@ -653,9 +650,6 @@ impl ArenaBuilder {
                 items: items.iter().map(|x| self.lower_type_expr(x)).collect(),
                 span: span.clone(),
             },
-            TypeExpr::CapabilityClause { base, .. } => {
-                return self.lower_type_expr(base);
-            }
             TypeExpr::Apply { base, args, span } => ArenaTypeExpr::Apply {
                 base: self.lower_type_expr(base),
                 args: args.iter().map(|x| self.lower_type_expr(x)).collect(),

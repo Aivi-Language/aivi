@@ -1,7 +1,1 @@
-source.transform: (A -> B) -> Source K A -> Source K B
-source.validate: (A -> Validation (List DecodeError) B) -> Source K A -> Source K B
-source.retry: RetryPolicy -> Source K A -> Source K A
-source.timeout: Int -> Source K A -> Source K A
-source.cache: CachePolicy -> Source K A -> Source K A
-source.provenance: ProvenancePolicy -> Source K A -> Source K A
-source.observe: ObservationPolicy -> Source K A -> Source K A
+DecodeError (List aivi.validation.DecodeError)

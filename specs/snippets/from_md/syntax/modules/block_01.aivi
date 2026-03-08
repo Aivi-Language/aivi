@@ -1,0 +1,1 @@
+use company.project.analytics as Analytics // shorter name inside this file

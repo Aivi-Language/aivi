@@ -37,23 +37,6 @@ For handling an effect error as data, the standard library provides:
 
 `attempt` runs the inner effect and captures success or failure as a `Result E A`. The outer effect uses a different error type `F`, because the original `E` has been converted into data.
 
-### Capability requirements
-
-After you understand the basic `Effect E A` shape, the next refinement is authority: which outside operations this effect is allowed to use.
-
-Capabilities refine `Effect E A` without turning it into a different effect type. Write a minimum-authority clause after the effect type:
-
-```aivi
-loadConfig : Text -> Effect ConfigError AppConfig with { file.read, process.env.read }
-```
-
-- the capability clause is checked statically and is **not** part of `E`
-- callers may run an effect in any larger capability scope
-- lexical narrowing uses `with { ... } in expr`
-- handler or interpreter binding uses the same scope form via `with { capability = handler } in expr`
-
-See [Capabilities](capabilities.md) and [Effect Handlers](effect_handlers.md) for the shared rules.
-
 ### Examples (core operations)
 
 `pure` lifts a value into an effect:
@@ -78,17 +61,9 @@ The standard library function `load` lifts a typed `Source` (see [External Sourc
 
 <<< ../snippets/from_md/syntax/effects/load.aivi{aivi}
 
-The capability required by `load` depends on the source kind:
-
-- file or image sources → `file.read`
-- REST / HTTP / HTTPS sources → `network.http`
-- environment sources → `process.env.read`
-- database-backed source loads → `db.query`
-- `@static` embedded sources → no runtime capability after compilation
-
 When a source value carries composition metadata, `load` runs the source's canonical pipeline before returning the final value.
 
-See [External Sources](external_sources.md) and [Capabilities](capabilities.md) for the full mapping.
+See [External Sources](external_sources.md) for the full source model.
 
 ## 9.2 `do Effect` blocks
 
@@ -98,12 +73,8 @@ A `do Effect { ... }` block is the everyday way to write effectful code. This se
 
 A `do Effect { ... }` block lets you write effectful code in the same order the steps happen.
 
-```aivi
-do Effect {
-  user <- loadUser id   // run the effect and bind its result
-  pure user.name        // wrap the final plain value back into Effect
-}
-```
+<<< ../snippets/from_md/syntax/effects/block_01.aivi{aivi}
+
 
 Inside a `do Effect { ... }` block:
 
@@ -154,11 +125,8 @@ Restrictions:
 
 In `do Effect { ... }`, this common pattern is allowed without `_ <-`:
 
-```aivi
-do Effect {
-  _ <- if cond then print "branch" else pure Unit
-}
-```
+<<< ../snippets/from_md/syntax/effects/block_02.aivi{aivi}
+
 
 This is equivalent to the shorter statement form:
 
@@ -304,9 +272,8 @@ If a handler fails, the transition remains applied. See [Machine Runtime Semanti
 
 ### Example (minimal)
 
-```aivi
-on Click => pure Unit
-```
+<<< ../snippets/from_md/syntax/effects/block_03.aivi{aivi}
+
 
 ### Example: persistent todo list
 

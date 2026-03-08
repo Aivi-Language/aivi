@@ -29,13 +29,8 @@ In practical terms, `@static` fixes data or generated artifacts at build time. T
 
 ## Basic examples
 
-```aivi
-@static
-schema = file.json "./schema.json"        // bundled into the compiled program
+<<< ../../snippets/from_md/syntax/external_sources/compile_time/block_01.aivi{aivi}
 
-@static
-buildEnv = env.get "AIVI_BUILD_ENV"       // resolved when compiling, not at runtime
-```
 
 Use this style when you want the compiled binary to carry the value directly.
 For file-based reads, relative paths resolve from the source file first and then from the workspace root.

@@ -1,0 +1,20 @@
+Rgb = { r: Int, g: Int, b: Int }
+
+adjustLightness : Rgb -> Int -> Rgb
+adjustLightness = color amount => ...
+
+adjustHue : Rgb -> Int -> Rgb
+adjustHue = color amount => ...
+
+domain Color over Rgb = {
+  Delta = Lightness Int | Hue Int
+
+  (+) : Rgb -> Delta -> Rgb
+  (+) = color (Lightness amount) => adjustLightness color amount
+  (+) = color (Hue amount) => adjustHue color amount
+
+  1l : Int -> Delta
+  1h : Int -> Delta
+  1l = amount => Lightness amount
+  1h = amount => Hue amount
+}

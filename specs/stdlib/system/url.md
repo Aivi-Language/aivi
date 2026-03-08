@@ -46,18 +46,8 @@ See also [Operators: Sigils](../../syntax/operators.md#118-sigils) and [Domains 
 
 Inside `aivi.url`, the domain is defined like this:
 
-```aivi
-domain Url over Url = {
-  (+) : Url -> (Text, Text) -> Url
-  (+) = value (key, v) => { ...value, query: [...value.query, (key, v)] }
+<<< ../../snippets/from_md/stdlib/system/url/block_01.aivi{aivi}
 
-  (-) : Url -> Text -> Url
-  (-) = value key => {
-    ...value,
-    query: List.filter (filterKey key) value.query
-  }
-}
-```
 
 Outside the module, use the exported operators (`url + ("page", "1")`, `url - "page"`). Do not rely on record update syntax against `Url`; the representation is hidden outside `aivi.url`. The `-` operator removes every query entry whose key matches the given text.
 
@@ -92,31 +82,11 @@ Working with a structured `Url` value makes those operations clearer, and it let
 
 ## Usage Examples
 
-```aivi
-use aivi.url
+<<< ../../snippets/from_md/stdlib/system/url/block_02.aivi{aivi}
 
-base = ~url(https://api.example.com/v1/search)
-search = base + ("q", "aivi") + ("sort", "desc")
-cleaned = search - "sort"
 
-searchHost = host search
-searchPath = path search
-searchQuery = query search
-searchText = toString search
-cleanedText = toString cleaned
-```
+<<< ../../snippets/from_md/stdlib/system/url/block_03.aivi{aivi}
 
-```aivi
-use aivi.url
-
-loadSearchUrl : Text -> Result Text Text
-loadSearchUrl = raw =>
-  parse raw match
-    | Ok url =>
-        Ok (toString (url + ("page", "1")))
-    | Err message =>
-        Err "invalid configuration URL: {message}"
-```
 
 ## Related modules
 

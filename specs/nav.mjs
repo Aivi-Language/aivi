@@ -44,8 +44,6 @@ export const sidebar = [
           { text: 'do Notation', link: '/syntax/do_notation' },
           { text: 'Resources', link: '/syntax/resources' },
           { text: 'Generators', link: '/syntax/generators' },
-          { text: 'Capabilities', link: '/syntax/capabilities' },
-          { text: 'Effect Handlers', link: '/syntax/effect_handlers' },
           {
             text: 'State Machines',
             collapsed: true,

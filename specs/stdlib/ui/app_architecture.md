@@ -76,9 +76,8 @@ A few terms appear often on this page:
 
 Some apps do not need explicit commands yet. In that case, the simpler update shape still works as shorthand:
 
-```aivi
-update : msg -> model -> Effect GtkError model
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_01.aivi{aivi}
+
 
 Conceptually, that is equivalent to:
 
@@ -182,18 +181,13 @@ Think of a command as a receipt for future work: `update` does not perform the w
 
 ### One-shot effect shape
 
-```aivi
-commandPerform {
-  run: searchCatalog model.searchQuery
-  onError: Some SearchFailed
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_02.aivi{aivi}
+
 
 Conceptually, `run` has this shape:
 
-```aivi
-run : Effect GtkError msg with { ... }
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_03.aivi{aivi}
+
 
 Semantics:
 
@@ -226,9 +220,8 @@ A subscription is a standing request that says, “while the model looks like th
 
 Conceptually, `open` has this shape:
 
-```aivi
-open : Resource GtkError (Recv msg) with { ... }
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_04.aivi{aivi}
+
 
 That `Resource` boundary matters because replacing or removing a subscription should trigger structured cleanup automatically.
 
@@ -257,9 +250,8 @@ For example, if `clockRunning` changes from `True` to `False`, the `"clock"` sub
 
 Your app's primary GTK signal flow still goes through:
 
-```aivi
-toMsg : GtkSignalEvent -> Option Msg
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_05.aivi{aivi}
+
 
 That is already hosted by the built-in `signalStream` inside `gtkApp`. If you need extra GTK-driven feeds beyond that primary stream, wrap them in `subscriptionSource` instead of starting a second top-level loop.
 

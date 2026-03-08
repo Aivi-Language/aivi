@@ -51,13 +51,8 @@ Conceptually:
 
 The composition model is expressed with pure combinators. The currently verified surface is:
 
-```aivi
-source.transform : (A -> B) -> Source K A -> Source K B
-source.validate :
-  (A -> Validation (List DecodeError) B) ->
-  Source K A ->
-  Source K B
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_01.aivi{aivi}
+
 
 The wider design also reserves policy combinators for retry, timeout, cache, provenance, and observation:
 
@@ -111,9 +106,8 @@ The decode stage comes from the source declaration:
 
 Decode failures surface through:
 
-```aivi
-DecodeError (List aivi.validation.DecodeError)
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_02.aivi{aivi}
+
 
 ### Transform
 
@@ -131,12 +125,8 @@ If a step can reject data, it is not a transform. Use validation instead so fail
 
 Use `source.validate` for semantic rules that sit above structural decoding:
 
-```aivi
-source.validate :
-  (A -> Validation (List DecodeError) B) ->
-  Source K A ->
-  Source K B
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_03.aivi{aivi}
+
 
 Typical examples:
 
@@ -153,12 +143,8 @@ The policy stages in this section are part of the broader composition model. The
 
 Retry policy is source metadata, not a second effect system:
 
-```aivi
-RetryPolicy = {
-  attempts: Int
-  backoff: BackoffPolicy
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_04.aivi{aivi}
+
 
 `BackoffPolicy` must support at least:
 
@@ -170,8 +156,8 @@ Rules:
 
 - retries wrap **connector acquisition only**
 - decode and validation failures are never retried automatically
-- retries re-run the connector against the same source declaration and capability scope
-- backoff delays use the `clock.sleep` capability
+- retries re-run the connector against the same source declaration
+- backoff delays use ordinary sleep effects
 - source retry policy works with connector-specific transient-failure classification
 
 `source.timeout ms` sets a per-attempt acquisition deadline. If you need a budget for the whole load, wrap `load source` with the usual `timeoutWith` from `aivi.concurrency`.
@@ -226,60 +212,23 @@ At minimum, provenance must capture:
 Observation must:
 
 - never change the decoded value,
-- never widen the source capability set,
+- never widen the source declaration itself,
 - redact secrets such as tokens, passwords, and environment values,
 - report stage boundaries in canonical execution order,
 - identify the failing stage (`acquire`, `decode`, `validate`, `cache`) rather than collapsing everything into a generic I/O error.
 
 ## Testing composed sources
 
-Composition does not need a special mocking API. Today, tests mainly exercise connector handlers plus transform/validate behavior; once retry and timeout policies are active, the same handler-based approach also covers timing behavior. Tests reuse ordinary handlers:
+Composition does not need a special mocking API. Tests should keep the same composed source value and replace the surrounding bindings that fetch, sleep, or read configuration when deterministic behavior is needed.
 
-- replace file, network, env, or db handlers to control connector I/O,
-- replace `clock.sleep` or `clock.now` when you want deterministic retry and timeout behavior,
-- keep the same composed source value in production and tests,
-- use `mock ... in` only when you are substituting a specific binding rather than interpreting a capability.
-
-<<< ../../snippets/from_md/syntax/external_sources/composition/block_06.aivi{aivi}
-
-
-The important invariant is that the source pipeline stays the same. Tests swap interpreters, not source declarations.
+The important invariant is that the source pipeline stays the same. Tests swap nearby bindings, not source declarations.
 
 ## End-to-end example
 
 Here is a composition example you can verify today with the currently implemented stages:
 
-```aivi
-use aivi.validation
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_05.aivi{aivi}
 
-RawUser = { id: Int, name: Text, enabled: Bool, legacyId: Option Text }
-User    = { id: Int, name: Text, enabled: Bool }
-
-normalizeUsers : List RawUser -> List User
-normalizeUsers =
-  users => users |> map (user => {
-      id: user.id
-      name: user.name
-      enabled: user.enabled
-  })
-
-validateUsers : List User -> Validation (List DecodeError) (List User)
-validateUsers = users =>
-  if isEmpty users then
-    Invalid [{ path: [], message: "expected at least one user" }]
-  else
-    Valid users
-
-usersSource : Source RestApi (List User)
-usersSource =
-  rest.get {
-    url: ~u(https://api.example.com/users)
-    schema: source.schema.derive
-    strictStatus: True
-  }
-  |> source.transform normalizeUsers
-  |> source.validate validateUsers
-```
 
 If you read `load usersSource` in plain language today:
 
@@ -310,5 +259,5 @@ Reading that extended version in plain language:
 - [Schema-First Source Definitions](schema_first.md) explains how a source declaration carries connector config and schema.
 - [External Sources](../external_sources.md) introduces `Source K A` and `load`.
 - [Effects](../effects.md#load) defines `load` as the effectful boundary.
-- [Effect Handlers](../effect_handlers.md) explains the interpreter model reused for testing.
+- [`mock ... in`](../decorators/test.md#mock-expressions) covers binding substitution used in tests.
 - [Validation](../../stdlib/core/validation.md) defines the accumulation semantics used by `source.validate`.

@@ -1,0 +1,4 @@
+use aivi.collections
+
+history = Deque.pushFront "undo-2" (Deque.pushFront "undo-1" Deque.empty)
+latest  = Deque.peekFront history

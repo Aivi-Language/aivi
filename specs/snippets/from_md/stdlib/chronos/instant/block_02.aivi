@@ -1,0 +1,9 @@
+use aivi.chronos.instant (domain Instant)
+
+base = 2024-01-01T00:00:00Z
+retryDelay = { millis: 1500 }
+
+deadline = base + retryDelay
+roundTrip = deadline - retryDelay
+elapsed = deadline - base
+stillAfterBase = deadline > base

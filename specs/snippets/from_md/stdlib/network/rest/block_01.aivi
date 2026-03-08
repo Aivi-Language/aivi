@@ -1,0 +1,6 @@
+use aivi.rest
+
+User = { id: Int, name: Text }
+
+loadUser : Url -> Effect Text User
+loadUser = userUrl => get userUrl

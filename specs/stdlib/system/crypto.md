@@ -24,20 +24,8 @@ Two distinctions matter right away:
 
 ## Quick start
 
-```aivi
-use aivi.crypto
+<<< ../../snippets/from_md/stdlib/system/crypto/block_01.aivi{aivi}
 
-fingerprint = sha256 "hello world"
-
-makeSessionToken : Effect Text Text with { randomness.secure }
-makeSessionToken = do Effect {
-  bytes <- randomBytes 32
-  pure (toHex bytes)
-}
-
-checkPassword : Text -> Text -> Effect Text Bool
-checkPassword = password storedHash => verifyPassword password storedHash
-```
 
 ## Choose the right tool
 
@@ -102,8 +90,7 @@ Store the returned hash string as an opaque value and hand it back to `verifyPas
 
 ## Capabilities
 
-Pure hashing and HMAC helpers do not require capabilities.
-The following operations consume secure randomness and therefore map to `randomness.secure`; see [Capabilities](../../syntax/capabilities.md):
+Pure hashing and HMAC helpers stay pure. The following operations consume secure randomness at runtime:
 
 - `randomUuid`
 - `randomBytes`

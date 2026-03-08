@@ -75,11 +75,8 @@ For pattern-based search, capture groups, or regex replacement, use [`aivi.regex
 
 The comparison operators `<`, `<=`, `>`, and `>=` are built in for `Text` and follow the same Unicode codepoint ordering as `compare`.
 
-```aivi
-"apple" < "banana"
-"z" > "a"
-"abc" <= "abc"
-```
+<<< ../../snippets/from_md/stdlib/core/text/block_01.aivi{aivi}
+
 
 Notes:
 
@@ -172,13 +169,8 @@ Notes:
 - `toBytes Latin1 text` replaces characters outside Latin-1 with `?`.
 - Handle `fromBytes` with `match`, `attempt`, or `or` so decode failures stay explicit.
 
-```aivi
-payload = toBytes Utf8 "héllo"
+<<< ../../snippets/from_md/stdlib/core/text/block_02.aivi{aivi}
 
-message = fromBytes Utf8 payload match
-  | Ok text                 => text
-  | Err (InvalidEncoding _) => "Could not decode input"
-```
 
 ### Formatting and conversion
 
@@ -192,12 +184,8 @@ This section is the bridge between raw text and other value types.
 
 When you are parsing user input, the usual flow is: clean the text, parse it, then decide what to do with `None`. `parseInt` and `parseFloat` do not trim whitespace for you.
 
-```aivi
-rawPort     = " 8080 "
-trimmedPort = trim rawPort
-maybePort   = parseInt trimmedPort
-port        = maybePort ?? 3000
-```
+<<< ../../snippets/from_md/stdlib/core/text/block_03.aivi{aivi}
+
 
 ## Usage examples
 

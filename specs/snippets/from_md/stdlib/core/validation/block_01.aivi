@@ -1,0 +1,1 @@
+ap : Validation (List E) (A -> B) -> Validation (List E) A -> Validation (List E) B

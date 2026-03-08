@@ -1,8 +1,11 @@
-JsonValue
-= JsonNull
-| JsonBool Bool
-| JsonInt Int
-| JsonFloat Float
-| JsonString Text
-| JsonArray (List JsonValue)
-| JsonObject (List (Text, JsonValue))
+use aivi.json
+
+Status = Active | Inactive
+
+decodeStatus : JsonValue -> Result JsonError Status
+decodeStatus = value =>
+  decodeText value match
+    | Ok "active"   => Ok Active
+    | Ok "inactive" => Ok Inactive
+    | Ok _          => Err { message: "expected \"active\" or \"inactive\"" }
+    | Err err       => Err err

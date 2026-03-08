@@ -29,7 +29,6 @@ impl TypeChecker {
                 }
                 Type::Record { fields: merged }
             }
-            TypeExpr::CapabilityClause { base, .. } => self.type_from_expr(base, ctx),
             TypeExpr::Apply { base, args, .. } => {
                 if let TypeExpr::Name(base_name) = base.as_ref() {
                     if let Some(row_type) = self.apply_row_op(&base_name.name, args, ctx) {
@@ -120,32 +119,6 @@ impl TypeChecker {
                     self.validate_type_expr(item, errors);
                 }
             }
-            TypeExpr::CapabilityClause {
-                base,
-                capabilities,
-                ..
-            } => {
-                self.validate_type_expr(base, errors);
-                if !Self::is_capability_clause_target(base) {
-                    errors.push(TypeError {
-                        span: self.type_expr_span(expr),
-                        message: "capability clauses are only valid on `Effect E A` or `Resource E A` types".to_string(),
-                        expected: None,
-                        found: None,
-                    });
-                }
-                let mut seen = HashSet::new();
-                for capability in capabilities {
-                    if !seen.insert(capability.name.clone()) {
-                        errors.push(TypeError {
-                            span: capability.span.clone(),
-                            message: format!("duplicate capability '{}'", capability.name),
-                            expected: None,
-                            found: None,
-                        });
-                    }
-                }
-            }
             TypeExpr::Apply { base, args, .. } => {
                 self.validate_apply_kinds(base, args, errors);
                 if let TypeExpr::Name(base_name) = base.as_ref() {
@@ -206,18 +179,6 @@ impl TypeChecker {
                 }
                 _ => break,
             }
-        }
-    }
-
-    fn is_capability_clause_target(expr: &TypeExpr) -> bool {
-        match expr {
-            TypeExpr::Apply { base, args, .. } => match base.as_ref() {
-                TypeExpr::Name(name) => {
-                    (name.name == "Effect" || name.name == "Resource") && args.len() == 2
-                }
-                _ => false,
-            },
-            _ => false,
         }
     }
 
@@ -339,7 +300,6 @@ impl TypeChecker {
         match expr {
             TypeExpr::Name(name) => name.span.clone(),
             TypeExpr::And { span, .. }
-            | TypeExpr::CapabilityClause { span, .. }
             | TypeExpr::Apply { span, .. }
             | TypeExpr::Func { span, .. }
             | TypeExpr::Record { span, .. }

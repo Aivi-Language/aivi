@@ -350,8 +350,6 @@ Literal        := "True"
   - otherwise parse as `Block`
 - `.field` is shorthand for `x => x.field`
 - `_` is not a value; in expression position it appears only as placeholder-lambda sugar
-- `with { file.read, clock.now } in expr` narrows the visible capabilities for `expr`
-- `with { file.read = fixtureFiles } in expr` uses the same surface form to install scoped handlers; see [Effect Handlers](effect_handlers.md)
 - `mock snapshot some.binding` records the real binding result for later replay; see [@test — Test Declarations](decorators/test.md#mock-expressions)
 - `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals, and HTML/GTK angle sigils are documented in [Operators and Context](operators.md#118-sigils)
 - `RecordSpread` (`...expr`) merges fields left to right, with later fields overriding earlier ones
@@ -394,10 +392,10 @@ If you want matching on more than one value, match on a tuple:
 
 ## 0.6 Types
 
-The type grammar covers function arrows, type application, tuple types, record types, and capability clauses.
+The type grammar covers function arrows, type application, tuple types, and record types.
 
 ```ebnf
-Type           := TypeArrow [ CapabilityClause ]
+Type           := TypeArrow
 TypeArrow      := TypeAnd [ "->" TypeArrow ]
 TypeAnd        := TypePipe { "with" TypePipe }
 TypePipe       := TypeApp { "|>" TypeApp }
@@ -409,16 +407,10 @@ TypeAtom       := UpperIdent
                | TupleType
                | RecordType
 
-CapabilityClause := "with" CapabilitySet
-CapabilitySet    := "{" CapabilityPath { "," CapabilityPath } "}"
-CapabilityPath   := lowerIdent { "." lowerIdent }
-
 TupleType      := "(" Type "," Type { "," Type } ")"
 RecordType     := "{" { RecordTypeField } "}"
 RecordTypeField := lowerIdent ":" Type [ FieldSep ]
 ```
-
-Capability clauses matter only for effect-like types such as `Effect ...` and `Resource ...`. In type position, the clause lists capability names only. Expression-scope handler bindings such as `with { file.read = fixtureFiles } in expr` belong to §0.3 and are not part of the type grammar.
 
 ## 0.7 Patterns
 

@@ -1,6 +1,8 @@
-use aivi.defaults (Option, Text)
+use aivi.ui
 
-request : { token: Option Text, note: Text }
-request = {
-  note: "hello"
-} // `token` is filled with `None` because the expected type is known
+count = 3
+
+view =
+  ~<html>
+    <p>Open tabs: { count }</p>
+  </html>

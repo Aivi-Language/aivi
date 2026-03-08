@@ -24,7 +24,6 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
             | Expr::Match { span, .. }
             | Expr::If { span, .. }
             | Expr::Binary { span, .. }
-            | Expr::CapabilityScope { span, .. }
             | Expr::Block { span, .. }
             | Expr::Mock { span, .. }
             | Expr::Raw { span, .. } => span.clone(),
@@ -260,12 +259,6 @@ fn check_expr(
         Expr::Binary { left, right, .. } => {
             check_expr(left, scope, diagnostics, module, allow_unknown);
             check_expr(right, scope, diagnostics, module, allow_unknown);
-        }
-        Expr::CapabilityScope { handlers, body, .. } => {
-            for handler in handlers {
-                check_expr(&handler.handler, scope, diagnostics, module, allow_unknown);
-            }
-            check_expr(body, scope, diagnostics, module, allow_unknown);
         }
         Expr::Block { items, .. } => {
             let mut block_scope = scope.clone();

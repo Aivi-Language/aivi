@@ -107,7 +107,7 @@ impl TypeChecker {
             ctx.type_vars.insert(param.name.clone(), var);
             params.push(var);
         }
-        let body = self.type_from_expr(self.strip_capability_clause(&alias.aliased), &mut ctx);
+        let body = self.type_from_expr(&alias.aliased, &mut ctx);
         AliasInfo { params, body }
     }
 
@@ -139,13 +139,11 @@ impl TypeChecker {
 
     fn scheme_from_sig(&mut self, sig: &TypeSig, origin: SchemeOrigin) -> Scheme {
         let mut ctx = TypeContext::new(&self.type_constructors);
-        let ty_expr = self.strip_capability_clause(&sig.ty);
-        let ty = self.type_from_expr(ty_expr, &mut ctx);
+        let ty = self.type_from_expr(&sig.ty, &mut ctx);
         let vars: Vec<TypeVarId> = ctx.type_vars.values().cloned().collect();
         Scheme {
             vars,
             ty,
-            capabilities: self.capabilities_from_type_expr(&sig.ty),
             origin: Some(origin),
         }
     }
@@ -236,7 +234,6 @@ impl TypeChecker {
             let scheme = Scheme {
                 vars: params.clone(),
                 ty: ctor_type,
-                capabilities: Default::default(),
                 origin: None,
             };
             env.insert(ctor.name.name.clone(), scheme);

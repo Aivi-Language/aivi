@@ -1,0 +1,7 @@
+double : Int -> Int
+double = x => x * 2
+
+add : Int -> Int -> Int
+add = x y => x + y
+
+answer = add 10 (double 5)

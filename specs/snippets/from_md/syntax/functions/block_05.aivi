@@ -1,0 +1,3 @@
+order
+  |> validate // first check the value you are working on
+  |> save     // then pass the validated value to the next step

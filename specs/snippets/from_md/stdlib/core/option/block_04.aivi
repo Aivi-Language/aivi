@@ -1,0 +1,6 @@
+nested = Some (Some 42)
+flat   = nested |> chain (inner => inner) // Some 42
+
+primary   = None
+secondary = Some "backup"
+value     = primary |> alt secondary // Some "backup"

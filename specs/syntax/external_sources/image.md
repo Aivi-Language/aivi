@@ -39,22 +39,15 @@ That conversion also drops alpha information today, because the runtime normaliz
 
 `file.imageMeta` is typically decoded into a small record such as:
 
-```aivi
-{ width: Int, height: Int, format: Text }
-```
+<<< ../../snippets/from_md/syntax/external_sources/image/block_01.aivi{aivi}
+
 
 The `format` field here reflects the file/container format guessed from the image bytes, typically values such as `"Png"` or `"Jpeg"`.
 
 `file.image` currently produces a record with width, height, a decoded format marker, and row-major RGB pixels:
 
-```aivi
-{
-  width: Int,
-  height: Int,
-  format: Text,
-  pixels: List (List (Int, Int, Int))
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/image/block_02.aivi{aivi}
+
 
 For successful full-image reads in v0.1, `format` is currently `"Rgb8"`.
 That shape is useful for thumbnailing, analysis, and other pixel-oriented work when RGB pixels are enough.
@@ -62,7 +55,7 @@ That shape is useful for thumbnailing, analysis, and other pixel-oriented work w
 ## Capability mapping
 
 Loading either image source requires `file.read`.
-See [Capabilities](../capabilities.md) for the capability vocabulary and [File Sources](file.md) for the wider file-source family.
+See [File Sources](file.md) for the wider file-source family.
 
 ## Example
 

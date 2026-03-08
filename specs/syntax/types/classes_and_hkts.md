@@ -124,13 +124,8 @@ In plain language, a `given (...)` clause says “this member or instance works 
 Some class members are values rather than functions.
 A classic example is `empty` from `Monoid`: there are no arguments to inspect, so the compiler uses the surrounding expected type to decide which instance to pick.
 
-```aivi
-emptyList : List Int
-emptyList = empty       // expected type says: use the `List` instance
+<<< ../../snippets/from_md/syntax/types/classes_and_hkts/block_01.aivi{aivi}
 
-emptyMap : Map Text Int
-emptyMap = empty        // expected type says: use the `Map` instance
-```
 
 When there is no type context, the compiler cannot guess:
 

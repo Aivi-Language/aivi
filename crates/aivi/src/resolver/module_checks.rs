@@ -149,7 +149,6 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                     collect_type_expr(item, out);
                 }
             }
-            TypeExpr::CapabilityClause { base, .. } => collect_type_expr(base, out),
             TypeExpr::Apply { base, args, .. } => {
                 collect_type_expr(base, out);
                 for arg in args {
@@ -312,12 +311,6 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
             Expr::Binary { left, right, .. } => {
                 collect_expr(left, out);
                 collect_expr(right, out);
-            }
-            Expr::CapabilityScope { handlers, body, .. } => {
-                for handler in handlers {
-                    collect_expr(&handler.handler, out);
-                }
-                collect_expr(body, out);
             }
             Expr::Block { items, .. } => {
                 for item in items {

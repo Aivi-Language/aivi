@@ -253,9 +253,6 @@ impl Backend {
                     Self::collect_call_hints_in_block_item(item, param_names, hints, range);
                 }
             }
-            Expr::CapabilityScope { body, .. } => {
-                Self::collect_call_hints_in_expr(body, param_names, hints, range);
-            }
             Expr::Match {
                 scrutinee, arms, ..
             } => {

@@ -262,7 +262,6 @@ impl Backend {
         }
 
         let mut base = Self::hover_base_for_module(module, ident, inferred)?;
-        Self::append_capability_details(&mut base, module, ident, inferred);
         if let Some(doc) = doc {
             let doc = doc.trim();
             if !doc.is_empty() {
@@ -456,97 +455,7 @@ impl Backend {
             out.push_str("\n\n");
             out.push_str(entry.content.trim());
         }
-        Self::append_capability_details(&mut out, module, ident, inferred);
         Self::hover_badge_markdown(Self::quick_info_badge(&entry.kind), out)
-    }
-
-    fn append_capability_details(
-        contents: &mut String,
-        module: &Module,
-        ident: &str,
-        inferred: Option<&HashMap<String, String>>,
-    ) {
-        let capabilities = Self::required_capabilities_for_ident(module, ident, inferred);
-        if capabilities.is_empty() {
-            return;
-        }
-
-        contents.push_str("\n\n**Required capabilities:** ");
-        contents.push_str(
-            &capabilities
-                .iter()
-                .map(|cap| format!("`{cap}`"))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-    }
-
-    fn required_capabilities_for_ident(
-        module: &Module,
-        ident: &str,
-        inferred: Option<&HashMap<String, String>>,
-    ) -> Vec<String> {
-        let matches = |name: &str| name == ident || name == format!("({})", ident);
-
-        for item in module.items.iter() {
-            match item {
-                ModuleItem::TypeSig(sig) if matches(&sig.name.name) => {
-                    return Self::capabilities_from_type_expr(&sig.ty);
-                }
-                ModuleItem::ClassDecl(class_decl) => {
-                    for member in class_decl.members.iter() {
-                        if matches(&member.name.name) {
-                            return Self::capabilities_from_type_expr(&member.ty);
-                        }
-                    }
-                }
-                ModuleItem::DomainDecl(domain_decl) => {
-                    for domain_item in domain_decl.items.iter() {
-                        if let DomainItem::TypeSig(sig) = domain_item {
-                            if matches(&sig.name.name) {
-                                return Self::capabilities_from_type_expr(&sig.ty);
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        inferred
-            .and_then(|types| {
-                types
-                    .get(ident)
-                    .or_else(|| types.get(&format!("({})", ident)))
-            })
-            .map(|rendered| Self::capabilities_from_rendered_type(rendered))
-            .unwrap_or_default()
-    }
-
-    fn capabilities_from_type_expr(expr: &TypeExpr) -> Vec<String> {
-        match expr {
-            TypeExpr::CapabilityClause { capabilities, .. } => {
-                capabilities.iter().map(|cap| cap.name.clone()).collect()
-            }
-            TypeExpr::Func { result, .. } => Self::capabilities_from_type_expr(result),
-            _ => Vec::new(),
-        }
-    }
-
-    fn capabilities_from_rendered_type(rendered: &str) -> Vec<String> {
-        let Some(start) = rendered.rfind(" with { ") else {
-            return Vec::new();
-        };
-        let suffix = &rendered[start + " with { ".len()..];
-        let Some(contents) = suffix.strip_suffix(" }") else {
-            return Vec::new();
-        };
-        contents
-            .split(',')
-            .map(str::trim)
-            .filter(|cap| !cap.is_empty())
-            .map(str::to_string)
-            .collect()
     }
 
     fn hover_contents_for_item(
@@ -751,9 +660,6 @@ impl Backend {
                 for arg in args {
                     Self::collect_type_names_inner(arg, names);
                 }
-            }
-            TypeExpr::CapabilityClause { base, .. } => {
-                Self::collect_type_names_inner(base, names);
             }
             TypeExpr::Func { params, result, .. } => {
                 for param in params {

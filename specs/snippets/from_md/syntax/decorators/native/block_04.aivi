@@ -1,0 +1,2 @@
+@native "serde_json::from_str"
+parseUser : Text -> Result Text { name: Text, age: Int }   // AOT build generates the bridge

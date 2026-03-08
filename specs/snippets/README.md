@@ -31,10 +31,9 @@ Keep the include directive on its own line with blank lines around it so the mar
 If you are drafting a new multi-line AIVI example inside a markdown page, start with a normal fenced block:
 
 ````md
-```aivi
-value = 41
-next = value + 1
-```
+
+<<< ./from_md/snippets/README/block_01.aivi{aivi}
+
 ````
 
 Then use the existing commands from the repo root:

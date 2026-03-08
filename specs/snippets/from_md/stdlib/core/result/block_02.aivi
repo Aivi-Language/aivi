@@ -1,0 +1,3 @@
+rawConfig     = readConfigFile "app.toml"
+parsedConfig  = chain parseConfig rawConfig
+checkedConfig = chain validateConfig parsedConfig

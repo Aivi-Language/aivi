@@ -1,9 +1,4 @@
 do Effect {
-  users <- load (
-    file.json {
-      path: "./users.json"
-      schema: source.schema.derive
-    }
-  )
+  users <- load usersSource
   pure users
 }

@@ -1,0 +1,14 @@
+do Effect {
+  slow = _ => do Effect {
+    sleep 50
+    pure "left"
+  }
+  fast = _ => do Effect {
+    sleep 0
+    pure "right"
+  }
+
+  fastest <- race (slow Unit) (fast Unit)
+  guarded <- timeoutWith 100 "timeout" (pure 9)
+  pure (fastest, guarded)
+}

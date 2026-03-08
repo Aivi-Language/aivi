@@ -52,9 +52,8 @@ Use a selective import when you want a short, explicit list of dependencies. Use
 
 Aliasing helps when a module name is long or when two imports would otherwise collide. You can alias either a whole module path or an individual imported name.
 
-```aivi
-use company.project.analytics as Analytics // shorter name inside this file
-```
+<<< ../snippets/from_md/syntax/modules/block_01.aivi{aivi}
+
 
 <<< ../snippets/from_md/syntax/modules/renaming_aliasing.aivi{aivi}
 

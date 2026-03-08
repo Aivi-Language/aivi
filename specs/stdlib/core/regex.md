@@ -29,35 +29,15 @@ Reach for this module based on the job you need to do:
 
 ## Overview
 
-```aivi
-use aivi.regex
+<<< ../../snippets/from_md/stdlib/core/regex/block_01.aivi{aivi}
 
-emailPattern = ~r/^[\w.-]+@([\w-]+\.)+[\w-]{2,4}$/
-hasEmail     = test emailPattern "contact hello@example.com"
-
-assignment = ~r/(\w+)=(\d+)/
-firstPair  = match assignment "x=10 y=20"
-rewritten  = replaceAll assignment "x=10 y=20" "$1:$2"
-
-headerName = ~r/^content-type$/i
-isHeader   = test headerName "CONTENT-TYPE"
-```
 
 This example shows the three most common workflows: yes/no matching, extracting a match record, and rewriting text with capture groups.
 
 ## Types
 
-```aivi
-RegexError = | InvalidPattern Text
+<<< ../../snippets/from_md/stdlib/core/regex/block_02.aivi{aivi}
 
-Match =
-  {
-    full: Text
-    groups: List (Option Text)
-    start: Int
-    end: Int
-  }
-```
 
 - `InvalidPattern` carries the pattern-parse error text returned by `compile`.
 - `full` is the entire matched text.

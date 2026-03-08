@@ -1,0 +1,2 @@
+@native "system.args"
+rawArgs : Unit -> Effect Text (List Text)

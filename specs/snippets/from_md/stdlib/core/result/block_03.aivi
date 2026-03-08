@@ -1,0 +1,2 @@
+portResult   = parsePort text
+configResult = mapErr (err => ConfigError "PORT" err) portResult

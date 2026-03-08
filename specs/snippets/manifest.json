@@ -3022,27 +3022,6 @@
       ]
     },
     {
-      "path": "specs/snippets/from_md/syntax/capabilities/block_02.aivi",
-      "module": "docs.snippets.syntax.capabilities.block_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/capabilities/block_03.aivi",
-      "module": "docs.snippets.syntax.capabilities.block_03",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/capabilities/block_05.aivi",
-      "module": "docs.snippets.syntax.capabilities.block_05",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
       "path": "specs/snippets/from_md/syntax/decorators/static/block_02.aivi",
       "module": "docs.snippets.syntax.decorators.static.block_02",
       "verify": [
@@ -3087,48 +3066,6 @@
     {
       "path": "specs/snippets/from_md/syntax/do_notation/block_02.aivi",
       "module": "docs.snippets.syntax.do_notation.block_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/effect_handlers/block_01.aivi",
-      "module": "docs.snippets.syntax.effect_handlers.block_01",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/effect_handlers/block_02.aivi",
-      "module": "docs.snippets.syntax.effect_handlers.block_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/effect_handlers/block_03.aivi",
-      "module": "docs.snippets.syntax.effect_handlers.block_03",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/effect_handlers/block_04.aivi",
-      "module": "docs.snippets.syntax.effect_handlers.block_04",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/effect_handlers/block_05.aivi",
-      "module": "docs.snippets.syntax.effect_handlers.block_05",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/syntax/effect_handlers/block_06.aivi",
-      "module": "docs.snippets.syntax.effect_handlers.block_06",
       "verify": [
         "fmt"
       ]
@@ -3486,6 +3423,1266 @@
     {
       "path": "specs/snippets/from_md/syntax/types/record_row_transforms/block_01.aivi",
       "module": "docs.snippets.syntax.types.record_row_transforms.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_02.aivi",
+      "module": "docs.snippets.introduction.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_03.aivi",
+      "module": "docs.snippets.introduction.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/snippets/README/block_01.aivi",
+      "module": "docs.snippets.snippets.README.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/calendar/block_01.aivi",
+      "module": "docs.snippets.stdlib.chronos.calendar.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/calendar/block_02.aivi",
+      "module": "docs.snippets.stdlib.chronos.calendar.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/calendar/block_03.aivi",
+      "module": "docs.snippets.stdlib.chronos.calendar.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/calendar/block_04.aivi",
+      "module": "docs.snippets.stdlib.chronos.calendar.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/calendar/block_05.aivi",
+      "module": "docs.snippets.stdlib.chronos.calendar.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/instant/block_01.aivi",
+      "module": "docs.snippets.stdlib.chronos.instant.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/instant/block_02.aivi",
+      "module": "docs.snippets.stdlib.chronos.instant.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/instant/block_03.aivi",
+      "module": "docs.snippets.stdlib.chronos.instant.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/instant/block_04.aivi",
+      "module": "docs.snippets.stdlib.chronos.instant.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/timezone/block_01.aivi",
+      "module": "docs.snippets.stdlib.chronos.timezone.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_04.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_05.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_06.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_07.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_08.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_09.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/collections/block_10.aivi",
+      "module": "docs.snippets.stdlib.core.collections.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/generator/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.generator.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/generator/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.generator.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_04.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_05.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_06.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_07.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/i18n/block_08.aivi",
+      "module": "docs.snippets.stdlib.core.i18n.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/option/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.option.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/option/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.option.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/option/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.option.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/option/block_04.aivi",
+      "module": "docs.snippets.stdlib.core.option.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/option/block_05.aivi",
+      "module": "docs.snippets.stdlib.core.option.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/prelude/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.prelude.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/prelude/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.prelude.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/prelude/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.prelude.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/regex/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.regex.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/regex/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.regex.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/result/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.result.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/result/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.result.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/result/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.result.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/result/block_04.aivi",
+      "module": "docs.snippets.stdlib.core.result.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/result/block_05.aivi",
+      "module": "docs.snippets.stdlib.core.result.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/text/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.text.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/text/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.text.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/text/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.text.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/units/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.units.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/units/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.units.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/units/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.units.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/units/block_04.aivi",
+      "module": "docs.snippets.stdlib.core.units.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/validation/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.validation.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/validation/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.validation.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/validation/block_03.aivi",
+      "module": "docs.snippets.stdlib.core.validation.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/bits/block_01.aivi",
+      "module": "docs.snippets.stdlib.data.bits.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_01.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_04.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_05.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_06.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_07.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/geometry/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.geometry.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/geometry/block_02.aivi",
+      "module": "docs.snippets.stdlib.math.geometry.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/geometry/block_03.aivi",
+      "module": "docs.snippets.stdlib.math.geometry.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/geometry/block_04.aivi",
+      "module": "docs.snippets.stdlib.math.geometry.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/graph/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.graph.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/linear_algebra/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.linear_algebra.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/linear_algebra/block_02.aivi",
+      "module": "docs.snippets.stdlib.math.linear_algebra.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/matrix/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.matrix.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/matrix/block_02.aivi",
+      "module": "docs.snippets.stdlib.math.matrix.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/matrix/block_03.aivi",
+      "module": "docs.snippets.stdlib.math.matrix.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/number/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.number.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/number/block_02.aivi",
+      "module": "docs.snippets.stdlib.math.number.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/number/block_03.aivi",
+      "module": "docs.snippets.stdlib.math.number.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/number/block_04.aivi",
+      "module": "docs.snippets.stdlib.math.number.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/number/block_05.aivi",
+      "module": "docs.snippets.stdlib.math.number.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/probability/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.probability.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/probability/block_02.aivi",
+      "module": "docs.snippets.stdlib.math.probability.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/probability/block_03.aivi",
+      "module": "docs.snippets.stdlib.math.probability.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/probability/block_04.aivi",
+      "module": "docs.snippets.stdlib.math.probability.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/probability/block_05.aivi",
+      "module": "docs.snippets.stdlib.math.probability.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/tree/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.tree.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/tree/block_02.aivi",
+      "module": "docs.snippets.stdlib.math.tree.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/tree/block_03.aivi",
+      "module": "docs.snippets.stdlib.math.tree.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/math/vector/block_01.aivi",
+      "module": "docs.snippets.stdlib.math.vector.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_03.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_04.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_05.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_06.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_07.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_08.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_09.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/rest/block_01.aivi",
+      "module": "docs.snippets.stdlib.network.rest.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/rest/block_03.aivi",
+      "module": "docs.snippets.stdlib.network.rest.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/concurrency/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.concurrency.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/crypto/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.crypto.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/file/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.file.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/path/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.path.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/path/block_02.aivi",
+      "module": "docs.snippets.stdlib.system.path.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/path/block_03.aivi",
+      "module": "docs.snippets.stdlib.system.path.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/path/block_04.aivi",
+      "module": "docs.snippets.stdlib.system.path.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/secrets/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.secrets.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/secrets/block_02.aivi",
+      "module": "docs.snippets.stdlib.system.secrets.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/system/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.system.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/system/block_02.aivi",
+      "module": "docs.snippets.stdlib.system.system.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/url/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.url.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/url/block_02.aivi",
+      "module": "docs.snippets.stdlib.system.url.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/url/block_03.aivi",
+      "module": "docs.snippets.stdlib.system.url.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/color/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.color.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/color/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.color.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/html/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.html.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/html/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.html.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/layout/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.layout.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/layout/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.layout.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/layout/block_03.aivi",
+      "module": "docs.snippets.stdlib.ui.layout.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/reactive_dataflow/block_03.aivi",
+      "module": "docs.snippets.stdlib.ui.reactive_dataflow.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/bindings/block_01.aivi",
+      "module": "docs.snippets.syntax.bindings.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/debug/block_01.aivi",
+      "module": "docs.snippets.syntax.decorators.debug.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/debug/block_02.aivi",
+      "module": "docs.snippets.syntax.decorators.debug.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/deprecated/block_01.aivi",
+      "module": "docs.snippets.syntax.decorators.deprecated.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/native/block_01.aivi",
+      "module": "docs.snippets.syntax.decorators.native.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/native/block_02.aivi",
+      "module": "docs.snippets.syntax.decorators.native.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/native/block_03.aivi",
+      "module": "docs.snippets.syntax.decorators.native.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/native/block_04.aivi",
+      "module": "docs.snippets.syntax.decorators.native.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/native/block_05.aivi",
+      "module": "docs.snippets.syntax.decorators.native.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/no_prelude/block_01.aivi",
+      "module": "docs.snippets.syntax.decorators.no_prelude.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/static/block_01.aivi",
+      "module": "docs.snippets.syntax.decorators.static.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/test/block_02.aivi",
+      "module": "docs.snippets.syntax.decorators.test.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/domains/block_01.aivi",
+      "module": "docs.snippets.syntax.domains.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/domains/block_02.aivi",
+      "module": "docs.snippets.syntax.domains.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/domains/block_03.aivi",
+      "module": "docs.snippets.syntax.domains.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/domains/block_04.aivi",
+      "module": "docs.snippets.syntax.domains.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/domains/block_05.aivi",
+      "module": "docs.snippets.syntax.domains.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effects/block_01.aivi",
+      "module": "docs.snippets.syntax.effects.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effects/block_02.aivi",
+      "module": "docs.snippets.syntax.effects.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effects/block_03.aivi",
+      "module": "docs.snippets.syntax.effects.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/block_03.aivi",
+      "module": "docs.snippets.syntax.external_sources.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/block_04.aivi",
+      "module": "docs.snippets.syntax.external_sources.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/block_05.aivi",
+      "module": "docs.snippets.syntax.external_sources.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/compile_time/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.compile_time.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_03.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_04.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_05.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/environment/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.environment.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/image/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.image.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/imap_email/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.imap_email.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/rest_http/block_03.aivi",
+      "module": "docs.snippets.syntax.external_sources.rest_http.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_03.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_05.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_01.aivi",
+      "module": "docs.snippets.syntax.functions.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_02.aivi",
+      "module": "docs.snippets.syntax.functions.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_03.aivi",
+      "module": "docs.snippets.syntax.functions.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_04.aivi",
+      "module": "docs.snippets.syntax.functions.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_05.aivi",
+      "module": "docs.snippets.syntax.functions.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_06.aivi",
+      "module": "docs.snippets.syntax.functions.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_07.aivi",
+      "module": "docs.snippets.syntax.functions.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_08.aivi",
+      "module": "docs.snippets.syntax.functions.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_09.aivi",
+      "module": "docs.snippets.syntax.functions.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_10.aivi",
+      "module": "docs.snippets.syntax.functions.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_11.aivi",
+      "module": "docs.snippets.syntax.functions.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_12.aivi",
+      "module": "docs.snippets.syntax.functions.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/functions/block_13.aivi",
+      "module": "docs.snippets.syntax.functions.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines_runtime/block_02.aivi",
+      "module": "docs.snippets.syntax.machines_runtime.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines_runtime/block_03.aivi",
+      "module": "docs.snippets.syntax.machines_runtime.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/modules/block_01.aivi",
+      "module": "docs.snippets.syntax.modules.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/operators/block_01.aivi",
+      "module": "docs.snippets.syntax.operators.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/classes_and_hkts/block_01.aivi",
+      "module": "docs.snippets.syntax.types.classes_and_hkts.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/closed_records/block_01.aivi",
+      "module": "docs.snippets.syntax.types.closed_records.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/closed_records/block_02.aivi",
+      "module": "docs.snippets.syntax.types.closed_records.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/closed_records/block_03.aivi",
+      "module": "docs.snippets.syntax.types.closed_records.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/closed_records/block_04.aivi",
+      "module": "docs.snippets.syntax.types.closed_records.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/primitive_types/block_01.aivi",
+      "module": "docs.snippets.syntax.types.primitive_types.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/primitive_types/block_02.aivi",
+      "module": "docs.snippets.syntax.types.primitive_types.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/primitive_types/block_03.aivi",
+      "module": "docs.snippets.syntax.types.primitive_types.block_03",
       "verify": [
         "fmt"
       ]

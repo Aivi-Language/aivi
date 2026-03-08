@@ -1,5 +1,1 @@
-update : msg -> model -> Effect GtkError (AppStep model msg)
-update = msg => model => pure {
-  model
-  commands: []
-}
+run : Effect GtkError msg

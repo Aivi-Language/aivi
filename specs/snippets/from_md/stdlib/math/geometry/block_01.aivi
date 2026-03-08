@@ -1,0 +1,9 @@
+use aivi.geometry
+
+origin   = point2 0.0 0.0
+target   = point2 3.0 4.0
+edge     = segment2 0.0 0.0 6.0 2.0
+mid      = midpoint edge
+gap      = distance origin target
+triangle = { vertices: [point2 0.0 0.0, point2 4.0 0.0, point2 0.0 3.0] }
+size     = area triangle

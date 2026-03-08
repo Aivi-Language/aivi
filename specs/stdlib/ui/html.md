@@ -22,50 +22,13 @@ Use the HTML sigil when you want browser-style UI structure without building `VN
 
 A child splice uses `{ expr }` inside element content. If `expr` already has type `VNode msg`, it is inserted directly. If it is `Text` or another `ToText` value, the compiler coerces it into a `TextNode` and inserts `toText` when needed.
 
-```aivi
-use aivi.ui
+<<< ../../snippets/from_md/stdlib/ui/html/block_01.aivi{aivi}
 
-name = "AIVI"
-count = 3
-
-view =
-  ~<html>
-    <section class="card">
-      <h1>
-        Hello { name }
-      </h1>
-      <p>
-        Open tabs: { count }
-      </p>
-    </section>
-  </html>
-```
 
 In attribute position, write `name={ expr }`. The expression is type-checked against that attribute's expected type. Typed attributes keep their specific types, while generic attributes elaborate against `Text`.
 
-```aivi
-use aivi.ui
-use aivi.ui.layout
+<<< ../../snippets/from_md/stdlib/ui/html/block_02.aivi{aivi}
 
-Msg = SearchChanged Text | Submit
-
-query = "AIVI"
-count = 3
-
-view =
-  ~<html>
-    <div
-      class="search"
-      style={ { padding: 12px, width: 50% } }
-      data-count={ count }
-    >
-      <input value={ query } onInput={ SearchChanged } />
-      <button onClick={ Submit }>
-        Search
-      </button>
-    </div>
-  </html>
-```
 
 ## Attributes
 
