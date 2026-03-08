@@ -1,0 +1,7 @@
+~<gtk>
+  <object class="GtkButton" onClick={ Msg.Save } />
+  <object class="GtkEntry" onInput={ Msg.Changed } />
+  <object class="GtkButton">
+    <signal name="clicked" on={ Msg.Save } />
+  </object>
+</gtk>

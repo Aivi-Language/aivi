@@ -51,20 +51,8 @@ That makes `@static` a good fit for inputs that must be present and valid before
 
 One of the most useful patterns is to load a schema artifact at compile time and then attach it to a runtime source declaration.
 
-```aivi
-use aivi.json
+<<< ../../snippets/from_md/syntax/external_sources/compile_time/block_02.aivi{aivi}
 
-@static
-userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json"  // checked while compiling
-
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json",
-    schema: source.schema.json userSchema              // runtime reads must match this contract
-  }
-```
 
 When a source declaration uses compile-time-stable config and schema inputs, the compiler can validate the declaration before code generation. In practice, that means:
 

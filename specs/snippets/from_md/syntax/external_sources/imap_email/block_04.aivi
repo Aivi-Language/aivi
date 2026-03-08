@@ -1,0 +1,26 @@
+use aivi.email
+
+processInbox : Text -> Effect Text (List InboxMessage)
+processInbox = token => do Effect {
+  session <- imapOpen {
+    host: "imap.gmail.com"
+    user: "user@gmail.com"
+    auth: OAuth2 token
+    port: None
+    starttls: None
+    mailbox: None
+    filter: None
+    limit: None
+  }
+  _        <- imapSelect "INBOX" session
+  result   <- imapIdle 300 session // wait for mailbox changes for up to 300 seconds
+  messages <- result match
+    | MailboxChanged => do Effect {
+        uids <- imapSearch "UNSEEN" session
+        msgs <- imapFetch uids session
+        _    <- imapAddFlags uids ["\\Seen"] session
+        pure msgs
+      }
+    | TimedOut => pure []
+      pure messages
+}

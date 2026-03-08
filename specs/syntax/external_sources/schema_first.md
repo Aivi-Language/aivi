@@ -8,28 +8,13 @@ Schema-first style is about naming an external boundary once and making its cont
 
 Instead of only writing:
 
-```aivi
-do Effect {
-  users <- load (
-    file.json {
-      path: "./users.json"
-      schema: source.schema.derive
-    }
-  )
-  pure users
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_01.aivi{aivi}
+
 
 you can declare the source itself with its connector config and schema:
 
-```aivi
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json",
-    schema: source.schema.derive
-  }
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_02.aivi{aivi}
+
 
 Then you can reuse it anywhere:
 
@@ -54,14 +39,8 @@ Conceptually, the declaration bundles:
 
 Illustratively:
 
-```aivi
-// illustrative shape; exact runtime representation is not part of the public contract
-SourceDecl K A = {
-  config: ConnectorConfig K A
-  schema: SourceSchema A
-  contract: Option SourceContract
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_04.aivi{aivi}
+
 
 `load` remains the only effectful step:
 
@@ -86,37 +65,15 @@ Connector-specific schema carriers may exist, but they must still agree with the
 
 ### Derived schema example
 
-```aivi
-User = { id: Int, name: Text, enabled: Bool }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_06.aivi{aivi}
 
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json",
-    schema: source.schema.derive   // the List User type drives the contract
-  }
-```
 
 The type annotation on `usersSource` matters because it gives the compiler the result contract up front.
 
 ### Checked external contract example
 
-```aivi
-use aivi.json
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_07.aivi{aivi}
 
-User = { id: Int, name: Text, enabled: Bool }
-
-@static
-userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json"  // load the contract while compiling
-
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json",
-    schema: source.schema.json userSchema              // require agreement with the declared type
-  }
-```
 
 This pattern is useful when the external contract already exists outside your AIVI codebase and you want the compiler to check it early.
 
@@ -135,43 +92,18 @@ That makes connector validation local and readable.
 
 ### Environment example
 
-```aivi
-AppConfig = { port: Int, debug: Bool }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_08.aivi{aivi}
 
-appConfig : Source Env AppConfig
-appConfig =
-  env.decode {
-    prefix: "AIVI_APP",
-    schema: source.schema.derive,
-    strict: True
-  }
-```
 
 ### REST example
 
-```aivi
-User = { id: Int, name: Text, enabled: Bool }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_09.aivi{aivi}
 
-usersApi : Source RestApi (List User)
-usersApi =
-  rest.get {
-    url: ~u(https://api.example.com/users),
-    schema: source.schema.derive,
-    timeoutMs: 5_000,
-    strictStatus: True
-  }
-```
 
 ### Database example
 
-```aivi
-usersRows : Source Db (List User)
-usersRows =
-  db.source {
-    table: usersTable,
-    schema: source.schema.table usersTable
-  }
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_10.aivi{aivi}
+
 
 The exact constructor names may vary by connector, but the public idea is the same: the source declaration carries both the connector config and the schema contract.
 
@@ -215,108 +147,42 @@ The migration is usually mechanical.
 
 Before:
 
-```aivi
-do Effect {
-  users <- load (
-    file.json {
-      path: "./users.json"
-      schema: source.schema.derive
-    }
-  )
-  pure users
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_11.aivi{aivi}
+
 
 After:
 
-```aivi
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json",
-    schema: source.schema.derive
-  }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_12.aivi{aivi}
 
-do Effect {
-  users <- load usersSource
-  pure users
-}
-```
 
 ### Environment
 
 Before:
 
-```aivi
-do Effect {
-  cfg <- load (
-    env.decode {
-      prefix: "AIVI_APP"
-      schema: source.schema.derive
-    }
-  )
-  pure cfg
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_13.aivi{aivi}
+
 
 After:
 
-```aivi
-appConfig : Source Env AppConfig
-appConfig =
-  env.decode {
-    prefix: "AIVI_APP",
-    schema: source.schema.derive
-  }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_14.aivi{aivi}
 
-do Effect {
-  cfg <- load appConfig
-  pure cfg
-}
-```
 
 ### REST / HTTP
 
 Before:
 
-```aivi
-do Effect {
-  users <- load (
-    rest.get {
-      url: ~u(https://api.example.com/users)
-      schema: source.schema.derive
-    }
-  )
-  pure users
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_15.aivi{aivi}
+
 
 After:
 
-```aivi
-usersApi : Source RestApi (List User)
-usersApi =
-  rest.get {
-    url: ~u(https://api.example.com/users),
-    schema: source.schema.derive
-  }
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_16.aivi{aivi}
 
-do Effect {
-  users <- load usersApi
-  pure users
-}
-```
 
 ### Database
 
-```aivi
-usersRows : Source Db (List User)
-usersRows =
-  db.source {
-    table: usersTable,
-    schema: source.schema.table usersTable
-  }
-```
+<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_17.aivi{aivi}
+
 
 ## How this relates to source composition
 

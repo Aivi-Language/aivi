@@ -25,15 +25,8 @@ Reading only metadata can be cheaper and simpler when you are validating uploads
 
 ## Example
 
-```aivi
-ImageMeta = { width: Int, height: Int, format: Text }
+<<< ../../snippets/from_md/syntax/external_sources/image/block_01.aivi{aivi}
 
-do Effect {
-  meta <- load (file.imageMeta "./photo.jpg")  // inspect the file without loading the full image payload
-  img  <- load (file.image "./photo.jpg")      // decode the image for further work
-  pure { meta, img }
-}
-```
 
 ## Typical uses
 

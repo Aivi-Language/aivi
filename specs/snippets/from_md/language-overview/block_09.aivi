@@ -1,0 +1,6 @@
+domain Distance = {
+  (+): Distance -> Distance -> Distance
+}
+
+trip = 5km + 800m
+// Units are part of the value, not just a naming convention.

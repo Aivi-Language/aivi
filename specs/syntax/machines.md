@@ -8,14 +8,8 @@ Start with [State Machines](./state_machines.md) if you want the reader-facing i
 
 ## Start with a practical example
 
-```aivi
-machine AccountSyncMachine = {
-             -> Idle     : boot {}
-  Idle       -> Acquired : lease {}
-  Acquired   -> Syncing  : run { batchId: Int }
-  Syncing    -> Idle     : done {}
-}
-```
+<<< ../snippets/from_md/syntax/machines/block_01.aivi{aivi}
+
 
 This declaration says:
 
@@ -34,13 +28,8 @@ Use a machine when your program has steps that must happen in order, such as lea
 
 ## Declaration syntax
 
-```aivi
-machine MachineName = {
-               -> InitialState : initTransition { FieldDecl, ... }
-  StateA       -> StateB       : transitionName { FieldDecl, ... }
-  StateB       -> StateC       : anotherTransition { FieldDecl, ... }
-}
-```
+<<< ../snippets/from_md/syntax/machines/block_02.aivi{aivi}
+
 
 Each line is one transition rule.
 
@@ -57,18 +46,8 @@ The rule that starts with bare `->` is the **init transition**. It sets the init
 
 Destructure the machine value to access its transition functions and helper fields.
 
-```aivi
-sync = do Effect {
-  { boot, lease, run, done, currentState, can } = AccountSyncMachine
+<<< ../snippets/from_md/syntax/machines/block_03.aivi{aivi}
 
-  _ <- boot {}
-  _ <- lease {}
-  _ <- run { batchId: 42 }
-  _ <- done {}
-
-  pure (currentState Unit)
-}
-```
 
 Read that block as “step through the workflow, then inspect the resulting state”.
 

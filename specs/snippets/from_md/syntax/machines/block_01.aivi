@@ -1,0 +1,6 @@
+machine AccountSyncMachine = {
+           -> Idle     : boot {}
+  Idle     -> Acquired : lease {}
+  Acquired -> Syncing  : run { batchId: Int }
+  Syncing  -> Idle     : done {}
+}

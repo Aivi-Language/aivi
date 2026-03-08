@@ -151,28 +151,15 @@ Domains define many sigils. Some are compiler-provided and backed by standard-li
 
 `` ~`...` `` produces `Text` verbatim. Use it when ordinary string escaping would get noisy.
 
-```aivi
-json  = ~`{"id": 1, "name": "Alice"}` // braces stay literal
-query = ~`SELECT *
-          FROM users
-          WHERE id = 1`
-poem  = ~`
-          | Hallo
-          | Andreas
-`
-```
+<<< ../snippets/from_md/syntax/operators/block_02.aivi{aivi}
+
 
 If every non-empty line in a multiline backtick sigil starts with optional indentation followed by `|`, AIVI strips the indentation, strips the `|`, and also drops one optional space after the `|`. A leading blank line immediately after ``~` `` and a trailing blank line immediately before the closing backtick are also removed in that margin mode.
 
 The VSCode extension also recognizes an optional embedded-language header on the first line of a multiline raw-text sigil. When the first line is one of `css`, `html`, `xml`, `json`, `sql`, `js`, `javascript`, `ts`, or `typescript`, that header is metadata only and the extension injects matching syntax highlighting into the body.
 
-```aivi
-styles = ~`css
-  | .myClass {
-  |   color: red;
-  | }
-`
-```
+<<< ../snippets/from_md/syntax/operators/block_03.aivi{aivi}
+
 
 ### Structured sigils
 
@@ -197,35 +184,13 @@ Uppercase or dotted tags in HTML sigils are treated as component calls with reco
 
 **Shorthand widget tags** starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="WidgetName">` in GTK sigils.
 
-```aivi
-// Shorthand (preferred)
-~<gtk>
-  <GtkBox spacing="24" marginTop="12">
-    <GtkLabel label="Hello" />
-    <GtkButton label="Save" onClick={ Msg.Save } />
-  </GtkBox>
-</gtk>
+<<< ../snippets/from_md/syntax/operators/block_04.aivi{aivi}
 
-// Equivalent verbose form
-~<gtk>
-  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-    <object class="GtkLabel" props={{ label: "Hello" }} />
-    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
-  </object>
-</gtk>
-```
 
 **Signal sugar quick reference:**
 
-```aivi
-~<gtk>
-  <object class="GtkButton" onClick={ Msg.Save } />
-  <object class="GtkEntry" onInput={ Msg.Changed } />
-  <object class="GtkButton">
-    <signal name="clicked" on={ Msg.Save } />
-  </object>
-</gtk>
-```
+<<< ../snippets/from_md/syntax/operators/block_05.aivi{aivi}
+
 
 Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`, `onActivate` → `activate`, `onToggle` → `toggled`, `onValueChanged` → `value-changed`, `onFocusIn` → `focus-enter`, `onFocusOut` → `focus-leave`.
 

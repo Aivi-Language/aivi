@@ -9,14 +9,8 @@ You can apply it to individual definitions or to a whole module.
 
 ## Syntax
 
-```aivi
-// Test case (description is mandatory)
-@test "description of what is tested"
-testName = ...
+<<< ../../snippets/from_md/syntax/decorators/test/block_01.aivi{aivi}
 
-// Test-only module
-@test module ModuleName
-```
 
 ## Example
 
@@ -99,13 +93,8 @@ assertSnapshot : Text -> A -> Effect Text Unit
 `assertSnapshot` compares a serialized value against a stored snapshot.
 Pass `--update-snapshots` when you intentionally want to re-record the expected output.
 
-```aivi
-@test "user formatting"
-testFormat = do Effect {
-  formatted = formatUserTable [{ id: 1, name: "Ada" }]
-  assertSnapshot "user_table" formatted   // compare against the stored golden result
-}
-```
+<<< ../../snippets/from_md/syntax/decorators/test/block_03.aivi{aivi}
+
 
 ### Compile-time errors
 

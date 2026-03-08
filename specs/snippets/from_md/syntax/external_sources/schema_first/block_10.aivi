@@ -1,0 +1,6 @@
+usersRows : Source Db (List User)
+usersRows =
+  db.source {
+    table: usersTable
+    schema: source.schema.table usersTable
+  }

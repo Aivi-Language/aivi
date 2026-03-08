@@ -64,30 +64,8 @@ OAuth2 uses the XOAUTH2 SASL mechanism, which is commonly supported by providers
 
 ## Example — one-shot mailbox read
 
-```aivi
-InboxMessage = {
-  uid: Option Int
-  subject: Option Text
-  from: Option Text
-  to: Option Text
-  date: Option Text
-  body: Text
-}
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_02.aivi{aivi}
 
-do Effect {
-  msgs <- load (email.imap {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 myToken
-    mailbox: Some "INBOX"   // read from the inbox
-    filter: Some "UNSEEN"   // only unread messages
-    limit: Some 50          // cap the batch size
-    port: None
-    starttls: None
-  })
-  pure msgs
-}
-```
 
 This is a good fit for batch-style jobs such as importing unread support messages or extracting invoices from a mailbox.
 
@@ -95,48 +73,15 @@ This is a good fit for batch-style jobs such as importing unread support message
 
 If you need a little more control than the one-shot source gives you, this is the smallest useful session flow:
 
-```aivi
-do Effect {
-  session <- email.imapOpen config
-  _ <- email.imapSelect "INBOX" session
-  messageIds <- email.imapSearch "UNSEEN" session
-  messages <- email.imapFetch messageIds session
-  pure messages
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_03.aivi{aivi}
+
 
 This pattern is useful when you want custom search strings or you want to decide yourself where the mailbox session scope begins and ends.
 
 ## Example — session with IDLE
 
-```aivi
-use aivi.email
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_04.aivi{aivi}
 
-processInbox : Text -> Effect Text (List InboxMessage)
-processInbox = token => do Effect {
-  session <- imapOpen {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 token
-    port: None
-    starttls: None
-    mailbox: None
-    filter: None
-    limit: None
-  }
-  _ <- imapSelect "INBOX" session
-  result <- imapIdle 300 session         // wait for mailbox changes for up to 300 seconds
-  messages <- result match
-    | MailboxChanged => do Effect {
-        uids <- imapSearch "UNSEEN" session
-        msgs <- imapFetch uids session
-        _ <- imapAddFlags uids ["\\Seen"] session
-        pure msgs
-      }
-    | TimedOut => pure []
-  pure messages
-}
-```
 
 Because `imapOpen` is acquired with `<-`, the session is released automatically when the surrounding `do Effect` block exits.
 

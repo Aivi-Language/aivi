@@ -44,15 +44,8 @@ Everything else on this page explains how `gtkApp` hosts that loop.
 
 The architecture is built around these conceptual types:
 
-```aivi
-CommandKey = Text
-SubscriptionKey = Text
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_01.aivi{aivi}
 
-AppStep model msg = {
-  model: model,
-  commands: List (Command msg)
-}
-```
 
 `AppStep` means:
 
@@ -78,13 +71,8 @@ update : msg -> model -> Effect GtkError model
 
 Conceptually, that is equivalent to:
 
-```aivi
-update : msg -> model -> Effect GtkError (AppStep model msg)
-update = msg => model => pure {
-  model,
-  commands: []
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_03.aivi{aivi}
+
 
 `appStep` and `appStepWith` are just shorthand constructors for that same record shape. Use them when they help; direct `{ model, commands }` records are equally valid.
 
@@ -105,19 +93,8 @@ Likewise, if an app has no long-lived external feeds, `subscriptions = noSubscri
 
 The specified public shape is:
 
-```aivi
-gtkApp : {
-  id:            Text,
-  title:         Text,
-  size:          (Int, Int),
-  model:         s,
-  onStart:       AppId -> WindowId -> Effect GtkError Unit,
-  subscriptions: s -> List (Subscription msg),
-  view:          s -> GtkNode,
-  toMsg:         GtkSignalEvent -> Option msg,
-  update:        msg -> s -> Effect GtkError (AppStep s msg)
-} -> Effect GtkError Unit
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_04.aivi{aivi}
+
 
 For older code or very simple examples, the host can also lift `update : msg -> s -> Effect GtkError s` into an `AppStep` automatically.
 
@@ -155,23 +132,8 @@ Reactive helpers such as `signal` and `computed` are useful when you want named 
 
 A small example:
 
-```aivi
-headerLabel = computed "projects.header" (model =>
-  "Projects: {toText model.projectCount}"
-)
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_05.aivi{aivi}
 
-visibleProjects = signal (model => model.visibleProjects)
-
-view = _ =>
-  ~<gtk>
-    <GtkBox orientation="vertical">
-      <GtkLabel label={headerLabel} />
-      <each items={visibleProjects} as={project}>
-        <GtkLabel label={project.name} />
-      </each>
-    </GtkBox>
-  </gtk>
-```
 
 Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed).
 
@@ -248,14 +210,8 @@ A subscription is a standing request that says, “while the model looks like th
 
 `subscriptionSource` is the general bridge for any long-lived producer that can be opened, cleaned up, and read over time.
 
-```aivi
-subscriptionSource {
-  key: "config-watch",
-  open: watchConfigMessages "./config.json",
-  onError: Some ConfigWatchFailed,
-  onClosed: Some ConfigWatchClosed
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_08.aivi{aivi}
+
 
 Conceptually, `open` has this shape:
 
@@ -369,96 +325,15 @@ Reach for them when you need custom hosting, experiments, or multi-window flows.
 
 This first example keeps one search query in the model and adds a repeating timer only while the screen says it should be active:
 
-```aivi
-Model = {
-  searchQuery: Text
-  clockRunning: Bool
-  visibleSeconds: Int
-}
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_11.aivi{aivi}
 
-Msg = SearchQueryChanged Text | Tick
-
-subscriptions : Model -> List (Subscription Msg)
-subscriptions = model =>
-  if model.clockRunning
-    then [
-      subscriptionEvery {
-        key: "clock"
-        millis: 1000
-        tag: Tick
-      }
-    ]
-    else []
-
-update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
-update = msg => model =>
-  pure (
-    msg match
-      | SearchQueryChanged updatedQuery =>
-          {
-            model: model <| { searchQuery: updatedQuery }
-            commands: []
-          }
-      | Tick =>
-          {
-            model: model <| { visibleSeconds: model.visibleSeconds + 1 }
-            commands: []
-          }
-  )
-```
 
 ## Example 2: add background work without changing the loop
 
 When a message should launch asynchronous work, return a command from `update`:
 
-```aivi
-Model = {
-  searchQuery: Text
-  searchInFlight: Bool
-  searchResults: List Text
-  searchError: Option GtkError
-}
+<<< ../../snippets/from_md/stdlib/ui/app_architecture/block_12.aivi{aivi}
 
-Msg
-  = SearchQueryChanged Text
-  | SearchFinished (List Text)
-  | SearchFailed GtkError
-
-update = msg => model =>
-  pure (
-    msg match
-      | SearchQueryChanged updatedQuery =>
-          {
-            model: model <| {
-              searchQuery: updatedQuery
-              searchInFlight: True
-              searchError: None
-            }
-            commands: [
-              commandPerform {
-                run: searchCatalog updatedQuery
-                onError: Some SearchFailed
-              }
-            ]
-          }
-      | SearchFinished foundResults =>
-          {
-            model: model <| {
-              searchInFlight: False
-              searchResults: foundResults
-            }
-            commands: []
-          }
-      | SearchFailed error =>
-          {
-            model: model <| {
-              searchInFlight: False
-              searchError: Some error
-            }
-            commands: []
-          }
-  )
-```
 
 Here `searchCatalog : Text -> Effect GtkError Msg` can return `SearchFinished results` on success. The important part is that nothing creates a second event loop. Even background work still feeds results back as ordinary `Msg` values.
 

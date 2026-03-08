@@ -40,15 +40,8 @@ The module includes both conversion functions for sockets and combinators for tr
 
 Create a stream from a list and transform it:
 
-```aivi
-use aivi.net.streams
-use aivi.logic
+<<< ../../snippets/from_md/stdlib/network/streams/block_01.aivi{aivi}
 
-// fromList is handy for examples, tests, and in-memory pipelines.
-nums    = fromList [1, 2, 3, 4, 5]
-evens   = filter (x => x % 2 == 0) nums
-doubled = map (x => x * 2) evens
-```
 
 Read bytes from a socket, then regroup them into fixed-size chunks:
 

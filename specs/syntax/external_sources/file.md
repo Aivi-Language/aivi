@@ -36,22 +36,8 @@ Loading a file source requires `file.read` (or the broader `file` family shortha
 
 ## Example
 
-```aivi
-User = { id: Int, name: Text, enabled: Bool }
-AppConfig = { port: Int, debug: Bool }
+<<< ../../snippets/from_md/syntax/external_sources/file/block_01.aivi{aivi}
 
-usersSource : Source File (List User)
-usersSource = file.csv "./users.csv"      // each CSV row decodes to User
-
-configSource : Source File AppConfig
-configSource = file.json "./config.json"  // the JSON object decodes to AppConfig
-
-do Effect {
-  users <- load usersSource
-  cfg   <- load configSource
-  pure { users, cfg }
-}
-```
 
 This style keeps parsing rules close to the file boundary instead of spreading ad hoc decoding logic through the rest of the program.
 

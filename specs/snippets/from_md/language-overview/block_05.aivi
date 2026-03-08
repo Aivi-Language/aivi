@@ -1,0 +1,5 @@
+activeNames =
+  users
+|> filter (_.active)
+|> map.name
+|> sort

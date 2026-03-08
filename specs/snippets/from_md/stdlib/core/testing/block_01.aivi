@@ -1,0 +1,10 @@
+@test "read config from fixtures"
+readConfigFromFixtures =
+  with {
+    file.read        = fixtureFiles
+    process.env.read = fixtureEnv
+  } in do Effect {
+    cfg <- readConfig
+    _   <- assertEq cfg.mode "test"
+    pure Unit
+  }

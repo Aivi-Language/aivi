@@ -1,0 +1,15 @@
+// Build a query value once
+activeUserNamesQuery : Query Text
+activeUserNamesQuery = do Query {
+  user <- db.from userTable
+  db.guard_ user.active // keep only active users
+  db.queryOf user.name // project one field
+}
+
+// Run it with an explicit connection
+main = do Effect {
+  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
+  names  <- db.runQueryOn dbConn activeUserNamesQuery
+  _      <- db.close dbConn
+  pure names
+}

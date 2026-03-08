@@ -1,0 +1,8 @@
+loadUserCache: Text -> Effect CacheError User with { file.read }
+
+refreshUser : Url -> Effect SyncError User with { network.http, file.read }
+refreshUser = url => do Effect {
+  remote <- load (rest.get url)
+  cached <- loadUserCache "./user-cache.json"
+  pure (merge remote cached)
+}

@@ -80,30 +80,15 @@ There are three common levels of reuse:
 
 Conceptual examples:
 
-```aivi
-visibleProjects = model =>
-  model.projects
-    |> filter (matchesQuery model.searchQuery)
-    |> filter (matchesTags model.selectedTags)
+<<< ../../snippets/from_md/stdlib/ui/reactive_dataflow/block_01.aivi{aivi}
 
-resultsSummary = model =>
-  if model.loading
-    then "Searching..."
-    else "Showing {length (visibleProjects model)} projects"
-```
 
 Both helpers above are already derived values. They stay pure and may be recomputed whenever read.
 
 When the same derivation is expensive or widely reused, promote it:
 
-```aivi
-visibleProjects =
-  computed "projects.visible" (model =>
-    model.projects
-      |> filter (matchesQuery model.searchQuery)
-      |> filter (matchesTags model.selectedTags)
-  )
-```
+<<< ../../snippets/from_md/stdlib/ui/reactive_dataflow/block_02.aivi{aivi}
+
 
 The current public surface is:
 

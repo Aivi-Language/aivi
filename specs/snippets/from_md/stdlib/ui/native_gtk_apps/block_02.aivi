@@ -1,0 +1,10 @@
+use aivi.chronos.scheduler
+
+nightlyReportPlan = {
+  key: planKey "nightly-report" 2026-01-01T00:00:00Z
+  tenantId: "tenant-apac"
+  trigger: once 2026-01-01T00:00:00Z
+  scheduledAt: 2026-01-01T00:00:00Z
+  attempt: 0
+  status: Planned
+}

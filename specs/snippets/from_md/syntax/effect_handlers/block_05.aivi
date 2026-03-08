@@ -1,0 +1,11 @@
+@test "refreshSession uses deterministic time"
+refreshSessionDeterministic =
+  with {
+    clock.now        = fixedClock
+    clock.sleep      = immediateClock
+    process.env.read = fixtureEnv
+  } in do Effect {
+    session <- refreshSession
+    _       <- assertEq session.expiresAt expectedExpiry
+    pure Unit
+  }

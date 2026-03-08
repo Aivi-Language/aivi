@@ -14,27 +14,15 @@ Use `do M` when you want the same step-by-step reading style as `do Effect`, but
 
 ### `Option`: stop at the first missing step
 
-```aivi
-lookupDisplayName : UserId -> Option Text
-lookupDisplayName = userId => do Option {
-  user <- findUser userId
-  profile <- findProfile user.profileId
-  Some profile.displayName
-}
-```
+<<< ../snippets/from_md/syntax/do_notation/block_01.aivi{aivi}
+
 
 If either lookup returns `None`, the whole block returns `None`. Otherwise the final line produces `Some profile.displayName`.
 
 ### `Result`: stop at the first validation error
 
-```aivi
-loadPort : Text -> Result ConfigError Port
-loadPort = rawPort => do Result {
-  parsedNumber <- parsePortNumber rawPort
-  validPort <- validatePort parsedNumber
-  Ok validPort
-}
-```
+<<< ../snippets/from_md/syntax/do_notation/block_02.aivi{aivi}
+
 
 The block reads top to bottom. Each successful step feeds the next one. The first error ends the block and returns that `Err`.
 

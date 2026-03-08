@@ -54,43 +54,13 @@ Choose the smallest entry point that matches the job:
 
 This example fetches a page and checks whether the request succeeded:
 
-```aivi
-use aivi.net.http
+<<< ../../snippets/from_md/stdlib/network/http/block_01.aivi{aivi}
 
-loadHomePage : Url -> Effect Text Text
-loadHomePage = homePageUrl => do Effect {
-  responseResult <- get homePageUrl
-  responseResult match
-    | Ok response =>
-        homePageBody = response.body
-        pure homePageBody
-    | Err err =>
-        fail "Could not load page: {err.message}"
-}
-```
 
 For requests that need custom headers or a request body, use `fetch`:
 
-```aivi
-use aivi.net.http
+<<< ../../snippets/from_md/stdlib/network/http/block_02.aivi{aivi}
 
-submitFeedback : Url -> Effect Text Int
-submitFeedback = feedbackUrl => do Effect {
-  requestOptions = {
-    method: "POST"
-    url: feedbackUrl
-    headers: [
-      { name: "Accept", value: "application/json" }
-    ]
-    body: Some (Plain "Great work!")
-  }
-
-  responseResult <- fetch requestOptions
-  responseResult match
-    | Ok response => pure response.status
-    | Err err => fail "Request failed: {err.message}"
-}
-```
 
 ## Functions
 

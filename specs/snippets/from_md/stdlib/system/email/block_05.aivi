@@ -1,0 +1,5 @@
+MailboxInfo = {
+  name: Text
+  separator: Option Text
+  attributes: List Text
+}

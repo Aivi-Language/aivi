@@ -1,0 +1,5 @@
+loadConfig : Path -> Effect ConfigError Config
+loadConfig = path => do Effect {
+  cfg <- load (file.json path) // effect: read and decode a config file
+  pure cfg // return the final value
+}

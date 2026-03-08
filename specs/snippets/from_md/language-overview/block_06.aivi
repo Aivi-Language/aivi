@@ -1,0 +1,5 @@
+loadGreeting : Path -> Effect FileError Text
+loadGreeting = path => do Effect {
+  text <- file.read path // effect: read from disk
+  pure "Loaded: {text}"
+}

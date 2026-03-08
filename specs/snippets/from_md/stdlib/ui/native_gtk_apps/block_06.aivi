@@ -1,0 +1,43 @@
+renameProject : Text -> Model -> AppStep Model Msg
+renameProject = updatedName model => {
+  model: model <| { projectName: updatedName }
+  commands: []
+}
+
+markSaved : Model -> AppStep Model Msg
+markSaved = model => {
+  model: model <| {
+    secondsSinceSave: 0
+    saveStatus: "Saved"
+  }
+  commands: [
+    commandAfter {
+      key: "clear-status"
+      millis: 2000
+      msg: ClearStatus
+    }
+  ]
+}
+
+advanceClock : Model -> AppStep Model Msg
+advanceClock = model => {
+  model: model <| {
+    secondsSinceSave: model.secondsSinceSave + 1
+  }
+  commands: []
+}
+
+clearSaveStatus : Model -> AppStep Model Msg
+clearSaveStatus = model => {
+  model: model <| { saveStatus: "Waiting for changes" }
+  commands: []
+}
+
+update = msg => model =>
+  pure (
+    msg match
+      | ProjectNameChanged updatedName => renameProject updatedName model
+      | Save                           => markSaved model
+      | Tick                           => advanceClock model
+      | ClearStatus                    => clearSaveStatus model
+  )

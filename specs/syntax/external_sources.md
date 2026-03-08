@@ -19,18 +19,8 @@ Most source-heavy code follows the same simple pattern:
 1. **Describe the boundary.**
 2. **Load it inside `do Effect { ... }`.**
 
-```aivi
-User = { id: Int, name: Text }
+<<< ../snippets/from_md/syntax/external_sources/block_01.aivi{aivi}
 
-usersFromFile : Source File (List User)
-usersFromFile = file.json "./users.json"
-
-loadUsers : Effect (SourceError File) (List User)
-loadUsers = do Effect {
-  users <- load usersFromFile
-  pure users
-}
-```
 
 Nothing is read when `usersFromFile` is defined. The read happens when `load usersFromFile` runs.
 

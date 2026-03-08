@@ -1,0 +1,10 @@
+User = { id: Int, name: Text }
+
+usersFromFile : Source File (List User)
+usersFromFile = file.json "./users.json"
+
+loadUsers : Effect (SourceError File) (List User)
+loadUsers = do Effect {
+  users <- load usersFromFile
+  pure users
+}

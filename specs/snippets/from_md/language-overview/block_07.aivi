@@ -1,0 +1,5 @@
+evens = generate {
+  x <- [1..10]
+  x -> x % 2 == 0 // guard: keep only even numbers
+  yield x
+}

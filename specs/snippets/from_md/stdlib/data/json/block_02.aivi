@@ -1,0 +1,11 @@
+@static
+userSchema : JsonSchema
+userSchema = file.json "./schemas/users.schema.json"
+
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json"
+    // Reuse the checked schema when loading this source.
+    schema: source.schema.json userSchema
+  }

@@ -1,0 +1,26 @@
+module aivi.url
+
+opaque Url = {
+  protocol: Text
+  host: Text
+  port: Option Int
+  path: Text
+  query: List (Text, Text)
+  hash: Option Text
+}
+
+example = {
+  protocol: "https"
+  host: "example.com"
+  port: None
+  path: "/"
+  query: []
+  hash: None
+}
+
+p       = example.protocol // field access is allowed here
+updated = example <| { host: "other.com" }
+
+usesHttps = url => url match
+  | { protocol: "https" } => True // pattern matching is also allowed here
+  | _                     => False

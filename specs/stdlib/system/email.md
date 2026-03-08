@@ -37,18 +37,8 @@ EmailAuth = Password Text | OAuth2 Text
 
 Connection and filtering settings for IMAP.
 
-```aivi
-ImapConfig = {
-  host: Text
-  user: Text
-  auth: EmailAuth
-  port: Option Int
-  starttls: Option Bool
-  mailbox: Option Text
-  filter: Option Text
-  limit: Option Int
-}
-```
+<<< ../../snippets/from_md/stdlib/system/email/block_02.aivi{aivi}
+
 
 | Field | Type | What it controls |
 | --- | --- | --- |
@@ -65,21 +55,8 @@ ImapConfig = {
 
 Configuration for sending one plain-text email.
 
-```aivi
-SmtpConfig = {
-  host: Text
-  user: Text
-  auth: EmailAuth
-  from: Text
-  to: List Text
-  cc: Option (List Text)
-  bcc: Option (List Text)
-  subject: Text
-  body: Text
-  port: Option Int
-  starttls: Option Bool
-}
-```
+<<< ../../snippets/from_md/stdlib/system/email/block_03.aivi{aivi}
+
 
 | Field | Type | What it controls |
 | --- | --- | --- |
@@ -110,13 +87,8 @@ MimePart = {
 
 Information about an IMAP mailbox.
 
-```aivi
-MailboxInfo = {
-  name: Text
-  separator: Option Text
-  attributes: List Text
-}
-```
+<<< ../../snippets/from_md/stdlib/system/email/block_05.aivi{aivi}
+
 
 ### `IdleResult`
 
@@ -173,66 +145,15 @@ As a `Resource`, it automatically closes the session when the surrounding resour
 
 ### One-shot fetch with OAuth2
 
-```aivi
-use aivi.email
+<<< ../../snippets/from_md/stdlib/system/email/block_07.aivi{aivi}
 
-do Effect {
-  msgs <- imap {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 myAccessToken
-    mailbox: Some "INBOX"
-    filter: Some "UNSEEN"   // only unread messages
-    limit: Some 20          // keep the fetch bounded
-    port: None
-    starttls: None
-  }
-  pure msgs
-}
-```
 
 ### Session-based workflow
 
-```aivi
-use aivi.email
+<<< ../../snippets/from_md/stdlib/system/email/block_08.aivi{aivi}
 
-processInbox = token => resource {
-  session <- imapOpen {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 token
-    port: None
-    starttls: None
-    mailbox: None
-    filter: None
-    limit: None
-  }
-  yield session
-}
-  |> withResource (session => do Effect {
-    _    <- imapSelect "INBOX" session
-    uids <- imapSearch "UNSEEN" session
-    msgs <- imapFetch uids session
-    _    <- imapAddFlags uids ["\\Seen"] session   // mark them as processed
-    pure msgs
-  })
-```
 
 ### Watching a mailbox with IMAP IDLE
 
-```aivi
-use aivi.email
+<<< ../../snippets/from_md/stdlib/system/email/block_09.aivi{aivi}
 
-watchInbox = session => do Effect {
-  _ <- imapSelect "INBOX" session
-  result <- imapIdle 300 session
-  result match
-    | MailboxChanged => do Effect {
-        uids <- imapSearch "UNSEEN" session
-        msgs <- imapFetch uids session
-        _    <- processMsgs msgs
-        watchInbox session
-      }
-    | TimedOut => watchInbox session   // start another wait cycle
-}
-```

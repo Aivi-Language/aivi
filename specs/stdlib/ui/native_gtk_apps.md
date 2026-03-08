@@ -77,17 +77,8 @@ Commands and subscriptions feed the same loop by producing more `Msg` values. Re
 
 Use `~<gtk>` and prefer shorthand widget tags:
 
-```aivi
-~<gtk>
-  <AdwClamp maximumSize="480">
-    <GtkBox orientation="vertical" spacing="12">
-      <GtkLabel label="Project Settings" cssClass="title-2" />
-      <GtkEntry id="projectNameInput" placeholderText="Project name" />
-      <GtkButton id="saveButton" label="Save" />
-    </GtkBox>
-  </AdwClamp>
-</gtk>
-```
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_01.aivi{aivi}
+
 
 `Gtk*` and `Adw*` tags are both first-class here. The sigil lowers to a `GtkNode` tree, and `gtkApp` takes care of mounting and patching that tree for standard apps.
 
@@ -150,18 +141,8 @@ Use `commandAfter` and `subscriptionEvery` when the timing only matters while th
 
 Use [`aivi.chronos.scheduler`](/stdlib/chronos/scheduler) when the work should survive restarts, be coordinated with workers, or follow durable rules such as cron, retry, lease, and tenant concurrency limits.
 
-```aivi
-use aivi.chronos.scheduler
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_02.aivi{aivi}
 
-nightlyReportPlan = {
-  key: planKey "nightly-report" 2026-01-01T00:00:00Z
-  tenantId: "tenant-apac"
-  trigger: once 2026-01-01T00:00:00Z
-  scheduledAt: 2026-01-01T00:00:00Z
-  attempt: 0
-  status: Planned
-}
-```
 
 A GTK app will often create or inspect scheduler values as part of normal app logic, while a worker or backend process executes them later.
 
@@ -183,83 +164,8 @@ The examples below build up the full pattern in smaller, easier-to-scan steps. E
 
 ### Example 1: minimal `gtkApp`
 
-```aivi
-use aivi.ui.gtk4
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_03.aivi{aivi}
 
-Model = {
-  projectName: Text
-  saveStatus: Text
-}
-
-Msg
-  = ProjectNameChanged Text
-  | Save
-
-initialModel : Model
-initialModel = {
-  projectName: ""
-  saveStatus: "Waiting for changes"
-}
-
-pageHeading : Model -> Text
-pageHeading = model =>
-  if model.projectName == ""
-    then "Project Settings"
-    else "Project Settings · {model.projectName}"
-
-view : Model -> GtkNode
-view = model =>
-  ~<gtk>
-    <AdwClamp maximumSize="480">
-      <GtkBox
-        orientation="vertical"
-        spacing="12"
-        marginTop="24"
-        marginBottom="24"
-        marginStart="24"
-        marginEnd="24"
-      >
-        <GtkLabel label={pageHeading model} cssClass="title-2" />
-        <GtkEntry
-          text={model.projectName}
-          placeholderText="Project name"
-          onInput={ ProjectNameChanged }
-        />
-        <GtkButton label="Save" onClick={ Save } />
-        <GtkLabel label={model.saveStatus} />
-      </GtkBox>
-    </AdwClamp>
-  </gtk>
-
-update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
-update = msg => model =>
-  pure (
-    msg match
-      | ProjectNameChanged updatedName =>
-          {
-            model: model <| { projectName: updatedName }
-            commands: []
-          }
-      | Save =>
-          {
-            model: model <| { saveStatus: "Saved" }
-            commands: []
-          }
-  )
-
-main : Effect GtkError Unit
-main = gtkApp {
-  id: "docs.projectSettings"
-  title: "Project Settings"
-  size: (640, 480)
-  model: initialModel
-  onStart: _ _ => pure Unit
-  subscriptions: noSubscriptions
-  view: view
-  toMsg: auto
-  update: update
-}
-```
 
 This is enough for many simple settings and editor screens.
 
@@ -267,150 +173,22 @@ This is enough for many simple settings and editor screens.
 
 Here the same app gains one extra live value: “how long since the last save?”
 
-```aivi
-Model = {
-  projectName: Text
-  secondsSinceSave: Int
-  saveStatus: Text
-}
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_04.aivi{aivi}
 
-Msg
-  = ProjectNameChanged Text
-  | Save
-  | Tick
-
-subscriptions : Model -> List (Subscription Msg)
-subscriptions = _ => [
-  subscriptionEvery {
-    key: "clock"
-    millis: 1000
-    tag: Tick
-  }
-]
-
-update = msg => model =>
-  pure (
-    msg match
-      | Save =>
-          {
-            model: model <| {
-              secondsSinceSave: 0
-              saveStatus: "Saved"
-            }
-            commands: []
-          }
-      | Tick =>
-          {
-            model: model <| {
-              secondsSinceSave: model.secondsSinceSave + 1
-            }
-            commands: []
-          }
-      | ProjectNameChanged updatedName =>
-          {
-            model: model <| { projectName: updatedName }
-            commands: []
-          }
-  )
-```
 
 ### Example 3: add a delayed follow-up
 
 A one-shot command is the right tool when the app should do something later exactly once.
 
-```aivi
-Msg
-  = ProjectNameChanged Text
-  | Save
-  | Tick
-  | ClearStatus
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_05.aivi{aivi}
 
-update = msg => model =>
-  pure (
-    msg match
-      | Save =>
-          {
-            model: model <| {
-              secondsSinceSave: 0
-              saveStatus: "Saved"
-            }
-            commands: [
-              commandAfter {
-                key: "clear-status"
-                millis: 2000
-                msg: ClearStatus
-              }
-            ]
-          }
-      | ClearStatus =>
-          {
-            model: model <| { saveStatus: "Waiting for changes" }
-            commands: []
-          }
-      | Tick =>
-          {
-            model: model <| {
-              secondsSinceSave: model.secondsSinceSave + 1
-            }
-            commands: []
-          }
-      | ProjectNameChanged updatedName =>
-          {
-            model: model <| { projectName: updatedName }
-            commands: []
-          }
-  )
-```
 
 ### Example 4: refactor repetitive update branches into helpers
 
 Once the screen grows, keep the same `Model` and `Msg`, then extract small helper functions so `update` stays easy to scan:
 
-```aivi
-renameProject : Text -> Model -> AppStep Model Msg
-renameProject = updatedName model => {
-  model: model <| { projectName: updatedName }
-  commands: []
-}
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_06.aivi{aivi}
 
-markSaved : Model -> AppStep Model Msg
-markSaved = model => {
-  model: model <| {
-    secondsSinceSave: 0
-    saveStatus: "Saved"
-  }
-  commands: [
-    commandAfter {
-      key: "clear-status"
-      millis: 2000
-      msg: ClearStatus
-    }
-  ]
-}
-
-advanceClock : Model -> AppStep Model Msg
-advanceClock = model => {
-  model: model <| {
-    secondsSinceSave: model.secondsSinceSave + 1
-  }
-  commands: []
-}
-
-clearSaveStatus : Model -> AppStep Model Msg
-clearSaveStatus = model => {
-  model: model <| { saveStatus: "Waiting for changes" }
-  commands: []
-}
-
-update = msg => model =>
-  pure (
-    msg match
-      | ProjectNameChanged updatedName => renameProject updatedName model
-      | Save                            => markSaved model
-      | Tick                            => advanceClock model
-      | ClearStatus                     => clearSaveStatus model
-  )
-```
 
 When a screen has several unnamed widgets producing the same signal, either give them `id="..."` names or keep an explicit `toMsg`. `auto` is meant for straightforward constructor-routing cases, not for every possible GTK event workflow.
 

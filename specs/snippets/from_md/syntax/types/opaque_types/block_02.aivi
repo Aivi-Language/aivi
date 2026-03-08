@@ -1,0 +1,12 @@
+opaque Url = {
+  protocol: Text
+  host: Text
+  port: Option Int
+  path: Text
+  query: List (Text, Text)
+  hash: Option Text
+}
+
+opaque Color  = Red | Green | Blue // constructors are hidden outside the module
+opaque Email  = Text! // opaque branded type
+opaque UserId = Int // opaque alias

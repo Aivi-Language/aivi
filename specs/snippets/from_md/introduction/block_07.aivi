@@ -1,0 +1,4 @@
+parsePort : Text -> Result Text Int
+parsePort = text => textToInt text match
+  | Some port => Ok port
+  | None      => Err "Port must be a whole number"

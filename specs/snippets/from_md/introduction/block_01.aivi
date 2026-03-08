@@ -1,0 +1,12 @@
+User = {
+  id: Int
+  name: Text
+  email: Option Text
+}
+
+formatUser : User -> Text
+formatUser = user =>
+// `match` makes the "email might be missing" case explicit.
+user.email match
+  | Some email => "{user.name} <{email}>"
+  | None       => user.name

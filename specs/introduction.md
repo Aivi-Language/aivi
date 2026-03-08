@@ -28,20 +28,8 @@ Typical examples include ETL jobs, backend services, API clients, automation too
 
 ## The core idea in one example
 
-```aivi
-User = {
-  id: Int,
-  name: Text,
-  email: Option Text
-}
+<<< ./snippets/from_md/introduction/block_01.aivi{aivi}
 
-formatUser : User -> Text
-formatUser = user =>
-  // `match` makes the "email might be missing" case explicit.
-  user.email match
-    | Some email => "{user.name} <{email}>"
-    | None       => user.name
-```
 
 A few important ideas show up immediately:
 
@@ -75,13 +63,8 @@ That reads as: "finding a user performs effects, can fail with `LoadError`, and 
 
 ### 3. Pattern matching replaces many `if` trees
 
-```aivi
-label : Result Text User -> Text
-label = result =>
-  result match
-    | Ok user  => "Hello, {user.name}!"
-    | Err text => "Could not load user: {text}"
-```
+<<< ./snippets/from_md/introduction/block_04.aivi{aivi}
+
 
 Pattern matching is the standard way to work with structured data like `Option`, `Result`, tuples, records, and your own tagged unions.
 
@@ -102,13 +85,8 @@ That pipeline says: start with `users`, keep only the active ones, then extract 
 
 AIVI separates pure calculations from operations that interact with the outside world.
 
-```aivi
-loadConfig : Path -> Effect ConfigError Config
-loadConfig = path => do Effect {
-  cfg <- load (file.json path)         // effect: read and decode a config file
-  pure cfg                             // return the final value
-}
-```
+<<< ./snippets/from_md/introduction/block_06.aivi{aivi}
+
 
 This is one of the biggest differences from mainstream languages:
 
@@ -126,13 +104,8 @@ AIVI uses familiar building blocks instead of special runtime behavior:
 - `Result E A` for "this can fail with error `E` or succeed with `A`",
 - `Effect E A` for "this computation performs effects and may fail with `E`".
 
-```aivi
-parsePort : Text -> Result Text Int
-parsePort = text =>
-  textToInt text match
-    | Some port => Ok port
-    | None      => Err "Port must be a whole number"
-```
+<<< ./snippets/from_md/introduction/block_07.aivi{aivi}
+
 
 If you are used to `null`, exceptions, or out-of-band sentinel values, this style may feel more explicit at first. In practice, it makes programs easier to understand because the important edge cases are not hidden.
 
@@ -142,14 +115,8 @@ AIVI is not just about pure functions. It is also designed to let code speak in 
 
 Domains define the meaning of operators, literals, and units for specific kinds of values. That lets code stay readable without losing type safety.
 
-```aivi
-domain Distance = {
-  (+) : Distance -> Distance -> Distance
-}
+<<< ./snippets/from_md/introduction/block_08.aivi{aivi}
 
-trip = 5km + 800m
-// The units are part of the program, not comments on a raw number.
-```
 
 This matters when you work with time, geometry, UI layout, finance, measurements, and other areas where plain `Int` or `Float` values are too weak to describe intent.
 
@@ -157,13 +124,8 @@ This matters when you work with time, geometry, UI layout, finance, measurements
 
 AIVI puts special emphasis on **typed external sources**. The goal is simple: when data crosses into your program, the expected shape should already be known and checked.
 
-```aivi
-loadCustomers : Effect LoadError (List Customer)
-loadCustomers = do Effect {
-  customers <- load (file.csv "customers.csv")
-  pure customers
-}
-```
+<<< ./snippets/from_md/introduction/block_09.aivi{aivi}
+
 
 In many languages, the risky part of a boundary is hidden in manual parsing code. In AIVI, boundary operations are part of the language and the type system, so decoding, failure modes, and expected structure are easier to see.
 

@@ -1,0 +1,6 @@
+domain Distance = {
+  (+): Distance -> Distance -> Distance
+}
+
+trip = 5km + 800m
+// The units are part of the program, not comments on a raw number.

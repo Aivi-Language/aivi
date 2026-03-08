@@ -1,0 +1,6 @@
+loadPort : Text -> Result ConfigError Port
+loadPort = rawPort => do Result {
+  parsedNumber <- parsePortNumber rawPort
+  validPort    <- validatePort parsedNumber
+  Ok validPort
+}

@@ -1,0 +1,5 @@
+loadUsers : Effect LoadError (List User)
+loadUsers = do Effect {
+  users <- load (file.csv "users.csv")
+  pure users
+}
