@@ -9,6 +9,8 @@ If “higher-kinded type” is a new phrase, read it as “a container shape suc
 
 If you know interfaces or traits, a class fills a similar role. The main difference is that the compiler chooses an instance from the type, rather than looking for methods stored on an object.
 
+This page focuses on the syntax. For the standard hierarchy and everyday built-in examples, see [`aivi.logic`](../../stdlib/core/logic.md).
+
 ## A few terms in plain language
 
 | Term | Plain-language meaning |
@@ -68,41 +70,46 @@ In other words, the container input is added internally as the last argument.
 
 ### Building a class family
 
-<<< ../../snippets/from_md/syntax/types/classes_and_hkts_02.aivi{aivi}
-
 <<< ../../snippets/from_md/syntax/types/classes_and_hkts_03.aivi{aivi}
 
 <<< ../../snippets/from_md/syntax/types/classes_and_hkts_04.aivi{aivi}
 
+<<< ../../snippets/from_md/syntax/types/classes_and_hkts_02.aivi{aivi}
+
 These declarations say that `Applicative` builds on `Apply`, and `Chain` builds on `Apply` too. The container shape `F` stays the same; each class simply asks that shape to support more operations.
+
+The same abbreviated HKT form is still in play. For example, `ap: F (A -> B) -> F B` expands to `ap: F (A -> B) -> F A -> F B`, and `chain: (A -> F B) -> F B` expands to `chain: (A -> F B) -> F A -> F B`.
 
 ### Combining classes
 
-<<< ../../snippets/from_md/syntax/types/classes_and_hkts_05.aivi{aivi}
+<<< ../../snippets/from_md/syntax/types/classes_and_hkts_06.aivi{aivi}
 
 This reads as: a `Monad` is anything that already has both the `Applicative` and `Chain` behaviour.
 
+The same superclass pattern appears elsewhere in the standard library too; [`aivi.logic`](../../stdlib/core/logic.md) shows the wider family.
+
 ### Writing instances
 
-<<< ../../snippets/from_md/syntax/types/classes_and_hkts_06.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/logic/functor_for_option.aivi{aivi}
 
 An instance picks one concrete type or type expression and supplies the implementation for that class.
+If a class only combines superclasses and introduces no new members, the instance body can be empty once those superclass instances already exist. The standard `Monad` instances in `aivi.logic` use that pattern.
 
 ## Type variable constraints
 
 Some class members need extra promises about their type variables. AIVI writes those promises with a `given (...)` clause.
 
-Class declarations may attach constraints to the type variables used in member signatures with `given (...)`.
+Class declarations may attach constraints to the type variables mentioned by their member signatures with `given (...)`.
 
 <<< ../../snippets/from_md/syntax/types/type_variable_constraints_01.aivi{aivi}
 
-`A with B` in a type position means record/type composition: combine the requirements of both sides.
+`A: Eq` means “the type variable `A` must have an `Eq` instance”. If you need more than one requirement, separate them with commas.
 
 Instances use the same idea from the implementation side:
 
-<<< ../../snippets/from_md/syntax/types/type_variable_constraints_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/validation/applicative_instance.aivi{aivi}
 
-In plain language, a `given (...)` clause says “this member or instance works for any type variables that also satisfy these class requirements”.
+In plain language, a `given (...)` clause says “this member or instance works for any type variables that also satisfy these class requirements”. In the `Validation` example above, `E: Semigroup` is what makes it possible to combine multiple errors; see [`aivi.validation`](../../stdlib/core/validation.md) for the full context.
 
 ## Practical notes
 
@@ -133,3 +140,8 @@ error: cannot resolve class member 'empty' (from Monoid) without type context
 ```
 
 Qualified forms such as `List.empty` and `Map.empty` work even when no surrounding type annotation is available.
+
+## See also
+
+- [`aivi.logic`](../../stdlib/core/logic.md) — the standard class hierarchy and real built-in instances
+- [`do` notation](../do_notation.md) — how `Applicative` and `Chain` power `do M { ... }`

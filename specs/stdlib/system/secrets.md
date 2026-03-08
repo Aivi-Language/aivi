@@ -1,17 +1,39 @@
 # Secrets Module
 
 <!-- quick-info: {"kind":"module","name":"aivi.secrets"} -->
-`aivi.secrets` is a small abstraction for storing and retrieving encrypted secret values by key.
+`aivi.secrets` stores and retrieves already-encrypted secret values by application-chosen keys.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.secrets</div>
 
 ## What this module is for
 
-Use this module when your program needs to keep an encrypted blob in a secret store and look it up later by an identifier.
-A common example is storing an API credential, refresh token, or other sensitive payload that has already been encrypted.
+Use this module when your program already has ciphertext and wants to store it under a stable identifier, then load it again later.
+Common examples include encrypted API credentials, refresh tokens, or service-specific session material.
 
 This module focuses on storage and retrieval. It does not turn plaintext into ciphertext for you; instead, it works with `EncryptedBlob` values.
+If your host already injects a secret as plaintext configuration, [`aivi.system.env.get`](./system.md) is often a better fit.
+
+## Quick example
+
+```aivi
+use aivi.secrets
+use aivi.text (toBytes, Utf8)
+
+loadStoredAlgorithm = do Effect {
+  keyId  = "services/github/token"
+  secret = blob keyId "aes-256-gcm" (toBytes Utf8 "ciphertext-from-kms")
+  _      <- put keyId secret
+  stored <- get keyId
+  pure (
+    stored match
+      | Some saved => Some (blobAlgorithm saved)
+      | None       => None
+  )
+}
+```
+
+This example shows the intended shape of the API: create a blob, store it, then read it back as an `Option`.
 
 ## Types
 
@@ -25,7 +47,8 @@ SecretKeyId = Text
 
 ### `SecretError`
 
-Alias for `Text`; used as the error type for secret operations.
+Alias for `Text`; used as the error type for backend or store failures.
+Missing secrets are reported as `None` by `get`, not as `SecretError`.
 
 ```aivi
 SecretError = Text
@@ -33,7 +56,7 @@ SecretError = Text
 
 ### `EncryptedBlob`
 
-A structured encrypted value with the information needed to store and validate it.
+A structured encrypted value with the metadata needed to store and later inspect ciphertext.
 
 <<< ../../snippets/from_md/stdlib/system/secrets/block_03.aivi{aivi}
 
@@ -44,28 +67,30 @@ A structured encrypted value with the information needed to store and validate i
 
 | Function | What it does |
 | --- | --- |
-| **put** keyId blob<br><code>SecretKeyId -> EncryptedBlob -> Effect SecretError Unit</code> | Stores `blob` under `keyId`. |
+| **put** keyId blob<br><code>SecretKeyId -> EncryptedBlob -> Effect SecretError Unit</code> | Stores `blob` under `keyId`. The storage lookup uses the explicit `keyId` argument, so keep it consistent with `blobKeyId blob`. |
 | **get** keyId<br><code>SecretKeyId -> Effect SecretError (Option EncryptedBlob)</code> | Loads the blob for `keyId`, returning `None` when nothing is stored there. |
-| **delete** keyId<br><code>SecretKeyId -> Effect SecretError Unit</code> | Removes the stored blob for `keyId`. |
+| **delete** keyId<br><code>SecretKeyId -> Effect SecretError Unit</code> | Removes the stored blob for `keyId` if one is present. |
 
 ### Blob construction and inspection
 
 | Function | What it does |
 | --- | --- |
-| **blob** keyId algorithm ciphertext<br><code>SecretKeyId -> Text -> Bytes -> EncryptedBlob</code> | Builds an `EncryptedBlob` value. |
+| **blob** keyId algorithm ciphertext<br><code>SecretKeyId -> Text -> Bytes -> EncryptedBlob</code> | Builds an `EncryptedBlob` value from a key id, an algorithm label, and raw ciphertext bytes. |
 | **blobKeyId** blob<br><code>EncryptedBlob -> SecretKeyId</code> | Returns the blob's key identifier. |
 | **blobAlgorithm** blob<br><code>EncryptedBlob -> Text</code> | Returns the algorithm label. |
 | **blobCiphertext** blob<br><code>EncryptedBlob -> Bytes</code> | Returns the encrypted bytes. |
-| **validateBlob** blob<br><code>EncryptedBlob -> Bool</code> | Checks that the required blob fields are present and usable. |
+| **validateBlob** blob<br><code>EncryptedBlob -> Bool</code> | Performs a lightweight structural check. In the current implementation this means the key id and algorithm label are non-empty; it does not decrypt or authenticate the ciphertext. |
 
 ## Typical workflow
 
-1. Create or obtain encrypted bytes.
-2. Wrap them in an `EncryptedBlob` with a key id and algorithm label.
-3. Store the blob with `put`.
-4. Load it later with `get` and inspect or validate it before use.
+1. Create or obtain encrypted bytes from the system that manages your encryption keys.
+2. Wrap them in an `EncryptedBlob` with a key id and an algorithm label that your application understands.
+3. Store the blob with `put`, using the same lookup key you placed inside the blob.
+4. Load it later with `get`.
+5. Use `validateBlob` for a quick structural sanity check before handing the blob to your own decryption or verification layer.
 
 ## Notes
 
-- Runtime backends may map this API to operating-system secret stores such as libsecret.
-- The runtime surface stays the same even when the backing storage implementation changes.
+- Backends may implement this API in different ways, including in-process storage or operating-system secret services.
+- Do not assume a secret written by one process will still be available in a later process unless the target runtime explicitly documents persistence.
+- The public AIVI API stays the same even when the backing storage strategy changes.

@@ -38,16 +38,16 @@ When this page mentions a **workspace snapshot**, it means the full per-request 
 
 - **Go to Definition**: jump to where a symbol is defined.
 - **Go to Declaration**: behaves the same as definition for most items.
-- **Go to Implementation**: jump to implementations of classes.
+- **Go to Implementation**: currently behaves the same as definition, so editors still offer a consistent “jump to symbol” action.
 - **Find References**: list uses of a symbol across the workspace.
 - **Document Symbols**: show an outline of symbols in the current file.
 
 ### Information and help while editing
 
-- **Hover**: shows type information and documentation. The server first tries definition-based lookup, then falls back to span-type lookup so hover still works for expressions that do not have a named definition.
-- **Signature Help**: shows function signatures and parameter information while you type.
-- **Schema and source help**: hover content also documents source-oriented helpers such as `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
-- **GTK architecture help**: hover content documents `gtkApp`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
+- **Hover**: shows type information and documentation. The server first tries definition-based lookup, then falls back to inferred type information for the smallest matching span so hover still works for expressions that do not have a named definition.
+- **Signature Help**: shows function signatures and parameter information while you type in a call.
+- **Schema and source help**: hover content also documents source-oriented helpers such as `load`, `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
+- **GTK architecture help**: hover content and completion scaffolds document `gtkApp`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
 
 ### Editing support
 
@@ -59,6 +59,13 @@ When this page mentions a **workspace snapshot**, it means the full per-request 
 
 Completion also includes scaffolds for the recommended `gtkApp` architecture so editors guide users toward the main public GTK app loop.
 
+### Other protocol features
+
+- **Folding Ranges**: lets editors collapse regions such as multi-line blocks.
+- **Selection Ranges**: expands selection in syntax-aware steps instead of raw character ranges.
+- **Inlay Hints**: shows lightweight inline hints where the client supports them.
+- **Workspace Symbols**: lets editors search for symbols across the workspace, not just in the current file.
+
 ## Diagnostics
 
 The server reports diagnostics as you type. It checks:
@@ -66,8 +73,8 @@ The server reports diagnostics as you type. It checks:
 - **syntax** — catches parse errors and malformed code early
 - **types** — catches type mismatches before runtime
 - **scope and name resolution** — catches missing imports, unknown names, and similar wiring mistakes
-- **structured-source ergonomics** — warns about source-boundary patterns such as legacy source forms or missing schema strategies
-- **GTK and app-architecture ergonomics** — guides users toward the recommended `gtkApp` host and standard command and subscription helpers
+- **structured-source ergonomics** — warns about legacy `file.json "..."` / `env.decode "..."` forms, missing `schema:` fields in record-form sources, and top-level `source.schema.derive` declarations that need an explicit `Source ...` type signature
+- **optional strict-mode rules** — when enabled, adds progressively stricter style and safety diagnostics on top of the default checks
 
 ## Incremental workspace checking
 
@@ -89,6 +96,26 @@ The full ownership, invalidation, and publish rules are defined in [Incremental 
 ## Configuration
 
 The server reads configuration from editor settings sent via `workspace/didChangeConfiguration`.
+Editors often namespace these settings differently; for example, VS Code exposes them as `aivi.*` settings, while the language server receives the nested object below. See [VSCode Extension](vscode_extension.md#configuration) for the editor-facing names.
+
+```json
+{
+  "format": {
+    "indentSize": 2,
+    "maxBlankLines": 1,
+    "braceStyle": "kr",
+    "maxWidth": 100
+  },
+  "diagnostics": {
+    "includeSpecsSnippets": false
+  },
+  "strict": {
+    "level": 0,
+    "forbidImplicitCoercions": false,
+    "warningsAsErrors": false
+  }
+}
+```
 
 ### Format options
 
@@ -109,16 +136,22 @@ The server reads configuration from editor settings sent via `workspace/didChang
 
 | Setting | Type | Default | Description |
 |:-------- |:---- |:------- |:----------- |
-| `strict.level` | number | `0` | Strictness level (`0` = default, higher = stricter). |
+| `strict.level` | number | `0` | Strictness level (`0` = off, `1`–`5` progressively stricter). |
 | `strict.forbidImplicitCoercions` | boolean | `false` | Forbid implicit type coercions. |
 | `strict.warningsAsErrors` | boolean | `false` | Treat warnings as errors. |
 
+Level `1` starts with lexical and structural guidance, and higher levels add progressively stricter checks for imports, patterns, pipes, types, domains, and coercions.
+
 ## Starting the server
 
-The `aivi` CLI can launch the server directly, and editor integrations usually do exactly that:
+The `aivi` CLI can launch the server directly, and editor integrations usually do exactly that. Like most LSP servers, it speaks over standard input and output rather than printing an interactive terminal UI.
 
 ```bash
 aivi lsp  # Start the language server for an editor client.
 ```
 
-The server is also available as the standalone binary `aivi-lsp`.
+The server is also available as the standalone binary `aivi-lsp`:
+
+```bash
+aivi-lsp
+```

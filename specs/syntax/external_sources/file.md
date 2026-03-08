@@ -11,28 +11,27 @@ They work well for:
 - JSON configuration files,
 - CSV imports,
 - checked-in fixtures for tests,
-- plain-text templates or content,
-- image metadata and decoded image payloads.
+- plain-text templates or content.
+
+For image-specific file-backed reads such as metadata inspection or decoded pixel payloads, see [Image Sources](image.md).
 
 ## APIs
 
 - `file.read : Text -> Source File Text`
 - `file.json : Text -> Source File A`
 - `file.csv : Text -> Source File (List A)`
-- `file.imageMeta : Text -> Source Image A`
-- `file.image : Text -> Source Image A`
 
 ## Choosing the right file source
 
 - use `file.read` when you want raw text
 - use `file.json` when the file should decode into a typed value
 - use `file.csv` when each row should decode into a typed record
-- use `file.imageMeta` when you only need image metadata such as width or format
-- use `file.image` when you need the decoded image payload itself
+
+The examples on this page use the compact path-only form. When you want a reusable declaration with an explicit schema contract, see [Schema-First Source Definitions](schema_first.md).
 
 ## Capability mapping
 
-Loading a file source requires `file.read` (or the broader `file` family shorthand). This applies to `file.read`, `file.json`, `file.csv`, `file.imageMeta`, and `file.image`.
+Loading `file.read`, `file.json`, or `file.csv` requires `file.read` (or the broader `file` family shorthand). Image-backed file sources also require `file.read`; see [Image Sources](image.md).
 
 ## Example
 
@@ -52,7 +51,7 @@ do Effect {
 
 ## Error experience
 
-When decoding fails, the error should point to both:
+At the type level, file-source failures surface as [`SourceError File`](../external_sources.md#1211-sourceerror). The decode branch carries path-aware [`aivi.validation.DecodeError`](../../stdlib/core/validation.md#5-decodeerror-adt) values, which format into messages that point to both:
 
 - the file that was read,
 - the place inside the decoded structure where the mismatch happened.

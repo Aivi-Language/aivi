@@ -1,24 +1,41 @@
 # Matrix Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.matrix"} -->
-The `Matrix` domain provides fixed-size matrices used for transforms, coordinate changes, and other grid-shaped linear algebra operations.
+The `Matrix` domain provides fixed-size square matrices used for transforms, coordinate changes, and other grid-shaped linear algebra operations.
 It is especially useful for graphics, geometry, and simulation code where you want to combine multiple transforms into one reusable value.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.matrix<span class="domain-badge">domain</span></div>
 
-A good mental model is: a matrix encodes a transformation you can reuse. One value can represent scaling, rotation, translation, or a combination of them.
+A good mental model is: a matrix encodes a reusable transform. One value can represent scaling, rotation, or a composition of several transforms.
+In v0.1, `aivi.matrix` is intentionally focused: it exposes `Mat2`, `Mat3`, and `Mat4`, not arbitrary `Mat M N` sizes.
+For vector-specific helpers such as `vec2`, `transformPoint3`, or `transformDir3`, see [Vector](vector.md). For broader algebraic helpers, see [Linear Algebra](linear_algebra.md).
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/math/matrix/sigil_constructors.aivi{aivi}
+```aivi
+use aivi.matrix
+use aivi.vector (vec2)
 
-## Features
+scale2 = ~mat[2.0 0.0
+              0.0 2.0]
+point  = vec2 1.0 3.0
 
-<<< ../../snippets/from_md/stdlib/math/matrix/features.aivi{aivi}
+result = scale2 × point
+```
 
-## Domain Definition
+`use aivi.matrix` brings the named helpers (`identity2`, `multiply4`, ...) and `domain Matrix` into scope.
+Import `aivi.vector` as well when you want `Vec2`, `Vec3`, `Vec4`, or vector constructors such as `vec2`.
 
-<<< ../../snippets/from_md/stdlib/math/matrix/domain_definition.aivi{aivi}
+## Supported matrix types
+
+| Type | Meaning |
+| --- | --- |
+| `Mat2` | 2×2 matrix with row-major fields `m00`..`m11`. |
+| `Mat3` | 3×3 matrix with row-major fields `m00`..`m22`. |
+| `Mat4` | 4×4 matrix with row-major fields `m00`..`m33`. |
+| `Scalar` | Alias for `Float`; used by scalar scaling such as `mat * 0.5`. |
+
+This module is always about one of those three square sizes. If you need a literal, helper, or operator here, it is specialized for `Mat2`, `Mat3`, or `Mat4`.
 
 ## `×` operator overloads
 
@@ -38,11 +55,15 @@ Read it this way:
 | `mat4 × mat4` | `multiply4 mat4 mat4` | `Mat4` |
 | `mat4 × vec4` | `transform4 mat4 vec4` | `Vec4` |
 
-`×` is reserved for structural products; `*` stays available for scalar scaling.
+To use infix `×`, bring `domain Matrix` into scope with `use aivi.matrix` or `use aivi.matrix (domain Matrix, ...)`.
+The vector overloads dispatch to `transform2`, `transform3`, and `transform4` from [Vector](vector.md#vector-×-matrix); the matrix overloads dispatch to `multiply2`, `multiply3`, and `multiply4` from this module.
 
-Requires `use aivi.matrix (domain Matrix)` or `use aivi.matrix`, plus `use aivi.vector` if you want the `Vec*` types in scope.
+Because matrix multiplication composes transforms, `(a × b) × v` applies `b` first and then `a`.
+`×` is reserved for structural products; `*` stays available for scalar scaling, with the matrix on the left: `mat * 0.5`.
 
 ## Core helpers
+
+Use the named helpers when you want explicit calls instead of operator syntax.
 
 | Function | What it does |
 | --- | --- |
@@ -60,10 +81,40 @@ Requires `use aivi.matrix (domain Matrix)` or `use aivi.matrix`, plus `use aivi.
 
 For concise literals, use the structured `~mat` sigil.
 
-<<< ../../snippets/from_md/stdlib/math/matrix/sigil_constructors.aivi{aivi}
+```aivi
+// 2x2 rotation matrix (90 degrees counterclockwise)
+rot90 = ~mat[0.0 -1.0
+             1.0  0.0]
 
-Rows are separated by newlines and columns by whitespace. The formatter aligns columns for readability, so the literal stays easy to scan like a small grid. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row and column count.
+// 3x3 identity
+id3 = ~mat[1.0 0.0 0.0
+           0.0 1.0 0.0
+           0.0 0.0 1.0]
+```
+
+You can write the cells on one line or across multiple lines. The formatter rewrites the literal as aligned rows, which is the style shown above because it is easiest to scan.
+The sigil accepts only 4, 9, or 16 cells, inferring `Mat2`, `Mat3`, or `Mat4` from that square size.
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/stdlib/math/matrix/usage_examples.aivi{aivi}
+```aivi
+use aivi.matrix
+use aivi.vector (vec2)
+
+scale2 = ~mat[2.0  0.0
+              0.0  2.0]
+rot90  = ~mat[0.0 -1.0
+              1.0  0.0]
+point  = vec2 1.0 0.0
+
+combined = rot90 × scale2
+explicit = multiply2 rot90 scale2
+result   = combined × point
+```
+
+`combined` and `explicit` are the same matrix. `result` first scales `point` and then rotates it.
+
+## Related domains
+
+- See [Vector](vector.md) for `Vec2`/`Vec3`/`Vec4`, vector constructors, and helpers such as `transformPoint3` and `transformDir3`.
+- See [Linear Algebra](linear_algebra.md) when the main job is algebraic operations over vectors and matrices rather than storing reusable transforms.

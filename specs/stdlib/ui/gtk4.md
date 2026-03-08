@@ -51,13 +51,15 @@ If you want one tiny anchor before the reference sections, start here:
 <<< ../../snippets/from_md/stdlib/ui/gtk4/block_01.aivi{aivi}
 
 
-## Public API
+## Selected public API surface
+
+This condensed signature block is meant to help you orient yourself quickly. The module also exports additional lower-level setters, widget helpers, and compatibility functions that later sections call out when they matter.
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/public_api.aivi{aivi}
 
 ## Native mapping table
 
-Treat this table as a reference shelf, not a first-read tutorial. The runtime forwards these AIVI functions to their native GTK or libadwaita counterparts:
+Treat this table as a reference shelf, not a first-read tutorial. It highlights common lower-level functions that forward directly to GTK or libadwaita counterparts:
 
 | AIVI function | Native target |
 | --- | --- |
@@ -65,8 +67,13 @@ Treat this table as a reference shelf, not a first-read tutorial. The runtime fo
 | `appNew` | `gtk4.appNew` |
 | `windowNew` | `gtk4.windowNew` |
 | `windowSetTitle` | `gtk4.windowSetTitle` |
+| `windowSetTitlebar` | `gtk4.windowSetTitlebar` |
 | `windowSetChild` | `gtk4.windowSetChild` |
 | `windowPresent` | `gtk4.windowPresent` |
+| `windowClose` | `gtk4.windowClose` |
+| `windowOnClose` | `gtk4.windowOnClose` |
+| `windowSetHideOnClose` | `gtk4.windowSetHideOnClose` |
+| `windowSetDecorated` | `gtk4.windowSetDecorated` |
 | `appRun` | `gtk4.appRun` |
 | `widgetShow` | `gtk4.widgetShow` |
 | `widgetHide` | `gtk4.widgetHide` |
@@ -326,7 +333,7 @@ For standard apps, `signalStream` is the usual choice. `signalPoll` is more usef
 
 ## `gtkApp` — the standard app host
 
-`gtkApp` is the recommended entry point for most GTK applications in AIVI. You give it a configuration record, and it handles init, startup, window creation, event ingestion, reconciliation, and the command/subscription flow described in [GTK App Architecture](/stdlib/ui/app_architecture).
+`gtkApp` is the recommended entry point for most GTK applications in AIVI. You give it a configuration record, and it handles init, startup, window creation, event ingestion, reconciliation, and the command/subscription flow described in [GTK App Architecture](./app_architecture.md).
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/block_13.aivi{aivi}
 
@@ -377,6 +384,7 @@ Properties are patched, CSS classes are diffed, signal handlers are reconnected 
 - `E1613`: non-literal `props` field value
 - `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onToggle`, `onValueChanged`, `onFocusIn`, `onFocusOut`, and `<signal ... on={...}>` require compile-time values)
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node)
+- `E1616`: bare `<child>` without a `type` attribute (nest `<object>` elements directly inside the parent instead)
 - `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)
 
 ## UI update pattern (state machine + events + repaint)

@@ -3,6 +3,7 @@
 <!-- quick-info: {"kind":"module","name":"aivi.email"} -->
 The `email` module lets AIVI programs read mail from IMAP servers and send mail through SMTP.
 Use `imap` for simple one-shot reads, `imapOpen` when you need a longer-lived IMAP session, and `smtpSend` when your program needs to deliver mail.
+This module is the convenient stdlib surface over the lower-level `email.*` runtime APIs.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.email</div>
@@ -16,7 +17,11 @@ Use `imap` for simple one-shot reads, `imapOpen` when you need a longer-lived IM
 - watch for changes with IMAP IDLE,
 - or send plain-text email notifications.
 
-Both IMAP and SMTP support password authentication and OAuth2 (`XOAUTH2`) access tokens.
+All of these APIs perform network I/O, so callers need the [`network` capability](../../syntax/capabilities.md).
+If you need the lower-level `load (email.imap ...)` source form, see [IMAP Email Sources](../../syntax/external_sources/imap_email.md).
+
+Both IMAP and SMTP accept password credentials or OAuth2 access tokens through `EmailAuth`.
+IMAP uses XOAUTH2 directly; SMTP token support depends on what the remote server accepts for authenticated SMTP.
 
 ## Types
 
@@ -31,7 +36,7 @@ EmailAuth = Password Text | OAuth2 Text
 | Constructor | What it means |
 | --- | --- |
 | `Password Text` | Password-based authentication. |
-| `OAuth2 Text` | OAuth2 access token used through XOAUTH2. |
+| `OAuth2 Text` | OAuth2 access token. IMAP uses XOAUTH2 directly; SMTP support depends on the provider/server. |
 
 ### `ImapConfig`
 
@@ -54,6 +59,7 @@ Connection and filtering settings for IMAP.
 ### `SmtpConfig`
 
 Configuration for sending one plain-text email.
+Use this when you want the runtime to build and send a straightforward plain-text message for you.
 
 <<< ../../snippets/from_md/stdlib/system/email/block_03.aivi{aivi}
 
@@ -105,13 +111,16 @@ IdleResult = TimedOut | MailboxChanged
 - Use **`smtpSend`** when you want to send a plain-text message.
 - Use **`mimeParts`** and **`flattenBodies`** when you already have raw mail data and want to inspect or display it.
 
+`imap` is a convenience wrapper around `load (email.imap config)`.
+If you want the underlying source-oriented API or more detail about typed mailbox reads, see [IMAP Email Sources](../../syntax/external_sources/imap_email.md).
+
 ## Functions
 
 ### One-shot helpers
 
 | Function | What it does |
 | --- | --- |
-| **imap** config<br><code>ImapConfig -> Effect Text (List A)</code> | Connects, fetches messages that match `config.filter` from `config.mailbox`, decodes them as `A`, and disconnects. |
+| **imap** config<br><code>ImapConfig -> Effect Text (List A)</code> | Connects, fetches messages that match `config.filter` from `config.mailbox`, decodes them with the same rules as `load (email.imap config)`, and disconnects. |
 | **smtpSend** config<br><code>SmtpConfig -> Effect Text Unit</code> | Sends one email using the supplied SMTP settings. |
 | **mimeParts** raw<br><code>Text -> List MimePart</code> | Parses a raw MIME message into decoded parts. |
 | **flattenBodies** parts<br><code>List MimePart -> Text</code> | Joins the body text of multiple MIME parts into one plain text value. |
@@ -143,17 +152,26 @@ As a `Resource`, it automatically closes the session when the surrounding resour
 
 ## Examples
 
+These examples use Gmail-style hostnames because they are familiar to many readers.
+Replace the host, username, mailbox names, and token/password values with the settings from your own mail provider and deployment environment.
+
 ### One-shot fetch with OAuth2
 
 <<< ../../snippets/from_md/stdlib/system/email/block_07.aivi{aivi}
 
+This is the smallest useful flow when you just want “read a bounded batch of messages and return them”.
+`myAccessToken` stands for an OAuth2 access token that your program acquired elsewhere.
 
 ### Session-based workflow
 
 <<< ../../snippets/from_md/stdlib/system/email/block_08.aivi{aivi}
 
+This keeps one IMAP connection open long enough to select a mailbox, search it, fetch matching messages, and then mark those messages as seen.
+Use this pattern when several mailbox operations belong in one resource scope.
 
 ### Watching a mailbox with IMAP IDLE
 
 <<< ../../snippets/from_md/stdlib/system/email/block_09.aivi{aivi}
 
+This example assumes `processMsgs` is your own application function, for example `List InboxMessage -> Effect Text Unit`.
+Wrap `watchInbox` in a resource scope that acquires the session with `imapOpen`, then let the recursive loop continue until your application decides to stop.

@@ -1,6 +1,6 @@
 # Generic `do M` Blocks
 
-Most AIVI code uses `do Effect { ... }` for side effects. This page covers the more general form `do M { ... }`, which lets the same block style work for other container-like types such as `Option`, `Result`, and `List`.
+Most AIVI code uses `do Effect { ... }` for side effects. This page covers the more general form `do M { ... }`, which lets the same block style work for other container-like types such as `Option`, `Result`, and `List`, plus query-like forms such as `Query`.
 
 A few terms, in plain language:
 
@@ -8,7 +8,7 @@ A few terms, in plain language:
 - **chain** means “run one step, then pass its successful result into the next step”
 - **desugaring** means “the compiler rewrites friendly syntax into simpler core expressions”
 
-Use `do M` when you want the same step-by-step reading style as `do Effect`, but your type is something like `Option`, `Result`, or `List` rather than an effectful computation.
+Use `do M` when you want the same step-by-step reading style as `do Effect`, but your type is something like `Option`, `Result`, `List`, or `Query` rather than an effectful computation.
 
 ## Start with concrete examples
 
@@ -26,24 +26,26 @@ If either lookup returns `None`, the whole block returns `None`. Otherwise the f
 
 The block reads top to bottom. Each successful step feeds the next one. The first error ends the block and returns that `Err`.
 
+Notice that the last line is still a `Result` value, not a plain `Port`. That is the general rule for `do M`: the final expression must already be wrapped as `M A`.
+
 ## `do Effect` first, `do M` when you need the generic form
 
 `do Effect { ... }` is the everyday version. It is built for typed side effects and supports extra effect-specific statements such as `or`, resource acquisition, `when`, `unless`, `given`, `loop` / `recurse`, and `on`.
 
-`do M { ... }` is the smaller, reusable core. It works when a type constructor `M` has the class instances needed to chain steps together.
+`do M { ... }` is the smaller, reusable core. It works when a type constructor `M` has the sequencing support needed to chain steps together.
 
 If you have seen the word **monadic** before, this generic chaining pattern is what it refers to: each step can decide what the next step sees.
 
 ## Overview
 
-Generic `do M { ... }` reuses the same readable block layout as `do Effect { ... }`, but the meaning comes from type class instances instead of being hard-coded for effects.
+Generic `do M { ... }` reuses the same readable block layout as `do Effect { ... }`. For most constructors the meaning comes from `Chain` / `Applicative` support instead of being hard-coded for effects; `do Query { ... }` is the main built-in special case.
 
 ### Design principles
 
 1. **`do Effect { ... }` is the everyday form.** Use it for I/O, resources, cancellation, and the other effect-only statements described in [Effects](effects.md).
 2. **`generate { ... }` stays separate.** Generators describe pure sequences with `yield`, so they use their own rules.
 3. **Generic `do M { ... }` uses the common subset.** It supports `<-` for bind, `=` for pure local names, expression sequencing, and a final expression.
-4. **Instances provide the behavior.** The compiler looks up `Chain M` and `Applicative M` to determine how the block sequences work and how an empty block produces `Unit`.
+4. **Constructor support provides the behavior.** Ordinary `do M` blocks lower through `chain` and `of`, so they rely on the constructor's `Chain` and `Applicative` support. `do Query { ... }` is the notable built-in exception: it lowers through query helpers described in [Database](../stdlib/system/database.md).
 
 ## Syntax
 
@@ -58,7 +60,7 @@ DoBlock := "do" UpperIdent "{" { DoStmt } "}"
 The parser accepts any `UpperIdent` after `do`. The difference is semantic:
 
 - `do Effect { ... }` gets the effect-specific rules
-- every other `do M { ... }` is checked through type class instances
+- every other `do M { ... }` uses the generic block rules; most lower through `chain` / `of`, while `do Query { ... }` uses query-specific helpers
 
 ### Statement subset by block kind
 
@@ -87,7 +89,7 @@ In the examples below, `⟦ ... ⟧` means “the compiler’s rewritten form of
 
 ### Generic `do M { ... }`
 
-A `do M { ... }` block becomes calls to `chain` and `of` from the `Chain M` and `Applicative M` instances in scope.
+Most `do M { ... }` blocks become calls to `chain` and `of` from the `Chain M` and `Applicative M` support in scope.
 
 #### Bind
 
@@ -143,6 +145,8 @@ desugars to `⟦expr⟧`. The final expression must already have type `M A`.
 
 desugars to `of Unit`, using `of : A -> M A` from `Applicative M`.
 
+Special case: `do Query { ... }` uses `queryChain` and `queryOf` instead. See [Database](../stdlib/system/database.md).
+
 ### `do Effect { ... }` as a specialization
 
 `do Effect { ... }` follows the same broad idea, but it has extra rules for effect-specific statements. In practice:
@@ -155,17 +159,18 @@ The compiler recognizes `Effect` specially so those extra statements remain avai
 
 ## Type checking
 
-Generic `do M` blocks are checked against in-scope type class instances:
+Most generic `do M` blocks rely on the target constructor's sequencing operations:
 
 - `Chain M` provides `chain` for `<-` binds and expression sequencing
 - `Applicative M` provides `of` for empty blocks and value injection
+- `do Query` uses `queryChain` and `queryOf`; see [Database](../stdlib/system/database.md)
 - for `M ≠ Effect`, effect-only statements such as `or`, `when`, `unless`, `given`, `on`, resource binds, and `loop` / `recurse` are rejected
 
-If no suitable instance is available, compilation fails with an instance-resolution error for the target constructor.
+If the required sequencing operations are unavailable, compilation fails during name or instance resolution for the target constructor.
 
 ## Runtime behavior
 
-`do M { ... }` lowers to nested `chain` calls plus lambdas, with `of Unit` for the empty-block case.
+Most `do M { ... }` blocks lower to nested `chain` calls plus lambdas, with `of Unit` for the empty-block case. `do Query { ... }` uses the query-specific `queryChain` / `queryOf` pair instead.
 
 `do Effect { ... }` keeps the additional runtime behavior described in [Effects](effects.md).
 
@@ -176,11 +181,12 @@ If no suitable instance is available, compilation fails with an instance-resolut
 | `Option A`   | Stop early when any step returns `None`. |
 | `Result E A` | Chain computations that may fail, without using `Effect`. |
 | `List A`     | Describe non-deterministic combinations such as cartesian products. |
+| `Query A`    | Build typed database reads in a step-by-step style; see [Database](../stdlib/system/database.md). |
 
 ## When to use which block form
 
 - Use `do Effect { ... }` for I/O, resource management, cancellation-aware work, and the effect-only statements from [Effects](effects.md).
-- Use `do M { ... }` when you want the same readable sequencing for `Option`, `Result`, `List`, or another type constructor with the required class instances.
+- Use `do M { ... }` when you want the same readable sequencing for `Option`, `Result`, `List`, `Query`, or another type constructor with the required sequencing support.
 - Use `generate { ... }` when you are building a pure sequence of yielded values.
 
 ## References
@@ -190,3 +196,4 @@ If no suitable instance is available, compilation fails with an instance-resolut
 - Generators: [§ 7](generators.md)
 - Type classes: [§ 3.5](types/classes_and_hkts.md)
 - Monad hierarchy: [aivi.logic](../stdlib/core/logic.md)
+- Database query DSL: [Database](../stdlib/system/database.md)

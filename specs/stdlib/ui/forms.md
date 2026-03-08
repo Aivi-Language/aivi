@@ -2,7 +2,7 @@
 ## Lightweight Forms and Validation for GTK Apps
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui.forms"} -->
-`aivi.ui.forms` gives GTK apps a small set of practical form helpers: typed field state with `Field A`, update helpers for common GTK input events, and validation helpers built on `Validation (List E) A`.
+`aivi.ui.forms` gives GTK apps a small set of practical form helpers: typed field state with `Field A`, update helpers for common GTK input events, and validation helpers built on [`Validation`](../core/validation.md).
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.ui.forms</div>
@@ -30,23 +30,25 @@ If you know ordinary web-form patterns, think of `Field A` as “the input value
 - `touched` becomes `True` after the user leaves the field,
 - `dirty` becomes `True` after any input change.
 
+In practice, `touched` is usually what controls when validation feedback becomes visible, while `dirty` is useful for “Save” button state or unsaved-changes prompts.
+
 The module deliberately stays small. Instead of forcing a single giant `Form` type, it lets you keep your overall screen model as a normal AIVI record and use `Field A` only where it helps.
 
 ## The usual GTK event flow
 
 A typical field follows this mapping:
 
-| GTK event | `Msg` | Model helper |
+| GTK event | `Msg` | Typical model update |
 | --- | --- | --- |
 | `GtkInputChanged _ "fieldId" txt` | `FieldChanged txt` | `setValue txt field` |
 | `GtkFocusOut _ "fieldId"` | `FieldBlurred` | `touch field` |
-| `GtkClicked _ "submitBtn"` | `Submit` | `submitted: True` |
+| `GtkClicked _ "submitBtn"` | `Submit` | `model <| { submitted: True }` |
 
 That keeps forms inside the same event pipeline as the rest of the app. There is no hidden widget-owned form state and no second validation loop to learn.
 
 ## Field-level validation
 
-Validators stay as plain pure functions returning `Validation (List E) A`:
+Validators stay as plain pure functions. The built-in helpers in this module mostly validate `Text`, but custom rules can use the same `Validation (List E) A` shape:
 
 <<< ../../snippets/from_md/stdlib/ui/forms/block_02.aivi{aivi}
 
@@ -61,9 +63,30 @@ Validators stay as plain pure functions returning `Validation (List E) A`:
 
 ## Form-level validation
 
-Field-level checks are great for inline feedback. On submit, you usually want one typed domain value.
+Field-level checks are great for inline feedback. On submit, you usually want one typed domain value, and `Validation` lets you accumulate all field errors instead of stopping at the first one.
 
-<<< ../../snippets/from_md/stdlib/ui/forms/block_03.aivi{aivi}
+```aivi
+Contact = {
+  name: Text
+  email: Text
+}
+
+MkContact : Text -> Text -> Contact
+MkContact = name email => {
+  name: name
+  email: email
+}
+
+toContact : {
+  name: Field Text
+  email: Field Text
+} -> Validation (List Text) Contact
+toContact = model =>
+  // Validate each field, then assemble a typed Contact value.
+  ap
+    (ap (Valid MkContact) (validate (allOf [required, minLength 2]) model.name))
+    (validate (allOf [required, email]) model.email)
+```
 
 
 A good rule of thumb is:
@@ -74,7 +97,91 @@ A good rule of thumb is:
 
 ## Full GTK app example
 
-<<< ../../snippets/from_md/stdlib/ui/forms/block_04.aivi{aivi}
+```aivi
+use aivi
+use aivi.text
+use aivi.validation
+use aivi.ui.forms
+use aivi.ui.gtk4
+
+Model = {
+  submitted: Bool
+  name: Field Text
+  email: Field Text
+}
+
+Msg =
+  | NameChanged Text
+  | NameBlurred
+  | EmailChanged Text
+  | EmailBlurred
+  | Submit
+
+initialModel : Model
+initialModel = {
+  submitted: False
+  name: field ""
+  email: field ""
+}
+
+nameRule : Text -> Validation (List Text) Text
+nameRule = allOf [required, minLength 2]
+
+emailRule : Text -> Validation (List Text) Text
+emailRule = allOf [required, email]
+
+nameErrors : Model -> List Text
+nameErrors = model => visibleErrors model.submitted nameRule model.name
+
+emailErrors : Model -> List Text
+emailErrors = model => visibleErrors model.submitted emailRule model.email
+
+view : Model -> GtkNode
+view = model => ~<gtk>
+  <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
+    <GtkEntry
+      id="nameInput"
+      text={model.name.value}
+      placeholderText="Name"
+      onInput={ NameChanged }
+      onFocusOut={ NameBlurred } />
+    <GtkLabel label={text.join ", " (nameErrors model)} />
+    <GtkEntry
+      id="emailInput"
+      text={model.email.value}
+      placeholderText="Email"
+      onInput={ EmailChanged }
+      onFocusOut={ EmailBlurred } />
+    <GtkLabel label={text.join ", " (emailErrors model)} />
+    <GtkButton id="submitBtn" label="Save" onClick={ Submit } />
+  </GtkBox>
+</gtk>
+
+toMsg : GtkSignalEvent -> Option Msg
+toMsg = event => event match
+  | GtkInputChanged _ "nameInput" txt  => Some (NameChanged txt)
+  | GtkFocusOut _ "nameInput"          => Some NameBlurred
+  | GtkInputChanged _ "emailInput" txt => Some (EmailChanged txt)
+  | GtkFocusOut _ "emailInput"         => Some EmailBlurred
+  | GtkClicked _ "submitBtn"           => Some Submit
+  | _                                  => None
+
+update : Msg -> Model -> Effect GtkError Model
+update = msg model => msg match
+  | NameChanged txt =>
+      // Keep the latest draft value in the model.
+      pure (model <| { name: setValue txt model.name })
+  | NameBlurred =>
+      // Mark the field as touched so its errors can become visible.
+      pure (model <| { name: touch model.name })
+  | EmailChanged txt =>
+      pure (model <| { email: setValue txt model.email })
+  | EmailBlurred =>
+      pure (model <| { email: touch model.email })
+  | Submit =>
+      // Flip the submitted flag so every field shows its current errors.
+      pure (model <| { submitted: True })
+```
 
 
-This example stops before command execution on purpose. If submission should trigger IO, first produce the validated payload, then launch the command from `update`.
+This example stops before command execution on purpose. If submission should trigger IO, first produce the validated payload, then launch the command from `update` as described in [`gtkApp` architecture](./app_architecture.md).

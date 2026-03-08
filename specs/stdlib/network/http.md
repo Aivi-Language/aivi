@@ -57,9 +57,11 @@ This example fetches a page and checks whether the request succeeded:
 <<< ../../snippets/from_md/stdlib/network/http/block_01.aivi{aivi}
 
 
-For requests that need custom headers or a request body, use `fetch`:
+For requests that need a custom method, custom headers, or an explicit body, use `fetch`:
 
 <<< ../../snippets/from_md/stdlib/network/http/block_02.aivi{aivi}
+
+For JSON payloads, pass `Some (Json ...)` directly or rely on the `Body` coercions described below.
 
 
 ## Functions
@@ -98,21 +100,28 @@ Body = Plain Text | Form (List Header) | Json JsonValue
 Think of the variants like this:
 
 - `Plain Text` sends raw text exactly as written.
-- `Form (List Header)` sends form-style name/value fields.
+- `Form (List Header)` reuses the `{ name, value }` shape from `Header` and percent-encodes the pairs as an `application/x-www-form-urlencoded` body.
 - `Json JsonValue` sends structured JSON data.
 
-When the expected type is `Body`, a plain record literal is automatically coerced to `Json (toJson record)`. That means you can stay focused on the data you want to send:
+When the expected type is `Body`, a plain record literal is automatically coerced to `Json (toJson record)`. See [expected-type coercions](../../syntax/types/expected_type_coercions.md#body-coercions) for the full rule. In practice, that means you can stay focused on the data you want to send:
 
 ```aivi
 // This record is automatically turned into JSON.
 body: Some { grant_type: "authorization_code", code: code }
 ```
 
-Header rule: the `Json` variant automatically adds `Content-Type: application/json` when the request does not already define a `Content-Type` header.
+Header rule: the `Json` variant automatically adds `Content-Type: application/json` when the request does not already define a `Content-Type` header. If you use `Form`, set `Content-Type` yourself when the server expects it.
 
 ### `Request`
 
-<<< ../../snippets/from_md/stdlib/network/http/request.aivi{aivi}
+```aivi
+Request = {
+  method: Text
+  url: Url
+  headers: List Header
+  body: Option Body
+}
+```
 
 `Request` is the full request envelope. A useful way to read it is:
 
@@ -130,7 +139,13 @@ Header rule: the `Json` variant automatically adds `Content-Type: application/js
 
 ### `Response`
 
-<<< ../../snippets/from_md/stdlib/network/http/response.aivi{aivi}
+```aivi
+Response = {
+  status: Int
+  headers: List Header
+  body: Text
+}
+```
 
 `Response` contains three things:
 
@@ -178,11 +193,11 @@ Choose [`aivi.rest`](./rest.md) when:
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.https</div>
 
-`aivi.net.https` exports the same functions (`get`, `post`, `fetch`) and the same supporting types (`Header`, `Body`, `Request`, `Response`, `Error`) as `aivi.net.http`. The main difference is that the connection is secured with TLS.
+`aivi.net.https` exports the same entry points (`get`, `post`, `fetch`) and the same request/response workflow as `aivi.net.http`, but it only accepts `https://` URLs and secures the connection with TLS. The `Header`, `Request`, `Response`, and `Error` shapes match `aivi.net.http`; its current `Body` type exposes `Plain` and `Form`.
 
 ### Common use
 
-If an API gives you an `https://...` URL, import `aivi.net.https` and use it the same way you would use `aivi.net.http`:
+If an API gives you an `https://...` URL, import `aivi.net.https` and use it the same way you would use `aivi.net.http` for `GET`, text-body, and form-encoded requests:
 
 ```aivi
 use aivi.net.https
@@ -201,10 +216,21 @@ loadProfile = profileUrl => get profileUrl
 
 ### Types
 
-The data types have the same shapes as the ones in `aivi.net.http`:
+The data types are:
 
 ```aivi
 Header = { name: Text, value: Text }
-Body   = Plain Text | Form (List Header) | Json JsonValue
-Error  = { message: Text }
+Body = Plain Text | Form (List Header)
+Request = {
+  method: Text
+  url: Url
+  headers: List Header
+  body: Option Body
+}
+Response = {
+  status: Int
+  headers: List Header
+  body: Text
+}
+Error = { message: Text }
 ```

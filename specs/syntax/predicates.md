@@ -1,23 +1,21 @@
 # Predicates (Unified Model)
 
-A predicate is a boolean test that reads naturally against a “current value”. AIVI uses the same mental model in helpers such as `filter`, in generator guards, and in patch predicates.
+A predicate is a `Bool`-valued test that reads naturally against a “current value”. AIVI uses the same mental model in helpers such as `filter`, in generator guards, and in patch predicates, so the rules on this page carry over directly to [Generators](generators.md) and [Patching Records](patching.md).
 
 ## 4.1 Predicate expressions
 
-Any expression of type `Bool` that uses only:
+Predicate positions accept either:
 
-- literals
-- field access
-- patterns
-- the implicit `_`
+- an ordinary expression of type `Bool`
+- a **pattern predicate**, which the compiler desugars to a `Bool`-returning match test
 
-is a **predicate expression**.
+Read the snippet below as predicate bodies. For example, `users |> filter (age > 18)` uses `age > 18`, while `users |> filter (Some _)` uses a parenthesized pattern predicate.
 
 Examples:
 
 <<< ../snippets/from_md/syntax/predicates/predicate_expressions.aivi{aivi}
 
-Pattern predicates like `Ok { value } when value > 10` are “match tests”: they succeed if the current value matches the pattern, and the `when` guard can refer to names bound by the pattern.
+Pattern predicates such as `Some _` or `Ok { value } when value > 10` are match tests: they succeed if the current value matches the pattern, and the optional `when` guard can refer to names bound by that pattern. In expression positions they are usually parenthesized; generator guards accept the same idea directly. See [Pattern Matching](pattern_matching.md) for the pattern syntax itself.
 
 ## 4.1.1 Predicate combinators
 
@@ -29,26 +27,28 @@ Predicate expressions support the usual boolean operators:
 
 These operators may appear inside any predicate position, including generator guards and patch predicates.
 
-If you want to name predicate functions explicitly, you can treat them as ordinary functions:
+If you want to name predicate functions explicitly, define ordinary functions of type `A -> Bool` and compose them like any other helpers:
 
 <<< ../snippets/from_md/syntax/predicates/predicate_combinators.aivi{aivi}
 
 ## 4.2 Implicit binding rule
 
-Inside a predicate expression:
+When a predicate is being interpreted against a current value:
 
-- `_` is bound to the **current element**
-- bare field names are resolved as `_.field`
-- `.field` is an accessor function (`x => x.field`), not a field value
+- `_` names that current value explicitly, as in `_.price > 80`
+- an unbound bare field name such as `price` is shorthand for `_.price`
+- `.field` is different: it is an accessor function (`x => x.field`), not a field value or boolean test
 
 > [!TIP]
-> `users |> filter active` is shorthand for `users |> filter (_.active)` when `active` is a boolean field. If `active` is already bound in scope, that existing binding wins instead.
+> `users |> filter active` is shorthand for `users |> filter (_.active)` when `active` is a boolean field. If `active` is already bound in scope, that existing binding wins instead, so write `_.active` when you need to disambiguate.
+
+If you write a pattern predicate such as `Some _`, the `_` inside the pattern keeps its normal wildcard meaning rather than referring to the current value.
 
 <<< ../snippets/from_md/syntax/predicates/implicit_binding_rule.aivi{aivi}
 
 ## 4.3 Predicate lifting
 
-Whenever a function expects a predicate of shape `A -> Bool`, you can often write the body of the test directly as a predicate expression.
+Whenever a function parameter has type `A -> Bool`, you can often write just the body of the test instead of spelling out `_ => ...` or `x => ...`.
 
 <<< ../snippets/from_md/syntax/predicates/predicate_lifting_01.aivi{aivi}
 
@@ -59,14 +59,16 @@ predicateExpr
 ⇒ (_ => predicateExpr)
 ```
 
-as shorthand in predicate positions.
+as shorthand when the surrounding context expects `A -> Bool`.
+
+If you already write `_` explicitly, as in `takeWhile (_ < 10)`, you are using the ordinary unary-function shorthand from [Functions](functions.md), so there is nothing extra to lift.
 
 This applies to:
 
-- `filter`, `find`, `takeWhile`, `dropWhile`
-- generator guards (`x -> pred`)
-- patch predicates
-- user-defined functions that expect a predicate argument
+- stdlib helpers such as `filter`, `find`, `takeWhile`, `dropWhile`
+- generator guards (`item -> pred`) described in [Generators](generators.md)
+- patch predicates such as `items[price > 80]` from [Patching Records](patching.md)
+- your own helpers whose parameter type is `A -> Bool`
 
 Examples:
 
@@ -78,10 +80,14 @@ Examples:
 
 <<< ../snippets/from_md/syntax/predicates/predicate_lifting_05.aivi{aivi}
 
-## 4.4 No automatic lifting in predicates
+The last two examples show the same shorthand working in patch selectors and in a user-defined helper typed `(A -> Bool) -> ...`.
 
-Predicates do **not** automatically lift over `Option` or `Result`.
+## 4.4 No automatic unwrapping over `Option` or `Result`
+
+Predicate sugar does **not** unwrap `Option` or `Result` for you. If a field has type `Option Text`, compare against `Some ...`, use a pattern predicate such as `(Some value when value == "x")`, or unwrap earlier with helpers from [Option](../stdlib/core/option.md) or [Result](../stdlib/core/result.md).
 
 <<< ../snippets/from_md/syntax/predicates/no_automatic_lifting_in_predicates.aivi{aivi}
+
+The same rule applies to `Result`: write the structure you mean, for example `(Ok value when value > 10)`, rather than expecting predicate sugar to look through `Ok` or `Err` automatically.
 
 The reason is practical: predicates influence **cardinality**. A failed match inside a predicate is not the same thing as “filter this element out”, so the language requires you to make that choice explicitly.

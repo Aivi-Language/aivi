@@ -41,6 +41,7 @@ The parser reads infix operators from lowest to highest precedence in this order
 9. `<|` (patch)
 
 Unary prefix operators: `!` for logical negation and `-` for numeric negation.
+Within one precedence level, infix operators associate left-to-right. Add parentheses when you want a different grouping.
 
 ```aivi
 total = subtotal + tax * rate // `*` binds tighter than `+`
@@ -49,6 +50,17 @@ total = subtotal + tax * rate // `*` binds tighter than `+`
 > **Note:** Bitwise operators such as `&`, `|`, `^`, `~`, `<<`, and `>>` are not language operators. Use the [`aivi.bits`](../stdlib/data/bits.md) standard library module instead.
 
 `..` is not a general infix operator. It is a list-item form that appears only inside list literals.
+
+### Patch application (`<|`)
+
+`<|` applies a patch literal to the value on its left and returns a new value. It never mutates the original.
+
+```aivi
+renamed = user <| { name: "Ada Lovelace" }
+avatar  = user <| { profile.avatar: "new.png" }
+```
+
+See [Patching Records](patching.md) for reusable `patch { ... }` values, deep selectors, and collection-aware updates.
 
 ## 11.3 Lists: literals, range items, and spread
 
@@ -141,11 +153,13 @@ Sigils are named literal forms for values that would be awkward to write as plai
 
 Domains define many sigils. Some are compiler-provided and backed by standard-library domains:
 
-- `~u(https://example.com)` / `~url(https://example.com)` → `aivi.url.Url`
-- `~path[/usr/local/bin]` → `aivi.path.Path`
-- `~r/pattern/flags` → `aivi.regex.Regex`
-- `~mat[...]` → matrix literals such as `aivi.matrix.Mat2`, `Mat3`, `Mat4`
+- `~u(https://example.com)` / `~url(https://example.com)` → [`Url`](../stdlib/system/url.md)
+- `~path[/usr/local/bin]` → [`Path`](../stdlib/system/path.md)
+- `~r/pattern/flags` → [`Regex`](../stdlib/core/regex.md)
+- `~mat[...]` → matrix literals such as [`Mat2`, `Mat3`, `Mat4`](../stdlib/math/matrix.md)
 - `~d(2024-05-21)` → `Date`, `~t(12:00:00)` → `Time`, `~tz(Europe/Paris)` → `TimeZone`
+
+Use these sigils when the full value is known at compile time. When the source text only arrives at runtime, prefer the module's parser or constructor APIs instead.
 
 ### Raw text sigil
 
@@ -196,7 +210,7 @@ Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`
 
 Signal handlers must be compile-time expressions.
 
-**`props` attribute** is sugar for a compile-time record literal of GTK properties. Non-literal values produce a diagnostic.
+**`props` attribute** is sugar for a record literal written inside a splice, for example `props={ { label: "Save" } }`. The shape must be a record literal with simple field names, but field values may still be ordinary expressions.
 
 **Dynamic repeated children** are written with `<each items={items} as={item}>...</each>` inside GTK elements.
 
@@ -208,9 +222,10 @@ GTK sigils also allow **function-call tags** for local helper functions: `<NavRa
 
 | Code | Condition |
 |---|---|
-| E1612 | Invalid `props` shape (must be a compile-time record literal) |
-| E1613 | Non-literal `props` value |
+| E1612 | Invalid `props` shape (must use a `props={ ... }` splice whose value is a record literal with simple field names) |
 | E1614 | Non-compile-time signal handler binding |
+| E1615 | Invalid `<each>` usage |
+| E1616 | Bare `<child>` without a `type=` attribute |
 | E1617 | Invalid GTK function-call tag usage |
 
-See [Collections](../stdlib/core/collections.md) for `~map` and `~set`, and [HTML Sigil](../stdlib/ui/html.md) for `~html`.
+See [Collections](../stdlib/core/collections.md) for `~map` and `~set`, [HTML Sigil](../stdlib/ui/html.md) for `~html`, [GTK4 UI](../stdlib/ui/gtk4.md) for GTK runtime details, plus [URL](../stdlib/system/url.md), [Path](../stdlib/system/path.md), and [Regex](../stdlib/core/regex.md) for domain-specific sigils.

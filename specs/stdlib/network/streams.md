@@ -29,21 +29,21 @@ A `Stream A` represents a sequence of values of type `A`. For example:
 
 The module includes both conversion functions for sockets and combinators for transforming streams.
 
+When you start from raw TCP I/O, this module works together with [`aivi.net.sockets`](./sockets.md): `connect` and `accept` give you a `Connection`, then `fromSocket` turns that connection into a byte stream.
+
 ## Types
 
 <<< ../../snippets/from_md/stdlib/network/streams/types.aivi{aivi}
 
 - `Stream A` is the stream itself.
 - `StreamError` is the error type used by stream operations that perform effects.
+- `Connection`, used by `fromSocket` and `toSocket`, comes from [`aivi.net.sockets`](./sockets.md).
 
 ## Common examples
 
-Create a stream from a list and transform it:
+For quick in-memory verification, the opening example uses `fromList` together with `filter` and `map`. That is the easiest way to check a pipeline before wiring it to a real socket.
 
-<<< ../../snippets/from_md/stdlib/network/streams/block_01.aivi{aivi}
-
-
-Read bytes from a socket, then regroup them into fixed-size chunks:
+Assuming `connection` came from `connect` or `accept` in [`aivi.net.sockets`](./sockets.md), you can turn it into a byte stream and regroup the incoming data into fixed-size chunks:
 
 ```aivi
 use aivi.net.streams
@@ -73,7 +73,7 @@ These functions let you build pipelines without needing to consume the stream im
 | **take** n stream<br><code>Int -> Stream A -> Stream A</code> | Keeps the first `n` items, then closes the resulting stream. |
 | **drop** n stream<br><code>Int -> Stream A -> Stream A</code> | Skips the first `n` items and yields the rest. |
 | **flatMap** f stream<br><code>(A -> Stream B) -> Stream A -> Stream B</code> | Turns each item into a stream, then flattens the results into one stream. |
-| **merge** left right<br><code>Stream A -> Stream A -> Stream A</code> | Interleaves values from two streams into one combined stream. |
+| **merge** left right<br><code>Stream A -> Stream A -> Stream A</code> | Combines two streams by yielding every value from `left` first and then every value from `right`. |
 | **fold** f seed stream<br><code>(B -> A -> B) -> B -> Stream A -> Effect StreamError B</code> | Consumes the stream and combines all items into one final value. |
 
 ## HKT instances
@@ -90,6 +90,8 @@ These functions let you build pipelines without needing to consume the stream im
 ## Practical guidance
 
 - Use `fromList` when you want a simple stream for tests or examples.
-- Use `fromSocket` and `toSocket` when moving bytes through a network connection.
+- Use `fromSocket` and `toSocket` with `Connection` values from [`aivi.net.sockets`](./sockets.md) when moving bytes through a network connection.
+- `chunks` expects a positive size, and the last chunk may be smaller than that size.
 - Use `map`, `filter`, and `flatMap` to build transformation pipelines.
+- `take` and `drop` expect non-negative counts.
 - Use `fold` when you are ready to consume the stream and produce one final result.

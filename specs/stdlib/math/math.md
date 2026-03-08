@@ -10,17 +10,20 @@ If you are not sure where a numeric helper belongs, start here.
 
 ## Overview
 
+In the sketch below, assume `r : Float` is a radius and `x : Float` is an input you want to clamp into the `0.0`-to-`1.0` range.
+
 <<< ../../snippets/from_md/stdlib/math/math/overview.aivi{aivi}
 
 ## Constants
 
-`inf` is positive infinity and `negInf` is negative infinity. They are IEEE 754 `Float` values, so they apply to `Float` only. `Int` has no infinity value.
+`inf` is positive infinity and `negInf` is negative infinity. `nan` is the IEEE 754 “not a number” value. These are `Float`-only concepts, so `Int` has no infinity or NaN value. The other named constants in this module, such as `pi`, `tau`, `e`, and `phi`, are ordinary `Float` values.
 
 <<< ../../snippets/from_md/stdlib/math/math/constants.aivi{aivi}
 
 ## Angles
 
 Trigonometric functions work with the dedicated `Angle` type instead of raw `Float` values. That keeps units explicit and makes code such as `sin 90deg` easier to read correctly.
+The snippet below shows the underlying shape of `Angle`; in everyday code, `degrees` and `radians` are the usual constructors.
 
 <<< ../../snippets/from_md/stdlib/math/math/angles.aivi{aivi}
 
@@ -63,7 +66,7 @@ Use these helpers when you need stable, named rounding behavior instead of remem
 | **floor** x<br><code>Float -> Float</code> | Rounds toward `-inf`. |
 | **ceil** x<br><code>Float -> Float</code> | Rounds toward `+inf`. |
 | **trunc** x<br><code>Float -> Float</code> | Rounds toward `0`. |
-| **round** x<br><code>Float -> Float</code> | Uses banker's rounding (ties to even). |
+| **round** x<br><code>Float -> Float</code> | Uses banker's rounding: halfway cases go to the nearest even integer. |
 | **fract** x<br><code>Float -> Float</code> | Returns the fractional part with the same sign as `x`. |
 
 | Function | What it does |
@@ -135,7 +138,7 @@ These helpers are useful for counting problems, modular arithmetic, and exact in
 | **divmod** a b<br><code>Int -> Int -> (Int, Int)</code> | Returns `(q, r)` such that `a = q * b + r` and `0 <= r < |b|`. |
 | **modPow** base exp modulus<br><code>Int -> Int -> Int -> Int</code> | Computes `(base^exp) mod modulus`. |
 
-`BigInt` comes from `aivi.number.bigint` and is re-exported by `aivi.math`.
+`BigInt` comes from [`aivi.number.bigint`](./number.md#bigint) and is re-exported by `aivi.math`.
 
 ## Floating-point checks
 
@@ -157,5 +160,7 @@ Use these when you are handling user input, numerical edge cases, or low-level a
 | **remainder** a b<br><code>Float -> Float -> Float</code> | Returns the IEEE-754 remainder using the nearest integer quotient. |
 
 ## Usage Examples
+
+This example converts degrees into an `Angle`, evaluates a trig function, and sums a short list of floating-point values.
 
 <<< ../../snippets/from_md/stdlib/math/math/usage_examples.aivi{aivi}

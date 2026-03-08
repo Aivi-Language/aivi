@@ -1,49 +1,59 @@
 # Environment Sources
 
 <!-- quick-info: {"kind":"topic","name":"environment sources"} -->
-Environment boundaries support single-value reads and structured prefix decoding.
+Environment sources describe typed configuration reads from the process environment.
 <!-- /quick-info -->
 
 Environment sources are for configuration that comes from the process environment: ports, feature flags, API keys, deployment names, and similar values.
 
-They let you keep the same typed source pattern you use for files or HTTP APIs.
+They follow the same source pattern used for files or HTTP APIs: define a `Source Env A` first, then call `load` inside `do Effect { ... }` when you actually want to read from the host environment.
 
 ## APIs
 
 - `env.get : Text -> Source Env Text`
 - `env.decode : Text -> Source Env A`
 
-Use:
+Choose the API by the shape of configuration you need:
 
-- `env.get` when you want one variable as raw `Text`
-- `env.decode` when you want a whole typed value decoded from a prefix
+- `env.get` when one required variable should come through as raw `Text`
+- `env.decode` when several related variables should decode into one typed value
 
 ## Capability mapping
 
-Loading from `env.get` or `env.decode` requires `process.env.read`.
+Defining either source is pure. The capability requirement appears when you load it:
+
+- `load (env.get ...)` requires `process.env.read`
+- `load (env.decode ...)` requires `process.env.read`
+
+See [Capabilities](../capabilities.md) for the standard capability vocabulary.
 
 ## Reading a single variable
 
 ```aivi
 do Effect {
-  mode <- load (env.get "AIVI_MODE")  // reads exactly one environment variable
+  mode <- load (env.get "AIVI_MODE") // reads exactly one environment variable
   pure mode
 }
 ```
 
-`env.get` is the simplest option when you want to read a single string and decode or interpret it yourself later.
+`env.get` is the simplest option when you want one required string and plan to interpret it yourself later.
+
+If `AIVI_MODE` is missing, `load (env.get "AIVI_MODE")` fails at the source boundary. Use `attempt` at the load site when you want to recover from a missing variable instead of letting the effect fail.
 
 ## Decoding a typed config value
 
 <<< ../../snippets/from_md/syntax/external_sources/environment/block_02.aivi{aivi}
 
 
-`env.decode "AIVI_APP"` collects matching variables such as:
+`env.decode "AIVI_APP"` looks for variables that share the prefix, such as:
 
 - `AIVI_APP_PORT`
 - `AIVI_APP_DEBUG`
 
-Those values are then decoded into the expected result type. In the example above, `port` must decode as an `Int` and `debug` must decode as a `Bool`.
+After the shared prefix is removed, the remaining suffix becomes the field name in lowercase. In the example above, `PORT` maps to `port` and `DEBUG` maps to `debug`, so the expected result type must be compatible with fields like:
+
+- `port : Int`
+- `debug : Bool`
 
 ## When to use `env.decode`
 
@@ -53,11 +63,14 @@ Those values are then decoded into the expected result type. In the example abov
 - you want type errors reported at the boundary,
 - you want the same config record shape in development, tests, and production.
 
-## Failure modes
+## Failure modes and diagnostics
 
-Environment sources can fail in two common ways:
+Environment sources can fail in three common ways:
 
-- the variable is missing or inaccessible,
-- the text value exists but cannot be decoded into the expected type.
+- `env.get` fails when the named variable is missing or inaccessible,
+- `env.decode` fails when no variables match the requested prefix,
+- either source can fail when the text values exist but cannot be decoded into the expected type.
 
-That second case is often where typed environment sources help most. Instead of sprinkling manual parsing logic throughout the program, you keep the decoding rule at the boundary.
+Typical diagnostics include messages such as `env var not found: AIVI_MODE` or `no environment variables found for prefix \`AIVI_APP\``. Decode failures keep the source boundary attached as well, so you can tell whether the problem came from acquisition or from type-directed decoding.
+
+For the general source error model, see [External Sources](../external_sources.md#1211-sourceerror).

@@ -3,6 +3,8 @@
 This guide explains how AIVI reuses compiler work across repeated checks without sacrificing correctness.
 It applies to `aivi check`, `aivi build`, `aivi lsp`, and any other tool that needs to answer the same questions many times as files change.
 
+Today the repository already enforces the core safety rules in this document: workspace snapshot tokens in the LSP, open-document overlays that stay session-local, module export-surface summaries for importer invalidation, and a reusable stdlib typecheck checkpoint. Some finer-grained checkpoints described below—especially definition-group and schema-artefact caches—are the target architecture and conformance model, not a claim that every optimization is already fully implemented in the current tree.
+
 The key idea is simple: every request sees one complete **workspace snapshot**—one coherent view of files, unsaved editor text, and relevant settings at a moment in time. The compiler may reuse cached work only when the exact inputs still match that snapshot, and it may publish only results that belong to that same snapshot.
 
 ## Start here
@@ -11,8 +13,8 @@ If you want the shortest reliable mental model, keep these four rules in mind:
 
 1. every request gets its own workspace snapshot
 2. caches may be reused only when they still match that snapshot
-3. private-body edits stay local unless they change public facts
-4. public API edits dirty importing modules
+3. private-body edits usually stay local when exported facts are explicit
+4. public or conservatively inferred export changes dirty importing modules
 
 The early sections on this page are meant to give any contributor a reliable mental model. Later sections become more implementation-oriented and spell out the cache-ownership and invalidation rules in detail.
 
@@ -38,9 +40,10 @@ In this document, that “photo” is called a **workspace snapshot**.
 
 ## One concrete scenario
 
-Suppose `Module A` exports `parseUser`, but also contains a private helper `trimText`.
+Suppose `Module A` exports `parseUser : Text -> Result ParseError User`, but also contains a private helper `trimText`.
 
-- edit only `trimText` and keep `parseUser`'s public type and behavior surface unchanged: the compiler can usually recheck only the affected definition group inside `Module A`
+- edit only `trimText` and keep `parseUser`'s explicit exported type and other importer-visible facts unchanged: the compiler can usually keep the damage inside `Module A`
+- if `parseUser` is exported without an explicit type signature, that same private edit may still dirty importers conservatively because the export surface is body-sensitive
 - change the exported signature or exported schema facts of `parseUser`: importers of `Module A` now need to be rechecked too
 - edit two mutually recursive helpers: if they are in the same SCC, they rise and fall together as one recheck unit
 
@@ -65,7 +68,7 @@ A conforming implementation should:
 
 ## What gets tracked
 
-AIVI uses a mixed-granularity dependency graph:
+This architecture uses a mixed-granularity dependency graph:
 
 - **module granularity across files**
 - **definition-group granularity within a module**
@@ -79,8 +82,8 @@ That combination keeps cross-module invalidation understandable while still allo
 | **Workspace snapshot** | whole request | workspace root, compiler options, stdlib fingerprint, open-document overlays | CLI + LSP |
 | **File snapshot** | one file or URI | exact source text and file-local parse result | parser, formatter, LSP |
 | **Module summary** | one module | module name, `use` declarations, exported names, decorator and source declarations, and other syntax-level data needed to build the module graph | resolver, LSP workspace index |
-| **Export surface** | one module | the typed public API visible to importers: exported values and schemes, types and constructors, domains, classes, instances, and exported schema summaries | typechecker, CLI, LSP |
-| **Definition group** | one strongly connected group of top-level definitions in a module | recursively checked binding bodies plus the local environment they require | typechecker |
+| **Export surface** | one module | the typed public API visible to importers: exported values with explicit signatures or conservative inferred export fingerprints, exported types and constructors, domains, classes, instances, and exported schema summaries | typechecker, CLI, LSP |
+| **Definition group** | one strongly connected group of top-level definitions in a module | recursively checked binding bodies plus the local environment they require | typechecker; target intra-module reuse boundary |
 | **Schema artefact** | one source or schema declaration | derived schema or config summary used by decoding, validation, source loading, or compile-time checks | compiler + tooling |
 
 ## Granularity rules
@@ -94,10 +97,14 @@ In practice that means:
 - changing a private helper does not automatically dirty every importer
 - changing a public type, value signature, constructor, domain, class, or exported schema fact does
 
+There is one important conservative case: when an exported value or exported domain behavior has no explicit signature, the implementation may need to treat its body as part of the export fingerprint. In that case a seemingly private body edit can still dirty importers because the compiler cannot prove that the importer-visible type facts stayed the same.
+
 ### Same-module rule
 
-Inside one module, the recheck unit is a **definition group**, not the entire module body.
+Inside one module, the intended fine-grained recheck unit is a **definition group**, not the entire module body.
 A definition group is the strongly connected component created by top-level recursive references. In plainer language: if top-level definitions call each other in a loop, they rise and fall together as one recheck unit.
+
+The current repository already performs module-level incremental rechecks. Definition-group checkpointing is the finer-grained model this page defines for conforming implementations and future optimization work.
 
 Therefore:
 
@@ -107,7 +114,7 @@ Therefore:
 
 ### Schema rule
 
-Schema-aware source declarations use the same dependency graph rather than a side system.
+Schema-aware source declarations use the same dependency graph rather than a side system. See [Schema-First Source Definitions](../syntax/external_sources/schema_first.md) for the current user-facing source forms.
 A schema artefact depends on:
 
 - the source declaration itself
@@ -152,7 +159,7 @@ Invalidation is based on fingerprint changes, not file timestamps alone.
 
 When a file changes, ask these beginner-friendly questions first:
 
-1. **Did the public API change?**  
+1. **Did the public API—or any export fingerprint the compiler must compute conservatively—change?**  
    If yes, importers become dirty.
 2. **Did only a private helper change?**  
    If yes, keep the damage local to the affected definition groups.
@@ -175,7 +182,7 @@ Changes to any of the following invalidate the module graph:
 
 - module name
 - `use` declarations
-- exported-name list
+- export declarations, whether written in an export list or with inline `export`
 - source or decorator declarations that affect graph shape or exported artefacts
 
 When the module graph changes:
@@ -197,7 +204,7 @@ It does **not** invalidate importers unless the module's export surface or expor
 
 The export surface fingerprint changes when any importer-visible fact changes, including:
 
-- exported value names or schemes
+- exported value names or type signatures; for inferred exports, any body detail the compiler must conservatively include
 - exported type definitions or constructors
 - exported domains, classes, or instances
 - exported schema summaries or compile-time source contracts
@@ -242,6 +249,8 @@ Each request combines:
 - reusable clean checkpoints whose fingerprints match that exact snapshot
 
 ### Recheck algorithm
+
+The current repository already uses snapshot tokens, export-surface summaries, a cached stdlib checkpoint, and transitive reverse-dependency rechecks for open dependents. The algorithm below describes the full model; an implementation may temporarily recheck a larger slice—such as whole modules instead of same-module definition groups—as long as it still obeys the snapshot, fingerprint, and stale-publish rules in this document.
 
 On a document change, the server should:
 
@@ -298,6 +307,12 @@ The current repository areas most relevant to this architecture are:
 | `crates/aivi_lsp/src/server.rs` | request lifecycle, debounce, cancellation, and publish discipline |
 
 These paths are informative rather than normative; another implementation may organize the same responsibilities differently.
+
+## See also
+
+- [LSP Server](lsp_server.md) for the editor-facing behavior built on these snapshot rules
+- [CLI](cli.md#check) for the batch `aivi check` command and [CLI](cli.md#lsp) for `aivi lsp`
+- [Schema-First Source Definitions](../syntax/external_sources/schema_first.md) for the source-declaration shapes referenced by the schema artefact rules
 
 ## Boundary with reactive dataflow
 

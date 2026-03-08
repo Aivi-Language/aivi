@@ -2,7 +2,7 @@
 
 The `aivi` command-line tool is the main entry point for creating projects, running programs, inspecting compiler output, formatting code, and starting editor-facing services.
 
-If you are new to AIVI, most day-to-day work fits into five commands: `init`, `run`, `check`, `fmt`, and `test`. Later sections cover packaging, editor services, and compiler-inspection commands that are more useful to contributors and tooling authors.
+If you are new to AIVI, most day-to-day work fits into `run`, `check`, `fmt`, and `test`; use `init` when you are starting a new project. Later sections cover packaging, editor services, and compiler-inspection commands that are more useful once you already have a project or are debugging tooling.
 
 A good mental model is:
 
@@ -17,9 +17,10 @@ The usual starter loop is:
 1. `aivi init hello-world --bin`
 2. `cd hello-world`
 3. `aivi run`
-4. `aivi check src`
+4. `aivi check`
 5. `aivi fmt --write src`
-6. `aivi test src`
+
+Add `aivi test` once the project actually contains `@test` definitions.
 
 ## Installation
 
@@ -30,10 +31,12 @@ The CLI is distributed as a binary named `aivi`. Once it is installed, `aivi --v
 ```bash
 aivi init hello-world --bin  # Create an application project.
 cd hello-world
-aivi run                     # Build and run using aivi.toml.
+aivi run                     # Run the project entry through the development JIT pipeline.
 ```
 
 For a library project, use `--lib` instead of `--bin`.
+
+When the current directory contains `aivi.toml`, `aivi build`, `aivi run`, `aivi check`, and `aivi test` all prefer **project mode**. Passing a file path from inside that project does not switch those commands into direct mode; run them from outside the project root if you want true direct-mode behavior.
 
 ## Command map by task
 
@@ -65,17 +68,19 @@ Use **direct mode** when you want to point at one file or directory without scaf
 
 | Situation | Reach for |
 | --- | --- |
-| “I am inside a normal AIVI project.” | `aivi run`, `aivi build`, `aivi package` |
-| “I want to test or inspect this file/folder quickly.” | `aivi run path/to/file.aivi`, `aivi build path/to/dir` |
+| “I am inside a normal AIVI project.” | `aivi run`, `aivi build`, `aivi check`, `aivi test` |
+| “I want to inspect or run one file/folder from a scratch location.” | `aivi run path/to/file.aivi`, `aivi check path/to/file.aivi`, `aivi build path/to/dir/...` |
 
 ## Common workflows
 
 | Workflow | Commands | When to use it |
 | --- | --- | --- |
-| first-time setup | `aivi init` → `aivi install` → `aivi run` | starting a new project |
-| daily editing | `aivi run --watch` → `aivi check src` → `aivi test src` | active development |
-| before commit | `aivi fmt --write src` → `aivi check src` → `aivi test src` | local validation |
+| first-time setup | `aivi init` → `aivi run` → `aivi check` | starting a new project |
+| daily editing | `aivi run --watch` → `aivi check` → `aivi test` | active development |
+| before commit | `aivi fmt --write src` → `aivi check` → `aivi test` | local validation |
 | release a library | `aivi package --dry-run` → `aivi publish` | packaging and publishing |
+
+In the rows that include `aivi test`, assume the project already contains `@test` definitions.
 
 ## Commands
 
@@ -142,6 +147,8 @@ Searches the package registry for AIVI packages.
 aivi search <query>
 ```
 
+Internally this wraps `cargo search keyword:aivi <query> --limit 20`, so results come from crates.io.
+
 #### `package`
 
 Runs `cargo package` for the current project after AIVI-specific preflight checks.
@@ -177,6 +184,8 @@ aivi clean [--all]
 - without `--all`: cleans AIVI-generated code in `target/aivi-gen`
 - with `--all`: also cleans Cargo artefacts such as `target/debug` and `target/release`
 
+See also [Package Manager & Packaging](package_manager.md) for dependency syntax, manifest structure, and publishing workflow.
+
 ### Build and run
 
 #### `build`
@@ -186,14 +195,14 @@ aivi clean [--all]
 **Project mode** uses the project manifest (`aivi.toml`):
 
 ```bash
-aivi build [--release] [-- <cargo args...>]
+aivi build [--release]
 ```
 
-- compiles the configured AIVI entrypoints
-- writes generated Rust to `target/aivi-gen/src/`
-- invokes `cargo build`
-- forwards `--release` and any extra Cargo arguments
-- when `[build].native_ui_target = "gnome-gtk4-libadwaita"`, forwards the `runtime-gnome` feature to Cargo
+- compiles the source tree derived from the project entry in `aivi.toml`
+- writes an object file to `target/aivi-gen/aivi_program.o`
+- writes generated harness/support code under `target/aivi-gen/src/`
+- invokes `cargo build` to link the final binary
+- `--release` switches Cargo to the release profile
 
 **Direct mode** compiles an explicit file or directory target:
 
@@ -201,6 +210,7 @@ aivi build [--release] [-- <cargo args...>]
 aivi build <path|dir/...> [--debug-trace] [--out <dir|path>]
 ```
 
+- emits a native object file and prints its path
 - `--out`: output directory for generated artefacts (default: `target/aivi-gen`)
 - `--debug-trace`: enable verbose compiler tracing via `AIVI_DEBUG_TRACE=1`
 
@@ -213,13 +223,13 @@ Direct mode is the easiest way to experiment with one file or folder before you 
 **Project mode**:
 
 ```bash
-aivi run [--release] [--watch|-w] [-- <cargo args...>]
+aivi run [--watch|-w]
 ```
 
 - runs the current project described by `aivi.toml`
+- uses the Cranelift JIT pipeline for a fast edit/run loop
 - `--watch` re-runs when source files change
-- `--release` and extra Cargo arguments are forwarded to Cargo
-- when `[build].native_ui_target = "gnome-gtk4-libadwaita"`, forwards the `runtime-gnome` feature to Cargo
+- `--release` and extra Cargo arguments are not supported in project mode; use `aivi build --release` when you need an optimized binary
 
 **Direct mode**:
 
@@ -232,7 +242,7 @@ aivi run <path|dir/...> [--debug-trace] [--target native] [--watch|-w]
 - `--debug-trace` enables verbose compiler tracing
 - `--watch` recompiles and re-runs when `.aivi` files change
 
-Direct `run` is great for quick experiments and examples. For distributable applications and repeatable builds, prefer project mode.
+Direct `run` is great for quick experiments and examples. For distributable applications and repeatable builds, prefer `aivi build`.
 
 ### Development tools
 
@@ -252,9 +262,11 @@ aivi fmt [--write] <path|dir/...>
 Parses, resolves, and type-checks code without generating runnable output.
 
 ```bash
-aivi check [--debug-trace] [--check-stdlib] <path|dir/...>
+aivi check [--debug-trace] [--check-stdlib] [<path|dir/...>]
 ```
 
+- inside a project, omitting the target checks the source tree derived from `aivi.toml`
+- outside a project, pass an explicit file or directory target
 - `--debug-trace`: enable verbose compiler tracing
 - `--check-stdlib`: include diagnostics from embedded stdlib modules
 
@@ -263,14 +275,21 @@ aivi check [--debug-trace] [--check-stdlib] <path|dir/...>
 Runs top-level definitions decorated with `@test`.
 
 ```bash
-aivi test <path|dir/**> [--check-stdlib] [--only <name>...]
+aivi test [<path|dir/...>] [--check-stdlib] [--only <name>...] [--update-snapshots]
 ```
 
+- inside a project, omitting the target uses the source tree derived from `aivi.toml`
+- outside a project, pass an explicit file or directory target
 - discovers `@test` definitions under the target
+- formats discovered test files in place before execution
 - executes each test as an `Effect`
+- fails if no `@test` definitions are found under the target
 - reports failures using qualified names such as `Module.testName`
 - writes file lists to `target/aivi-test-passed-files.txt` and `target/aivi-test-failed-files.txt`
 - `--only` may be repeated and accepts either qualified or unqualified test names
+- `--update-snapshots` records or refreshes snapshot files used by snapshot assertions
+
+See also [Testing Module](../stdlib/core/testing.md) for assertion helpers and snapshot semantics, and [`@test`](../syntax/decorators/test.md) for decorator syntax and `mock ... in` rules.
 
 #### `parse`
 
@@ -329,7 +348,7 @@ See also [LSP Server](lsp_server.md) for the feature-level behavior and incremen
 Starts the Model Context Protocol server for language tooling and optional GTK inspection / driver tools.
 
 ```bash
-aivi mcp serve <path|dir/...> [--allow-effects] [--ui]
+aivi mcp serve [<path|dir/...>] [--allow-effects] [--ui]
 ```
 
 - `--allow-effects`: enables effectful tools such as formatting files in place, launching UI sessions, or driving GTK widgets
@@ -344,7 +363,7 @@ aivi mcp serve <path|dir/...> [--allow-effects] [--ui]
 
 With `--ui`, it also exposes non-effectful GTK tools such as discovery, widget inspection, and tree inspection, plus effectful tools such as `aivi_gtk_launch`, `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_select`, and `aivi_gtk_keyPress`.
 
-The `<path|dir/...>` argument is accepted for compatibility and is currently ignored by the server; individual tool calls pass their own explicit `target` argument.
+The optional `<path|dir/...>` argument is accepted for compatibility and is currently ignored by the server; if omitted it defaults to `./...`, and individual tool calls still pass their own explicit `target` argument.
 
 See also [MCP Server](mcp.md) for the GTK session lifecycle, inspection payloads, and interaction semantics.
 

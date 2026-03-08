@@ -303,7 +303,7 @@ impl Backend {
         uri: Url,
         text: String,
         version: i32,
-    ) -> Vec<aivi::FileDiagnostic> {
+    ) -> Option<Vec<aivi::FileDiagnostic>> {
         let path = PathBuf::from(Self::path_from_uri(&uri));
         let text_clone = text.clone();
         let (modules, parse_diags) =
@@ -312,6 +312,13 @@ impl Backend {
                 .unwrap_or_default();
 
         let mut state = self.state.lock().await;
+        if state
+            .documents
+            .get(&uri)
+            .is_some_and(|document| document.version > version)
+        {
+            return None;
+        }
 
         if let Some(existing) = state.open_modules_by_uri.remove(&uri) {
             for module_name in existing {
@@ -345,7 +352,7 @@ impl Backend {
                 parse_diags: parse_diags.clone(),
             },
         );
-        parse_diags
+        Some(parse_diags)
     }
 
     pub(super) async fn remove_document(&self, uri: &Url) {

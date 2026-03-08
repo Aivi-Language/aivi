@@ -36,7 +36,7 @@ apply: always
 | Text literal                              | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                                                     |
 | Int, Float                                | `42`, `3.14`                                                                                                                                                                           |
 | Char                                      | `'a'`                                                                                                                                                                                  |
-| ISO instant                               | `2024-05-21T12:00:00Z`                                                                                                                                                                 |
+| ISO date-time / timestamp carrier         | `2024-05-21T12:00:00Z`                                                                                                                                                                 |
 | Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                                |
 | Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on opaque or over patch recurse resource snapshot then unless use when with yield loop` |
 
@@ -216,12 +216,14 @@ All `match` expressions must be exhaustive. Non-exhaustive matches are compile e
 Unit  Bool  Int  Float
 ```
 
-### Standard library types
+### Standard library carriers and aliases
 
 ```aivi
 Text  Bytes  Decimal  BigInt
-Duration  Instant  Date  Time  TimeZone  ZonedDateTime
+DateTime  Timestamp  Date  TimeZone  ZonedDateTime
 ```
+
+`Timestamp = DateTime` in `aivi.chronos.instant`. `Duration` and `Instant` are important library-facing names, but they are not separate primitive carriers in the current verified v0.1 surface.
 
 ### Algebraic data types (ADTs)
 
@@ -230,10 +232,10 @@ Option A = None | Some A
 Result E A = Err E | Ok A
 Validation E A = Valid A | Invalid E
 Color = Red | Green | Blue
-Tree A = Leaf A | Node (Tree A) (Tree A)
+Tree A = Node A (List (Tree A))
 ```
 
-Create values by applying constructors: `Some 42`, `Err "nope"`, `Valid "ok"`, `Node (Leaf 1) (Leaf 2)`.
+Create values by applying constructors: `Some 42`, `Err "nope"`, `Valid "ok"`, `Node 1 [Node 2 [], Node 3 []]`.
 Nullary constructors (`None`, `True`, `Red`) are values directly.
 Use `constructorName value` and `constructorOrdinal value` to inspect an ADT value at runtime.
 `constructorOrdinal` is zero-based by constructor declaration order.
@@ -405,7 +407,6 @@ or function signature is enough. When ambiguous, use qualified forms: `List.empt
 | `Result E A` | ✓ | — | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
 | `Map K V` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
 | `Generator A` | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
-| `Tree A` | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
 | `Stream A` | — | — | — | — | ✓ | ✓ | — | — | — | — | — | — | — | — | — |
 
 ### Type variable constraints
@@ -456,6 +457,7 @@ Inside predicates:
 - `.field` is an accessor function, not a field value.
 - Combinators: `!p`, `p && q`, `p || q`.
 - Pattern predicates: `Some _`, `Ok { value } when value > 10`.
+- Predicates do not automatically unwrap `Option` or `Result`; use a pattern predicate or a full `match`.
 
 ---
 
@@ -685,7 +687,7 @@ machine Door = {
 }
 ```
 
-`-> State : init {}` marks the starting state. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
+`-> State : init {}` marks the starting state. Machine values begin in that target state; the init edge is not a normal runtime step you call later. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
 
 Runtime machine values are available by machine name and can be destructured as records:
 
@@ -1168,9 +1170,10 @@ ExtractionResult = {
 
 @static
 extractionSchema = type.jsonSchema ExtractionResult
+schemaText = toText extractionSchema
 ```
 
-`extractionSchema` becomes a `Text` constant containing the JSON schema. Maps `Text`→string, `Int`→integer, `Float`→number, `Bool`→boolean, `List T`→array, records→object, `Option T`→nullable. Useful for LLM structured-output APIs.
+`extractionSchema` becomes an embedded schema value; use `toText extractionSchema` when another system expects the JSON document itself. Maps `Text`→string, `Int`→integer, `Float`→number, `Bool`→boolean, `List T`→array, records→object, `Option T`→nullable. Useful for LLM structured-output APIs.
 
 ---
 
@@ -1187,8 +1190,9 @@ Custom literals with `~tag` and a delimiter:
 ~mat[1.0 0.0                   // Matrix literal (Mat2/Mat3/Mat4)
      0.0 1.0]
 ~d(2024-05-21)                 // Date
-~t(12:00:00)                   // Time
+~dt(2024-05-21T12:00:00Z)      // DateTime
 ~tz(Europe/Paris)              // TimeZone
+~zdt(2024-05-21T12:00:00[Europe/Paris]) // ZonedDateTime
 ~k"app.button.save"            // i18n key (validated at parse time)
 ~m"Hello, {name}!"             // i18n message template (validated at parse time)
 ~`raw text, no interpolation`  // Raw Text — multiline, no { } interpolation
@@ -1412,10 +1416,11 @@ Compile-time metadata only. No user-defined decorators.
 | `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
 | `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
-`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`, `type.jsonSchema TypeName`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable. `type.jsonSchema` produces a `Text` constant with an OpenAI-compatible JSON Schema.
+`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`, `type.jsonSchema TypeName`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable. `type.jsonSchema` produces an embedded OpenAI-compatible JSON Schema value; render it with `toText` when a downstream API expects JSON text.
 
 Unknown decorators are compile errors.
 `@native` is only valid on top-level definitions and requires an explicit type signature. No dummy body is needed — the compiler auto-generates the def from the type signature. Runtime natives use `.` paths (`"mod.fn"`); crate natives use `::` paths (`"crate::fn"`) and require `aivi build`.
+Current limitation: `@debug` may still reject ordinary `name = x => ...` definitions with `E2010`; prefer the forms exercised by the decorator docs until resolver/HIR alignment lands.
 
 ---
 
@@ -1463,7 +1468,7 @@ in mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
 
 | Rule                 | Detail                                                                  |
 |:-------------------- |:----------------------------------------------------------------------- |
-| Only qualified paths | `mock rest.get = ...` ✓ — `mock localFn = ...` ✗ (use `let` for locals) |
+| Only qualified paths | `mock rest.get = ...` ✓ — `mock localFn = ...` ✗ (use a local binding/helper for locals) |
 | Type-safe            | Mock expression must match the original binding's type                  |
 | Scoped               | Mock is only active inside `in <body>` — originals restored after       |
 | Composable           | Works in any expression position, not just `@test`                      |
@@ -1518,7 +1523,7 @@ deadline = { millis: 0 } + 10min     // + resolved by Duration domain
 Suffix literals are numeric literals followed immediately by a suffix identifier. They resolve to domain-defined **template functions** named `1{suffix}`:
 
 ```aivi
-10min  30s  100px  50%  2w  3d
+10min  30s  100px  50%  1d  1y
 ```
 
 Suffix can also be applied to a parenthesized expression (variable suffix):
@@ -1532,7 +1537,7 @@ Common suffix → domain mapping:
 | Suffix                     | Domain   | Type            |
 |:-------------------------- |:-------- |:--------------- |
 | `10ms`, `1s`, `5min`, `2h` | Duration | `Duration`      |
-| `1d`, `2w`, `3mo`, `1y`    | Calendar | `CalendarDelta` |
+| `1d`, `1m`, `1y`           | Calendar | `CalendarDelta` |
 | `20deg`, `1.2rad`          | Angle    | `Angle`         |
 | `10l`, `5s`, `30h`         | Color    | `ColorDelta`    |
 
@@ -1680,8 +1685,8 @@ topoSmoke = do Effect {
 | Provide default for Result   | `res \|> getOrElse default`                                             |
 | Check Option state           | `isSome opt`, `isNone opt`                                              |
 | Check Result state           | `isOk res`, `isErr res`                                                 |
-| Transform Option             | `opt \|> map f \|> filter pred \|> flatMap g`                           |
-| Transform Result             | `res \|> map f \|> mapErr g \|> flatMap h`                              |
+| Transform Option             | `opt \|> map f \|> filter pred \|> chain g`                             |
+| Transform Result             | `res \|> map f \|> mapErr g \|> chain h`                                |
 | Accumulate errors            | `ap (ap (Valid f) v1) v2` (Validation applicative)                      |
 | GTK form field state         | `use aivi.ui.forms; field ""`, `setValue txt field`, `touch field`      |
 | Check Validation state       | `isValid v`, `isInvalid v`                                              |
@@ -1731,7 +1736,10 @@ topoSmoke = do Effect {
 | `x.method()`           | No methods, no parens            | `method x` or `x \|> method`                        |
 | `List<Int>` / `Option<T>` | No angle-bracket generics     | `List Int` / `Option T`                             |
 | `List.map f xs`        | HKT methods are unqualified      | `map f xs` (with `use aivi.logic`)                  |
+| `opt \|> flatMap f`    | Option uses `chain`, not `flatMap` | `opt \|> chain f`                                 |
+| `res \|> flatMap f`    | Result uses `chain`, not `flatMap` | `res \|> chain f`                                 |
 | `fmap` / `>>=` / `<$>` / `<*>` | Haskell operators        | `map` / `chain` / `map` / `ap`                      |
+| `Tree A = Leaf A \| Node (Tree A) (Tree A)` | `aivi.tree` is a rose tree | `Tree A = Node A (List (Tree A))`        |
 | `impl Trait for Type`  | Rust syntax                      | `instance Class (Type) = { ... }`                   |
 | `newtype Foo = Foo T`  | Haskell syntax                   | `opaque Foo = T`                                    |
 | `do { x <- m }`        | Must name the monad              | `do Effect { x <- m }`                              |
@@ -1744,6 +1752,7 @@ topoSmoke = do Effect {
 | `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a`                       |
 | `"x" ++ "y"`           | No string concat operator        | `"{x}{y}"`                                          |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
+| `~t(12:00:00)`         | Verified time/date sigils use `~dt(...)` / `~zdt(...)` | `~dt(2024-05-21T12:00:00Z)` |
 | `pure ()`              | Aivi uses Unit as ()             | `pure Unit`                                         |
 | `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |
 | `x = 1 -- init`        | No `--` comments                 | use `//` or `/* .... */`                            |

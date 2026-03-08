@@ -4,8 +4,6 @@ Pattern matching lets you branch on the shape of a value instead of manually unp
 
 ## 8.1 `match` branching
 
-<<< ../snippets/from_md/syntax/pattern_matching/choosing_the_match_subject_scrutinee_01.aivi{aivi}
-
 This is the main way to do case analysis, similar to `match` in Rust or `case` in Haskell and Elixir.
 
 ### Choosing the match subject (scrutinee)
@@ -22,7 +20,7 @@ This rule composes nicely with pipelines because `match` comes *after* the full 
 
 In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
 
-See also: [Functions and Pipes](functions.md) for `|>`.
+See also: [Functions and Pipes](functions.md) for `|>`, [Closed Records](types/closed_records.md) for record shapes, and [Algebraic Data Types](types/algebraic_data_types.md) for the constructors that patterns match.
 
 Compiler checks:
 
@@ -37,7 +35,9 @@ The leading `|` tokens in this form introduce pattern branches; they are not pip
 
 Multi-clause function definitions require an explicit type signature for the function name. With closed records, that signature provides the exact input shape used to type-check each arm.
 
-If execution reaches a call where no arm matches, evaluation fails with a non-exhaustive-match runtime error.
+Use this form when a function's single input is the main thing you want to branch on.
+
+If execution reaches a call where no arm matches, evaluation fails with a non-exhaustive match runtime error.
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
@@ -45,21 +45,21 @@ Here is the same idea without `|>`, using rebinding plus record destructuring in
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_record_rebinding_01.aivi{aivi}
 
-<<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
-
 ## 8.3 Record Patterns
 
-Record patterns let you pick out only the fields you care about.
+Record patterns let you pick out only the fields you care about. The basic forms are shorthand binding (`{ name }`), renaming (`{ name: n }`), and matching against a nested pattern (`{ role: Admin }`).
 
-<<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
 
-This is often clearer than reading a field, storing it in a temporary name, and then matching on that temporary later.
+This is often clearer than reading a field, storing it in a temporary name, and then matching on that temporary later. Use `as` when you want both the whole field value and its destructured pieces; that form is covered in Section 8.5.
 
 ## 8.4 Nested Patterns
 
-Record patterns support dotted keys, so nested data can often be matched without a tower of extra braces.
+Nested record patterns let you destructure inner fields in place, so you do not need a tower of temporary bindings. Dotted field paths are also accepted when that reads better.
 
 <<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_02.aivi{aivi}
+
+This is the same `as` form in nested position: `profile` stays available as the full nested value while `name` and `age` are also brought into scope.
 
 ### Nested constructor patterns
 

@@ -1,7 +1,7 @@
 # Sockets Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.net.sockets"} -->
-The `Sockets` domain exposes low-level TCP and UDP networking. Use it when you need to build a custom protocol, keep a long-lived connection open, or work below the HTTP layer.
+The `Sockets` domain exposes low-level TCP networking. Use it when you need to build a custom protocol, keep a long-lived connection open, or work below the HTTP layer.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.sockets</div>
@@ -10,22 +10,36 @@ The `Sockets` domain exposes low-level TCP and UDP networking. Use it when you n
 
 ## What this module is for
 
-`aivi.net.sockets` gives you direct access to socket-based networking primitives. It is a better fit than HTTP when:
+`aivi.net.sockets` gives you direct access to TCP socket primitives. It is a better fit than HTTP when:
 
 - you are implementing your own wire protocol
-- you need a custom binary connection
-- you want UDP datagrams instead of request/response HTTP traffic
+- you need a long-lived byte-stream connection
+- you want direct control over raw bytes and connection lifecycle
 
-If you are building a web API or consuming one, `aivi.net.http`, `aivi.net.https`, or `aivi.rest` will usually be easier to work with.
+If you are building a web API or consuming one, [`aivi.net.http`](./http.md), [`aivi.net.https`](./http.md#https-domain), or [`aivi.rest`](./rest.md) will usually be easier to work with.
+
+If your protocol naturally works in chunks, pair this module with [`aivi.net.streams`](./streams.md) instead of writing every `recv` loop by hand.
+
+## Capabilities
+
+Socket operations use the `network` capability family:
+
+| Operation | Capability |
+| --- | --- |
+| `listen` | `network.socket.listen` (or the broader `network`) |
+| `connect` | `network.socket.connect` (or the broader `network`) |
+| `accept`, `send`, `recv`, `close` | `network` |
 
 ## Types
 
 <<< ../../snippets/from_md/stdlib/network/sockets/types.aivi{aivi}
 
-`Listener` and `Connection` are opaque handles managed by the runtime:
+The module exposes two ordinary records plus two opaque runtime-managed handles:
 
 | Type | Description |
 | --- | --- |
+| `Address` | TCP endpoint record `{ host: Text, port: Int }`. `port` must fit in `0..65535` at runtime. |
+| `SocketError` | Error record `{ message: Text }` returned when a socket operation fails. |
 | `Listener` | A bound TCP listener created by `listen`. Use it with `accept` to wait for incoming connections. |
 | `Connection` | An established TCP connection used with `send`, `recv`, and `close`. |
 
@@ -48,49 +62,29 @@ On the client side:
 2. Use `send` and `recv`.
 3. Call `close` when done.
 
+`listen` is resource-scoped, so the listener is cleaned up automatically when its `Resource` scope ends. `Connection` values are not resource-scoped, so every accepted or connected socket should be closed explicitly.
+
+### Client example
+
 <<< ../../snippets/from_md/stdlib/network/sockets/block_01.aivi{aivi}
 
+### Functions
 
 | Function | Explanation |
 | --- | --- |
 | **listen** address<br><code>Address -> Resource SocketError Listener</code> | Binds a TCP listener to `address`. The listener is cleaned up with its resource scope. |
 | **accept** listener<br><code>Listener -> Effect SocketError Connection</code> | Waits for an incoming TCP connection and returns it. |
 | **connect** address<br><code>Address -> Effect SocketError Connection</code> | Opens a TCP connection to a remote address. |
-| **send** connection bytes<br><code>Connection -> List Int -> Effect SocketError Unit</code> | Sends raw bytes over a TCP connection. |
-| **recv** connection<br><code>Connection -> Effect SocketError (List Int)</code> | Receives raw bytes from a TCP connection. |
+| **send** connection bytes<br><code>Connection -> List Int -> Effect SocketError Unit</code> | Sends raw bytes over a TCP connection. Each `Int` must be in the byte range `0..255`. |
+| **recv** connection<br><code>Connection -> Effect SocketError (List Int)</code> | Receives the next available chunk of raw bytes from a TCP connection. An empty list means the peer closed the connection cleanly. |
 | **close** connection<br><code>Connection -> Effect SocketError Unit</code> | Closes a TCP connection. |
 
-## UDP
+## Practical guidance
 
-UDP is useful when you want lightweight datagrams and can tolerate missing, duplicated, or out-of-order packets.
-
-```aivi
-use aivi.net.sockets
-
-sendDatagram = socket => address =>
-  sendTo socket address [1, 2, 3, 4]
-```
-
-| Function | Explanation |
-| --- | --- |
-| **bindUdp** address<br><code>Address -> Resource SocketError UdpSocket</code> | Binds a UDP socket to `address`. |
-| **sendTo** socket address bytes<br><code>UdpSocket -> Address -> List Int -> Effect SocketError Unit</code> | Sends one UDP datagram to `address`. |
-| **recvFrom** socket<br><code>UdpSocket -> Effect SocketError { from: Address, bytes: List Int }</code> | Receives one UDP datagram and reports both the sender address and the bytes received. |
-| **closeUdp** socket<br><code>UdpSocket -> Effect SocketError Unit</code> | Closes a UDP socket. |
-
-## TCP vs UDP
-
-Choose TCP when you need:
-
-- delivery guarantees
-- ordered data
-- a connection that stays open across many messages
-
-Choose UDP when you need:
-
-- lightweight one-shot datagrams
-- low overhead
-- a protocol that already handles loss or ordering itself
+- Use `listen` inside a `Resource` scope so listeners always shut down cleanly.
+- Close every `Connection` you open or accept, even when the surrounding listener is resource-scoped.
+- Reach for [`aivi.net.streams`](./streams.md) when you want chunked processing pipelines on top of a `Connection`.
+- Reach for [`aivi.net.http`](./http.md) or [`aivi.rest`](./rest.md) when the remote protocol is already HTTP-based.
 
 ## Errors
 
@@ -100,4 +94,6 @@ Socket operations return `SocketError` when something goes wrong:
 SocketError = { message: Text }
 ```
 
-Typical causes include bind failures, connection failures, or reading from a closed socket.
+`SocketError` is intentionally small: surface `message` directly for logs or wrap it in a more specific application error.
+
+Typical causes include bind failures, connection failures, broken pipes, and operations on closed sockets.

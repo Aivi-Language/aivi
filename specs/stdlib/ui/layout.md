@@ -7,6 +7,8 @@ That makes layout code easier to read and helps the compiler catch unit mix-ups 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.ui.layout<span class="domain-badge">domain</span></div>
 
+Import `use aivi.ui.layout` for the exported types and constructors, and add `use aivi.ui.layout (domain Layout)` anywhere you want suffix literals such as `10px`, `2em`, and `50%` to be active. If you want the general rules behind domain-owned suffixes, see [Domains](/syntax/domains).
+
 ## Why this domain exists
 
 In untyped UI systems, layout values often travel around as strings like `"12px"` or `"80%"`. That is flexible, but it is also easy to mix incompatible units or accidentally treat a count as a length.
@@ -15,13 +17,39 @@ In untyped UI systems, layout values often travel around as strings like `"12px"
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/ui/layout/overview.aivi{aivi}
+```aivi
+use aivi.ui.layout
+use aivi.ui.layout (domain Layout)
+
+width : Length
+width = 100px
+
+height : Percentage
+height = 50%
+
+gap : Length
+gap = 2em
+```
+
+This is the usual pattern in UI code: keep constructors such as `Px` and `Pct` available for explicit values, but use the `Layout` domain when suffix forms make the intent easier to read.
 
 ## Domain definition
 
 If you want to see the concrete shapes behind the sigils, start here:
 
-<<< ../../snippets/from_md/stdlib/ui/layout/domain_definition.aivi{aivi}
+```aivi
+domain Layout over UnitVal = {
+  Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
+  Percentage = Pct Int
+
+  1px  = Px 1
+  1em  = Em 1
+  1rem = Rem 1
+  1vh  = Vh 1
+  1vw  = Vw 1
+  1%   = Pct 1
+}
+```
 
 ## Types
 
@@ -39,7 +67,7 @@ If you want to see the concrete shapes behind the sigils, start here:
 
 ### Percentage
 
-`Percentage` represents a fractional value between 0 and 100.
+`Percentage` represents an integer percentage value such as `Pct 50` for `50%`. In practice, UI renderers treat it like a CSS percentage, so values usually follow the familiar `0..100` convention.
 
 | Constructor | Meaning |
 | --- | --- |
@@ -47,11 +75,15 @@ If you want to see the concrete shapes behind the sigils, start here:
 
 ### Underlying representation
 
-<<< ../../snippets/from_md/stdlib/ui/layout/underlying_representation.aivi{aivi}
+`Layout` is implemented over a small carrier record. Most code should treat that record as an internal detail and work with `Length`, `Percentage`, or the suffix forms instead.
+
+```aivi
+UnitVal = { val: Int }
+```
 
 ## Literal sigils
 
-The domain provides these literal forms:
+When `domain Layout` is in scope, the module provides these literal forms:
 
 | Literal | Constructs |
 | --- | --- |
@@ -62,6 +94,6 @@ The domain provides these literal forms:
 | `1vw` | `Vw 1` |
 | `1%` | `Pct 1` |
 
-Numeric multipliers are applied automatically, so `100px` becomes `Px 100`.
+Numeric multipliers are applied automatically, so `100px` becomes `Px 100`, `2em` becomes `Em 2`, and `50%` becomes `Pct 50`. The same rule also works for parenthesized expressions such as `(gapSize)px`; see [Operators and Context](/syntax/operators#115-units-suffix-literals-and-template-functions) for the general suffix-literal elaboration rules.
 
-In practice, the domain is most helpful when you pass layout values into style records, widget properties, or helper functions and want the code to stay self-explanatory.
+In practice, the domain is most helpful when you pass layout values into style records, widget properties, or helper functions and want the code to stay self-explanatory. For adjacent UI APIs, see [HTML](/stdlib/ui/html), [VDOM](/stdlib/ui/vdom), and [GTK4](/stdlib/ui/gtk4).

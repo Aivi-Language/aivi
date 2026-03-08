@@ -1,20 +1,21 @@
 # `@static` — Compile-Time Evaluation
 
 <!-- quick-info: {"kind":"decorator","name":"@static"} -->
-`@static` evaluates deterministic source reads at compile time and embeds the value into the program as a constant. No runtime overhead.
+`@static` evaluates deterministic source reads at compile time and embeds the resulting value into the program as a constant. The running program does not re-read, re-fetch, or re-decode that binding.
 <!-- /quick-info -->
 
 Use `@static` when a value should be fetched, read, or generated during compilation instead of at runtime.
 Typical uses include bundling configuration files, generating clients from schemas, and baking build-time data into the executable.
+If you want design guidance rather than decorator syntax, see [Compile-Time Sources](../external_sources/compile_time.md).
 
 ## Syntax
 
 ```aivi
 @static
-binding = source.call "argument"
+binding = staticSource ...
 ```
 
-The binding must be parameterless because the compiler evaluates it before the program runs.
+The binding must be parameterless because the compiler evaluates it before the program runs and there are no runtime arguments to supply.
 
 ## Start with the common cases
 
@@ -26,19 +27,21 @@ Most people reach for `@static` in one of three situations:
 
 ## Supported sources (v0.1)
 
-| Source call | Result type | Practical use |
-|:----------- |:----------- |:------------- |
+| Source call | Embedded value | Practical use |
+|:----------- |:------------- |:------------- |
 | `file.read "path"` | `Text` | Embed a text file directly |
-| `file.json "path"` | inferred from use | Load typed JSON data at build time |
+| `file.json "path"` | value inferred from the JSON shape | Load typed JSON data at build time |
 | `file.csv "path"` | `List { ... }` | Ship CSV data as records |
 | `env.get "KEY"` | `Text` | Bake an environment value into the build |
-| `openapi.fromUrl ~url(...)` | typed module | Generate an API client from a remote OpenAPI spec |
-| `openapi.fromFile "path"` | typed module | Generate an API client from a local OpenAPI spec |
-| `type.jsonSchema TypeName` | `Text` | Generate OpenAI-compatible JSON Schema from a type |
+| `openapi.fromUrl ~url(...)` | factory function `Config -> { endpoints... }` | Generate an API client from a remote OpenAPI spec |
+| `openapi.fromFile "path"` | factory function `Config -> { endpoints... }` | Generate an API client from a local OpenAPI spec |
+| `type.jsonSchema TypeName` | compile-time schema value (render with `toText` when you need JSON text) | Generate OpenAI-compatible JSON Schema from a type |
 
 If you are just starting, focus on the first four rows. The OpenAPI and `type.jsonSchema` entries are the more advanced build-time code-generation cases.
 
 ## Examples
+
+The snippets below move from simple file embedding to the more advanced code-generation cases. The OpenAPI and `type.jsonSchema` examples are mirrored by `integration-tests/syntax/decorators/static_openapi.aivi` and `integration-tests/syntax/decorators/static_json_schema.aivi`.
 
 <<< ../../snippets/from_md/syntax/decorators/compile_time_embedding.aivi{aivi}
 
@@ -60,9 +63,8 @@ If you are just starting, focus on the first four rows. The OpenAPI and `type.js
 | E1515 | File read failure |
 | E1516 | JSON parse failure |
 | E1517 | CSV parse failure |
-| E1518 | OpenAPI spec fetch/read failure |
+| E1518 | OpenAPI source argument, fetch, or file-read failure |
 | E1519 | OpenAPI spec parse failure |
-| E1520 | Unsupported OpenAPI feature in type mapping |
 | E1554 | `type.jsonSchema` missing or invalid type name |
 | E1555 | `type.jsonSchema` type not found in module |
 
@@ -89,11 +91,13 @@ You pass it a configuration record, and it returns a record of endpoint function
 | `strictStatus` | `Option Bool` | Treat non-2xx responses as errors |
 | `baseUrl` | `Option Text` | Override the base URL from the spec |
 
+Every field is optional, so calling the generated factory with `{}` uses the defaults.
+
 ### Endpoint parameters
 
 Each generated endpoint function takes a record of parameters.
 Path, query, and header parameters are mapped by name.
-For `POST`, `PUT`, and `PATCH` endpoints, extra fields become the JSON request body.
+For `POST`, `PUT`, and `PATCH` endpoints, fields not consumed as path/query/header parameters become the JSON request body.
 Required parameters stay direct fields; optional parameters become `Option T`.
 
 ### Type mapping
@@ -111,18 +115,18 @@ Required parameters stay direct fields; optional parameters become `Option T`.
 | `oneOf` / `anyOf` | sum type (ADT) |
 | string `enum` | sum type |
 | `string` with `format: date` | `Date` |
-| `string` with `format: date-time` | `Instant` |
+| `string` with `format: date-time` | `DateTime` |
 
-Generated endpoint names come from `operationId` when present; otherwise they are derived from HTTP method and path.
-OpenAPI results are cached in `.aivi-cache/openapi/`; pass `--refresh-static` to force a refresh.
+Generated endpoint names come from `operationId` when present; otherwise they are derived from the lowercased HTTP method plus capitalized path segments. For example, `GET /pets/{petId}` becomes `getPetsPetId`.
+Rebuild the program when the OpenAPI spec changes; the generated client is refreshed during compilation, not at runtime.
 
 ## JSON Schema generation
 
 <!-- quick-info: {"kind":"topic","name":"type.jsonSchema compile-time source"} -->
-`type.jsonSchema` converts an AIVI type alias into an [OpenAI-compatible JSON Schema](https://platform.openai.com/docs/guides/structured-outputs) at compile time. The result is a `Text` value containing the JSON schema string.
+`type.jsonSchema` converts an AIVI type alias into an [OpenAI-compatible JSON Schema](https://platform.openai.com/docs/guides/structured-outputs) envelope at compile time. Render the embedded value with `toText` when you need the JSON document itself.
 <!-- /quick-info -->
 
-Use this when an external system, such as an LLM API or validation service, expects a JSON Schema description of structured output.
+Use this when an external system, such as an LLM API or validation service, expects a JSON Schema description of structured output and you want that schema generated during the build.
 
 ### Syntax
 
@@ -132,12 +136,12 @@ schemaBinding = type.jsonSchema TypeName
 ```
 
 `TypeName` must be a type alias defined in the same module.
-The generated schema is wrapped in the OpenAI structured-output envelope:
+The generated schema follows the OpenAI structured-output envelope:
 
 ```json
 {
-  "format": {
-    "type": "json_schema",
+  "type": "json_schema",
+  "json_schema": {
     "name": "TypeName",
     "schema": { ... },
     "strict": true
@@ -146,6 +150,8 @@ The generated schema is wrapped in the OpenAI structured-output envelope:
 ```
 
 ### Example
+
+The example below shows the compile-time binding and a typical `toText` rendering step for handing the schema to another system.
 
 <<< ../../snippets/from_md/syntax/decorators/static/block_05.aivi{aivi}
 
@@ -166,4 +172,4 @@ The generated schema is wrapped in the OpenAI structured-output envelope:
 | mixed-form ADT | `{"anyOf": [...]}` |
 | unresolved or function type | `{"type": "string"}` fallback |
 
-Records set `"additionalProperties": false` and include all non-optional fields in `"required"`.
+Records set `"additionalProperties": false`. In the current strict structured-output envelope, every declared field appears in `"required"`; `Option T` fields are marked with `"nullable": true` rather than being omitted from `"required"`.

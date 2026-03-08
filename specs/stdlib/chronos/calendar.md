@@ -1,11 +1,11 @@
 # Calendar Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.calendar"} -->
-The `Calendar` domain is for human calendar math: dates, months, years, and “what happens next month?” style questions.
+The `Calendar` domain is for human calendar math: dates, month boundaries, leap years, and “what date comes next?” style questions.
 
-It exists because calendar arithmetic is full of edge cases. Months have different lengths, leap years happen, and a calendar day is not the same thing as a fixed number of seconds.
+It exists because calendar arithmetic is full of edge cases. Months have different lengths, leap years happen, and “one month later” is not the same thing as “thirty days later”.
 <!-- /quick-info -->
-<div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">domain</span></div>
+<div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">module</span></div>
 
 ## Quick chooser
 
@@ -19,7 +19,7 @@ It exists because calendar arithmetic is full of edge cases. Months have differe
 
 ## When to use `Calendar`
 
-Reach for `aivi.chronos.calendar` when your logic cares about what people see on calendars and clocks:
+Reach for `aivi.chronos.calendar` when your logic cares about date-based rules people expect from calendars:
 
 - billing dates,
 - monthly renewals,
@@ -29,6 +29,19 @@ Reach for `aivi.chronos.calendar` when your logic cares about what people see on
 
 If you need a precise moment on the UTC timeline, use [`aivi.chronos.instant`](./instant.md). If you need time-zone-aware local time, use [`aivi.chronos.timezone`](./timezone.md).
 
+## Importing it today
+
+Use `aivi.chronos.calendar` for the exported types and helper functions such as `addMonths`, `endOfMonth`, and `now`.
+
+Like other domains, the operator and suffix-literal sugar is activated separately. In the current implementation, the working import pattern is:
+
+```aivi
+use aivi.chronos.calendar
+use aivi.calendar (domain Calendar)
+```
+
+That gives you the named helpers from `aivi.chronos.calendar` together with the calendar-aware literals and operators shown below. For background on domain imports, see [Domains](../../syntax/domains.md).
+
 ## Mental model
 
 `Calendar` answers **“which human date?”**
@@ -37,19 +50,68 @@ Use it when you want the meaning people expect from a calendar, not the meaning 
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/chronos/calendar/overview.aivi{aivi}
+```aivi
+use aivi.chronos.calendar
+use aivi.calendar (domain Calendar)
+
+invoiceDate = ~d(2025-02-08)
+renewalDate = invoiceDate + 1m
+statementDate = invoiceDate + eom
+
+createdAt = ~dt(2025-02-08T12:34:56Z)
+```
+
+The `~d(...)` literal gives you a `Date`, while `~dt(...)` gives you a `DateTime` value you can pass to other chronos modules when you need a full timestamp.
 
 ## Common operations
 
-These examples show the kinds of calendar questions the domain is built to answer. Read them in order: start from a date, apply calendar-aware adjustments, then inspect helper functions such as leap-year and end-of-month handling.
+These examples show the kinds of calendar questions the domain is built to answer. Read them top to bottom: start from a date, apply explicit helpers, then compare those results with the domain sugar.
 
-<<< ../../snippets/from_md/stdlib/chronos/calendar/features.aivi{aivi}
+```aivi
+use aivi.chronos.calendar
+use aivi.calendar (domain Calendar)
+
+today = ~d(2024-02-29)
+
+tomorrow = addDays today 1
+nextMonth = addMonths today 1
+nextYear = addYears today 1
+
+isLeap = isLeapYear today
+daysThisMonth = daysInMonth today
+monthEnd = endOfMonth today
+sameAsTomorrow = today + 1d
+```
+
+These helpers are all pure. The only effectful entry point in this module is `now`.
 
 ## Domain definition
 
-The domain definition shows the underlying shapes used for dates, date-times, and calendar deltas:
+`Date` values are plain records such as `{ year: 2025, month: 2, day: 8 }`. `DateTime` is also exported for interop with the rest of chronos, but the calendar-specific domain logic itself is defined over `Date`.
 
-<<< ../../snippets/from_md/stdlib/chronos/calendar/domain_definition.aivi{aivi}
+The underlying delta shapes and literals are:
+
+```aivi
+domain Calendar over Date = {
+  Delta = Day Int | Month Int | Year Int | End EndOfMonth
+
+  (+) : Date -> Delta -> Date
+  (+) = date (Day n) => addDays date n
+  (+) = date (Month n) => addMonths date n
+  (+) = date (Year n) => addYears date n
+  (+) = date End => endOfMonth date
+
+  (-) : Date -> Delta -> Date
+  (-) = date delta => date + (negateDelta delta)
+
+  1d = Day 1
+  1m = Month 1
+  1y = Year 1
+  eom = End
+}
+```
+
+In other words, the domain gives you four calendar deltas today: days, months, years, and the special `eom` marker for “move to the end of this month”.
 
 ## Helper functions
 
@@ -62,9 +124,24 @@ The domain definition shows the underlying shapes used for dates, date-times, an
 | **addMonths** date n<br><code>Date -> Int -> Date</code> | Move by whole months while handling month length differences and day clamping. |
 | **addYears** date n<br><code>Date -> Int -> Date</code> | Move by whole years while preserving calendar intent as closely as possible. |
 | **negateDelta** delta<br><code>Delta -> Delta</code> | Reverse a calendar delta so you can undo or mirror an adjustment. |
+| **now**<br><code>Effect DateTime</code> | Read the current wall-clock `DateTime`. This is effectful and depends on the active `clock.now` handler. |
 
 ## Usage examples
 
 A good pattern is to model user-facing dates with `Calendar`, then convert to instants or zoned values only when you need execution or storage semantics.
 
-<<< ../../snippets/from_md/stdlib/chronos/calendar/usage_examples.aivi{aivi}
+```aivi
+use aivi.chronos.calendar (addDays, addMonths)
+use aivi.calendar (domain Calendar)
+
+issuedOn = ~d(2024-01-31)
+trialEnds = addDays issuedOn 14
+renewsOn = addMonths issuedOn 1
+statementClosesOn = issuedOn + eom
+```
+
+This style keeps the business rule readable:
+
+- `trialEnds` is a fixed count of calendar days after signup,
+- `renewsOn` uses month-aware clamping, so January 31 rolls to the last valid day of February,
+- `statementClosesOn` says “end of this month” directly instead of reimplementing month-length logic by hand.

@@ -2,46 +2,115 @@
 
 <!-- quick-info: {"kind":"topic","name":"rest http sources"} -->
 
-AIVI supports both low-level HTTP (`http`/`https`) and a REST-oriented facade (`rest`) as typed `Source` boundaries.
+AIVI supports both low-level HTTP (`http` / `https`) and a REST-oriented facade (`rest`) as typed `Source` boundaries.
 
 <!-- /quick-info -->
 
-HTTP sources are for reading typed data from web services.
+REST and HTTP sources let you describe network reads as reusable `Source` values.
 
 Use them when your program needs to:
 
-- fetch JSON from an API,
-- submit requests with headers or authentication,
-- treat network responses as typed values at the boundary.
+- call a web API,
+- send headers, request bodies, or bearer authentication,
+- decide whether you want the raw HTTP envelope or a decoded application value at the boundary.
 
-## APIs
+## API surface
 
-- `http.get/post/fetch`
-- `https.get/post/fetch`
-- `rest.get/post/fetch`
+| Family | Common entries | What `load` gives back | Best fit |
+| --- | --- | --- | --- |
+| `http` | `http.get`, `http.post`, `http.fetch` | `Result Error Response` | You want raw status, headers, and body text. |
+| `https` | `https.get`, `https.post`, `https.fetch` | `Result Error Response` | Same as `http`, but for HTTPS-only endpoints. |
+| `rest` | `rest.get`, `rest.post`, `rest.fetch` | `A` | You want the response body decoded into the expected type. |
 
-`rest.fetch` supports request-level options such as timeouts, retries, bearer authentication, and strict status handling.
+`rest.fetch` extends the usual request shape with request-level options such as timeouts, retries, bearer authentication, and strict status handling.
 
-## Choosing between `http` and `rest`
+If you want one-off `Effect` helpers instead of reusable source values, see [`aivi.net.http`](../../stdlib/network/http.md) and [`aivi.rest`](../../stdlib/network/rest.md).
 
-- use `http` or `https` when you want a lower-level HTTP boundary
-- use `rest` when you want a more REST-oriented, typed API surface
+## Choosing between `http`, `https`, and `rest`
 
-Both fit into the same `Source` model and are loaded with `load`.
+- use `http` when the raw HTTP envelope matters,
+- use `https` when you want that same raw envelope but only for HTTPS endpoints,
+- use `rest` when the response body should decode into a typed AIVI value at the boundary.
+
+All three fit into the same `Source` model and become effects only when you call `load`.
 
 ## Capability mapping
 
-Loading a REST or HTTP source requires `network.http` (or the broader `network` family shorthand).
+Loading any REST or HTTP source requires `network.http` (or the broader `network` family shorthand).
 
-## Simple example
+## Decoded REST example
 
-<<< ../../snippets/from_md/syntax/external_sources/rest_http/block_01.aivi{aivi}
+```aivi
+User = { name: Text, age: Int, gender: Text }
 
+usersSource : Source RestApi (List User)
+usersSource = rest.get ~u(https://api.example.com/users)
+
+do Effect {
+  users <- load usersSource
+  pure users
+}
+```
+
+`load` turns the reusable source into an effect. Here the expected result type, `List User`, tells the REST boundary what shape to decode from the response body.
+
+## Raw HTTP example
+
+```aivi
+healthSource : Source Https (Result Error Response)
+healthSource = https.get ~u(https://status.example.com/health)
+
+do Effect {
+  result <- load healthSource
+  pure (
+    result match
+      | Ok response => response.status
+      | Err _       => 0
+  )
+}
+```
+
+Use `http.*` or `https.*` when you want to inspect `status`, `headers`, and `body` yourself instead of decoding the body immediately.
 
 ## Example with request options
 
-<<< ../../snippets/from_md/syntax/external_sources/rest_http/block_02.aivi{aivi}
+```aivi
+apiToken : Text
+apiToken = "demo-token"
 
+User = { name: Text, age: Int, gender: Text }
+
+usersSource : Source RestApi (List User)
+usersSource =
+  rest.fetch {
+    method: "GET"
+    url: ~u(https://api.example.com/users)
+    headers: []
+    body: None
+    timeoutMs: Some 5_000
+    retryCount: Some 2
+    bearerToken: Some apiToken
+    strictStatus: Some True
+  }
+```
+
+Here `apiToken` is just a normal `Text` binding supplied elsewhere in your program. The extra request fields mean:
+
+- `timeoutMs`: fail the request if one attempt takes too long,
+- `retryCount`: retry transient request failures,
+- `bearerToken`: add `Authorization: Bearer ...`,
+- `strictStatus`: treat non-2xx responses as failures instead of normal REST results.
+
+## Failure modes and diagnostics
+
+Loading network sources can fail in different ways:
+
+- `http.*` and `https.*` return transport failures as `Err { message }`; successful calls stay in `Ok { status, headers, body }`, including non-2xx statuses unless you interpret them yourself.
+- `rest.*` uses the same transport boundary and then decodes the response body into the expected type.
+- `strictStatus: Some True` upgrades non-2xx responses into failures at the REST boundary.
+- if the response body does not match the expected type, the loader should report a source parse error that points at the mismatched path.
+
+See [External Sources](../external_sources.md) for the shared `SourceError` model.
 
 ## How request options relate to source composition
 

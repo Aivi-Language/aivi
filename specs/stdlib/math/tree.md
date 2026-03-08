@@ -12,12 +12,18 @@ Rose trees are a good fit for menus, document outlines, comment threads, file hi
 
 <<< ../../snippets/from_md/stdlib/math/tree/types.aivi{aivi}
 
+`Tree` is a non-empty rose tree. You can pattern-match on `Node value children` directly when constructors and traversal helpers are not enough.
+
 ## Constructors
 
 <<< ../../snippets/from_md/stdlib/math/tree/constructors.aivi{aivi}
 
 - `node value children` creates a tree node with a value and a list of child trees.
-- `leaf value` creates a node with no children.
+- `leaf value` creates a node with no children. It is shorthand for `node value []`.
+
+```aivi
+outline = node "root" [leaf "intro", node "chapter" [leaf "section"]]
+```
 
 ## Core API
 
@@ -25,12 +31,10 @@ Rose trees are a good fit for menus, document outlines, comment threads, file hi
 | --- | --- |
 | **node** value children<br><code>A -> List (Tree A) -> Tree A</code> | Constructs a node with `value` and `children`. |
 | **leaf** value<br><code>A -> Tree A</code> | Constructs a node with no children. |
-| **value** tree<br><code>Tree A -> A</code> | Returns the current node value. |
-| **children** tree<br><code>Tree A -> List (Tree A)</code> | Returns the node's direct children. |
-| **map** f tree<br><code>(A -> B) -> Tree A -> Tree B</code> | Transforms every node value while preserving the shape. |
-| **fold** f seed tree<br><code>(B -> A -> B) -> B -> Tree A -> B</code> | Reduces a tree to one accumulated result. |
-| **size** tree<br><code>Tree A -> Int</code> | Counts all nodes in the tree. |
-| **height** tree<br><code>Tree A -> Int</code> | Returns the maximum depth. |
+| **dfsPreorder** tree<br><code>Tree A -> List A</code> | Visits the current node first, then each subtree from left to right. |
+| **dfsPostorder** tree<br><code>Tree A -> List A</code> | Visits each subtree first and the current node last. |
+| **bfs** tree<br><code>Tree A -> List A</code> | Visits the tree level by level from left to right. |
+| **fromListBy** idFn parentIdFn items<br><code>(A -> K) -> (A -> Option K) -> List A -> Option (Tree A)</code> | Builds one rooted tree from flat `(id, parentId)` style data when the input has exactly one root. |
 
 ## Traversals
 
@@ -39,6 +43,14 @@ Rose trees are a good fit for menus, document outlines, comment threads, file hi
 - `dfsPreorder` visits a node before its children.
 - `dfsPostorder` visits children before the node itself.
 - `bfs` visits the tree level by level.
+
+```aivi
+sample = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
+
+dfsPreorder sample  // [1, 2, 3, 4, 5, 6]
+dfsPostorder sample // [2, 4, 5, 3, 6, 1]
+bfs sample          // [1, 2, 3, 6, 4, 5]
+```
 
 ## Building a tree from flat data
 
@@ -49,3 +61,21 @@ This helper is useful when your input comes from a database or API as `(id, pare
 - `idFn` extracts a unique identifier from each item.
 - `parentIdFn` returns `None` for the root item and `Some parentId` otherwise.
 - The result is `None` when the input does not describe exactly one root.
+- Provide unique ids and parent ids that refer to items in the same list.
+
+```aivi
+rows = [
+  { id: 1, parentId: None, label: "root" },
+  { id: 2, parentId: Some 1, label: "drafts" },
+  { id: 3, parentId: Some 1, label: "published" }
+]
+
+idOf = row => row.id
+parentOf = row => row.parentId
+
+tree = fromListBy idOf parentOf rows
+```
+
+## Verification
+
+Current behavior is exercised in `integration-tests/stdlib/aivi/tree/Tree.aivi`, covering the public constructors, all three traversal helpers, and the success and failure cases for `fromListBy`.

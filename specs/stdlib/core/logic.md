@@ -37,6 +37,8 @@ If terms such as *Functor*, *Monad*, or *Monoid* are new to you, think of `aivi.
 
 When a type implements one of these classes, you can use the same operation names across many different data types.
 
+In the class snippets below, container-shaped classes use AIVI's abbreviated HKT member syntax: the container input is omitted and added as the final argument by the compiler. For example, `map: (A -> B) -> F B` reads as `map: (A -> B) -> F A -> F B`.
+
 ### Quick chooser
 
 If you only need the everyday mental model, start here:
@@ -178,26 +180,28 @@ A `Traversable` lets you map with an effect and collect the results in one pass.
 
 This is especially useful when you have a list of effectful steps and want either one collected success or one combined effectful computation. A common example is turning `List (Result Text Int)` into `Result Text (List Int)`.
 
-## 5b. Filtering
+In everyday AIVI code, you will most often see `Traversable` used with `Effect`, especially when validating, loading, or transforming each item in a list.
+
+## 5.1 Filtering
 
 ### Filterable
 
 <!-- quick-info: {"kind":"class","name":"Filterable","module":"aivi.logic"} -->
-A `Filterable` can remove elements using a predicate. Requires `Functor`.
-`filter` expands from `(A -> Bool) -> F A` to `(A -> Bool) -> F A -> F A`.
+A `Filterable` can remove values using a predicate. Requires `Functor`.
+The class snippet uses abbreviated HKT form, so `filter: (A -> Bool) -> F A` reads as `filter: (A -> Bool) -> F A -> F A`.
 <!-- /quick-info -->
 
 `Filterable` is the shared interface behind filtering values out of structures such as lists, maps, generators, and other containers that support removal.
 
 <<< ../../snippets/from_md/stdlib/core/logic/filterable.aivi{aivi}
 
-## 5c. Alternatives
+## 5.2 Alternatives
 
 ### Alternative
 
 <!-- quick-info: {"kind":"class","name":"Alternative","module":"aivi.logic"} -->
-An `Alternative` provides a choice operator — `alt` picks the first successful/non-empty value. Requires `Applicative`.
-`alt` expands from `F A -> F A` to `F A -> F A -> F A`.
+An `Alternative` provides fallback choice. In pipeline form, `primary |> alt fallback` keeps `primary` when it succeeds and otherwise uses `fallback`. Requires `Applicative`.
+The class snippet uses abbreviated HKT form, so `alt: F A -> F A` reads as `alt: F A -> F A -> F A`.
 <!-- /quick-info -->
 
 Use `Alternative` when you want a fallback choice between two values in the same context.
@@ -263,3 +267,5 @@ This table shows which standard types implement which classes. `use aivi.logic` 
 | **Stream** | — | — | — | — | ✓ | ✓ | — | — | — | — | — | — | — | — | — |
 
 > **Set, Queue, Deque, Heap** — Foldable/Filterable instances are deferred until builtin runtime operations are added for those types. Set and Heap cannot be Functors because arbitrary mapping can break their structural invariants.
+
+`Result E` supports fallback choice via `alt`, but it has no universal `zero`: AIVI does not assume a default error value for every possible `E`.

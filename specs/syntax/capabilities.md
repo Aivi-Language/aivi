@@ -15,7 +15,7 @@ A capability clause sits on top of `Effect E A` or `Resource E A` as a permissio
 - capabilities describe which external operations the code may use
 - missing capabilities are compile-time diagnostics, not runtime `E` values
 
-`attempt`, `or`, `resource`, and `do Effect { ... }` keep their existing meaning. A capability clause only narrows the external authority available inside that code.
+`attempt`, fallback `or`, `resource`, and `do Effect { ... }` keep the semantics described in [Effects](effects.md) and [Resources](resources.md). A capability clause only narrows the external authority available inside that code.
 
 ## How capabilities look in code
 
@@ -64,6 +64,8 @@ Pure functions carry no capability clause because they do not need outside-world
 | `cancellation` | `cancellation.observe`, `cancellation.propagate`, `cancellation.mask` | Structured cancellation and cancellation control |
 
 The first segment names the family. Later segments narrow that authority to the smallest useful operation.
+
+Family names such as `network`, `process`, or `ui` also work as broader shorthands for everything beneath them. In public APIs, prefer the narrowest leaf that states the real requirement.
 
 ## How to use capabilities
 
@@ -121,15 +123,23 @@ Ordinary resource cleanup is still cancellation-protected automatically. You do 
 
 GTK commands and subscriptions reuse the same capability vocabulary.
 
+For the full host model, see [GTK App Architecture](../stdlib/ui/app_architecture.md) and [`aivi.ui.gtk4`](../stdlib/ui/gtk4.md).
+
 - `gtkApp` is the coarse-grained `ui` entry point
+- low-level widget and window construction/presentation use `ui.window`
+- signal helpers such as `signalPoll`, `signalStream`, and `signalEmit` use `ui.signal`
+- clipboard helpers such as `clipboardDefault`, `clipboardSetText`, and `clipboardText` use `ui.clipboard`
+- notification helpers such as `notificationNew`, `notificationSetBody`, and app notification delivery use `ui.notification`
 - `commandPerform` inherits the capabilities of the enclosed `Effect`
-- `commandAfter` and `subscriptionEvery` consume `clock.sleep` or `clock.schedule`
-- keyed timer or subscription cancellation uses `cancellation.propagate`
+- `commandAfter` and `subscriptionEvery` use `clock.sleep` or `clock.schedule`
+- `commandCancel` and keyed subscription/timer replacement use `cancellation.propagate`
 - `subscriptionSource` inherits the capabilities of its underlying `Resource`
 
 This keeps UI code aligned with the rest of the language instead of introducing a separate permission model.
 
 ## How today’s APIs map to capabilities
+
+These are the most common current surface mappings, not an exhaustive list.
 
 | Current surface | Capability requirement |
 | --- | --- |
@@ -138,7 +148,10 @@ This keeps UI code aligned with the rest of the language instead of introducing 
 | `file.exists`, `file.stat`, `file.listDir` | `file.metadata` |
 | `file.copy`, `file.move` | `file.read` + `file.write` |
 | `rest.*`, `http.*`, `https.*` | `network.http` |
-| `email.imap*`, `smtpSend`, socket APIs | `network` |
+| `email.imap*`, `smtpSend` | `network` |
+| `listen` (sockets) | `network.socket.listen` (or broader `network`) |
+| `connect` (sockets) | `network.socket.connect` (or broader `network`) |
+| `accept`, `send`, `recv`, `close` (sockets) | `network` |
 | `db.configure`, pool creation / acquisition | `db.connect` |
 | `db.load` | `db.query` |
 | `db.applyDelta`, transactions, savepoints | `db.mutate` |
@@ -152,10 +165,15 @@ This keeps UI code aligned with the rest of the language instead of introducing 
 | `timeoutWith` | `clock.sleep` + `cancellation.propagate` |
 | `scope`, `spawn`, `race`, explicit task cancellation | `cancellation.propagate` |
 | `crypto.randomUuid`, `crypto.randomBytes`, salted password hashing | `randomness.secure` |
-| `gtkApp`, `signalStream`, `reconcileNode`, clipboard helpers, notification helpers | `ui` |
-| `commandAfter`, `subscriptionEvery` | `clock.sleep` / `clock.schedule` |
-| `commandCancel`, subscription replacement/removal | `cancellation.propagate` |
-| `subscriptionSource` over files, sockets, db notifications, or custom feeds | capabilities required by the underlying `Resource` |
+| low-level widget/window helpers in `aivi.ui.gtk4` | `ui.window` (or broader `ui`) |
+| `signalPoll`, `signalStream`, `signalEmit` | `ui.signal` (or broader `ui`) |
+| `clipboardDefault`, `clipboardSetText`, `clipboardText` | `ui.clipboard` (or broader `ui`) |
+| `notificationNew`, `notificationSetBody`, `appSendNotification`, `appWithdrawNotification` | `ui.notification` (or broader `ui`) |
+| `gtkApp` | `ui` |
+| `commandPerform { run, ... }` | capabilities required by the enclosed `Effect` |
+| `commandAfter`, `subscriptionEvery` | `clock.sleep` / `clock.schedule` (or broader `clock`) |
+| `commandCancel` | `cancellation.propagate` |
+| `subscriptionSource { open, ... }` | capabilities required by the underlying `Resource` |
 | `@static` embedded sources | no runtime capability after compilation |
 
 ## Practical rules of thumb

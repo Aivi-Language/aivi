@@ -1,8 +1,8 @@
 # Concrete Syntax (EBNF Reference)
 
-This page is the exact parsing reference for AIVI's surface language. Most readers will use it when implementing tooling, debugging a parse error, or checking how the compiler groups tokens.
+This page is the concrete-syntax reference for AIVI's surface language. Most readers will use it when implementing tooling, debugging a parse error, or checking how the compiler groups tokens.
 
-If you are learning the language, read the guide-style syntax pages first and come back here when you need the precise grammar.
+If you are learning the language, read the guide-style syntax pages first and come back here when you need the precise grammar. Where the reader-facing spec pages and the current parser are still being aligned, this page calls that out explicitly instead of pretending the mismatch does not exist.
 
 A quick reminder for the notation used below:
 
@@ -29,6 +29,7 @@ The grammar here is about **parsing**. Typing, elaboration, and runtime behavior
 - `UpperIdent` starts with an uppercase ASCII letter and is used for types, constructors, modules, domains, and classes.
 - After the first character, identifiers may contain ASCII letters, digits, and `_`.
 - Keywords are reserved and cannot be reused as identifiers.
+- `Ident` in the EBNF below means either `lowerIdent` or `UpperIdent`.
 
 ### Keywords
 
@@ -77,7 +78,7 @@ FieldSep   := Sep | ","
 
 ## 0.2 Top level
 
-At the top level, a file starts with optional decorators and then a single module definition.
+At the top level, a file starts with optional module decorators and then a single module definition. For the practical reader-facing guides, see [Modules](modules.md), [Bindings and Scope](bindings.md), [Domains](domains.md), [Machine Syntax](machines.md), and [Type Classes & HKTs](types/classes_and_hkts.md).
 
 ```ebnf
 Program        := { Decorator } ModuleDef
@@ -85,6 +86,7 @@ TopItem        := Definition
 
 Decorator      := "@" lowerIdent [ DecoratorArg ] Sep
 DecoratorArg   := Expr | RecordLit
+Ident          := lowerIdent | UpperIdent
 
 Definition     := ValueSig
                | ValueBinding
@@ -98,24 +100,25 @@ Definition     := ValueSig
                | MachineDef
 
 ValueSig       := lowerIdent ":" Type Sep
-ValueBinding   := Pattern "=" Expr Sep
+ValueBinding   := Pattern "=" BindingRhs Sep
+BindingRhs     := Expr | FunArms
 
 BrandedType    := [ "opaque" ] UpperIdent [ TypeParams ] "=" Type "!" Sep
-TypeAlias      := [ "opaque" ] UpperIdent [ TypeParams ] "=" TypeRhs Sep
+TypeAlias      := [ "opaque" ] UpperIdent [ TypeParams ] "=" Type Sep
 OpaqueType     := UpperIdent [ TypeParams ] Sep
-TypeDef        := [ "opaque" ] UpperIdent [ TypeParams ] "=" TypeRhs Sep
+TypeDef        := [ "opaque" ] UpperIdent [ TypeParams ] "=" TypeConstructors Sep
 TypeParams     := UpperIdent { UpperIdent }
-TypeRhs        := Type
-               | RecordType
-               | [ Sep? "|" ] ConDef { Sep? "|" ConDef }
+TypeConstructors := [ Sep? "|" ] ConDef { Sep? "|" ConDef }
 ConDef         := UpperIdent { TypeAtom }
 
 ModuleDef      := "module" ModulePath Sep ModuleBodyImplicit
-ModulePath     := ModuleSeg { "." ModuleSeg }
-ModuleSeg      := lowerIdent | UpperIdent
-ModuleItem     := ExportStmt | ExportedDefinition | UseStmt | Definition
+ModulePath     := lowerIdent { "." lowerIdent }
+ModuleItem     := ExportStmt
+               | UseStmt
+               | DecoratedDefinition
 ModuleBodyImplicit := { ModuleItem } EOF
 (* `module` must be the first non-empty item in the file (after any module decorators). *)
+DecoratedDefinition := { Decorator } ( ExportedDefinition | Definition )
 ExportedDefinition := "export" ExportableDefinition
 ExportableDefinition := ValueSig
                     | ValueBinding
@@ -127,22 +130,29 @@ ExportableDefinition := ValueSig
                     | ClassDef
                     | InstanceDef
                     | MachineDef
-ExportStmt     := "export" ( "*" | ExportList ) Sep
+ExportStmt     := "export" ExportList Sep
 ExportList     := ExportItem { "," ExportItem }
 ExportItem     := lowerIdent | UpperIdent | ("domain" UpperIdent)
 UseStmt        := "use" ModulePath [ UseSpec ] Sep
-UseSpec        := "as" UpperIdent
+UseSpec        := "as" Ident
                | "(" ImportList ")"
                | "hiding" "(" ImportList ")"
 ImportList     := ImportItem { "," ImportItem }
-ImportItem     := (lowerIdent | UpperIdent | ("domain" UpperIdent)) [ "as" (lowerIdent | UpperIdent) ]
+ImportItem     := (lowerIdent | UpperIdent | ("domain" UpperIdent)) [ "as" Ident ]
 
 DomainDef      := "domain" UpperIdent "over" Type "=" "{" { DomainItem } "}" Sep
-DomainItem     := OpaqueType | TypeAlias | TypeDef | ValueSig | ValueBinding | OpDef | DeltaLitBinding
+DomainItem     := { Decorator } DomainEntry
+DomainEntry    := TypeDef
+               | ValueSig
+               | ValueBinding
+               | OpDef
+               | DeltaLitSig
+               | DeltaLitBinding
 OpDef          := "(" Operator ")" ":" Type Sep
                | "(" Operator ")" Pattern { Pattern } "=" Expr Sep
 Operator       := "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||" | "++" | "??"
                | "×"
+DeltaLitSig    := SuffixedNumberLit ":" Type Sep
 DeltaLitBinding:= SuffixedNumberLit "=" Expr Sep
 
 ClassDef       := "class" UpperIdent ClassParams "=" ClassRhs Sep
@@ -151,19 +161,32 @@ ClassParam     := TypeAtom
 
 (* Classes are records of methods ("dictionaries") with optional superclass composition.
    A class may also declare constraints on the type variables used in its member signatures. *)
-ClassRhs       := [ ClassSupers ] [ ClassConstraints ] ClassMembers
-ClassSupers    := UpperIdent { "," UpperIdent }
+ClassRhs       := [ ClassPrelude ] [ ClassMembers ]
+ClassPrelude   := ClassPreludeItem { "," ClassPreludeItem }
+ClassPreludeItem := UpperIdent | ClassConstraints
 ClassConstraints := "given" "(" TypeVarConstraint { "," TypeVarConstraint } ")"
 TypeVarConstraint := UpperIdent ":" UpperIdent
 ClassMembers   := RecordType
 
-InstanceDef    := "instance" UpperIdent InstanceHead "=" RecordLit Sep
-InstanceHead   := "(" Type ")"
+InstanceDef    := "instance" UpperIdent InstanceHead "=" [ InstanceConstraints ] "{" { InstanceItem } "}" Sep
+InstanceHead   := TypeAtom { TypeAtom }
+InstanceConstraints := "given" "(" TypeVarConstraint { "," TypeVarConstraint } ")"
+InstanceItem   := lowerIdent ":" Expr Sep
+               | ValueBinding
 
 MachineDef     := "machine" UpperIdent "=" "{" { MachineTransition } "}" Sep
 MachineTransition := [ UpperIdent ] "->" UpperIdent ":" lowerIdent "{" { FieldDecl } "}"
 FieldDecl      := lowerIdent ":" Type
 ```
+
+Notes:
+
+- `OpaqueType` is the bare abstract form: a line such as `Token` or `Token A` declares a name without exposing a representation.
+- `TypeAlias` covers transparent aliases such as `User = { name: Text }` or `Handler = Req -> Effect Err Res`.
+- `TypeDef` is the constructor-list form (`Foo = A | B | C`) used for ADTs.
+- Decorators may appear before ordinary declarations and before inline `export` declarations, but not before standalone `use` or export-list items.
+- `hiding (...)` is part of the documented module surface syntax. Current parser support is still being aligned.
+- In the broader docs, “binding” is sometimes used more loosely for destructuring `=` forms. This grammar keeps the parser-facing distinction explicit and uses `BindingRhs` to show where the arm form from §0.5 fits.
 
 ## 0.3 Expressions
 
@@ -179,8 +202,10 @@ Useful reading rules:
 ```ebnf
 Expr           := WithCapsExpr
 
-WithCapsExpr   := "with" CapabilitySet "in" Expr
+WithCapsExpr   := "with" CapabilityScope "in" Expr
                | IfExpr
+CapabilityScope := "{" [ CapabilityScopeEntry { FieldSep CapabilityScopeEntry } ] "}"
+CapabilityScopeEntry := CapabilityPath [ "=" Expr ]
 
 IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr
@@ -232,8 +257,10 @@ Atom           := Literal
                | ListLit
                | RecordLit
                | "patch" PatchLit
+               | MockExpr
                | Block
                | DoBlock
+               | EffectBlock
                | GenerateBlock
                | ResourceBlock
 
@@ -242,8 +269,13 @@ Suffix         := lowerIdent | "%"
 
 Block          := "{" { Stmt } "}"
 DoBlock        := "do" UpperIdent "{" { DoStmt } "}"
+EffectBlock    := "effect" "{" { DoStmt } "}"   (* deprecated alias for `do Effect { ... }` *)
 GenerateBlock  := "generate" "{" { GenStmt } "}"
 ResourceBlock  := "resource" "{" { ResStmt } "}"
+
+MockExpr       := "mock" MockBinding { Sep? "mock" MockBinding } "in" Expr
+MockBinding    := [ "snapshot" ] MockPath [ "=" Expr ]
+MockPath       := lowerIdent { "." lowerIdent }
 
 Stmt           := BindStmt | ValueBinding | Expr Sep
 BindStmt       := Pattern "<-" Expr [ OrFallback ] Sep
@@ -253,7 +285,7 @@ DoStmt         := BindStmt
                | Expr Sep
                | "when" Expr "<-" Expr Sep
                | "unless" Expr "<-" Expr Sep
-               | "given" Expr "or" Expr Sep
+               | "given" Expr "or" ( Expr | OrArms ) Sep
                | "on" PostfixExpr "=>" Expr Sep
                | "recurse" Expr Sep
                | "loop" Pattern "=" Expr "=>" Block Sep
@@ -280,7 +312,9 @@ Range          := Expr ".." Expr
 
 RecordLit      := "{" { RecordEntry } "}"
 RecordEntry    := RecordField | RecordSpread
-RecordField    := lowerIdent ":" Expr [ FieldSep ]
+RecordField    := RecordKey ":" Expr [ FieldSep ]
+               | lowerIdent [ FieldSep ]       (* shorthand field *)
+RecordKey      := lowerIdent { "." lowerIdent }
 RecordSpread   := "..." Expr [ FieldSep ]
 
 MapLit         := "~map" "{" [ MapEntry { FieldSep MapEntry } ] "}"
@@ -312,12 +346,16 @@ Literal        := "True"
 
 - `{ ... }` is used for both record-shaped forms (`RecordLit`, `RecordType`, `RecordPat`, `PatchLit`, and module/domain bodies) and expression blocks.
 - Parsing `{ ... }` should disambiguate **record literal vs block** by lookahead:
-  - if the first non-newline token begins a record entry (`...` spread, or a field name followed by `:`), parse as `RecordLit`
+  - if the first non-newline token can start a record entry (`...`, `name`, or `name.path:`), parse as `RecordLit`
   - otherwise parse as `Block`
 - `.field` is shorthand for `x => x.field`
 - `_` is not a value; in expression position it appears only as placeholder-lambda sugar
-- `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals
+- `with { file.read, clock.now } in expr` narrows the visible capabilities for `expr`
+- `with { file.read = fixtureFiles } in expr` uses the same surface form to install scoped handlers; see [Effect Handlers](effect_handlers.md)
+- `mock snapshot some.binding` records the real binding result for later replay; see [@test — Test Declarations](decorators/test.md#mock-expressions)
+- `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals, and HTML/GTK angle sigils are documented in [Operators and Context](operators.md#118-sigils)
 - `RecordSpread` (`...expr`) merges fields left to right, with later fields overriding earlier ones
+- `name.path: value` inside a record literal builds nested record-shaped data from scratch. If you meant “update an existing nested value”, use `<|` / `patch`.
 
 ## 0.4 Patching
 
@@ -345,11 +383,10 @@ Select         := "[" ( "*" | Expr ) "]"
 A unary function can be written directly as a list of pattern arms.
 
 ```ebnf
-ValueBinding   := lowerIdent "=" FunArms Sep
 FunArms        := "|" Arm { Sep "|" Arm }
 ```
 
-This form desugars to a one-argument function that performs a `match` on its input.
+This form is one possible `BindingRhs` from §0.2. It desugars to a one-argument function that performs a `match` on its input.
 
 If you want matching on more than one value, match on a tuple:
 
@@ -378,10 +415,10 @@ CapabilityPath   := lowerIdent { "." lowerIdent }
 
 TupleType      := "(" Type "," Type { "," Type } ")"
 RecordType     := "{" { RecordTypeField } "}"
-RecordTypeField:= lowerIdent ":" Type [ FieldSep ]
+RecordTypeField := lowerIdent ":" Type [ FieldSep ]
 ```
 
-Capability clauses matter only for effect-like types such as `Effect ...` and `Resource ...`. Likewise, `with { ... } in expr` narrows the capability scope; it does not install handlers by itself.
+Capability clauses matter only for effect-like types such as `Effect ...` and `Resource ...`. In type position, the clause lists capability names only. Expression-scope handler bindings such as `with { file.read = fixtureFiles } in expr` belong to §0.3 and are not part of the type grammar.
 
 ## 0.7 Patterns
 
@@ -414,4 +451,4 @@ Good syntax errors are part of the language experience. These are especially use
 - **arms without a `match`**: `| p => e` is valid only after `match` or directly after `=` in the multi-clause unary form
 - **multi-clause signature requirement**: when a function uses multiple pattern clauses, require an explicit type signature for that name
 - **`_` placeholder misuse**: `_ + 1` is legal only where a unary function is expected; otherwise suggest `x => x + 1`
-- **deep keys in record literals**: reject `a.b: 1` in record literals and suggest patching with `<|` when appropriate
+- **deep keys in record literals**: if `a.b: 1` appears where an update was intended, suggest `<|` / `patch`; in a record literal it builds nested data rather than patching an existing value

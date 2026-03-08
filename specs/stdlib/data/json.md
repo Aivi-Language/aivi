@@ -1,74 +1,128 @@
 # Standard Library: JSON Parsing & Validation
 
 <!-- quick-info: {"kind":"module","name":"aivi.json"} -->
-The `aivi.json` module defines parsing strategies that connect raw data sources to typed structures via the `Validation` Applicative. 
+The `aivi.json` module provides low-level JSON values, helper functions for inspecting and building them, and small schema utilities for object-shaped data.
 <!-- /quick-info -->
 
-`aivi.json` helps you move between raw JSON text and normal AIVI values. You can use it in a few different ways:
+`aivi.json` is the JSON toolbox you reach for when you need to work with JSON-shaped data directly inside a program. In current AIVI, fully typed JSON decoding usually happens at source boundaries such as [`file.json`](../../syntax/external_sources/file.md), while `aivi.json` itself focuses on `JsonValue`, field extraction, schema checks, and error formatting.
 
-- parse JSON text into a generic `JsonValue`
-- decode JSON into a concrete AIVI type such as `User`
-- validate that an object has the shape you expect
-- migrate older JSON objects into a newer layout
+Use it to:
 
-If you are new to `Validation`, the important idea is simple: decoding can return a valid value or a list of problems. That is especially useful for configuration files, API payloads, and imported data, because you can report several mistakes at once instead of stopping at the first one.
+- build or inspect `JsonValue` values,
+- turn `JsonValue` back into JSON text,
+- pull fields and lists out of existing JSON values,
+- check simple object requirements with `JsonSchema`,
+- format JSON-specific failures for logs and diagnostics.
+
+If you are new to [`Validation`](../core/validation.md), the practical idea is simple: source decoding can report a list of problems instead of stopping at the first one. In AIVI today, that accumulated error story appears through `SourceError.DecodeError (List aivi.validation.DecodeError)` at structured source boundaries and through `source.validate` for extra semantic checks.
 
 ## Import
 
-```aivi
-use aivi.json
-```
+<div class="import-badge">use aivi.json</div>
+
+If you are adding `Validation`-based checks on top of decoded source data, also import [`aivi.validation`](../core/validation.md).
 
 ## Start here
 
-For most apps, the shortest useful path is:
+For most apps today, the shortest useful path is:
 
-1. decode raw JSON into a typed value,
-2. inspect the returned `Validation`,
-3. only write a custom decoder when plain structure is not enough,
-4. add schema checks only when you must match an external contract exactly.
+1. decode JSON into a typed value at the source boundary with [`file.json`](../../syntax/external_sources/file.md) or another structured source,
+2. handle `SourceError.DecodeError` if the payload shape is wrong,
+3. add `source.validate` only when structure alone is not enough,
+4. use `JsonValue` helpers when you need manual inspection, migration, or rendering,
+5. use `JsonSchema` only when you must match an external contract.
 
-## Decode JSON directly into the type you want
+## Decode JSON into the type you want at the source boundary
 
-A common pattern in AIVI is to state the type you want and let the JSON layer check the input against that type. This keeps the code close to the data model you actually care about.
+In current AIVI, the practical typed-decoding path is a structured source such as `file.json`, not a direct `json.parse` helper.
 
-<<< ../../snippets/from_md/stdlib/data/json/type_driven_parsing.aivi{aivi}
+```aivi
+use aivi.json
 
-In the example above, the result is `Validation (List DecodeError) User`. That means:
+User = { id: Int, name: Text, age: Int }
 
-- `Valid user` if the JSON matches the `User` type
-- `Invalid errors` if the JSON shape does not match
+userSource : Source File User
+userSource = file.json "./user.json"
 
-The benefit is practical: the caller does not receive a partially decoded `User`. Instead, it receives a clear list of problems, such as a missing field or a field with the wrong type.
+loadUser = do Effect {
+  user <- load userSource
+  pure user
+}
+```
+
+Here `loadUser` succeeds with a normal `User` value or fails with `SourceError File`. If the file can be read but the JSON does not match `User`, the failure is `DecodeError (List aivi.validation.DecodeError)`, so callers get a list of path-aware problems rather than a partially decoded value.
+
+See also:
+
+- [`file sources`](../../syntax/external_sources/file.md) for the boundary-decoding workflow,
+- [`Validation`](../core/validation.md) for accumulated error handling,
+- [`source composition`](../../syntax/external_sources/composition.md#validate) for semantic checks after decoding.
 
 ## Use JSON with external data sources
 
-JSON decoding is also useful at the boundary of your program, especially when reading files or other external sources. In that setup, the source provides raw JSON, and AIVI checks it before your main logic sees the value.
+When you want to inspect success and failure as ordinary data, wrap the load with `attempt`:
 
-<<< ../../snippets/from_md/stdlib/data/json/integrating_decode_with_external_sources.aivi{aivi}
+```aivi
+use aivi.json
 
-This pattern is helpful when you want early failures with good error messages. Once the load succeeds, the rest of your code can work with a normal typed value instead of repeatedly checking raw JSON fields.
+User = { id: Int, name: Text, age: Int }
+
+users : Source File (List User)
+users = file.json "./users.json"
+
+readUsers = attempt (load users)
+```
+
+`readUsers` lets you distinguish:
+
+- `Ok data` when the file existed and matched `List User`,
+- `Err (IOError message)` when the file could not be read,
+- `Err (DecodeError errors)` when the file was readable but the JSON shape was wrong.
+
+This keeps raw I/O and JSON-shape problems at the program boundary, so the rest of your code can work with normal typed values.
 
 ## Add custom decoders for values that need special rules
 
-Some values cannot be derived from structure alone. Enums, constrained strings, and custom tagged formats often need a small decoder that explains the allowed cases.
+Some values cannot be accepted from structure alone. Enums, constrained strings, and tagged formats often need one extra step that explains the allowed cases.
 
-Choose a custom decoder when the question is not just “does the JSON shape match?” but also “does this value obey my domain rules?”.
+When you already have a `JsonValue`, a small custom decoder can build on the primitive helpers in `aivi.json`:
 
-<<< ../../snippets/from_md/stdlib/data/json/custom_decoders_for_enums_complex_types.aivi{aivi}
+```aivi
+use aivi.json
 
-A custom decoder is just a function that turns a `JsonValue` into either a valid result or a list of `DecodeError`s. That keeps special-case rules close to the type they belong to.
+Status = Active | Inactive
 
-## Validate against a schema when you need stricter contracts
+decodeStatus : JsonValue -> Result JsonError Status
+decodeStatus = value =>
+  decodeText value match
+    | Ok "active"   => Ok Active
+    | Ok "inactive" => Ok Inactive
+    | Ok _          => Err { message: "expected \"active\" or \"inactive\"" }
+    | Err err       => Err err
+```
 
-If you already have a JSON schema, you can attach it to a source declaration or validate a decoded object against it. This is useful when the JSON must match an external contract shared with other systems.
+This style is a good fit when you are manually walking a `JsonValue`. If the value came from a structured source and you want accumulated, path-aware errors, keep the structural decoding at the source boundary and add the domain rule with [`source.validate`](../../syntax/external_sources/composition.md#validate) and [`aivi.validation.DecodeError`](../core/validation.md#5-decodeerror-adt).
 
-<<< ../../snippets/from_md/stdlib/data/json/block_02.aivi{aivi}
+## Validate against a schema when you need a contract
 
+Use `JsonSchema` when you want a small, explicit contract for object-shaped data that already exists as a `JsonValue`.
 
-When the schema value is compile-time stable, the compiler can compare that schema with the source's result type before runtime. At runtime, `load` still uses the normal JSON decode pipeline and reports accumulated `DecodeError` values if the live data does not match.
+```aivi
+use aivi.json
 
-Use `validateSchema` when you want a list of schema issues, and `migrateObject` when you need to reshape older JSON objects into the format your program expects today.
+schema : JsonSchema
+schema = {
+  required: ["id", "name"]
+  strict: True
+}
+
+payload = encodeObject [("id", encodeInt 1)]
+issues  = validateSchema schema payload
+```
+
+In the example above, `issues` contains one `SchemaIssue` for the missing `name` field. In the current implementation, `validateSchema` checks that the input is an object and that every `required` field exists. The `strict` flag is part of `JsonSchema`, but `validateSchema` does not yet reject extra keys on its own; use `strictFields` when you need unknown-key rejection today.
+
+If you want to attach a JSON contract to a source declaration and have the compiler compare it with the declared result type, see [`schema-first source definitions`](../../syntax/external_sources/schema_first.md).
 
 ## Core types
 
@@ -79,9 +133,11 @@ Use `validateSchema` when you want a list of schema issues, and `migrateObject` 
 <<< ../../snippets/from_md/stdlib/data/json/block_03.aivi{aivi}
 
 
+For example, `JsonObject [("name", JsonString "Ada")]` is a `JsonValue`.
+
 ### `JsonError`
 
-`JsonError` describes a parsing or decoding failure.
+`JsonError` is the one-off error type returned by helpers such as `decode`, `decodeText`, `decodeField`, and `decodeList`.
 
 ```aivi
 JsonError = { message: Text }
@@ -89,7 +145,7 @@ JsonError = { message: Text }
 
 ### `JsonSchema`
 
-`JsonSchema` describes basic structural rules checked by `validateSchema`.
+`JsonSchema` describes the small schema record understood by `validateSchema`.
 
 ```aivi
 JsonSchema = {
@@ -98,13 +154,23 @@ JsonSchema = {
 }
 ```
 
+`required` lists fields that must exist on an object. `strict` records whether extra keys should be treated as unexpected, but the current `validateSchema` helper does not yet enforce that flag directly.
+
 ### `SchemaIssue`
 
-`SchemaIssue` describes one schema validation problem, including where it happened.
+`SchemaIssue` describes one schema-validation problem, including where it happened.
 
 ```aivi
 SchemaIssue = { path: Text, message: Text }
 ```
+
+### How these types relate to `DecodeError`
+
+Do not confuse the low-level JSON helper types above with [`aivi.validation.DecodeError`](../core/validation.md#5-decodeerror-adt):
+
+- `JsonError` is for one-off helper failures such as “expected Text” or “missing field: name”,
+- `SchemaIssue` is for `validateSchema`,
+- `DecodeError` is the path-aware error type used by structured source decoding and `source.validate`.
 
 ## API reference
 
@@ -120,7 +186,7 @@ Use the tables below by workflow:
 
 | Function | Type | What it does |
 | --- | --- | --- |
-| `decode` | `Text -> Result JsonError JsonValue` | Parses raw JSON text into a `JsonValue`. Returns `Err` when the text is not valid JSON. |
+| `decode` | `Text -> Result JsonError JsonValue` | Reserved for parsing raw JSON text into a `JsonValue`. In the current implementation, native text-to-JSON parsing is not yet available, so this function currently returns `Err`. For production decoding today, prefer typed sources such as `file.json`. |
 | `jsonToText` | `JsonValue -> Text` | Converts a `JsonValue` back into JSON text. |
 
 ### Build `JsonValue` values
@@ -143,7 +209,7 @@ Use the tables below by workflow:
 | `decodeFloat` | `JsonValue -> Result JsonError Float` | Extracts `Float` from a `JsonFloat` or `JsonInt`, or returns `Err`. |
 | `decodeBool` | `JsonValue -> Result JsonError Bool` | Extracts `Bool` from a `JsonBool`, or returns `Err`. |
 | `decodeField` | `Text -> JsonValue -> Result JsonError JsonValue` | Looks up a field by name in a `JsonObject`. Returns `Err` if the field is missing or the input is not an object. |
-| `decodeList` | `(JsonValue -> Result JsonError A) -> JsonValue -> Result JsonError (List A)` | Applies a decoder to each element of a `JsonArray`. |
+| `decodeList` | `(JsonValue -> Result JsonError A) -> JsonValue -> Result JsonError (List A)` | Applies a decoder to each element of a `JsonArray`, stopping at the first element-level failure. |
 
 ### Validate and migrate objects
 
@@ -151,7 +217,7 @@ Use the tables below by workflow:
 | --- | --- | --- |
 | `requiredField` | `Text -> JsonValue -> Result JsonError JsonValue` | Alias for `decodeField` when you want the call site to clearly say that a field must exist. |
 | `strictFields` | `List Text -> JsonValue -> Result JsonError JsonValue` | Fails if an object contains keys outside the allowed list. |
-| `validateSchema` | `JsonSchema -> JsonValue -> List SchemaIssue` | Checks a `JsonValue` against a `JsonSchema` and returns every issue it finds. An empty list means the object passed validation. |
+| `validateSchema` | `JsonSchema -> JsonValue -> List SchemaIssue` | Checks that the value is an object and that every required field exists. The current implementation does not yet use the `strict` flag; combine it with `strictFields` if you also need unknown-key rejection. |
 | `migrateObject` | `(List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue -> JsonValue` | Applies a patch function to the entries of a `JsonObject`. Non-object values pass through unchanged. |
 
 ### Render and log errors

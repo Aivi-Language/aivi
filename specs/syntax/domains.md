@@ -1,13 +1,13 @@
 # Domains
 
-Domains let AIVI give familiar syntax a domain-specific meaning. Instead of teaching the core language every rule about calendars, units, geometry, or colors, a domain says how operators and suffix literals should behave for a particular kind of value.
+Domains let AIVI give familiar syntax a domain-specific meaning for a type. Instead of teaching the core language every rule about calendars, units, geometry, or colors, a domain says how operators and suffix literals should behave for a particular kind of value.
 
 ## What a domain is
 
 A domain is a bundle of semantics for a **carrier type** such as a date, duration, vector, or color. A domain may provide:
 
 - operator meanings such as `+`, `-`, `*`, or `×`
-- typed suffix literals such as `10ms`, `2h`, or `30deg`
+- typed suffix literals such as `10ms`, `2h`, or `10l`
 - helper types for changes or measurements, often called **deltas**
 - compile-time validation for domain-owned syntax
 
@@ -22,30 +22,42 @@ Domains are useful when plain numbers are not enough. Reach for them when you wa
 - **literal suffixes** that compile into real values
 - **clear separation** between the core language and specialized rules
 
-Typical examples include time and calendar arithmetic, geometry, matrices, angles, and UI color adjustment.
+Typical examples include time and calendar arithmetic, geometry, matrices, UI layout units, and color adjustment.
 
 ## Using an existing domain
 
-To use a domain, import it with `use`. This brings its operator functions and literal templates into scope.
-
-<<< ../snippets/from_md/syntax/domains/using_domains.aivi{aivi}
+To use a domain, bring the domain itself into scope. The most explicit form is:
 
 ```aivi
-use aivi.chronos.calendar (domain Calendar)
+use aivi.vector (domain Vector)
 
-dueDate = issuedOn + 30d   // Calendar provides both `+` and the `d` suffix here
+position = { x: 10.0, y: 20.0 }
+velocity = { x: 1.0, y: 0.0 }
+
+nextPosition = position + velocity
 ```
+
+```aivi
+use aivi.chronos.calendar
+use aivi.calendar (domain Calendar)
+
+issuedOn = ~d(2025-02-08)
+dueDate = issuedOn + 30d
+```
+
+The first example uses a module that exports its domain directly. The second shows a companion-module pattern used by some standard-library areas: one module provides the named helpers, and another exports the domain sugar.
 
 ### Importing a domain explicitly
 
-Domains are imported separately from ordinary values and types.
+Domains are separate import items.
 
-- Export a domain with `export domain Calendar`
-- Import it with `use aivi.chronos.calendar (domain Calendar)`
+- Export a domain with `export domain Color`
+- Import it selectively with `use aivi.color (Rgb, domain Color)`
+- A plain `use aivi.color` can also bring the exported domain into scope when you want the module's whole public API
 
-Importing the domain activates its members, including operator definitions like `(+)` and literal templates like `1d`.
+Importing the domain activates its members, including operator definitions like `(+)` and literal templates like `1l`.
 
-> Domain names are not ordinary runtime values. You do not pass `Calendar` around as a term-level value; you import it so its syntax becomes available in the current module.
+> Domain names are not runtime values. You do not pass `Color` around as a function argument; you import the domain so its syntax becomes available in the current module.
 
 ## Typed deltas and suffix literals
 
@@ -53,18 +65,20 @@ Domains often introduce **delta** values: typed changes such as “three days”
 
 <<< ../snippets/from_md/syntax/domains/delta_literals_suffixes_01.aivi{aivi}
 
-These literals are fully typed. Depending on the active domain, `10m` might mean a duration, a distance, or something else entirely.
+These literals are fully typed. The exact result type depends on the template behind the suffix: many suffixes produce a delta value, while some produce a carrier value directly.
 
 Common standard-library suffixes include:
 
-| Suffix | Domain | Type | Module |
+| Suffix | Domain | What it builds | Module |
 | --- | --- | --- | --- |
-| `10ms`, `1s`, `5min`, `2h` | Duration | `Duration` | [aivi.chronos.duration](../stdlib/chronos/duration.md) |
-| `1d`, `2w`, `3mo`, `1y` | Calendar | `CalendarDelta` | [aivi.chronos.calendar](../stdlib/chronos/calendar.md) |
-| `20deg`, `1.2rad` | Angle | `Angle` | [aivi.math](../stdlib/math/math.md) |
-| `10l`, `5s`, `30h` | Color | `ColorDelta` | [aivi.color](../stdlib/ui/color.md) |
+| `10ms`, `1s`, `5min`, `2h` | Duration | time-span deltas used with `Span` arithmetic | [aivi.chronos.duration](../stdlib/chronos/duration.md) |
+| `1d`, `3m`, `1y` | Calendar | calendar deltas used with `Date` arithmetic | [aivi.chronos.calendar](../stdlib/chronos/calendar.md) |
+| `10px`, `2em`, `50%` | Layout | typed UI units such as `Length` and `Percentage` | [aivi.ui.layout](../stdlib/ui/layout.md) |
+| `10l`, `5s`, `30h`, `8r` | Color | HSL-style deltas (`l`, `s`, `h`) and channel values (`r`, `g`, `b`) | [aivi.color](../stdlib/ui/color.md) |
 
 <<< ../snippets/from_md/syntax/domains/delta_literals_suffixes_02.aivi{aivi}
+
+Angles are typed too, but today they use constructors such as `degrees 90.0` and `radians pi` from [`aivi.math`](../stdlib/math/math.md) rather than a standard-library domain suffix.
 
 ## Applying suffixes to computed values
 
@@ -100,14 +114,15 @@ Rules:
 
 ## Supported operator hooks in v0.1
 
-In v0.1, the surface language has built-in syntax for operators, and domains may supply the meaning for part of that syntax.
+In v0.1, domains can participate in the operator syntax below when an in-scope definition matches the operand types.
 
-| Operator | Built-in meaning | Domain meaning (when a non-`Int` carrier is involved) |
-| --- | --- | --- |
-| `+`, `-`, `*`, `×`, `/`, `%` | `Int` arithmetic | Resolved to an in-scope operator function such as `(+)` |
-| `<`, `<=`, `>`, `>=` | `Int` ordering | Resolved to an in-scope operator function such as `(<)` returning `Bool` |
+| Operator family | Notes |
+| --- | --- |
+| `+`, `-`, `*`, `×`, `/`, `%` | Fall back to built-in numeric behavior for `Int` and `Float`, or resolve to an in-scope domain operator such as `(+)`. |
+| `++` | May be supplied by an in-scope domain or module export for collection-like carriers. |
+| `<`, `<=`, `>`, `>=` | Keep built-in ordering for `Int`, `Float`, and `Text`, or resolve to an in-scope domain operator such as `(<)` that returns `Bool`. |
 
-These operators are **not** domain-resolved in v0.1 and always keep their built-in meaning: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
+These operators are **not** domain-resolved in v0.1 and always keep their built-in meaning: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`.
 
 See also: [Operators and Context](operators.md#114-domains-and-operator-meaning).
 
@@ -118,7 +133,7 @@ Suffix literals are implemented through template functions named `1{suffix}`:
 - `10ms` uses `1ms`
 - `(x)ms` also uses `1ms`
 
-Domains usually define these templates in the domain body.
+Domains usually define these templates in the domain body. The template signature determines which numeric forms are accepted, for example `1l : Int -> Delta` or a custom floating-point template such as `1turn : Float -> Angle`.
 
 If two imported domains define the same template name, the compiler does not currently disambiguate them by carrier type. In practice, avoid collisions by:
 
@@ -132,17 +147,57 @@ Define a domain when you want problem-specific syntax that stays type-safe and p
 
 ### Syntax
 
-<<< ../snippets/from_md/syntax/domains/syntax.aivi{aivi}
+```aivi
+domain Name over CarrierType = {
+  Delta = ...
+
+  (+) : CarrierType -> Delta -> CarrierType
+  (+) = carrier delta => ...
+
+  1d : Int -> Delta
+  1d = amount => ...
+}
+```
+
+In v0.1, sigils are not declared inside a `domain` block. Standard-library sigils are compiler-provided separately; see [Operators and Context](operators.md#118-sigils).
 
 ### Example: a simple color domain
 
-<<< ../snippets/from_md/syntax/domains/example_a_simple_color_domain.aivi{aivi}
+```aivi
+Rgb = { r: Int, g: Int, b: Int }
+
+adjustLightness : Rgb -> Int -> Rgb
+adjustLightness = color amount => ...
+
+adjustHue : Rgb -> Int -> Rgb
+adjustHue = color amount => ...
+
+domain Color over Rgb = {
+  Delta = Lightness Int | Hue Int
+
+  (+) : Rgb -> Delta -> Rgb
+  (+) = color (Lightness amount) => adjustLightness color amount
+  (+) = color (Hue amount) => adjustHue color amount
+
+  1l : Int -> Delta
+  1h : Int -> Delta
+  1l = amount => Lightness amount
+  1h = amount => Hue amount
+}
+```
 
 ### How the compiler reads a domain expression
 
 When you write a domain-owned expression, the compiler starts from the carrier type and then resolves the operator and any suffix literals through the domain currently in scope.
 
-<<< ../snippets/from_md/syntax/domains/interpretation.aivi{aivi}
+```aivi
+use aivi.color (Rgb, domain Color)
+
+red : Rgb
+red = { r: 255, g: 0, b: 0 }
+
+lighter = red + 10l
+```
 
 For a value like `red + 10l`, the flow is:
 
@@ -151,7 +206,7 @@ For a value like `red + 10l`, the flow is:
 3. desugar `10l` using the domain’s template for that suffix
 4. resolve `+` to the domain’s `(+)` definition
 
-This only works when the domain itself is in scope, for example `use aivi.color (domain Color)`. Importing only the carrier type is not enough.
+This only works when the domain itself is in scope. `use aivi.color (Rgb)` is not enough; write `use aivi.color (Rgb, domain Color)` or import the whole module if you want all of its exported names and domain behavior.
 
 ## Multi-carrier domains
 
@@ -159,11 +214,13 @@ Sometimes one idea applies to several carrier types, such as both `Vec2` and `Ve
 
 <<< ../snippets/from_md/syntax/domains/multi_carrier_domains.aivi{aivi}
 
+Reusing the same domain name across those declarations is normal. Resolution still starts from the carrier type on the left-hand side of the operator.
+
 ## Domains and sigils
 
-Some standard-library domains also expose sigils. For example, a URL domain may offer `~u(https://example.com)` and a path domain may offer `~path[/usr/local/bin]`. These sigils are compile-time validated constructors for typed values, not raw strings.
+Some standard-library modules that also export domains provide sigils. For example, URL-related APIs offer `~u(https://example.com)` and path APIs offer `~path[/usr/local/bin]`. These sigils are compile-time validated constructors for typed values, not raw strings.
 
-In v0.1, custom sigils are compiler-provided for standard-library domains only. They are not declared inside a `domain` block.
+In v0.1, those sigils are compiler-provided for standard-library modules only. They are not declared inside a `domain` block, and user-defined domains cannot add new sigil forms.
 
 ## Domains are not implicit casts
 

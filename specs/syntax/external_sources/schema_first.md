@@ -4,14 +4,14 @@
 Schema-first source definitions put connector config and schema information on the source declaration itself, while keeping `load` as the effectful execution step.
 <!-- /quick-info -->
 
-Schema-first style is about naming an external boundary once and making its contract explicit.
+If you are new to external sources, the mental model is simple: name the boundary once, keep it pure, and call `load` later where I/O should happen.
 
-Instead of only writing:
+Instead of repeating the full source declaration inline at every load site:
 
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_01.aivi{aivi}
 
 
-you can declare the source itself with its connector config and schema:
+you can name that boundary once and give it an explicit result type:
 
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_02.aivi{aivi}
 
@@ -25,176 +25,217 @@ do Effect {
 }
 ```
 
-For many small programs, the shorter inline `load (...)` style is perfectly fine. Schema-first declarations become especially useful when you want reuse, explicit contracts, or compile-time validation.
+For many small programs, the shorter inline `load (...)` style is perfectly fine. Schema-first declarations become useful when a boundary is reused, when you want hover and diagnostics to describe it before `load`, or when you want the connector config to live in one obvious place.
 
 ## What a schema-first source declaration contains
 
-A schema-first source is still a pure value. Building it performs no I/O.
+A schema-first source is still a pure value. Building it performs no I/O; only `load` touches the outside world.
 
-Conceptually, the declaration bundles:
+At a high level, the declaration bundles:
 
 1. typed connector configuration,
-2. a schema strategy that explains the expected external shape,
-3. optional compile-time contract artifacts such as JSON Schema or OpenAPI data.
+2. a decode contract for the eventual `A`,
+3. any compile-time-stable helper inputs that the connector docs say may participate in checking.
 
-Illustratively:
+The exact internal representation is not part of the public API. The sketch below is conceptual only:
 
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_04.aivi{aivi}
 
 
-`load` remains the only effectful step:
+`load` remains the effectful step:
 
 ```aivi
 load : Source K A -> Effect (SourceError K) A
 ```
 
-## Schema strategies
+See [External Sources](../external_sources.md#1211-sourceerror) for the shared error model.
 
-Structured sources need a clear answer to the question "how do we know what shape to decode?"
+## The stable v0.1 schema strategy
 
-The standard strategies are:
+Current v0.1 public docs and tooling center on one stable schema-first field:
 
-- `source.schema.derive`
-  - derive the schema from the declaration's result type `A`
-- `source.schema.json contract`
-  - use a `JsonSchema` value as the external contract and check that it agrees with `A`
-- `source.schema.table table`
-  - reuse a `Table A` or similar database schema value as the row contract
+```aivi
+schema: source.schema.derive
+```
 
-Connector-specific schema carriers may exist, but they must still agree with the declared result type.
+`source.schema.derive` means “use the declaration's result type as the source contract.” That is why top-level schema-first bindings should carry an explicit `Source K A` type signature.
 
 ### Derived schema example
 
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_06.aivi{aivi}
 
 
-The type annotation on `usersSource` matters because it gives the compiler the result contract up front.
+The type annotation on `usersSource` matters because it gives the compiler and LSP a concrete contract to explain before any later `load usersSource`.
 
-### Checked external contract example
+### About external contract artifacts
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_07.aivi{aivi}
+Checked-in schema files, OpenAPI documents, and database schema values can still be part of a source workflow, but they should stay explicit. Use [Compile-Time Sources](compile_time.md) and [`@static`](../decorators/static.md#static-compile-time-evaluation) when you want contract data fixed at build time, and use the [Database Domain](../../stdlib/system/database.md) for today's table and query APIs.
 
-
-This pattern is useful when the external contract already exists outside your AIVI codebase and you want the compiler to check it early.
+This page intentionally documents the stable schema-first surface that is available across the current public docs and implementation. Additional connector-specific `source.schema.*` carriers should be treated as connector-specific syntax only after their own guide defines the exact form and verification story.
 
 ## Typed connector configuration
 
-Schema-first sources use typed connector records rather than unstructured option bags.
+Schema-first sources use typed connector records rather than unstructured option bags. The exact fields depend on the connector, but the stable public pattern today looks like this:
 
-| Connector family | Typical typed config | Schema carrier |
+| Connector family | Typical record fields | Stable schema field today |
 | --- | --- | --- |
-| File / JSON / CSV | `path`, format-specific options, optional encoding hints | `source.schema.derive` or `source.schema.json ...` |
-| REST / HTTP | method, `Url`, typed headers and auth fields, timeout, status handling | derived schema or an explicit JSON/OpenAPI contract |
-| Environment | prefix or variable names, defaults or examples, strictness flags | usually `source.schema.derive` |
-| Database | connection selection, table/query/projection, typed parameters, migration anchor | usually `source.schema.table ...` |
+| File / JSON / CSV | `path` plus connector-specific file options | `schema: source.schema.derive` |
+| Environment | `prefix` and environment-decoding options such as `strict` | `schema: source.schema.derive` |
+| REST / HTTP | request fields such as `url`, `timeoutMs`, `strictStatus`, headers/auth, and connector-specific fetch options | `schema: source.schema.derive` |
 
-That makes connector validation local and readable.
+That makes connector validation local and readable: the record says where data comes from, and the `schema` field says how the result type should drive decoding.
 
 ### Environment example
 
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_08.aivi{aivi}
 
 
+Here the record makes both the source boundary (`prefix: "AIVI_APP"`) and the decoding policy (`strict: True`) visible before any call to `load`.
+
 ### REST example
 
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_09.aivi{aivi}
 
 
-### Database example
+Here `timeoutMs` and `strictStatus` are connector-specific request details, while `schema: source.schema.derive` still says that the `List User` result type is the decode contract.
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_10.aivi{aivi}
+## What can be checked before runtime?
 
+Schema-first declarations are most helpful when the source is fully spelled out in one place: a typed `Source ...` signature, a typed connector record, and any helper inputs that are stable at build time.
 
-The exact constructor names may vary by connector, but the public idea is the same: the source declaration carries both the connector config and the schema contract.
+In the stable v0.1 surface documented here, that lets tooling and the compiler verify things such as:
 
-## Compile-time validation
-
-Compile-time validation is most useful when the declaration's schema inputs are stable at build time, for example:
-
-- literal config records,
-- `@static` schema artifacts,
-- `@static` OpenAPI discovery,
-- checked-in table or migration definitions.
-
-When those inputs are available, the compiler can validate the declaration before code generation:
-
-1. derive or load the connector-facing contract,
-2. compare that contract with the declared result type,
-3. validate connector-specific fields,
-4. report mismatches at the declaration site.
+1. whether `source.schema.derive` has enough type information,
+2. whether the connector record matches the constructor you chose,
+3. whether a declaration is descriptive enough for hover and diagnostics at the source definition site.
 
 Typical diagnostics include:
 
-- missing type information for `source.schema.derive`,
-- JSON Schema fields that disagree with the declared record shape,
-- CSV headers that cannot populate a required field,
-- environment defaults with the wrong type,
-- query or projection shapes that do not match the declared row type.
+- missing explicit type information for `source.schema.derive`,
+- malformed or incomplete connector config for the chosen source constructor,
+- runtime `DecodeError` values when live data still does not match the declared result type.
 
-Compile-time validation does not remove runtime decoding. Live data can still diverge, so `load` still performs the final decode.
+Compile-time checking does not remove runtime decoding. Live files, env vars, or API responses can still diverge, so `load` remains responsible for the final decode.
 
 ## Explicit remote discovery
 
 Remote discovery must stay explicit.
 
-If you want to fetch an OpenAPI document or another remote contract while compiling, do it through an explicit compile-time source such as `openapi.fromUrl`. The compiler should not perform surprise network discovery just because a source declaration exists.
+If you want to fetch an OpenAPI document or another remote contract while compiling, do it through an explicit compile-time source such as `openapi.fromUrl`. See [Compile-Time Sources](compile_time.md) and [`@static` OpenAPI sources](../decorators/static.md#openapi-source). The compiler should not perform surprise network discovery just because a source declaration exists.
 
 ## Moving from inline `load` calls to named declarations
 
-The migration is usually mechanical.
+The migration is usually mechanical: keep the same record-shaped source, move it into a named `Source ...` binding, and load that binding later.
 
 ### File / JSON
 
 Before:
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_11.aivi{aivi}
-
+```aivi
+do Effect {
+  users <- load (
+    file.json {
+      path: "./users.json"
+      schema: source.schema.derive
+    }
+  )
+  pure users
+}
+```
 
 After:
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_12.aivi{aivi}
+```aivi
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json"
+    schema: source.schema.derive
+  }
 
+do Effect {
+  users <- load usersSource
+  pure users
+}
+```
 
 ### Environment
 
 Before:
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_13.aivi{aivi}
-
+```aivi
+do Effect {
+  cfg <- load (
+    env.decode {
+      prefix: "AIVI_APP"
+      schema: source.schema.derive
+    }
+  )
+  pure cfg
+}
+```
 
 After:
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_14.aivi{aivi}
+```aivi
+appConfig : Source Env AppConfig
+appConfig =
+  env.decode {
+    prefix: "AIVI_APP"
+    schema: source.schema.derive
+  }
 
+do Effect {
+  cfg <- load appConfig
+  pure cfg
+}
+```
 
 ### REST / HTTP
 
 Before:
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_15.aivi{aivi}
-
+```aivi
+do Effect {
+  users <- load (
+    rest.get {
+      url: ~u(https://api.example.com/users)
+      schema: source.schema.derive
+    }
+  )
+  pure users
+}
+```
 
 After:
 
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_16.aivi{aivi}
+```aivi
+usersApi : Source RestApi (List User)
+usersApi =
+  rest.get {
+    url: ~u(https://api.example.com/users)
+    schema: source.schema.derive
+  }
 
+do Effect {
+  users <- load usersApi
+  pure users
+}
+```
 
-### Database
-
-<<< ../../snippets/from_md/syntax/external_sources/schema_first/block_17.aivi{aivi}
-
+For database-backed reads, use the current [Database Domain](../../stdlib/system/database.md) APIs until a connector guide defines a stable schema-first database record form on its own page.
 
 ## How this relates to source composition
 
-Schema-first declarations answer "what is this source and what contract does it promise?"
+Schema-first declarations answer “what source are we naming, and what result type should it decode into?”
 
-Source composition answers "what extra processing or execution policy should happen when we load it?"
+Source composition answers “once that named source exists, what extra policy should wrap `load`?”
 
 Use schema-first declarations for:
 
 - named, reusable external boundaries,
 - explicit connector config,
-- compile-time contract checking.
+- a clear decode contract before the first `load`.
 
 Use source composition for:
 
@@ -204,4 +245,4 @@ Use source composition for:
 - caching,
 - provenance and observation.
 
-See [Source Composition](composition.md) for those execution-stage details.
+In practice, the order is: declare the source first, then wrap that source with composition helpers as needed. See [Source Composition](composition.md) for those execution-stage details.
