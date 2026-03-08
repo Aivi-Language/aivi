@@ -1,0 +1,8 @@
+json  = ~`{"id": 1, "name": "Alice"}` // braces stay literal
+query = ~`SELECT *
+          FROM users
+          WHERE id = 1`
+poem = ~`
+          | Hallo
+          | Andreas
+`

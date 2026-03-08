@@ -8,16 +8,8 @@ That gives you a practical way to enforce invariants: callers can use the type, 
 Without `opaque`, a plain type alias is transparent everywhere.
 For example, if `Url` were just a record alias, any module could create a malformed value directly:
 
-```aivi
-badUrl = {
-  protocol: "http",
-  host: "",
-  port: None,
-  path: "",
-  query: [],
-  hash: None
-}   // no validation happens here
-```
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_01.aivi{aivi}
+
 
 That bypasses your parsing and validation logic.
 `opaque` closes that escape hatch and forces callers through the API you choose to expose.
@@ -26,20 +18,8 @@ That bypasses your parsing and validation logic.
 
 The `opaque` keyword can be used with any type definition form:
 
-```aivi
-opaque Url = {
-  protocol: Text,
-  host: Text,
-  port: Option Int,
-  path: Text,
-  query: List (Text, Text),
-  hash: Option Text
-}
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_02.aivi{aivi}
 
-opaque Color = Red | Green | Blue   // constructors are hidden outside the module
-opaque Email = Text!                // opaque branded type
-opaque UserId = Int                 // opaque alias
-```
 
 ## What changes inside and outside the module
 
@@ -48,34 +28,8 @@ opaque UserId = Int                 // opaque alias
 Inside the module that defines the type, `opaque` behaves as if it were not there.
 You can construct values, inspect fields, update records, and pattern match normally.
 
-```aivi
-module aivi.url
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_03.aivi{aivi}
 
-opaque Url = {
-  protocol: Text,
-  host: Text,
-  port: Option Int,
-  path: Text,
-  query: List (Text, Text),
-  hash: Option Text
-}
-
-example = {
-  protocol: "https",
-  host: "example.com",
-  port: None,
-  path: "/",
-  query: [],
-  hash: None
-}
-
-p = example.protocol                  // field access is allowed here
-updated = example <| { host: "other.com" }
-
-usesHttps = url => url match
-  | { protocol: "https" } => True   // pattern matching is also allowed here
-  | _                      => False
-```
 
 ### Outside the defining module
 
@@ -104,22 +58,8 @@ A common pattern is:
 - export read-only accessor functions
 - export domain operations or class instances as needed
 
-```aivi
-module aivi.url
+<<< ../../snippets/from_md/syntax/types/opaque_types/block_04.aivi{aivi}
 
-export Url, parse, toString, protocol, host, port, path, query, hash
-
-opaque Url = { ... }
-
-parse : Text -> Result UrlError Url
-parse = text => ...                 // validated constructor
-
-protocol : Url -> Text
-protocol = url => url.protocol      // safe accessor
-
-host : Url -> Text
-host = url => url.host
-```
 
 Callers then work through the exported surface instead of the hidden representation:
 

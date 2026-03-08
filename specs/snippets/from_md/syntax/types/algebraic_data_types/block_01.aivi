@@ -1,0 +1,6 @@
+maybeName = Some "Ada" // `Some` wraps a value and tags which case we are using
+isReady   = True // `True` is a nullary constructor
+
+message = maybeName match
+  | Some name => "Hello {name}" // read the payload carried by `Some`
+  | None      => "Hello" // handle the empty case explicitly

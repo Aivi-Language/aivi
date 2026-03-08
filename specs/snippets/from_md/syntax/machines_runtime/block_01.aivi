@@ -1,0 +1,16 @@
+machine AccountSyncMachine = {
+           -> Idle     : boot {}
+  Idle     -> Acquired : lease {}
+  Acquired -> Syncing  : run { batchId: Int }
+  Syncing  -> Idle     : done {}
+}
+
+sync = do Effect {
+  { boot, lease, run, done, currentState, can } = AccountSyncMachine
+
+  _ <- boot {}
+  _ <- assertEq (constructorName (currentState Unit)) "Idle" // Read the current state
+  _ <- assertEq (can.lease Unit) True // Guard says lease is legal
+  _ <- assertEq (can.run Unit) False // run is not legal yet
+  pure Unit
+}

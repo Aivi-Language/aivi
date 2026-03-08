@@ -31,14 +31,8 @@ launchUi : Model -> Effect GtkError Unit with { ui.window, ui.signal }
 
 Here is a slightly larger example:
 
-```aivi
-saveProfile : Text -> Bytes -> Effect ProfileError Unit with { file.write, network.http }
-saveProfile = userId avatar => do Effect {
-  _ <- uploadAvatar userId avatar
-  _ <- file.writeBytes "./profile-avatar.bin" avatar
-  pure Unit
-}
-```
+<<< ../snippets/from_md/syntax/capabilities/block_02.aivi{aivi}
+
 
 That signature tells the reader two things at once:
 
@@ -49,16 +43,8 @@ That signature tells the reader two things at once:
 
 A capability clause describes the **minimum** authority a function needs. Callers may always run that function from a scope that has a **superset** of the listed capabilities.
 
-```aivi
-loadUserCache : Text -> Effect CacheError User with { file.read }
+<<< ../snippets/from_md/syntax/capabilities/block_03.aivi{aivi}
 
-refreshUser : Url -> Effect SyncError User with { network.http, file.read }
-refreshUser = url => do Effect {
-  remote <- load (rest.get url)
-  cached <- loadUserCache "./user-cache.json"
-  pure (merge remote cached)
-}
-```
 
 `loadUserCache` only asks for `file.read`, so it can run inside a larger scope that also includes `network.http`, `ui`, `db`, or other authority. The practical rule is simple: **smaller requirement sets compose into larger ones**.
 
@@ -95,15 +81,8 @@ openStore : DbConfig -> Resource DbError DbConn with { db.connect }
 
 `with { ... } in expr` narrows the visible capability set for `expr`.
 
-```aivi
-loadBootConfig : Effect ConfigError BootConfig with { file.read, process.env.read }
-loadBootConfig =
-  with { file.read, process.env.read } in do Effect {
-    config <- load (file.json "./config.json")
-    mode <- load (env.get "AIVI_MODE")
-    pure { config, mode }
-  }
-```
+<<< ../snippets/from_md/syntax/capabilities/block_05.aivi{aivi}
+
 
 Rules:
 

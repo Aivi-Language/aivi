@@ -42,16 +42,8 @@ If you are just starting, focus on the first four rows. The OpenAPI and `type.js
 
 <<< ../../snippets/from_md/syntax/decorators/compile_time_embedding.aivi{aivi}
 
-```aivi
-@static
-buildEnv = env.get "AIVI_BUILD_ENV"   // captured once during compilation
+<<< ../../snippets/from_md/syntax/decorators/static/block_02.aivi{aivi}
 
-@static
-petStore = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
-
-@static
-internalApi = openapi.fromFile "./specs/internal-api.yaml"
-```
 
 ## Semantics
 
@@ -83,38 +75,8 @@ internalApi = openapi.fromFile "./specs/internal-api.yaml"
 The generated value is a factory function.
 You pass it a configuration record, and it returns a record of endpoint functions.
 
-```aivi
-@static
-petStoreApi = openapi.fromFile "./petstore.json"
+<<< ../../snippets/from_md/syntax/decorators/static/block_03.aivi{aivi}
 
-listSomePets = do Effect {
-  client = petStoreApi {
-    bearerToken: Some "sk-...",
-    baseUrl: None,
-    headers: None,
-    timeoutMs: None,
-    retryCount: None,
-    strictStatus: None
-  }
-
-  pets <- client.listPets { limit: Some 10 }
-  pure pets
-}
-
-listPetsWithDestructuring = do Effect {
-  { listPets } = petStoreApi {
-    bearerToken: None,
-    baseUrl: None,
-    headers: None,
-    timeoutMs: None,
-    retryCount: None,
-    strictStatus: None
-  }
-
-  result <- listPets {}
-  pure result
-}
-```
 
 ### Config record fields
 
@@ -185,17 +147,8 @@ The generated schema is wrapped in the OpenAI structured-output envelope:
 
 ### Example
 
-```aivi
-ExtractionResult = {
-  title: Text,
-  summary: Text,
-  tags: List Text,
-  score: Option Float
-}
+<<< ../../snippets/from_md/syntax/decorators/static/block_05.aivi{aivi}
 
-@static
-extractionSchema = type.jsonSchema ExtractionResult   // becomes a compile-time `Text` constant
-```
 
 ### Type mapping
 

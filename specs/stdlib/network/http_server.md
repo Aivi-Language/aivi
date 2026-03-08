@@ -23,21 +23,8 @@ Because `listen` returns a `Resource Server`, the server shuts down automaticall
    - `Http response` for a normal HTTP response, or
    - `Ws handler` to upgrade the connection to WebSocket mode.
 
-```aivi
-use aivi.net.httpServer
+<<< ../../snippets/from_md/stdlib/network/http_server/block_01.aivi{aivi}
 
-startServer = resource {
-  server <- listen { address: "127.0.0.1:8080" } (request =>
-    pure (Http {
-      status: 200
-      headers: [{ name: "Content-Type", value: "text/plain" }]
-      body: [72, 101, 108, 108, 111] // "Hello" encoded as UTF-8 bytes: H e l l o
-    })
-  )
-
-  pure server
-}
-```
 
 > `Response.body` uses raw bytes (`List Int`), so text responses are typically encoded before sending.
 > In other words, `"Hello"` is shown here as the byte values the server actually writes to the socket.
@@ -88,15 +75,8 @@ Important fields:
 
 To accept a WebSocket connection, return `Ws ...` instead of `Http ...` from your request handler:
 
-```aivi
-use aivi.net.httpServer
+<<< ../../snippets/from_md/stdlib/network/http_server/block_02.aivi{aivi}
 
-echoSocket = socket => do Effect {
-  message <- wsRecv socket
-  wsSend socket message
-  wsClose socket
-}
-```
 
 This is a good pattern for chat-style features, live updates, or custom protocols that need a long-lived two-way connection.
 

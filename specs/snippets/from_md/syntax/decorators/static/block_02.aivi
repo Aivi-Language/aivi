@@ -1,0 +1,8 @@
+@static
+buildEnv = env.get "AIVI_BUILD_ENV" // captured once during compilation
+
+@static
+petStore = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
+
+@static
+internalApi = openapi.fromFile "./specs/internal-api.yaml"

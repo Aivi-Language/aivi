@@ -1,0 +1,20 @@
+Field A = {
+  value: A
+  touched: Bool
+  dirty: Bool
+}
+
+field: A -> Field A
+setValue: A -> Field A -> Field A
+touch: Field A -> Field A
+
+validate: (A -> Validation (List E) B) -> Field A -> Validation (List E) B
+errors: (A -> Validation (List E) B) -> Field A -> List E
+visibleErrors: Bool -> (A -> Validation (List E) B) -> Field A -> List E
+
+allOf: List (A -> Validation (List E) B) -> A -> Validation (List E) A
+rule: Text -> (A -> Bool) -> A -> Validation (List Text) A
+required: Text -> Validation (List Text) Text
+minLength: Int -> Text -> Validation (List Text) Text
+maxLength: Int -> Text -> Validation (List Text) Text
+email: Text -> Validation (List Text) Text

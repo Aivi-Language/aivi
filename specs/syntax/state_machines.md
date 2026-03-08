@@ -40,14 +40,8 @@ Think of a machine as a small workflow object:
 
 ## A practical example
 
-```aivi
-machine AccountSyncMachine = {
-             -> Idle     : boot {}
-  Idle       -> Acquired : lease {}
-  Acquired   -> Syncing  : run { batchId: Int }
-  Syncing    -> Idle     : done {}
-}
-```
+<<< ../snippets/from_md/syntax/state_machines/block_01.aivi{aivi}
+
 
 This says:
 
@@ -58,18 +52,8 @@ This says:
 
 ## Using a machine in ordinary code
 
-```aivi
-sync = do Effect {
-  { boot, lease, run, done, currentState, can } = AccountSyncMachine
+<<< ../snippets/from_md/syntax/state_machines/block_02.aivi{aivi}
 
-  _ <- boot {}                                      // Initialize the workflow
-  _ <- if can.lease Unit then lease {} else fail "lease not available"
-  _ <- run { batchId: 42 }                          // Transition with typed data
-  _ <- done {}                                      // Return to Idle
-
-  pure (currentState Unit)                          // Inspect the current state if needed
-}
-```
 
 The main idea is simple: transition names become effectful functions. They are the API of the workflow.
 

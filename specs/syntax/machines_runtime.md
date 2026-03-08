@@ -16,24 +16,8 @@ A machine declaration produces a runtime value with:
 - `currentState`
 - `can`, a record of guard-check functions
 
-```aivi
-machine AccountSyncMachine = {
-             -> Idle     : boot {}
-  Idle       -> Acquired : lease {}
-  Acquired   -> Syncing  : run { batchId: Int }
-  Syncing    -> Idle     : done {}
-}
+<<< ../snippets/from_md/syntax/machines_runtime/block_01.aivi{aivi}
 
-sync = do Effect {
-  { boot, lease, run, done, currentState, can } = AccountSyncMachine
-
-  _ <- boot {}
-  _ <- assertEq (constructorName (currentState Unit)) "Idle"   // Read the current state
-  _ <- assertEq (can.lease Unit) True                           // Guard says lease is legal
-  _ <- assertEq (can.run Unit) False                            // run is not legal yet
-  pure Unit
-}
-```
 
 ## What happens when you call a transition
 
@@ -86,23 +70,8 @@ This ordering makes handlers a good fit for follow-up work such as logging, metr
 
 Handler failure does **not** roll the machine state back.
 
-```aivi
-machineFlow = do Effect {
-  { run, lease, currentState } = AccountSyncMachine
+<<< ../snippets/from_md/syntax/machines_runtime/block_04.aivi{aivi}
 
-  on run => fail "run handler failure"
-
-  _ <- lease {}
-  runResult <- attempt (run { batchId: 1 })
-
-  _ <- runResult match
-    | Err _ => pure Unit
-    | Ok _  => fail "expected handler failure"
-
-  _ <- assertEq (constructorName (currentState Unit)) "Syncing"   // State change remains applied
-  pure Unit
-}
-```
 
 This is important in real systems: once the transition itself has succeeded, post-transition observers do not rewind the workflow.
 

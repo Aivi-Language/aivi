@@ -1,0 +1,15 @@
+projectNames = ["A", "B", "C"]
+
+listView : GtkNode
+listView =
+  ~<gtk>
+    <object class="GtkBox" props={{ orientation: "vertical", spacing: 4 }}>
+      <each items={projectNames} as={projectName}>
+        <object class="GtkLabel">
+          <property name="label">
+            { projectName }
+          </property>
+        </object>
+      </each>
+    </object>
+  </gtk>

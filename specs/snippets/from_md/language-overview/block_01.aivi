@@ -1,0 +1,9 @@
+x = 42
+add : Int -> Int -> Int
+add = a b => a + b
+
+inc = add 1
+// Function application uses spaces, not parentheses.
+
+result = [1, 2, 3] |> map inc
+// `|>` passes the value on the left into the function on the right.

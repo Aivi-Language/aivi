@@ -48,17 +48,8 @@ On the client side:
 2. Use `send` and `recv`.
 3. Call `close` when done.
 
-```aivi
-use aivi.net.sockets
+<<< ../../snippets/from_md/stdlib/network/sockets/block_01.aivi{aivi}
 
-sendGreeting = address => do Effect {
-  connection <- connect address
-  _ <- send connection [72, 101, 108, 108, 111] // "Hello" in bytes
-  reply <- recv connection
-  _ <- close connection
-  pure reply
-}
-```
 
 | Function | Explanation |
 | --- | --- |

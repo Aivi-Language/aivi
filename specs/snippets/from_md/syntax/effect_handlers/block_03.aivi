@@ -1,0 +1,9 @@
+testConfigRead =
+  do Effect {
+    fixtures <- openFixtureStore "./fixtures"
+
+    with {
+      file.read        = fixtureReader fixtures
+      process.env.read = fixtureEnv fixtures
+    } in readBootConfig
+  }

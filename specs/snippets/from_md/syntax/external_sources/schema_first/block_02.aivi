@@ -1,0 +1,6 @@
+usersSource : Source File (List User)
+usersSource =
+  file.json {
+    path: "./users.json"
+    schema: source.schema.derive
+  }

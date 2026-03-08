@@ -1,0 +1,6 @@
+use aivi.defaults (Option, Text)
+
+request : { token: Option Text, note: Text }
+request = {
+  note: "hello"
+} // `token` is filled with `None` because the expected type is known

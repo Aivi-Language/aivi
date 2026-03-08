@@ -48,23 +48,8 @@ The rest of this page is still important reference material, but you do not need
 
 If you want one tiny anchor before the reference sections, start here:
 
-```aivi
-main = gtkApp {
-  id: "docs.hello",
-  title: "Hello",
-  size: (400, 240),
-  model: { count: 0 },
-  onStart: _ _ => pure Unit,
-  subscriptions: noSubscriptions,
-  view: model => ~<gtk>
-    <GtkBox orientation="vertical" spacing="12">
-      <GtkLabel label="Count: {toText model.count}" />
-    </GtkBox>
-  </gtk>,
-  toMsg: auto,
-  update: _ model => pure { model, commands: [] }
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_01.aivi{aivi}
+
 
 ## Public API
 
@@ -207,27 +192,13 @@ The second field is the widget's `id="..."` name, or `""` when no `id` is set. T
 
 Tags starting with `Gtk`, `Adw`, or `Gsk` are shorthand for `<object class="...">`. They are the style most readers will want because they are shorter and closer to the widget names you see in GTK documentation.
 
-```aivi
-// Shorthand — the most readable style for day-to-day app code.
-~<gtk>
-  <GtkBox spacing="24" marginTop="12">
-    <AdwActionRow title="Save AI Settings" />
-    <GtkButton label="Save" onClick={ Msg.Save } />
-  </GtkBox>
-</gtk>
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_02.aivi{aivi}
+
 
 The parser lowers shorthand tags to the same IR as the verbose `<object>` form:
 
-```aivi
-// Equivalent verbose form.
-~<gtk>
-  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-    <object class="AdwActionRow" props={{ title: "Save AI Settings" }} />
-    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
-  </object>
-</gtk>
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_03.aivi{aivi}
+
 
 Attributes on shorthand tags become properties automatically, except for pass-through attributes such as `id` and `ref`.
 
@@ -315,152 +286,50 @@ For standard apps, `signalStream` is the usual choice. `signalPoll` is more usef
 
 ### Example: builder + shorthand
 
-```aivi
-settingsView : GtkNode
-settingsView =
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="12" marginTop="16">
-      <GtkLabel label="Settings" />
-    </GtkBox>
-  </gtk>
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_05.aivi{aivi}
+
 
 ### Example: builder + property sugar (verbose form)
 
-```aivi
-settingsView : GtkNode
-settingsView =
-  ~<gtk>
-    <object class="GtkBox" props={ { orientation: "vertical", spacing: 12, marginTop: 16 } }>
-      <object class="GtkLabel">
-        <property name="label">Settings</property>
-      </object>
-    </object>
-  </gtk>
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_06.aivi{aivi}
+
 
 ### Example: signal sugar with shorthand
 
-```aivi
-Msg = Save | ProjectNameChanged Text
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_07.aivi{aivi}
 
-formView : GtkNode
-formView =
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="8">
-      <GtkEntry onInput={ ProjectNameChanged } />
-      <GtkButton label="Save" onClick={ Save } />
-    </GtkBox>
-  </gtk>
-```
 
 ### Example: signal sugar with verbose form
 
-```aivi
-Msg = Save | ProjectNameChanged Text
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_08.aivi{aivi}
 
-formView : GtkNode
-formView =
-  ~<gtk>
-    <object class="GtkBox" props={ { orientation: "vertical", spacing: 8 } }>
-      <object class="GtkEntry" onInput={ ProjectNameChanged } />
-      <object class="GtkButton" onClick={ Save }>
-        <property name="label">Save</property>
-      </object>
-    </object>
-  </gtk>
-```
 
 ### Example: explicit `<signal>` tags
 
-```aivi
-Msg = Save
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_09.aivi{aivi}
 
-buttonView : GtkNode
-buttonView =
-  ~<gtk>
-    <object class="GtkButton">
-      <property name="label">Save</property>
-      <signal name="clicked" on={ Save } />
-    </object>
-  </gtk>
-```
 
 ### Example: dynamic list children with `<each>`
 
-```aivi
-projectNames = ["A", "B", "C"]
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_10.aivi{aivi}
 
-listView : GtkNode
-listView =
-  ~<gtk>
-    <object class="GtkBox" props={ { orientation: "vertical", spacing: 4 } }>
-      <each items={projectNames} as={projectName}>
-        <object class="GtkLabel">
-          <property name="label">{ projectName }</property>
-        </object>
-      </each>
-    </object>
-  </gtk>
-```
 
 ### Example: consuming queued signal events (`signalPoll`)
 
-```aivi
-nextEventSummary : Effect GtkError (Option Text)
-nextEventSummary = do Effect {
-  nextEvent <- signalPoll {}
-  nextEvent match
-    | None                                => pure None
-    | Some (GtkClicked _ _)               => pure (Some "button clicked")
-    | Some (GtkInputChanged _ _ txt)      => pure (Some txt)
-    | Some (GtkFocusOut _ _)              => pure (Some "focus lost")
-    | Some (GtkUnknownSignal _ _ sig _ _) => pure (Some sig)
-    | Some _                              => pure (Some "other event")
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_11.aivi{aivi}
+
 
 ### Example: consuming signal events via `signalStream`
 
-```aivi
-Msg = Save | ProjectNameChanged Text | VolumeChanged Float
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_12.aivi{aivi}
 
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event =>
-  event match
-    | GtkClicked _ _          => Some Save
-    | GtkInputChanged _ _ txt => Some (ProjectNameChanged txt)
-    | GtkValueChanged _ _ val => Some (VolumeChanged val)
-    | _                       => None
-
-runLoop : Effect GtkError Unit
-runLoop = do Effect {
-  events <- signalStream {}
-  channel.forEach events (event =>
-    toMsg event match
-      | None     => pure {}
-      | Some msg => handleMsg msg
-  )
-}
-```
 
 ## `gtkApp` — the standard app host
 
 `gtkApp` is the recommended entry point for most GTK applications in AIVI. You give it a configuration record, and it handles init, startup, window creation, event ingestion, reconciliation, and the command/subscription flow described in [GTK App Architecture](/stdlib/ui/app_architecture).
 
-```aivi
-gtkApp : {
-  id:     Text,
-  title:  Text,
-  size:   (Int, Int),
-  model:  s,
-  onStart: AppId -> WindowId -> Effect GtkError Unit,
-  subscriptions: s -> List (Subscription msg),
-  view:   s -> GtkNode,
-  toMsg:  GtkSignalEvent -> Option msg,
-  update: msg -> s -> Effect GtkError (AppStep s msg)
-} -> Effect GtkError Unit
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_13.aivi{aivi}
+
 
 Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `onStart` → `buildFromNode` → `windowSetChild` → `signalStream` → initial `subscriptions` → `windowPresent` → event loop with `toMsg`/`update` → reactive invalidation for changed source snapshots → `reconcileNode` → subscription refresh → command launch.
 
@@ -499,44 +368,8 @@ Properties are patched, CSS classes are diffed, signal handlers are reconnected 
 
 ### Full example
 
-```aivi
-Msg = DraftTitleChanged Text | DraftBodyChanged Text | Save
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_15.aivi{aivi}
 
-editorView : { draftTitle: Text, draftBody: Text } -> GtkNode
-editorView = state => ~<gtk>
-  <GtkBox orientation="vertical" spacing="8">
-    <GtkEntry id="titleInput" placeholderText="Title" onInput={ DraftTitleChanged } />
-    <GtkEntry id="bodyInput" placeholderText="Body" onInput={ DraftBodyChanged } />
-    <GtkButton label="Save" onClick={ Save } />
-  </GtkBox>
-</gtk>
-
-update : Msg -> { draftTitle: Text, draftBody: Text } -> Effect GtkError (AppStep { draftTitle: Text, draftBody: Text } Msg)
-update = msg => state =>
-  msg match
-    | DraftTitleChanged newTitle =>
-        pure { model: state <| { draftTitle: newTitle }, commands: [] }
-    | DraftBodyChanged newBody =>
-        pure { model: state <| { draftBody: newBody }, commands: [] }
-    | Save =>
-        do Effect {
-          _ <- saveNote state
-          pure { model: state, commands: [] }
-        }
-
-main : Effect GtkError Unit
-main = gtkApp {
-  id: "com.example.notepad",
-  title: "Notepad",
-  size: (640, 480),
-  model: { draftTitle: "", draftBody: "" },
-  onStart: _ _ => pure Unit,
-  subscriptions: noSubscriptions,
-  view: editorView,
-  toMsg: auto,
-  update: update
-}
-```
 
 ## Diagnostics
 

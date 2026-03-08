@@ -1,0 +1,6 @@
+saveProfile : Text -> Bytes -> Effect ProfileError Unit with { file.write, network.http }
+saveProfile = userId avatar => do Effect {
+  _ <- uploadAvatar userId avatar
+  _ <- file.writeBytes "./profile-avatar.bin" avatar
+  pure Unit
+}

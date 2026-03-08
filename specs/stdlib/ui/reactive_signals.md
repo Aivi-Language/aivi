@@ -42,24 +42,8 @@ There are three common levels:
 2. `signal` for a named reactive reader,
 3. `computed` for a named reader with memoization.
 
-```aivi
-projectHeading = model =>
-  if model.searchQuery == ""
-    then "All Projects"
-    else "Search · {model.searchQuery}"
+<<< ../../snippets/from_md/stdlib/ui/reactive_signals/block_01.aivi{aivi}
 
-projectHeadingSignal =
-  signal (model =>
-    if model.searchQuery == ""
-      then "All Projects"
-      else "Search · {model.searchQuery}"
-  )
-
-visibleProjectNames =
-  computed "projects.visibleNames" (model =>
-    map (project => project.name) model.visibleProjects
-  )
-```
 
 Use a plain helper when the value is small and local. Use `signal` when a named reader makes the code easier to follow. Use `computed` when the same pure work is read repeatedly and should be cached until its dependencies change.
 
@@ -75,59 +59,8 @@ Use a plain helper when the value is small and local. Use `signal` when a named 
 
 Reactive signals read from the app model and fit into the normal `gtkApp` loop:
 
-```aivi
-use aivi.ui.gtk4
+<<< ../../snippets/from_md/stdlib/ui/reactive_signals/block_02.aivi{aivi}
 
-Project = { name: Text }
-
-Model = {
-  searchQuery: Text
-  visibleProjects: List Project
-  fastRefresh: Bool
-}
-
-Msg = SearchQueryChanged Text | Tick
-
-heading : Model -> Text
-heading =
-  signal (model =>
-    if model.searchQuery == ""
-      then "All Projects"
-      else "Search · {model.searchQuery}"
-  )
-
-projectNames : Model -> List Text
-projectNames =
-  computed "projects.names" (model =>
-    map (project => project.name) model.visibleProjects
-  )
-
-refreshMillis : Model -> Int
-refreshMillis =
-  signal (model =>
-    if model.fastRefresh then 250 else 1000
-  )
-
-view : Model -> GtkNode
-view = _ =>
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="8">
-      <GtkLabel label={heading} />
-      <each items={projectNames} as={projectName}>
-        <GtkLabel label={projectName} />
-      </each>
-    </GtkBox>
-  </gtk>
-
-subscriptions : Model -> List (Subscription Msg)
-subscriptions = model => [
-  subscriptionEvery {
-    key: "tick"
-    millis: readSignal refreshMillis model
-    tag: Tick
-  }
-]
-```
 
 This shows the usual pattern:
 

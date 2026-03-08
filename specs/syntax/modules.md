@@ -76,20 +76,8 @@ A consuming module must import the domain explicitly when it wants the domain-re
 
 You can put `export` directly in front of a declaration when the file mostly defines public items.
 
-```aivi
-module app.flow
+<<< ../snippets/from_md/syntax/modules/block_02.aivi{aivi}
 
-export run = input => input
-
-export domain Status over Int = {
-  next : Int -> Int
-  next = x => x + 1
-}
-
-export machine Workflow = {
-  -> Idle : boot {}
-}
-```
 
 The export-list form is still useful for facade modules and re-exports.
 

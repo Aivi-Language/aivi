@@ -1,0 +1,6 @@
+with {
+  file      = realFs
+  file.read = fixtureReads
+} in with {
+  file.write = auditSink
+} in syncProfile

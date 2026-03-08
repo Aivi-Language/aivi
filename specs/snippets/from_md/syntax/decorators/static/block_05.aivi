@@ -1,0 +1,9 @@
+ExtractionResult = {
+  title: Text
+  summary: Text
+  tags: List Text
+  score: Option Float
+}
+
+@static
+extractionSchema = type.jsonSchema ExtractionResult // becomes a compile-time `Text` constant

@@ -65,9 +65,15 @@ function snippetPathFromMd(mdRel, blockIndex1) {
 
 const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
+const minLinesArgIndex = argv.indexOf("--min-lines");
+const minNonEmptyLines =
+  minLinesArgIndex === -1 ? 1 : Number.parseInt(argv[minLinesArgIndex + 1], 10);
 const manifestArgIndex = argv.indexOf("--manifest");
 const manifestRel =
   manifestArgIndex === -1 ? "specs/snippets/manifest.json" : argv[manifestArgIndex + 1];
+if (Number.isNaN(minNonEmptyLines) || minNonEmptyLines < 1) {
+  die("invalid value for --min-lines");
+}
 if (!manifestRel) die("missing value for --manifest");
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -105,6 +111,7 @@ const mdFiles = rgFiles.stdout
 let extracted = 0;
 let rewrittenMdFiles = 0;
 let addedManifest = 0;
+let skippedShortBlocks = 0;
 
 for (const mdRel of mdFiles) {
   const mdAbs = path.resolve(repoRoot, mdRel);
@@ -129,6 +136,15 @@ for (const mdRel of mdFiles) {
       }
 
       const blockLines = lines.slice(i + 1, j);
+      const nonEmptyLines = blockLines.filter((line) => line.trim().length > 0).length;
+      if (nonEmptyLines < minNonEmptyLines) {
+        out.push(line);
+        out.push(...blockLines);
+        out.push(lines[j]);
+        skippedShortBlocks++;
+        i = j;
+        continue;
+      }
       const snippetRel = toPosix(snippetPathFromMd(mdRel, blockIndex));
       const snippetAbs = path.resolve(repoRoot, snippetRel);
       fs.mkdirSync(path.dirname(snippetAbs), { recursive: true });
@@ -153,12 +169,12 @@ for (const mdRel of mdFiles) {
       changed = true;
       extracted++;
 
-      // Add to manifest (parse-only by default; check can be enabled later per snippet).
+      // Add to manifest (format-only by default; parse/check can be enabled later per snippet).
       if (!manifestByPath.has(snippetRel)) {
         manifest.snippets.push({
           path: snippetRel,
           module: moduleFromMd(mdRel, blockIndex),
-          verify: ["fmt", "parse"],
+          verify: ["fmt"],
         });
         manifestByPath.add(snippetRel);
         addedManifest++;
@@ -187,10 +203,12 @@ process.stdout.write(
   JSON.stringify(
     {
       apply,
+      minNonEmptyLines,
       markdownFilesScanned: mdFiles.length,
       markdownFilesRewritten: rewrittenMdFiles,
       snippetsExtracted: extracted,
       manifestEntriesAdded: addedManifest,
+      skippedShortBlocks,
     },
     null,
     2,

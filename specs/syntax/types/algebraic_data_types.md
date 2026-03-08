@@ -42,13 +42,7 @@ Nullary constructors such as `None`, `True`, and `False` are already complete va
 
 ## A small mental model
 
-```aivi
-maybeName = Some "Ada"   // `Some` wraps a value and tags which case we are using
-isReady = True           // `True` is a nullary constructor
+<<< ../../snippets/from_md/syntax/types/algebraic_data_types/block_01.aivi{aivi}
 
-message = maybeName match
-  | Some name => "Hello {name}"   // read the payload carried by `Some`
-  | None      => "Hello"          // handle the empty case explicitly
-```
 
 A good rule of thumb: if you find yourself reaching for sentinel values like empty strings or `0` to mean "special case", an ADT is often a better fit.

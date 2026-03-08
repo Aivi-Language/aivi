@@ -46,14 +46,8 @@ For other types, importing `ToDefault` enables instance-driven filling through `
 
 Defaults are prepended before user-written fields, so explicit fields and later spreads still win.
 
-```aivi
-use aivi.defaults (Option, Text)
+<<< ../../snippets/from_md/syntax/types/expected_type_coercions/block_01.aivi{aivi}
 
-request : { token: Option Text, note: Text }
-request = {
-  note: "hello"
-}   // `token` is filled with `None` because the expected type is known
-```
 
 ## `Body` coercions
 
@@ -67,14 +61,8 @@ When `Body` is expected, such as in an HTTP request, the compiler inserts the fo
 
 That lets request-building code stay focused on the payload you mean to send:
 
-```aivi
-fetch {
-  method: "POST",
-  url: url,
-  headers: [],
-  body: Some { grant_type: "authorization_code", code: code }   // record becomes JSON body
-}
-```
+<<< ../../snippets/from_md/syntax/types/expected_type_coercions/block_02.aivi{aivi}
+
 
 ## `Option` coercion
 
@@ -82,14 +70,8 @@ When `Option A` is expected and the expression does not already unify, the compi
 
 This composes with other coercions. For example, when `Option Body` is expected, a bare record literal becomes `Some (Json (toJson { ... }))`:
 
-```aivi
-fetch {
-  method: "POST",
-  url: url,
-  headers: [],
-  body: { grant_type: "authorization_code", code: code }   // rewritten to `Some (...)`
-}
-```
+<<< ../../snippets/from_md/syntax/types/expected_type_coercions/block_03.aivi{aivi}
+
 
 ## Practical guideline
 

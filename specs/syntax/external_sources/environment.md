@@ -35,14 +35,8 @@ do Effect {
 
 ## Decoding a typed config value
 
-```aivi
-AppConfig = { port: Int, debug: Bool }
+<<< ../../snippets/from_md/syntax/external_sources/environment/block_02.aivi{aivi}
 
-do Effect {
-  cfg <- load (env.decode "AIVI_APP")  // looks for variables under the AIVI_APP prefix
-  pure cfg
-}
-```
 
 `env.decode "AIVI_APP"` collects matching variables such as:
 

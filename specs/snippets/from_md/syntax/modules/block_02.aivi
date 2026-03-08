@@ -1,0 +1,12 @@
+module app.flow
+
+export run = input => input
+
+export domain Status over Int = {
+  next : Int -> Int
+  next = x => x + 1
+}
+
+export machine Workflow = {
+  -> Idle : boot {}
+}

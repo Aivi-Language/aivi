@@ -1224,118 +1224,6 @@
       ]
     },
     {
-      "path": "specs/snippets/from_md/desugaring/patterns/pattern_binding_with_total_only_01.aivi",
-      "module": "docs.snippets.desugaring.patterns.pattern_binding_with_total_only_01",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/patterns/pattern_binding_with_total_only_02.aivi",
-      "module": "docs.snippets.desugaring.patterns.pattern_binding_with_total_only_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/patterns/pattern_binding_with_total_only_03.aivi",
-      "module": "docs.snippets.desugaring.patterns.pattern_binding_with_total_only_03",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/patterns/whole_value_binding_as.aivi",
-      "module": "docs.snippets.desugaring.patterns.whole_value_binding_as",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/generators/generate_01.aivi",
-      "module": "docs.snippets.desugaring.generators.generate_01",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/generators/generate_02.aivi",
-      "module": "docs.snippets.desugaring.generators.generate_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/generators/generate_03.aivi",
-      "module": "docs.snippets.desugaring.generators.generate_03",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/generators/resource_acquisition.aivi",
-      "module": "docs.snippets.desugaring.generators.resource_acquisition",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/effects/do_effect_01.aivi",
-      "module": "docs.snippets.desugaring.effects.do_effect_01",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/effects/do_effect_02.aivi",
-      "module": "docs.snippets.desugaring.effects.do_effect_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/effects/do_effect_03.aivi",
-      "module": "docs.snippets.desugaring.effects.do_effect_03",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/effects/do_effect_04.aivi",
-      "module": "docs.snippets.desugaring.effects.do_effect_04",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/domains/ambiguity_errors_suffix_literal_templates_01.aivi",
-      "module": "docs.snippets.desugaring.domains.ambiguity_errors_suffix_literal_templates_01",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/domains/ambiguity_errors_suffix_literal_templates_02.aivi",
-      "module": "docs.snippets.desugaring.domains.ambiguity_errors_suffix_literal_templates_02",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/domains/ambiguity_errors_suffix_literal_templates_03.aivi",
-      "module": "docs.snippets.desugaring.domains.ambiguity_errors_suffix_literal_templates_03",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/domains/operator_precedence.aivi",
-      "module": "docs.snippets.desugaring.domains.operator_precedence",
-      "verify": [
-        "fmt"
-      ]
-    },
-    {
       "path": "specs/snippets/from_md/stdlib/core/prelude/standard_library_prelude.aivi",
       "module": "docs.snippets.stdlib.core.prelude.standard_library_prelude",
       "verify": [
@@ -2384,8 +2272,7 @@
       "path": "specs/snippets/from_md/stdlib/ui/html/splices_02.aivi",
       "module": "docs.snippets.stdlib.ui.html.splices_02",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
@@ -2463,40 +2350,35 @@
       "path": "specs/snippets/from_md/syntax/do_notation/bind.aivi",
       "module": "docs.snippets.syntax.do_notation.bind",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
       "path": "specs/snippets/from_md/syntax/do_notation/pure_let_binding.aivi",
       "module": "docs.snippets.syntax.do_notation.pure_let_binding",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
       "path": "specs/snippets/from_md/syntax/do_notation/sequencing_expression_statement.aivi",
       "module": "docs.snippets.syntax.do_notation.sequencing_expression_statement",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
       "path": "specs/snippets/from_md/syntax/do_notation/final_expression.aivi",
       "module": "docs.snippets.syntax.do_notation.final_expression",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
       "path": "specs/snippets/from_md/syntax/do_notation/empty_block.aivi",
       "module": "docs.snippets.syntax.do_notation.empty_block",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
@@ -2518,14 +2400,6 @@
     {
       "path": "specs/snippets/from_md/syntax/comments/placement.aivi",
       "module": "docs.snippets.syntax.comments.placement",
-      "verify": [
-        "fmt",
-        "parse"
-      ]
-    },
-    {
-      "path": "specs/snippets/from_md/desugaring/classes/type_variable_constraints.aivi",
-      "module": "docs.snippets.desugaring.classes.type_variable_constraints",
       "verify": [
         "fmt",
         "parse"
@@ -2591,16 +2465,1029 @@
       "path": "specs/snippets/from_md/runtime/package_manager/write_your_library.aivi",
       "module": "docs.snippets.runtime.package_manager.write_your_library",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
       ]
     },
     {
       "path": "specs/snippets/from_md/runtime/package_manager/import_in_your_code.aivi",
       "module": "docs.snippets.runtime.package_manager.import_in_your_code",
       "verify": [
-        "fmt",
-        "parse"
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_01.aivi",
+      "module": "docs.snippets.introduction.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_04.aivi",
+      "module": "docs.snippets.introduction.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_06.aivi",
+      "module": "docs.snippets.introduction.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_07.aivi",
+      "module": "docs.snippets.introduction.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_08.aivi",
+      "module": "docs.snippets.introduction.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/introduction/block_09.aivi",
+      "module": "docs.snippets.introduction.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_01.aivi",
+      "module": "docs.snippets.language_overview.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_02.aivi",
+      "module": "docs.snippets.language_overview.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_03.aivi",
+      "module": "docs.snippets.language_overview.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_05.aivi",
+      "module": "docs.snippets.language_overview.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_06.aivi",
+      "module": "docs.snippets.language_overview.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_07.aivi",
+      "module": "docs.snippets.language_overview.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_08.aivi",
+      "module": "docs.snippets.language_overview.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_09.aivi",
+      "module": "docs.snippets.language_overview.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_10.aivi",
+      "module": "docs.snippets.language_overview.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/language-overview/block_11.aivi",
+      "module": "docs.snippets.language_overview.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/testing/block_01.aivi",
+      "module": "docs.snippets.stdlib.core.testing.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/core/testing/block_02.aivi",
+      "module": "docs.snippets.stdlib.core.testing.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/bits/block_02.aivi",
+      "module": "docs.snippets.stdlib.data.bits.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/bits/block_03.aivi",
+      "module": "docs.snippets.stdlib.data.bits.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_02.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/data/json/block_03.aivi",
+      "module": "docs.snippets.stdlib.data.json.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_01.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http/block_02.aivi",
+      "module": "docs.snippets.stdlib.network.http.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http_server/block_01.aivi",
+      "module": "docs.snippets.stdlib.network.http_server.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/http_server/block_02.aivi",
+      "module": "docs.snippets.stdlib.network.http_server.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/rest/block_02.aivi",
+      "module": "docs.snippets.stdlib.network.rest.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/rest/block_04.aivi",
+      "module": "docs.snippets.stdlib.network.rest.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/sockets/block_01.aivi",
+      "module": "docs.snippets.stdlib.network.sockets.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/network/streams/block_01.aivi",
+      "module": "docs.snippets.stdlib.network.streams.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_01.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_02.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_03.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_04.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_05.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_06.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/database/block_07.aivi",
+      "module": "docs.snippets.stdlib.system.database.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_02.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_03.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_05.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_07.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_08.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/email/block_09.aivi",
+      "module": "docs.snippets.stdlib.system.email.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/system/secrets/block_03.aivi",
+      "module": "docs.snippets.stdlib.system.secrets.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_03.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_04.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_05.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_08.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_11.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/app_architecture/block_12.aivi",
+      "module": "docs.snippets.stdlib.ui.app_architecture.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/forms/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.forms.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/forms/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.forms.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/forms/block_03.aivi",
+      "module": "docs.snippets.stdlib.ui.forms.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/forms/block_04.aivi",
+      "module": "docs.snippets.stdlib.ui.forms.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_03.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_05.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_06.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_07.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_08.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_09.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_10.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_11.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_12.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_13.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/block_15.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/native_gtk_apps/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.native_gtk_apps.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/native_gtk_apps/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.native_gtk_apps.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/native_gtk_apps/block_03.aivi",
+      "module": "docs.snippets.stdlib.ui.native_gtk_apps.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/native_gtk_apps/block_04.aivi",
+      "module": "docs.snippets.stdlib.ui.native_gtk_apps.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/native_gtk_apps/block_05.aivi",
+      "module": "docs.snippets.stdlib.ui.native_gtk_apps.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/native_gtk_apps/block_06.aivi",
+      "module": "docs.snippets.stdlib.ui.native_gtk_apps.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/reactive_dataflow/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.reactive_dataflow.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/reactive_dataflow/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.reactive_dataflow.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/reactive_signals/block_01.aivi",
+      "module": "docs.snippets.stdlib.ui.reactive_signals.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/reactive_signals/block_02.aivi",
+      "module": "docs.snippets.stdlib.ui.reactive_signals.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/capabilities/block_02.aivi",
+      "module": "docs.snippets.syntax.capabilities.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/capabilities/block_03.aivi",
+      "module": "docs.snippets.syntax.capabilities.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/capabilities/block_05.aivi",
+      "module": "docs.snippets.syntax.capabilities.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/static/block_02.aivi",
+      "module": "docs.snippets.syntax.decorators.static.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/static/block_03.aivi",
+      "module": "docs.snippets.syntax.decorators.static.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/static/block_05.aivi",
+      "module": "docs.snippets.syntax.decorators.static.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/test/block_01.aivi",
+      "module": "docs.snippets.syntax.decorators.test.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/decorators/test/block_03.aivi",
+      "module": "docs.snippets.syntax.decorators.test.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/do_notation/block_01.aivi",
+      "module": "docs.snippets.syntax.do_notation.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/do_notation/block_02.aivi",
+      "module": "docs.snippets.syntax.do_notation.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effect_handlers/block_01.aivi",
+      "module": "docs.snippets.syntax.effect_handlers.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effect_handlers/block_02.aivi",
+      "module": "docs.snippets.syntax.effect_handlers.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effect_handlers/block_03.aivi",
+      "module": "docs.snippets.syntax.effect_handlers.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effect_handlers/block_04.aivi",
+      "module": "docs.snippets.syntax.effect_handlers.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effect_handlers/block_05.aivi",
+      "module": "docs.snippets.syntax.effect_handlers.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/effect_handlers/block_06.aivi",
+      "module": "docs.snippets.syntax.effect_handlers.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/compile_time/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.compile_time.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_06.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/composition/block_07.aivi",
+      "module": "docs.snippets.syntax.external_sources.composition.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/environment/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.environment.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/file/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.file.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/image/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.image.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/imap_email/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.imap_email.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/imap_email/block_03.aivi",
+      "module": "docs.snippets.syntax.external_sources.imap_email.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/imap_email/block_04.aivi",
+      "module": "docs.snippets.syntax.external_sources.imap_email.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/rest_http/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.rest_http.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/rest_http/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.rest_http.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_01.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_02.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_04.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_06.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_07.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_08.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_09.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_10.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_11.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_12.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_13.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_14.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_15.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_16.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_16",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/external_sources/schema_first/block_17.aivi",
+      "module": "docs.snippets.syntax.external_sources.schema_first.block_17",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/generators/block_01.aivi",
+      "module": "docs.snippets.syntax.generators.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines/block_01.aivi",
+      "module": "docs.snippets.syntax.machines.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines/block_02.aivi",
+      "module": "docs.snippets.syntax.machines.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines/block_03.aivi",
+      "module": "docs.snippets.syntax.machines.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines_runtime/block_01.aivi",
+      "module": "docs.snippets.syntax.machines_runtime.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/machines_runtime/block_04.aivi",
+      "module": "docs.snippets.syntax.machines_runtime.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/modules/block_02.aivi",
+      "module": "docs.snippets.syntax.modules.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/operators/block_02.aivi",
+      "module": "docs.snippets.syntax.operators.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/operators/block_03.aivi",
+      "module": "docs.snippets.syntax.operators.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/operators/block_04.aivi",
+      "module": "docs.snippets.syntax.operators.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/operators/block_05.aivi",
+      "module": "docs.snippets.syntax.operators.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/state_machines/block_01.aivi",
+      "module": "docs.snippets.syntax.state_machines.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/state_machines/block_02.aivi",
+      "module": "docs.snippets.syntax.state_machines.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/algebraic_data_types/block_01.aivi",
+      "module": "docs.snippets.syntax.types.algebraic_data_types.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/expected_type_coercions/block_01.aivi",
+      "module": "docs.snippets.syntax.types.expected_type_coercions.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/expected_type_coercions/block_02.aivi",
+      "module": "docs.snippets.syntax.types.expected_type_coercions.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/expected_type_coercions/block_03.aivi",
+      "module": "docs.snippets.syntax.types.expected_type_coercions.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/opaque_types/block_01.aivi",
+      "module": "docs.snippets.syntax.types.opaque_types.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/opaque_types/block_02.aivi",
+      "module": "docs.snippets.syntax.types.opaque_types.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/opaque_types/block_03.aivi",
+      "module": "docs.snippets.syntax.types.opaque_types.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/opaque_types/block_04.aivi",
+      "module": "docs.snippets.syntax.types.opaque_types.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/syntax/types/record_row_transforms/block_01.aivi",
+      "module": "docs.snippets.syntax.types.record_row_transforms.block_01",
+      "verify": [
+        "fmt"
       ]
     }
   ]

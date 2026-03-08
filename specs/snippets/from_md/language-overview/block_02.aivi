@@ -1,0 +1,14 @@
+User = {
+  id: Int
+  name: Text
+  email: Option Text
+}
+
+user = {
+  id: 1
+  name: "Ada"
+  email: Some "ada@example.com"
+}
+
+names = ["Ada", "Linus", "Grace"]
+pair  = (1, "ready")

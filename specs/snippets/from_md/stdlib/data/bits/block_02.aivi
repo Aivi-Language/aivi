@@ -1,0 +1,10 @@
+use aivi.bits
+
+extractRgb : Bits -> { r: Int, g: Int, b: Int }
+extractRgb = color =>
+// A one-byte mask lets us keep only the lowest 8 bits.
+mask = fromInt 0xFF
+{ r: color |> shiftRight 16 |> and mask |> toInt
+  g: color |> shiftRight 8 |> and mask |> toInt
+  b: color |> and mask |> toInt
+}

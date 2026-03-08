@@ -1,0 +1,6 @@
+loadUsersForTest : Effect (SourceError RestApi) (List User)
+loadUsersForTest =
+  with {
+    network.http = fixtureHttp // serve a known response
+    clock.sleep  = immediateClock // avoid real waiting during retries
+  } in load usersSource

@@ -1,0 +1,7 @@
+loadBootConfig : Effect ConfigError BootConfig with { file.read, process.env.read }
+loadBootConfig =
+  with { file.read, process.env.read } in do Effect {
+    config <- load (file.json "./config.json")
+    mode   <- load (env.get "AIVI_MODE")
+    pure { config, mode }
+  }

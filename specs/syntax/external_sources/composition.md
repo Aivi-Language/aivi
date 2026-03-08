@@ -47,33 +47,13 @@ You do not need to memorize the illustrative model below to use the feature. The
 
 Conceptually:
 
-```aivi
-// Illustrative model only. The exact runtime representation is not part of the public contract.
-Source K A =
-  SourcePipeline {
-    connector: SourceConnector K
-    decode: DecodeStage K Raw
-    transforms: List (TransformStage Raw A)
-    validations: List (ValidationStage A)
-    retry: RetryPolicy
-    timeout: TimeoutPolicy
-    cache: CachePolicy
-    provenance: ProvenancePolicy
-    observation: ObservationPolicy
-  }
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_01.aivi{aivi}
+
 
 The public surface is a set of pure combinators:
 
-```aivi
-source.transform  : (A -> B) -> Source K A -> Source K B
-source.validate   : (A -> Validation (List DecodeError) B) -> Source K A -> Source K B
-source.retry      : RetryPolicy -> Source K A -> Source K A
-source.timeout    : Int -> Source K A -> Source K A
-source.cache      : CachePolicy -> Source K A -> Source K A
-source.provenance : ProvenancePolicy -> Source K A -> Source K A
-source.observe    : ObservationPolicy -> Source K A -> Source K A
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_02.aivi{aivi}
+
 
 These functions do not perform I/O. They only return a richer source description for `load` to execute later.
 
@@ -243,14 +223,8 @@ Composition does not need a special mocking API. Tests reuse ordinary handlers:
 - keep the same composed source value in production and tests,
 - use `mock ... in` only when you are substituting a specific binding rather than interpreting a capability.
 
-```aivi
-loadUsersForTest : Effect (SourceError RestApi) (List User)
-loadUsersForTest =
-  with {
-    network.http = fixtureHttp,   // serve a known response
-    clock.sleep = immediateClock  // avoid real waiting during retries
-  } in load usersSource
-```
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_06.aivi{aivi}
+
 
 The important invariant is that the source pipeline stays the same. Tests swap interpreters, not source declarations.
 
@@ -258,55 +232,8 @@ The important invariant is that the source pipeline stays the same. Tests swap i
 
 Here is how those pieces fit together in one realistic source declaration:
 
-```aivi
-use aivi.validation
+<<< ../../snippets/from_md/syntax/external_sources/composition/block_07.aivi{aivi}
 
-RawUser = { id: Int, name: Text, enabled: Bool, legacyId: Option Text }
-User = { id: Int, name: Text, enabled: Bool }
-
-normalizeUsers : List RawUser -> List User
-normalizeUsers =
-  users => users |> map (user => {
-    id: user.id,
-    name: user.name,
-    enabled: user.enabled
-  })
-
-validateUsers : List User -> Validation (List DecodeError) (List User)
-validateUsers = users =>
-  if isEmpty users then
-    Invalid [{ path: [], message: "expected at least one user" }]
-  else
-    Valid users
-
-usersSource : Source RestApi (List User)
-usersSource =
-  rest.get {
-    url: ~u(https://api.example.com/users),
-    schema: source.schema.derive,
-    strictStatus: True
-  }
-    |> source.transform normalizeUsers
-    |> source.validate validateUsers
-    |> source.retry {
-      attempts: 3,
-      backoff: source.backoff.exponential {
-        baseMs: 200,
-        factor: 2,
-        maxMs: 2_000
-      }
-    }
-    |> source.timeout 5_000
-    |> source.cache {
-      ttlMs: 60_000
-    }
-    |> source.provenance {
-      name: "users-api"
-    }
-    |> source.observe {
-      kind: "trace"
-    }
-```
 
 Reading `load usersSource` in plain language:
 

@@ -1,0 +1,47 @@
+use aivi.validation
+
+RawUser = { id: Int, name: Text, enabled: Bool, legacyId: Option Text }
+User    = { id: Int, name: Text, enabled: Bool }
+
+normalizeUsers : List RawUser -> List User
+normalizeUsers =
+  users => users |> map (user => {
+      id: user.id
+      name: user.name
+      enabled: user.enabled
+  })
+
+validateUsers : List User -> Validation (List DecodeError) (List User)
+validateUsers = users =>
+  if isEmpty users then
+    Invalid [{ path: [], message: "expected at least one user" }]
+  else
+    Valid users
+
+usersSource : Source RestApi (List User)
+usersSource =
+  rest.get {
+    url: ~u(https://api.example.com/users)
+    schema: source.schema.derive
+    strictStatus: True
+  }
+|> source.transform normalizeUsers
+|> source.validate validateUsers
+|> source.retry {
+    attempts: 3
+    backoff: source.backoff.exponential {
+      baseMs: 200
+      factor: 2
+      maxMs: 2_000
+    }
+}
+|> source.timeout 5_000
+|> source.cache {
+    ttlMs: 60_000
+}
+|> source.provenance {
+    name: "users-api"
+}
+|> source.observe {
+    kind: "trace"
+}

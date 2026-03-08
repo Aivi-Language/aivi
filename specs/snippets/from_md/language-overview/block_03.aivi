@@ -1,0 +1,9 @@
+showEmail : User -> Text
+showEmail = user => user.email match
+  | Some email => email
+  | None       => "(no email on file)"
+
+parseAge : Text -> Result Text Int
+parseAge = text => textToInt text match
+  | Some age => Ok age
+  | None     => Err "Age must be a whole number"

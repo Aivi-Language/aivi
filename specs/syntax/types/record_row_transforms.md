@@ -27,18 +27,8 @@ After elaboration, the compiler still works with ordinary closed record types.
 
 ## Practical example
 
-```aivi
-User = {
-  id: Int,
-  email: Text,
-  name: Text,
-  isAdmin: Bool
-}
+<<< ../../snippets/from_md/syntax/types/record_row_transforms/block_01.aivi{aivi}
 
-PublicUser = User |> Omit (isAdmin)
-PatchUser = User |> Optional (email, name)
-RenamedUser = User |> Rename { email: loginEmail }
-```
 
 The example above keeps a single source-of-truth record type and derives narrower or more convenient variants from it.
 That reduces duplication while keeping the final types explicit.

@@ -50,18 +50,8 @@ The runner prints a pass/fail summary and returns a non-zero exit code when any 
 
 When production code depends on capabilities, the usual testing approach is to install scoped handlers with [`with { capability = handler } in`](/syntax/effect_handlers).
 
-```aivi
-@test "read config from fixtures"
-readConfigFromFixtures =
-  with {
-    file.read        = fixtureFiles
-    process.env.read = fixtureEnv
-  } in do Effect {
-    cfg <- readConfig
-    _   <- assertEq cfg.mode "test"
-    pure Unit
-  }
-```
+<<< ../../snippets/from_md/stdlib/core/testing/block_01.aivi{aivi}
+
 
 This swaps the capability interpreters only inside the test scope, so the production logic stays unchanged.
 
@@ -69,26 +59,8 @@ This swaps the capability interpreters only inside the test scope, so the produc
 
 When code is still written around top-level bindings rather than capability signatures, [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) are a practical fallback.
 
-```aivi
-use aivi.testing
-use aivi.rest
+<<< ../../snippets/from_md/stdlib/core/testing/block_02.aivi{aivi}
 
-User = { id: Int, name: Text }
-
-fetchUsers = rest.get ~u(https://api.example.com/users)
-
-@test "fetch users with a mocked request"
-fetchUsersWithMock =
-  mock
-    rest.get = _ => pure [{ id: 1, name: "Ada" }]
-  in do Effect {
-    users <- fetchUsers
-    _     <- assertEq (length users) 1
-    users match
-      | [u, ..._] => assertEq u.name "Ada"
-      | []        => fail "expected one mocked user"
-  }
-```
 
 Here the mock replaces `rest.get` only inside the test body, so the example can exercise the surrounding logic without making a real network call.
 

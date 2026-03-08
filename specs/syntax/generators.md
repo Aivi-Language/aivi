@@ -20,13 +20,8 @@ A generator is an ordinary value you can pass around, return from a function, an
 
 A small example shows the overall shape:
 
-```aivi
-generate {
-  value <- xs
-  value -> value > 0
-  yield value * 2
-}
-```
+<<< ../snippets/from_md/syntax/generators/block_01.aivi{aivi}
+
 
 Read that block top to bottom:
 

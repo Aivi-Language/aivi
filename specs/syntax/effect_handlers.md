@@ -12,13 +12,8 @@ If you come from another ecosystem, this is similar in spirit to dependency inje
 
 ## Start with one example
 
-```aivi
-with {
-  file.read = fixtureFiles,
-  process.env.read = fixtureEnv,
-  clock.now
-} in readBootConfig
-```
+<<< ../snippets/from_md/syntax/effect_handlers/block_01.aivi{aivi}
+
 
 Read that block like this:
 
@@ -51,13 +46,8 @@ With that mental model in place, the surface syntax stays small.
 1. a **bare capability** entry that narrows the available authority
 2. a **handler binding** that installs an interpreter for a capability or capability family
 
-```aivi
-with {
-  file.read = fixtureFiles,      // Use fixture-backed file reads in this scope
-  process.env.read = fixtureEnv, // Use deterministic environment values here
-  clock.now                      // Keep the nearest outer/default clock.now interpreter
-} in readBootConfig
-```
+<<< ../snippets/from_md/syntax/effect_handlers/block_02.aivi{aivi}
+
 
 | Entry form | Meaning |
 | --- | --- |
@@ -71,17 +61,8 @@ The right-hand side of a handler binding is a regular value naming the handler. 
 
 If a handler needs setup or teardown, do that work first and then install the resulting value into the `with` scope.
 
-```aivi
-testConfigRead =
-  do Effect {
-    fixtures <- openFixtureStore "./fixtures"
+<<< ../snippets/from_md/syntax/effect_handlers/block_03.aivi{aivi}
 
-    with {
-      file.read = fixtureReader fixtures,
-      process.env.read = fixtureEnv fixtures
-    } in readBootConfig
-  }
-```
 
 In other words: resource setup happens outside `with`, and the scoped handler uses the prepared value.
 
@@ -115,14 +96,8 @@ When code needs a capability such as `file.read`, lookup works like this:
 
 Bare capability entries participate in authority checking, but they do not stop interpreter lookup from continuing outward.
 
-```aivi
-with {
-  file = realFs,
-  file.read = fixtureReads
-} in with {
-  file.write = auditSink
-} in syncProfile
-```
+<<< ../snippets/from_md/syntax/effect_handlers/block_04.aivi{aivi}
+
 
 In that example:
 
@@ -136,19 +111,8 @@ The same exact capability path must not be bound twice in one `with` block.
 
 Tests use the same mechanism as ordinary code: install handlers, then run the production logic unchanged.
 
-```aivi
-@test "refreshSession uses deterministic time"
-refreshSessionDeterministic =
-  with {
-    clock.now = fixedClock,
-    clock.sleep = immediateClock,
-    process.env.read = fixtureEnv
-  } in do Effect {
-    session <- refreshSession
-    _ <- assertEq session.expiresAt expectedExpiry
-    pure Unit
-  }
-```
+<<< ../snippets/from_md/syntax/effect_handlers/block_05.aivi{aivi}
+
 
 Use effect handlers when your code is already written against capability requirements.
 
@@ -181,16 +145,8 @@ If a handler value itself owns external state that needs teardown, model that st
 
 Handlers do not replace capability clauses; they work within them.
 
-```aivi
-readConfig : Effect ConfigError Config with { file.read, process.env.read }
+<<< ../snippets/from_md/syntax/effect_handlers/block_06.aivi{aivi}
 
-readConfigForTests : Effect ConfigError Config with { file.read, process.env.read }
-readConfigForTests =
-  with {
-    file.read = fixtureFiles,
-    process.env.read = fixtureEnv
-  } in readConfig
-```
 
 The inner scope above does not widen `readConfig`’s authority. It only changes which interpreter serves the already-required capabilities.
 

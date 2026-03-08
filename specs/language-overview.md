@@ -71,17 +71,8 @@ If you keep those rules in mind, most of the syntax becomes easier to read.
 
 ## Bindings and functions
 
-```aivi
-x = 42
-add : Int -> Int -> Int
-add = a b => a + b
+<<< ./snippets/from_md/language-overview/block_01.aivi{aivi}
 
-inc = add 1
-// Function application uses spaces, not parentheses.
-
-result = [1, 2, 3] |> map inc
-// `|>` passes the value on the left into the function on the right.
-```
 
 Useful reading rules:
 
@@ -96,22 +87,8 @@ See [Bindings & Scope](syntax/bindings) and [Functions & Pipes](syntax/functions
 
 ## Records, lists, and common data shapes
 
-```aivi
-User = {
-  id: Int,
-  name: Text,
-  email: Option Text
-}
+<<< ./snippets/from_md/language-overview/block_02.aivi{aivi}
 
-user = {
-  id: 1,
-  name: "Ada",
-  email: Some "ada@example.com"
-}
-
-names = ["Ada", "Linus", "Grace"]
-pair = (1, "ready")
-```
 
 AIVI makes data shapes explicit. `User` is a record type with exactly those fields. `Option Text` means the email may be missing, but that possibility is part of the type. A custom data type such as `Option` is often called an **algebraic data type (ADT)**, which simply means a type made from named cases like `Some` and `None`.
 
@@ -121,19 +98,8 @@ See [Primitive Types](syntax/types/primitive_types), [Records](syntax/types/clos
 
 ## Handling missing values and failures
 
-```aivi
-showEmail : User -> Text
-showEmail = user =>
-  user.email match
-    | Some email => email
-    | None       => "(no email on file)"
+<<< ./snippets/from_md/language-overview/block_03.aivi{aivi}
 
-parseAge : Text -> Result Text Int
-parseAge = text =>
-  textToInt text match
-    | Some age => Ok age
-    | None     => Err "Age must be a whole number"
-```
 
 This is a major AIVI habit:
 
@@ -163,13 +129,8 @@ See [Patching Records](syntax/patching).
 
 ## Working with collections
 
-```aivi
-activeNames =
-  users
-  |> filter (_.active)
-  |> map .name
-  |> sort
-```
+<<< ./snippets/from_md/language-overview/block_05.aivi{aivi}
+
 
 Read that as:
 
@@ -188,13 +149,8 @@ See [Predicates](syntax/predicates), [Collections](stdlib/core/collections), and
 
 Pure code and effectful code are separated.
 
-```aivi
-loadGreeting : Path -> Effect FileError Text
-loadGreeting = path => do Effect {
-  text <- file.read path          // effect: read from disk
-  pure "Loaded: {text}"
-}
-```
+<<< ./snippets/from_md/language-overview/block_06.aivi{aivi}
+
 
 `Effect FileError Text` means: this computation may perform effects, may fail with `FileError`, and if it succeeds it returns `Text`.
 
@@ -206,13 +162,8 @@ See [Effects](syntax/effects), [do Notation](syntax/do_notation), and [Resources
 
 ## Generators instead of loops
 
-```aivi
-evens = generate {
-  x <- [1 .. 10]
-  x -> x % 2 == 0   // guard: keep only even numbers
-  yield x
-}
-```
+<<< ./snippets/from_md/language-overview/block_07.aivi{aivi}
+
 
 Generators are a convenient way to describe a stream of values without writing a mutable loop.
 
@@ -222,14 +173,8 @@ See [Generators](syntax/generators).
 
 ## Modules and imports
 
-```aivi
-module my.app.users
-export loadUsers, User
+<<< ./snippets/from_md/language-overview/block_08.aivi{aivi}
 
-use aivi.file
-use aivi.json
-use aivi.text as Text
-```
 
 AIVI uses one module per file. Module paths and file names are written in `snake_case`.
 
@@ -239,14 +184,8 @@ See [Modules](syntax/modules).
 
 ## Domains and units
 
-```aivi
-domain Distance = {
-  (+) : Distance -> Distance -> Distance
-}
+<<< ./snippets/from_md/language-overview/block_09.aivi{aivi}
 
-trip = 5km + 800m
-// Units are part of the value, not just a naming convention.
-```
 
 Domains let operators and literals carry domain meaning. This is useful for units, time, finance, geometry, UI layout, and other areas where plain numbers are not descriptive enough.
 
@@ -256,13 +195,8 @@ See [Domains & Units](syntax/domains).
 
 ## External sources
 
-```aivi
-loadUsers : Effect LoadError (List User)
-loadUsers = do Effect {
-  users <- load (file.csv "users.csv")
-  pure users
-}
-```
+<<< ./snippets/from_md/language-overview/block_10.aivi{aivi}
+
 
 AIVI treats boundaries such as files, REST APIs, environment variables, and email as typed sources. The expected output type guides decoding and error reporting.
 
@@ -287,19 +221,8 @@ See [Decorators](syntax/decorators/).
 
 ## A tiny end-to-end example
 
-```aivi
-User = { id: Int, name: Text, active: Bool }
+<<< ./snippets/from_md/language-overview/block_11.aivi{aivi}
 
-activeUserNames : Effect LoadError (List Text)
-activeUserNames = do Effect {
-  users <- load (file.csv "users.csv")
-  pure (
-    users
-    |> filter (_.active)
-    |> map .name
-  )
-}
-```
 
 This single example shows much of the language style:
 

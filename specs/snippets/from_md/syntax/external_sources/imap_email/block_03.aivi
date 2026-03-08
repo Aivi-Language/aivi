@@ -1,0 +1,7 @@
+do Effect {
+  session    <- email.imapOpen config
+  _          <- email.imapSelect "INBOX" session
+  messageIds <- email.imapSearch "UNSEEN" session
+  messages   <- email.imapFetch messageIds session
+  pure messages
+}

@@ -1,0 +1,4 @@
+label : Result Text User -> Text
+label = result => result match
+  | Ok user  => "Hello, {user.name}!"
+  | Err text => "Could not load user: {text}"

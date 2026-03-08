@@ -1,0 +1,14 @@
+module aivi.url
+
+export Url, parse, toString, protocol, host, port, path, query, hash
+
+opaque Url = { ...}
+
+parse : Text -> Result UrlError Url
+parse = text => ... // validated constructor
+
+protocol : Url -> Text
+protocol = url => url.protocol // safe accessor
+
+host : Url -> Text
+host = url => url.host

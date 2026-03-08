@@ -1,0 +1,15 @@
+// Shorthand (preferred)
+~<gtk>
+  <GtkBox spacing="24" marginTop="12">
+    <GtkLabel label="Hello" />
+    <GtkButton label="Save" onClick={ Msg.Save } />
+  </GtkBox>
+</gtk>
+
+// Equivalent verbose form
+~<gtk>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="GtkLabel" props={{ label: "Hello" }} />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
+  </object>
+</gtk>

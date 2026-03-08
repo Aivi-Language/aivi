@@ -63,19 +63,8 @@ A custom decoder is just a function that turns a `JsonValue` into either a valid
 
 If you already have a JSON schema, you can attach it to a source declaration or validate a decoded object against it. This is useful when the JSON must match an external contract shared with other systems.
 
-```aivi
-@static
-userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json"
+<<< ../../snippets/from_md/stdlib/data/json/block_02.aivi{aivi}
 
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    // Reuse the checked schema when loading this source.
-    schema: source.schema.json userSchema
-  }
-```
 
 When the schema value is compile-time stable, the compiler can compare that schema with the source's result type before runtime. At runtime, `load` still uses the normal JSON decode pipeline and reports accumulated `DecodeError` values if the live data does not match.
 
@@ -87,16 +76,8 @@ Use `validateSchema` when you want a list of schema issues, and `migrateObject` 
 
 `JsonValue` represents any JSON value. It is the low-level format you work with before decoding into application-specific types.
 
-```aivi
-JsonValue
-= JsonNull
-| JsonBool Bool
-| JsonInt Int
-| JsonFloat Float
-| JsonString Text
-| JsonArray (List JsonValue)
-| JsonObject (List (Text, JsonValue))
-```
+<<< ../../snippets/from_md/stdlib/data/json/block_03.aivi{aivi}
+
 
 ### `JsonError`
 

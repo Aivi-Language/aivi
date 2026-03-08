@@ -1,0 +1,6 @@
+// Test case (description is mandatory)
+@test "description of what is tested"
+testName = ...
+
+// Test-only module
+@test module ModuleName

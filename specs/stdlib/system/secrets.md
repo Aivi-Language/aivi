@@ -35,13 +35,8 @@ SecretError = Text
 
 A structured encrypted value with the information needed to store and validate it.
 
-```aivi
-EncryptedBlob = {
-  keyId: SecretKeyId
-  algorithm: Text
-  ciphertext: Bytes
-}
-```
+<<< ../../snippets/from_md/stdlib/system/secrets/block_03.aivi{aivi}
+
 
 ## Core API
 

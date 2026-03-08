@@ -1,0 +1,6 @@
+fetch {
+  method: "POST"
+  url: url
+  headers: []
+  body: Some { grant_type: "authorization_code", code: code } // record becomes JSON body
+}

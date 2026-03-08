@@ -1,0 +1,8 @@
+badUrl = {
+  protocol: "http"
+  host: ""
+  port: None
+  path: ""
+  query: []
+  hash: None
+} // no validation happens here

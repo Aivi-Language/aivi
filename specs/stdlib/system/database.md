@@ -40,20 +40,8 @@ If this is your first pass, skim these and keep moving. The query and migration 
 
 If you want one concrete pattern to copy, start with an explicit connection and a single query:
 
-```aivi
-main = do Effect {
-  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
-  _      <- db.runMigrationsOn dbConn [userTable]
+<<< ../../snippets/from_md/stdlib/system/database/block_01.aivi{aivi}
 
-  activeUsersQuery =
-    db.from userTable
-    |> db.where_ _.active
-
-  activeUsers <- db.runQueryOn dbConn activeUsersQuery
-  _           <- db.close dbConn
-  pure activeUsers
-}
-```
 
 That gives you a complete first loop: connect, migrate, query, clean up.
 
@@ -140,57 +128,23 @@ If you are learning the query DSL, read the examples in this order:
 
 Start here with the one-table example. The later examples reuse the same ideas and add one new concept at a time.
 
-```aivi
-// Build a query value once
-activeUserNamesQuery : Query Text
-activeUserNamesQuery = do Query {
-  user <- db.from userTable
-  db.guard_ user.active          // keep only active users
-  db.queryOf user.name           // project one field
-}
+<<< ../../snippets/from_md/stdlib/system/database/block_02.aivi{aivi}
 
-// Run it with an explicit connection
-main = do Effect {
-  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
-  names  <- db.runQueryOn dbConn activeUserNamesQuery
-  _      <- db.close dbConn
-  pure names
-}
-```
 
 If you have already configured a default connection, you can use the ambient helpers instead:
 
-```aivi
-main = do Effect {
-  _     <- db.configure { driver: Sqlite, url: "app.db" }
-  _     <- db.runMigrations [userTable]
-  names <- db.runQuery activeUserNamesQuery
-  pure names
-}
-```
+<<< ../../snippets/from_md/stdlib/system/database/block_03.aivi{aivi}
+
 
 You can also build the same query with pipeline helpers:
 
-```aivi
-activeUserNamesQuery : Query Text
-activeUserNamesQuery =
-  db.from userTable
-  |> db.where_ _.active
-  |> db.select _.name
-```
+<<< ../../snippets/from_md/stdlib/system/database/block_04.aivi{aivi}
+
 
 Sorting and paging work well in the pipeline style because they read from top to bottom:
 
-```aivi
-recentTopNames : Query Text
-recentTopNames =
-  db.from userTable
-  |> db.where_ _.active
-  |> db.orderBy _.createdAt   // sort before slicing
-  |> db.offset 10             // skip the first page
-  |> db.limit 5               // then keep the next five rows
-  |> db.select _.name
-```
+<<< ../../snippets/from_md/stdlib/system/database/block_05.aivi{aivi}
+
 
 Inside a `do Query` block, apply those helpers to the source query on the right-hand side of `<-`.
 <!-- /quick-info -->
@@ -201,25 +155,8 @@ Inside a `do Query` block, apply those helpers to the source query on the right-
 Multi-table reads are written as repeated `db.from` binds plus `db.guard_` conditions that relate the rows.
 In the portable subset, that pattern lowers to a SQL cross join with pushed-down `WHERE` predicates. In practice, when the guard compares keys from the participating rows, that behaves like the inner joins most SQL users expect.
 
-```aivi
-Order = { id: Int, userId: Int, total: Int }
+<<< ../../snippets/from_md/stdlib/system/database/block_06.aivi{aivi}
 
-orderTable : Table Order
-orderTable = db.table "orders" [
-  { name: "id",     type: IntType, constraints: [AutoIncrement, NotNull], default: None }
-  { name: "userId", type: IntType, constraints: [NotNull],                default: None }
-  { name: "total",  type: IntType, constraints: [NotNull],                default: None }
-]
-
-activeUserOrders : Query { user: User, order: Order }
-activeUserOrders = do Query {
-  user  <- db.from userTable
-  db.guard_ user.active
-  order <- db.from orderTable
-  db.guard_ (order.userId == user.id)   // join condition
-  db.queryOf { user: user, order: order }
-}
-```
 
 This style currently covers inner-join-like workflows built from table sources and guard conditions.
 <!-- /quick-info -->
@@ -230,21 +167,8 @@ This style currently covers inner-join-like workflows built from table sources a
 `db.count` and `db.exists` are the simplest way to ask summary questions about a query.
 When their input query stays inside the lowered subset, they compile to SQL aggregate or existence checks. Otherwise, they use the older in-memory behavior.
 
-```aivi
-activeUserCountQuery : Query Int
-activeUserCountQuery = db.count (db.from userTable |> db.where_ _.active)
+<<< ../../snippets/from_md/stdlib/system/database/block_07.aivi{aivi}
 
-hasActiveUsers : Query Bool
-hasActiveUsers = db.exists (db.from userTable |> db.where_ _.active)
-
-main = do Effect {
-  dbConn       <- db.connect { driver: Sqlite, url: "app.db" }
-  [userCount]  <- db.runQueryOn dbConn activeUserCountQuery
-  [foundUsers] <- db.runQueryOn dbConn hasActiveUsers
-  _            <- db.close dbConn
-  pure (userCount, foundUsers)
-}
-```
 
 These helpers do not make an otherwise unsupported query lowerable; they only follow the behavior of the query they wrap.
 <!-- /quick-info -->

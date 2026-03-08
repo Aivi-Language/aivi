@@ -1,0 +1,5 @@
+machine MachineName = {
+         -> InitialState : initTransition { FieldDecl, ...}
+  StateA -> StateB       : transitionName { FieldDecl, ...}
+  StateB -> StateC       : anotherTransition { FieldDecl, ...}
+}

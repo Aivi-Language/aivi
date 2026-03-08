@@ -50,26 +50,8 @@ The expected result type (`User` here) tells the module what to decode from the 
 
 For more control, build a `Request` value step by step:
 
-```aivi
-use aivi.rest
+<<< ../../snippets/from_md/stdlib/network/rest/block_02.aivi{aivi}
 
-savePost : Url -> Text -> Effect Text SavedPost
-savePost = postUrl => accessToken => do Effect {
-  requestOptions = {
-    method: "POST"
-    url: postUrl
-    headers: [{ name: "Accept", value: "application/json" }]
-    body: Some (Plain "{\"title\":\"Hello\"}")
-    timeoutMs: Some 5000
-    retryCount: Some 2
-    bearerToken: Some accessToken
-    strictStatus: Some True
-  }
-
-  savedPost <- fetch requestOptions
-  pure savedPost
-}
-```
 
 Read the extra fields as policy choices:
 
@@ -92,20 +74,8 @@ Header = { name: Text, value: Text }
 
 `Request` gathers the options you can set for a REST call.
 
-```aivi
-Body = Plain Text | Form (List Header)
+<<< ../../snippets/from_md/stdlib/network/rest/block_04.aivi{aivi}
 
-Request = {
-  method: Text
-  url: Url
-  headers: List Header
-  body: Option Body
-  timeoutMs: Option Int
-  retryCount: Option Int
-  bearerToken: Option Text
-  strictStatus: Option Bool
-}
-```
 
 | Field | Type | Explanation |
 | --- | --- | --- |
