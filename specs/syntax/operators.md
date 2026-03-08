@@ -148,7 +148,7 @@ Sigils are named literal forms for values that would be awkward to write as plai
 
 <<< ../snippets/syntax/sigils/basic.aivi{aivi}
 
-Domains define many sigils. Some are compiler-provided and backed by standard-library domains:
+Some standard-library modules expose compiler-provided sigils:
 
 - `~u(https://example.com)` / `~url(https://example.com)` → [`Url`](../stdlib/system/url.md)
 - `~path[/usr/local/bin]` → [`Path`](../stdlib/system/path.md)

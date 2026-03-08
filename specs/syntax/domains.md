@@ -139,8 +139,6 @@ Define a domain when you want problem-specific syntax that stays type-safe and p
 <<< ../snippets/from_md/syntax/domains/block_03.aivi{aivi}
 
 
-In v0.1, sigils are not declared inside a `domain` block. Standard-library sigils are compiler-provided separately; see [Operators and Context](operators.md#118-sigils).
-
 ### Example: a simple color domain
 
 <<< ../snippets/from_md/syntax/domains/block_04.aivi{aivi}
@@ -169,12 +167,6 @@ Sometimes one idea applies to several carrier types, such as both `Vec2` and `Ve
 <<< ../snippets/from_md/syntax/domains/multi_carrier_domains.aivi{aivi}
 
 Reusing the same domain name across those declarations is normal. Resolution still starts from the carrier type on the left-hand side of the operator.
-
-## Domains and sigils
-
-Some standard-library modules that also export domains provide sigils. For example, URL-related APIs offer `~u(https://example.com)` and path APIs offer `~path[/usr/local/bin]`. These sigils are compile-time validated constructors for typed values, not raw strings.
-
-In v0.1, those sigils are compiler-provided for standard-library modules only. They are not declared inside a `domain` block, and user-defined domains cannot add new sigil forms.
 
 ## Domains are not implicit casts
 
