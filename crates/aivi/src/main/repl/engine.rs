@@ -1014,7 +1014,7 @@ fn plain_entry_text(entry: &TranscriptEntry) -> String {
 
 // ── Slash command helpers ─────────────────────────────────────────────────────
 
-const SLASH_COMMANDS: &[&str] = &[
+pub(crate) const SLASH_COMMANDS: &[&str] = &[
     "/help",
     "/use",
     "/types",
@@ -1042,6 +1042,36 @@ fn closest_command(input: &str) -> Option<&'static str> {
         })
         .min_by_key(|&(_, d)| d)
         .map(|(cmd, _)| cmd)
+}
+
+pub(crate) fn slash_command_suggestions(input: &str) -> Vec<&'static str> {
+    let trimmed = input.trim_start();
+    if !trimmed.starts_with('/') {
+        return Vec::new();
+    }
+    let command_fragment = trimmed.split_whitespace().next().unwrap_or(trimmed);
+    if trimmed.contains(char::is_whitespace) && command_fragment != "/" {
+        return Vec::new();
+    }
+
+    let mut suggestions: Vec<&'static str> = if command_fragment == "/" {
+        SLASH_COMMANDS.to_vec()
+    } else {
+        SLASH_COMMANDS
+            .iter()
+            .copied()
+            .filter(|cmd| cmd.starts_with(command_fragment))
+            .collect()
+    };
+    suggestions.sort_unstable();
+    suggestions
+}
+
+pub(crate) fn command_accepts_argument(command: &str) -> bool {
+    matches!(
+        command,
+        "/use" | "/types" | "/values" | "/functions" | "/history" | "/load" | "/openapi"
+    )
 }
 
 fn levenshtein(a: &str, b: &str) -> usize {
@@ -1430,6 +1460,18 @@ mod tests {
     #[test]
     fn closest_command_no_match_far_off() {
         assert!(closest_command("/zzzzzzzzz").is_none());
+    }
+
+    #[test]
+    fn slash_command_suggestions_show_all_for_slash() {
+        let suggestions = slash_command_suggestions("/");
+        assert!(suggestions.contains(&"/help"));
+        assert!(suggestions.contains(&"/values"));
+    }
+
+    #[test]
+    fn slash_command_suggestions_filter_by_prefix() {
+        assert_eq!(slash_command_suggestions("/va"), vec!["/values"]);
     }
 
     // ── /openapi command ────────────────────────────────────────────────────

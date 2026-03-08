@@ -10,10 +10,7 @@
 use std::io::{self, IsTerminal, Stdout};
 
 use crossterm::{
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
-        MouseEventKind,
-    },
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -29,7 +26,8 @@ use ratatui::{
 use aivi::AiviError;
 
 use super::engine::{
-    ReplEngine, ReplSnapshot, SymbolEntry, SymbolKind, TranscriptEntry, TranscriptKind,
+    command_accepts_argument, slash_command_suggestions, ReplEngine, ReplSnapshot, SymbolEntry,
+    SymbolKind, TranscriptEntry, TranscriptKind,
 };
 use super::{ColorMode, ReplOptions, SymbolPane};
 
@@ -205,6 +203,19 @@ impl Palette {
         }
     }
 
+    fn suggestion(self) -> Style {
+        if self.use_color {
+            Style::default().fg(Color::Cyan)
+        } else {
+            Style::default()
+        }
+    }
+
+    fn selected_suggestion(self) -> Style {
+        self.suggestion()
+            .add_modifier(Modifier::REVERSED | Modifier::BOLD)
+    }
+
     /// Box-drawing characters: Unicode when colour is enabled, ASCII when degraded.
     #[allow(dead_code)]
     pub(crate) fn box_chars(self) -> BoxChars {
@@ -265,6 +276,7 @@ struct TuiState {
     quit: bool,
     snapshot: ReplSnapshot,
     palette: Palette,
+    suggestion_index: usize,
 }
 
 impl TuiState {
@@ -279,6 +291,7 @@ impl TuiState {
             quit: false,
             snapshot,
             palette,
+            suggestion_index: 0,
         }
     }
 
@@ -290,6 +303,7 @@ impl TuiState {
         self.input.insert(self.cursor, c);
         self.cursor += c.len_utf8();
         self.scroll_offset = 0;
+        self.suggestion_index = 0;
     }
 
     fn delete_back(&mut self) {
@@ -303,6 +317,7 @@ impl TuiState {
             .unwrap_or(0);
         self.input.drain(prev..self.cursor);
         self.cursor = prev;
+        self.suggestion_index = 0;
     }
 
     fn history_up(&mut self) {
@@ -320,6 +335,7 @@ impl TuiState {
         self.history_idx = Some(next);
         self.input = self.history[next].clone();
         self.cursor = self.input.len();
+        self.suggestion_index = 0;
     }
 
     fn history_down(&mut self) {
@@ -332,6 +348,7 @@ impl TuiState {
             self.input = self.history[idx + 1].clone();
         }
         self.cursor = self.input.len();
+        self.suggestion_index = 0;
     }
 
     fn record_history(&mut self, input: String) {
@@ -342,6 +359,55 @@ impl TuiState {
         }
         self.history_idx = None;
         self.history_saved.clear();
+    }
+
+    fn command_suggestions(&self) -> Vec<&'static str> {
+        visible_command_suggestions(&self.input)
+    }
+
+    fn has_command_suggestions(&self) -> bool {
+        !self.command_suggestions().is_empty()
+    }
+
+    fn selected_suggestion(&self) -> Option<&'static str> {
+        let suggestions = self.command_suggestions();
+        if suggestions.is_empty() {
+            None
+        } else {
+            Some(suggestions[self.suggestion_index.min(suggestions.len() - 1)])
+        }
+    }
+
+    fn suggestion_up(&mut self) {
+        let suggestions = self.command_suggestions();
+        if suggestions.is_empty() {
+            return;
+        }
+        self.suggestion_index = self
+            .suggestion_index
+            .checked_sub(1)
+            .unwrap_or(suggestions.len() - 1);
+    }
+
+    fn suggestion_down(&mut self) {
+        let suggestions = self.command_suggestions();
+        if suggestions.is_empty() {
+            return;
+        }
+        self.suggestion_index = (self.suggestion_index + 1) % suggestions.len();
+    }
+
+    fn accept_command_suggestion(&mut self) -> bool {
+        let Some(suggestion) = self.selected_suggestion() else {
+            return false;
+        };
+        self.input = suggestion.to_owned();
+        if command_accepts_argument(suggestion) {
+            self.input.push(' ');
+        }
+        self.cursor = self.input.len();
+        self.suggestion_index = 0;
+        true
     }
 }
 
@@ -395,7 +461,9 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
 
     enable_raw_mode().map_err(AiviError::Io)?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture).map_err(AiviError::Io)?;
+    // Do not enable mouse capture: terminals need normal mouse behavior so users can
+    // select and copy transcript text from the REPL.
+    execute!(stdout, EnterAlternateScreen).map_err(AiviError::Io)?;
 
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AiviError::Io)?;
@@ -405,11 +473,7 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
 
     // Always restore — even if event_loop returns an error.
     let _ = disable_raw_mode();
-    let _ = execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture,
-    );
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     let _ = terminal.show_cursor();
 
     result
@@ -434,9 +498,6 @@ fn event_loop(
         match event::read().map_err(AiviError::Io)? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 handle_key(key.code, key.modifiers, engine, state)?;
-            }
-            Event::Mouse(m) => {
-                handle_mouse(m.kind, state);
             }
             Event::Resize(_, _) => {
                 // Re-draw happens automatically at the top of the loop.
@@ -471,6 +532,7 @@ fn handle_key(
             state.input.clear();
             state.cursor = 0;
             state.history_idx = None;
+            state.suggestion_index = 0;
         }
 
         // Clear transcript display (session state survives).
@@ -485,6 +547,7 @@ fn handle_key(
             let input = std::mem::take(&mut state.input);
             state.cursor = 0;
             state.scroll_offset = 0;
+            state.suggestion_index = 0;
             state.record_history(input.clone());
             state.snapshot = engine.submit(&input)?;
         }
@@ -494,9 +557,21 @@ fn handle_key(
             state.push_char('\n');
         }
 
-        // History navigation.
-        KeyCode::Up => state.history_up(),
-        KeyCode::Down => state.history_down(),
+        // History navigation or command suggestion selection.
+        KeyCode::Up => {
+            if state.has_command_suggestions() {
+                state.suggestion_up();
+            } else {
+                state.history_up();
+            }
+        }
+        KeyCode::Down => {
+            if state.has_command_suggestions() {
+                state.suggestion_down();
+            } else {
+                state.history_down();
+            }
+        }
 
         // Transcript scrolling.
         KeyCode::PageUp => {
@@ -506,10 +581,12 @@ fn handle_key(
             state.scroll_offset = state.scroll_offset.saturating_sub(5);
         }
 
-        // Symbol pane toggle / close.
+        // Accept a command suggestion, otherwise toggle the symbol pane.
         KeyCode::Tab => {
-            engine.toggle_symbol_pane();
-            state.snapshot = engine.snapshot();
+            if !state.accept_command_suggestion() {
+                engine.toggle_symbol_pane();
+                state.snapshot = engine.snapshot();
+            }
         }
         KeyCode::Esc => {
             engine.close_symbol_pane();
@@ -557,18 +634,6 @@ fn handle_key(
     Ok(())
 }
 
-fn handle_mouse(kind: MouseEventKind, state: &mut TuiState) {
-    match kind {
-        MouseEventKind::ScrollUp => {
-            state.scroll_offset = state.scroll_offset.saturating_add(2);
-        }
-        MouseEventKind::ScrollDown => {
-            state.scroll_offset = state.scroll_offset.saturating_sub(2);
-        }
-        _ => {}
-    }
-}
-
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 fn render(frame: &mut Frame, state: &TuiState) {
@@ -577,7 +642,8 @@ fn render(frame: &mut Frame, state: &TuiState) {
     let show_pane = snap.symbol_pane.is_some();
 
     // Vertical split: main area / status bar / input area.
-    let input_height = (count_input_lines(&state.input) as u16).clamp(1, 5) + 2; // +2 for borders
+    let suggestion_count = visible_command_suggestions(&state.input).len() as u16;
+    let input_height = (count_input_lines(&state.input) as u16).clamp(1, 5) + suggestion_count + 2;
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -685,7 +751,7 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
     let after_start = state.cursor + cursor_ch.map_or(0, char::len_utf8);
     let after = &state.input[after_start.min(state.input.len())..];
 
-    let line = Line::from(vec![
+    let mut lines = vec![Line::from(vec![
         Span::styled(format!("{prompt_char} "), palette.prompt()),
         Span::styled(before.to_string(), palette.input_text()),
         Span::styled(
@@ -693,13 +759,33 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
             Style::default().add_modifier(Modifier::REVERSED),
         ),
         Span::styled(after.to_string(), palette.input_text()),
-    ]);
+    ])];
+
+    let suggestions = visible_command_suggestions(&state.input);
+    let selected_index = state
+        .suggestion_index
+        .min(suggestions.len().saturating_sub(1));
+    for (idx, suggestion) in suggestions.iter().enumerate() {
+        let style = if idx == selected_index {
+            palette.selected_suggestion()
+        } else {
+            palette.suggestion()
+        };
+        lines.push(Line::from(vec![
+            Span::styled("  ", palette.hint()),
+            Span::styled(*suggestion, style),
+            Span::styled(
+                if idx == 0 { "  [Tab: accept]" } else { "" },
+                palette.hint(),
+            ),
+        ]));
+    }
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(palette.border());
     frame.render_widget(
-        Paragraph::new(Text::from(line))
+        Paragraph::new(Text::from(lines))
             .block(block)
             .wrap(Wrap { trim: false }),
         area,
@@ -814,6 +900,13 @@ pub(crate) fn count_input_lines(input: &str) -> usize {
     }
 }
 
+fn visible_command_suggestions(input: &str) -> Vec<&'static str> {
+    slash_command_suggestions(input)
+        .into_iter()
+        .take(5)
+        .collect()
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -856,6 +949,29 @@ mod tests {
     #[test]
     fn count_lines_empty_is_one() {
         assert_eq!(count_input_lines(""), 1);
+    }
+
+    #[test]
+    fn visible_command_suggestions_show_matches() {
+        let suggestions = visible_command_suggestions("/va");
+        assert_eq!(suggestions, vec!["/values"]);
+    }
+
+    #[test]
+    fn tab_completion_accepts_command_and_adds_space_for_args() {
+        let snapshot = ReplSnapshot {
+            transcript: Vec::new(),
+            symbol_pane: None,
+            symbols: Vec::new(),
+            turn: 0,
+        };
+        let palette = Palette::new(ColorMode::Never, true);
+        let mut state = TuiState::new(snapshot, palette);
+        state.input = "/op".to_owned();
+        state.cursor = state.input.len();
+
+        assert!(state.accept_command_suggestion());
+        assert_eq!(state.input, "/openapi ");
     }
 
     #[test]

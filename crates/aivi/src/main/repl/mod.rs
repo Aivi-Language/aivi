@@ -71,11 +71,11 @@ pub(crate) fn print_repl_help() {
         KEYBOARD SHORTCUTS:\n\
         \x20 Enter          Submit input\n\
         \x20 Shift+Enter    Insert newline (multi-line input)\n\
-        \x20 ↑ / ↓          Navigate history\n\
+        \x20 ↑ / ↓          Navigate history or command suggestions\n\
         \x20 Ctrl+L         Clear transcript\n\
         \x20 Ctrl+C         Cancel current input\n\
         \x20 Ctrl+D         Exit (on empty input)\n\
-        \x20 Tab            Toggle symbol pane\n\
+        \x20 Tab            Accept command suggestion or toggle symbol pane\n\
         \x20 Esc            Close symbol pane"
     );
 }
