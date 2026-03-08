@@ -7,16 +7,6 @@ It is meant for work that should survive process restarts or be coordinated acro
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.scheduler<span class="domain-badge">domain</span></div>
 
-## Quick chooser
-
-| If your main question is... | Use... |
-| --- | --- |
-| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
-| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
-| “What calendar date comes next?” | [`aivi.chronos.calendar`](./calendar.md) |
-| “What local time should this show in a region?” | [`aivi.chronos.timezone`](./timezone.md) |
-| “How should jobs keep happening, even across restarts?” | `aivi.chronos.scheduler` |
-
 ## When to use `Scheduler`
 
 Use this domain when a simple in-process timer is not enough. Typical cases include:

@@ -1,1 +1,1 @@
-findUser : Int -> Effect LoadError (Option User)
+findUser: Int -> Effect LoadError (Option User)

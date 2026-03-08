@@ -7,16 +7,6 @@ That is especially helpful for timeouts, retry delays, sleeps, polling intervals
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.duration<span class="domain-badge">domain</span></div>
 
-## Quick chooser
-
-| If your main question is... | Use... |
-| --- | --- |
-| “How long should I wait?” | `aivi.chronos.duration` |
-| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
-| “What calendar date comes next?” | [`aivi.chronos.calendar`](./calendar.md) |
-| “What local time should this show in a region?” | [`aivi.chronos.timezone`](./timezone.md) |
-| “How should jobs keep happening over time?” | [`aivi.chronos.scheduler`](./scheduler.md) |
-
 ## When to use `Duration`
 
 Use this domain for fixed spans of elapsed time, such as:

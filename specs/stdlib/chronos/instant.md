@@ -11,16 +11,6 @@ That makes it the right fit for audit timestamps, event ordering, deadlines, and
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.instant<span class="domain-badge">domain</span></div>
 
-## Quick chooser
-
-| If your main question is... | Use... |
-| --- | --- |
-| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
-| “Exactly when did this happen?” | `aivi.chronos.instant` |
-| “What calendar date should users see?” | [`aivi.chronos.calendar`](./calendar.md) |
-| “What local time is this in Berlin or New York?” | [`aivi.chronos.timezone`](./timezone.md) |
-| “How should jobs keep happening over time?” | [`aivi.chronos.scheduler`](./scheduler.md) |
-
 ## When to use `Instant`
 
 Reach for `Instant` when you need:

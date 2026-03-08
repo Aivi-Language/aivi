@@ -7,16 +7,6 @@ It exists because calendar arithmetic is full of edge cases. Months have differe
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">domain</span></div>
 
-## Quick chooser
-
-| If your main question is... | Use... |
-| --- | --- |
-| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
-| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
-| “What calendar date comes next?” | `aivi.chronos.calendar` |
-| “What local time should this show in a region?” | [`aivi.chronos.timezone`](./timezone.md) |
-| “How should work repeat durably?” | [`aivi.chronos.scheduler`](./scheduler.md) |
-
 ## When to use `Calendar`
 
 Reach for `aivi.chronos.calendar` when your logic cares about date-based rules people expect from calendars:

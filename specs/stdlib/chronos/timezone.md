@@ -9,16 +9,6 @@ They are the right tools when local time matters: meeting times, user-facing sch
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.timezone<span class="domain-badge">domain</span></div>
 
-## Quick chooser
-
-| If your main question is... | Use... |
-| --- | --- |
-| “How long should I wait?” | [`aivi.chronos.duration`](./duration.md) |
-| “Exactly when did this happen?” | [`aivi.chronos.instant`](./instant.md) |
-| “What calendar date comes next?” | [`aivi.chronos.calendar`](./calendar.md) |
-| “What local time is this in a named place?” | `aivi.chronos.timezone` |
-| “How should jobs keep happening over time?” | [`aivi.chronos.scheduler`](./scheduler.md) |
-
 ## When to use `TimeZone`
 
 Reach for this module when you need to:
