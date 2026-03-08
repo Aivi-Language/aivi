@@ -43,7 +43,7 @@ In this module, `Context` is `List (Text, Text)`: a simple list of key-value pai
 - Prefer stable keys such as `requestId`, `userId`, and `component` so downstream tools can group similar events.
 - Use `info` for normal milestones, `warn` for unusual situations, and `error` when work failed or user-visible behavior is affected.
 
-The runtime provides a default handler that writes logs to standard output. Custom handlers can be supplied through effect handlers when you need to forward logs somewhere else.
+The runtime provides a default handler that writes one JSON log entry per line. `trace`, `debug`, and `info` go to standard output, while `warn` and `error` go to standard error. Custom handlers can be supplied through effect handlers when you need to forward logs somewhere else.
 
 ## Type Signatures
 

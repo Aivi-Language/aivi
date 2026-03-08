@@ -7,6 +7,8 @@ This is typed templating, not string templating: the result is a `VNode`, so the
 <!-- /quick-info -->
 <div class="import-badge">use aivi.ui</div>
 
+For the underlying `VNode`/`Attr` data model, see [UI Virtual DOM](./vdom.md). For the parser-level overview of structured sigils, see [Syntax: operators](../../syntax/operators.md#html-and-gtk-sigils).
+
 ## What it is for
 
 Use the HTML sigil when you want browser-style UI structure without building `VNode` constructors by hand. It is especially helpful for:
@@ -18,52 +20,100 @@ Use the HTML sigil when you want browser-style UI structure without building `VN
 
 ## Splices
 
-Inline expressions use `{ expr }`:
+A child splice uses `{ expr }` inside element content. If `expr` already has type `VNode msg`, it is inserted directly. If it is `Text` or another `ToText` value, the compiler coerces it into a `TextNode` and inserts `toText` when needed.
 
-<<< ../../snippets/from_md/stdlib/ui/html/splices_02.aivi{aivi}
+```aivi
+use aivi.ui
 
-If the splice is `Text` (or implements `ToText`), it is coerced by wrapping it with `TextNode` and inserting `toText` when needed.
+name = "AIVI"
+count = 3
 
-In attribute position, `...={expr}` is type-checked against the attribute's expected type. For example, `style` expects a record rather than a raw CSS string.
+view =
+  ~<html>
+    <section class="card">
+      <h1>
+        Hello { name }
+      </h1>
+      <p>
+        Open tabs: { count }
+      </p>
+    </section>
+  </html>
+```
 
-<<< ../../snippets/from_md/stdlib/ui/html/splices_02.aivi{aivi}
+In attribute position, write `name={ expr }`. The expression is type-checked against that attribute's expected type. Typed attributes keep their specific types, while generic attributes elaborate against `Text`.
+
+```aivi
+use aivi.ui
+use aivi.ui.layout
+
+Msg = SearchChanged Text | Submit
+
+query = "AIVI"
+count = 3
+
+view =
+  ~<html>
+    <div
+      class="search"
+      style={ { padding: 12px, width: 50% } }
+      data-count={ count }
+    >
+      <input value={ query } onInput={ SearchChanged } />
+      <button onClick={ Submit }>
+        Search
+      </button>
+    </div>
+  </html>
+```
 
 ## Attributes
 
-Some HTML-looking attributes lower to more specific typed constructors:
+The sigil special-cases a small set of common HTML-looking attributes:
 
 - `class="..."` → `Class "..."`
 - `id="..."` → `Id "..."`
 - `style={ expr }` → `Style expr` (expects a record; see `aivi.ui.layout` for units such as `10px` and `50%`)
 - `onClick={ msg }` → `OnClick msg`
+- `onClickE={ f }` → `OnClickE f` where `f : Click -> msg`
 - `onInput={ f }` → `OnInput f` where `f : Text -> msg`
+- `onInputE={ f }` → `OnInputE f` where `f : Input -> msg`
+- `onKeyDown={ f }`, `onKeyUp={ f }`, `onPointerDown={ f }`, `onPointerUp={ f }`, and `onPointerMove={ f }` lower to their matching typed handlers
+- `onFocus={ msg }` and `onBlur={ msg }` carry plain messages
 
-Any attribute without a special typed lowering becomes `Attr name value`:
+Any other attribute form becomes `Attr name value`:
 
 - `title="Hello"` → `Attr "title" "Hello"`
 - `data-x={ expr }` → `Attr "data-x" (toText expr)`
+- `disabled` → `Attr "disabled" "true"`
+
+The special cases are syntax-sensitive. For example, `class="card"` lowers to `Class "card"`, but `class={ dynamicClass }` falls back to `Attr "class" (toText dynamicClass)`.
+
+For the event payload record shapes behind `Click`, `Input`, keyboard, and pointer handlers, see [UI Virtual DOM](./vdom.md#event-payloads).
 
 ## Component tags
 
-Uppercase or dotted tag names are treated as component calls instead of intrinsic HTML elements:
+Uppercase or dotted tag names are treated as component calls instead of intrinsic HTML elements. They use record-based lowering:
 
 - `<Card ...>...</Card>`
 - `<Ui.Card ...>...</Ui.Card>`
 
 Lowering shape:
 
-- `Card [attrs...] [children...]`
-- `Ui.Card [attrs...] [children...]`
+- `Card { title: "Hello", children: [...] }`
+- `Ui.Card { title: "Hello", children: [...] }`
+
+All attributes become record fields, and child nodes become a `children` field.
 
 Lowercase tags still lower to intrinsic `Element` nodes.
 
 ## Keys
 
-The `key=` attribute is special-cased so list rendering can keep stable identity:
+On intrinsic lowercase tags, the `key=` attribute is special-cased so list rendering can keep stable identity:
 
 - `<li key="k">...</li>` lowers to `Keyed "k" (Element "li" ...)`
 
-Use keys when list items may move, be inserted, or be removed and you want diffing to stay stable.
+Use keys when list items may move, be inserted, or be removed and you want diffing to stay stable. On component tags, `key` is just another record field because component tags use record-based lowering.
 
 ## Whitespace
 
@@ -71,4 +121,4 @@ Whitespace-only text between tags is ignored. That lets you indent templates cle
 
 ## Multiple roots
 
-`~<html>...</html>` must contain exactly one top-level node. If you need several siblings, wrap them in a single root element such as a `<div>` or another layout container.
+`~<html>...</html>` must contain exactly one top-level node. If you need several siblings, wrap them in a single root element such as a `<div>` or another layout container. Multiple roots produce diagnostic `E1601`.

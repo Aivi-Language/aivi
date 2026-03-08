@@ -29,7 +29,7 @@ Effect sequencing is usually written with `do Effect { ... }`, but the underlyin
 - `bind : Effect E A -> (A -> Effect E B) -> Effect E B` — sequence one effect after another
 - `fail : E -> Effect E A` — stop with an error value
 
-In everyday code, most people mainly use `do Effect { ... }`, `pure`, and `attempt`. The lower-level names are still worth knowing because they explain what the block syntax expands to.
+In everyday code, most people mainly use `do Effect { ... }`, `pure`, and `attempt`. The lower-level names are still worth knowing because they explain what the block syntax expands to. The later sections of this page focus on the surface syntax built from these operations.
 
 For handling an effect error as data, the standard library provides:
 
@@ -154,6 +154,14 @@ Restrictions:
 
 In `do Effect { ... }`, this common pattern is allowed without `_ <-`:
 
+```aivi
+do Effect {
+  _ <- if cond then print "branch" else pure Unit
+}
+```
+
+This is equivalent to the shorter statement form:
+
 <<< ../snippets/from_md/syntax/effects/if_else_unit_as_a_statement.aivi{aivi}
 
 Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches still have an effect type.
@@ -182,19 +190,21 @@ An explicit `do Effect { ... }` is itself an expression of type `Effect E A`. If
 
 <<< ../snippets/from_md/syntax/effects/nested_do_effect_expressions_inside_if.aivi{aivi}
 
-If you instead write `if ... then do Effect { ... } else do Effect { ... }` without binding it, the result of the `if` is an `Effect ...` value, not a sequence of steps in the surrounding block, unless it is the final expression of that surrounding `do Effect { ... }`.
+If you instead write `if ... then do Effect { ... } else do Effect { ... }` without binding it, the `if` expression evaluates to an `Effect ...` value. It only becomes the next step of the surrounding block when it is used in a bind or returned as that block's final expression.
 
 ## 9.3 Effects and patching
 
+A patch is still a pure value, even when you use it in effectful code. The effectful part is obtaining the record to patch or deciding when to persist the updated record; the patch expression itself stays an ordinary expression you can name and reuse.
+
 <<< ../snippets/from_md/syntax/effects/effects_and_patching.aivi{aivi}
 
-Patches are pure values. Compute or load the record first, then apply the patch where the record value is available.
+In practice, compute or load the base record first, then apply the patch where that record value is available.
 
 ## 9.4 Comparison and Translation
 
 `do Effect` is the main surface syntax for sequencing impure operations. It translates directly to monadic binds.
 
-Example translations:
+Short translations:
 
 <<< ../snippets/from_md/syntax/effects/comparison_and_translation_01.aivi{aivi}
 
@@ -204,7 +214,7 @@ Example translations:
 
 <<< ../snippets/from_md/syntax/effects/comparison_and_translation_04.aivi{aivi}
 
-Example translation:
+Worked translation:
 
 <<< ../snippets/from_md/syntax/effects/comparison_and_translation_05.aivi{aivi}
 
@@ -234,7 +244,7 @@ Effect blocks combine well with pipelines and pattern matching, which makes ever
 
 ### Desugaring
 
-Inside effect blocks, `loop` desugars to a local recursive function at parse time, using the same basic idea as in [Generators § 7.6](generators.md#76-tail-recursive-loops):
+Inside effect blocks, `loop` desugars to a local recursive function at parse time, using the same basic idea as in [Generators § 7.5](generators.md#75-tail-recursive-loops):
 
 ```text
 loop pat = init => { body }

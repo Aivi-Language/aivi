@@ -41,11 +41,13 @@ Generators use three common statement forms:
 - `name = expr` is a plain pure local binding
 - `item -> predicate` keeps the current `item` only when the predicate is true
 
-In a guard, the current item is also available implicitly. That is why these forms are equivalent:
+In a guard, the current item is also available implicitly, using the same rule as [Predicates § 4.2](predicates.md#42-implicit-binding-rule): bare field names resolve to fields on the current item. That is why these forms are equivalent, and why `email` below means `u.email`:
 
 <<< ../snippets/from_md/syntax/generators/guards_and_predicates_01.aivi{aivi}
 
 A small but important distinction: `.email` is an accessor function (`user => user.email`). It is useful for `map .email`, but in a guard you usually want a boolean-valued expression such as `email`, `_.email`, or `user.email`.
+
+For example, if `xs` contains records with a `price` field, this keeps only the items whose price is above `80`:
 
 <<< ../snippets/from_md/syntax/generators/guards_and_predicates_02.aivi{aivi}
 
@@ -88,11 +90,15 @@ A **Cartesian product** is the combination of every item from one sequence with 
 
 ### Filtering and transformation together
 
+Assume `users` is a sequence of user records with `active`, `tier`, `name`, and `email` fields. This example keeps only active premium users whose email passes validation, then yields a smaller normalized record for each matching user:
+
 <<< ../snippets/from_md/syntax/generators/complex_filtering_and_transformation.aivi{aivi}
 
 ### Infinite sequences
 
 <<< ../snippets/from_md/syntax/generators/expressive_infinity.aivi{aivi}
+
+This generator produces the Fibonacci sequence forever. The loop state `(a, b)` starts at `(0, 1)`, yields `a`, then continues with the next pair `(b, a + b)`. Because every iteration reaches `recurse`, the generator does not terminate on its own; consumers stop by taking only the prefix they need.
 
 ## 7.5 Tail-recursive loops
 

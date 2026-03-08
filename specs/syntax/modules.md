@@ -4,21 +4,23 @@ Modules are how AIVI organizes code, controls visibility, and groups related def
 
 ## 10.1 Module Definitions
 
-A module declaration names the file's module and starts the module body.
+A module declaration names the file's module path and starts the module body.
 
 Modules use a flat form, so most files stay readable without an extra indentation level.
 
 <<< ../snippets/from_md/syntax/modules/module_definitions.aivi{aivi}
 
+This example uses the **export-list form**: declare the module, list the public names near the top, then define them anywhere later in the file. Names omitted from the export list stay private to this file.
+
 Practical rules:
 
 - there is exactly one module per file
-- the `module` declaration is the first non-empty item in the file, after any module decorators
+- the `module` declaration is the first non-empty item in the file, after any module decorators such as `@no_prelude`
 - the module body continues to end-of-file
 
-## 10.2 Module Pathing (Dot Separator)
+## 10.2 Module Paths (Dot Separator)
 
-Module names use dot-separated paths. The path is the module's logical namespace, not just a filename.
+Module names use dot-separated paths. The path is the module's logical namespace, not just a filename, and each path segment uses `snake_case`.
 
 Common conventions:
 
@@ -38,15 +40,17 @@ This is the direct form: import a module so you can use its exported names.
 
 <<< ../snippets/from_md/syntax/modules/basic_import.aivi{aivi}
 
-### Selective / Selective Hiding
+This minimal form brings the module's ordinary exported names into scope for the rest of the file. Domain operators are a separate opt-in described in [10.4 Domain Exports](#104-domain-exports).
 
-Use selective imports when you want to make dependencies obvious, or `hiding` when you want almost everything except a few names.
+### Selective Imports & Hiding
+
+Use a selective import when you want a short, explicit list of dependencies. Use `hiding` when you want most of a module's exports except for a few conflicting names.
 
 <<< ../snippets/from_md/syntax/modules/selective_selective_hiding.aivi{aivi}
 
 ### Renaming / Aliasing
 
-Aliasing helps when a module name is long or when two imports would otherwise collide.
+Aliasing helps when a module name is long or when two imports would otherwise collide. You can alias either a whole module path or an individual imported name.
 
 ```aivi
 use company.project.analytics as Analytics // shorter name inside this file
@@ -57,7 +61,7 @@ use company.project.analytics as Analytics // shorter name inside this file
 Compiler checks:
 
 - importing a missing module or symbol is a compile-time error
-- unused imports produce a warning, unless the import is needed only for a domain side effect
+- unused imports produce a warning, unless the import is needed only to activate a domain's operators or literals (see [10.4 Domain Exports](#104-domain-exports))
 
 ## 10.4 Domain Exports
 
@@ -67,19 +71,20 @@ Exporting a domain makes its carrier type, delta types, and operators available 
 
 <<< ../snippets/from_md/syntax/modules/domain_exports.aivi{aivi}
 
-A consuming module must import the domain explicitly when it wants the domain-resolved operators:
+A plain module import does not automatically activate exported domains. A consuming module must import the domain explicitly when it wants the domain-resolved operators or literals:
 
 - `use geo.vector (domain Vector)` imports the domain behavior
 - ordinary `use geo.vector` does not automatically activate that domain's operators
 
+This is why a domain import can be intentional even when no imported identifier is referenced directly in the file.
+
 ## 10.4.1 Inline export declarations
 
-You can put `export` directly in front of a declaration when the file mostly defines public items.
+In addition to the export-list form shown in [10.1](#101-module-definitions), you can put `export` directly in front of a declaration when the file mostly defines public items.
 
 <<< ../snippets/from_md/syntax/modules/block_02.aivi{aivi}
 
-
-The export-list form is still useful for facade modules and re-exports.
+The export-list form from [10.1](#101-module-definitions) is still useful for facade modules and re-exports, where one compact public surface is easier to scan than many inline `export` markers.
 
 ## 10.5 File-Scoped Modules (No Nesting)
 
@@ -98,11 +103,13 @@ A module can act as a small public facade that re-exports a curated API from sev
 
 ## 10.6 The Prelude
 
-Every module implicitly starts with `use aivi.prelude`. This saves boilerplate for the most common types, functions, and default domains.
+Every module implicitly starts with `use aivi.prelude`, unless it has `@no_prelude` immediately above the module declaration. This saves boilerplate for the most common types, functions, and default domains.
 
 If you are writing low-level code and want a completely explicit environment, opt out with:
 
 <<< ../snippets/from_md/syntax/modules/the_prelude.aivi{aivi}
+
+Once you opt out, import every required module, name, and domain explicitly.
 
 ## 10.7 Circular Dependencies
 
@@ -144,6 +151,6 @@ Use module swapping for code structure. Use runtime configuration for values tha
 
 That configuration should be injected as data, often through the `Env` source.
 
-See [12.4 Environment Sources](external_sources.md#124-environment-sources-env) for details.
+See [12.4 Environment Sources (Env)](external_sources.md#124-environment-sources-env) for details.
 
 <<< ../snippets/from_md/syntax/modules/runtime_configuration_env_vars.aivi{aivi}

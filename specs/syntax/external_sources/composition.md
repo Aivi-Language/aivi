@@ -1,7 +1,7 @@
 # Source Composition
 
 <!-- quick-info: {"kind":"topic","name":"source composition"} -->
-Source composition standardizes the extra steps around a source read: decode, transform, validate, retry, cache, and observe.
+Source composition describes how extra stages wrap a source read. Today, the verified core is decode, transform, and validate; this page also specifies the wider execution-policy model for retry, timeout, caching, provenance, and observation.
 <!-- /quick-info -->
 
 Source composition is for the cases where "just load the data" is not enough.
@@ -49,17 +49,28 @@ Conceptually:
 
 <<< ../../snippets/from_md/syntax/external_sources/composition/block_01.aivi{aivi}
 
+The composition model is expressed with pure combinators. The currently verified surface is:
 
-The public surface is a set of pure combinators:
+```aivi
+source.transform : (A -> B) -> Source K A -> Source K B
+source.validate :
+  (A -> Validation (List DecodeError) B) ->
+  Source K A ->
+  Source K B
+```
+
+The wider design also reserves policy combinators for retry, timeout, cache, provenance, and observation:
 
 <<< ../../snippets/from_md/syntax/external_sources/composition/block_02.aivi{aivi}
 
 
-These functions do not perform I/O. They only return a richer source description for `load` to execute later.
+None of these functions perform I/O. They only return a richer source description for `load` to execute later.
 
 ## How `load` executes a composed source
 
-Even if you write the combinators in a different order, `load` follows one canonical runtime sequence:
+Today, the verified runtime behavior is the decode → transform → validate subset. The full composition model below is still useful because it defines the canonical order that connector docs and future runtime work should share.
+
+Even if you write the combinators in a different order, the full model for `load` follows one canonical runtime sequence:
 
 1. **seed provenance**
    - assign source identity, connector kind, schema fingerprint when known, and user labels;
@@ -138,6 +149,8 @@ Validation failures accumulate as `DecodeError` values and do not trigger retry.
 
 ## Retry, timeout, and backoff
 
+The policy stages in this section are part of the broader composition model. They are specified here so source guides can share one execution story, even though the currently verified runtime subset is still `source.transform` and `source.validate`.
+
 Retry policy is source metadata, not a second effect system:
 
 ```aivi
@@ -177,6 +190,8 @@ This makes it safe for helpers to provide defaults while allowing call sites to 
 
 ## Caching
 
+Like retry and timeout, caching belongs to the broader composition model rather than the currently verified transform/validate subset.
+
 Caching is read-through reuse of the final validated value.
 
 That means a cache entry stores the value **after** decode, transform, and validate have all succeeded.
@@ -191,6 +206,8 @@ The public contract is intentionally small:
 - `@static` embedded sources already behave like permanently available values.
 
 ## Provenance and observability
+
+Provenance and observation are specified here as source-level policy layers so all connectors can share the same vocabulary once runtime support is wired through consistently.
 
 Every composed source carries provenance metadata even when `load` still returns only `A`.
 
@@ -216,7 +233,7 @@ Observation must:
 
 ## Testing composed sources
 
-Composition does not need a special mocking API. Tests reuse ordinary handlers:
+Composition does not need a special mocking API. Today, tests mainly exercise connector handlers plus transform/validate behavior; once retry and timeout policies are active, the same handler-based approach also covers timing behavior. Tests reuse ordinary handlers:
 
 - replace file, network, env, or db handlers to control connector I/O,
 - replace `clock.sleep` or `clock.now` when you want deterministic retry and timeout behavior,
@@ -230,12 +247,53 @@ The important invariant is that the source pipeline stays the same. Tests swap i
 
 ## End-to-end example
 
-Here is how those pieces fit together in one realistic source declaration:
+Here is a composition example you can verify today with the currently implemented stages:
+
+```aivi
+use aivi.validation
+
+RawUser = { id: Int, name: Text, enabled: Bool, legacyId: Option Text }
+User    = { id: Int, name: Text, enabled: Bool }
+
+normalizeUsers : List RawUser -> List User
+normalizeUsers =
+  users => users |> map (user => {
+      id: user.id
+      name: user.name
+      enabled: user.enabled
+  })
+
+validateUsers : List User -> Validation (List DecodeError) (List User)
+validateUsers = users =>
+  if isEmpty users then
+    Invalid [{ path: [], message: "expected at least one user" }]
+  else
+    Valid users
+
+usersSource : Source RestApi (List User)
+usersSource =
+  rest.get {
+    url: ~u(https://api.example.com/users)
+    schema: source.schema.derive
+    strictStatus: True
+  }
+  |> source.transform normalizeUsers
+  |> source.validate validateUsers
+```
+
+If you read `load usersSource` in plain language today:
+
+1. call the API,
+2. decode the payload using the declared schema,
+3. normalize the decoded data,
+4. run semantic validation.
+
+The extended policy-aware shape looks like this:
 
 <<< ../../snippets/from_md/syntax/external_sources/composition/block_07.aivi{aivi}
 
 
-Reading `load usersSource` in plain language:
+Reading that extended version in plain language:
 
 1. identify the source as `"users-api"`,
 2. look for a fresh cached value,

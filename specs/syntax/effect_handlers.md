@@ -17,9 +17,12 @@ If you come from another ecosystem, this is similar in spirit to dependency inje
 
 Read that block like this:
 
-- use `fixtureFiles` whenever this scope reads files
-- use `fixtureEnv` whenever this scope reads environment variables
-- keep the nearest outer or default `clock.now` handler unchanged
+- allow code in this inner scope to use exactly the listed capabilities
+- interpret `file.read` with `fixtureFiles`
+- interpret `process.env.read` with `fixtureEnv`
+- keep `clock.now` available, but continue resolving it from the nearest outer or default interpreter
+
+`clock.now` appears as a bare entry because `with { ... } in` still narrows the inner capability set to the listed entries, even when some entries also install handlers.
 
 ## What effect handlers are for
 
@@ -41,19 +44,21 @@ With that mental model in place, the surface syntax stays small.
 
 ## Basic syntax
 
-`with { ... } in expr` supports two kinds of entries:
+`with { ... } in expr` supports two kinds of entries. Every entry contributes to the inner scope's visible capability set; some entries also install handlers.
 
-1. a **bare capability** entry that narrows the available authority
-2. a **handler binding** that installs an interpreter for a capability or capability family
+1. a **bare capability** entry that keeps a capability available in the narrowed inner scope without installing a new handler
+2. a **handler binding** that keeps a capability or capability family available and also installs an interpreter for it
 
 <<< ../snippets/from_md/syntax/effect_handlers/block_02.aivi{aivi}
 
 
 | Entry form | Meaning |
 | --- | --- |
-| `file.read` | `file.read` is allowed in this scope and resolves to the nearest outer or default interpreter |
-| `file.read = fixtureFiles` | `file.read` is allowed and handled by `fixtureFiles` in this scope |
-| `file = localFs` | the `file` family is allowed and `localFs` handles any `file.*` leaf not overridden by a more specific entry |
+| `file.read` | `file.read` remains available as part of this inner scope, and interpreter lookup continues to the nearest outer or default interpreter |
+| `file.read = fixtureFiles` | `file.read` remains available in this inner scope and is handled by `fixtureFiles` here |
+| `file = localFs` | the `file` family remains available in this inner scope, and `localFs` handles any `file.*` leaf not overridden by a more specific entry |
+
+Bare entries and handler bindings both count toward the inner capability set. If code in the body still needs `clock.now`, `db.query`, or another capability that you are not rebinding, you still list it explicitly (or list a covering family entry) so the narrowed scope continues to allow it.
 
 ## The right-hand side is a handler value
 
@@ -80,10 +85,12 @@ Handler scopes are:
 The visible capability set for an expression is still the intersection of:
 
 - the enclosing function signature
-- any enclosing `with { ... } in` scopes
+- any enclosing `with { ... } in` scopes, where each scope contributes every capability path named by its entries, including `capability = handler` bindings
 - the innermost `with` block currently being checked
 
 An inner scope may narrow authority further, but it cannot widen it.
+
+So `with { file.read = fixtureFiles } in expr` allows `file.read` in that inner scope, not every capability from the surrounding scope. If `expr` also needs `clock.now`, you must list `clock.now` explicitly or add a broader entry that covers it.
 
 ### How interpreter lookup works
 
@@ -92,9 +99,11 @@ When code needs a capability such as `file.read`, lookup works like this:
 1. start at the innermost active `with` scope
 2. prefer an **exact** binding such as `file.read = ...`
 3. otherwise use a matching **family** binding such as `file = ...`
-4. if no scoped binding matches, use the nearest outer or default runtime interpreter
+4. if nothing in the current scope matches, continue outward until a scoped binding or the default runtime interpreter handles it
 
 Bare capability entries participate in authority checking, but they do not stop interpreter lookup from continuing outward.
+
+That is why bare entries are useful: they narrow which capabilities the inner code may use without forcing you to install a fresh handler for each one.
 
 <<< ../snippets/from_md/syntax/effect_handlers/block_04.aivi{aivi}
 
@@ -105,7 +114,7 @@ In that example:
 - `file.write` resolves to `auditSink`
 - `file.metadata` resolves to `realFs`
 
-The same exact capability path must not be bound twice in one `with` block.
+If the same exact capability path appears more than once in one `with` block, current runtime behavior is “last binding wins”. Avoid repeating the same path in one block; one explicit binding is clearer.
 
 ## Handlers in tests and local simulations
 
@@ -126,7 +135,7 @@ Handlers apply to the full resource lifecycle:
 - helper effects inside the resource body
 - cleanup after `yield`
 
-When a resource is acquired with `<-`, the runtime captures the active handler environment for that acquisition. The cleanup phase later runs with that same captured environment, even if inner scopes shadow the capability before the enclosing block exits.
+When a resource is acquired, typically with `<-` inside `do Effect`, the runtime captures the active handler environment for that acquisition. The cleanup phase later runs with that same captured environment, even if inner scopes shadow the capability before the enclosing block exits.
 
 This keeps acquisition and release paired with the same interpreter.
 
@@ -155,6 +164,6 @@ The inner scope above does not widen `readConfig`’s authority. It only changes
 These features are distinct from effect handlers:
 
 - `on transition => handler` in machine code is a **transition hook**, not a capability interpreter
-- `mock ... in` in [`@test`](decorators/test.md#mock-expressions) is **binding substitution**, not capability interpretation
+- `mock ... in` in [`@test`](/syntax/decorators/test#mock-expressions) is **binding substitution**, not capability interpretation
 
 Use effect handlers when you want to reinterpret capability-driven effects in a scope. Use the other features when you are working with transitions or named bindings instead.

@@ -4,7 +4,7 @@ AIVI provides a dedicated `Resource` type for values that need reliable setup an
 
 ## 15.1 The `Resource E A` Type
 
-`Resource E A` is a value that describes how to **acquire** a handle of type `A`, **use** it, and **release** it.
+`Resource E A` is a value that describes how to **acquire** a handle of type `A` and later **release** it around a caller-supplied use site.
 
 ```text
 Resource E A
@@ -13,7 +13,7 @@ Resource E A
 - `E` is the error type for acquisition failures, such as `FileError` or `SocketError`
 - `A` is the type of the acquired handle, such as `Handle` or `Socket`
 
-A `Resource` is **not** a handle itself. It is a recipe for obtaining one. The handle exists only within the scope where the resource is acquired.
+A `Resource` is **not** a handle itself. It is an inert recipe for obtaining one. The actual use happens after acquisition with `<-`, and the handle exists only within that enclosing scope.
 
 ### Capability requirements
 
@@ -38,28 +38,28 @@ See [Effect Handlers](effect_handlers.md) for the binding rules and precedence m
 
 ## 15.2 Defining Resources
 
-Define a resource with a `resource` block. The shape is simple: perform setup, `yield` the resource, then write cleanup after `yield`.
+Define a resource with a `resource` block. The shape is simple: perform setup, `yield` the resource to the caller, then write cleanup after `yield`.
 
 The code after `yield` is guaranteed to run when the resource goes out of scope.
 
 <<< ../snippets/from_md/syntax/resources/defining_resources.aivi{aivi}
 
-Think of `yield` as the boundary between “make the handle available” and “clean it up later”.
+Think of `yield` as the handoff point between “make the handle available” and “clean it up later”.
 
 ### Rules
 
-- a `resource` block must contain exactly **one** `yield` statement
+- write acquisition before `yield` and cleanup after it; a well-formed resource uses `yield` as its single handoff point
 - if `yield` is never reached, such as when acquisition fails, no cleanup runs because there is nothing to release
 - the cleanup phase runs as a finalizer and **may perform effects**
 - cleanup effects use the same error type `E`; if cleanup itself fails, the error is logged but does not override the original error
 
 ## 15.3 Using Resources
 
-Inside a `do Effect { ... }` block, use `<-` to acquire a resource. This scopes the handle to the enclosing block.
+Inside a `do Effect { ... }` block, use `<-` to acquire a resource. This binds the handle for the rest of that enclosing scope.
 
 <<< ../snippets/from_md/syntax/resources/using_resources.aivi{aivi}
 
-When the surrounding `do Effect { ... }` block exits, whether by normal completion, an error in `E`, or cancellation, all acquired resources are released in reverse order.
+When the enclosing scope exits—typically the surrounding `do Effect { ... }` block—whether by normal completion, an error in `E`, or cancellation, all acquired resources are released in reverse order.
 
 ### Multiple Resources
 
@@ -77,7 +77,7 @@ All of these guarantees hold for typed errors and for cancellation.
 
 ## 15.5 Cancellation
 
-Resources interact with the cancellation system (see [Concurrency](/stdlib/system/concurrency)):
+Resources interact with the cancellation system (see [Concurrency](../stdlib/system/concurrency.md)):
 
 - cancellation is checked at `<-` bind points; if a task is cancelled before acquisition, acquisition does not run
 - if cancellation arrives **during use** of an acquired resource, cleanup still runs

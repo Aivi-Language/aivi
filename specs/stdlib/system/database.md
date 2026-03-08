@@ -175,13 +175,11 @@ These helpers do not make an otherwise unsupported query lowerable; they only fo
 
 <<< ../../snippets/from_md/stdlib/system/database/querying.aivi{aivi}
 
-## Joins and preloading
+## Shaping multi-table results
 
-<<< ../../snippets/from_md/stdlib/system/database/joins_and_preloading_01.aivi{aivi}
+Use repeated `db.from` binds plus `db.guard_` when you want one flattened row per match; the [Multi-table joins](#multi-table-joins) example above is the canonical portable form.
 
-For eager loading, use the matching preload helpers and patterns shown here:
-
-<<< ../../snippets/from_md/stdlib/system/database/joins_and_preloading_02.aivi{aivi}
+When you need a nested parent/child result such as `{ user, posts }`, keep the database read typed and do the final shaping in ordinary AIVI code after one or more explicit `db.runQueryOn` or `db.loadOn` calls. That keeps this page aligned with the currently documented `Query` and table-loading helpers without implying extra preload-specific APIs.
 
 ## Migrations
 
@@ -197,10 +195,24 @@ This gives tooling enough information to validate columns and projected row shap
 
 A database source declaration should carry typed connector config, the table or query/projection to read from, and any typed parameters it needs.
 
+For the `Source Db` forms themselves, see [External Sources](../../syntax/external_sources.md) and [Schema-First Source Definitions](../../syntax/external_sources/schema_first.md). A minimal table-backed declaration looks like this:
+
+```aivi
+usersRows : Source Db (List User)
+usersRows =
+  db.source {
+    table: usersTable
+    schema: source.schema.table usersTable
+  }
+```
+
+`load usersRows` is still the effectful step; the declaration just makes the database boundary reusable and statically inspectable.
+
 ## Pooling
 
 Connection pooling lives in `aivi.database.pool`.
 The pool is configured explicitly, and `withConn` guarantees a checked-out connection is released even if the work fails or is cancelled.
+The underlying pool API is generic; the signatures below show the usual database instantiation with `DbConnection` and `DbError`.
 
 If you are still on the beginner path, skip pooling until one process needs many short-lived database operations.
 
@@ -340,8 +352,8 @@ Use the typed helpers for one-off mutations. Use `db.applyDeltas` or `db.applyDe
 
 | Function | What it does |
 | --- | --- |
-| **Pool.create** config<br><code>Pool.Config Conn -> Effect E (Result Pool.PoolError (Pool Conn))</code> | Creates a connection pool from the given configuration. |
-| **Pool.withConn** pool f<br><code>Pool Conn -> (Conn -> Effect E A) -> Effect E (Result Pool.PoolError A)</code> | Borrows a connection, runs `f`, and always releases the connection afterward. |
+| **Pool.create** config<br><code>Pool.Config DbConnection -> Effect DbError (Result Pool.PoolError (Pool DbConnection))</code> | Creates a connection pool from the given configuration. |
+| **Pool.withConn** pool f<br><code>Pool DbConnection -> (DbConnection -> Effect DbError A) -> Effect DbError (Result Pool.PoolError A)</code> | Borrows a connection, runs `f`, and always releases the connection afterward. |
 
 ## Practical guidance
 
@@ -353,6 +365,6 @@ Use the typed helpers for one-off mutations. Use `db.applyDeltas` or `db.applyDe
 
 ## Notes
 
-- Raw SQL strings through an external-source `db.query` mechanism are not part of this module's documented surface; use `db.from` and the typed query helpers instead.
+- The external-source form `db.query "SELECT ..."` is documented with [External Sources](../../syntax/external_sources.md) and [Schema-First Source Definitions](../../syntax/external_sources/schema_first.md), not with the `Query A` DSL on this page.
 - `db.applyDelta`, `db.applyDeltas`, and the typed mutation helpers operate in memory rather than compiling predicates and patches into SQL mutation statements.
 - Transactions are scoped to a single `DbConnection`.

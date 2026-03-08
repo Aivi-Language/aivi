@@ -1,6 +1,6 @@
 # MCP Server
 
-`aivi mcp serve` exposes AIVI tooling over the Model Context Protocol (MCP) so editor agents and other local automation can inspect source code, read bundled documentation, and, when enabled, inspect or drive GTK applications.
+`aivi mcp serve` exposes AIVI tooling over the Model Context Protocol (MCP) so editor agents and other local automation can inspect AIVI source targets, read bundled specifications, and, when enabled, inspect or drive GTK applications.
 
 The MCP server is local-first:
 
@@ -10,9 +10,13 @@ The MCP server is local-first:
 
 Tool names are advertised with only letters, numbers, `_`, and `-` because some MCP hosts reject dotted names in `tools/list`. The server still accepts legacy dotted spellings such as `aivi.gtk.launch` on `tools/call` for backwards compatibility.
 
+See also [CLI](cli.md) for the command-line entry point and [`aivi.ui.gtk4`](../stdlib/ui/gtk4.md) for the GTK signal/runtime model behind the UI tools.
+
 ## Transport and process model
 
-The MCP server itself speaks JSON-RPC over the MCP transport chosen by the client, typically stdio.
+`aivi mcp serve` is currently a stdio server. Over stdio it accepts newline-delimited JSON-RPC, and it also tolerates LSP-style `Content-Length:` framing for compatibility with MCP hosts that reuse LSP transport code.
+
+The positional `<path|dir/...>` argument in `aivi mcp serve <path|dir/...>` is accepted for CLI compatibility but is currently ignored by the server. Individual MCP tool calls pass their own explicit `target`, `sessionId`, `name`, or `id` arguments.
 
 When `--ui` is enabled, GTK tools use a second local bridge between the MCP server and the running GTK application:
 
@@ -25,7 +29,7 @@ This bridge is intentionally local and per-session. Numeric widget ids are only 
 
 ## Bundled resources
 
-`aivi mcp serve` always exposes bundled specs as MCP resources under URIs such as:
+`aivi mcp serve` always exposes bundled `specs/**/*.md` and `specs/**/*.aivi` files as MCP resources under URIs such as:
 
 ```text
 aivi://specs/tools/cli.md
@@ -43,18 +47,29 @@ Without `--ui`, the main MCP tools are:
 - `aivi_fmt`
 - `aivi_fmt_write` (requires `--allow-effects`)
 
-These operate on explicit `target` arguments passed per tool call.
+These operate on explicit `target` arguments passed per tool call:
+
+- `aivi_parse` parses one file or driver-style target and returns syntax diagnostics
+- `aivi_check` type-checks a target and optionally accepts `checkStdlib: true`
+- `aivi_fmt` formats exactly one file and returns the formatted text without writing it
+- `aivi_fmt_write` formats matching `.aivi` files in place
 
 ## GTK session tools
 
 With `--ui`, the server also exposes GTK session management tools:
 
-- `aivi_gtk_discover` — list candidate local GTK debug sockets
-- `aivi_gtk_attach` — connect to an existing GTK session when you already know the socket path and token
-- `aivi_gtk_launch` — start an AIVI GTK application under MCP inspection
-- `aivi_gtk_hello` — verify that a session is alive and report high-level capabilities
+- `aivi_gtk_discover` — list candidate local GTK debug sockets; it does not reveal the session token needed for attachment
+- `aivi_gtk_attach` — connect to an existing GTK session when you already know both the socket path and token
+- `aivi_gtk_launch` — start an AIVI GTK application under MCP inspection and return `sessionId`, `socketPath`, `token`, `pid`, and `ready`
+- `aivi_gtk_hello` — verify that a session is alive and report high-level capabilities for a known `sessionId`
 
-`aivi_gtk_launch`, and all mutation-style GTK tools, require `--allow-effects`.
+`aivi_gtk_launch` and all mutation-style GTK tools require `--allow-effects`.
+
+### Session lifecycle
+
+Use either `aivi_gtk_launch` or `aivi_gtk_attach` first. Both return a `sessionId`. Pass that `sessionId` to `aivi_gtk_hello`, the inspection tools, and the interaction tools for the rest of the session.
+
+`aivi_gtk_discover` is only a socket finder. It helps you find candidate sessions, but you still need a valid token before `aivi_gtk_attach` can succeed.
 
 ## GTK inspection tools
 
@@ -103,7 +118,7 @@ The GTK driver layer currently exposes:
 - `aivi_gtk_select`
 - `aivi_gtk_keyPress`
 
-These operate on widgets previously discovered via `listWidgets`, `inspectWidget`, or `dumpTree`.
+These operate on widgets previously discovered via `listWidgets`, `inspectWidget`, or `dumpTree`. All of them require a `sessionId`; widget selection then happens by `name` or numeric `id`.
 
 ### Targeting rules
 
@@ -157,11 +172,42 @@ There are no silent no-op fallbacks for unsupported widget actions.
 
 ## Example workflow
 
-```text
-1. start `aivi mcp serve --ui --allow-effects`
-2. call `aivi_gtk_launch` with a target `.aivi` app
-3. call `aivi_gtk_listWidgets`
-4. call `aivi_gtk_inspectWidget` for a named button or entry
-5. call `aivi_gtk_click`, `aivi_gtk_type`, or `aivi_gtk_select`
-6. re-read the widget or tree snapshot to observe the updated state
-```
+### Launch and inspect a demo app
+
+1. Start an MCP host against `aivi mcp serve . --ui --allow-effects`.
+2. Call `aivi_gtk_launch` with:
+
+   ```json
+   { "target": "demos/snake.aivi" }
+   ```
+
+3. Save the returned `sessionId`, then call `aivi_gtk_hello`:
+
+   ```json
+   { "sessionId": "<sessionId>" }
+   ```
+
+4. Discover stable widget handles with `aivi_gtk_listWidgets`:
+
+   ```json
+   { "sessionId": "<sessionId>" }
+   ```
+
+5. Inspect one widget by `name` or numeric `id`:
+
+   ```json
+   { "sessionId": "<sessionId>", "name": "<widget-name>" }
+   ```
+
+6. Call `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_select`, or `aivi_gtk_keyPress`, then re-read the widget or tree snapshot to observe the updated state.
+
+If the app is already running, use `aivi_gtk_discover` to find candidate sockets, then `aivi_gtk_attach` once you have the matching `socketPath` and `token`.
+
+## Quick verification
+
+A minimal manual smoke test should confirm all of the following:
+
+- `resources/list` includes bundled URIs such as `aivi://specs/tools/mcp.md`
+- `tools/list` advertises underscore-safe names such as `aivi_parse` and, with `--ui`, `aivi_gtk_launch`
+- `aivi_gtk_launch` on `demos/snake.aivi` returns a `sessionId`
+- `aivi_gtk_hello` and `aivi_gtk_listWidgets` succeed when called with that `sessionId`

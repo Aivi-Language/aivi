@@ -2,18 +2,21 @@
 
 Bindings are how you give names to values in AIVI. If you are coming from a language with mutable variables, the most important shift is this: `=` creates a name for a value; it does not update storage in place.
 
-In practice, that means you describe data flow by introducing new names, shadowing old ones in a narrower scope, or destructuring values into the pieces you need.
+In practice, that means you describe data flow by introducing new names, shadowing earlier ones in a narrower scope, or destructuring values into the pieces you need.
 
 ## 1.1 Definitions
 
-AIVI uses the same `=` syntax for many kinds of definitions:
+AIVI reuses `=` for many definitions, especially value-level bindings and several top-level declaration forms:
 
 - values
 - functions
-- types
+- most type aliases and type definitions
+- domains
 - classes
 - instances
-- modules
+- machines
+
+Modules are introduced with `module ...`, not `=`.
 
 Think of `=` as “define this name” rather than “assign into this variable”.
 
@@ -21,35 +24,42 @@ Think of `=` as “define this name” rather than “assign into this variable�
 
 ## 1.2 Shadowing
 
-Bindings are lexical, so an inner scope can reuse a name from an outer scope.
+Bindings are lexical, so names resolve from the nearest enclosing scope outward. That means an inner scope can reuse a name from an outer scope.
 
-<<< ../snippets/from_md/syntax/bindings/shadowing.aivi{aivi}
+```aivi
+x = 1
+x = x + 1
+```
 
 This creates a new binding that temporarily hides the earlier one. It is similar to Rust shadowing or `let`-binding in ML-family languages, and it is different from mutation.
 
+On the right-hand side of the second line, `x` still refers to the earlier binding. After the second line, later code sees only the newer `x`.
+
 Use shadowing when the new name really is “the updated version” of the old value and the narrower scope keeps that intent clear.
 
-## 1.2.1 Recursion (module level)
+## 1.2.1 Recursion (module level only)
 
 Inside a module body, top-level value bindings are recursive. A top-level definition may refer to itself and to definitions that appear later in the same file.
 
 That lets you write ordinary recursive helpers without rearranging a file to satisfy declaration order.
 
+Local bindings are different: a binding inside a function, block, or `match` arm does **not** become recursive just because it uses `=`. For local recursion, use a module-level helper or the dedicated `loop` / `recurse` forms described in [Generators](generators.md) and [Effects](effects.md).
+
 <<< ../snippets/from_md/syntax/bindings/recursion_module_level.aivi{aivi}
 
 ## 1.3 Pattern Bindings
 
-A binding can destructure a value directly on the left-hand side. Use this when the shape is guaranteed and you want the interesting pieces available by name immediately.
+A binding can destructure a value directly on the left-hand side. Use this when the shape is guaranteed by the type or by earlier control flow and you want the interesting pieces available by name immediately.
 
 <<< ../snippets/from_md/syntax/bindings/pattern_bindings.aivi{aivi}
 
-### Record destructuring (deconstructing records)
+### Record destructuring
 
 To pull fields out of a record, use a record pattern on the left-hand side.
 
 <<< ../snippets/from_md/syntax/bindings/record_destructuring_deconstructing_records.aivi{aivi}
 
-You can also destructure nested records using dot-paths (Section 1.5).
+The deep-path example later on this page shows how to destructure nested records without unpacking every intermediate layer by hand.
 
 Rules to remember:
 
@@ -75,13 +85,15 @@ Allowed in:
 
 - top-level and local bindings
 - `match` arms
-- function clauses
+- function parameters and function clauses
 
 Example:
 
 <<< ../snippets/from_md/syntax/bindings/whole_value_binding_with_as_02.aivi{aivi}
 
-## 1.5 Usage Examples
+## 1.5 Common Binding Patterns
+
+The examples below use values whose shapes are already known, so the destructuring bindings remain total.
 
 ### Config Binding
 
@@ -127,9 +139,11 @@ Function definitions are bindings too, so the same scoping and shadowing rules a
 
 ---
 
-## Comments
+## Appendix: Comments
 
-Comments are ignored by the language runtime and type system. Use them to explain intent, assumptions, or why a piece of code is shaped the way it is.
+Comments are a general lexical feature rather than a binding rule, but they appear often in binding-heavy code, so this page summarizes them here for convenience. For the exact lexical rules, see the [Concrete Syntax](grammar.md) page.
+
+Comments are ignored by parsing and evaluation. Use them to explain intent, assumptions, or why a piece of code is shaped the way it is.
 
 ### Line comments
 
@@ -143,6 +157,6 @@ Block comments start with `/*` and end with `*/`. They may span multiple lines.
 
 <<< ../snippets/from_md/syntax/comments/block_comments.aivi{aivi}
 
-Comments may appear anywhere whitespace is allowed, and the formatter preserves them in place.
+Comments may appear anywhere whitespace is allowed, including after a binding or inside a larger expression, and the formatter preserves them in place.
 
-**Not supported:** doc comments (`///` / `/** */`), nested block comments, shebangs (`#!`).
+**Not supported:** documentation comments (`///` / `/** */`), nested block comments, shebangs (`#!`).

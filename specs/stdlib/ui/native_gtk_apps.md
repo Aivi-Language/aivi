@@ -160,7 +160,7 @@ There is no separate form runtime and no hidden widget-owned field state.
 
 ## Guided example
 
-The examples below build up the full pattern in smaller, easier-to-scan steps. Example 1 is the minimum useful `gtkApp`; Examples 2 and 3 add one extra concept each.
+The examples below build up the full pattern in smaller, easier-to-scan steps. Example 1 is the minimum useful `gtkApp`. Examples 2 through 4 then show only the parts that change, so each added concept is easier to spot.
 
 ### Example 1: minimal `gtkApp`
 
@@ -173,14 +173,14 @@ This is enough for many simple settings and editor screens.
 
 Here the same app gains one extra live value: “how long since the last save?”
 
-<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_05.aivi{aivi}
 
 
 ### Example 3: add a delayed follow-up
 
 A one-shot command is the right tool when the app should do something later exactly once.
 
-<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/native_gtk_apps/block_04.aivi{aivi}
 
 
 ### Example 4: refactor repetitive update branches into helpers

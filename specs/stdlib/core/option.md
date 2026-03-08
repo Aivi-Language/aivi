@@ -1,10 +1,12 @@
 # Standard Library: Option Utilities
 
 <!-- quick-info: {"kind":"module","name":"aivi.option"} -->
-The `aivi.option` module provides utility functions for working with `Option A` values. These complement the `??` operator and the shared `map`/`flatMap` style operations provided through `aivi.logic`.
+The `aivi.option` module provides utility functions for working with `Option A` values. This page also points out the shared [`aivi.logic`](logic.md) operations that `Option` supports, such as `map`, `chain`, `filter`, and `alt`.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.option</div>
+
+Add `use aivi.logic` as well when you want the shared `Option` operations such as `map`, `chain`, `filter`, or `alt`.
 
 ## What `Option` means
 
@@ -25,7 +27,7 @@ Use `Option` when:
 - you do not need to explain the reason,
 - you are not collecting several independent failures.
 
-Do **not** use `Option` when the caller needs a real error message or error value. In those cases, move to `Result` or `Validation`.
+Do **not** use `Option` when the caller needs a real error message or error value. In those cases, move to [`Result`](result.md) or [`Validation`](validation.md).
 
 For example, a missing `page` query parameter is a good `Option Int`; a broken config file path is usually a `Result ConfigError Path`.
 
@@ -39,11 +41,14 @@ For example, a missing `page` query parameter is a good `Option Int`; a broken c
 
 ## Overview
 
-This module adds small, practical helpers for checking, transforming, and converting `Option` values.
+This page covers two kinds of tools:
+
+- `aivi.option` helpers for checking, extracting, and converting `Option` values,
+- shared [`aivi.logic`](logic.md) operations that already work with `Option`.
 
 ## Predicates
 
-These helpers are most useful near the edges of your program when you need a direct branch. In pipelines, `map`, `flatMap`, and `??` often read more clearly.
+These helpers are most useful near the edges of your program when you need a direct branch. In pipelines, `map`, `chain`, and `??` often read more clearly.
 
 | Function | Type | Description |
 |----------|------|-------------|
@@ -64,25 +69,38 @@ These helpers are most useful near the edges of your program when you need a dir
 For simple defaults, the `??` operator is usually the shortest choice:
 
 ```aivi
-name = maybeUser.name ?? "Anonymous"
+name = maybeName ?? "Anonymous"
 ```
 
 Use `getOrElseLazy` when building the fallback value is expensive and should happen only if needed.
 
 ## Transformations
 
+`Option` participates in the shared classes from [`aivi.logic`](logic.md). In AIVI, the shared name is `chain` rather than a separate `flatMap` helper.
+
 | Function | Type | Description |
 |----------|------|-------------|
 | `map` | `(A -> B) -> Option A -> Option B` | Changes the inner value when it exists |
-| `flatMap` | `(A -> Option B) -> Option A -> Option B` | Chains two optional steps together |
+| `chain` | `(A -> Option B) -> Option A -> Option B` | Chains two optional steps together |
 | `filter` | `(A -> Bool) -> Option A -> Option A` | Keeps the value only when it satisfies the predicate |
 
-<<< ../../snippets/from_md/stdlib/core/option/transformations.aivi{aivi}
+```aivi
+doubled = Some 5 |> map (_ * 2) // Some 10
+
+nextPage = page =>
+  if page > 0 then Some (page + 1) else None
+
+movedForward = Some 5 |> chain nextPage // Some 6
+missingPage  = None |> chain nextPage // None
+
+adult = Some 25 |> filter (_ >= 18) // Some 25
+minor = Some 12 |> filter (_ >= 18) // None
+```
 
 A good rule of thumb:
 
 - use `map` when your function always succeeds,
-- use `flatMap` when your function may also return `None`,
+- use `chain` when your function may also return `None`,
 - use `filter` when you want to reject values that do not meet a condition.
 
 ### A readable optional pipeline
@@ -90,10 +108,10 @@ A good rule of thumb:
 When an optional workflow starts to feel nested, split it into named steps:
 
 ```aivi
-maybeUser      = lookupUser 42
-maybeName      = map (_.name) maybeUser
-maybeNamedUser = filter (name => name != "") maybeName
-displayName    = maybeNamedUser ?? "Anonymous"
+maybeUser         = lookupUser 42
+maybeName         = maybeUser |> map (user => user.name)
+maybeNonBlankName = maybeName |> filter (name => name != "")
+displayName       = maybeNonBlankName ?? "Anonymous"
 ```
 
 This reads better than packing all of that into one expression, and it makes the “where can this become `None`?” points obvious.
@@ -111,20 +129,41 @@ These conversions are useful when you start with “maybe there is a value” an
 
 ## Combining options
 
-| Function | Type | Description |
-|----------|------|-------------|
-| `flatten` | `Option (Option A) -> Option A` | Removes one layer of nesting |
-| `orElse` | `Option A -> Option A -> Option A` | Returns the first `Some`, or a fallback option |
+For fallback choice and one-layer flattening, reach for the shared [`aivi.logic`](logic.md) operations that `Option` already implements.
 
-<<< ../../snippets/from_md/stdlib/core/option/combining.aivi{aivi}
+```aivi
+nested = Some (Some 42)
+flat   = nested |> chain (inner => inner) // Some 42
+
+primary   = None
+secondary = Some "backup"
+value     = primary |> alt secondary // Some "backup"
+```
+
+`chain (inner => inner)` is the standard one-layer flattening pattern. `alt` is the shared fallback-choice operation that many other libraries call `orElse`.
 
 ## Relationship to other tools
 
 - **`??` operator** — best for “use this default value if the left side is missing.”
-- **`aivi.logic`** — provides shared class operations such as `map`, `of`, `chain`, and `filter` where supported.
-- **`aivi.result`** — use it when you need to explain *why* a value is missing or invalid.
-- **`do Option { ... }`** — useful when several optional steps depend on one another.
+- **[`aivi.logic`](logic.md)** — provides shared class operations such as `map`, `of`, `chain`, `filter`, and `alt` where supported.
+- **[`aivi.result`](result.md)** — use it when you need to explain *why* a value is missing or invalid.
+- **[`do Option { ... }`](../../syntax/do_notation.md)** — useful when several optional steps depend on one another.
 
-## Example: optional pipeline
+## Example: lookup, validate, and default an optional email
 
-<<< ../../snippets/from_md/stdlib/core/option/pipeline_example.aivi{aivi}
+Assume each user record stores `email : Option Text`. This example looks up a user, keeps only email-like strings, normalizes them, and falls back to a default address.
+
+```aivi
+use aivi.list
+use aivi.logic
+use aivi.option
+use aivi.text
+
+processUser = users userId =>
+  users
+  |> find (user => user.id == userId)
+  |> chain (user => user.email)
+  |> filter (text.contains "@")
+  |> map text.toLower
+  |> getOrElse "no-email@example.com"
+```

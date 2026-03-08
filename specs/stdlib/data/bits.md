@@ -1,6 +1,6 @@
 # Bits
 
-<!-- quick-info: {"module": "aivi.bits", "since": "v0.1"} -->
+<!-- quick-info: {"kind":"module","name":"aivi.bits","since":"v0.1"} -->
 
 The `aivi.bits` module provides bitwise operations through stdlib functions instead of infix operators. AIVI does not have bitwise operator syntax (`&`, `|`, `^`, `~`, `<<`, `>>`); all bit manipulation is done via this module.
 
@@ -63,12 +63,14 @@ Bit indexes are MSB-first, so bit `0` is the left-most bit in the first byte.
 
 | Function | Type | What it does |
 |:---------|:-----|:-------------|
-| `slice` | `Int -> Int -> Bits -> Bits` | Extracts bytes from `start` (inclusive) to `end` (exclusive). This is useful when a format stores separate fields in fixed byte ranges. |
+| `slice` | `Int -> Int -> Bits -> Bits` | Extracts bytes from `start` (inclusive) to `end` (exclusive). Indexes are byte offsets, not bit indexes. This is useful when a format stores separate fields in fixed byte ranges. |
 | `popCount` | `Bits -> Int` | Counts how many bits are set to `1`. |
 
 ## Read structured binary data with `BitStream`
 
 `BitStream` is a simple sequential reader. It is helpful when a binary format is laid out field-by-field and you want each read to return the next chunk plus the updated stream.
+
+Despite the name, the v0.1 `BitStream` API advances in whole bytes. `streamRead 2` reads two bytes, `streamSkip 1` skips one byte, and `streamRemaining` reports the number of unread bytes.
 
 | Function | Type | What it does |
 |:---------|:-----|:-------------|
@@ -87,5 +89,6 @@ Bit indexes are MSB-first, so bit `0` is the left-most bit in the first byte.
 
 ### Parse a simple binary header
 
-<<< ../../snippets/from_md/stdlib/data/bits/block_03.aivi{aivi}
+This example also imports `aivi.logic` so it can use `chain` and `map` with `Result`.
 
+<<< ../../snippets/from_md/stdlib/data/bits/block_03.aivi{aivi}

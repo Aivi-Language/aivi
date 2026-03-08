@@ -41,7 +41,7 @@ If you want the computation to stop at the first failure, use `Result` instead.
 - `Result` is best for sequential steps where each step depends on the previous one.
 - `Validation` is best for independent checks that can all be run and then combined.
 
-`Validation` is an **Applicative** rather than a **Monad**. In plain language, that means AIVI can combine independent validations side by side and accumulate their errors, but it does not support `chain` for workflows where each later check depends on an earlier successful value.
+`Validation` is an [`Applicative`](logic.md#applicative) rather than a [`Monad`](logic.md#monad). In plain language, that means AIVI can combine independent validations side by side and accumulate their errors, but it is not the tool for `chain`-style workflows where each later check depends on an earlier successful value.
 
 If those words are unfamiliar, the practical takeaway is simple: `Validation` is for checks that can run independently, such as “name is present” and “email looks valid”, then report all failures together.
 
@@ -52,17 +52,33 @@ Another way to say it:
 
 <<< ../../snippets/from_md/stdlib/core/validation/the_validation_type.aivi{aivi}
 
-## 2. Applicative instance
+## 2. Combining validations with `ap`
 
-When two `Validation` values are combined applicatively and both are invalid, their errors are concatenated. That requires `E` to be a `Semigroup`, which simply means the error type knows how to merge two error values into one. A list of errors is the most common choice.
+In everyday AIVI code, the main combination helper is `ap`:
 
-For everyday use, you can read “`E` must be a `Semigroup`” as “the error type must know how to join two failures into one combined failure.”
+```aivi
+ap : Validation (List E) (A -> B) -> Validation (List E) A -> Validation (List E) B
+```
 
-<<< ../../snippets/from_md/stdlib/core/validation/applicative_instance.aivi{aivi}
+That signature is why the most common shape is `Validation (List E) A`: each failed check contributes a list of errors, and `ap` appends the lists when more than one check fails.
+If you want the typeclass background, this is the practical `Validation` version of [`Applicative`](logic.md#applicative) combination, and the list of errors is the [`Semigroup`](logic.md#semigroup) that makes accumulation possible.
+
+```aivi
+MkPerson : Text -> Int -> { name: Text, age: Int }
+MkPerson = name age => { name: name, age: age }
+
+nameCheck = Invalid ["Name is required"]
+ageCheck = Invalid ["Age must be non-negative"]
+
+result = ap (ap (Valid MkPerson) nameCheck) ageCheck
+```
+
+Here, `result` is `Invalid ["Name is required", "Age must be non-negative"]`.
 
 ## 3. Creating validations
 
 Helper functions make it easy to lift either a valid value or one or more errors into the `Validation` type. A good pattern is to validate each field separately, then combine those field checks at the end.
+When you plan to combine checks with `ap`, wrap each single failure in a one-element list such as `Invalid ["Email is required"]` so later checks can append their own errors.
 
 <<< ../../snippets/from_md/stdlib/core/validation/creating_validations.aivi{aivi}
 
@@ -70,6 +86,7 @@ Helper functions make it easy to lift either a valid value or one or more errors
 
 Sometimes a single field check is naturally written as a `Result`, and then lifted into a larger validation pipeline that should accumulate errors across fields.
 This is a common pattern when each individual parser or decoder already returns `Result`, but the whole form or configuration load should report multiple problems at once.
+`fromResult` turns `Err e` into `Invalid [e]`, while `toResult` preserves the entire accumulated error value when you want to leave the validation-oriented part of the pipeline.
 
 <<< ../../snippets/from_md/stdlib/core/validation/converting_from_to_result.aivi{aivi}
 
@@ -77,6 +94,17 @@ This is a common pattern when each individual parser or decoder already returns 
 
 For validations around standard data sources such as JSON, environment variables, or databases, the standard library uses `DecodeError` to capture both **where** the problem occurred and **what** went wrong.
 
-<<< ../../snippets/from_md/stdlib/core/validation/decodeerror_adt.aivi{aivi}
+```aivi
+DecodeError = {
+  path: List Text,
+  message: Text
+}
+```
 
-This is part of the foundation for AIVI's type-safe bindings at `Source` boundaries.
+- `path` is the location inside the incoming value, such as `["user", "preferences", "theme"]`.
+- `message` explains the actual mismatch, such as `Expected Text, got Int`.
+
+`formatDecodeError` turns that structured value into a user-facing message. For example, a `DecodeError` with path `["user", "preferences", "theme"]` renders as `at $.user.preferences.theme: Expected Text, got Int`.
+An empty path renders as `at $.: ...`, which is how root-level decode failures are displayed in the current implementation and tests.
+
+This is part of the foundation for AIVI's type-safe bindings at source boundaries. See also [`aivi.json`](../data/json.md) for a larger decoding workflow built on `Validation` and `DecodeError`.

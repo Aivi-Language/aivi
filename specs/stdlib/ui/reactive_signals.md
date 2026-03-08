@@ -4,7 +4,7 @@
 Reactive signals are pure derived readers over committed model state. Use them to give reusable UI data a name, and promote them to `computed` when the same pure derivation should be memoized. They are not the same thing as GTK signal events.
 <!-- /quick-info -->
 
-If you want the big-picture app guide, start with [Native GTK & libadwaita Apps](./native_gtk_apps.md). If you want the detailed semantics, read [Reactive Dataflow](./reactive_dataflow.md). This page focuses on practical use.
+If you want the big-picture app guide, start with [Native GTK & libadwaita Apps](./native_gtk_apps.md). If you want the turn-by-turn host flow around these helpers, read [GTK App Architecture](./app_architecture.md). If you want the detailed semantics, read [Reactive Dataflow](./reactive_dataflow.md). This page focuses on practical use.
 
 ## Two different meanings of “signal”
 
@@ -42,6 +42,8 @@ There are three common levels:
 2. `signal` for a named reactive reader,
 3. `computed` for a named reader with memoization.
 
+For `computed`, the first argument is a stable descriptive key that identifies the cached derivation across app turns.
+
 <<< ../../snippets/from_md/stdlib/ui/reactive_signals/block_01.aivi{aivi}
 
 
@@ -59,13 +61,15 @@ Use a plain helper when the value is small and local. Use `signal` when a named 
 
 Reactive signals read from the app model and fit into the normal `gtkApp` loop:
 
+The snippet below shows only the pure derived-data slice. The surrounding `toMsg`, `update`, and `gtkApp` wiring stays the same as in the normal app architecture.
+
 <<< ../../snippets/from_md/stdlib/ui/reactive_signals/block_02.aivi{aivi}
 
 
 This shows the usual pattern:
 
 - `view` reads `heading` and `projectNames`,
-- `projectNames` is memoized because it may be reused,
+- `projectNames` is memoized because it may be reused and carries a stable cache key (`"projects.names"`),
 - `subscriptions` uses `readSignal` explicitly outside the GTK sigil.
 
 ## GTK sigils auto-read signals
@@ -76,6 +80,8 @@ Inside `~<gtk>...</gtk>` hosted by `gtkApp`, signal values are read automaticall
 - `<each items={projectNames} as={projectName}>`.
 
 Outside the sigil, signals stay ordinary function values of shape `Model -> A`, so use `readSignal` or plain function application.
+
+For example, `readSignal refreshMillis model` and `refreshMillis model` evaluate the same pure reader; `readSignal` simply makes that boundary explicit in examples and app code.
 
 ## When not to use reactive signals
 
@@ -91,5 +97,6 @@ Signals should stay pure and synchronous.
 ## Where to go next
 
 - [Reactive Dataflow](./reactive_dataflow.md) — invalidation, memoization, dependency tracking, and semantics
+- [GTK App Architecture](./app_architecture.md) — where `view`, `subscriptions`, commands, and turn boundaries fit together
 - [Native GTK & libadwaita Apps](./native_gtk_apps.md) — how reactive signals fit into the full app loop
 - [`aivi.ui.gtk4`](./gtk4.md) — GTK signal events and widget-side signal bindings

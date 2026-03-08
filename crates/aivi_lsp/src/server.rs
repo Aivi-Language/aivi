@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::{Arc, Once};
+use std::sync::{Arc, Once, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -62,6 +62,7 @@ struct AiviConfig {
 }
 
 static PANIC_HOOK_INSTALLED: Once = Once::new();
+static STDLIB_TYPECHECK_CHECKPOINT: OnceLock<aivi::CheckTypesCheckpoint> = OnceLock::new();
 
 #[derive(Clone)]
 struct DiagnosticTarget {
@@ -72,6 +73,15 @@ struct DiagnosticTarget {
 }
 
 impl Backend {
+    fn stdlib_typecheck_checkpoint() -> aivi::CheckTypesCheckpoint {
+        STDLIB_TYPECHECK_CHECKPOINT
+            .get_or_init(|| {
+                let stdlib = aivi::embedded_stdlib_modules();
+                aivi::check_types_stdlib_checkpoint(&stdlib)
+            })
+            .clone()
+    }
+
     fn changed_module_names(
         previous: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
         current: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
@@ -222,10 +232,7 @@ impl Backend {
         match tokio::task::spawn_blocking(move || {
             let (cp, is_new) = match checkpoint {
                 Some(cp) => (cp, false),
-                None => {
-                    let stdlib = aivi::embedded_stdlib_modules();
-                    (aivi::check_types_stdlib_checkpoint(&stdlib), true)
-                }
+                None => (Self::stdlib_typecheck_checkpoint(), true),
             };
             let diags = Backend::build_diagnostics_with_workspace(
                 &target.text,
@@ -721,8 +728,13 @@ impl LanguageServer for Backend {
         let previous_workspace = self.workspace_modules_for(&uri).await;
         let previous_summaries =
             Self::module_export_summaries_from_workspace(&uri, &previous_workspace);
-        self.update_document(uri.clone(), text.clone(), version)
-            .await;
+        if self
+            .update_document(uri.clone(), text.clone(), version)
+            .await
+            .is_none()
+        {
+            return;
+        }
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
         let current_summaries = Self::module_export_summaries_from_workspace(&uri, &workspace);
         let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
@@ -805,9 +817,12 @@ impl LanguageServer for Backend {
         // a concurrently executed stale handler cannot overwrite the document state with its
         // own (potentially broken) parse results and corrupt what we pass to the type-checker.
         let previous_summaries = self.document_module_export_summaries(&uri).await;
-        let parse_diags = self
+        let Some(parse_diags) = self
             .update_document(uri.clone(), text.clone(), version)
-            .await;
+            .await
+        else {
+            return;
+        };
         let current_summaries = self.document_module_export_summaries(&uri).await;
         let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
         let export_changed = !changed_modules.is_empty();

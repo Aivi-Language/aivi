@@ -1,46 +1,90 @@
 # Probability & Distribution Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.probability"} -->
-The `Probability` domain models probabilities and probability distributions so you can express random choices with explicit intent.
-Use it when “pick a random number” is too vague and you want a named distribution such as Bernoulli or uniform sampling.
+The `Probability` domain models probabilities and simple probability distributions as inspectable values.
+Use it when you want to talk about a named distribution such as Bernoulli or uniform density, instead of passing around unnamed `Float` values.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.probability<span class="domain-badge">domain</span></div>
 
-This domain is for simulations, experiments, sampling, randomized testing, and statistical code where the shape of randomness matters. In plain language, the “shape” is the pattern of likely outcomes: equal chance everywhere, a weighted coin flip, or values clustered around a center.
+This module is for simulations, experiments, randomized testing, and statistical code where the shape of uncertainty matters. In plain language, the “shape” is the pattern of likely outcomes: equal density across an interval, a weighted coin flip, or some other explicit distribution.
+
+The current API is descriptive rather than effectful: it lets you define distributions and inspect `pdf`, but it does not currently include a sampling function.
 
 ## Start here
 
-Choose a named distribution when you want readers to understand *what kind* of randomness you mean, not just that “something random” happened.
+Choose a named distribution when you want readers to understand *what kind* of uncertainty you mean, not just that “something random” happened. For general numeric helpers around `Float`, see [Math](math.md).
 
 ## What it is for
 
 A few examples:
 
 - a coin flip with a configurable chance of success
-- a random value drawn from a numeric interval
-- code that talks about expected values, not just raw samples
+- a uniform density over a numeric interval
+- code that reasons about weights or expected-value contributions, not just raw samples
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/math/probability/overview.aivi{aivi}
+```aivi
+use aivi.probability
+
+distribution = uniform 0.0 1.0
+
+// For continuous distributions, pdf returns density at a value.
+densityAtHalf = distribution.pdf 0.5
+```
 
 ## Features
 
-<<< ../../snippets/from_md/stdlib/math/probability/features.aivi{aivi}
+```aivi
+Probability = Float
+Distribution A = { pdf: A -> Probability }
+```
+
+`Probability` is currently just an alias for `Float`, so the type is convenient but not range-safe by itself. Use `clamp` when a computed value may fall outside `[0.0, 1.0]`.
+
+`Distribution A` exposes `pdf`, which is the pointwise probability function for the value type `A`:
+
+- for discrete distributions such as `bernoulli`, `pdf` behaves like probability mass;
+- for continuous distributions such as `uniform`, `pdf` behaves like density at a point.
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/stdlib/math/probability/domain_definition.aivi{aivi}
+```aivi
+domain Probability over Probability = {
+  (+) : Probability -> Probability -> Probability
+  (-) : Probability -> Probability -> Probability
+  (*) : Probability -> Probability -> Probability
+}
+```
+
+The domain gives you convenient arithmetic on probability-typed values, but it does not enforce normalization or the `[0.0, 1.0]` invariant.
 
 ## Core helpers
 
 | Function | What it does |
 | --- | --- |
 | **clamp** p<br><code>Probability -> Probability</code> | Restricts `p` to the valid probability range `[0.0, 1.0]`. |
-| **bernoulli** p<br><code>Probability -> Distribution Bool</code> | Creates a two-outcome distribution that succeeds with probability `p`. |
-| **uniform** lo hi<br><code>Float -> Float -> Distribution Float</code> | Creates a uniform distribution over `[lo, hi]`. |
-| **expectation** dist x<br><code>Distribution Float -> Float -> Float</code> | Returns the contribution of `x` to the expected value of `dist`. The expected value is the long-run average you would get if you sampled the distribution many times. |
+| **bernoulli** p<br><code>Probability -> Distribution Bool</code> | Creates a two-outcome distribution that succeeds with probability `p`. The current implementation does not clamp automatically, so pass a value already in `[0.0, 1.0]` or use `clamp` first. |
+| **uniform** lo hi<br><code>Float -> Float -> Distribution Float</code> | Creates a uniform density over `[lo, hi]` when `lo < hi`. The current implementation does not reorder or normalize invalid bounds, so equal or reversed bounds do not produce a meaningful uniform distribution. |
+| **expectation** dist x<br><code>Distribution Float -> Float -> Float</code> | Returns the point contribution `dist.pdf x * x`. For discrete distributions you sum these contributions across the support; for continuous distributions integration is outside the current API. |
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/stdlib/math/probability/usage_examples.aivi{aivi}
+```aivi
+use aivi.probability
+
+successRate = clamp 0.7
+coin        = bernoulli successRate
+probHeads   = coin.pdf True
+probTails   = coin.pdf False
+```
+
+```aivi
+use aivi.probability
+
+unitInterval     = uniform 0.0 1.0
+densityAtHalf    = unitInterval.pdf 0.5
+halfContribution = expectation unitInterval 0.5
+```
+
+In the second example, `halfContribution` is only the contribution at `0.5`, not the total expected value of the whole distribution.

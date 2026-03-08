@@ -1,7 +1,7 @@
 # State Machines
 
 <!-- quick-info: {"kind":"topic","name":"state machines"} -->
-State machines model workflows where certain actions are only valid in certain states. In AIVI, `machine` gives those workflows a first-class language surface with named states, typed transitions, guard checks, and runtime helpers such as `currentState`, `can`, and `on`.
+State machines model workflows where certain actions are only valid in certain states. In AIVI, `machine` gives those workflows a first-class language surface with named states, typed transitions, guard checks, and inspection helpers such as `currentState` and `can`.
 <!-- /quick-info -->
 
 If you want syntax details, read [Machine Syntax](./machines.md). If you want the execution rules, read [Machine Runtime](./machines_runtime.md). This page is the practical guide: what machines are for, when to use them, and how they fit into ordinary AIVI code.
@@ -50,6 +50,8 @@ This says:
 - `run` is only legal from `Acquired` and carries a payload
 - `done` returns the machine to `Idle`
 
+The `boot {}` transition is the one-time initializer. Calling it again after startup is an invalid transition.
+
 ## Using a machine in ordinary code
 
 <<< ../snippets/from_md/syntax/state_machines/block_02.aivi{aivi}
@@ -75,7 +77,7 @@ These helpers make machines useful in real applications:
 
 ## Reacting to transitions with `on`
 
-Machines can trigger follow-up work when a transition succeeds.
+Machines can trigger follow-up work when a transition succeeds. The `on` form is ordinary `Effect` syntax that observes successful transitions; it is not an extra field on the machine value.
 
 ```aivi
 on run => do Effect {

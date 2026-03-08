@@ -1,38 +1,83 @@
 # Units Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.units"} -->
-The `Units` domain brings **dimensional analysis** to your code. In plain language, that means numbers carry their physical meaning with them, so `10 meters` and `10 seconds` are not interchangeable by accident. This helps prevent the classic “the numbers looked compatible, but the units were wrong” kind of bug.
+The `aivi.units` module is a lightweight way to keep a numeric value and its unit together. It helps you make conversions explicit and keep module boundaries readable, but in v0.1 it does **not** provide compile-time dimensional analysis or automatic derived-unit math.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.units<span class="domain-badge">domain</span></div>
 
 ## What this domain is for
 
-`aivi.units` lets you work with physical quantities without losing track of what the numbers mean. Instead of passing around unlabelled `Float` values, you can express measurements such as meters, seconds, and kilograms directly in the type system.
+`aivi.units` is useful when a bare `Float` would be too ambiguous. You define units such as meters, kilograms, or pixels yourself, then store values as `Quantity` records that carry both the numeric magnitude and the chosen `Unit`.
 
-This helps when you are writing code for science, engineering, graphics, simulations, sensors, or any other place where mixing units would be a real bug.
+This is a good fit for sensor readings, simulation inputs, graphics measurements, engineering data, or any API boundary where “what does this number mean?” should be obvious from the value itself.
 
 ## Start here
 
 Reach for `aivi.units` when:
 
 - a number crosses a module boundary and should stay self-describing,
-- you are combining measurements such as distance, time, speed, or mass,
-- a wrong unit would be a real defect, not just a display issue.
+- you need explicit conversions such as meters ↔ kilometers,
+- the unit is part of the meaning, not just display text.
+
+Reach for a more specialized domain when the standard library already models the concept directly. For example, [`aivi.chronos.duration`](../chronos/duration.md) already provides built-in time literals such as `500ms` and `2s`.
+
+## Import patterns
+
+- `use aivi.units` brings `Unit`, `Quantity`, `defineUnit`, `convert`, and `sameUnit` into scope.
+- The exported `Units` domain supplies `+`, `-`, `*`, and `/` for `Quantity`.
+- For the general language rules around domains and operator ownership, see [Domains](/syntax/domains) and [Operators](/syntax/operators).
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/core/units/overview.aivi{aivi}
+```aivi
+use aivi.units
 
-## Supported dimensions
+meter     = defineUnit "m" 1.0
+kilometer = defineUnit "km" 1000.0
 
-Start here if you want to scan the built-in measurement families before reading the full domain definition.
+raceDistance   = { value: 1500.0, unit: meter }
+raceDistanceKm = convert raceDistance kilometer
+sameScale      = sameUnit raceDistance { value: 400.0, unit: meter }
+```
 
-<<< ../../snippets/from_md/stdlib/core/units/supported_dimensions.aivi{aivi}
+In this example, `raceDistanceKm` becomes `1.5 km`, and `sameScale` is `True` because both quantities use the unit name `"m"`.
+
+## Core data shapes
+
+`aivi.units` does not ship a built-in catalog of SI units. Instead, it gives you two small record types so each module can define the units it needs:
+
+```aivi
+Unit     = { name: Text, factor: Float }
+Quantity = { value: Float, unit: Unit }
+```
+
+`factor` is the scale relative to the base unit you choose for your problem. For example, if `meter` uses factor `1.0`, then `kilometer` can use factor `1000.0`.
 
 ## Domain definition
 
-<<< ../../snippets/from_md/stdlib/core/units/domain_definition.aivi{aivi}
+When the `Units` domain is in scope, `Quantity` supports a small arithmetic surface:
+
+| Operator | Type | Runtime behavior |
+| --- | --- | --- |
+| `a + b` | `Quantity -> Quantity -> Quantity` | Adds the numeric values and keeps `a.unit`. Convert to a common unit first. |
+| `a - b` | `Quantity -> Quantity -> Quantity` | Subtracts the numeric values and keeps `a.unit`. Convert to a common unit first. |
+| `q * s` | `Quantity -> Float -> Quantity` | Scales the quantity by a plain number. |
+| `q / s` | `Quantity -> Float -> Quantity` | Divides the quantity by a plain number. |
+
+```aivi
+use aivi.units
+
+meter     = defineUnit "m" 1.0
+kilometer = defineUnit "km" 1000.0
+
+a    = { value: 1500.0, unit: meter }
+b    = { value: 2.0, unit: kilometer }
+bInM = convert b meter
+
+total = a + bInM
+half  = total / 2.0
+```
 
 ## Helper functions
 
@@ -40,16 +85,34 @@ The usual workflow is: define or pick a unit, do your arithmetic in one consiste
 
 | Function | Explanation |
 | --- | --- |
-| **defineUnit** name factor<br><code>Text -> Float -> Unit</code> | Defines a unit relative to a base unit using a scale factor. |
-| **convert** quantity target<br><code>Quantity -> Unit -> Quantity</code> | Converts a quantity into another unit of the same dimension. |
-| **sameUnit** a b<br><code>Quantity -> Quantity -> Bool</code> | Checks whether two quantities use the same unit name. |
+| **defineUnit** name factor<br><code>Text -> Float -> Unit</code> | Creates a named unit with a scale factor relative to your chosen base unit. |
+| **convert** quantity target<br><code>Quantity -> Unit -> Quantity</code> | Re-expresses a quantity in `target` by applying the stored scale factors. |
+| **sameUnit** a b<br><code>Quantity -> Quantity -> Bool</code> | Checks whether `a.unit.name` and `b.unit.name` are the same text label. |
 
 ## Practical guidance
 
-- Use units on values that cross module boundaries so their meaning stays obvious.
-- Prefer conversions at the edges of your program, such as I/O or display formatting, instead of constantly changing units internally.
-- `sameUnit` checks the unit label, while the type-level dimension rules protect the deeper physical correctness.
+- Use `Quantity` for values that cross module boundaries so the unit stays visible in the data shape.
+- Pick one canonical unit per measurement family inside a module, and convert at the edges for display or input.
+- Convert to a common unit before addition or subtraction; the domain operators do not silently normalize mismatched units for you.
+- Keep unit names stable and meaningful. `sameUnit` compares labels, not conversion factors.
+
+## Limitations in v0.1
+
+- There are no built-in `10m`, `5kg`, or `3s` suffix literals in `aivi.units`; define units explicitly with `defineUnit`.
+- The module does not derive composite units such as “meters per second” for you.
+- The API helps document and convert units at runtime, but it does not prove physical correctness in the type checker.
 
 ## Usage examples
 
-<<< ../../snippets/from_md/stdlib/core/units/usage_examples.aivi{aivi}
+```aivi
+use aivi.units
+
+meter     = defineUnit "m" 1.0
+kilometer = defineUnit "km" 1000.0
+
+trip      = { value: 1500.0, unit: meter }
+tripKm    = convert trip kilometer
+sameScale = sameUnit trip { value: 3.0, unit: kilometer }
+```
+
+Use this pattern when you want unit names and explicit conversions, but do not need a larger domain such as calendar time or geometry.

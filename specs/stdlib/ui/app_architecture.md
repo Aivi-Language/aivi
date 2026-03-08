@@ -40,6 +40,17 @@ Before reading the full API surface, keep this checklist in mind:
 
 Everything else on this page explains how `gtkApp` hosts that loop.
 
+## Two different meanings of “signal”
+
+AIVI UI docs use the word **signal** in two different ways:
+
+| Term | Meaning |
+| --- | --- |
+| **GTK signal event** | widget input such as clicks, text changes, and focus changes |
+| **reactive signal** | pure derived data created with `signal` or `computed` |
+
+GTK signal events flow **into** your app as `GtkSignalEvent` values. Reactive signals are read **inside** your app from the committed model. If you want the beginner-friendly version of that distinction, read [Reactive Signals](./reactive_signals.md#two-different-meanings-of-signal).
+
 ## Core types
 
 The architecture is built around these conceptual types:
@@ -76,7 +87,7 @@ Conceptually, that is equivalent to:
 
 `appStep` and `appStepWith` are just shorthand constructors for that same record shape. Use them when they help; direct `{ model, commands }` records are equally valid.
 
-Likewise, if an app has no long-lived external feeds, `subscriptions = noSubscriptions` is equivalent to `subscriptions = _ => []`.
+Likewise, if an app has no long-lived external feeds, `subscriptions = noSubscriptions` is equivalent to `subscriptions = _ => []`. `noSubscriptions` is simply the standard helper for that default.
 
 ## `gtkApp` in one sentence
 
@@ -135,7 +146,7 @@ A small example:
 <<< ../../snippets/from_md/stdlib/ui/app_architecture/block_05.aivi{aivi}
 
 
-Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed).
+Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed). If you want the full invalidation and memoization rules, read [Reactive Dataflow](./reactive_dataflow.md).
 
 ## Forms and validation stay in the same architecture
 
@@ -321,14 +332,18 @@ AIVI still exposes the lower-level building blocks behind this architecture:
 
 Reach for them when you need custom hosting, experiments, or multi-window flows. For standard single-window apps, let `gtkApp` own the event loop.
 
-## Example 1: local state plus a repeating timer
+## Two focused examples
+
+These two examples show the two most common ways an app grows after the basic `Model -> Msg -> update -> view` loop is already in place: add a repeating subscription, then add one-shot background work. For form-heavy flows, jump back to [Forms and validation stay in the same architecture](#forms-and-validation-stay-in-the-same-architecture) or continue with [`aivi.ui.forms`](./forms.md).
+
+### Example 1: local state plus a repeating timer
 
 This first example keeps one search query in the model and adds a repeating timer only while the screen says it should be active:
 
 <<< ../../snippets/from_md/stdlib/ui/app_architecture/block_11.aivi{aivi}
 
 
-## Example 2: add background work without changing the loop
+### Example 2: add background work without changing the loop
 
 When a message should launch asynchronous work, return a command from `update`:
 
@@ -344,3 +359,11 @@ If you want to compare this guide with real project code, these are useful follo
 - `demos/snake.aivi` for `gtkApp` with a repeating subscription,
 - `integration-tests/stdlib/aivi/ui/gtk4/gtk4.aivi` for `AppStep`, command, and subscription helpers,
 - `integration-tests/stdlib/aivi/ui/forms/` for form state and validation flows.
+
+## Where to go next
+
+- [`aivi.ui.gtk4`](./gtk4.md) — GTK signal event types, `~<gtk>` sigil details, and low-level primitives
+- [Native GTK & libadwaita Apps](./native_gtk_apps.md) — the broader overview and guided app examples
+- [Reactive Signals](./reactive_signals.md) — pure derived readers in day-to-day app code
+- [Reactive Dataflow](./reactive_dataflow.md) — invalidation, dependency tracking, and memoization semantics
+- [`aivi.ui.forms`](./forms.md) — field state, validation helpers, and form-focused patterns

@@ -5,6 +5,8 @@ The `rest` module is a higher-level HTTP client for JSON-based APIs. It is desig
 <!-- /quick-info -->
 <div class="import-badge">use aivi.rest</div>
 
+This page covers the immediate convenience functions from `use aivi.rest`. If you want reusable `Source` declarations such as `rest.get { ... }` that you later pass to `load`, see [REST / HTTP Sources](../../syntax/external_sources/rest_http.md).
+
 ## What this module is for
 
 Use `aivi.rest` when you are talking to a conventional REST API and want a friendlier interface than raw HTTP requests. In everyday API work, “REST” usually means resource-style HTTP endpoints that send and receive JSON.
@@ -35,6 +37,10 @@ Choose the smallest entry point that fits:
 | configure timeouts, retries, bearer auth, or strict status rules | `fetch` |
 | inspect raw headers and bodies yourself | [`aivi.net.http`](./http.md) |
 
+## Capabilities
+
+Calling `get`, `post`, or `fetch` requires the `network.http` capability, or the broader `network` shorthand.
+
 ## Typical example
 
 This is the style of code `aivi.rest` is meant for:
@@ -42,11 +48,15 @@ This is the style of code `aivi.rest` is meant for:
 ```aivi
 use aivi.rest
 
+User = { id: Int, name: Text }
+
 loadUser : Url -> Effect Text User
 loadUser = userUrl => get userUrl
 ```
 
 The expected result type (`User` here) tells the module what to decode from the response body.
+
+These helpers already perform `load` for you. Use `attempt (get userUrl)`, `attempt (post ...)`, or `attempt (fetch ...)` when you want to catch transport, decode, or strict-status failures explicitly.
 
 For more control, build a `Request` value step by step:
 
@@ -60,6 +70,13 @@ Read the extra fields as policy choices:
 - `bearerToken` adds `Authorization: Bearer ...`,
 - `strictStatus` turns non-2xx responses into errors.
 
+## How decoding and failures work
+
+- `get`, `post`, and `fetch` are convenience wrappers over the lower-level REST source APIs. They return an `Effect` directly instead of a reusable `Source`.
+- The surrounding result type drives response decoding. In `loadUser : Url -> Effect Text User`, the final `User` tells the loader what shape to expect from the response body.
+- Transport failures always fail the effect. Decode failures also fail the effect, and `strictStatus: Some True` upgrades non-2xx HTTP responses into failures too.
+- If you need reusable source declarations, schema-first source definitions, or composition with other source policies, use the REST source forms documented in [REST / HTTP Sources](../../syntax/external_sources/rest_http.md).
+
 ## Types
 
 ### `Header`
@@ -70,19 +87,42 @@ A single HTTP header as a name/value pair.
 Header = { name: Text, value: Text }
 ```
 
+### `Body`
+
+`Body` describes what you send to the server.
+
+```aivi
+Body = Plain Text | Form (List Header)
+```
+
+- `Plain Text` sends text exactly as written. Use this when you already have a JSON string or another raw payload.
+- `Form (List Header)` sends form fields as `{ name, value }` pairs.
+
+Unlike [`aivi.net.http`](./http.md), the convenience `aivi.rest` module does not expose a `Json` request-body variant today. If you want the JSON-body helper from the lower-level HTTP layer, use [`aivi.net.http`](./http.md); otherwise send JSON text with `Plain` or `post` and set any headers you need.
+
 ### `Request`
 
 `Request` gathers the options you can set for a REST call.
 
-<<< ../../snippets/from_md/stdlib/network/rest/block_04.aivi{aivi}
-
+```aivi
+Request = {
+  method: Text
+  url: Url
+  headers: List Header
+  body: Option Body
+  timeoutMs: Option Int
+  retryCount: Option Int
+  bearerToken: Option Text
+  strictStatus: Option Bool
+}
+```
 
 | Field | Type | Explanation |
 | --- | --- | --- |
 | `method` | `Text` | The HTTP method, such as `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`. |
 | `url` | `Url` | The endpoint to call. |
 | `headers` | `List Header` | Extra HTTP headers to send with the request. |
-| `body` | `Option Body` | Optional request body. Use `Plain` for raw text or `Form` for form-style fields. |
+| `body` | `Option Body` | Optional request body. Use `Plain` for raw text or `Form` for form fields represented as `{ name, value }` pairs. |
 | `timeoutMs` | `Option Int` | Maximum request time in milliseconds. `None` uses the runtime default. |
 | `retryCount` | `Option Int` | Number of retry attempts for transient failures. `None` means no retries are requested. |
 | `bearerToken` | `Option Text` | Adds an `Authorization: Bearer <token>` header when present. |
@@ -92,9 +132,9 @@ Header = { name: Text, value: Text }
 
 | Function | Explanation |
 | --- | --- |
-| **get** url<br><code>Url -> Effect Text A</code> | Sends a `GET` request and decodes the response body into the expected type `A`. |
-| **post** url body<br><code>Url -> Text -> Effect Text A</code> | Sends a `POST` request with a text body and decodes the response into `A`. |
-| **fetch** request<br><code>Request -> Effect Text A</code> | Sends a custom REST request and decodes the response into the expected type `A`. |
+| **get** url<br><code>Url -> Effect Text A</code> | Sends a `GET` request and decodes the response body into the expected type `A`. Use `attempt` if you want to recover from network or decode failures. |
+| **post** url body<br><code>Url -> Text -> Effect Text A</code> | Sends a `POST` request with a text body and decodes the response into `A`. Reach for `fetch` when you also need headers, bearer auth, or other request options. |
+| **fetch** request<br><code>Request -> Effect Text A</code> | Sends a custom REST request and decodes the response into the expected type `A`. This is the entry point for timeouts, retries, bearer auth, and strict status handling. |
 
 ## Choosing between `rest` and `http`
 

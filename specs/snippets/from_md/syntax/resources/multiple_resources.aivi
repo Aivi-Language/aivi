@@ -1,6 +1,8 @@
-copy = src dest => do Effect {
-  input  <- managedFile src
-  output <- managedFile dest
+compareFiles = leftPath rightPath => do Effect {
+  left  <- managedFile leftPath
+  right <- managedFile rightPath
 
-  file.copyTo input output
+  leftContent  <- file.readAll left
+  rightContent <- file.readAll right
+  print "{leftContent} / {rightContent}"
 }

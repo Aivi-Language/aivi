@@ -4,14 +4,20 @@ AIVI has a rich surface language, but the compiler lowers it to a much smaller c
 
 This page is mainly for contributors and curious advanced readers. The point is not that AIVI source code is tiny; it is that many different source features end up using the same small implementation core.
 
+If you want the surrounding pipeline first, start with [Compiler & Backend Design](design.md).
+
 A few terms used on this page:
 
 - **λ** means an anonymous function
 - **currying** means representing a multi-argument function as a chain of one-argument functions
 - **`let rec`** means a recursive binding in the core language
 - **HKT** means a higher-kinded type, a type constructor that itself takes type parameters
+- **Church-encoded** means representing a structure by the function that consumes it instead of by a dedicated runtime object
+- **dictionary** means a record of class methods that the compiler can pass implicitly
 
 ## Surface feature → kernel building block
+
+This table mixes true kernel primitives with a few compile-time rewrites and backend-retained forms. The point is that each surface feature stops introducing new semantic machinery once lowering is complete.
 
 | Surface feature | Kernel primitive |
 |:--------------- |:---------------- |
@@ -24,16 +30,16 @@ A few terms used on this page:
 | Predicates | λ + case |
 | Generators | fold (Church-encoded) |
 | Effects (`do Effect {}`) | `bind` + `pure` |
-| Generic do-monads | `chain` + `of` |
+| Generic do-monads | `chain` + `of` (`do Query` uses `queryChain` + `queryOf`) |
 | Resources | `__makeResource` |
 | Plain blocks | immediately-applied λ |
-| Domains | static rewrite |
-| Sigils | function call |
+| Domains | static rewrite to ordinary calls or templates |
+| Sigils | specialized lowering (raw sigils stay literals; structured sigils become ordinary expressions) |
 | Modules | namespaces |
-| Classes | dictionaries (records) |
+| Classes | instance dictionaries (records) |
 | HKTs | ∀ |
 
-In other words, the surface language is expressive, but the core it compiles to is intentionally small.
+In other words, the surface language is expressive, but the implementation core is intentionally small. Some features disappear as rewrites before the kernel proper, while others survive briefly as backend-oriented literal forms, but they still avoid adding new expressive power.
 
 ## The kernel in one sentence
 
@@ -43,18 +49,20 @@ That means features that look quite different in source code—`do Effect`, `res
 
 ## How block forms are lowered
 
-Generic do-monads (`do Option`, `do Result`, `do List`) and effect blocks are desugared by a `desugar_blocks()` pass that transforms `HIR -> HIR`.
-The output is block-free HIR composed of nested lambdas and ordinary function calls.
+These forms do not all disappear in the same pass. Generic `do M` blocks other than `do Effect` are rewritten during the surface → HIR lowering step; `do Effect`, `resource`, `generate`, and `plain` blocks are rewritten later by `desugar_blocks()` during the HIR → block-free HIR step.
+
+The combined result is block-free HIR composed of nested lambdas and ordinary function calls.
 
 | Block kind | Stage | Desugared form |
 |:---------- |:----- |:-------------- |
-| `do Option { x <- e1; e2 }` | HIR transform | `chain e1 (λx → e2)` |
-| `do Result { x <- e1; e2 }` | HIR transform | `chain e1 (λx → e2)` |
-| `do Effect { x <- e1; e2 }` | HIR transform | `__withResourceScope(bind e1 (λx → e2))` |
-| `do Effect { x = e; rest }` | HIR transform | `bind (pure e) (λx → rest)` |
-| `resource { acq; yield v; cleanup }` | HIR transform | `__makeResource (λ_ → acq_chain) (λ_ → cleanup_chain)` |
-| `generate { yield e; ... }` | HIR transform | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` (represented by how the generator is consumed rather than by a dedicated runtime generator data type) |
-| `plain { x = e; body }` | HIR transform | `(λx → body) e` |
+| `do Option { x <- e1; e2 }` | Surface → HIR | `chain (λx → e2) e1` |
+| `do Result { x <- e1; e2 }` | Surface → HIR | `chain (λx → e2) e1` |
+| `do Query { x <- e1; e2 }` | Surface → HIR | `queryChain (λx → e2) e1` |
+| `do Effect { x <- e1; e2 }` | HIR → block-free HIR | `__withResourceScope (bind e1 (λx → e2))` |
+| `do Effect { x = e; rest }` | HIR → block-free HIR | `__withResourceScope (bind (pure e) (λx → rest))` |
+| `resource { acq; yield v; cleanup }` | HIR → block-free HIR | `__makeResource (λ_ → acquire_chain) (λ_ → cleanup_chain)`, where each chain is lowered with the `do Effect` rules |
+| `generate { yield e; ... }` | HIR → block-free HIR | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` (the generator is represented by the fold that consumes it, not by a separate runtime generator data type) |
+| `plain { x = e; body }` | HIR → block-free HIR | `(λx → body) e` |
 
 By the time lowering reaches RustIR, these block forms no longer exist as separate syntax categories.
 
@@ -71,3 +79,9 @@ Several RustIR expression forms could be reduced further to the pure kernel, but
 | `TextInterpolate` | Chain of string concatenations | Allows more efficient string assembly |
 
 These variants do not add expressive power. They are retained because the backend can generate better code from them than it could from their fully reduced equivalents.
+
+## See also
+
+- [Compiler & Backend Design](design.md) for the full compilation pipeline
+- [Generic `do M` Blocks](../syntax/do_notation.md) and [Effects](../syntax/effects.md) for the surface rules behind the block examples
+- [Domains & Units](../syntax/domains.md), [Operators and Context](../syntax/operators.md), and [Classes and Higher-Kinded Types](../syntax/types/classes_and_hkts.md) for the surface features summarized here
