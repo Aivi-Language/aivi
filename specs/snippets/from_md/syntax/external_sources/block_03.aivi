@@ -1,8 +1,7 @@
 AppConfig = { port: Int, debug: Bool }
 
 appConfig : Source Env AppConfig
-appConfig =
-  env.decode {
-    prefix: "AIVI_APP"
-    schema: source.schema.derive
-  }
+appConfig = env.decode {
+  prefix: "AIVI_APP"
+  schema: source.schema.derive
+}

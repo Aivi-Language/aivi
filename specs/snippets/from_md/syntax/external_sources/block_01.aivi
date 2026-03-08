@@ -1,12 +1,10 @@
 User = { id: Int, name: Text, enabled: Bool }
 
 usersSource : Source File (List User)
-usersSource =
-  file.csv "./users.csv"
+usersSource = file.csv "./users.csv"
 
 configSource : Source File { port: Int, debug: Bool }
-configSource =
-  file.json {
-    path: "./config.json"
-    schema: source.schema.derive
-  }
+configSource = file.json {
+  path: "./config.json"
+  schema: source.schema.derive
+}

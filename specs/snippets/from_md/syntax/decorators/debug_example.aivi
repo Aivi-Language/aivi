@@ -8,8 +8,7 @@ processOrder = order => do Effect {
 
 // Verbose: traces every pipe step, arguments, and return value
 @debug(pipes, args, return, time)
-pipeline = xs =>
-  xs
-|> filter (_ > 0)
-|> map (_ * 2)
-|> fold 0 (+)
+pipeline = xs => xs
+  |> filter (_ > 0)
+  |> map (_ * 2)
+  |> fold 0 (+)

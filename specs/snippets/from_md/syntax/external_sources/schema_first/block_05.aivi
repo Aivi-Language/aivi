@@ -1,9 +1,8 @@
 usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    schema: source.schema.derive
-  }
+usersSource = file.json {
+  path: "./users.json"
+  schema: source.schema.derive
+}
 
 do Effect {
   users <- load usersSource

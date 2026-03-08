@@ -11,13 +11,13 @@ Msg = TitleChanged Text | Save
 
 view : Model -> GtkNode
 view = state => ~<gtk>
-                  <GtkBox orientation="vertical" spacing="8">
-                    <GtkEntry id="titleInput" placeholderText="Title" onInput={ TitleChanged } />
-                    <GtkLabel label={"Draft: {state.title}"} />
-                    <GtkButton label="Save" onClick={ Save } />
-                    <GtkLabel label={state.status} />
-                  </GtkBox>
-                </gtk>
+  <GtkBox orientation="vertical" spacing="8">
+    <GtkEntry id="titleInput" placeholderText="Title" onInput={ TitleChanged } />
+    <GtkLabel label={"Draft: {state.title}"} />
+    <GtkButton label="Save" onClick={ Save } />
+    <GtkLabel label={state.status} />
+  </GtkBox>
+</gtk>
 
 update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
 update = msg => state =>

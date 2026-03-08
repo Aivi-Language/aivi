@@ -1,1 +1,1 @@
-{ data: { user: { profile: p as { name } } } } = response
+{ data: { user: { profile as { name } } } } = response

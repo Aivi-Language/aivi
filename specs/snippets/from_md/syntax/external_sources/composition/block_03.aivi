@@ -1,4 +1,1 @@
-source.validate :
-  (A -> Validation (List DecodeError) B) ->
-  Source K A ->
-  Source K B
+source.validate: (A -> Validation (List DecodeError) B) -> Source K A -> Source K B
