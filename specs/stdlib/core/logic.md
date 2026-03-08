@@ -8,8 +8,6 @@ The `aivi.logic` module defines the shared interface hierarchy used across the A
 ## Start here
 
 If you opened this page because another module says “`Option` is a `Functor`” or “`Result` is a `Monad`”, you do **not** need a full category-theory background first.
-Read the quick chooser below, then jump straight to the class you need.
-
 Plain-language decoder:
 
 - **Functor** = a wrapper or container you can `map` over
@@ -48,19 +46,6 @@ If terms such as *Functor*, *Monad*, or *Monoid* are new to you, think of `aivi.
 When a type implements one of these classes, you can use the same operation names across many different data types.
 
 In the class snippets below, container-shaped classes use AIVI's abbreviated HKT member syntax: the container input is omitted and added as the final argument by the compiler. For example, `map: (A -> B) -> F B` reads as `map: (A -> B) -> F A -> F B`.
-
-### Quick chooser
-
-If you only need the everyday mental model, start here:
-
-| If you want to... | Reach for... | Plain-language idea |
-| --- | --- | --- |
-| compare values | `Setoid`, `Ord` | equality and sorting |
-| combine values of the same type | `Semigroup`, `Monoid` | append or merge, sometimes with an “empty” starting value |
-| change values inside a wrapper | `Functor` | `map` over the inside without changing the wrapper |
-| combine several independent wrapped steps | `Applicative` | prepare several inputs separately, then combine them |
-| sequence wrapped steps that depend on earlier results | `Monad` | later steps can inspect earlier results |
-| collapse many values into one summary | `Foldable` | reduce or fold |
 
 ### One problem, three levels of power
 

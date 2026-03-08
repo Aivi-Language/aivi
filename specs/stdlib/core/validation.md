@@ -26,14 +26,6 @@ That makes it a good fit for tasks such as:
 
 If you want the computation to stop at the first failure, use `Result` instead.
 
-## Quick chooser
-
-| If the situation is... | Use | Why |
-| --- | --- | --- |
-| the value might be missing, and that is normal | [`Option`](option.md) | there is no extra error story to tell |
-| one step can fail and the next step depends on it | [`Result`](result.md) | stop early and keep one explicit success-or-error path |
-| several checks are independent and you want all problems | `Validation` | accumulate errors instead of stopping at the first one |
-
 ## 1. The `Validation` type
 
 `Validation E A` looks a lot like `Result E A`, but it is designed for a different workflow.
