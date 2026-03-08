@@ -486,17 +486,85 @@ Command Reference
                     ));
                     return;
                 }
-                let module_name = alias.unwrap_or_else(|| derive_module_name(source));
-                if !self.imports.contains(&module_name) {
-                    self.imports.push(module_name.clone());
+
+                if kind == "file" && !Path::new(source).exists() {
+                    self.push_error(format!(
+                        "OpenAPI file not found: `{source}`\n\
+                         Check the path and try again."
+                    ));
+                    return;
                 }
-                // TODO: feed through the compile-time OpenAPI loader once available.
+
+                if kind == "url"
+                    && !source.starts_with("http://")
+                    && !source.starts_with("https://")
+                {
+                    self.push_error(format!(
+                        "Invalid URL `{source}`: must start with http:// or https://"
+                    ));
+                    return;
+                }
+
+                let binding_name = alias.unwrap_or_else(|| derive_module_name(source));
+                let loader_call = if kind == "file" {
+                    format!("openapi.fromFile \"{source}\"")
+                } else {
+                    format!("openapi.fromUrl \"{source}\"")
+                };
+                let snippet = format!("@static\n{binding_name} = {loader_call}");
+
+                // Validate by running the snippet through the normal compile pipeline.
+                let module_source = self.synthesize_module(&snippet, InputKind::Definition);
+                let path = Path::new("<repl_session>");
+                let (mut session_modules, mut parse_diags) = parse_modules(path, &module_source);
+                let mut all_modules = embedded_stdlib_modules();
+                all_modules.append(&mut session_modules);
+
+                let resolver_diags = check_modules(&all_modules);
+                parse_diags.extend(
+                    resolver_diags
+                        .into_iter()
+                        .filter(|d| d.path == "<repl_session>"),
+                );
+
+                if file_diagnostics_have_errors(&parse_diags) {
+                    self.push_diagnostics_as_error("<repl_session>", &parse_diags);
+                    return;
+                }
+
+                let type_diags: Vec<FileDiagnostic> = check_types(&all_modules)
+                    .into_iter()
+                    .filter(|d| d.path == "<repl_session>")
+                    .collect();
+
+                if file_diagnostics_have_errors(&type_diags) {
+                    self.push_diagnostics_as_error("<repl_session>", &type_diags);
+                    return;
+                }
+
+                // Inject the @static snippet and register the binding in the symbol inventory.
+                // Use the inferred type from this compilation (mirrors what eval_input does for
+                // definitions), with "?" as a fallback if type inference can't resolve it.
+                let infer = infer_value_types_full(&all_modules);
+                let binding_type = infer
+                    .type_strings
+                    .get("repl_session")
+                    .and_then(|types| types.get(binding_name.as_str()))
+                    .cloned()
+                    .unwrap_or_else(|| "?".to_owned());
+
+                self.definitions.push(snippet);
+                self.session_types
+                    .insert(binding_name.clone(), binding_type);
+                if let Some(pane) = self.active_pane {
+                    self.cached_symbols = self.build_symbol_entries(pane, "");
+                }
+
                 self.transcript.push(TranscriptEntry {
                     kind: TranscriptKind::System,
                     text: format!(
-                        "OpenAPI {source_label} `{source}` registered as module `{module_name}` \
-                         (types and functions will appear in /types and /functions once the \
-                         OpenAPI loader is wired up)"
+                        "OpenAPI {source_label} `{source}` bound as `{binding_name}` \
+                         — use `{binding_name} {{}}` to create a client"
                     ),
                 });
             }
@@ -1362,6 +1430,190 @@ mod tests {
     #[test]
     fn closest_command_no_match_far_off() {
         assert!(closest_command("/zzzzzzzzz").is_none());
+    }
+
+    // ── /openapi command ────────────────────────────────────────────────────
+
+    #[test]
+    fn openapi_no_kind_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/openapi").unwrap();
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error));
+        assert!(has_error);
+    }
+
+    #[test]
+    fn openapi_unknown_kind_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/openapi grpc some.proto").unwrap();
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error) && e.text.contains("`file` or `url`"));
+        assert!(has_error, "expected error mentioning 'file' or 'url'");
+    }
+
+    #[test]
+    fn openapi_file_missing_source_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/openapi file").unwrap();
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error));
+        assert!(has_error);
+    }
+
+    #[test]
+    fn openapi_url_missing_source_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/openapi url").unwrap();
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error));
+        assert!(has_error);
+    }
+
+    #[test]
+    fn openapi_file_nonexistent_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine
+            .submit("/openapi file /nonexistent/path/does_not_exist.json as myApi")
+            .unwrap();
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error) && e.text.contains("not found"));
+        assert!(has_error, "expected 'not found' error for missing file");
+    }
+
+    #[test]
+    fn openapi_url_invalid_format_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine
+            .submit("/openapi url not-a-url/spec.json as myApi")
+            .unwrap();
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error) && e.text.contains("Invalid URL"));
+        assert!(has_error, "expected 'Invalid URL' error");
+    }
+
+    #[test]
+    fn openapi_file_success_injects_static_definition() {
+        // Use the petstore.json from the integration-tests directory.
+        let petstore = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../integration-tests/syntax/decorators/petstore.json"
+        );
+        if !std::path::Path::new(petstore).exists() {
+            // Skip if the file is not reachable from this test's working directory.
+            return;
+        }
+        let mut engine = make_engine();
+        let snap = engine
+            .submit(&format!("/openapi file {petstore} as petStoreApi"))
+            .unwrap();
+
+        // Should not have any error.
+        let has_error = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::Error));
+        assert!(!has_error, "unexpected error: {:?}", snap.transcript);
+
+        // A success system message should appear.
+        let has_success = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::System) && e.text.contains("petStoreApi"));
+        assert!(
+            has_success,
+            "expected success message mentioning petStoreApi"
+        );
+
+        // The @static snippet should be in definitions.
+        assert!(
+            engine
+                .definitions
+                .iter()
+                .any(|d| d.contains("petStoreApi") && d.contains("openapi.fromFile")),
+            "expected @static snippet in definitions"
+        );
+    }
+
+    #[test]
+    fn openapi_file_success_symbols_visible() {
+        let petstore = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../integration-tests/syntax/decorators/petstore.json"
+        );
+        if !std::path::Path::new(petstore).exists() {
+            return;
+        }
+        let mut engine = make_engine();
+        engine
+            .submit(&format!("/openapi file {petstore} as petStoreApi"))
+            .unwrap();
+
+        // After injecting, /values should list petStoreApi.
+        let snap = engine.submit("/values").unwrap();
+        let lists_binding = snap.symbols.iter().any(|e| e.name.contains("petStoreApi"));
+        assert!(
+            lists_binding,
+            "expected petStoreApi in /values after /openapi file"
+        );
+    }
+
+    #[test]
+    fn openapi_file_derives_binding_name_when_omitted() {
+        let petstore = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../integration-tests/syntax/decorators/petstore.json"
+        );
+        if !std::path::Path::new(petstore).exists() {
+            return;
+        }
+        let mut engine = make_engine();
+        // No `as <name>` — should auto-derive "petstore" from the filename.
+        let snap = engine.submit(&format!("/openapi file {petstore}")).unwrap();
+        let has_success = snap
+            .transcript
+            .iter()
+            .any(|e| matches!(e.kind, TranscriptKind::System) && e.text.contains("petstore"));
+        assert!(
+            has_success,
+            "expected auto-derived name 'petstore' in message"
+        );
+    }
+
+    // ── parse_openapi_args ──────────────────────────────────────────────────
+
+    #[test]
+    fn parse_openapi_args_with_as_clause() {
+        let (source, alias) = parse_openapi_args("./petstore.json as petApi");
+        assert_eq!(source, "./petstore.json");
+        assert_eq!(alias, Some("petApi".to_owned()));
+    }
+
+    #[test]
+    fn parse_openapi_args_without_as_clause() {
+        let (source, alias) = parse_openapi_args("./petstore.yaml");
+        assert_eq!(source, "./petstore.yaml");
+        assert!(alias.is_none());
+    }
+
+    #[test]
+    fn parse_openapi_args_url_with_as_clause() {
+        let (source, alias) =
+            parse_openapi_args("https://api.example.com/v1/openapi.json as exampleApi");
+        assert_eq!(source, "https://api.example.com/v1/openapi.json");
+        assert_eq!(alias, Some("exampleApi".to_owned()));
     }
 
     // ── Derive module name ──────────────────────────────────────────────────
