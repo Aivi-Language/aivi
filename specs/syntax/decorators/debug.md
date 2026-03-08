@@ -7,7 +7,7 @@
 Use `@debug` when you want tooling to keep extra tracing metadata for a function instead of hand-writing temporary logging into the body.
 It is useful for troubleshooting call flow, timing, and pipeline-heavy code during focused investigation.
 
-Current implementation status: the parser and HIR lowering recognize the decorator forms below, but end-to-end CLI commands still reject ordinary v0.1 `name = x => ...` definitions with `E2010`.
+Current implementation status: the parser and HIR lowering recognize the decorator forms below, but the CLI currently rejects `@debug` on ordinary `name = x => ...` lambda definitions with error `E2010`.
 This page therefore documents the currently implemented decorator shapes and lowering behaviour, while also calling out the validator gap that still blocks normal CLI use.
 
 ## Syntax

@@ -43,6 +43,8 @@ If you want to see the concrete shapes behind the sigils, start here:
 | `Vh Int` | Percentage of viewport height |
 | `Vw Int` | Percentage of viewport width |
 
+Viewport units (`Vh`, `Vw`) apply primarily in HTML rendering contexts. For native GTK layouts, `Px`, `Em`, and `Rem` are more common.
+
 ### Percentage
 
 `Percentage` represents an integer percentage value such as `Pct 50` for `50%`. In practice, UI renderers treat it like a CSS percentage, so values usually follow the familiar `0..100` convention.

@@ -70,7 +70,7 @@ Inside a compiled function body, `CgType` information lets the lowering pass kee
 - `Float` → `f64`
 - `Bool` → `i64` (`0` or `1`)
 
-Boxing helpers such as `rt_box_int` and `rt_unbox_int` connect that scalar fast path to the generic boxed representation at helper boundaries and function entry / exit points. In other words, the current implementation gets most of its "typed" win *within* lowered function bodies rather than through a fully specialized public ABI between all compiled functions.
+Boxing helpers such as `rt_box_int` and `rt_unbox_int` connect that scalar fast path to the generic boxed representation at helper boundaries and function entry / exit points. In other words, the current implementation gets most of its performance benefit from type-directed optimizations *within* lowered function bodies rather than through a fully specialized public ABI between all compiled functions.
 
 ### Runtime context
 

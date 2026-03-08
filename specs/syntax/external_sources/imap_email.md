@@ -1,4 +1,4 @@
-# IMAP Email Sources
+# IMAP (Internet Message Access Protocol) Email Sources
 
 <!-- quick-info: {"kind":"topic","name":"imap email sources"} -->
 AIVI provides IMAP integration in two related forms: a typed one-shot source for “connect, fetch, disconnect” mailbox reads, and a longer-lived session API for workflows such as search, flag management, mailbox administration, and IDLE notifications. This page focuses on the IMAP-specific surface; for the convenience module that re-exports the session functions as everyday stdlib calls, see the [Email Module](../../stdlib/system/email.md).
@@ -9,7 +9,7 @@ IMAP support comes in two styles:
 1. a **one-shot source** when you want to load messages as typed data,
 2. a **session API** when you need a longer conversation with the mailbox.
 
-Use the one-shot source for simple inbox ingestion. Use the session API when you need to select mailboxes, manage flags, move or append messages, or listen for changes with IDLE.
+Use the one-shot source for simple inbox ingestion. Use the session API when you need to select mailboxes, manage flags, move or append messages, or listen for changes with IDLE (an IMAP extension for push-style notifications of new mail).
 
 ## Start here
 
@@ -70,7 +70,7 @@ Both password and OAuth2 (XOAUTH2) authentication are supported through `EmailAu
 <<< ../../snippets/from_md/syntax/external_sources/imap_email/block_01.aivi{aivi}
 
 
-OAuth2 uses the XOAUTH2 SASL mechanism, which is commonly supported by providers such as Gmail and Outlook.
+OAuth2 uses the XOAUTH2 (an OAuth2-based authentication mechanism for email servers) SASL mechanism, which is commonly supported by providers such as Gmail and Outlook.
 
 For the full record definitions of `ImapConfig`, `MailboxInfo`, and `IdleResult`, see the [Email Module](../../stdlib/system/email.md). In practice, the most important `ImapConfig` fields are:
 

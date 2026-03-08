@@ -71,7 +71,7 @@ One side sends values, the other side receives them, and the type system keeps b
 | --- | --- |
 | **send** sender value<br><code>Send A -> A -> Effect E Unit</code> | Sends `value` into the channel. |
 | **recv** receiver<br><code>Recv A -> Effect E (Result ChannelError A)</code> | Waits for the next value. Returns `Ok value` for each message, or `Err Closed` once the channel is closed and drained. In this module, `ChannelError` only has the `Closed` case. |
-| **close** sender<br><code>Send A -> Effect E Unit</code> | Closes the sending side so receivers can finish cleanly. |
+| **close** sender<br><code>Send A -> Effect E Unit</code> | Closes the sending side so receivers can finish cleanly. Pending `recv` calls unblock with `Err Closed` once the sending side is closed and any buffered values have been drained. |
 
 ### Consuming a stream of values
 

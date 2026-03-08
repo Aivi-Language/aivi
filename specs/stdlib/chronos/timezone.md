@@ -5,7 +5,7 @@ The `TimeZone` and `ZonedDateTime` domains handle named geographic zones, daylig
 
 They are the right tools when local time matters: meeting times, user-facing schedules, region-specific deadlines, and conversions between UTC storage and local display.
 
-**Implementation note:** time-zone rules come from the IANA time-zone database (the standard global list of zone names such as `Europe/Berlin` and `America/New_York`) via `chrono-tz`. Ambiguous or invalid local times are runtime errors when a wall-clock time cannot be resolved to one instant.
+**Implementation note:** time-zone rules come from the IANA (Internet Assigned Numbers Authority) time-zone database (the standard global list of zone names such as `Europe/Berlin` and `America/New_York`) via `chrono-tz`. Ambiguous or invalid local times are runtime errors when a wall-clock time cannot be resolved to one instant.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.timezone<span class="domain-badge">domain</span></div>
 

@@ -69,7 +69,7 @@ A few terms appear often on this page:
 | Term | Meaning in plain language |
 | --- | --- |
 | **committed model** | the official `Model` value after `update` succeeds |
-| **reconciliation** | patching the live widget tree instead of rebuilding everything from scratch |
+| **reconciliation** | patching the existing widget tree with only the minimal changes needed, rather than rebuilding every widget from scratch |
 | **command** | one-shot follow-up work launched after an update commits |
 | **subscription** | a long-lived event source that can keep emitting messages over time |
 | **keyed** | identified by a stable text key so the host can replace, cancel, or keep work running |

@@ -71,7 +71,7 @@ Loading network sources can fail in different ways:
 - `http.*` and `https.*` return transport failures as `Err { message }`; successful calls stay in `Ok { status, headers, body }`, including non-2xx statuses unless you interpret them yourself.
 - `rest.*` uses the same transport boundary and then decodes the response body into the expected type.
 - `strictStatus: Some True` upgrades non-2xx responses into failures at the REST boundary.
-- if the response body does not match the expected type, the loader should report a source parse error that points at the mismatched path.
+- if the response body does not match the expected type, the loader should report a `SourceError RestApi` with a `DecodeError` branch that points at the mismatched path.
 
 See [External Sources](../external_sources.md) for the shared `SourceError` model.
 

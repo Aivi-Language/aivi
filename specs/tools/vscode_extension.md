@@ -4,7 +4,7 @@ The **AIVI Language Support** extension is the main Visual Studio Code integrati
 
 ## What the extension adds
 
-- **Syntax highlighting** for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting for multiline raw-text sigils whose first line is a language tag such as `css`, `json`, or `sql`; see [Raw text sigil](../syntax/operators.md#raw-text-sigil).
+- **Syntax highlighting** for `.aivi` files, including HTML/GTK injection support and embedded-language highlighting for multiline raw-text sigils (a sigil is a special prefix notation for embedding literal text or code) whose first line is a language tag such as `css`, `json`, or `sql`; see [Raw text sigil](../syntax/operators.md#raw-text-sigil).
 - **Semantic highlighting** with custom token types for arrows, pipes, brackets, dots, units, sigils, and dotted-path segments. This is extra language-aware coloring on top of the grammar-based highlighting.
 - **Language server integration** so features such as hover, rename, go-to-definition, diagnostics, and completion work automatically.
 - **Formatting** through VS Code's standard **Format Document** command and Format on Save.

@@ -54,7 +54,7 @@ Another way to say it:
 
 ## 2. Combining validations with `ap`
 
-In everyday AIVI code, the main combination helper is `ap`:
+In everyday AIVI code, the main combination helper is `ap` (the `Applicative` combination operator from [`aivi.logic`](logic.md)):
 
 <<< ../../snippets/from_md/stdlib/core/validation/block_01.aivi{aivi}
 

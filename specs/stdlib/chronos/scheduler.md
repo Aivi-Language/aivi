@@ -3,7 +3,7 @@
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.scheduler"} -->
 The `Scheduler` domain models durable scheduling primitives for cron, interval, and one-shot jobs.
 
-It is meant for work that should survive process restarts or be coordinated across workers. Here, **durable** means the schedule survives restarts, **idempotent plan keys** mean the same job can be recognised safely if it is submitted twice, **leases** mean temporary ownership by one worker, and **heartbeats** are periodic “I am still alive” updates from that worker. Retries can include exponential backoff and jitter, where **jitter** means small random variation so many workers do not retry at the exact same instant.
+It is meant for work that should survive process restarts or be coordinated across workers. Here, **durable** means the schedule survives restarts, **idempotent plan keys** mean the same job can be recognised safely if it is submitted twice, **leases** mean temporary ownership by one worker, and **heartbeats** are periodic “I am still alive” updates from that worker. Retries can include exponential backoff and jitter, where **jitter** means small random variation so many workers do not retry at the exact same instant. These concepts matter because without them, distributed job runners risk duplicating work, losing track of ownership, or stampeding the same resource when failures happen.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.scheduler<span class="domain-badge">domain</span></div>
 

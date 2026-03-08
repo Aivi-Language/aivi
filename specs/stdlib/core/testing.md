@@ -67,7 +67,7 @@ Keep `mock ... in` for binding-level substitution, snapshots, and APIs that shou
 - `aivi test path --update-snapshots` writes a new snapshot file or refreshes an existing one.
 - Plain `aivi test path` compares the current value against the existing snapshot file.
 - If the snapshot file is missing and you did not pass `--update-snapshots`, the test fails and tells you to re-run in update mode.
-- Snapshot files live under `__snapshots__/<module.path>/<testName>/<name>.snap`.
+- Snapshot files live under `<project>/__snapshots__/<module.path>/<testName>/<name>.snap`.
 
 Snapshot tests are especially helpful for larger structured output such as formatted text, generated code, or UI trees.
 

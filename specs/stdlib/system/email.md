@@ -21,7 +21,7 @@ All of these APIs perform network I/O when executed.
 If you need the lower-level `load (email.imap ...)` source form, see [IMAP Email Sources](../../syntax/external_sources/imap_email.md).
 
 Both IMAP and SMTP accept password credentials or OAuth2 access tokens through `EmailAuth`.
-IMAP uses XOAUTH2 directly; SMTP token support depends on what the remote server accepts for authenticated SMTP.
+IMAP uses XOAUTH2 (an OAuth2-based authentication mechanism specifically for email servers) directly; SMTP token support depends on what the remote server accepts for authenticated SMTP.
 
 ## Types
 

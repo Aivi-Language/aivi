@@ -114,9 +114,6 @@ For `mock snapshot`, the `<binding_path>` part of the filename is derived from t
 `assertSnapshot` compares a serialized value against a stored snapshot.
 Pass `--update-snapshots` when you intentionally want to re-record the expected output.
 
-<<< ../../snippets/from_md/syntax/decorators/test/block_03.aivi{aivi}
-
-
 ### Mock parse errors
 
 | Code | Condition |

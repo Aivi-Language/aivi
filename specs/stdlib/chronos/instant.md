@@ -69,6 +69,8 @@ The `retryDelay` record is the concrete `Span` shape. If you want named duration
 
 ## Domain definition
 
+`Timestamp` is the public type alias for `Instant` — they refer to the same type.
+
 The public surface is a `Timestamp` alias plus comparison and span arithmetic:
 
 <<< ../../snippets/from_md/stdlib/chronos/instant/block_03.aivi{aivi}

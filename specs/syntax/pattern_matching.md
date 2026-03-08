@@ -6,7 +6,7 @@ Pattern matching lets you branch on the shape of a value instead of manually unp
 
 This is the main way to do case analysis, similar to `match` in Rust or `case` in Haskell and Elixir.
 
-### Choosing the match subject (scrutinee)
+### Choosing the match subject
 
 <!-- quick-info: {"kind":"operator","name":"match"} -->
 `match` matches on the expression immediately to its left.
@@ -24,7 +24,7 @@ See also: [Functions and Pipes](functions.md) for `|>`, [Closed Records](types/c
 
 Compiler checks:
 
-- non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present
+- non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present — this ensures every possible value shape is handled, preventing runtime surprises
 - unreachable arms (shadowed by earlier patterns) produce a warning
 
 ## 8.2 Multi-clause functions
@@ -47,7 +47,7 @@ Here is the same idea without `|>`, using rebinding plus record destructuring in
 
 ## 8.3 Record Patterns
 
-Record patterns let you pick out only the fields you care about. The basic forms are shorthand binding (`{ name }`), renaming (`{ name: n }`), and matching against a nested pattern (`{ role: Admin }`).
+Record patterns let you pick out only the fields you care about. The basic forms are shorthand binding (`{ name }`), binding under a new name (`{ name: n }`), and matching against a nested pattern (`{ role: Admin }`).
 
 <<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
 

@@ -1,11 +1,11 @@
 # Calendar Domain
 
-<!-- quick-info: {"kind":"module","name":"aivi.chronos.calendar"} -->
+<!-- quick-info: {"kind":"domain","name":"aivi.chronos.calendar"} -->
 The `Calendar` domain is for human calendar math: dates, month boundaries, leap years, and “what date comes next?” style questions.
 
 It exists because calendar arithmetic is full of edge cases. Months have different lengths, leap years happen, and “one month later” is not the same thing as “thirty days later”.
 <!-- /quick-info -->
-<div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">module</span></div>
+<div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">domain</span></div>
 
 ## Quick chooser
 

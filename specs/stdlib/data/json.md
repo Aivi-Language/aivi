@@ -90,7 +90,7 @@ If you want to attach a JSON contract to a source declaration and have the compi
 
 `JsonValue` represents any JSON value. It is the low-level format you work with before decoding into application-specific types.
 
-<<< ../../snippets/from_md/stdlib/data/json/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/data/json/block_08.aivi{aivi}
 
 
 For example, `JsonObject [("name", JsonString "Ada")]` is a `JsonValue`.

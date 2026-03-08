@@ -54,7 +54,7 @@ Here is what that looks like in code.
 
 Read `class Functor (F A)` as “for any container shape `F` and element type `A`”.
 
-The member signature uses AIVI’s abbreviated HKT form. The compiler reads:
+The member signature uses AIVI’s abbreviated HKT form — the container argument is omitted from the signature and added automatically by the compiler as the last parameter. The compiler reads:
 
 ```text
 map : (A -> B) -> F B

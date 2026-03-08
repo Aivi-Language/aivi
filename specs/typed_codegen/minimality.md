@@ -12,7 +12,7 @@ A few terms used on this page:
 - **currying** means representing a multi-argument function as a chain of one-argument functions
 - **`let rec`** means a recursive binding in the core language
 - **HKT** means a higher-kinded type, a type constructor that itself takes type parameters
-- **Church-encoded** means representing a structure by the function that consumes it instead of by a dedicated runtime object
+- **Church-encoded** (representing data as fold functions, a technique from lambda calculus) means representing a structure by the function that consumes it instead of by a dedicated runtime object
 - **dictionary** means a record of class methods that the compiler can pass implicitly
 
 ## Surface feature → kernel building block

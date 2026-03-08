@@ -39,7 +39,7 @@ This example shows the three most common workflows: yes/no matching, extracting 
 <<< ../../snippets/from_md/stdlib/core/regex/block_02.aivi{aivi}
 
 
-- `InvalidPattern` carries the pattern-parse error text returned by `compile`.
+- `RegexError` is a sum type with one constructor: `InvalidPattern Text`. It carries the pattern-parse error text returned by `compile`.
 - `full` is the entire matched text.
 - `groups` contains capture groups `1..N`; the full match is **not** repeated there because it already appears in `full`.
 - `start` and `end` are the match bounds.

@@ -8,7 +8,7 @@ The MCP server is local-first:
 - it exposes compiler and formatter tools such as `aivi_parse`, `aivi_check`, and `aivi_fmt`
 - with `--ui`, it also exposes `aivi_gtk_*` tools for live GTK inspection and interaction
 
-Tool names are advertised with only letters, numbers, `_`, and `-` because some MCP hosts reject dotted names in `tools/list`. The server still accepts legacy dotted spellings such as `aivi.gtk.launch` on `tools/call` for backwards compatibility.
+Tool names are advertised with underscore-safe names (using only letters, numbers, `_`, and `-`, because some MCP hosts reject dotted names in the `tools/list` response). The server still accepts legacy dotted spellings such as `aivi.gtk.launch` on `tools/call` for backwards compatibility.
 
 See also [CLI](cli.md) for the command-line entry point and [`aivi.ui.gtk4`](../stdlib/ui/gtk4.md) for the GTK signal/runtime model behind the UI tools.
 

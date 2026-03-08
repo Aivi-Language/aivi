@@ -69,4 +69,4 @@ Environment sources can fail in three common ways:
 
 Typical diagnostics include messages such as `env var not found: AIVI_MODE` or `no environment variables found for prefix \`AIVI_APP\``. Decode failures keep the source boundary attached as well, so you can tell whether the problem came from acquisition or from type-directed decoding.
 
-For the general source error model, see [External Sources](../external_sources.md#1211-sourceerror).
+For the general source error model, see [External Sources](../external_sources.md#128-sourceerror).

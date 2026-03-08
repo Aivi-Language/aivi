@@ -8,7 +8,7 @@ A domain is a bundle of semantics for a **carrier type** such as a date, duratio
 
 - operator meanings such as `+`, `-`, `*`, or `×`
 - typed suffix literals such as `10ms`, `2h`, or `10l`
-- helper types for changes or measurements, often called **deltas**
+- helper types for changes or measurements, often called **deltas** — typed changes such as "three days", "five meters", or "twenty degrees"
 - compile-time validation for domain-owned syntax
 
 That means code can stay concise without becoming untyped. For example, `30d` is not a string; it is a typed value supplied by an active domain.
@@ -34,7 +34,7 @@ To use a domain, bring the domain itself into scope. The most explicit form is:
 <<< ../snippets/from_md/syntax/domains/block_02.aivi{aivi}
 
 
-The first example uses a module that exports its domain directly. The second shows a companion-module pattern used by some standard-library areas: one module provides the named helpers, and another exports the domain sugar.
+The first example uses a module that exports its domain directly. The second shows a companion-module pattern (a separate module that provides extra operations for a domain type) used by some standard-library areas: one module provides the named helpers, and another exports the domain sugar.
 
 ### Importing a domain explicitly
 
@@ -82,7 +82,7 @@ Write the suffix immediately after the closing `)`:
 
 ## Domain-owned operators
 
-Domains may define operator behavior that goes beyond plain integer arithmetic. That includes familiar operators such as `+` and `*`, and also `×` for transform-style multiplication.
+Domains may define operator behavior that goes beyond plain integer arithmetic. That includes familiar operators such as `+` and `*`, and also `×` for transform-style multiplication (such as matrix-by-matrix or matrix-by-vector products).
 
 ### Overloading the same operator inside one domain
 

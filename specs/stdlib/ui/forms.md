@@ -7,6 +7,8 @@
 
 <div class="import-badge">use aivi.ui.forms</div>
 
+This module works inside the standard Model / Msg / update pattern described in [GTK App Architecture](./app_architecture.md).
+
 This module is designed to fit naturally into [`gtkApp`](./app_architecture.md):
 
 - the **model** owns the editable values,

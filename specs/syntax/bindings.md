@@ -35,17 +35,17 @@ On the right-hand side of the second line, `x` still refers to the earlier bindi
 
 Use shadowing when the new name really is “the updated version” of the old value and the narrower scope keeps that intent clear.
 
-## 1.2.1 Recursion (module level only)
+## 1.3 Recursion (module level only)
 
 Inside a module body, top-level value bindings are recursive. A top-level definition may refer to itself and to definitions that appear later in the same file.
 
 That lets you write ordinary recursive helpers without rearranging a file to satisfy declaration order.
 
-Local bindings are different: a binding inside a function, block, or `match` arm does **not** become recursive just because it uses `=`. For local recursion, use a module-level helper or the dedicated `loop` / `recurse` forms described in [Generators](generators.md) and [Effects](effects.md).
+Local bindings are different: a binding inside a function, block, or `match` arm does **not** become recursive just because it uses `=`. For local recursion, use a module-level helper or the dedicated `loop` / `recurse` forms (`loop` starts a recursive computation and `recurse` jumps back to it), described in [Generators](generators.md) and [Effects](effects.md).
 
 <<< ../snippets/from_md/syntax/bindings/recursion_module_level.aivi{aivi}
 
-## 1.3 Pattern Bindings
+## 1.4 Pattern Bindings
 
 A binding can destructure a value directly on the left-hand side. Use this when the shape is guaranteed by the type or by earlier control flow and you want the interesting pieces available by name immediately.
 
@@ -67,7 +67,7 @@ Rules to remember:
 > [!NOTE]
 > Using `=` with a non-total pattern such as `[h, ...t] = []` is a compile-time error. When a match may fail, write a `match` so the failure path is visible in the source.
 
-## 1.4 Whole-value binding with `as`
+## 1.5 Whole-value binding with `as`
 
 Sometimes you want both the whole value and a few pieces inside it. `as` lets one pattern do both jobs.
 
@@ -89,7 +89,7 @@ Example:
 
 <<< ../snippets/from_md/syntax/bindings/whole_value_binding_with_as_02.aivi{aivi}
 
-## 1.5 Common Binding Patterns
+## 1.6 Common Binding Patterns
 
 The examples below use values whose shapes are already known, so the destructuring bindings remain total.
 

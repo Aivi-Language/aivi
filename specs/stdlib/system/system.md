@@ -3,7 +3,7 @@
 <!-- quick-info: {"kind":"module","name":"aivi.system"} -->
 The `aivi.system` module is the bridge between an AIVI program and the operating system that launched it.
 
-Use it to read environment variables, inspect command-line arguments, detect a best-effort locale tag, or terminate the current process with an exit code.
+Use it to read environment variables, inspect command-line arguments, detect the system locale (or `None` if detection fails), or terminate the current process with an exit code.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.system</div>
@@ -43,7 +43,7 @@ For the source-level model behind these helpers, see [Environment sources](../..
 | Function | What it does |
 | --- | --- |
 | **args**<br><code>Effect Text (List Text)</code> | Returns the command-line arguments in the order the user supplied them, excluding the executable name. |
-| **localeTag**<br><code>Effect Text (Option Text)</code> | Returns a best-effort host locale tag such as `"en-GB"`, or `None` when no locale information is available. |
+| **localeTag**<br><code>Effect Text (Option Text)</code> | Returns the system locale as a tag such as `"en-GB"`, or `None` if detection fails. |
 | **exit** code<br><code>Int -> Effect Text Unit</code> | Terminates the process with `code`. `0` means success; non-zero codes signal failure. |
 
 On Unix-like hosts, `localeTag` checks `LC_ALL`, `LC_MESSAGES`, and `LANG` in that order, then strips charset and modifier suffixes such as `.UTF-8` or `@euro`.
@@ -53,7 +53,7 @@ On Unix-like hosts, `localeTag` checks `LC_ALL`, `LC_MESSAGES`, and `LANG` in th
 - Use `env.get` when one variable is optional and you want to choose the fallback yourself.
 - Use `env.decode` when several related variables form one typed configuration record.
 - Use `args` for command-line tools, batch jobs, and wrappers that receive user-provided flags.
-- Use `localeTag` when you want a best-effort starting point for localization; see [I18n](../core/i18n.md) for locale parsing and fallback patterns.
+- Use `localeTag` when you want the system locale as a starting point for localization (it returns `None` if detection fails); see [I18n](../core/i18n.md) for locale parsing and fallback patterns.
 - Use `exit` at the program boundary when another program, shell script, or CI job needs a clear success or failure signal.
 
 ## Type Signatures
