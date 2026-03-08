@@ -16,6 +16,16 @@ That is why simple code can use names such as `Int`, `Text`, `Option`, `Some`, `
 
 <<< ../../snippets/from_md/stdlib/core/prelude/block_01.aivi{aivi}
 
+::: repl
+```aivi
+toText 42
+// => "42"
+Some "hello" |> isSome
+// => True
+constructorName (Ok 1)
+// => "Ok"
+```
+:::
 
 ## What is typically included
 

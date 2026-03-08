@@ -19,6 +19,16 @@ Plain-language decoder:
 
 <<< ../../snippets/from_md/stdlib/core/logic/standard_library_logic_algebraic_hierarchy.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.logic
+Some 5 |> map (_ + 1)
+// => Some 6
+[1, 2, 3] |> map (_ * 10)
+// => [10, 20, 30]
+```
+:::
+
 See also:
 
 - Syntax: classes and instances ([The Type System](../../syntax/types.md))

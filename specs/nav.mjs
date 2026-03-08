@@ -174,8 +174,6 @@ export const sidebar = [
           { text: 'Matrix', link: '/stdlib/math/matrix' },
           { text: 'Linear Algebra', link: '/stdlib/math/linear_algebra' },
           { text: 'Geometry', link: '/stdlib/math/geometry' },
-          { text: 'Probability', link: '/stdlib/math/probability' },
-          { text: 'Signal Processing', link: '/stdlib/math/signal' },
           { text: 'Graph', link: '/stdlib/math/graph' },
           { text: 'Tree', link: '/stdlib/math/tree' }
         ]

@@ -112,13 +112,6 @@ Today the stable surface uses `race` when two effects compete and `timeoutWith` 
 In the example above, `race` keeps only the faster branch, and `timeoutWith` cancels the protected effect if the timer wins.
 A dedicated `select { ... }` surface form is not part of `aivi.concurrency` today.
 
-## Capabilities
-
-- `sleep` uses clock access.
-- Task creation, racing, cancellation, timeouts, and retries rely on concurrency and cancellation support in the runtime.
-- Channel creation and delivery rely on runtime channel support.
-- Resource cleanup still runs when a task is cancelled.
-
 ## How this fits GTK apps
 
 The same concurrency ideas show up in [GTK App Architecture](../ui/app_architecture.md) and [`aivi.ui.gtk4`](../ui/gtk4.md).

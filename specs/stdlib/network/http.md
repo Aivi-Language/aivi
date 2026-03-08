@@ -46,10 +46,6 @@ Choose the smallest entry point that matches the job:
 | set headers, choose a method, or send a structured body | `fetch` |
 | call a JSON API and decode directly into a value | [`aivi.rest`](./rest.md) |
 
-## Capabilities
-
-`get`, `post`, and `fetch` perform network I/O when executed. The `rest` helper module covers the same runtime surface.
-
 ## Quick start
 
 This example fetches a page and checks whether the request succeeded:

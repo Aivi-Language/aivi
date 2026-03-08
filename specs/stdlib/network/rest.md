@@ -37,10 +37,6 @@ Choose the smallest entry point that fits:
 | configure timeouts, retries, bearer auth, or strict status rules | `fetch` |
 | inspect raw headers and bodies yourself | [`aivi.net.http`](./http.md) |
 
-## Capabilities
-
-`get`, `post`, and `fetch` perform network I/O when executed.
-
 ## Typical example
 
 This is the style of code `aivi.rest` is meant for:

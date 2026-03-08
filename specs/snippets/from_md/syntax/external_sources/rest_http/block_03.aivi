@@ -10,7 +10,7 @@ usersSource =
     url: ~u(https://api.example.com/users)
     headers: []
     body: None
-    timeoutMs: Some 5_000
+    timeoutMs: Some 5000
     retryCount: Some 2
     bearerToken: Some apiToken
     strictStatus: Some True

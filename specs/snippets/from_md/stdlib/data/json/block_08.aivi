@@ -1,5 +1,5 @@
-JsonValue
-  = JsonNull
+JsonValue =
+  | JsonNull
   | JsonBool Bool
   | JsonInt Int
   | JsonFloat Float

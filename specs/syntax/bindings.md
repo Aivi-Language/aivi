@@ -22,6 +22,15 @@ Think of `=` as “define this name” rather than “assign into this variable�
 
 <<< ../snippets/from_md/syntax/bindings/definitions.aivi{aivi}
 
+::: repl
+```aivi
+x = 42
+add = a b => a + b
+add 10 x
+// => 52
+```
+:::
+
 ## 1.2 Shadowing
 
 Bindings are lexical, so names resolve from the nearest enclosing scope outward. That means an inner scope can reuse a name from an outer scope.
@@ -50,6 +59,15 @@ Local bindings are different: a binding inside a function, block, or `match` arm
 A binding can destructure a value directly on the left-hand side. Use this when the shape is guaranteed by the type or by earlier control flow and you want the interesting pieces available by name immediately.
 
 <<< ../snippets/from_md/syntax/bindings/pattern_bindings.aivi{aivi}
+
+::: repl
+```aivi
+pair = (10, 20)
+(a, b) = pair
+a + b
+// => 30
+```
+:::
 
 ### Record destructuring
 

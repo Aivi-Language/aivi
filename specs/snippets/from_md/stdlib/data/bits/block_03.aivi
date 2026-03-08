@@ -1,11 +1,11 @@
 use aivi.bits
-use aivi.logic
 
 parseHeader : Bits -> Result Text { version: Int, flags: Bits, payload: Bits }
 parseHeader = raw =>
-  stream      = streamFromBits raw
-stream |> streamRead 1 |> chain (vb, s1) =>
-  s1 |> streamRead 2 |> chain (flags, s2) =>
-// The final read returns the payload and the advanced stream.
-s2 |> streamRead 4 |> map (payload, _) =>
-  { version: toInt vb, flags: flags, payload: payload }
+  s0 = streamFromBits raw
+  do Result {
+    (vb, s1)      <- streamRead 1 s0
+    (flags, s2)   <- streamRead 2 s1
+    (payload, _)  <- streamRead 4 s2
+    pure { version: toInt vb, flags: flags, payload: payload }
+  }

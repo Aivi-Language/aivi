@@ -19,15 +19,14 @@ subscriptions = model =>
     else []
 
 update : Msg -> Model -> Effect GtkError (AppStep Model Msg)
-update = msg => model =>
-  pure (
-    msg match
-      | SearchQueryChanged updatedQuery => {
-          model: model <| { searchQuery: updatedQuery }
-          commands: []
-        }
-      | Tick => {
-          model: model <| { visibleSeconds: model.visibleSeconds + 1 }
-          commands: []
-        }
-  )
+update = msg => model => pure (
+  msg match
+    | SearchQueryChanged updatedQuery => {
+        model: model <| { searchQuery: updatedQuery }
+        commands: []
+      }
+    | Tick => {
+        model: model <| { visibleSeconds: model.visibleSeconds + 1 }
+        commands: []
+      }
+)

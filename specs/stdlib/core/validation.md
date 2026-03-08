@@ -52,6 +52,15 @@ Another way to say it:
 
 <<< ../../snippets/from_md/stdlib/core/validation/the_validation_type.aivi{aivi}
 
+::: repl
+```aivi
+ok = Valid 42
+bad = Invalid ["too short", "missing @"]
+ok |> map (_ + 1)
+// => Valid 43
+```
+:::
+
 ## 2. Combining validations with `ap`
 
 In everyday AIVI code, the main combination helper is `ap` (the `Applicative` combination operator from [`aivi.logic`](logic.md)):

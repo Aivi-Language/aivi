@@ -17,6 +17,15 @@ If you are new to generators, copy this three-stage workflow first:
 
 <<< ../../snippets/from_md/stdlib/core/generator/block_01.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.generator
+range 1 5 |> map (_ * 2) |> toList
+// => [2, 4, 6, 8, 10]
+range 1 100 |> filter (_ % 15 == 0) |> toList
+// => [15, 30, 45, 60, 75, 90]
+```
+:::
 
 Read that top to bottom as: “describe a sequence, narrow it, adjust it, then finally materialize it.”
 

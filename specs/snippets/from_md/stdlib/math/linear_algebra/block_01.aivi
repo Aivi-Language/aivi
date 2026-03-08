@@ -4,7 +4,7 @@ basisX = { size: 2, data: [1.0, 0.0] }
 basisY = { size: 2, data: [0.0, 1.0] }
 
 system = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
-rhs = { size: 2, data: [3.0, 1.0] }
+rhs    = { size: 2, data: [3.0, 1.0] }
 
 alignment = dot basisX basisY
-solution = solve2x2 system rhs
+solution  = solve2x2 system rhs

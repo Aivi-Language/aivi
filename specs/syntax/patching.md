@@ -28,6 +28,14 @@ Apply a patch immediately with `<|`:
 
 <<< ../snippets/from_md/syntax/patching/patching_records_01.aivi{aivi}
 
+::: repl
+```aivi
+user = { name: "Ada", age: 30, role: "dev" }
+user <| { age: 31, role: "lead" }
+// => { name: "Ada", age: 31, role: "lead" }
+```
+:::
+
 Build a reusable patch value with `patch { ... }`:
 
 <<< ../snippets/from_md/syntax/patching/patching_records_02.aivi{aivi}

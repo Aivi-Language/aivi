@@ -12,6 +12,16 @@ Function application is written with whitespace, not call parentheses.
 
 <<< ../snippets/from_md/syntax/functions/block_01.aivi{aivi}
 
+::: repl
+```aivi
+add = x y => x + y
+add 2 3
+// => 5
+add2 = add 2
+add2 10
+// => 12
+```
+:::
 
 A multi-argument definition is still curried, so `add 2` returns a new function that remembers the first argument.
 
@@ -46,6 +56,14 @@ Pipes are for readable data flow. Start with a value on the left, then keep tran
 
 <<< ../snippets/from_md/syntax/functions/block_05.aivi{aivi}
 
+::: repl
+```aivi
+[1, 2, 3, 4, 5]
+  |> filter (_ > 2)
+  |> map (_ * 10)
+// => [30, 40, 50]
+```
+:::
 
 ### Choosing the pipe subject (and argument position)
 

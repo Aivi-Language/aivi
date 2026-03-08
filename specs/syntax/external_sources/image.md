@@ -52,11 +52,6 @@ The `format` field here reflects the file/container format guessed from the imag
 For successful full-image reads in v0.1, `format` is currently `"Rgb8"`.
 That shape is useful for thumbnailing, analysis, and other pixel-oriented work when RGB pixels are enough.
 
-## Capability mapping
-
-Loading either image source requires `file.read`.
-See [File Sources](file.md) for the wider file-source family.
-
 ## Example
 
 <<< ../../snippets/from_md/syntax/external_sources/image/block_01.aivi{aivi}

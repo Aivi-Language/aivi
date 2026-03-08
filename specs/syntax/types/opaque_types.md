@@ -20,6 +20,13 @@ Use `opaque` when you want a record, ADT, branded alias, or ordinary alias to st
 
 <<< ../../snippets/from_md/syntax/types/opaque_types/block_02.aivi{aivi}
 
+::: repl
+```aivi
+opaque Email = Text
+// Inside the defining module, construction works:
+e = "ada@example.com" : Email
+```
+:::
 
 ## What changes inside and outside the module
 

@@ -18,15 +18,6 @@ Choose the API by the shape of configuration you need:
 - `env.get` when one required variable should come through as raw `Text`
 - `env.decode` when several related variables should decode into one typed value
 
-## Capability mapping
-
-Defining either source is pure. Effects appear when you load it:
-
-- `load (env.get ...)` requires `process.env.read`
-- `load (env.decode ...)` requires `process.env.read`
-
-See [Effects](../effects.md) for how source loads become runtime effects.
-
 ## Reading a single variable
 
 <<< ../../snippets/from_md/syntax/external_sources/environment/block_01.aivi{aivi}

@@ -1,6 +1,0 @@
-use aivi.probability
-
-distribution = uniform 0.0 1.0
-
-// For continuous distributions, pdf returns density at a value.
-densityAtHalf = distribution.pdf 0.5

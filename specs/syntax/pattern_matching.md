@@ -14,6 +14,16 @@ This is the main way to do case analysis, similar to `match` in Rust or `case` i
 
 <<< ../snippets/from_md/syntax/pattern_matching/choosing_the_match_subject_scrutinee_01.aivi{aivi}
 
+::: repl
+```aivi
+value = Some 42
+value match
+  | Some x => "got {x}"
+  | None   => "nothing"
+// => "got 42"
+```
+:::
+
 This rule composes nicely with pipelines because `match` comes *after* the full expression:
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}

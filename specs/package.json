@@ -18,6 +18,7 @@
     "snippets:fix": "pnpm snippets:verify:fix"
   },
   "devDependencies": {
+    "markdown-it-container": "^4.0.0",
     "vitepress": "1.6.4",
     "vue": "^3.5.28"
   }

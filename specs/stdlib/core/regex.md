@@ -31,6 +31,14 @@ Reach for this module based on the job you need to do:
 
 <<< ../../snippets/from_md/stdlib/core/regex/block_01.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.regex
+pat = ~r"\d+"
+test pat "abc123"
+// => True
+```
+:::
 
 This example shows the three most common workflows: yes/no matching, extracting a match record, and rewriting text with capture groups.
 

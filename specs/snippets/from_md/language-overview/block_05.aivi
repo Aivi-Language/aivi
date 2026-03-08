@@ -1,5 +1,4 @@
-activeNames =
-  users
-|> filter (_.active)
-|> map.name
-|> sort
+activeNames = users
+  |> filter active
+  |> map.name
+  |> sort

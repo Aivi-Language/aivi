@@ -15,10 +15,8 @@ keyText = k => k match
   | AppGoodbye => "app.goodbye"
 
 t : KeyId -> {} -> Text
-t = k args =>
-  Map.get (keyText k) bundle.entries match
-    | None => keyText k
-    | Some msg =>
-      (i18n.render msg args) match
-        | Ok txt => txt
-        | Err _  => keyText k
+t = k args => Map.get (keyText k) bundle.entries match
+  | None     => keyText k
+  | Some msg => (i18n.render msg args) match
+    | Ok txt   => txt
+    | Err _    => keyText k

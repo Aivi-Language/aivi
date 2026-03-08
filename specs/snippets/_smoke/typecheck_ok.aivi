@@ -1,4 +1,0 @@
-Option A = None | Some A
-
-someCount : Option Int
-someCount = Some 123

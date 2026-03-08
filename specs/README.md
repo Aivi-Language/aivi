@@ -116,8 +116,6 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Matrix](stdlib/math/matrix.md)
 - [Linear Algebra](stdlib/math/linear_algebra.md)
 - [Geometry](stdlib/math/geometry.md)
-- [Probability](stdlib/math/probability.md)
-- [Signal Processing](stdlib/math/signal.md)
 - [Graph](stdlib/math/graph.md)
 - [Tree](stdlib/math/tree.md)
 #### Time & Scheduling

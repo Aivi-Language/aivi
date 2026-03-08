@@ -55,6 +55,15 @@ For handling an effect error as data, the standard library provides:
 
 <<< ../snippets/from_md/syntax/effects/examples_core_operations_04.aivi{aivi}
 
+::: repl
+```aivi
+pure 42
+// => Effect _ 42
+attempt (pure 42)
+// => Effect _ (Ok 42)
+```
+:::
+
 ### `load`
 
 The standard library function `load` lifts a typed `Source` (see [External Sources](external_sources.md)) into an `Effect`.

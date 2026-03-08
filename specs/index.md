@@ -142,8 +142,6 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Matrix](stdlib/math/matrix)
 - [Linear Algebra](stdlib/math/linear_algebra)
 - [Geometry](stdlib/math/geometry)
-- [Probability](stdlib/math/probability)
-- [Signal Processing](stdlib/math/signal)
 - [Graph](stdlib/math/graph)
 - [Tree](stdlib/math/tree)
 #### Time & Scheduling

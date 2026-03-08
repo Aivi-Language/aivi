@@ -88,6 +88,6 @@ Bit indexes are MSB-first, so bit `0` is the left-most bit in the first byte.
 
 ### Parse a simple binary header
 
-This example also imports `aivi.logic` so it can use `chain` and `map` with `Result`.
+This example uses `do Result { ... }` to chain reads from a `BitStream`, stopping early if any read fails.
 
 <<< ../../snippets/from_md/stdlib/data/bits/block_03.aivi{aivi}

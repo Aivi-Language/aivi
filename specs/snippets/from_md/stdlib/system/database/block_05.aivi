@@ -1,6 +1,5 @@
 recentTopNames : Query Text
-recentTopNames =
-  db.from userTable
+recentTopNames = db.from userTable
 |> db.where_ _.active
 |> db.orderBy _.createdAt // sort before slicing
 |> db.offset 10 // skip the first page

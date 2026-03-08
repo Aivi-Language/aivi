@@ -12,6 +12,14 @@ If you know TypeScript utility types such as `Pick`, `Omit`, or `Partial`, this 
 
 <<< ../../snippets/from_md/syntax/types/record_row_transforms_01.aivi{aivi}
 
+::: repl
+```aivi
+type User = { id: Int, name: Text, email: Text, password: Text }
+type PublicUser = Omit (password) User
+// PublicUser = { id: Int, name: Text, email: Text }
+```
+:::
+
 In the prefix form above, the transform comes first and the source record type comes last.
 For example, `Pick (id, name) User` means “start from `User`, then keep only `id` and `name`”.
 Likewise, `Rename { createdAt: created_at } User` means “start from `User`, then rename `createdAt` to `created_at`”.

@@ -34,10 +34,6 @@ If you want one-off `Effect` helpers instead of reusable source values, see [`ai
 
 All three fit into the same `Source` model and become effects only when you call `load`.
 
-## Capability mapping
-
-Loading any REST or HTTP source requires `network.http` (or the broader `network` family shorthand).
-
 ## Decoded REST example
 
 <<< ../../snippets/from_md/syntax/external_sources/rest_http/block_01.aivi{aivi}

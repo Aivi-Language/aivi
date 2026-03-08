@@ -1,7 +1,8 @@
 doubled = Some 5 |> map (_ * 2) // Some 10
 
-nextPage = page =>
-  if page > 0 then Some (page + 1) else None
+nextPage = page => if page > 0
+  then Some (page + 1)
+  else None
 
 movedForward = Some 5 |> chain nextPage // Some 6
 missingPage  = None |> chain nextPage // None

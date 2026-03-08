@@ -69,6 +69,15 @@ Inside a list literal, there are three ways to contribute elements:
 
 <<< ../snippets/from_md/syntax/operators/lists_literals_range_items_and_spread.aivi{aivi}
 
+::: repl
+```aivi
+xs = [1..5]
+// => [1, 2, 3, 4, 5]
+ys = [0, ...xs, 6]
+// => [0, 1, 2, 3, 4, 5, 6]
+```
+:::
+
 Notes:
 
 - `a .. b` produces `[]` when `b < a`.

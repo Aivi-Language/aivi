@@ -57,6 +57,19 @@ These helpers are most useful near the edges of your program when you need a dir
 
 <<< ../../snippets/from_md/stdlib/core/option/predicates.aivi{aivi}
 
+::: repl
+```aivi
+isSome (Some 42)
+// => True
+isNone None
+// => True
+Some 5 |> map (_ + 1)
+// => Some 6
+None |> getOrElse 0
+// => 0
+```
+:::
+
 ## Extracting values
 
 | Function | Type | Description |

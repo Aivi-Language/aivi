@@ -1,8 +1,8 @@
 use aivi.chronos.calendar
 use aivi.calendar (domain Calendar)
 
-invoiceDate = ~d(2025-02-08)
-renewalDate = invoiceDate + 1m
+invoiceDate   = ~d(2025-02-08)
+renewalDate   = invoiceDate + 1m
 statementDate = invoiceDate + eom
 
 createdAt = ~dt(2025-02-08T12:34:56Z)

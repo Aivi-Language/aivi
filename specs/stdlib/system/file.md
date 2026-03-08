@@ -34,15 +34,6 @@ If you are choosing an API for a beginner-friendly workflow, a good rule of thum
 
 `FileHandle` is an opaque runtime handle. You obtain it from `open`, pass it to `readAll` or `close`, and treat it as a resource rather than a value you inspect directly.
 
-## Capabilities
-
-Effects and resources describe how file operations execute at runtime; see [Effects](../../syntax/effects.md) and [Resources](../../syntax/resources.md).
-
-- `readText`, `readJson`, `readCsv`, `imageMeta`, and `image` need `file.read`.
-- `exists` and `stat` need `file.metadata`.
-- `writeText`, `delete`, and manual `close` need `file.write`.
-- `open` participates in a full resource lifecycle, so account for both acquisition and cleanup when documenting or structuring file workflows.
-
 ## Choosing between resource and path APIs
 
 - Use the **path-based helpers** such as `readText`, `readJson`, and `writeText` for one-shot operations.

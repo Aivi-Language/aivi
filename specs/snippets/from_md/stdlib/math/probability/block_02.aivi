@@ -1,2 +1,0 @@
-Probability = Float
-Distribution A = { pdf: A -> Probability }

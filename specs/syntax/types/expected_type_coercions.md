@@ -22,6 +22,14 @@ It is re-exported from the prelude, so most programs can call `toText` without a
 
 <<< ../../snippets/from_md/syntax/types/totext_01.aivi{aivi}
 
+::: repl
+```aivi
+count = 42
+"There are {count} items"
+// => "There are 42 items"
+```
+:::
+
 Informally, when `Text` is expected and an expression has type `A`, the compiler may rewrite that expression to `toText expr` if a matching `ToText A` instance is in scope.
 
 This is especially useful at program boundaries such as logging, headers, URLs, or templated output:

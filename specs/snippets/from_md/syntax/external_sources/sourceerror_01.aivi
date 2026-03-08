@@ -1,1 +1,1 @@
-load: Source K A -> Effect (SourceError K) A
+load : Source K A -> Effect (SourceError K) A
