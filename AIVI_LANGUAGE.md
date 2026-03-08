@@ -1703,7 +1703,7 @@ aivi repl --no-color # disable ANSI colour
 
 - Type any AIVI expression or definition and press Enter to evaluate.
 - Use Shift+Enter for multi-line input; Ctrl+D (on empty input) to exit.
-- Ctrl+L clears the transcript. Tab toggles the symbol pane.
+- Ctrl+L clears the transcript. When you start with `/`, the TUI suggests matching slash commands; use `↑` / `↓` to move, `Tab` to accept, or let Tab toggle the symbol pane when no suggestion is shown.
 
 **Key slash commands**
 
