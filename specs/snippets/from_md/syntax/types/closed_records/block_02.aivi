@@ -1,6 +1,6 @@
 user : User
 user = {
-  id: 1,
-  name: "Ada",
+  id: 1
+  name: "Ada"
   email: None
 }

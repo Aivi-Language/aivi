@@ -2,12 +2,12 @@ Msg = DraftTitleChanged Text | DraftBodyChanged Text | Save
 
 editorView : { draftTitle: Text, draftBody: Text } -> GtkNode
 editorView = state => ~<gtk>
-                        <GtkBox orientation="vertical" spacing="8">
-                          <GtkEntry id="titleInput" placeholderText="Title" onInput={ DraftTitleChanged } />
-                          <GtkEntry id="bodyInput" placeholderText="Body" onInput={ DraftBodyChanged } />
-                          <GtkButton label="Save" onClick={ Save } />
-                        </GtkBox>
-                      </gtk>
+  <GtkBox orientation="vertical" spacing="8">
+    <GtkEntry id="titleInput" placeholderText="Title" onInput={ DraftTitleChanged } />
+    <GtkEntry id="bodyInput" placeholderText="Body" onInput={ DraftBodyChanged } />
+    <GtkButton label="Save" onClick={ Save } />
+  </GtkBox>
+</gtk>
 
 update : Msg -> { draftTitle: Text, draftBody: Text } -> Effect GtkError (AppStep { draftTitle: Text, draftBody: Text } Msg)
 update = msg => state => msg match

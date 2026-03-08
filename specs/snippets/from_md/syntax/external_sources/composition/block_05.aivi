@@ -25,5 +25,5 @@ usersSource =
     schema: source.schema.derive
     strictStatus: True
   }
-  |> source.transform normalizeUsers
-  |> source.validate validateUsers
+|> source.transform normalizeUsers
+|> source.validate validateUsers
