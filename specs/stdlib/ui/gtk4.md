@@ -381,6 +381,8 @@ Properties are patched, CSS classes are diffed, signal handlers are reconnected 
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node)
 - `E1616`: bare `<child>` without a `type` attribute (nest `<object>` elements directly inside the parent instead)
 - `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)
+- Runtime signal-binding failures report the widget id/class, optional `id="..."` name, the bound handler, and the known supported signals for that class.
+- `AdwPreferencesDialog` and `AdwPreferencesPage` validate page/group child compatibility before calling libadwaita so invalid hierarchies fail with an AIVI runtime error instead of only a GTK assertion.
 
 ## UI update pattern (state machine + events + repaint)
 
