@@ -1,27 +1,21 @@
 # Collections
 
 <!-- quick-info: {"kind":"module","name":"aivi.collections"} -->
-The collections family provides persistent data structures for functional code. Each data structure lives in its own module:
-
-- `aivi.list`   ordered sequences (built-in type, standard API)
-- `aivi.map`   key-value maps
-- `aivi.set`   unique value sets
-- `aivi.queue`   FIFO queues and double-ended queues
-- `aivi.heap`   priority queues
-
-The facade module `aivi.collections` re-exports all of the above for convenience:
-
-<<< ../../snippets/from_md/stdlib/core/collections/overview.aivi{aivi}
-
-
+The collections family provides persistent data structures for functional AIVI code. `List` is a built-in type with extra helpers in `aivi.list`, while `aivi.collections` brings the `Map`, `Set`, `Queue`, `Deque`, and `Heap` namespaces into scope together with the `Collections` and `MinHeap` domains.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.collections</div>
 
 ## What this module is for
 
-`aivi.collections` is the easiest way to bring the standard immutable collection APIs into scope. The data structures in this family are **persistent**: when you insert, remove, or update, you get a new value back instead of mutating the old one.
+`aivi.collections` is the easiest way to bring AIVI's namespace-based immutable collection APIs into scope. The data structures in this family are **persistent**: when you insert, remove, or update, you get a new value back instead of mutating the old one.
 
 That makes them a good fit for AIVI programs where you want predictable data flow, easy refactoring, and safe reuse of earlier values.
+
+## Imports at a glance
+
+- `List` is available as a built-in type; use `aivi.list` for top-level helper functions such as `chunk`, `findMap`, and `forM_`.
+- `Map` helpers are available either as `Map.get`, `Map.insert`, and so on through `aivi.collections`, or as unqualified functions through `aivi.map`.
+- `Set`, `Queue`, `Deque`, and `Heap` are used through their qualified namespaces (`Set.*`, `Queue.*`, `Deque.*`, `Heap.*`) from `aivi.collections` or `aivi`.
 
 ## Start here
 
@@ -35,7 +29,16 @@ A quick mental model:
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/core/collections/overview.aivi{aivi}
+```aivi
+use aivi.collections
+use aivi.list
+
+backlog = Queue.enqueue "typecheck" (Queue.enqueue "parse" Queue.empty)
+labels  = Set.fromList ["urgent", "docs", "urgent"]
+scores  = Map.insert "alice" 7 Map.empty
+batches = chunk 2 [1, 2, 3, 4, 5]
+next    = Heap.fromList [5, 2, 9] |> Heap.peekMin
+```
 
 ## Choosing a collection
 
@@ -55,7 +58,17 @@ Map entries use `key => value`. Keys and values can be full expressions, and `..
 
 When the same key appears more than once, the **last** value wins.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_map.aivi{aivi}
+```aivi
+defaults = ~map{
+  "theme" => "light"
+  "lang"  => "en"
+}
+
+config = ~map{
+  ...defaults
+  "theme" => "dark"
+}
+```
 
 ### Set literals
 
@@ -63,7 +76,10 @@ Set literals hold values directly. `...expr` spreads another set into the litera
 
 Duplicate values are removed automatically because sets only keep unique members.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_set.aivi{aivi}
+```aivi
+baseTags = ~set["docs", "release"]
+allTags  = ~set[...baseTags, "featured", "docs"]
+```
 
 ### The `++` operator
 
@@ -75,17 +91,33 @@ Duplicate values are removed automatically because sets only keep unique members
 
 `++` is **not** text concatenation. For `Text`, use interpolation such as `"Hello, {name}"`.
 
-## `aivi.list`
+```aivi
+numbers = [1, 2] ++ [3, 4]
+
+defaults = ~map{"theme" => "light"}
+overrides = ~map{"theme" => "dark", "lang" => "en"}
+merged = defaults ++ overrides
+
+effectivePermissions = ~set["read"] ++ ~set["write", "read"]
+```
+
+## List helpers (`aivi.list`)
 
 `List` is AIVI's general-purpose ordered collection. Reach for it when you want to process items in order, keep duplicates, or build pipeline-style transformations.
 
 Common list jobs include filtering search results, mapping over rows, chunking work into batches, and folding a sequence into one summary value.
 
-**Class instances** (via `use aivi.logic`): `Functor` · `Filterable` · `Foldable` · `Traversable` · `Apply` · `Applicative` · `Chain` · `Monad` · `Semigroup` · `Monoid` · `Alternative` · `Plus`
+**Class instances** (via [`aivi.logic`](logic.md)): `Setoid` · `Ord` · `Functor` · `Filterable` · `Foldable` · `Traversable` · `Apply` · `Applicative` · `Chain` · `Monad` · `Semigroup` · `Monoid` · `Alternative` · `Plus`
 
-Those class instances give you shared operations such as `map`, `filter`, `reduce`, `traverse`, `chain`, `concat`, `empty`, `alt`, and `zero`. The functions below are the list-specific helpers you will use most often.
+Those class instances give you shared operations such as `map`, `filter`, `reduce`, `traverse`, `chain`, `concat`, `empty`, `alt`, and `zero`. The functions below are the list-specific helpers from `aivi.list` that you will use most often.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_list.aivi{aivi}
+```aivi
+use aivi.list
+
+batches  = chunk 2 [1, 2, 3, 4, 5]
+firstBig = find (n => n > 10) [3, 7, 11, 15]
+paired   = zip ["a", "b"] [1, 2, 3]
+```
 
 | Function | Explanation |
 | --- | --- |
@@ -117,17 +149,25 @@ Those class instances give you shared operations such as `map`, `filter`, `reduc
 | **forM_** list f<br><code>List a -> (a -> Effect e b) -> Effect e Unit</code> | `traverse_` with the arguments flipped. |
 | **forEachEffect** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | A descriptive alias for effectful iteration. |
 
-## `aivi.map`
+The effect-related helpers (`traverse_`, `sequence_`, `mapM`, `forM`, and their `_` variants) work with AIVI's [`Effect`](../../syntax/effects.md) type. Reach for them when each list item triggers logging, I/O, validation, or another effectful step.
+
+## Map helpers (`aivi.map` / `Map.*`)
 
 Use `Map` when your program needs named lookups, caches, indexes, or configuration tables.
 
 Choose `Map` when the first question is “what value belongs to this key?” rather than “what item is next in order?”.
 
-**Class instances** (via `use aivi.logic`): `Functor` · `Filterable` · `Foldable` · `Semigroup` · `Monoid`
+**Class instances** (via [`aivi.logic`](logic.md)): `Setoid` · `Functor` · `Filterable` · `Foldable` · `Semigroup` · `Monoid`
 
-The shared class methods operate on map **values**. Use the functions below when you need key-aware behavior.
+The shared class methods operate on map **values**. Use the functions below when you need key-aware behavior. `aivi.map` exposes these as unqualified helpers; `aivi.collections` exposes the same operations as `Map.empty`, `Map.get`, `Map.insert`, and so on.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_map.aivi{aivi}
+```aivi
+use aivi.collections
+
+scores  = Map.fromList [("alice", 3), ("bob", 5)]
+updated = Map.insert "carol" 8 scores
+alice   = Map.getOrElse "alice" 0 updated
+```
 
 | Function | Explanation |
 | --- | --- |
@@ -155,44 +195,60 @@ Notes:
 
 - `union` is right-biased.
 - `update` changes existing entries only.
-- Iteration order for folds and list conversions is unspecified unless a specific map implementation says otherwise.
+- Do not depend on the order returned by folds, `keys`, `values`, `entries`, or `toList`. If presentation order matters, convert to a list and sort explicitly before iterating.
 
-## `aivi.set`
+## Set operations (`Set.*`)
 
 Use `Set` when membership matters more than order, such as tracking enabled features, selected IDs, or permissions.
 
 `Set` is a good fit for questions like “is this enabled?”, “have I seen this already?”, or “which permissions does this user have?”.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_set.aivi{aivi}
+There is no separate `aivi.set` helper module in v0.1; use the qualified `Set.*` names from `aivi.collections` or `aivi`.
+
+```aivi
+use aivi.collections
+
+selected = Set.fromList [101, 102, 101]
+visible  = Set.difference selected (Set.fromList [102])
+```
 
 | Function | Explanation |
 | --- | --- |
-| **empty**<br><code>Set a</code> | Creates an empty set. |
-| **size** s<br><code>Set a -> Int</code> | Returns the number of elements. |
-| **has** value s<br><code>a -> Set a -> Bool</code> | Checks whether the set contains `value`. |
-| **insert** value s<br><code>a -> Set a -> Set a</code> | Returns a new set with `value` included. |
-| **remove** value s<br><code>a -> Set a -> Set a</code> | Returns a new set without `value`. |
-| **union** left right<br><code>Set a -> Set a -> Set a</code> | Combines both sets. |
-| **intersection** left right<br><code>Set a -> Set a -> Set a</code> | Keeps only values found in both sets. |
-| **difference** left right<br><code>Set a -> Set a -> Set a</code> | Keeps values that are in `left` but not in `right`. |
-| **fromList** values<br><code>List a -> Set a</code> | Builds a set from a list, dropping duplicates. |
-| **toList** s<br><code>Set a -> List a</code> | Converts a set into a list. |
-| **contains** value s<br><code>a -> Set a -> Bool</code> | Alias of `has`. |
+| **Set.empty**<br><code>Set a</code> | Creates an empty set. |
+| **Set.size** s<br><code>Set a -> Int</code> | Returns the number of elements. |
+| **Set.has** value s<br><code>a -> Set a -> Bool</code> | Checks whether the set contains `value`. |
+| **Set.insert** value s<br><code>a -> Set a -> Set a</code> | Returns a new set with `value` included. |
+| **Set.remove** value s<br><code>a -> Set a -> Set a</code> | Returns a new set without `value`. |
+| **Set.union** left right<br><code>Set a -> Set a -> Set a</code> | Combines both sets. |
+| **Set.intersection** left right<br><code>Set a -> Set a -> Set a</code> | Keeps only values found in both sets. |
+| **Set.difference** left right<br><code>Set a -> Set a -> Set a</code> | Keeps values that are in `left` but not in `right`. |
+| **Set.fromList** values<br><code>List a -> Set a</code> | Builds a set from a list, dropping duplicates. |
+| **Set.toList** s<br><code>Set a -> List a</code> | Converts a set into a list. |
+| **Set.contains** value s<br><code>a -> Set a -> Bool</code> | Alias of `Set.has`. |
 
-## `aivi.queue`
+## Queue and deque operations (`Queue.*`, `Deque.*`)
 
 A `Queue` is for first-in, first-out work: task scheduling, breadth-first search, or message buffering.
 
 Choose `Queue` when “oldest item first” is the rule. If you need to add or remove items at both ends, move to `Deque`.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_queue.aivi{aivi}
+There is no separate `aivi.queue` helper module in v0.1; use `Queue.*` and `Deque.*` from `aivi.collections` or `aivi`.
+
+```aivi
+use aivi.collections
+
+q0 = Queue.empty
+q1 = Queue.enqueue "parse" q0
+q2 = Queue.enqueue "typecheck" q1
+next = Queue.dequeue q2
+```
 
 | Function | Explanation |
 | --- | --- |
-| **empty**<br><code>Queue a</code> | Creates an empty queue. |
-| **enqueue** value q<br><code>a -> Queue a -> Queue a</code> | Adds a value at the back. |
-| **dequeue** q<br><code>Queue a -> Option (a, Queue a)</code> | Removes the front value and returns it together with the remaining queue. |
-| **peek** q<br><code>Queue a -> Option a</code> | Reads the front value without removing it. |
+| **Queue.empty**<br><code>Queue a</code> | Creates an empty queue. |
+| **Queue.enqueue** value q<br><code>a -> Queue a -> Queue a</code> | Adds a value at the back. |
+| **Queue.dequeue** q<br><code>Queue a -> Option (a, Queue a)</code> | Removes the front value and returns it together with the remaining queue. |
+| **Queue.peek** q<br><code>Queue a -> Option a</code> | Reads the front value without removing it. |
 
 ### Deque
 
@@ -200,7 +256,12 @@ A `Deque` (“double-ended queue”) lets you add or remove items from both ends
 
 That makes it useful for undo buffers, sliding windows, and algorithms that grow from either side.
 
-<<< ../../snippets/from_md/stdlib/core/collections/deque.aivi{aivi}
+```aivi
+use aivi.collections
+
+history = Deque.pushFront "undo-2" (Deque.pushFront "undo-1" Deque.empty)
+latest  = Deque.peekFront history
+```
 
 | Function | Explanation |
 | --- | --- |
@@ -212,21 +273,28 @@ That makes it useful for undo buffers, sliding windows, and algorithms that grow
 | **Deque.peekFront** d<br><code>Deque a -> Option a</code> | Reads the front value without removing it. |
 | **Deque.peekBack** d<br><code>Deque a -> Option a</code> | Reads the back value without removing it. |
 
-## `aivi.heap`
+## Heap operations (`Heap.*`)
 
 A `Heap` is a priority queue. It is useful when the “next” item is whichever value compares smallest, not whichever arrived first.
 
 Use it when urgency or score decides what happens next: shortest path search, “run the soonest deadline first”, or “pick the smallest cost so far”.
 
-<<< ../../snippets/from_md/stdlib/core/collections/aivi_heap.aivi{aivi}
+There is no separate `aivi.heap` helper module in v0.1; use the qualified `Heap.*` names from `aivi.collections` or `aivi`.
+
+```aivi
+use aivi.collections
+
+jobs = Heap.fromList [(2, "docs"), (1, "fix build"), (3, "release")]
+next = Heap.peekMin jobs
+```
 
 | Function | Explanation |
 | --- | --- |
-| **empty**<br><code>Heap a</code> | Creates an empty heap. |
-| **push** value h<br><code>a -> Heap a -> Heap a</code> | Inserts a value into the heap. |
-| **popMin** h<br><code>Heap a -> Option (a, Heap a)</code> | Removes and returns the smallest value together with the remaining heap. |
-| **peekMin** h<br><code>Heap a -> Option a</code> | Reads the smallest value without removing it. |
-| **fromList** xs<br><code>List a -> Heap a</code> | Builds a heap from a list. |
-| **size** h<br><code>Heap a -> Int</code> | Returns the number of stored elements. |
+| **Heap.empty**<br><code>Heap a</code> | Creates an empty heap. |
+| **Heap.push** value h<br><code>a -> Heap a -> Heap a</code> | Inserts a value into the heap. |
+| **Heap.popMin** h<br><code>Heap a -> Option (a, Heap a)</code> | Removes and returns the smallest value together with the remaining heap. |
+| **Heap.peekMin** h<br><code>Heap a -> Option a</code> | Reads the smallest value without removing it. |
+| **Heap.fromList** xs<br><code>List a -> Heap a</code> | Builds a heap from a list. |
+| **Heap.size** h<br><code>Heap a -> Int</code> | Returns the number of stored elements. |
 
 `Heap` ordering comes from `Ord` for the element type. Comparable primitives and tuples of comparable primitives use their normal ordering, with tuples ordered lexicographically.

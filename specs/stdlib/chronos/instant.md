@@ -1,13 +1,13 @@
 # Instant Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.instant"} -->
-The `Instant` domain represents a specific moment on the timeline, independent of calendars and time zones.
+The `Instant` domain models exact UTC moments on the timeline. Use it when you care about *when something actually happened* rather than *what a local wall clock said*.
 
-Use it when you care about *when something actually happened* rather than *what the local wall clock said*. That makes it a good fit for timestamps, logs, ordering, and precise scheduling boundaries.
+That makes it the right fit for audit timestamps, event ordering, deadlines, and duration math against a precise point in time.
 
-`Instant` corresponds to a UTC timestamp. By contrast, the calendar and timezone domains are about human-facing date and local-time concepts.
+`Instant` values are written as ISO-8601 UTC literals such as `2024-05-21T12:00:00Z`. By contrast, [`aivi.chronos.calendar`](./calendar.md) and [`aivi.chronos.timezone`](./timezone.md) focus on human-facing dates, local times, and regional clock rules.
 
-**Implementation note:** `Timestamp` is represented as `DateTime` in RFC3339 text form at runtime, which means timestamps look like `2026-01-01T12:30:00Z`. Instant operations parse and format that text representation. Durations use `Span` from `aivi.chronos.duration` with millisecond precision.
+**Implementation note:** the current runtime stores `Timestamp` as `DateTime` text, compares and offsets it by parsing RFC3339 values, and formats results back to RFC3339 text with up to nanosecond precision. `Instant` arithmetic with [`Span`](./duration.md) is still expressed in whole milliseconds.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.instant<span class="domain-badge">domain</span></div>
 
@@ -28,9 +28,9 @@ Reach for `Instant` when you need:
 - an audit timestamp,
 - a stable ordering key for events,
 - “run after this exact moment” logic,
-- duration math against a point on the UTC timeline.
+- elapsed-time math between two UTC moments.
 
-If you need calendar-friendly dates, use [`aivi.chronos.calendar`](./calendar.md). If you need local time with daylight-saving rules, use [`aivi.chronos.timezone`](./timezone.md).
+If you need human calendar concepts such as months or end-of-month handling, use [`aivi.chronos.calendar`](./calendar.md). If you need local time with daylight-saving rules, use [`aivi.chronos.timezone`](./timezone.md).
 
 ## Mental model
 
@@ -40,30 +40,99 @@ A good rule of thumb is:
 
 - store `Instant` values in databases and event logs,
 - compare `Instant` values when ordering matters,
-- convert to calendar or time-zone values only when you need a human-facing display.
+- convert to calendar or time-zone values only at display or interpretation boundaries.
 
 ## Overview
 
-<<< ../../snippets/from_md/stdlib/chronos/instant/overview.aivi{aivi}
+This is the smallest useful pattern: create two instants, compare them, then measure the elapsed span between them.
+
+```aivi
+use aivi.chronos.instant (domain Instant)
+
+createdAt = 2024-05-21T12:00:00Z
+processedAt = 2024-05-21T12:00:10Z
+
+inOrder = createdAt < processedAt
+elapsed = processedAt - createdAt
+```
+
+`elapsed` is a `Span`, so you can inspect `elapsed.millis` or combine it with other duration logic from [`aivi.chronos.duration`](./duration.md).
 
 ## Common operations
 
-These examples show how to create, compare, and offset instants. Read them as a three-step story: create an exact timestamp, compare it with another timestamp, then combine it with a duration when you need a deadline or timeout boundary.
+The `Instant` domain is intentionally small. Most day-to-day code uses just these operators:
 
-<<< ../../snippets/from_md/stdlib/chronos/instant/features.aivi{aivi}
+| Operation | Type | Use it for |
+| --- | --- | --- |
+| `<`, `<=`, `>`, `>=` | `Timestamp -> Timestamp -> Bool` | Ordering two exact moments on the UTC timeline |
+| `instant + span` | `Timestamp -> Span -> Timestamp` | Moving forward by a fixed elapsed duration |
+| `instant - span` | `Timestamp -> Span -> Timestamp` | Moving backward by a fixed elapsed duration |
+| `left - right` | `Timestamp -> Timestamp -> Span` | Measuring elapsed time between two instants |
+
+```aivi
+use aivi.chronos.instant (domain Instant)
+
+base = 2024-01-01T00:00:00Z
+retryDelay = { millis: 1500 }
+
+deadline = base + retryDelay
+roundTrip = deadline - retryDelay
+elapsed = deadline - base
+stillAfterBase = deadline > base
+```
+
+The `retryDelay` record is the concrete `Span` shape. If you want named duration literals such as `500ms` or `30s`, use [`aivi.chronos.duration`](./duration.md) to construct the span first and then combine it with an `Instant`.
 
 ## Domain definition
 
-The domain definition shows the concrete timestamp shape and the operations built around it:
+The public surface is a `Timestamp` alias plus comparison and span arithmetic:
 
-<<< ../../snippets/from_md/stdlib/chronos/instant/domain_definition.aivi{aivi}
+```aivi
+use aivi
+use aivi.chronos.duration (Span)
 
-## Reading the current time
+Timestamp = DateTime
 
-Effectful wall-clock reads such as `now` require the `clock.now` capability, or the broader `clock` shorthand.
+domain Instant over Timestamp = {
+  (<)  : Timestamp -> Timestamp -> Bool
+  (<=) : Timestamp -> Timestamp -> Bool
+  (>)  : Timestamp -> Timestamp -> Bool
+  (>=) : Timestamp -> Timestamp -> Bool
+
+  (+)  : Timestamp -> Span -> Timestamp
+  (-)  : Timestamp -> Span -> Timestamp
+  (-)  : Timestamp -> Timestamp -> Span
+}
+```
+
+The overloaded `-` either subtracts a `Span` from an instant or measures the `Span` between two instants, depending on the right-hand operand.
+
+## Getting the current time
+
+This module itself is pure: it defines comparisons and arithmetic once you already have a `Timestamp`. When another API performs a wall-clock read to produce a current instant, that effect requires the [`clock.now`](../../syntax/capabilities.md) capability (or the broader `clock` shorthand).
 
 ## Usage examples
 
-A practical pattern is to store or compare `Instant` values internally, then format them into calendar or time-zone-aware values for display.
+A practical pattern is to store or compare `Instant` values internally, then hand them off to calendar or time-zone code only when you need human-facing interpretation.
 
-<<< ../../snippets/from_md/stdlib/chronos/instant/usage_examples.aivi{aivi}
+```aivi
+use aivi.chronos.instant (domain Instant)
+
+receivedAt = 2024-01-01T00:00:00Z
+timeout = { millis: 30000 }
+
+deadline = receivedAt + timeout
+expiredAt = 2024-01-01T00:00:45Z
+
+didExpire = expiredAt > deadline
+timeInFlight = expiredAt - receivedAt
+```
+
+In real applications, keep `receivedAt`, `deadline`, and `expiredAt` in UTC `Instant` form for storage and comparison, then convert to [`aivi.chronos.timezone`](./timezone.md) only when you need to show local clock time.
+
+## See also
+
+- [`aivi.chronos.duration`](./duration.md) for fixed elapsed spans such as timeouts and retry delays
+- [`aivi.chronos.calendar`](./calendar.md) for month/day/year arithmetic
+- [`aivi.chronos.timezone`](./timezone.md) for local time and daylight-saving conversion
+- [`Capabilities`](../../syntax/capabilities.md) for effectful clock access

@@ -2,14 +2,14 @@
 
 AIVI is a statically typed, purely functional language with a Rust-based compiler toolchain. This folder is the main guide to the language: it explains the big ideas, defines the syntax and semantics, and documents the standard library and tooling.
 
-If you are new to AIVI, use this simple path first: **[Language at a Glance](language-overview.md)** for the fast tour, **[Introduction](introduction.md)** for the plain-language overview, then the **Learn AIVI** section in the table of contents from top to bottom. If you are editing or reviewing the docs in the repository, this README also shows how to preview the site locally.
+If you are new to AIVI, start with the two pages in **Start Here**: **[Language at a Glance](language-overview.md)** for the fast tour and **[Introduction](introduction.md)** for the plain-language overview. Then continue through the **Learn AIVI** section in the table of contents from top to bottom. If you are editing or reviewing the docs in the repository, this README also shows how to preview the site locally.
 
 ## A simple reading path
 
-1. **Start Here** to learn the feel of the language before you read detailed rules.
+1. **Start Here** to understand the core language ideas before you read detailed rules.
 2. **Learn AIVI** in order: Basics → Data & Types → Effects & Workflows → Modules & External Data.
 3. **Build Native Apps** if you are working on GTK or libadwaita applications.
-4. Use **Standard Library**, **Testing & Tooling**, and **Internals** as lookup sections once you know what you need.
+4. Use **Standard Library**, **Testing & Tooling**, and **Internals** as lookup sections once you have a specific module, tool, or compiler topic in mind.
 
 ## How to read the spec
 

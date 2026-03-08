@@ -7,7 +7,7 @@ It is written for people who already know how to program, but may be new to func
 ## Suggested first pass
 
 1. Skim this page once without trying to learn every rule.
-2. Read [Introduction](introduction.md) for the bigger picture and the plain-language explanation of effects, data, and boundaries.
+2. Read [Introduction](introduction) for the bigger picture and the plain-language explanation of effects, data, and boundaries.
 3. Then move through the **Learn AIVI** track in the sidebar, starting with Basics and Data & Types.
 
 ---
@@ -90,7 +90,7 @@ See [Bindings & Scope](syntax/bindings) and [Functions & Pipes](syntax/functions
 <<< ./snippets/from_md/language-overview/block_02.aivi{aivi}
 
 
-AIVI makes data shapes explicit. `User` is a record type with exactly those fields. `Option Text` means the email may be missing, but that possibility is part of the type. A custom data type such as `Option` is often called an **algebraic data type (ADT)**, which simply means a type made from named cases like `Some` and `None`.
+AIVI makes data shapes explicit. `User` is a record type with exactly those fields. `Option Text` means the email may be missing, but that possibility is part of the type. A type with named cases such as `Option` is often called an **algebraic data type (ADT)**. In practice, that means you work with constructors like `Some` and `None` instead of reaching for `null`.
 
 See [Primitive Types](syntax/types/primitive_types), [Records](syntax/types/closed_records), and [Custom Data Types (ADTs)](syntax/types/algebraic_data_types).
 
@@ -105,7 +105,7 @@ This is a major AIVI habit:
 
 - use `Option` when a value may be absent,
 - use `Result` when an operation may fail,
-- use `match` to handle each case clearly.
+- use `value match` to handle each case clearly.
 
 See [Pattern Matching](syntax/pattern_matching), [Option](stdlib/core/option), and [Result](stdlib/core/result).
 
@@ -200,7 +200,7 @@ See [Domains & Units](syntax/domains).
 
 AIVI treats boundaries such as files, REST APIs, environment variables, and email as typed sources. The expected output type guides decoding and error reporting.
 
-See [External Sources](syntax/external_sources) and the source-specific pages under `syntax/external_sources/`.
+See [External Sources](syntax/external_sources) and the source-specific guides linked from that overview.
 
 ---
 

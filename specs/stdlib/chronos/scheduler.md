@@ -27,7 +27,7 @@ Use this domain when a simple in-process timer is not enough. Typical cases incl
 - concurrency control per tenant,
 - explicit lease and heartbeat management.
 
-If the timing only matters while one GUI app is running, lighter tools such as `commandAfter` or `subscriptionEvery` are usually a better fit.
+If the timing only matters while one GUI app is running, lighter tools from [App architecture](/stdlib/ui/app_architecture) such as `commandAfter` or `subscriptionEvery` are usually a better fit; [Native GTK apps](/stdlib/ui/native_gtk_apps) shows the same “app-local timer vs durable schedule” split in a full UI context.
 
 ## Mental model
 
@@ -43,6 +43,14 @@ A good rule is:
 ## Overview
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/overview.aivi{aivi}
+
+## Trigger kinds at a glance
+
+| Trigger form | Best for | Example |
+| --- | --- | --- |
+| `cron expression zone` | wall-clock schedules that follow a named time zone | `cron "0 0 * * *" ~tz(Asia/Singapore)` |
+| `interval span` | repeated work based on elapsed time between runs | `interval { millis: 900000 }` |
+| `once timestamp` | one-shot work at a specific instant | `once 2026-02-01T12:00:00Z` |
 
 ## Common operations
 
@@ -62,12 +70,20 @@ A good mental model is: build plans as pure data, store them durably, then let w
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/usage_examples.aivi{aivi}
 
+## Verification
+
+The scheduler surface shown here is exercised in `integration-tests/stdlib/aivi/chronos/scheduler/scheduler.aivi`, including trigger constructors, idempotent plan indexing, retry delay behavior, tenant concurrency checks, and the worker helper functions.
+
+Use that test file when you need a fuller end-to-end example than the focused snippets on this page.
+
 ## Worker/runtime helpers
 
 The scheduler module also exposes pure helpers for worker-side planning logic:
 
-- `chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision`
-- `renewLease : Lease -> Timestamp -> Lease`
-- `planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun`
+| Helper | What it helps with |
+| --- | --- |
+| `chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision` | Decide whether a worker should run now, wait for a lease boundary, or schedule a retry. The final `Int` is the jitter seed, which keeps retry planning deterministic in tests. |
+| `renewLease : Lease -> Timestamp -> Lease` | Extend a lease from a heartbeat timestamp without mutating scheduler state in place. |
+| `planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun` | Produce the next planned run after a failure, including the incremented attempt count and retry schedule. The final `Int` is again the jitter seed. |
 
 These helpers make the most failure-prone parts of scheduling easier to test because lease renewal, retry timing, and next-action decisions remain pure value transformations.
