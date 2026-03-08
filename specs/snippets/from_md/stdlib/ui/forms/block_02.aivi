@@ -38,24 +38,24 @@ emailErrors = model => visibleErrors model.submitted emailRule model.email
 
 view : Model -> GtkNode
 view = model => ~<gtk>
-                  <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
-                    <GtkEntry
-                      id="nameInput"
-                      text={model.name.value}
-                      placeholderText="Name"
-                      onInput={ NameChanged }
-                      onFocusOut={ NameBlurred } />
-                    <GtkLabel label={text.join ", " (nameErrors model)} />
-                    <GtkEntry
-                      id="emailInput"
-                      text={model.email.value}
-                      placeholderText="Email"
-                      onInput={ EmailChanged }
-                      onFocusOut={ EmailBlurred } />
-                    <GtkLabel label={text.join ", " (emailErrors model)} />
-                    <GtkButton id="submitBtn" label="Save" onClick={ Submit } />
-                  </GtkBox>
-                </gtk>
+  <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
+    <GtkEntry
+      id="nameInput"
+      text={model.name.value}
+      placeholderText="Name"
+      onInput={ NameChanged }
+      onFocusOut={ NameBlurred } />
+    <GtkLabel label={text.join ", " (nameErrors model)} />
+    <GtkEntry
+      id="emailInput"
+      text={model.email.value}
+      placeholderText="Email"
+      onInput={ EmailChanged }
+      onFocusOut={ EmailBlurred } />
+    <GtkLabel label={text.join ", " (emailErrors model)} />
+    <GtkButton id="submitBtn" label="Save" onClick={ Submit } />
+  </GtkBox>
+</gtk>
 
 toMsg : GtkSignalEvent -> Option Msg
 toMsg = event => event match
@@ -68,16 +68,8 @@ toMsg = event => event match
 
 update : Msg -> Model -> Effect GtkError Model
 update = msg model => msg match
-  | NameChanged txt =>
-// Keep the latest draft value in the model.
-pure (model <| { name: setValue txt model.name })
-| NameBlurred =>
-// Mark the field as touched so its errors can become visible.
-pure (model <| { name: touch model.name })
-| EmailChanged txt =>
-  pure (model <| { email: setValue txt model.email })
-| EmailBlurred =>
-  pure (model <| { email: touch model.email })
-| Submit =>
-// Flip the submitted flag so every field shows its current errors.
-pure (model <| { submitted: True })
+  | NameChanged txt  => pure (model <| { name: setValue txt model.name })
+  | NameBlurred      => pure (model <| { name: touch model.name })
+  | EmailChanged txt => pure (model <| { email: setValue txt model.email })
+  | EmailBlurred     => pure (model <| { email: touch model.email })
+  | Submit           => pure (model <| { submitted: True })
