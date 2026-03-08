@@ -57,18 +57,29 @@ fn jsonrpc_result(id: serde_json::Value, result: serde_json::Value) -> serde_jso
     })
 }
 
+fn advertised_tool_name(canonical: &str) -> String {
+    canonical
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 fn is_mangled_tool_name(canonical: &str, received: &str) -> bool {
     if canonical == received {
         return true;
     }
-    // Check if received is mangled version of canonical (e.g. "Aivi-aivi_gtk_launch" or "aivi_gtk_launch").
     let received_core = if received.len() > 5 && received[..5].eq_ignore_ascii_case("aivi-") {
         &received[5..]
     } else {
         received
     };
-    let canonical_mangled = canonical.replace('.', "_");
-    canonical_mangled == received_core
+    advertised_tool_name(canonical) == advertised_tool_name(received_core)
 }
 
 fn handle_request(
@@ -104,7 +115,7 @@ fn handle_request(
             serde_json::json!({
                 "tools": manifest.tools.iter().filter(|tool| policy.allow_effectful_tools || !tool.effectful).map(|tool| {
                     serde_json::json!({
-                        "name": tool.name,
+                        "name": advertised_tool_name(&tool.name),
                         "description": tool.description,
                         "inputSchema": tool.input_schema
                     })
@@ -1091,10 +1102,10 @@ mod tests {
             .iter()
             .filter_map(|tool| tool.get("name").and_then(|name| name.as_str()))
             .collect::<Vec<_>>();
-        assert!(default_names.contains(&MCP_TOOL_PARSE));
-        assert!(default_names.contains(&MCP_TOOL_CHECK));
-        assert!(default_names.contains(&MCP_TOOL_FMT));
-        assert!(!default_names.contains(&MCP_TOOL_FMT_WRITE));
+        assert!(default_names.contains(&advertised_tool_name(MCP_TOOL_PARSE).as_str()));
+        assert!(default_names.contains(&advertised_tool_name(MCP_TOOL_CHECK).as_str()));
+        assert!(default_names.contains(&advertised_tool_name(MCP_TOOL_FMT).as_str()));
+        assert!(!default_names.contains(&advertised_tool_name(MCP_TOOL_FMT_WRITE).as_str()));
 
         let effectful_response = handle_request(
             &manifest,
@@ -1113,7 +1124,7 @@ mod tests {
             .iter()
             .filter_map(|tool| tool.get("name").and_then(|name| name.as_str()))
             .collect::<Vec<_>>();
-        assert!(effectful_names.contains(&MCP_TOOL_FMT_WRITE));
+        assert!(effectful_names.contains(&advertised_tool_name(MCP_TOOL_FMT_WRITE).as_str()));
     }
 
     #[test]
@@ -1269,6 +1280,38 @@ mod tests {
             // It might be an error because execution fails (dummy target), but that's fine.
             // We just care that it dispatched.
         }
+    }
+
+    #[test]
+    fn tools_list_advertises_underscore_safe_names() {
+        let manifest = bundled_specs_manifest_with_ui();
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list"
+        });
+
+        let response = handle_request(
+            &manifest,
+            McpPolicy {
+                allow_effectful_tools: true,
+            },
+            &request,
+        )
+        .expect("response");
+
+        let tool_names = response["result"]["tools"]
+            .as_array()
+            .expect("tool list")
+            .iter()
+            .map(|tool| tool["name"].as_str().expect("tool name"))
+            .collect::<Vec<_>>();
+
+        assert!(tool_names.contains(&"aivi_parse"));
+        assert!(tool_names.contains(&"aivi_fmt_write"));
+        assert!(tool_names.contains(&"aivi_gtk_launch"));
+        assert!(tool_names.contains(&"aivi_gtk_keyPress"));
+        assert!(!tool_names.iter().any(|name| name.contains('.')));
     }
 
     #[test]

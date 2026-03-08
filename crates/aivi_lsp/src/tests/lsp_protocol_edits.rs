@@ -254,14 +254,11 @@ mod lsp_protocol_edits {
         (client_read, client_write, server_task)
     }
 
-    async fn initialize_lsp(
+    async fn initialize_lsp_with_root(
         client_read: &mut (impl AsyncRead + Unpin),
         client_write: &mut (impl AsyncWrite + Unpin),
+        root_uri: Url,
     ) -> Value {
-        let root_uri = Url::from_file_path(repo_root())
-            .expect("root uri")
-            .to_string();
-
         write_lsp_msg(
             &mut *client_write,
             &json!({
@@ -269,7 +266,7 @@ mod lsp_protocol_edits {
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "rootUri": root_uri,
+                    "rootUri": root_uri.to_string(),
                     "capabilities": {}
                 }
             }),
@@ -291,6 +288,14 @@ mod lsp_protocol_edits {
         .await;
 
         response
+    }
+
+    async fn initialize_lsp(
+        client_read: &mut (impl AsyncRead + Unpin),
+        client_write: &mut (impl AsyncWrite + Unpin),
+    ) -> Value {
+        let root_uri = Url::from_file_path(repo_root()).expect("root uri");
+        initialize_lsp_with_root(client_read, client_write, root_uri).await
     }
 
     async fn shutdown_lsp(
@@ -393,9 +398,12 @@ mod lsp_protocol_edits {
     #[tokio::test]
     async fn rapid_changes_keep_latest_diagnostics() {
         let (mut client_read, mut client_write, server_task) = start_lsp().await;
-        initialize_lsp(&mut client_read, &mut client_write).await;
+        let root = std::env::temp_dir().join("aivi-lsp-rapid-root");
+        std::fs::create_dir_all(&root).expect("create rapid test root");
+        let root_uri = Url::from_file_path(&root).expect("rapid root uri");
+        initialize_lsp_with_root(&mut client_read, &mut client_write, root_uri).await;
 
-        let uri = Url::parse("file:///lsp/rapid.aivi").expect("uri");
+        let uri = Url::from_file_path(root.join("rapid.aivi")).expect("uri");
         let initial = "module lsp.demo\n\nvalue = 1\n";
         write_lsp_msg(
             &mut client_write,
