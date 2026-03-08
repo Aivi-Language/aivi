@@ -9,9 +9,9 @@
 
 Start with [Native GTK & libadwaita Apps](./native_gtk_apps.md) for the high-level guide and [GTK App Architecture](./app_architecture.md) for the event-loop details. This page is the practical API reference.
 
-## How UI effects fit into capabilities
+## How UI effects fit into AIVI
 
-GTK runtime operations use the `ui` capability family:
+GTK runtime operations are ordinary effects and resources in AIVI:
 
 - widget and window construction/presentation → `ui.window`,
 - `signalPoll`, `signalStream`, `signalEmit` → `ui.signal`,
@@ -19,7 +19,7 @@ GTK runtime operations use the `ui` capability family:
 - desktop notification helpers → `ui.notification`,
 - `gtkApp` → the coarse-grained `ui` entry point.
 
-These capabilities describe where native UI effects live in AIVI's effect system. They do not create a separate “special UI language”.
+These operations live in AIVI's ordinary effect system. They do not create a separate “special UI language”.
 
 ## Start here
 
@@ -269,12 +269,8 @@ Component tags use **record-based lowering**: attributes become record fields an
 
 GTK sigils also support **function-call tags** for local lowerCamel helpers that would be awkward to spell directly inside a sigil. A simple uppercase self-closing tag with positional arguments lowers to the same helper with a lowercased first letter:
 
-```aivi
-// Equivalent to: { navRailNode model.appState.activeSection "sidebar" }
-~<gtk>
-  <NavRailNode model.appState.activeSection "sidebar" />
-</gtk>
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_01.aivi{aivi}
+
 
 Function-call tags:
 
@@ -365,9 +361,8 @@ For unusual window flags such as `decorated` or `hideOnClose`, keep `gtkApp` as 
 
 `reconcileNode` diffs a new `GtkNode` tree against the live widget tree and applies the smallest changes it can:
 
-```aivi
-reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/block_02.aivi{aivi}
+
 
 It returns the root `WidgetId`: the same id when the root widget was patched in place, or a new id if the root widget type had to be rebuilt.
 

@@ -1,7 +1,7 @@
 # Testing Module
 
 <!-- quick-info: {"kind":"module","name":"aivi.testing"} -->
-`aivi.testing` provides the assertion helpers and snapshot assertions used inside `@test` definitions. It keeps ordinary unit checks, capability-based tests, and snapshot verification in the same built-in workflow as `aivi test`.
+`aivi.testing` provides the assertion helpers and snapshot assertions used inside `@test` definitions. It keeps ordinary unit checks and snapshot verification in the same built-in workflow as `aivi test`.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.testing</div>
@@ -14,17 +14,8 @@ This page focuses on the module itself. For test discovery, the `@test` decorato
 
 ## Overview
 
-```aivi
-use aivi
-use aivi.testing
+<<< ../../snippets/from_md/stdlib/core/testing/block_01.aivi{aivi}
 
-add = left right => left + right
-
-@test "addition works"
-additionWorks = do Effect {
-  assertEq (add 1 1) 2
-}
-```
 
 Tests are top-level bindings annotated with the [`@test` decorator](/syntax/decorators/test). The decorator's description string, such as `@test "addition works"`, is what the runner shows in its output.
 
@@ -56,20 +47,9 @@ aivi test path/to/directory --update-snapshots
 
 The runner discovers top-level `@test` bindings under the target, executes each one as an `Effect`, reports failures by qualified name, and returns a non-zero exit code when any test fails. It also writes passed and failed file lists to `target/aivi-test-passed-files.txt` and `target/aivi-test-failed-files.txt`.
 
-## Testing capability-based code
-
-When production code depends on capabilities, the usual testing approach is to install scoped handlers with [`with { capability = handler } in`](/syntax/effect_handlers).
-
-In the example below, assume `readConfig` reads through `file.read` and `process.env.read`, while `fixtureFiles` and `fixtureEnv` return deterministic test data.
-
-<<< ../../snippets/from_md/stdlib/core/testing/block_01.aivi{aivi}
-
-
-This swaps the capability interpreters only inside the test scope, so the production logic stays unchanged.
-
 ## Mocking REST and HTTP calls
 
-Prefer capability handlers for new code. When code is still written around imported bindings such as `rest.get`, [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) are a practical binding-level fallback.
+For code written around imported bindings such as `rest.get`, [`mock ... in` expressions](/syntax/decorators/test#mock-expressions) are the standard binding-level substitution tool.
 
 <<< ../../snippets/from_md/stdlib/core/testing/block_02.aivi{aivi}
 
@@ -78,7 +58,7 @@ Here the mock replaces `rest.get` only inside the test body, so the example can 
 
 Mock expressions provide **deep scoping**: functions called inside the mocked body also see the mock binding. See the [Mock Expressions](/syntax/decorators/test#mock-expressions) spec for multiple mocked bindings, restore rules, and `mock snapshot`.
 
-Prefer capability handlers when the code under test already exposes capabilities. Keep `mock ... in` for binding-level substitution, snapshots, and APIs that have not yet been expressed as capabilities.
+Keep `mock ... in` for binding-level substitution, snapshots, and APIs that should be isolated inside one test body.
 
 ## Snapshot assertions
 
@@ -94,5 +74,4 @@ Snapshot tests are especially helpful for larger structured output such as forma
 ## Related
 
 - [`@test` decorator and `mock ... in`](/syntax/decorators/test)
-- [Effect handlers](/syntax/effect_handlers)
 - [`aivi test` CLI command](/tools/cli#test)

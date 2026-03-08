@@ -1,0 +1,12 @@
+use aivi.list
+use aivi.logic
+use aivi.option
+use aivi.text
+
+processUser = users userId =>
+  users
+  |> find (user => user.id == userId)
+  |> chain (user => user.email)
+  |> filter (text.contains "@")
+  |> map text.toLower
+  |> getOrElse "no-email@example.com"

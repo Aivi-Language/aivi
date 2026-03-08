@@ -1,8 +1,4 @@
-badUrl = {
-  protocol: "http"
-  host: ""
-  port: None
-  path: ""
-  query: []
-  hash: None
-} // no validation happens here
+use aivi.url (Url, parse, protocol)
+
+myUrl = parse "https://example.com" or panic "bad url"
+p     = protocol myUrl // use the exported accessor

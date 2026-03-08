@@ -28,22 +28,11 @@ Typical examples include time and calendar arithmetic, geometry, matrices, UI la
 
 To use a domain, bring the domain itself into scope. The most explicit form is:
 
-```aivi
-use aivi.vector (domain Vector)
+<<< ../snippets/from_md/syntax/domains/block_01.aivi{aivi}
 
-position = { x: 10.0, y: 20.0 }
-velocity = { x: 1.0, y: 0.0 }
 
-nextPosition = position + velocity
-```
+<<< ../snippets/from_md/syntax/domains/block_02.aivi{aivi}
 
-```aivi
-use aivi.chronos.calendar
-use aivi.calendar (domain Calendar)
-
-issuedOn = ~d(2025-02-08)
-dueDate = issuedOn + 30d
-```
 
 The first example uses a module that exports its domain directly. The second shows a companion-module pattern used by some standard-library areas: one module provides the named helpers, and another exports the domain sugar.
 
@@ -147,57 +136,22 @@ Define a domain when you want problem-specific syntax that stays type-safe and p
 
 ### Syntax
 
-```aivi
-domain Name over CarrierType = {
-  Delta = ...
+<<< ../snippets/from_md/syntax/domains/block_03.aivi{aivi}
 
-  (+) : CarrierType -> Delta -> CarrierType
-  (+) = carrier delta => ...
-
-  1d : Int -> Delta
-  1d = amount => ...
-}
-```
 
 In v0.1, sigils are not declared inside a `domain` block. Standard-library sigils are compiler-provided separately; see [Operators and Context](operators.md#118-sigils).
 
 ### Example: a simple color domain
 
-```aivi
-Rgb = { r: Int, g: Int, b: Int }
+<<< ../snippets/from_md/syntax/domains/block_04.aivi{aivi}
 
-adjustLightness : Rgb -> Int -> Rgb
-adjustLightness = color amount => ...
-
-adjustHue : Rgb -> Int -> Rgb
-adjustHue = color amount => ...
-
-domain Color over Rgb = {
-  Delta = Lightness Int | Hue Int
-
-  (+) : Rgb -> Delta -> Rgb
-  (+) = color (Lightness amount) => adjustLightness color amount
-  (+) = color (Hue amount) => adjustHue color amount
-
-  1l : Int -> Delta
-  1h : Int -> Delta
-  1l = amount => Lightness amount
-  1h = amount => Hue amount
-}
-```
 
 ### How the compiler reads a domain expression
 
 When you write a domain-owned expression, the compiler starts from the carrier type and then resolves the operator and any suffix literals through the domain currently in scope.
 
-```aivi
-use aivi.color (Rgb, domain Color)
+<<< ../snippets/from_md/syntax/domains/block_05.aivi{aivi}
 
-red : Rgb
-red = { r: 255, g: 0, b: 0 }
-
-lighter = red + 10l
-```
 
 For a value like `red + 10l`, the flow is:
 

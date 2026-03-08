@@ -1,0 +1,4 @@
+RetryPolicy = {
+  attempts: Int
+  backoff: BackoffPolicy
+}

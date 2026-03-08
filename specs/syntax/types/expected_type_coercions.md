@@ -85,16 +85,8 @@ When a `VNode msg` is expected, such as in an HTML child splice, the compiler ca
 
 If the expression already has type `VNode msg`, no wrapper is added.
 
-```aivi
-use aivi.ui
+<<< ../../snippets/from_md/syntax/types/expected_type_coercions/block_01.aivi{aivi}
 
-count = 3
-
-view =
-  ~<html>
-    <p>Open tabs: { count }</p>
-  </html>
-```
 
 In the `{ count }` splice above, the compiler inserts `TextNode (toText count)` because the child position expects `VNode msg`.
 For more detail, see [HTML sigils](../../stdlib/ui/html.md#splices) and [UI Virtual DOM](../../stdlib/ui/vdom.md).

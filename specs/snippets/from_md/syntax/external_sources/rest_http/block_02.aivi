@@ -1,25 +1,11 @@
-Request = {
-  method: Text
-  url: Url
-  headers: List { name: Text, value: Text }
-  body: Option Text
-  timeoutMs: Option Int
-  retryCount: Option Int
-  bearerToken: Option Text
-  strictStatus: Option Bool
+healthSource : Source Https (Result Error Response)
+healthSource = https.get ~u(https://status.example.com/health)
+
+do Effect {
+  result <- load healthSource
+  pure (
+    result match
+      | Ok response => response.status
+      | Err _       => 0
+  )
 }
-
-User = { name: Text, age: Int, gender: Text }
-
-usersSource : Source RestApi (List User)
-usersSource =
-  rest.fetch {
-    method: "GET"
-    url: ~u(https://api.example.com/users)
-    headers: []
-    body: None
-    timeoutMs: Some 5_000
-    retryCount: Some 2
-    bearerToken: Some apiToken // attach bearer auth at the request boundary
-    strictStatus: Some True // treat non-2xx responses as failures
-  }

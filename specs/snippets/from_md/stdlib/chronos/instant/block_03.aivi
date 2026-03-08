@@ -1,0 +1,15 @@
+use aivi
+use aivi.chronos.duration (Span)
+
+Timestamp = DateTime
+
+domain Instant over Timestamp = {
+  (<)  : Timestamp -> Timestamp -> Bool
+  (<=) : Timestamp -> Timestamp -> Bool
+  (>)  : Timestamp -> Timestamp -> Bool
+  (>=) : Timestamp -> Timestamp -> Bool
+
+  (+)  : Timestamp -> Span -> Timestamp
+  (-)  : Timestamp -> Span -> Timestamp
+  (-)  : Timestamp -> Timestamp -> Span
+}

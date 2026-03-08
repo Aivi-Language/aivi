@@ -209,7 +209,6 @@ fn expr_span(expr: &Expr) -> Span {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Mock { span, .. }
-        | Expr::CapabilityScope { span, .. }
         | Expr::Block { span, .. } => span.clone(),
         Expr::Raw { span, .. } => span.clone(),
     }
@@ -233,7 +232,6 @@ fn type_span(ty: &TypeExpr) -> Span {
     match ty {
         TypeExpr::Name(name) => name.span.clone(),
         TypeExpr::And { span, .. }
-        | TypeExpr::CapabilityClause { span, .. }
         | TypeExpr::Apply { span, .. }
         | TypeExpr::Func { span, .. }
         | TypeExpr::Record { span, .. }

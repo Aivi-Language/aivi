@@ -30,21 +30,6 @@ impl Parser {
             if self.consume_ident_text("with").is_none() {
                 break;
             }
-            let after_with = self.pos;
-            if let Some(capabilities) = self.try_parse_capability_list() {
-                let end_span = capabilities
-                    .last()
-                    .map(|cap| cap.span.clone())
-                    .unwrap_or_else(|| self.previous_span());
-                let span = merge_span(type_span(&lhs), end_span);
-                lhs = TypeExpr::CapabilityClause {
-                    base: Box::new(lhs),
-                    capabilities,
-                    span,
-                };
-                continue;
-            }
-            self.pos = after_with;
             let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
                 span: type_span(&lhs),
             });
@@ -184,33 +169,6 @@ impl Parser {
         }
         None
     }
-
-    fn try_parse_capability_list(&mut self) -> Option<Vec<SpannedName>> {
-        let checkpoint = self.pos;
-        self.consume_newlines();
-        if !self.consume_symbol("{") {
-            return None;
-        }
-        self.consume_newlines();
-        let mut capabilities = Vec::new();
-        while !self.check_symbol("}") && self.pos < self.tokens.len() {
-            let capability = self.parse_dotted_name()?;
-            capabilities.push(capability);
-            self.consume_newlines();
-            if self.consume_symbol(",") {
-                self.consume_newlines();
-                continue;
-            }
-            if self.check_symbol("}") {
-                break;
-            }
-            self.pos = checkpoint;
-            return None;
-        }
-        self.expect_symbol("}", "expected '}' to close capability clause")?;
-        Some(capabilities)
-    }
-
     fn try_parse_datetime(&mut self, head: Token) -> Option<Literal> {
         let checkpoint = self.pos;
         let result = (|| {

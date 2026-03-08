@@ -1,0 +1,3 @@
+do Effect {
+  _ <- if cond then print "branch" else pure Unit
+}

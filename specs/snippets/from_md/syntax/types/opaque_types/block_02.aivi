@@ -1,12 +1,4 @@
-opaque Url = {
-  protocol: Text
-  host: Text
-  port: Option Int
-  path: Text
-  query: List (Text, Text)
-  hash: Option Text
-}
+use aivi.url (parse, domain Url)
 
-opaque Color  = Red | Green | Blue // constructors are hidden outside the module
-opaque Email  = Text! // opaque branded type
-opaque UserId = Int // opaque alias
+url  = parse "https://example.com" or panic "bad"
+url2 = url + ("q", "search") // `+` comes from the exported `domain Url`

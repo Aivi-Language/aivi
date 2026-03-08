@@ -79,12 +79,8 @@ These helpers make machines useful in real applications:
 
 Machines can trigger follow-up work when a transition succeeds. The `on` form is ordinary `Effect` syntax that observes successful transitions; it is not an extra field on the machine value.
 
-```aivi
-on run => do Effect {
-  _ <- log.info "sync started"   // Runs after the transition changed state
-  pure Unit
-}
-```
+<<< ../snippets/from_md/syntax/state_machines/block_01.aivi{aivi}
+
 
 An `on` handler is useful for logging, metrics, notifications, cache updates, or similar side effects.
 

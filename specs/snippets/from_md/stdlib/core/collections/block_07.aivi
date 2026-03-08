@@ -1,0 +1,4 @@
+use aivi.collections
+
+selected = Set.fromList [101, 102, 101]
+visible  = Set.difference selected (Set.fromList [102])

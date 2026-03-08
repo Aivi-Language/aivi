@@ -178,20 +178,6 @@ impl Backend {
                 .map(Self::type_expr_to_string)
                 .collect::<Vec<_>>()
                 .join(" with "),
-            TypeExpr::CapabilityClause {
-                base, capabilities, ..
-            } => {
-                let caps = capabilities
-                    .iter()
-                    .map(|cap| cap.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                if caps.is_empty() {
-                    Self::type_expr_to_string(base)
-                } else {
-                    format!("{} with {{ {} }}", Self::type_expr_to_string(base), caps)
-                }
-            }
             TypeExpr::Apply { base, args, .. } => {
                 let base_str = match **base {
                     TypeExpr::Func { .. } => format!("({})", Self::type_expr_to_string(base)),

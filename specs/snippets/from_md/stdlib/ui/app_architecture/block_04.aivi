@@ -1,11 +1,1 @@
-gtkApp: {
-  id: Text
-  title: Text
-  size: (Int, Int)
-  model: s
-  onStart: AppId -> WindowId -> Effect GtkError Unit
-  subscriptions: s -> List (Subscription msg)
-  view: s -> GtkNode
-  toMsg: GtkSignalEvent -> Option msg
-  update: msg -> s -> Effect GtkError (AppStep s msg)
-} -> Effect GtkError Unit
+open : Resource GtkError (Recv msg)

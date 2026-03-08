@@ -1,0 +1,2 @@
+value = 41
+next = value + 1

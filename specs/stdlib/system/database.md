@@ -197,14 +197,8 @@ A database source declaration should carry typed connector config, the table or 
 
 For the `Source Db` forms themselves, see [External Sources](../../syntax/external_sources.md) and [Schema-First Source Definitions](../../syntax/external_sources/schema_first.md). A minimal table-backed declaration looks like this:
 
-```aivi
-usersRows : Source Db (List User)
-usersRows =
-  db.source {
-    table: usersTable
-    schema: source.schema.table usersTable
-  }
-```
+<<< ../../snippets/from_md/stdlib/system/database/block_01.aivi{aivi}
+
 
 `load usersRows` is still the effectful step; the declaration just makes the database boundary reusable and statically inspectable.
 
@@ -218,12 +212,12 @@ If you are still on the beginner path, skip pooling until one process needs many
 
 <<< ../../snippets/from_md/stdlib/system/database/pooling.aivi{aivi}
 
-## Capabilities
+## Runtime effects
 
-- `db.configure`, `db.configureSqlite`, pool creation, and connection acquisition require database connection capability.
-- `db.load` and read-only query helpers require database query capability.
-- `db.applyDelta`, typed mutation helpers, transactions, and savepoints require database mutation capability.
-- `db.runMigrations` and `db.runMigrationSql` require database migration capability.
+- `db.configure`, `db.configureSqlite`, pool creation, and connection acquisition open or configure database connections.
+- `db.load` and read-only query helpers execute database reads.
+- `db.applyDelta`, typed mutation helpers, transactions, and savepoints execute database writes.
+- `db.runMigrations` and `db.runMigrationSql` apply schema changes.
 
 ## Core API
 

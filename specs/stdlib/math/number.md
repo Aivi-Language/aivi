@@ -36,15 +36,8 @@ A common import setup looks like this:
 
 `BigInt` is an opaque native type for integers larger than machine `Int` can represent. Import `aivi.number.bigint` for the conversion helpers, and add `use aivi.number.bigint (domain BigInt)` when you want `1n`-style literals.
 
-```aivi
-use aivi.number.bigint
-use aivi.number.bigint (domain BigInt)
+<<< ../../snippets/from_md/stdlib/math/number/block_01.aivi{aivi}
 
-seed           = fromInt 1000000
-huge           = seed * seed * seed
-next           = huge + 1n
-safeMachineInt = toInt 42n
-```
 
 | Function | What it does |
 | --- | --- |
@@ -58,13 +51,8 @@ safeMachineInt = toInt 42n
 
 `fromFloat` accepts only finite `Float` values. If NaN or infinity matters to your algorithm, stay in `Float` or switch to another exact representation before crossing the API boundary.
 
-```aivi
-use aivi.number.decimal
+<<< ../../snippets/from_md/stdlib/math/number/block_02.aivi{aivi}
 
-price = 19.99dec
-tax   = price * 0.2dec
-total = round (price + tax) 2
-```
 
 | Function | What it does |
 | --- | --- |
@@ -78,13 +66,8 @@ total = round (price + tax) 2
 
 Create values with `fromBigInts`; the denominator must be non-zero.
 
-```aivi
-use aivi.number.bigint (fromInt)
-use aivi.number.rational
+<<< ../../snippets/from_md/stdlib/math/number/block_03.aivi{aivi}
 
-half = fromBigInts (fromInt 1) (fromInt 2)
-sum  = normalize (half + half)
-```
 
 | Function | What it does |
 | --- | --- |
@@ -97,26 +80,15 @@ sum  = normalize (half + half)
 
 `Complex` values are records of the form `{ re: Float, im: Float }`. The module exports the `i` constant and a `Complex` domain with `+`, `-`, `*`, and division by a scalar `Float`.
 
-```aivi
-use aivi.number.complex
+<<< ../../snippets/from_md/stdlib/math/number/block_04.aivi{aivi}
 
-z1      = { re: 3.0, im: 4.0 }
-z2      = { re: 1.0, im: -2.0 }
-sum     = z1 + z2
-shifted = z1 + i
-```
 
 ## Quaternion
 
 `aivi.number.quaternion` models 3D rotations without the gimbal-lock issues that can show up with Euler angles. `fromAxisAngle` takes an axis record and an angle in radians, and it normalizes the axis for you before building the quaternion.
 
-```aivi
-use aivi.number.quaternion
+<<< ../../snippets/from_md/stdlib/math/number/block_05.aivi{aivi}
 
-axis     = { x: 0.0, y: 1.0, z: 0.0 }
-quarter  = fromAxisAngle axis 1.57079632679
-unitTurn = normalize quarter
-```
 
 The direct module also provides quaternion `+`, `-`, `*`, and division by a scalar `Float` through the `Quaternion` domain.
 

@@ -19,10 +19,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
         "read".to_string(),
-        builtin("file.read", 1, |mut args, runtime| {
-            if let Some(value) = runtime.dispatch_capability_handler("file.read", &args)? {
-                return Ok(value);
-            }
+        builtin("file.read", 1, |mut args, _runtime| {
             let path = match args.remove(0) {
                 Value::Text(text) => text,
                 _ => {

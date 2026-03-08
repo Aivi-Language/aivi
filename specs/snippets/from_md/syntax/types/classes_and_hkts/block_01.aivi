@@ -1,0 +1,5 @@
+emptyList : List Int
+emptyList = empty       // expected type says: use the `List` instance
+
+emptyMap : Map Text Int
+emptyMap = empty        // expected type says: use the `Map` instance

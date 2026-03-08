@@ -12,19 +12,8 @@ Use it to read environment variables, inspect command-line arguments, detect a b
 
 The most common `aivi.system` workflow is "read host-provided configuration, apply a fallback, then continue with normal program logic."
 
-```aivi
-use aivi.system (env)
+<<< ../../snippets/from_md/stdlib/system/system/block_01.aivi{aivi}
 
-main = do Effect {
-  portOpt <- env.get "PORT"
-  port =
-    portOpt match
-      | Some p => p
-      | None   => "8080"
-
-  print "Server will listen on {port}"
-}
-```
 
 ## Capabilities
 
@@ -69,15 +58,5 @@ On Unix-like hosts, `localeTag` checks `LC_ALL`, `LC_MESSAGES`, and `LANG` in th
 
 ## Type Signatures
 
-```aivi
-env : {
-  get: Text -> Effect Text (Option Text)
-  decode: Text -> Effect Text A
-  set: Text -> Text -> Effect Text Unit
-  remove: Text -> Effect Text Unit
-}
+<<< ../../snippets/from_md/stdlib/system/system/block_02.aivi{aivi}
 
-args : Effect Text (List Text)
-localeTag : Effect Text (Option Text)
-exit : Int -> Effect Text Unit
-```

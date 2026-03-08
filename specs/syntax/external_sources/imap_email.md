@@ -16,7 +16,7 @@ Use the one-shot source for simple inbox ingestion. Use the session API when you
 - Use the **one-shot source** when you want “load some messages as typed data”.
 - Use the **session API** when you need a conversation with the mailbox over time.
 - Most session workflows start with `imapOpen`, then `imapSelect` or `imapExamine`, and then `imapSearch` / `imapFetch`.
-- All of these operations perform network I/O, so they require the [`network` capability](../capabilities.md).
+- All of these operations perform network I/O when loaded or executed.
 
 The one-shot form is exposed directly as `email.imap`. Session operations exist at the lower-level runtime surface as `email.imapOpen`, `email.imapSelect`, and so on, and are re-exported by [`use aivi.email`](../../stdlib/system/email.md) as `imapOpen`, `imapSelect`, `imapFetch`, and related helpers. The examples below use `aivi.email` for the session API because that is the form most application code uses.
 
@@ -67,9 +67,8 @@ Flags are plain IMAP flag strings such as `"\\Seen"` or `"\\Deleted"`.
 
 Both password and OAuth2 (XOAUTH2) authentication are supported through `EmailAuth`:
 
-```aivi
-EmailAuth = Password Text | OAuth2 Text
-```
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_01.aivi{aivi}
+
 
 OAuth2 uses the XOAUTH2 SASL mechanism, which is commonly supported by providers such as Gmail and Outlook.
 
@@ -84,30 +83,8 @@ For session-oriented code, `mailbox` and `filter` are usually `None`, because yo
 
 ## Example — one-shot mailbox read
 
-```aivi
-InboxMessage = {
-  uid: Option Int
-  subject: Option Text
-  from: Option Text
-  to: Option Text
-  date: Option Text
-  body: Text
-}
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_02.aivi{aivi}
 
-do Effect {
-  msgs <- load (email.imap {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 myToken
-    mailbox: Some "INBOX" // read from the inbox
-    filter: Some "UNSEEN" // only unread messages
-    limit: Some 50 // cap the batch size
-    port: None
-    starttls: None
-  })
-  pure msgs
-}
-```
 
 This is a good fit for batch-style jobs such as importing unread support messages or extracting invoices from a mailbox. `myToken` stands for an OAuth2 access token that your program acquired elsewhere.
 
@@ -115,68 +92,15 @@ This is a good fit for batch-style jobs such as importing unread support message
 
 If you need a little more control than the one-shot source gives you, this is the smallest useful session flow:
 
-```aivi
-use aivi.email
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_03.aivi{aivi}
 
-InboxMessage = {
-  uid: Option Int
-  subject: Option Text
-  from: Option Text
-  to: Option Text
-  date: Option Text
-  body: Text
-}
-
-fetchUnread : ImapConfig -> Effect Text (List InboxMessage)
-fetchUnread = config => do Effect {
-  session <- imapOpen config
-  _       <- imapSelect "INBOX" session
-  uids    <- imapSearch "UNSEEN" session
-  msgs    <- imapFetch uids session
-  pure msgs
-}
-```
 
 This pattern is useful when you want custom search strings or you want to decide yourself where the mailbox session scope begins and ends. Because `imapOpen` returns a `Resource`, binding it with `<-` acquires the session for the surrounding scope and releases it automatically when that scope exits; see [Resources](../resources.md).
 
 ## Example — session with IDLE
 
-```aivi
-use aivi.email
+<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_04.aivi{aivi}
 
-InboxMessage = {
-  uid: Option Int
-  subject: Option Text
-  from: Option Text
-  to: Option Text
-  date: Option Text
-  body: Text
-}
-
-processInbox : Text -> Effect Text (List InboxMessage)
-processInbox = token => do Effect {
-  session <- imapOpen {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 token
-    port: None
-    starttls: None
-    mailbox: None
-    filter: None
-    limit: None
-  }
-  _      <- imapSelect "INBOX" session
-  result <- imapIdle 300 session // wait for mailbox changes for up to 300 seconds
-  result match
-    | MailboxChanged => do Effect {
-        uids <- imapSearch "UNSEEN" session
-        msgs <- imapFetch uids session
-        _    <- imapAddFlags uids ["\\Seen"] session
-        pure msgs
-      }
-    | TimedOut => pure []
-}
-```
 
 This example shows the smallest useful “wait, then fetch new mail” loop step. In a long-running application, place the `imapOpen` acquisition in an outer scope and repeat the `imapIdle` call until your application decides to stop.
 
@@ -193,5 +117,5 @@ Use the session API when you need:
 - [External Sources](../external_sources.md) for the broader `Source K A` model,
 - [Effects](../effects.md#load) for how `load` turns a `Source` into an `Effect`,
 - [Resources](../resources.md) for the acquisition and cleanup rules behind `imapOpen`,
-- [Capabilities](../capabilities.md) for the `network` capability requirement,
+- [Effects](../effects.md) for effectful runtime operations,
 - [Email Module](../../stdlib/system/email.md) for the convenience wrappers and full type definitions.

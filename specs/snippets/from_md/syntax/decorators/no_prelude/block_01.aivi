@@ -1,0 +1,2 @@
+@no_prelude
+module my.explicit.module

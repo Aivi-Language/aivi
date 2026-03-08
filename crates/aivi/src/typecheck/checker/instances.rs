@@ -425,23 +425,6 @@ impl TypeChecker {
                 return;
             }
             self.subst = base_subst;
-            let declared_caps = candidates.iter().fold(CapabilitySet::default(), |mut acc, scheme| {
-                acc.extend(scheme.capabilities.iter().cloned());
-                acc
-            });
-            self.def_capabilities
-                .insert(name.clone(), declared_caps.clone());
-            let mut scopes = Vec::new();
-            if !declared_caps.is_empty() {
-                scopes.push(CapabilityScopeFrame {
-                    capabilities: declared_caps,
-                    origin: CapabilityScopeOrigin::Signature {
-                        def_name: name.clone(),
-                        span: def.span.clone(),
-                    },
-                });
-            }
-            self.collect_expr_capabilities(&expr, env, &scopes, true);
             if candidates.len() == 1 {
                 env.insert(name.clone(), candidates[0].clone());
             } else {
@@ -494,12 +477,7 @@ impl TypeChecker {
                     env.insert(name.clone(), sig);
                 }
             } else {
-                let mut scheme = self.generalize(inferred, env);
-                let inferred_caps = self.collect_expr_capabilities(&expr, env, &[], false);
-                self.def_capabilities
-                    .insert(name.clone(), inferred_caps.clone());
-                scheme.capabilities = inferred_caps;
-                env.insert(name.clone(), scheme);
+                env.insert(name.clone(), self.generalize(inferred, env));
             }
         }
         self.checked_defs.insert(name);

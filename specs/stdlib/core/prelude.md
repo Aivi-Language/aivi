@@ -14,17 +14,8 @@ The Prelude is the default namespace for day-to-day AIVI code. Its job is to mak
 
 That is why simple code can use names such as `Int`, `Text`, `Option`, `Some`, `None`, `Result`, `Ok`, and `Err` without extra `use` lines.
 
-```aivi
-module docs.prelude.example
+<<< ../../snippets/from_md/stdlib/core/prelude/block_01.aivi{aivi}
 
-status : Option Int
-status = Some 3
-
-summary : Text
-summary = status match
-  | Some n => "count = {n}"
-  | None   => "no value"
-```
 
 ## What is typically included
 
@@ -41,18 +32,8 @@ When you need a broader API, import the specific module directly instead of trea
 
 Most projects should keep the Prelude enabled. If you want a fully explicit environment, opt out with [`@no_prelude`](/syntax/decorators/no_prelude) as described in [Modules: The Prelude](/syntax/modules#106-the-prelude).
 
-```aivi
-@no_prelude
-module docs.explicit
+<<< ../../snippets/from_md/stdlib/core/prelude/block_02.aivi{aivi}
 
-use aivi (Bool, Int, Result, Text, Ok, Err)
-
-isPositive : Int -> Bool
-isPositive = n => n > 0
-
-status : Result Text Int
-status = Ok 1
-```
 
 Once you opt out, even basic names must be imported explicitly. This is mainly useful for low-level modules, generated code, compiler tests, or teaching material that wants every dependency to be visible. If you only wanted to turn the implicit import off temporarily, you can also re-enable it later with `use aivi.prelude`.
 
@@ -71,14 +52,7 @@ The Prelude also makes constructor introspection available for algebraic data ty
 | `constructorName value` | `A -> Text` | Returns the constructor tag name, such as `Some`, `Err`, or `Published`. |
 | `constructorOrdinal value` | `A -> Int` | Returns the zero-based declaration index of the constructor inside its ADT definition. |
 
-```aivi
-Status = Draft | Published | Archived
+<<< ../../snippets/from_md/stdlib/core/prelude/block_03.aivi{aivi}
 
-tag : Text
-tag = constructorName Published
-
-position : Int
-position = constructorOrdinal Published
-```
 
 In this example, `tag` is `"Published"` and `position` is `1` because `Draft` is the first constructor.

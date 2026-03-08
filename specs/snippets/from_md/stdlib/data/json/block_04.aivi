@@ -1,0 +1,10 @@
+use aivi.json
+
+schema : JsonSchema
+schema = {
+  required: ["id", "name"]
+  strict: True
+}
+
+payload = encodeObject [("id", encodeInt 1)]
+issues  = validateSchema schema payload

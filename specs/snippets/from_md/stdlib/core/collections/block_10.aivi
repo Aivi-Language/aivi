@@ -1,0 +1,4 @@
+use aivi.collections
+
+jobs = Heap.fromList [(2, "docs"), (1, "fix build"), (3, "release")]
+next = Heap.peekMin jobs

@@ -1,0 +1,21 @@
+use aivi.ui
+use aivi.ui.layout
+
+Msg = SearchChanged Text | Submit
+
+query = "AIVI"
+count = 3
+
+view =
+  ~<html>
+    <div
+      class="search"
+      style={ { padding: 12px, width: 50% } }
+      data-count={ count }
+    >
+      <input value={ query } onInput={ SearchChanged } />
+      <button onClick={ Submit }>
+        Search
+      </button>
+    </div>
+  </html>

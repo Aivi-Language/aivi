@@ -1,0 +1,18 @@
+Rgb = { r: Int, g: Int, b: Int }
+Hsl = { h: Float, s: Float, l: Float }
+Hex = Text
+
+domain Color over Rgb = {
+  Delta = Lightness Int | Saturation Int | Hue Int
+
+  (+) : Rgb -> Delta -> Rgb
+  (+) = col (Lightness n) => adjustLightness col n
+  (+) = col (Saturation n) => adjustSaturation col n
+  (+) = col (Hue n) => adjustHue col n
+
+  (+) : Rgb -> Rgb -> Rgb
+  (+) = left { r, g, b } => { r: left.r + r, g: left.g + g, b: left.b + b }
+
+  (-) : Rgb -> Delta -> Rgb
+  (-) = col delta => col + (negateDelta delta)
+}

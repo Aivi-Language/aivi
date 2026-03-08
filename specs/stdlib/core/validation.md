@@ -56,22 +56,14 @@ Another way to say it:
 
 In everyday AIVI code, the main combination helper is `ap`:
 
-```aivi
-ap : Validation (List E) (A -> B) -> Validation (List E) A -> Validation (List E) B
-```
+<<< ../../snippets/from_md/stdlib/core/validation/block_01.aivi{aivi}
+
 
 That signature is why the most common shape is `Validation (List E) A`: each failed check contributes a list of errors, and `ap` appends the lists when more than one check fails.
 If you want the typeclass background, this is the practical `Validation` version of [`Applicative`](logic.md#applicative) combination, and the list of errors is the [`Semigroup`](logic.md#semigroup) that makes accumulation possible.
 
-```aivi
-MkPerson : Text -> Int -> { name: Text, age: Int }
-MkPerson = name age => { name: name, age: age }
+<<< ../../snippets/from_md/stdlib/core/validation/block_02.aivi{aivi}
 
-nameCheck = Invalid ["Name is required"]
-ageCheck = Invalid ["Age must be non-negative"]
-
-result = ap (ap (Valid MkPerson) nameCheck) ageCheck
-```
 
 Here, `result` is `Invalid ["Name is required", "Age must be non-negative"]`.
 
@@ -94,12 +86,8 @@ This is a common pattern when each individual parser or decoder already returns 
 
 For validations around standard data sources such as JSON, environment variables, or databases, the standard library uses `DecodeError` to capture both **where** the problem occurred and **what** went wrong.
 
-```aivi
-DecodeError = {
-  path: List Text,
-  message: Text
-}
-```
+<<< ../../snippets/from_md/stdlib/core/validation/block_03.aivi{aivi}
+
 
 - `path` is the location inside the incoming value, such as `["user", "preferences", "theme"]`.
 - `message` explains the actual mismatch, such as `Expected Text, got Int`.

@@ -11,9 +11,8 @@ AIVI records are:
 - **structural** — compatibility depends on field names and field types
 - **closed** — a record type describes an exact set of fields
 
-```aivi
-User = { id: Int, name: Text, email: Option Text }
-```
+<<< ../../snippets/from_md/syntax/types/closed_records/block_01.aivi{aivi}
+
 
 Here `Option Text` means the `email` field always exists, but its value is either `Some "ada@example.com"` or `None`.
 If `Option` is new to you, see [3.2 Algebraic Data Types](algebraic_data_types.md).
@@ -29,23 +28,15 @@ If you need a related shape such as “just these fields” or “the same field
 
 Use a record literal to build a value whose fields match the record type:
 
-```aivi
-user : User
-user = {
-  id: 1,
-  name: "Ada",
-  email: None
-}
-```
+<<< ../../snippets/from_md/syntax/types/closed_records/block_02.aivi{aivi}
+
 
 ## Reusing an existing record with spread
 
 Record literals can spread an existing record and then override selected fields:
 
-```aivi
-base = { name: "Ada", role: "user" }
-admin = { ...base, role: "admin" }
-```
+<<< ../../snippets/from_md/syntax/types/closed_records/block_03.aivi{aivi}
+
 
 Spreads merge fields from left to right.
 If the same field appears more than once, the later entry wins.
@@ -57,10 +48,8 @@ For typed structural updates that can reach nested data, see [Patching Records](
 
 Functions can use record types to state the exact shape they expect:
 
-```aivi
-displayName : { id: Int, name: Text } -> Text
-displayName = user => user.name
-```
+<<< ../../snippets/from_md/syntax/types/closed_records/block_04.aivi{aivi}
+
 
 Because records are structural, any value with exactly the fields `id : Int` and `name : Text` is compatible with that signature, even if it came from a different type alias.
 For destructuring record fields in patterns, see [Pattern Matching](../pattern_matching.md).

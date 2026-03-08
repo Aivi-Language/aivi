@@ -452,10 +452,7 @@ pub(crate) fn build_concurrent_record() -> Value {
     );
     fields.insert(
         "sleep".to_string(),
-        builtin("concurrent.sleep", 1, |mut args, runtime| {
-            if let Some(value) = runtime.dispatch_capability_handler("clock.sleep", &args)? {
-                return Ok(value);
-            }
+        builtin("concurrent.sleep", 1, |mut args, _runtime| {
             let millis = expect_int(args.pop().unwrap(), "concurrent.sleep")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {

@@ -1,7 +1,1 @@
-CommandKey      = Text
-SubscriptionKey = Text
-
-AppStep model msg = {
-  model: model
-  commands: List (Command msg)
-}
+update : msg -> model -> Effect GtkError model

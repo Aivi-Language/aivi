@@ -10,14 +10,8 @@ Function application is written with whitespace, not call parentheses.
 - `f x y` means “call `f` with `x`, then call the result with `y`”.
 - Because functions are curried by default, supplying fewer arguments produces a new function.
 
-```aivi
-add : Int -> Int -> Int
-add = x y => x + y
+<<< ../snippets/from_md/syntax/functions/block_01.aivi{aivi}
 
-sum   = add 2 3
-add2  = add 2
-total = add2 10
-```
 
 A multi-argument definition is still curried, so `add 2` returns a new function that remembers the first argument.
 
@@ -25,26 +19,20 @@ A multi-argument definition is still curried, so `add 2` returns a new function 
 
 Use `=>` to write anonymous functions directly where you need them.
 
-```aivi
-increment = x => x + 1
-pair      = x y => (x, y)
-```
+<<< ../snippets/from_md/syntax/functions/block_02.aivi{aivi}
+
 
 Use `_` as shorthand for a **single-argument lambda** when the surrounding context already expects a unary function.
 
-```aivi
-numbers |> map (_ + 1)
-scores  |> filter (_ > 0)
-```
+<<< ../snippets/from_md/syntax/functions/block_03.aivi{aivi}
+
 
 Outside a unary-function position, write the parameter explicitly instead of relying on `_`.
 
 When you need more than one argument, or when a callback deserves a clear name, write the parameters explicitly.
 
-```aivi
-applyTwice = f x => f (f x)
-labelUser  = user => "{user.name} ({user.age})"
-```
+<<< ../snippets/from_md/syntax/functions/block_04.aivi{aivi}
+
 
 ---
 
@@ -56,45 +44,35 @@ Pipelines use `|>`.
 
 Pipes are for readable data flow. Start with a value on the left, then keep transforming it step by step on the right.
 
-```aivi
-order
-  |> validate // first check the value you are working on
-  |> save     // then pass the validated value to the next step
-```
+<<< ../snippets/from_md/syntax/functions/block_05.aivi{aivi}
+
 
 ### Choosing the pipe subject (and argument position)
 
 `|>` applies the expression on the right to the value on the left.
 
-```aivi
-x |> f
-```
+<<< ../snippets/from_md/syntax/functions/block_06.aivi{aivi}
+
 
 is equivalent to:
 
-```aivi
-f x
-```
+<<< ../snippets/from_md/syntax/functions/block_07.aivi{aivi}
+
 
 If the right-hand side is already an application, the piped value becomes the **final** argument.
 
 That makes pipelines a good fit for helpers such as `map`, `filter`, and `fold`, where the collection being processed usually comes last.
 
-```aivi
-x |> f a b
-```
+<<< ../snippets/from_md/syntax/functions/block_08.aivi{aivi}
+
 
 is equivalent to:
 
-```aivi
-f a b x
-```
+<<< ../snippets/from_md/syntax/functions/block_09.aivi{aivi}
 
-```aivi
-users
-  |> filter active
-  |> map.name
-```
+
+<<< ../snippets/from_md/syntax/functions/block_10.aivi{aivi}
+
 
 In the example above, `filter active` uses predicate lifting and `map.name` uses accessor sugar. See [Predicates](predicates.md) and [Operators and Context](operators.md) for those shorthand forms.
 
@@ -102,11 +80,8 @@ A good rule of thumb: put the value you are “working on” on the left, and ke
 
 Pipelines also pair well with `match`, which lets you keep a left-to-right reading order even when branching.
 
-```aivi
-input |> parse match
-  | Ok x  => x
-  | Err _ => 0
-```
+<<< ../snippets/from_md/syntax/functions/block_11.aivi{aivi}
+
 
 See also: [Pattern Matching](pattern_matching.md) for the `match` operator.
 
@@ -120,15 +95,8 @@ These examples show common styles you will see in real AIVI code: ordinary funct
 
 These examples show ordinary function definitions and calls.
 
-```aivi
-double : Int -> Int
-double = x => x * 2
+<<< ../snippets/from_md/syntax/functions/block_12.aivi{aivi}
 
-add : Int -> Int -> Int
-add = x y => x + y
-
-answer = add 10 (double 5)
-```
 
 ### Higher-Order Functions
 
@@ -154,15 +122,8 @@ This example relies on the same shorthands from Section 2.3: `filter active` tre
 
 Point-free style builds a new function by partially applying or composing existing helpers. It can be concise, but use it when the result stays readable to someone seeing the code for the first time.
 
-```aivi
-use aivi.text (contains)
+<<< ../snippets/from_md/syntax/functions/block_13.aivi{aivi}
 
-isEmailLike : Text -> Bool
-isEmailLike = contains "@"
-
-keepEmailLikes : List Text -> List Text
-keepEmailLikes = filter isEmailLike
-```
 
 Here `keepEmailLikes` is defined without naming the list argument explicitly.
 

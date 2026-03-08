@@ -1,0 +1,9 @@
+use aivi.color
+
+primary = { r: 0, g: 123, b: 255 }
+
+hover   = primary + 10l
+pressed = primary - 8l
+muted   = primary - 20s
+accent  = primary + 30h
+cssText = toHex accent

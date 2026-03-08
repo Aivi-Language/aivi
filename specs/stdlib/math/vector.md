@@ -11,17 +11,8 @@ Vectors show up anywhere geometry and motion meet. They let you write the math d
 
 ## Overview
 
-```aivi
-use aivi.vector (Vec2, vec2, normalize, domain Vector)
+<<< ../../snippets/from_md/stdlib/math/vector/block_01.aivi{aivi}
 
-position  = vec2 10.0 20.0
-velocity  = vec2 1.0 0.5
-nextPos   = position + velocity * 0.016
-direction = normalize velocity
-
-origin : Vec2
-origin = { x: 0.0, y: 0.0 }
-```
 
 ## Features
 

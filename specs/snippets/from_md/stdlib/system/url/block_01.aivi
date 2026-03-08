@@ -1,0 +1,10 @@
+domain Url over Url = {
+  (+) : Url -> (Text, Text) -> Url
+  (+) = value (key, v) => { ...value, query: [...value.query, (key, v)] }
+
+  (-) : Url -> Text -> Url
+  (-) = value key => {
+    ...value,
+    query: List.filter (filterKey key) value.query
+  }
+}

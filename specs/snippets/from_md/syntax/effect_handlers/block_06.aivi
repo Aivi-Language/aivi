@@ -1,8 +1,0 @@
-readConfig: Effect ConfigError Config with { file.read, process.env.read }
-
-readConfigForTests : Effect ConfigError Config with { file.read, process.env.read }
-readConfigForTests =
-  with {
-    file.read        = fixtureFiles
-    process.env.read = fixtureEnv
-  } in readConfig

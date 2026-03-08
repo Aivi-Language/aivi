@@ -175,15 +175,6 @@ fn expand_module_aliases(modules: &mut [Module]) {
                     .collect(),
                 span,
             },
-            TypeExpr::CapabilityClause {
-                base,
-                capabilities,
-                span,
-            } => TypeExpr::CapabilityClause {
-                base: Box::new(rewrite_type_expr(*base, aliases)),
-                capabilities,
-                span,
-            },
             TypeExpr::Apply { base, args, span } => TypeExpr::Apply {
                 base: Box::new(rewrite_type_expr(*base, aliases)),
                 args: args
@@ -367,24 +358,6 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 op,
                 left: Box::new(rewrite_expr(*left, aliases)),
                 right: Box::new(rewrite_expr(*right, aliases)),
-                span,
-            },
-            Expr::CapabilityScope {
-                capabilities,
-                handlers,
-                body,
-                span,
-            } => Expr::CapabilityScope {
-                capabilities,
-                handlers: handlers
-                    .into_iter()
-                    .map(|handler| crate::surface::CapabilityHandlerBinding {
-                        capability: handler.capability,
-                        handler: rewrite_expr(handler.handler, aliases),
-                        span: handler.span,
-                    })
-                    .collect(),
-                body: Box::new(rewrite_expr(*body, aliases)),
                 span,
             },
             Expr::Block { kind, items, span } => Expr::Block {

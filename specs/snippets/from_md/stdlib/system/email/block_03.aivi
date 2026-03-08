@@ -1,13 +1,1 @@
-SmtpConfig = {
-  host: Text
-  user: Text
-  auth: EmailAuth
-  from: Text
-  to: List Text
-  cc: Option (List Text)
-  bcc: Option (List Text)
-  subject: Text
-  body: Text
-  port: Option Int
-  starttls: Option Bool
-}
+IdleResult = TimedOut | MailboxChanged

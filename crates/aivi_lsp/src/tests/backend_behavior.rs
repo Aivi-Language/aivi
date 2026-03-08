@@ -285,39 +285,6 @@ find = pred xs => xs
     );
 }
 
-#[test]
-fn diagnostics_missing_capability_include_help_and_related_scope() {
-    let text = r#"module test.capabilities
-
-loadConfig : Text -> Effect (SourceError File) Text with { network.http }
-loadConfig = path => do Effect {
-  text <- load (file.read path)
-  pure text
-}
-"#;
-    let uri = sample_uri();
-    let diagnostics = Backend::build_diagnostics(text, &uri);
-    let diag = diagnostics
-        .iter()
-        .find(|d| matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "E3310"))
-        .expect("expected E3310 missing capability diagnostic");
-
-    assert!(
-        diag.message.contains("Help:\n- add `file.read`"),
-        "expected capability help text in message, got: {}",
-        diag.message
-    );
-    let related = diag
-        .related_information
-        .as_ref()
-        .expect("expected related information for restrictive scope");
-    assert!(
-        related
-            .iter()
-            .any(|info| info.message.contains("missing capability `file.read`")),
-        "expected related info to mention restrictive signature, got: {related:?}"
-    );
-}
 
 #[test]
 fn diagnostics_hint_for_legacy_file_json_source_form() {

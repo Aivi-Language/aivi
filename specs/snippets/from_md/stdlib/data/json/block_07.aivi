@@ -1,0 +1,1 @@
+SchemaIssue = { path: Text, message: Text }

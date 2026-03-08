@@ -20,21 +20,17 @@ Choose the API by the shape of configuration you need:
 
 ## Capability mapping
 
-Defining either source is pure. The capability requirement appears when you load it:
+Defining either source is pure. Effects appear when you load it:
 
 - `load (env.get ...)` requires `process.env.read`
 - `load (env.decode ...)` requires `process.env.read`
 
-See [Capabilities](../capabilities.md) for the standard capability vocabulary.
+See [Effects](../effects.md) for how source loads become runtime effects.
 
 ## Reading a single variable
 
-```aivi
-do Effect {
-  mode <- load (env.get "AIVI_MODE") // reads exactly one environment variable
-  pure mode
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/environment/block_01.aivi{aivi}
+
 
 `env.get` is the simplest option when you want one required string and plan to interpret it yourself later.
 

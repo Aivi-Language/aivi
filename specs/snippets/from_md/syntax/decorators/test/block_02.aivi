@@ -1,0 +1,17 @@
+@test
+module order_tests
+
+use aivi
+use aivi.testing
+
+add = left right => left + right
+
+@test "addition is commutative"
+addCommutative = do Effect {
+  assertEq (add 2 3) (add 3 2)
+}
+
+@test "empty list has length zero"
+emptyLen = do Effect {
+  assertEq (length []) 0
+}

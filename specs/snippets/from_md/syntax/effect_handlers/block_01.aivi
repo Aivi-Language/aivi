@@ -1,5 +1,0 @@
-with {
-  file.read        = fixtureFiles
-  process.env.read = fixtureEnv
-  clock.now
-} in readBootConfig

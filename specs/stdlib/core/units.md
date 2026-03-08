@@ -30,16 +30,8 @@ Reach for a more specialized domain when the standard library already models the
 
 ## Overview
 
-```aivi
-use aivi.units
+<<< ../../snippets/from_md/stdlib/core/units/block_01.aivi{aivi}
 
-meter     = defineUnit "m" 1.0
-kilometer = defineUnit "km" 1000.0
-
-raceDistance   = { value: 1500.0, unit: meter }
-raceDistanceKm = convert raceDistance kilometer
-sameScale      = sameUnit raceDistance { value: 400.0, unit: meter }
-```
 
 In this example, `raceDistanceKm` becomes `1.5 km`, and `sameScale` is `True` because both quantities use the unit name `"m"`.
 
@@ -47,10 +39,8 @@ In this example, `raceDistanceKm` becomes `1.5 km`, and `sameScale` is `True` be
 
 `aivi.units` does not ship a built-in catalog of SI units. Instead, it gives you two small record types so each module can define the units it needs:
 
-```aivi
-Unit     = { name: Text, factor: Float }
-Quantity = { value: Float, unit: Unit }
-```
+<<< ../../snippets/from_md/stdlib/core/units/block_02.aivi{aivi}
+
 
 `factor` is the scale relative to the base unit you choose for your problem. For example, if `meter` uses factor `1.0`, then `kilometer` can use factor `1000.0`.
 
@@ -65,19 +55,8 @@ When the `Units` domain is in scope, `Quantity` supports a small arithmetic surf
 | `q * s` | `Quantity -> Float -> Quantity` | Scales the quantity by a plain number. |
 | `q / s` | `Quantity -> Float -> Quantity` | Divides the quantity by a plain number. |
 
-```aivi
-use aivi.units
+<<< ../../snippets/from_md/stdlib/core/units/block_03.aivi{aivi}
 
-meter     = defineUnit "m" 1.0
-kilometer = defineUnit "km" 1000.0
-
-a    = { value: 1500.0, unit: meter }
-b    = { value: 2.0, unit: kilometer }
-bInM = convert b meter
-
-total = a + bInM
-half  = total / 2.0
-```
 
 ## Helper functions
 
@@ -104,15 +83,7 @@ The usual workflow is: define or pick a unit, do your arithmetic in one consiste
 
 ## Usage examples
 
-```aivi
-use aivi.units
+<<< ../../snippets/from_md/stdlib/core/units/block_04.aivi{aivi}
 
-meter     = defineUnit "m" 1.0
-kilometer = defineUnit "km" 1000.0
-
-trip      = { value: 1500.0, unit: meter }
-tripKm    = convert trip kilometer
-sameScale = sameUnit trip { value: 3.0, unit: kilometer }
-```
 
 Use this pattern when you want unit names and explicit conversions, but do not need a larger domain such as calendar time or geometry.

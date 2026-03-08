@@ -1,0 +1,9 @@
+module docs.prelude.example
+
+status : Option Int
+status = Some 3
+
+summary : Text
+summary = status match
+  | Some n => "count = {n}"
+  | None   => "no value"

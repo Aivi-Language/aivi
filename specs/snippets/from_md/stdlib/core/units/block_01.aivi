@@ -1,0 +1,8 @@
+use aivi.units
+
+meter     = defineUnit "m" 1.0
+kilometer = defineUnit "km" 1000.0
+
+raceDistance   = { value: 1500.0, unit: meter }
+raceDistanceKm = convert raceDistance kilometer
+sameScale      = sameUnit raceDistance { value: 400.0, unit: meter }

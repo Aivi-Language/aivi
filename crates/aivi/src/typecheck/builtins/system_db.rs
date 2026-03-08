@@ -212,7 +212,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![env_decode_a, env_decode_arg],
             ty: env_source_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -245,7 +244,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![system_env_decode_a, system_env_decode_arg],
             ty: system_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -330,7 +328,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![imap_a],
             ty: email_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -1177,7 +1174,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![gtk4_model, gtk4_value],
             ty: gtk4_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );

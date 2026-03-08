@@ -17,7 +17,7 @@ This module is the convenient stdlib surface over the lower-level `email.*` runt
 - watch for changes with IMAP IDLE,
 - or send plain-text email notifications.
 
-All of these APIs perform network I/O, so callers need the [`network` capability](../../syntax/capabilities.md).
+All of these APIs perform network I/O when executed.
 If you need the lower-level `load (email.imap ...)` source form, see [IMAP Email Sources](../../syntax/external_sources/imap_email.md).
 
 Both IMAP and SMTP accept password credentials or OAuth2 access tokens through `EmailAuth`.
@@ -29,9 +29,8 @@ IMAP uses XOAUTH2 directly; SMTP token support depends on what the remote server
 
 Authentication method for IMAP and SMTP connections.
 
-```aivi
-EmailAuth = Password Text | OAuth2 Text
-```
+<<< ../../snippets/from_md/stdlib/system/email/block_01.aivi{aivi}
+
 
 | Constructor | What it means |
 | --- | --- |
@@ -82,12 +81,8 @@ Use this when you want the runtime to build and send a straightforward plain-tex
 
 A decoded MIME part extracted from a raw email message.
 
-```aivi
-MimePart = {
-  contentType: Text
-  body: Text
-}
-```
+<<< ../../snippets/from_md/stdlib/system/email/block_02.aivi{aivi}
+
 
 ### `MailboxInfo`
 
@@ -100,9 +95,8 @@ Information about an IMAP mailbox.
 
 Result of waiting with IMAP IDLE.
 
-```aivi
-IdleResult = TimedOut | MailboxChanged
-```
+<<< ../../snippets/from_md/stdlib/system/email/block_03.aivi{aivi}
+
 
 ## Choose the right entry point
 

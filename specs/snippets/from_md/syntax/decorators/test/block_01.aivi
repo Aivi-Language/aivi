@@ -1,6 +1,9 @@
-// Test case (description is mandatory)
-@test "description of what is tested"
-testName = ...
+// Runnable test definition
+@test "addition is commutative"
+addCommutative = do Effect {
+  assertEq (add 2 3) (add 3 2)
+}
 
-// Test-only module
-@test module ModuleName
+// Test-oriented module marker
+@test
+module order_tests

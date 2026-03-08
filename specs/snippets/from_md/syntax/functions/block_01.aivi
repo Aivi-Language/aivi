@@ -1,0 +1,6 @@
+add : Int -> Int -> Int
+add = x y => x + y
+
+sum   = add 2 3
+add2  = add 2
+total = add2 10

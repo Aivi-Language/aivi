@@ -1,0 +1,4 @@
+Email = Text!
+
+mkEmail : Text -> Email
+mkEmail = text => Email text

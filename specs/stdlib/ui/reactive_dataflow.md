@@ -53,7 +53,7 @@ If all you need is one short expression inside `view`, an ordinary helper is sti
 | --- | --- | --- |
 | **source value** | An authoritative snapshot that may change between app turns. In a standard GTK app, source values are ordinary fields inside the committed `Model`. | `model.projects`, `model.query`, `model.loading` |
 | **derived value** | Any pure projection over source values or other derived values. | `length model.projects`, `filter isVisible model.projects` |
-| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects and no capability clauses. | `headerText = signal (model => ...)` |
+| **signal** | A named read-only derived value that can be reused by other definitions or by the host. It has no side effects. | `headerText = signal (model => ...)` |
 | **computed value** | A derived reader with a stable key and memoization. The host tracks what it read last time and reuses the cached result until one of those dependencies changes. | `visibleProjects = computed "projects.visible" (model => ...)` |
 | **dirty** | Marked for recomputation because one of the inputs changed. Dirty values recompute only when read. | `visibleProjects` after `model.query` changes |
 
@@ -94,24 +94,15 @@ When the same derivation is expensive or widely reused, promote it:
 
 The snippets above show the two endpoints: plain helpers first, then the memoized `computed` form. `signal` sits in the middle and has the same reader shape as a helper, just with a clearer reactive name:
 
-```aivi
-projectNames : Model -> List Text
-projectNames =
-  signal (model =>
-    model.projects
-    |> map (project => project.name)
-  )
-```
+<<< ../../snippets/from_md/stdlib/ui/reactive_dataflow/block_01.aivi{aivi}
+
 
 For `computed`, the first argument is a stable descriptive key that identifies the cached derivation across app turns.
 
 The current public surface is:
 
-```aivi
-signal : (model -> a) -> model -> a
-computed : Text -> (model -> a) -> model -> a
-readSignal : (model -> a) -> model -> a
-```
+<<< ../../snippets/from_md/stdlib/ui/reactive_dataflow/block_02.aivi{aivi}
+
 
 - `signal` marks a plain derived reader intended for reactive reuse,
 - `computed` marks a memoized reader with a stable key,
@@ -172,7 +163,7 @@ Reactive dependency cycles are invalid. Obvious self-recursion should be rejecte
 | Concern | Reactive values | Effects / commands | Subscriptions |
 | --- | --- | --- | --- |
 | Owns authoritative state? | No. Reads committed source snapshots. | No. Reads captured values and produces later `Msg`. | No. Produces later `Msg` from long-lived resources. |
-| Can perform IO or use capabilities? | No. | Yes. | Yes. |
+| Can perform IO? | No. | Yes. | Yes. |
 | Runs when? | Synchronously when ordinary app code reads it, most often from `view` or `subscriptions`. | After `update` commits the returned model. | While installed by `gtkApp`; diffed and cancelled by key. |
 | May mutate model or widgets directly? | No. | No; they must emit `Msg` and let `update` commit the next model. | No; they must emit `Msg` and let `update` commit the next model. |
 | Lifetime | Current turn plus memo cache for computed nodes. | One-shot or keyed background task lifetime. | Long-lived until removed, replaced, or host shutdown. |
@@ -184,10 +175,8 @@ Two rules are especially useful in practice:
 
 In other words, capture the plain value, not the reader:
 
-```aivi
-summaryText = readSignal resultsSummary model
-saveCommand = buildSaveCommand summaryText
-```
+<<< ../../snippets/from_md/stdlib/ui/reactive_dataflow/block_03.aivi{aivi}
+
 
 Avoid capturing `resultsSummary` itself inside a command or subscription closure when what you really need is the current `Text`.
 
@@ -218,7 +207,7 @@ The reactive model deliberately keeps these guardrails:
 - no ambient observer graph outside `gtkApp`,
 - no hidden mutation from subscriptions or effects into computed caches,
 - no second scheduler beyond the existing command/subscription host,
-- no separate capability model for reactive code,
+- no separate effect model for reactive code,
 - no replacement for `Model -> View -> Msg -> Update`.
 
 In short: reactive dataflow is a tool for expressing and reusing pure derived state, not a second application architecture.

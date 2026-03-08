@@ -1,0 +1,2 @@
+@native "serde_json::from_str"
+parseConfig : Text -> Result Text { imapHost: Text, imapPort: Int, useSsl: Bool }

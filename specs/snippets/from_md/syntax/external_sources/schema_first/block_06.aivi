@@ -1,8 +1,9 @@
-User = { id: Int, name: Text, enabled: Bool }
-
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    schema: source.schema.derive // the List User type drives the contract
-  }
+do Effect {
+  cfg <- load (
+    env.decode {
+      prefix: "AIVI_APP"
+      schema: source.schema.derive
+    }
+  )
+  pure cfg
+}

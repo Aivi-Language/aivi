@@ -12,7 +12,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![a],
             ty: Type::con("Option").app(vec![Type::Var(a)]),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -25,7 +24,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(a)),
                 Box::new(Type::con("Option").app(vec![Type::Var(a)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -40,7 +38,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(a)),
                 Box::new(Type::con("Result").app(vec![Type::Var(e), Type::Var(a)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -54,7 +51,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(e)),
                 Box::new(Type::con("Result").app(vec![Type::Var(e), Type::Var(a)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -68,7 +64,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::con("Text")),
                 Box::new(Type::con("SourceError").app(vec![Type::Var(source_error_k)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -82,7 +77,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::con("List").app(vec![Type::Var(source_decode_e)])),
                 Box::new(Type::con("SourceError").app(vec![Type::Var(source_decode_k)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -92,7 +86,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![a],
             ty: Type::Func(Box::new(Type::Var(a)), Box::new(Type::con("Text"))),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -102,7 +95,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![a],
             ty: Type::Func(Box::new(Type::Var(a)), Box::new(Type::con("Int"))),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -123,7 +115,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::Func(Box::new(Type::Var(b)), Box::new(Type::Var(b)))),
                 )),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -138,7 +129,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(a)),
                 Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -152,7 +142,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(e)),
                 Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -169,7 +158,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Type::con("Result").app(vec![Type::Var(e), Type::Var(a)]),
                 ])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -202,7 +190,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Type::Var(a),
                 ])),
             ),
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -296,7 +283,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 source_decode_errors_e,
             ],
             ty: source_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -426,7 +412,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 file_image_a,
             ],
             ty: file_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -795,7 +780,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![msg, model],
             ty: ui_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );

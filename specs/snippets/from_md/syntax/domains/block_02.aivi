@@ -1,0 +1,5 @@
+use aivi.chronos.calendar
+use aivi.calendar (domain Calendar)
+
+issuedOn = ~d(2025-02-08)
+dueDate = issuedOn + 30d

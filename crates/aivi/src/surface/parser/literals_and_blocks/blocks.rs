@@ -619,24 +619,6 @@ fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
             right: Box::new(replace_recurse_in_expr(*right, fn_name)),
             span,
         },
-        Expr::CapabilityScope {
-            capabilities,
-            handlers,
-            body,
-            span,
-        } => Expr::CapabilityScope {
-            capabilities,
-            handlers: handlers
-                .into_iter()
-                .map(|handler| crate::surface::CapabilityHandlerBinding {
-                    capability: handler.capability,
-                    handler: replace_recurse_in_expr(handler.handler, fn_name),
-                    span: handler.span,
-                })
-                .collect(),
-            body: Box::new(replace_recurse_in_expr(*body, fn_name)),
-            span,
-        },
         Expr::Tuple { items, span } => Expr::Tuple {
             items: items
                 .into_iter()

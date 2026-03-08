@@ -29,18 +29,8 @@ This domain is useful when you need to:
 
 `aivi.linear_algebra` works with generic vector and matrix records:
 
-```aivi
-use aivi.linear_algebra
+<<< ../../snippets/from_md/stdlib/math/linear_algebra/block_01.aivi{aivi}
 
-basisX = { size: 2, data: [1.0, 0.0] }
-basisY = { size: 2, data: [0.0, 1.0] }
-
-system = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
-rhs = { size: 2, data: [3.0, 1.0] }
-
-alignment = dot basisX basisY
-solution = solve2x2 system rhs
-```
 
 Here `alignment` is `0.0`, and `solution.data` is `[2.0, 1.0]`.
 
@@ -81,24 +71,8 @@ The current runtime checks the following conditions before computing a result:
 
 ## Usage Examples
 
-```aivi
-use aivi.linear_algebra
+<<< ../../snippets/from_md/stdlib/math/linear_algebra/block_02.aivi{aivi}
 
-v1 = { size: 2, data: [1.0, 2.0] }
-v2 = { size: 2, data: [3.0, 4.0] }
-
-alignment = dot v1 v2
-
-identity2 = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
-transform = { rows: 2, cols: 2, data: [2.0, 3.0, 4.0, 5.0] }
-
-composed = matMul identity2 transform
-
-system = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
-rhs = { size: 2, data: [3.0, 1.0] }
-
-solution = solve2x2 system rhs
-```
 
 In this example, `alignment` is `11.0`, `composed.data` stays `[2.0, 3.0, 4.0, 5.0]`, and `solution.data` becomes `[2.0, 1.0]`.
 These cases are covered by `integration-tests/stdlib/aivi/linear_algebra/linear_algebra.aivi`.

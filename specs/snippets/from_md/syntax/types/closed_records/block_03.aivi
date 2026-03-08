@@ -1,0 +1,2 @@
+base = { name: "Ada", role: "user" }
+admin = { ...base, role: "admin" }

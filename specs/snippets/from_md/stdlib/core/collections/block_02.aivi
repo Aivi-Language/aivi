@@ -1,0 +1,9 @@
+defaults = ~map{
+  "theme" => "light"
+  "lang"  => "en"
+}
+
+config = ~map{
+  ...defaults
+  "theme" => "dark"
+}

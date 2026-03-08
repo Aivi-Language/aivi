@@ -361,12 +361,6 @@ impl TypeChecker {
                     || Self::expr_mentions_query_surface(then_branch)
                     || Self::expr_mentions_query_surface(else_branch)
             }
-            Expr::CapabilityScope { handlers, body, .. } => {
-                handlers
-                    .iter()
-                    .any(|handler| Self::expr_mentions_query_surface(&handler.handler))
-                    || Self::expr_mentions_query_surface(body)
-            }
             Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
                 TextPart::Text { .. } => false,
                 TextPart::Expr { expr, .. } => Self::expr_mentions_query_surface(expr),
@@ -603,12 +597,6 @@ impl TypeChecker {
                         self.validate_query_row_expr(expr, placeholder, bindings);
                     }
                 }
-            }
-            Expr::CapabilityScope { handlers, body, .. } => {
-                for handler in handlers {
-                    self.validate_query_row_expr(&handler.handler, placeholder, bindings);
-                }
-                self.validate_query_row_expr(body, placeholder, bindings);
             }
             Expr::Mock { substitutions, body, .. } => {
                 for sub in substitutions {

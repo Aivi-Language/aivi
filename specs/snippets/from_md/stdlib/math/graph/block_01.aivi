@@ -1,0 +1,7 @@
+use aivi.graph (fromEdges, dedupEdges, domain Graph)
+
+left = fromEdges [(1, 2)]
+right = fromEdges [(2, 3), (1, 2)]
+
+combined = left + right
+deduped = dedupEdges combined

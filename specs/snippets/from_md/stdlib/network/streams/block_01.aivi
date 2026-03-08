@@ -1,7 +1,5 @@
 use aivi.net.streams
-use aivi.logic
 
-// fromList is handy for examples, tests, and in-memory pipelines.
-nums    = fromList [1, 2, 3, 4, 5]
-evens   = filter (x => x % 2 == 0) nums
-doubled = map (x => x * 2) evens
+prepareInput = connection =>
+  fromSocket connection
+    |> chunks 1024 // emit blocks of up to 1024 bytes

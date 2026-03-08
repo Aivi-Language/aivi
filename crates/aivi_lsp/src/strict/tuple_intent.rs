@@ -124,7 +124,6 @@ pub(super) fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnos
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
-            aivi::Expr::CapabilityScope { body, .. } => walk_expr(body, out),
             aivi::Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let aivi::TextPart::Expr { expr, .. } = part {

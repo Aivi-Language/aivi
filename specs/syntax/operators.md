@@ -43,9 +43,8 @@ The parser reads infix operators from lowest to highest precedence in this order
 Unary prefix operators: `!` for logical negation and `-` for numeric negation.
 Within one precedence level, infix operators associate left-to-right. Add parentheses when you want a different grouping.
 
-```aivi
-total = subtotal + tax * rate // `*` binds tighter than `+`
-```
+<<< ../snippets/from_md/syntax/operators/block_01.aivi{aivi}
+
 
 > **Note:** Bitwise operators such as `&`, `|`, `^`, `~`, `<<`, and `>>` are not language operators. Use the [`aivi.bits`](../stdlib/data/bits.md) standard library module instead.
 
@@ -55,10 +54,8 @@ total = subtotal + tax * rate // `*` binds tighter than `+`
 
 `<|` applies a patch literal to the value on its left and returns a new value. It never mutates the original.
 
-```aivi
-renamed = user <| { name: "Ada Lovelace" }
-avatar  = user <| { profile.avatar: "new.png" }
-```
+<<< ../snippets/from_md/syntax/operators/block_02.aivi{aivi}
+
 
 See [Patching Records](patching.md) for reusable `patch { ... }` values, deep selectors, and collection-aware updates.
 

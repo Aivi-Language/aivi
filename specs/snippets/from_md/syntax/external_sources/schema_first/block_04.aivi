@@ -1,6 +1,9 @@
-// illustrative shape; exact runtime representation is not part of the public contract
-SourceDecl K A = {
-  config: ConnectorConfig K A
-  schema: SourceSchema A
-  contract: Option SourceContract
+do Effect {
+  users <- load (
+    file.json {
+      path: "./users.json"
+      schema: source.schema.derive
+    }
+  )
+  pure users
 }

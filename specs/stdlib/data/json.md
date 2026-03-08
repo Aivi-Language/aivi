@@ -36,19 +36,8 @@ For most apps today, the shortest useful path is:
 
 In current AIVI, the practical typed-decoding path is a structured source such as `file.json`, not a direct `json.parse` helper.
 
-```aivi
-use aivi.json
+<<< ../../snippets/from_md/stdlib/data/json/block_01.aivi{aivi}
 
-User = { id: Int, name: Text, age: Int }
-
-userSource : Source File User
-userSource = file.json "./user.json"
-
-loadUser = do Effect {
-  user <- load userSource
-  pure user
-}
-```
 
 Here `loadUser` succeeds with a normal `User` value or fails with `SourceError File`. If the file can be read but the JSON does not match `User`, the failure is `DecodeError (List aivi.validation.DecodeError)`, so callers get a list of path-aware problems rather than a partially decoded value.
 
@@ -62,16 +51,8 @@ See also:
 
 When you want to inspect success and failure as ordinary data, wrap the load with `attempt`:
 
-```aivi
-use aivi.json
+<<< ../../snippets/from_md/stdlib/data/json/block_02.aivi{aivi}
 
-User = { id: Int, name: Text, age: Int }
-
-users : Source File (List User)
-users = file.json "./users.json"
-
-readUsers = attempt (load users)
-```
 
 `readUsers` lets you distinguish:
 
@@ -87,19 +68,8 @@ Some values cannot be accepted from structure alone. Enums, constrained strings,
 
 When you already have a `JsonValue`, a small custom decoder can build on the primitive helpers in `aivi.json`:
 
-```aivi
-use aivi.json
+<<< ../../snippets/from_md/stdlib/data/json/block_03.aivi{aivi}
 
-Status = Active | Inactive
-
-decodeStatus : JsonValue -> Result JsonError Status
-decodeStatus = value =>
-  decodeText value match
-    | Ok "active"   => Ok Active
-    | Ok "inactive" => Ok Inactive
-    | Ok _          => Err { message: "expected \"active\" or \"inactive\"" }
-    | Err err       => Err err
-```
 
 This style is a good fit when you are manually walking a `JsonValue`. If the value came from a structured source and you want accumulated, path-aware errors, keep the structural decoding at the source boundary and add the domain rule with [`source.validate`](../../syntax/external_sources/composition.md#validate) and [`aivi.validation.DecodeError`](../core/validation.md#5-decodeerror-adt).
 
@@ -107,18 +77,8 @@ This style is a good fit when you are manually walking a `JsonValue`. If the val
 
 Use `JsonSchema` when you want a small, explicit contract for object-shaped data that already exists as a `JsonValue`.
 
-```aivi
-use aivi.json
+<<< ../../snippets/from_md/stdlib/data/json/block_04.aivi{aivi}
 
-schema : JsonSchema
-schema = {
-  required: ["id", "name"]
-  strict: True
-}
-
-payload = encodeObject [("id", encodeInt 1)]
-issues  = validateSchema schema payload
-```
 
 In the example above, `issues` contains one `SchemaIssue` for the missing `name` field. In the current implementation, `validateSchema` checks that the input is an object and that every `required` field exists. The `strict` flag is part of `JsonSchema`, but `validateSchema` does not yet reject extra keys on its own; use `strictFields` when you need unknown-key rejection today.
 
@@ -139,20 +99,15 @@ For example, `JsonObject [("name", JsonString "Ada")]` is a `JsonValue`.
 
 `JsonError` is the one-off error type returned by helpers such as `decode`, `decodeText`, `decodeField`, and `decodeList`.
 
-```aivi
-JsonError = { message: Text }
-```
+<<< ../../snippets/from_md/stdlib/data/json/block_05.aivi{aivi}
+
 
 ### `JsonSchema`
 
 `JsonSchema` describes the small schema record understood by `validateSchema`.
 
-```aivi
-JsonSchema = {
-  required: List Text
-  strict: Bool
-}
-```
+<<< ../../snippets/from_md/stdlib/data/json/block_06.aivi{aivi}
+
 
 `required` lists fields that must exist on an object. `strict` records whether extra keys should be treated as unexpected, but the current `validateSchema` helper does not yet enforce that flag directly.
 
@@ -160,9 +115,8 @@ JsonSchema = {
 
 `SchemaIssue` describes one schema-validation problem, including where it happened.
 
-```aivi
-SchemaIssue = { path: Text, message: Text }
-```
+<<< ../../snippets/from_md/stdlib/data/json/block_07.aivi{aivi}
+
 
 ### How these types relate to `DecodeError`
 

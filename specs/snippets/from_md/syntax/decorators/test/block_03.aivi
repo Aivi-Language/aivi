@@ -1,5 +1,1 @@
-@test "user formatting"
-testFormat = do Effect {
-  formatted = formatUserTable [{ id: 1, name: "Ada" }]
-  assertSnapshot "user_table" formatted // compare against the stored golden result
-}
+assertSnapshot : Text -> A -> Effect Text Unit

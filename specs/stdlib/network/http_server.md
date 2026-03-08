@@ -84,9 +84,7 @@ This is a good pattern for chat-style features, live updates, or custom protocol
 
 Both HTTP server operations and WebSocket operations use simple error records:
 
-```aivi
-HttpError = { message: Text }
-WsError   = { message: Text }
-```
+<<< ../../snippets/from_md/stdlib/network/http_server/block_01.aivi{aivi}
+
 
 If the main request handler returns `Err { message }`, the runtime answers with HTTP 500 and uses `message` as the response body. If you want a friendlier fallback response, catch the error inside your handler and return `Http ...` yourself. Invalid request data and missing or failed WebSocket upgrades produce HTTP 400 responses.

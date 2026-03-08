@@ -1,0 +1,1 @@
+total = subtotal + tax * rate // `*` binds tighter than `+`

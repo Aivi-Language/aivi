@@ -272,7 +272,6 @@ impl Backend {
                 } => Self::find_call_info(transition, position)
                     .or_else(|| Self::find_call_info(handler, position)),
             }),
-            Expr::CapabilityScope { body, .. } => Self::find_call_info(body, position),
             Expr::Mock {
                 substitutions,
                 body,
@@ -347,7 +346,6 @@ impl Backend {
             | Expr::Match { span, .. }
             | Expr::If { span, .. }
             | Expr::Binary { span, .. }
-            | Expr::CapabilityScope { span, .. }
             | Expr::Block { span, .. }
             | Expr::Raw { span, .. }
             | Expr::Mock { span, .. } => span,

@@ -1,0 +1,8 @@
+use aivi.logic
+
+nested = Ok (Ok 42)
+flat   = nested |> chain (inner => inner) // Ok 42
+
+primary   = Err "failed"
+secondary = Ok "backup"
+value     = primary |> alt secondary // Ok "backup"

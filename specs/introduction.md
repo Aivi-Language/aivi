@@ -45,19 +45,15 @@ If you know Rust, TypeScript, Python, Kotlin, or JavaScript, these mental shifts
 
 You do not update a variable in place. You compute a new value.
 
-```aivi
-cart = { total: 100, tax: 20 }
-updatedCart = cart <| { total: 120 }
-// `cart` is unchanged; `updatedCart` is the new record.
-```
+<<< ./snippets/from_md/introduction/block_01.aivi{aivi}
+
 
 ### 2. Everything important is in the type
 
 Instead of treating failure or missing data as a runtime surprise, AIVI keeps it in the function signature.
 
-```aivi
-findUser : Int -> Effect LoadError (Option User)
-```
+<<< ./snippets/from_md/introduction/block_02.aivi{aivi}
+
 
 That reads as: "finding a user performs effects, can fail with `LoadError`, and if it succeeds it may still return no user." You do not have to guess whether a function can return `null`, throw, or talk to the network — the type tells you.
 
@@ -72,12 +68,8 @@ Pattern matching is the standard way to work with structured data like `Option`,
 
 Instead of mutating counters or building collections step by step, you usually transform data with functions, generators, folds, or recursion.
 
-```aivi
-activeNames =
-  users
-  |> filter (user => user.active)
-  |> map (user => user.name)
-```
+<<< ./snippets/from_md/introduction/block_03.aivi{aivi}
+
 
 That pipeline says: start with `users`, keep only the active ones, then extract each `name`.
 

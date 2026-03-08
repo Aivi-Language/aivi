@@ -1,0 +1,4 @@
+on run => do Effect {
+  _ <- log.info "sync run started"   // Observes the transition after the state change
+  pure Unit
+}

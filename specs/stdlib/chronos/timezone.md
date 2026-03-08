@@ -66,14 +66,8 @@ These examples show how to work with named zones and zoned local date-times. Pay
 | `toInstant zdt` | `ZonedDateTime -> Timestamp` | You have a local wall-clock time plus a zone and need the corresponding UTC timestamp. |
 | `atZone zdt zone` | `ZonedDateTime -> TimeZone -> ZonedDateTime` | You want to keep the same instant but view it in a different named zone. |
 
-```aivi
-use aivi.chronos.timezone (getOffset, toInstant, atZone)
+<<< ../../snippets/from_md/stdlib/chronos/timezone/block_01.aivi{aivi}
 
-parisMeeting = ~zdt(2024-05-21T12:00:00[Europe/Paris])
-runAt        = toInstant parisMeeting
-tokyoView    = atZone parisMeeting ~tz(Asia/Tokyo)
-parisOffset  = getOffset ~tz(Europe/Paris) runAt
-```
 
 ## Domain definition
 

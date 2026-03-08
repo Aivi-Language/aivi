@@ -831,7 +831,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 map_k, map_v, map_v2, map_acc, set_a, queue_a, deque_a, heap_a,
             ],
             ty: collections_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -840,7 +839,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![map_k, map_v, map_v2, map_acc],
             ty: map_record_value,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -849,7 +847,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![set_a],
             ty: set_record_value,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -858,7 +855,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![queue_a],
             ty: queue_record_value,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -867,7 +863,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![deque_a],
             ty: deque_record_value,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -876,7 +871,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![heap_a],
             ty: heap_record_value,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -885,7 +879,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![list_a, list_b, list_c],
             ty: list_record_value,
-            capabilities: Default::default(),
             origin: None,
         },
     );

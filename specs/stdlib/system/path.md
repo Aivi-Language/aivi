@@ -9,17 +9,13 @@ Use `~path[...]` for path literals and `/` for joining path values, so your code
 
 ## Module
 
-```aivi
-module aivi.path
-export domain Path
-export parse, toString, isAbsolute, parent, fileName, normalize
-```
+<<< ../../snippets/from_md/stdlib/system/path/block_01.aivi{aivi}
+
 
 ## Types
 
-```aivi
-Path = { absolute: Bool, segments: List Text }
-```
+<<< ../../snippets/from_md/stdlib/system/path/block_02.aivi{aivi}
+
 
 `Path` is a normalized lexical value:
 
@@ -29,11 +25,8 @@ Path = { absolute: Bool, segments: List Text }
 
 ## Domain Definition
 
-```aivi
-domain Path over Path = {
-  (/): Path -> Path -> Path
-}
-```
+<<< ../../snippets/from_md/stdlib/system/path/block_03.aivi{aivi}
+
 
 `base / other` joins two `Path` values and then normalizes the result lexically.
 If `other` is absolute, it replaces `base`; if `other` is relative, its segments are appended to `base`.
@@ -75,18 +68,8 @@ Keep values as `Path` while you transform them, then render with `toString` only
 
 ## Usage Examples
 
-```aivi
-use aivi.path
+<<< ../../snippets/from_md/stdlib/system/path/block_04.aivi{aivi}
 
-root = ~path[/usr/local]
-bin = root / ~path[bin]
-
-cfg = ~path[config/../config/app.json]
-cfgText = toString cfg
-
-cfgParent = parent cfg
-cfgName = fileName cfg
-```
 
 This example is easy to verify without touching the filesystem:
 

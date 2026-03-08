@@ -1,12 +1,6 @@
-main = do Effect {
-  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
-  _      <- db.runMigrationsOn dbConn [userTable]
-
-  activeUsersQuery =
-    db.from userTable
-  |> db.where_ _.active
-
-    activeUsers <- db.runQueryOn dbConn activeUsersQuery
-    _           <- db.close dbConn
-    pure activeUsers
-}
+usersRows : Source Db (List User)
+usersRows =
+  db.source {
+    table: usersTable
+    schema: source.schema.table usersTable
+  }

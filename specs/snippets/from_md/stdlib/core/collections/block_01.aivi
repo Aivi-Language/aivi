@@ -1,0 +1,8 @@
+use aivi.collections
+use aivi.list
+
+backlog = Queue.enqueue "typecheck" (Queue.enqueue "parse" Queue.empty)
+labels  = Set.fromList ["urgent", "docs", "urgent"]
+scores  = Map.insert "alice" 7 Map.empty
+batches = chunk 2 [1, 2, 3, 4, 5]
+next    = Heap.fromList [5, 2, 9] |> Heap.peekMin

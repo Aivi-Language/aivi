@@ -1,10 +1,4 @@
-ImapConfig = {
-  host: Text
-  user: Text
-  auth: EmailAuth
-  port: Option Int
-  starttls: Option Bool
-  mailbox: Option Text
-  filter: Option Text
-  limit: Option Int
+MimePart = {
+  contentType: Text
+  body: Text
 }

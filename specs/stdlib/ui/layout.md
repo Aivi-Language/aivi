@@ -17,19 +17,8 @@ In untyped UI systems, layout values often travel around as strings like `"12px"
 
 ## Overview
 
-```aivi
-use aivi.ui.layout
-use aivi.ui.layout (domain Layout)
+<<< ../../snippets/from_md/stdlib/ui/layout/block_01.aivi{aivi}
 
-width : Length
-width = 100px
-
-height : Percentage
-height = 50%
-
-gap : Length
-gap = 2em
-```
 
 This is the usual pattern in UI code: keep constructors such as `Px` and `Pct` available for explicit values, but use the `Layout` domain when suffix forms make the intent easier to read.
 
@@ -37,19 +26,8 @@ This is the usual pattern in UI code: keep constructors such as `Px` and `Pct` a
 
 If you want to see the concrete shapes behind the sigils, start here:
 
-```aivi
-domain Layout over UnitVal = {
-  Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
-  Percentage = Pct Int
+<<< ../../snippets/from_md/stdlib/ui/layout/block_02.aivi{aivi}
 
-  1px  = Px 1
-  1em  = Em 1
-  1rem = Rem 1
-  1vh  = Vh 1
-  1vw  = Vw 1
-  1%   = Pct 1
-}
-```
 
 ## Types
 
@@ -77,9 +55,8 @@ domain Layout over UnitVal = {
 
 `Layout` is implemented over a small carrier record. Most code should treat that record as an internal detail and work with `Length`, `Percentage`, or the suffix forms instead.
 
-```aivi
-UnitVal = { val: Int }
-```
+<<< ../../snippets/from_md/stdlib/ui/layout/block_03.aivi{aivi}
+
 
 ## Literal sigils
 

@@ -1,0 +1,4 @@
+rawPort     = " 8080 "
+trimmedPort = trim rawPort
+maybePort   = parseInt trimmedPort
+port        = maybePort ?? 3000

@@ -1,0 +1,5 @@
+use aivi.number.quaternion
+
+axis     = { x: 0.0, y: 1.0, z: 0.0 }
+quarter  = fromAxisAngle axis 1.57079632679
+unitTurn = normalize quarter

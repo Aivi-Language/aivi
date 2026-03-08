@@ -1,0 +1,6 @@
+use aivi.file (readJson)
+
+AppConfig = { host: Text, port: Int }
+
+loadConfig : Text -> Effect Text AppConfig
+loadConfig = path => readJson path

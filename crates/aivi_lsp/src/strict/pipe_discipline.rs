@@ -144,7 +144,6 @@ pub(super) fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diag
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
-            aivi::Expr::CapabilityScope { body, .. } => walk_expr(body, out),
             aivi::Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let aivi::TextPart::Expr { expr, .. } = part {
@@ -311,7 +310,6 @@ pub(super) fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
-            aivi::Expr::CapabilityScope { body, .. } => walk_expr(body, out),
             aivi::Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let aivi::TextPart::Expr { expr, .. } = part {

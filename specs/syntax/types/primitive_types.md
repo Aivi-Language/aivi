@@ -9,10 +9,8 @@ For broad-audience reading, it helps to separate the small set of types the comp
 
 These are the core scalar types you can rely on without introducing a record, ADT, or domain first:
 
-```aivi
-Unit Bool Int Float
-Text Char Bytes
-```
+<<< ../../snippets/from_md/syntax/types/primitive_types/block_01.aivi{aivi}
+
 
 - `Unit` means “no interesting value here”.
 - `Bool`, `Int`, and `Float` cover control flow and everyday arithmetic.
@@ -22,10 +20,8 @@ Text Char Bytes
 
 The current implementation also recognizes a few carrier types because literals, runtime boundaries, or standard-library APIs refer to them directly:
 
-```aivi
-DateTime Decimal BigInt
-Date TimeZone ZonedDateTime
-```
+<<< ../../snippets/from_md/syntax/types/primitive_types/block_02.aivi{aivi}
+
 
 Treat these as public library surface types rather than as the first stop for learning the language:
 
@@ -60,12 +56,8 @@ Current `~tz(...)` and `~zdt(...)` behavior is exercised by `integration-tests/s
 A branded type creates a new nominal type with the same runtime representation as an existing base type.
 Use it when two values are stored the same way but should not be interchangeable at type-check time.
 
-```aivi
-Email = Text!
+<<< ../../snippets/from_md/syntax/types/primitive_types/block_03.aivi{aivi}
 
-mkEmail : Text -> Email
-mkEmail = text => Email text
-```
 
 A bare `Text` does not automatically satisfy `Email`; construct the branded value explicitly.
 If you also want to hide the representation outside the defining module, combine branding with [opaque types](./opaque_types.md): `opaque Email = Text!`.

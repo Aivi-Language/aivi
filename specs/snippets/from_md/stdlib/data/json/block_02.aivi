@@ -1,11 +1,8 @@
-@static
-userSchema : JsonSchema
-userSchema = file.json "./schemas/users.schema.json"
+use aivi.json
 
-usersSource : Source File (List User)
-usersSource =
-  file.json {
-    path: "./users.json"
-    // Reuse the checked schema when loading this source.
-    schema: source.schema.json userSchema
-  }
+User = { id: Int, name: Text, age: Int }
+
+users : Source File (List User)
+users = file.json "./users.json"
+
+readUsers = attempt (load users)

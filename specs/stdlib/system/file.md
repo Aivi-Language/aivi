@@ -32,16 +32,16 @@ If you are choosing an API for a beginner-friendly workflow, a good rule of thum
 
 <<< ../../snippets/from_md/stdlib/system/file/types.aivi{aivi}
 
-`FileHandle` is an opaque runtime handle. You obtain it from `open`, pass it to `readAll` or `close`, and treat it as a capability-bearing resource rather than a value you inspect directly.
+`FileHandle` is an opaque runtime handle. You obtain it from `open`, pass it to `readAll` or `close`, and treat it as a resource rather than a value you inspect directly.
 
 ## Capabilities
 
-Capability clauses describe which external operations an effect or resource may use; see the broader [capabilities guide](../../syntax/capabilities).
+Effects and resources describe how file operations execute at runtime; see [Effects](../../syntax/effects.md) and [Resources](../../syntax/resources.md).
 
 - `readText`, `readJson`, `readCsv`, `imageMeta`, and `image` need `file.read`.
 - `exists` and `stat` need `file.metadata`.
 - `writeText`, `delete`, and manual `close` need `file.write`.
-- `open` participates in a full resource lifecycle, so public capability clauses should account for both acquisition and cleanup, not only the initial read.
+- `open` participates in a full resource lifecycle, so account for both acquisition and cleanup when documenting or structuring file workflows.
 
 ## Choosing between resource and path APIs
 
@@ -81,14 +81,8 @@ Capability clauses describe which external operations an effect or resource may 
 
 ### Example: typed JSON load
 
-```aivi
-use aivi.file (readJson)
+<<< ../../snippets/from_md/stdlib/system/file/block_01.aivi{aivi}
 
-AppConfig = { host: Text, port: Int }
-
-loadConfig : Text -> Effect Text AppConfig
-loadConfig = path => readJson path
-```
 
 ## Path-based writes and metadata
 

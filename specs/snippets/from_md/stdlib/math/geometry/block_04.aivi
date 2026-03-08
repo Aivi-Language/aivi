@@ -1,0 +1,19 @@
+use aivi.geometry
+
+pathStart = point2 1.0 1.0
+pathEnd   = point2 5.0 4.0
+path      = segment2 1.0 1.0 5.0 4.0
+center    = midpoint path
+length    = distance pathStart pathEnd
+
+outline =
+  {
+    vertices:
+      [ point2 0.0 0.0
+      , point2 5.0 0.0
+      , point2 5.0 2.0
+      , point2 0.0 2.0
+      ]
+  }
+
+surfaceArea = area outline

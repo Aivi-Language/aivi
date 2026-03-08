@@ -1,0 +1,7 @@
+numbers = [1, 2] ++ [3, 4]
+
+defaults = ~map{"theme" => "light"}
+overrides = ~map{"theme" => "dark", "lang" => "en"}
+merged = defaults ++ overrides
+
+effectivePermissions = ~set["read"] ++ ~set["write", "read"]

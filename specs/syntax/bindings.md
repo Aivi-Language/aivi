@@ -26,10 +26,8 @@ Think of `=` as “define this name” rather than “assign into this variable�
 
 Bindings are lexical, so names resolve from the nearest enclosing scope outward. That means an inner scope can reuse a name from an outer scope.
 
-```aivi
-x = 1
-x = x + 1
-```
+<<< ../snippets/from_md/syntax/bindings/block_01.aivi{aivi}
+
 
 This creates a new binding that temporarily hides the earlier one. It is similar to Rust shadowing or `let`-binding in ML-family languages, and it is different from mutation.
 

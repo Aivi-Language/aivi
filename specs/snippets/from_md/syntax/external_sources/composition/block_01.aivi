@@ -1,13 +1,5 @@
-// Illustrative model only. The exact runtime representation is not part of the public contract.
-Source K A =
-  SourcePipeline {
-    connector: SourceConnector K
-    decode: DecodeStage K Raw
-    transforms: List (TransformStage Raw A)
-    validations: List (ValidationStage A)
-    retry: RetryPolicy
-    timeout: TimeoutPolicy
-    cache: CachePolicy
-    provenance: ProvenancePolicy
-    observation: ObservationPolicy
-  }
+source.transform : (A -> B) -> Source K A -> Source K B
+source.validate :
+  (A -> Validation (List DecodeError) B) ->
+  Source K A ->
+  Source K B

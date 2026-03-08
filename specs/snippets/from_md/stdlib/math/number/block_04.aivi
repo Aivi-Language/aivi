@@ -1,0 +1,6 @@
+use aivi.number.complex
+
+z1      = { re: 3.0, im: 4.0 }
+z2      = { re: 1.0, im: -2.0 }
+sum     = z1 + z2
+shifted = z1 + i

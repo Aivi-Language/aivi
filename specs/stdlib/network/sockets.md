@@ -22,7 +22,7 @@ If your protocol naturally works in chunks, pair this module with [`aivi.net.str
 
 ## Capabilities
 
-Socket operations use the `network` capability family:
+Socket operations perform network I/O:
 
 | Operation | Capability |
 | --- | --- |
@@ -90,9 +90,8 @@ On the client side:
 
 Socket operations return `SocketError` when something goes wrong:
 
-```aivi
-SocketError = { message: Text }
-```
+<<< ../../snippets/from_md/stdlib/network/sockets/block_01.aivi{aivi}
+
 
 `SocketError` is intentionally small: surface `message` directly for logs or wrap it in a more specific application error.
 

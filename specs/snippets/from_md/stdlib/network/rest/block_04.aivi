@@ -1,5 +1,3 @@
-Body = Plain Text | Form (List Header)
-
 Request = {
   method: Text
   url: Url

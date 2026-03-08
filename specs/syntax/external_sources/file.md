@@ -42,12 +42,8 @@ This style keeps parsing rules close to the file boundary instead of spreading a
 
 ## Raw text example
 
-```aivi
-do Effect {
-  template <- load (file.read "./email-template.txt")  // no decoding beyond Text
-  pure template
-}
-```
+<<< ../../snippets/from_md/syntax/external_sources/file/block_01.aivi{aivi}
+
 
 ## Error experience
 

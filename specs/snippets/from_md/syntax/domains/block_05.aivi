@@ -1,0 +1,6 @@
+use aivi.color (Rgb, domain Color)
+
+red : Rgb
+red = { r: 255, g: 0, b: 0 }
+
+lighter = red + 10l

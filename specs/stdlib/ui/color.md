@@ -42,17 +42,8 @@ The conversion helpers normalize values for you:
 
 These examples show the domain in everyday use:
 
-```aivi
-use aivi.color
+<<< ../../snippets/from_md/stdlib/ui/color/block_01.aivi{aivi}
 
-primary = { r: 0, g: 123, b: 255 }
-
-hover   = primary + 10l
-pressed = primary - 8l
-muted   = primary - 20s
-accent  = primary + 30h
-cssText = toHex accent
-```
 
 For direct channel edits, prefer record patching such as `color <| { r: 30 }` or channel literals such as `color + 10r` when you want precise low-level control. The delta helpers are most useful for perceptual adjustments like hue, saturation, and lightness.
 
@@ -68,26 +59,8 @@ This helper is local code, not an export from `aivi.color`. The built-in represe
 
 The core shapes look like this in the current implementation:
 
-```aivi
-Rgb = { r: Int, g: Int, b: Int }
-Hsl = { h: Float, s: Float, l: Float }
-Hex = Text
+<<< ../../snippets/from_md/stdlib/ui/color/block_02.aivi{aivi}
 
-domain Color over Rgb = {
-  Delta = Lightness Int | Saturation Int | Hue Int
-
-  (+) : Rgb -> Delta -> Rgb
-  (+) = col (Lightness n) => adjustLightness col n
-  (+) = col (Saturation n) => adjustSaturation col n
-  (+) = col (Hue n) => adjustHue col n
-
-  (+) : Rgb -> Rgb -> Rgb
-  (+) = left { r, g, b } => { r: left.r + r, g: left.g + g, b: left.b + b }
-
-  (-) : Rgb -> Delta -> Rgb
-  (-) = col delta => col + (negateDelta delta)
-}
-```
 
 The literal templates live inside the domain: `1l`, `1s`, and `1h` create `Delta` values, while `1r`, `1g`, and `1b` create channel-only `Rgb` records. Importing only `Rgb` does not activate those suffixes; the `Color` domain itself must be in scope.
 

@@ -9,14 +9,14 @@ InboxMessage = {
 
 do Effect {
   msgs <- load (email.imap {
-      host: "imap.gmail.com"
-      user: "user@gmail.com"
-      auth: OAuth2 myToken
-      mailbox: Some "INBOX" // read from the inbox
-      filter: Some "UNSEEN" // only unread messages
-      limit: Some 50 // cap the batch size
-      port: None
-      starttls: None
+    host: "imap.gmail.com"
+    user: "user@gmail.com"
+    auth: OAuth2 myToken
+    mailbox: Some "INBOX" // read from the inbox
+    filter: Some "UNSEEN" // only unread messages
+    limit: Some 50 // cap the batch size
+    port: None
+    starttls: None
   })
   pure msgs
 }

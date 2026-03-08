@@ -188,7 +188,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![rest_a],
             ty: rest_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -216,7 +215,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![oa_d, oa_c, oa_p, oa_r],
             ty: oa_ty,
-            capabilities: Default::default(),
             origin: None,
         },
     );
@@ -490,7 +488,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 b_fold, e_fold, a_fromlist,
             ],
             ty: streams_record,
-            capabilities: Default::default(),
             origin: None,
         },
     );

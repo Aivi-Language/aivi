@@ -1,0 +1,4 @@
+do Effect {
+  mode <- load (env.get "AIVI_MODE") // reads exactly one environment variable
+  pure mode
+}

@@ -328,12 +328,6 @@ impl Backend {
                 Self::collect_source_tooling_expr_diagnostics(left, out);
                 Self::collect_source_tooling_expr_diagnostics(right, out);
             }
-            Expr::CapabilityScope { body, handlers, .. } => {
-                for handler in handlers {
-                    Self::collect_source_tooling_expr_diagnostics(&handler.handler, out);
-                }
-                Self::collect_source_tooling_expr_diagnostics(body, out);
-            }
             Expr::Block { items, .. } => {
                 for item in items {
                     match item {
@@ -447,12 +441,6 @@ impl Backend {
             Expr::Binary { left, right, .. } => {
                 Self::expr_contains_ident_path(left, expected)
                     || Self::expr_contains_ident_path(right, expected)
-            }
-            Expr::CapabilityScope { handlers, body, .. } => {
-                handlers
-                    .iter()
-                    .any(|handler| Self::expr_contains_ident_path(&handler.handler, expected))
-                    || Self::expr_contains_ident_path(body, expected)
             }
             Expr::Block { items, .. } => items.iter().any(|item| match item {
                 BlockItem::Bind { expr, .. }

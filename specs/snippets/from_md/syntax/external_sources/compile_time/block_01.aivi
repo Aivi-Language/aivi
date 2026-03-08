@@ -1,0 +1,5 @@
+@static
+schema = file.json "./schema.json"        // bundled into the compiled program
+
+@static
+buildEnv = env.get "AIVI_BUILD_ENV"       // resolved when compiling, not at runtime

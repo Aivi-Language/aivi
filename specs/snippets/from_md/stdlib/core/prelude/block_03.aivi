@@ -1,0 +1,7 @@
+Status = Draft | Published | Archived
+
+tag : Text
+tag = constructorName Published
+
+position : Int
+position = constructorOrdinal Published

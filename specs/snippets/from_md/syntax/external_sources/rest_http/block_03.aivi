@@ -1,0 +1,17 @@
+apiToken : Text
+apiToken = "demo-token"
+
+User = { name: Text, age: Int, gender: Text }
+
+usersSource : Source RestApi (List User)
+usersSource =
+  rest.fetch {
+    method: "GET"
+    url: ~u(https://api.example.com/users)
+    headers: []
+    body: None
+    timeoutMs: Some 5_000
+    retryCount: Some 2
+    bearerToken: Some apiToken
+    strictStatus: Some True
+  }

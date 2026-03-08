@@ -1,0 +1,4 @@
+maybeUser         = lookupUser 42
+maybeName         = maybeUser |> map (user => user.name)
+maybeNonBlankName = maybeName |> filter (name => name != "")
+displayName       = maybeNonBlankName ?? "Anonymous"

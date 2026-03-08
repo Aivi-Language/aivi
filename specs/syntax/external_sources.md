@@ -72,20 +72,8 @@ Use file sources for local configuration, checked-in fixtures, imports, and one-
 - `file.json` decodes JSON into the type you ask for
 - `file.csv` decodes rows into a typed list
 
-```aivi
-User = { id: Int, name: Text, enabled: Bool }
+<<< ../snippets/from_md/syntax/external_sources/block_01.aivi{aivi}
 
-usersSource : Source File (List User)
-usersSource =
-  file.csv "./users.csv"
-
-configSource : Source File { port: Int, debug: Bool }
-configSource =
-  file.json {
-    path: "./config.json"
-    schema: source.schema.derive
-  }
-```
 
 For a practical guide, see [File Sources](external_sources/file.md).
 
@@ -96,22 +84,8 @@ Use HTTP or REST sources when your program reads typed data from a web service.
 - `rest.*` is usually the best starting point when you want typed JSON-style API reads
 - `http.*` and `https.*` expose the lower-level HTTP boundary when you need raw request/response control
 
-```aivi
-User = { name: Text, age: Int, gender: Text }
+<<< ../snippets/from_md/syntax/external_sources/block_02.aivi{aivi}
 
-usersSource : Source RestApi (List User)
-usersSource =
-  rest.fetch {
-    method: "GET"
-    url: ~u(https://api.example.com/users)
-    headers: []
-    body: None
-    timeoutMs: Some 5_000
-    retryCount: Some 2
-    bearerToken: Some apiToken
-    strictStatus: Some True
-  }
-```
 
 Here `apiToken` stands for a bearer token your program obtained elsewhere. If the endpoint is public, leave `bearerToken` out entirely.
 
@@ -124,16 +98,8 @@ Use environment sources for deployment-time configuration such as ports, feature
 - `env.get` reads a single variable as `Text`
 - `env.decode` reads a prefixed group of variables and decodes them into a record or other type
 
-```aivi
-AppConfig = { port: Int, debug: Bool }
+<<< ../snippets/from_md/syntax/external_sources/block_03.aivi{aivi}
 
-appConfig : Source Env AppConfig
-appConfig =
-  env.decode {
-    prefix: "AIVI_APP"
-    schema: source.schema.derive
-  }
-```
 
 For practical patterns, see [Environment Sources](external_sources/environment.md). The short form `env.decode "AIVI_APP"` still works when you want the smallest possible example.
 
@@ -167,19 +133,15 @@ For supported patterns and caveats, see [Compile-Time Sources](external_sources/
 
 A source is loaded through an effect:
 
-```aivi
-load : Source K A -> Effect (SourceError K) A
-```
+<<< ../snippets/from_md/syntax/external_sources/block_04.aivi{aivi}
+
 
 Here `K` is still the source kind from earlier sections, such as `File`, `RestApi`, `Env`, or `Imap`.
 
 `SourceError K` tells you whether the failure happened while reaching the source or while decoding its data:
 
-```aivi
-SourceError K =
-  | IOError Text
-  | DecodeError (List aivi.validation.DecodeError)
-```
+<<< ../snippets/from_md/syntax/external_sources/block_05.aivi{aivi}
+
 
 - `IOError` means the program could not reach or read the external system
 - `DecodeError` means the read succeeded, but the payload did not match the expected shape
@@ -193,17 +155,17 @@ If you want to handle failures as ordinary data, use `attempt`:
 
 <<< ../snippets/from_md/syntax/external_sources/sourceerror_02.aivi{aivi}
 
-## 12.9 Capability mapping
+## 12.9 Runtime effects
 
-Defining a source is pure. The capability requirement appears when the source is loaded:
+Defining a source is pure. Effects appear only when the source is loaded:
 
-- `load (file.*)` / `load (file.image*)` → `file.read`
-- `load (rest.*)` / `load (http.*)` / `load (https.*)` → `network.http`
-- `load (env.*)` → `process.env.read`
-- `load (email.imap ...)` and other mail/network connectors → `network`
-- `@static` embedded sources → no runtime capability after compilation
+- `load (file.*)` / `load (file.image*)` performs file I/O
+- `load (rest.*)` / `load (http.*)` / `load (https.*)` performs network I/O
+- `load (env.*)` reads process environment
+- `load (email.imap ...)` and other mail/network connectors perform network I/O
+- `@static` embedded sources do no runtime I/O after compilation
 
-See [Capabilities](capabilities.md) for the standard vocabulary.
+See [Effects](effects.md) for how source loads become runtime effects.
 
 ## 12.10 Source Composition
 

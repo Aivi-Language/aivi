@@ -131,11 +131,10 @@ impl Runtime {
                 Step::Eval(current) => match current {
                     Value::Resource(resource) => {
                         let cleanup = resource.cleanup.clone();
-                        let handlers = self.capture_capability_scopes();
                         match (resource.acquire)(self) {
                             Ok(result) => {
                                 self.resource_cleanups
-                                    .push(ResourceCleanupEntry::Cleanup { cleanup, handlers });
+                                    .push(ResourceCleanupEntry::Cleanup { cleanup });
                                 step = Step::Return(result);
                             }
                             Err(err) => {
@@ -210,12 +209,10 @@ impl Runtime {
         while let Some(entry) = self.resource_cleanups.pop() {
             match entry {
                 ResourceCleanupEntry::ScopeBoundary => break,
-                ResourceCleanupEntry::Cleanup { cleanup, handlers } => {
+                ResourceCleanupEntry::Cleanup { cleanup } => {
                     self.uncancelable(|runtime| {
-                        runtime.with_capability_scopes(&handlers, |runtime| {
-                            let _ = cleanup(runtime);
-                            runtime.jit_pending_error = None;
-                        });
+                        let _ = cleanup(runtime);
+                        runtime.jit_pending_error = None;
                     });
                 }
             }

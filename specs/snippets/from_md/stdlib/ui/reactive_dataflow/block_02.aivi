@@ -1,6 +1,3 @@
-visibleProjects =
-  computed "projects.visible" (model =>
-    model.projects
-  |> filter (matchesQuery model.searchQuery)
-  |> filter (matchesTags model.selectedTags)
-  )
+signal : (model -> a) -> model -> a
+computed : Text -> (model -> a) -> model -> a
+readSignal : (model -> a) -> model -> a

@@ -14,9 +14,8 @@ The module uses named functions instead of operator symbols. That makes examples
 
 ## Import
 
-```aivi
-use aivi.bits
-```
+<<< ../../snippets/from_md/stdlib/data/bits/block_01.aivi{aivi}
+
 
 ## Core ideas
 

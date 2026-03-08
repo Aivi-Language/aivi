@@ -12,16 +12,8 @@ For vector-specific helpers such as `vec2`, `transformPoint3`, or `transformDir3
 
 ## Overview
 
-```aivi
-use aivi.matrix
-use aivi.vector (vec2)
+<<< ../../snippets/from_md/stdlib/math/matrix/block_01.aivi{aivi}
 
-scale2 = ~mat[2.0 0.0
-              0.0 2.0]
-point  = vec2 1.0 3.0
-
-result = scale2 × point
-```
 
 `use aivi.matrix` brings the named helpers (`identity2`, `multiply4`, ...) and `domain Matrix` into scope.
 Import `aivi.vector` as well when you want `Vec2`, `Vec3`, `Vec4`, or vector constructors such as `vec2`.
@@ -81,36 +73,16 @@ Use the named helpers when you want explicit calls instead of operator syntax.
 
 For concise literals, use the structured `~mat` sigil.
 
-```aivi
-// 2x2 rotation matrix (90 degrees counterclockwise)
-rot90 = ~mat[0.0 -1.0
-             1.0  0.0]
+<<< ../../snippets/from_md/stdlib/math/matrix/block_02.aivi{aivi}
 
-// 3x3 identity
-id3 = ~mat[1.0 0.0 0.0
-           0.0 1.0 0.0
-           0.0 0.0 1.0]
-```
 
 You can write the cells on one line or across multiple lines. The formatter rewrites the literal as aligned rows, which is the style shown above because it is easiest to scan.
 The sigil accepts only 4, 9, or 16 cells, inferring `Mat2`, `Mat3`, or `Mat4` from that square size.
 
 ## Usage Examples
 
-```aivi
-use aivi.matrix
-use aivi.vector (vec2)
+<<< ../../snippets/from_md/stdlib/math/matrix/block_03.aivi{aivi}
 
-scale2 = ~mat[2.0  0.0
-              0.0  2.0]
-rot90  = ~mat[0.0 -1.0
-              1.0  0.0]
-point  = vec2 1.0 0.0
-
-combined = rot90 × scale2
-explicit = multiply2 rot90 scale2
-result   = combined × point
-```
 
 `combined` and `explicit` are the same matrix. `result` first scales `point` and then rotates it.
 

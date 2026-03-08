@@ -127,7 +127,6 @@ pub(super) fn expr_span(expr: &aivi::Expr) -> aivi::Span {
         | aivi::Expr::Match { span, .. }
         | aivi::Expr::If { span, .. }
         | aivi::Expr::Binary { span, .. }
-        | aivi::Expr::CapabilityScope { span, .. }
         | aivi::Expr::Block { span, .. }
         | aivi::Expr::Raw { span, .. }
         | aivi::Expr::Mock { span, .. } => span.clone(),
