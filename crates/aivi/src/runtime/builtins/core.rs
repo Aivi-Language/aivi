@@ -272,13 +272,7 @@ pub(crate) fn register_builtins(env: &Env) {
         builtin("bind", 2, |mut args, _| {
             let func = args.pop().unwrap();
             let effect = args.pop().unwrap();
-            let effect = EffectValue::Thunk {
-                func: std::sync::Arc::new(move |runtime| {
-                    let value = runtime.run_effect_value(effect.clone())?;
-                    let applied = runtime.apply(func.clone(), value)?;
-                    runtime.run_effect_value(applied)
-                }),
-            };
+            let effect = EffectValue::Bind { effect, func };
             Ok(Value::Effect(std::sync::Arc::new(effect)))
         }),
     );
@@ -676,14 +670,7 @@ pub(crate) fn register_builtins(env: &Env) {
         builtin("__withResourceScope", 1, |mut args, _runtime| {
             let effect = args.pop().unwrap();
             Ok(Value::Effect(Arc::new(
-                crate::runtime::values::EffectValue::Thunk {
-                    func: Arc::new(move |runtime: &mut crate::runtime::Runtime| {
-                        runtime.push_resource_scope();
-                        let result = runtime.run_effect_value(effect.clone());
-                        runtime.pop_resource_scope();
-                        result
-                    }),
-                },
+                crate::runtime::values::EffectValue::WithResourceScope { effect },
             )))
         }),
     );

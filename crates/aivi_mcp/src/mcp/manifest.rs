@@ -246,7 +246,7 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
         },
         McpTool {
             name: "aivi.gtk.listWidgets".to_string(),
-            description: "List all widgets in an attached GTK session.".to_string(),
+            description: "List inspectable widgets in an attached GTK session with dimensions and capabilities.".to_string(),
             module: "gtk".to_string(),
             binding: "listWidgets".to_string(),
             input_schema: serde_json::json!({
@@ -260,8 +260,25 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
             effectful: false,
         },
         McpTool {
+            name: "aivi.gtk.inspectWidget".to_string(),
+            description: "Inspect one widget in an attached GTK session, including props, dimensions, and children.".to_string(),
+            module: "gtk".to_string(),
+            binding: "inspectWidget".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
             name: "aivi.gtk.dumpTree".to_string(),
-            description: "Dump the widget tree of an attached GTK session.".to_string(),
+            description: "Dump the live widget tree of an attached GTK session, including props and dimensions.".to_string(),
             module: "gtk".to_string(),
             binding: "dumpTree".to_string(),
             input_schema: serde_json::json!({
@@ -307,6 +324,43 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
                     "name": { "type": "string" },
                     "id": { "type": "integer" },
                     "text": { "type": "string" }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.select".to_string(),
+            description: "Select a value on a widget in an attached GTK session (for example a stack page or toggle state).".to_string(),
+            module: "gtk".to_string(),
+            binding: "select".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "value"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "value": { "type": "string" }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.keyPress".to_string(),
+            description: "Inject a key press into an attached GTK session, defaulting to the sole window when no explicit target is provided.".to_string(),
+            module: "gtk".to_string(),
+            binding: "keyPress".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "key"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "key": { "type": "string" },
+                    "detail": { "type": "string", "description": "Optional extra detail or keycode text exposed as the fourth GtkKeyPressed field." }
                 }
             }),
             effectful: true,

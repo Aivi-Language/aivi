@@ -26,9 +26,12 @@ const MCP_TOOL_GTK_ATTACH: &str = "aivi.gtk.attach";
 const MCP_TOOL_GTK_LAUNCH: &str = "aivi.gtk.launch";
 const MCP_TOOL_GTK_HELLO: &str = "aivi.gtk.hello";
 const MCP_TOOL_GTK_LIST_WIDGETS: &str = "aivi.gtk.listWidgets";
+const MCP_TOOL_GTK_INSPECT_WIDGET: &str = "aivi.gtk.inspectWidget";
 const MCP_TOOL_GTK_DUMP_TREE: &str = "aivi.gtk.dumpTree";
 const MCP_TOOL_GTK_CLICK: &str = "aivi.gtk.click";
 const MCP_TOOL_GTK_TYPE: &str = "aivi.gtk.type";
+const MCP_TOOL_GTK_SELECT: &str = "aivi.gtk.select";
+const MCP_TOOL_GTK_KEY_PRESS: &str = "aivi.gtk.keyPress";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StdioFraming {
@@ -227,9 +230,12 @@ fn execute_tool(name: &str, arguments: &serde_json::Value) -> Result<serde_json:
         MCP_TOOL_GTK_LAUNCH => execute_gtk_launch_tool(arguments),
         MCP_TOOL_GTK_HELLO => execute_gtk_hello_tool(arguments),
         MCP_TOOL_GTK_LIST_WIDGETS => execute_gtk_list_widgets_tool(arguments),
+        MCP_TOOL_GTK_INSPECT_WIDGET => execute_gtk_inspect_widget_tool(arguments),
         MCP_TOOL_GTK_DUMP_TREE => execute_gtk_dump_tree_tool(arguments),
         MCP_TOOL_GTK_CLICK => execute_gtk_click_tool(arguments),
         MCP_TOOL_GTK_TYPE => execute_gtk_type_tool(arguments),
+        MCP_TOOL_GTK_SELECT => execute_gtk_select_tool(arguments),
+        MCP_TOOL_GTK_KEY_PRESS => execute_gtk_key_press_tool(arguments),
         _ => Err(AiviError::InvalidCommand(format!("unknown tool {name}"))),
     }
 }
@@ -658,6 +664,24 @@ fn execute_gtk_list_widgets_tool(
     }))
 }
 
+fn execute_gtk_inspect_widget_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let params = gtk_widget_params(args)?;
+    let result = gtk_ui_call(&session, "inspectWidget", params)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_INSPECT_WIDGET,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
 fn execute_gtk_dump_tree_tool(
     arguments: &serde_json::Value,
 ) -> Result<serde_json::Value, AiviError> {
@@ -717,6 +741,70 @@ fn execute_gtk_type_tool(arguments: &serde_json::Value) -> Result<serde_json::Va
     Ok(serde_json::json!({
         "ok": true,
         "tool": MCP_TOOL_GTK_TYPE,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_select_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "value"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let value = get_required_string(args, "value")?;
+
+    let mut params = match gtk_widget_params(args)? {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    params.insert(
+        "value".to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
+
+    let result = gtk_ui_call(&session, "select", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_SELECT,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_key_press_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "key", "detail"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let key = get_required_string(args, "key")?;
+
+    let mut params = serde_json::Map::new();
+    if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
+        params.insert(
+            "name".to_string(),
+            serde_json::Value::String(name.to_string()),
+        );
+    }
+    if let Some(id) = args.get("id").and_then(|v| v.as_i64()) {
+        params.insert("id".to_string(), serde_json::Value::Number(id.into()));
+    }
+    params.insert(
+        "key".to_string(),
+        serde_json::Value::String(key.to_string()),
+    );
+    if let Some(detail) = args.get("detail").and_then(|v| v.as_str()) {
+        params.insert(
+            "detail".to_string(),
+            serde_json::Value::String(detail.to_string()),
+        );
+    }
+
+    let result = gtk_ui_call(&session, "keyPress", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_KEY_PRESS,
         "sessionId": session_id,
         "pid": session.pid,
         "result": result,
@@ -1181,5 +1269,22 @@ mod tests {
             // It might be an error because execution fails (dummy target), but that's fine.
             // We just care that it dispatched.
         }
+    }
+
+    #[test]
+    fn gtk_ui_manifest_exposes_inspection_and_selection_tools() {
+        let manifest = bundled_specs_manifest_with_ui();
+        let tool_names = manifest
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>();
+        assert!(tool_names.contains(&MCP_TOOL_GTK_LIST_WIDGETS));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_INSPECT_WIDGET));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_DUMP_TREE));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_CLICK));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_TYPE));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_SELECT));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_KEY_PRESS));
     }
 }

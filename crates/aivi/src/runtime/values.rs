@@ -185,6 +185,13 @@ pub(crate) enum EffectValue {
     Thunk {
         func: Arc<ThunkFunc>,
     },
+    Bind {
+        effect: Value,
+        func: Value,
+    },
+    WithResourceScope {
+        effect: Value,
+    },
 }
 
 pub(crate) struct ResourceValue {

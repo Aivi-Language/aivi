@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+serde_json = "1.0.149"
 tokio = { version = "1.49.0", features = ["rt", "sync", "time"] }
 zbus = "5.14.0"

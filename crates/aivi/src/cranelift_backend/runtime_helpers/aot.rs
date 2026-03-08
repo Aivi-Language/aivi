@@ -369,9 +369,7 @@ pub extern "C" fn rt_snapshot_mock_install(
                             let rp = rec_path.clone();
                             Ok(Value::Effect(Arc::new(EffectValue::Thunk {
                                 func: Arc::new(move |rt2| {
-                                    let val = match eff.as_ref() {
-                                        EffectValue::Thunk { func } => func(rt2)?,
-                                    };
+                                    let val = rt2.run_effect_value(Value::Effect(eff.clone()))?;
                                     let json = snapshot::value_to_snapshot_json(&val)?;
                                     rt2.snapshot_recordings
                                         .entry(rp.clone())
