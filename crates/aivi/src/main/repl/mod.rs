@@ -84,8 +84,7 @@ pub(crate) fn cmd_repl(args: &[String]) -> Result<(), AiviError> {
     let mut color_mode = ColorMode::Auto;
     let mut plain_mode = false;
 
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
+    for arg in args {
         match arg.as_str() {
             "--color" => color_mode = ColorMode::Always,
             "--no-color" => color_mode = ColorMode::Never,

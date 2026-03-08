@@ -28,8 +28,10 @@ use ratatui::{
 
 use aivi::AiviError;
 
+use super::engine::{
+    ReplEngine, ReplSnapshot, SymbolEntry, SymbolKind, TranscriptEntry, TranscriptKind,
+};
 use super::{ColorMode, ReplOptions, SymbolPane};
-use super::engine::{ReplEngine, ReplSnapshot, SymbolEntry, SymbolKind, TranscriptEntry, TranscriptKind};
 
 // ─── Colour palette ──────────────────────────────────────────────────────────
 
@@ -41,7 +43,7 @@ pub(crate) struct Palette {
 impl Palette {
     pub(crate) fn new(mode: ColorMode, is_tty: bool) -> Self {
         let use_color = match mode {
-            ColorMode::Force => true,
+            ColorMode::Always => true,
             ColorMode::Never => false,
             ColorMode::Auto => {
                 is_tty
@@ -54,7 +56,9 @@ impl Palette {
 
     fn prompt(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         }
@@ -78,7 +82,9 @@ impl Palette {
 
     fn type_annotation(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default()
         }
@@ -86,7 +92,9 @@ impl Palette {
 
     fn defined_badge(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::Green).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default()
         }
@@ -94,7 +102,9 @@ impl Palette {
 
     fn error_prefix(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::LightRed)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         }
@@ -110,7 +120,9 @@ impl Palette {
 
     fn warning_prefix(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::LightYellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         }
@@ -126,7 +138,9 @@ impl Palette {
 
     fn command_output(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         }
@@ -134,7 +148,9 @@ impl Palette {
 
     fn symbol_badge_type(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::Magenta).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default()
         }
@@ -150,7 +166,9 @@ impl Palette {
 
     fn symbol_badge_val(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::Green).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default()
         }
@@ -158,7 +176,9 @@ impl Palette {
 
     fn border(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default()
         }
@@ -166,7 +186,10 @@ impl Palette {
 
     fn status_bar(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::DarkGray).bg(Color::Black).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Black)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default().add_modifier(Modifier::REVERSED)
         }
@@ -174,29 +197,32 @@ impl Palette {
 
     fn hint(self) -> Style {
         if self.use_color {
-            Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::DIM)
         } else {
             Style::default()
         }
     }
 
     /// Box-drawing characters: Unicode when colour is enabled, ASCII when degraded.
+    #[allow(dead_code)]
     pub(crate) fn box_chars(self) -> BoxChars {
         if self.use_color {
             BoxChars {
                 horizontal: "─",
-                vertical:   "│",
-                top_left:   "┌",
-                top_right:  "┐",
+                vertical: "│",
+                top_left: "┌",
+                top_right: "┐",
                 bottom_left: "└",
                 bottom_right: "┘",
             }
         } else {
             BoxChars {
                 horizontal: "-",
-                vertical:   "|",
-                top_left:   "+",
-                top_right:  "+",
+                vertical: "|",
+                top_left: "+",
+                top_right: "+",
                 bottom_left: "+",
                 bottom_right: "+",
             }
@@ -204,16 +230,21 @@ impl Palette {
     }
 
     fn prompt_char(self) -> &'static str {
-        if self.use_color { "❯" } else { ">" }
+        if self.use_color {
+            "❯"
+        } else {
+            ">"
+        }
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct BoxChars {
-    pub horizontal:   &'static str,
-    pub vertical:     &'static str,
-    pub top_left:     &'static str,
-    pub top_right:    &'static str,
-    pub bottom_left:  &'static str,
+    pub horizontal: &'static str,
+    pub vertical: &'static str,
+    pub top_left: &'static str,
+    pub top_right: &'static str,
+    pub bottom_left: &'static str,
     pub bottom_right: &'static str,
 }
 
@@ -282,9 +313,9 @@ impl TuiState {
             self.history_saved = self.input.clone();
         }
         let next = match self.history_idx {
-            None     => self.history.len().saturating_sub(1),
-            Some(0)  => 0,
-            Some(i)  => i - 1,
+            None => self.history.len().saturating_sub(1),
+            Some(0) => 0,
+            Some(i) => i - 1,
         };
         self.history_idx = Some(next);
         self.input = self.history[next].clone();
@@ -340,11 +371,11 @@ pub(crate) fn run_plain(mut engine: ReplEngine, options: &ReplOptions) -> Result
 
 fn entry_to_plain(entry: &TranscriptEntry) -> String {
     match entry.kind {
-        TranscriptKind::Input         => format!("> {}", entry.text),
-        TranscriptKind::Error         => format!("  ✖ {}", entry.text),
-        TranscriptKind::Warning       => format!("  ⚠ {}", entry.text),
-        TranscriptKind::System        => format!("  ✓ {}", entry.text),
-        _                             => format!("  {}", entry.text),
+        TranscriptKind::Input => format!("> {}", entry.text),
+        TranscriptKind::Error => format!("  ✖ {}", entry.text),
+        TranscriptKind::Warning => format!("  ⚠ {}", entry.text),
+        TranscriptKind::System => format!("  ✓ {}", entry.text),
+        _ => format!("  {}", entry.text),
     }
 }
 
@@ -360,19 +391,15 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
         return run_plain(engine, options);
     }
 
-    if let Some(pane) = options.symbol_pane {
-        engine.set_symbol_pane(pane);
-    }
-
     let snapshot = engine.snapshot();
 
     enable_raw_mode().map_err(AiviError::Io)?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture).map_err(AiviError::Io)?;
 
-    let backend  = CrosstermBackend::new(io::stdout());
+    let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AiviError::Io)?;
-    let mut state    = TuiState::new(snapshot, palette);
+    let mut state = TuiState::new(snapshot, palette);
 
     let result = event_loop(&mut terminal, &mut engine, &mut state);
 
@@ -396,7 +423,9 @@ fn event_loop(
     state: &mut TuiState,
 ) -> Result<(), AiviError> {
     loop {
-        terminal.draw(|frame| render(frame, state)).map_err(AiviError::Io)?;
+        terminal
+            .draw(|frame| render(frame, state))
+            .map_err(AiviError::Io)?;
 
         if state.quit {
             break;
@@ -426,7 +455,7 @@ fn handle_key(
     engine: &mut ReplEngine,
     state: &mut TuiState,
 ) -> Result<(), AiviError> {
-    let ctrl  = modifiers.contains(KeyModifiers::CONTROL);
+    let ctrl = modifiers.contains(KeyModifiers::CONTROL);
     let shift = modifiers.contains(KeyModifiers::SHIFT);
 
     match code {
@@ -466,12 +495,16 @@ fn handle_key(
         }
 
         // History navigation.
-        KeyCode::Up   => state.history_up(),
+        KeyCode::Up => state.history_up(),
         KeyCode::Down => state.history_down(),
 
         // Transcript scrolling.
-        KeyCode::PageUp   => { state.scroll_offset = state.scroll_offset.saturating_add(5); }
-        KeyCode::PageDown => { state.scroll_offset = state.scroll_offset.saturating_sub(5); }
+        KeyCode::PageUp => {
+            state.scroll_offset = state.scroll_offset.saturating_add(5);
+        }
+        KeyCode::PageDown => {
+            state.scroll_offset = state.scroll_offset.saturating_sub(5);
+        }
 
         // Symbol pane toggle / close.
         KeyCode::Tab => {
@@ -526,8 +559,12 @@ fn handle_key(
 
 fn handle_mouse(kind: MouseEventKind, state: &mut TuiState) {
     match kind {
-        MouseEventKind::ScrollUp   => { state.scroll_offset = state.scroll_offset.saturating_add(2); }
-        MouseEventKind::ScrollDown => { state.scroll_offset = state.scroll_offset.saturating_sub(2); }
+        MouseEventKind::ScrollUp => {
+            state.scroll_offset = state.scroll_offset.saturating_add(2);
+        }
+        MouseEventKind::ScrollDown => {
+            state.scroll_offset = state.scroll_offset.saturating_sub(2);
+        }
         _ => {}
     }
 }
@@ -535,7 +572,7 @@ fn handle_mouse(kind: MouseEventKind, state: &mut TuiState) {
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 fn render(frame: &mut Frame, state: &TuiState) {
-    let snap    = &state.snapshot;
+    let snap = &state.snapshot;
     let palette = state.palette;
     let show_pane = snap.symbol_pane.is_some();
 
@@ -569,10 +606,10 @@ fn render(frame: &mut Frame, state: &TuiState) {
 }
 
 fn render_transcript(
-    frame:   &mut Frame,
-    area:    Rect,
-    snap:    &ReplSnapshot,
-    state:   &TuiState,
+    frame: &mut Frame,
+    area: Rect,
+    snap: &ReplSnapshot,
+    state: &TuiState,
     palette: Palette,
 ) {
     let all_lines: Vec<ListItem> = snap
@@ -582,10 +619,10 @@ fn render_transcript(
         .map(ListItem::new)
         .collect();
 
-    let total   = all_lines.len() as u16;
+    let total = all_lines.len() as u16;
     let visible = area.height.saturating_sub(2); // account for borders
     let max_scroll = total.saturating_sub(visible) as usize;
-    let effective  = state.scroll_offset.min(max_scroll);
+    let effective = state.scroll_offset.min(max_scroll);
     let start = (total as usize).saturating_sub(visible as usize + effective);
 
     let visible_items: Vec<ListItem> = all_lines.into_iter().skip(start).collect();
@@ -600,17 +637,23 @@ fn render_transcript(
 
 fn render_symbol_pane(frame: &mut Frame, area: Rect, snap: &ReplSnapshot, palette: Palette) {
     let title = match snap.symbol_pane {
-        Some(SymbolPane::Types)     => " /types ",
-        Some(SymbolPane::Values)    => " /values ",
+        Some(SymbolPane::Types) => " /types ",
+        Some(SymbolPane::Values) => " /values ",
         Some(SymbolPane::Functions) => " /functions ",
-        Some(SymbolPane::Modules)   => " /modules ",
-        None                        => "",
+        Some(SymbolPane::Modules) => " /modules ",
+        None => "",
     };
 
     let items: Vec<ListItem> = if snap.symbols.is_empty() {
-        vec![ListItem::new(Line::from(Span::styled("  (empty)", palette.hint())))]
+        vec![ListItem::new(Line::from(Span::styled(
+            "  (empty)",
+            palette.hint(),
+        )))]
     } else {
-        snap.symbols.iter().map(|s| symbol_entry_to_item(s, palette)).collect()
+        snap.symbols
+            .iter()
+            .map(|s| symbol_entry_to_item(s, palette))
+            .collect()
     };
 
     let block = Block::default()
@@ -636,22 +679,29 @@ fn render_status_bar(frame: &mut Frame, area: Rect, snap: &ReplSnapshot, palette
 
 fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palette) {
     let prompt_char = palette.prompt_char();
-    let before     = &state.input[..state.cursor];
-    let cursor_ch  = state.input[state.cursor..].chars().next();
+    let before = &state.input[..state.cursor];
+    let cursor_ch = state.input[state.cursor..].chars().next();
     let cursor_str = cursor_ch.map_or(" ".to_string(), |c| c.to_string());
     let after_start = state.cursor + cursor_ch.map_or(0, char::len_utf8);
-    let after      = &state.input[after_start.min(state.input.len())..];
+    let after = &state.input[after_start.min(state.input.len())..];
 
     let line = Line::from(vec![
         Span::styled(format!("{prompt_char} "), palette.prompt()),
         Span::styled(before.to_string(), palette.input_text()),
-        Span::styled(cursor_str, Style::default().add_modifier(Modifier::REVERSED)),
+        Span::styled(
+            cursor_str,
+            Style::default().add_modifier(Modifier::REVERSED),
+        ),
         Span::styled(after.to_string(), palette.input_text()),
     ]);
 
-    let block = Block::default().borders(Borders::ALL).border_style(palette.border());
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(palette.border());
     frame.render_widget(
-        Paragraph::new(Text::from(line)).block(block).wrap(Wrap { trim: false }),
+        Paragraph::new(Text::from(line))
+            .block(block)
+            .wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -742,10 +792,10 @@ fn transcript_entry_to_lines(entry: &TranscriptEntry, palette: Palette) -> Vec<L
 
 fn symbol_entry_to_item(entry: &SymbolEntry, palette: Palette) -> ListItem<'static> {
     let (badge, style) = match entry.kind {
-        SymbolKind::Type     => ("[type]", palette.symbol_badge_type()),
+        SymbolKind::Type => ("[type]", palette.symbol_badge_type()),
         SymbolKind::Function => ("[fn]  ", palette.symbol_badge_fn()),
-        SymbolKind::Value    => ("[val] ", palette.symbol_badge_val()),
-        SymbolKind::Module   => ("[mod] ", palette.symbol_badge_type()),
+        SymbolKind::Value => ("[val] ", palette.symbol_badge_val()),
+        SymbolKind::Module => ("[mod] ", palette.symbol_badge_type()),
     };
     ListItem::new(Line::from(vec![
         Span::styled(badge, style),
@@ -757,7 +807,11 @@ fn symbol_entry_to_item(entry: &SymbolEntry, palette: Palette) -> ListItem<'stat
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 pub(crate) fn count_input_lines(input: &str) -> usize {
-    if input.is_empty() { 1 } else { input.lines().count().max(1) }
+    if input.is_empty() {
+        1
+    } else {
+        input.lines().count().max(1)
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -777,7 +831,7 @@ mod tests {
 
     #[test]
     fn palette_force_gives_unicode_borders() {
-        let p = Palette::new(ColorMode::Force, false);
+        let p = Palette::new(ColorMode::Always, false);
         assert!(p.use_color);
         let b = p.box_chars();
         assert_eq!(b.horizontal, "─");
@@ -811,13 +865,19 @@ mod tests {
 
     #[test]
     fn plain_entry_error_prefix() {
-        let e = TranscriptEntry { kind: TranscriptKind::Error, text: "oops".into() };
+        let e = TranscriptEntry {
+            kind: TranscriptKind::Error,
+            text: "oops".into(),
+        };
         assert!(entry_to_plain(&e).contains('✖'));
     }
 
     #[test]
     fn plain_entry_system_prefix() {
-        let s = TranscriptEntry { kind: TranscriptKind::System, text: "ready".into() };
+        let s = TranscriptEntry {
+            kind: TranscriptKind::System,
+            text: "ready".into(),
+        };
         assert!(entry_to_plain(&s).contains('✓'));
     }
 }
