@@ -40,7 +40,7 @@ A `Url` keeps the major parts separate:
 
 Both forms validate the URL as an absolute URL. A bad sigil is a compile-time error, while `parse` returns `Err ...` at runtime.
 
-See also [Operators: Sigils](../../syntax/operators.md#118-sigils) and [Domains and sigils](../../syntax/domains.md#domains-and-sigils).
+See also [Operators: Sigils](../../syntax/operators.md#118-sigils).
 
 ## Domain Definition
 

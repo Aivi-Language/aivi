@@ -33,7 +33,7 @@ If `other` is absolute, it replaces `base`; if `other` is relative, its segments
 
 ## Path literal syntax
 
-`~path[...]` is a compiler-provided structured sigil. See also [Operators: Sigils](../../syntax/operators.md#118-sigils) and [Domains and sigils](../../syntax/domains.md#domains-and-sigils).
+`~path[...]` is a compiler-provided structured sigil. See also [Operators: Sigils](../../syntax/operators.md#118-sigils).
 
 - `~path[/usr/local/bin]` creates an absolute path.
 - `~path[src/main.aivi]` creates a relative path.
