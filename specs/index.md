@@ -177,6 +177,7 @@ Use the table of contents as a map:
 - [Test Decorator & Mocking](syntax/decorators/test)
 #### Developer Tools
 - [CLI](tools/cli)
+- [MCP Server](tools/mcp)
 - [Package Manager](tools/package_manager)
 - [LSP Server](tools/lsp_server)
 - [VSCode Extension](tools/vscode_extension)

@@ -326,13 +326,13 @@ See also [LSP Server](lsp_server.md) for the feature-level behavior and incremen
 
 #### `mcp serve`
 
-Starts the Model Context Protocol server for language tooling and optional UI inspection tools.
+Starts the Model Context Protocol server for language tooling and optional GTK inspection / driver tools.
 
 ```bash
 aivi mcp serve <path|dir/...> [--allow-effects] [--ui]
 ```
 
-- `--allow-effects`: enables effectful tools such as formatting files in place or launching UI sessions
+- `--allow-effects`: enables effectful tools such as formatting files in place, launching UI sessions, or driving GTK widgets
 - `--ui`: also exposes GTK inspector and driver tools under `aivi.gtk.*`
 
 `aivi mcp serve` exposes bundled specs as resources and tooling operations such as:
@@ -342,9 +342,11 @@ aivi mcp serve <path|dir/...> [--allow-effects] [--ui]
 - `aivi.fmt`
 - `aivi.fmt.write` (requires `--allow-effects`)
 
-With `--ui`, it also exposes non-effectful GTK tools such as discovery and tree inspection, plus effectful tools such as `aivi.gtk.launch`, `aivi.gtk.click`, and `aivi.gtk.type`.
+With `--ui`, it also exposes non-effectful GTK tools such as discovery, widget inspection, and tree inspection, plus effectful tools such as `aivi.gtk.launch`, `aivi.gtk.click`, `aivi.gtk.type`, `aivi.gtk.select`, and `aivi.gtk.keyPress`.
 
 The `<path|dir/...>` argument is accepted for compatibility and is currently ignored by the server; individual tool calls pass their own explicit `target` argument.
+
+See also [MCP Server](mcp.md) for the GTK session lifecycle, inspection payloads, and interaction semantics.
 
 #### `i18n gen`
 

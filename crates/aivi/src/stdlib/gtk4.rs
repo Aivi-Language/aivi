@@ -436,33 +436,43 @@ forwardGtkMessages = msgTx => signalRx => toMsgFn =>
 
 runGtkAppLoop : Sender (HostedEvent msg) -> Recv (HostedEvent msg) -> AppId -> WindowId -> s -> WidgetId -> Map CommandKey HostedCommand -> Map SubscriptionKey HostedSubscription -> (s -> GtkNode) -> (s -> List (Subscription msg)) -> (AppId -> WindowId -> msg -> s -> Effect GtkError (AppStep s msg)) -> Effect GtkError Unit
 runGtkAppLoop = msgTx => msgRx => appId => win => currentModel => currentRoot => currentCommands => currentSubscriptions => viewFn => subscriptionsFn => updateFn => do Effect {
-  result <- concurrent.recv msgRx
-  result match
-    | Err _ => pure Unit
-    | Ok HostedCloseRequest =>
-        do Effect {
-          hideOnClose <- widgetGetBoolProperty win "hide-on-close"
-          if hideOnClose
-            then runGtkAppLoop msgTx msgRx appId win currentModel currentRoot currentCommands currentSubscriptions viewFn subscriptionsFn updateFn
-            else pure Unit
-        }
-    | Ok (HostedMsg msg) => do Effect {
-        step <- updateFn appId win msg currentModel
-        nextCommands <- launchCommands msgTx (flattenCommands step.commands) currentCommands
-        if step.model == currentModel
-          then
-            runGtkAppLoop msgTx msgRx appId win currentModel currentRoot nextCommands currentSubscriptions viewFn subscriptionsFn updateFn
-          else
-            do Effect {
-              _ <- gtk4.reactiveCommit currentModel step.model
+  loop state = {
+    model: currentModel
+    root: currentRoot
+    commands: currentCommands
+    subscriptions: currentSubscriptions
+  } => {
+    result <- concurrent.recv msgRx
+    result match
+      | Err _ => pure Unit
+      | Ok HostedCloseRequest =>
+          do Effect {
+            hideOnClose <- widgetGetBoolProperty win "hide-on-close"
+            if hideOnClose
+              then recurse state
+              else pure Unit
+          }
+      | Ok (HostedMsg msg) => do Effect {
+          step <- updateFn appId win msg state.model
+          nextCommands <- launchCommands msgTx (flattenCommands step.commands) state.commands
+          if step.model == state.model
+            then recurse (state <| { commands: nextCommands })
+            else do Effect {
+              _ <- gtk4.reactiveCommit state.model step.model
               newView = viewFn step.model
               _ <- gtk4.autoBindingsSet newView
-              newRoot <- reconcileNode currentRoot newView
-              _ <- if newRoot == currentRoot then pure Unit else windowSetChild win newRoot
-              nextSubscriptions <- syncSubscriptions msgTx (subscriptionsFn step.model) currentSubscriptions
-              runGtkAppLoop msgTx msgRx appId win step.model newRoot nextCommands nextSubscriptions viewFn subscriptionsFn updateFn
+              newRoot <- reconcileNode state.root newView
+              _ <- if newRoot == state.root then pure Unit else windowSetChild win newRoot
+              nextSubscriptions <- syncSubscriptions msgTx (subscriptionsFn step.model) state.subscriptions
+              recurse {
+                model: step.model
+                root: newRoot
+                commands: nextCommands
+                subscriptions: nextSubscriptions
+              }
             }
-      }
+        }
+  }
 }
 
 gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode

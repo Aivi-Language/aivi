@@ -92,35 +92,105 @@ impl Runtime {
         }
     }
 
-    /// Execute an effect value directly (no trampoline needed).
+    /// Execute an effect value directly using an explicit continuation stack so
+    /// long-running effect loops stay stack-safe.
     pub(crate) fn run_effect_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
-        self.check_cancelled()?;
-        match &value {
-            Value::Resource(r) => {
-                // Run acquire phase and push cleanup onto the resource stack
-                let cleanup = r.cleanup.clone();
-                let handlers = self.capture_capability_scopes();
-                let result = (r.acquire)(self)?;
-                self.resource_cleanups
-                    .push(ResourceCleanupEntry::Cleanup { cleanup, handlers });
-                Ok(result)
+        enum Continuation {
+            Apply(Value),
+            PopResourceScope,
+        }
+
+        enum Step {
+            Eval(Value),
+            Return(Value),
+        }
+
+        fn unwind_effect_error(
+            runtime: &mut Runtime,
+            continuations: &mut Vec<Continuation>,
+            err: RuntimeError,
+        ) -> Result<Value, RuntimeError> {
+            while let Some(continuation) = continuations.pop() {
+                if matches!(continuation, Continuation::PopResourceScope) {
+                    runtime.pop_resource_scope();
+                }
             }
-            _ => {
-                let effect = match &value {
-                    Value::Effect(e) => e.clone(),
-                    Value::Source(s) => s.effect.clone(),
-                    _ => {
+            Err(err)
+        }
+
+        fn is_effect_value(value: &Value) -> bool {
+            matches!(value, Value::Effect(_) | Value::Source(_) | Value::Resource(_))
+        }
+
+        let mut step = Step::Eval(value);
+        let mut continuations = Vec::new();
+
+        loop {
+            self.check_cancelled()?;
+            match step {
+                Step::Eval(current) => match current {
+                    Value::Resource(resource) => {
+                        let cleanup = resource.cleanup.clone();
+                        let handlers = self.capture_capability_scopes();
+                        match (resource.acquire)(self) {
+                            Ok(result) => {
+                                self.resource_cleanups
+                                    .push(ResourceCleanupEntry::Cleanup { cleanup, handlers });
+                                step = Step::Return(result);
+                            }
+                            Err(err) => {
+                                return unwind_effect_error(self, &mut continuations, err);
+                            }
+                        }
+                    }
+                    Value::Effect(effect) => match effect.as_ref() {
+                        EffectValue::Thunk { func } => match func(self) {
+                            Ok(result) => {
+                                step = Step::Return(result);
+                            }
+                            Err(err) => {
+                                return unwind_effect_error(self, &mut continuations, err);
+                            }
+                        },
+                        EffectValue::Bind { effect, func } => {
+                            continuations.push(Continuation::Apply(func.clone()));
+                            step = Step::Eval(effect.clone());
+                        }
+                        EffectValue::WithResourceScope { effect } => {
+                            self.push_resource_scope();
+                            continuations.push(Continuation::PopResourceScope);
+                            step = Step::Eval(effect.clone());
+                        }
+                    },
+                    Value::Source(effect_source) => {
+                        step = Step::Eval(Value::Effect(effect_source.effect.clone()));
+                    }
+                    other => {
                         return Err(RuntimeError::TypeError {
                             context: "effect execution".to_string(),
                             expected: "Effect".to_string(),
-                            got: format_value(&value),
-                        })
+                            got: format_value(&other),
+                        });
                     }
-                };
-                match effect.as_ref() {
-                    EffectValue::Thunk { func } => func(self),
+                },
+                Step::Return(mut value) => loop {
+                    match continuations.pop() {
+                        Some(Continuation::PopResourceScope) => {
+                            self.pop_resource_scope();
+                        }
+                        Some(Continuation::Apply(func)) => match self.apply(func, value)? {
+                            next if is_effect_value(&next) => {
+                                step = Step::Eval(next);
+                                break;
+                            }
+                            next => {
+                                value = next;
+                            }
+                        },
+                        None => return Ok(value),
+                    }
                 }
-            }
+            };
         }
     }
 

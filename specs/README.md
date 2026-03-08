@@ -153,6 +153,7 @@ If you are new to AIVI, use this simple path first: **[Language at a Glance](lan
 - [Test Decorator & Mocking](syntax/decorators/test.md)
 #### Developer Tools
 - [CLI](tools/cli.md)
+- [MCP Server](tools/mcp.md)
 - [Package Manager](tools/package_manager.md)
 - [LSP Server](tools/lsp_server.md)
 - [VSCode Extension](tools/vscode_extension.md)

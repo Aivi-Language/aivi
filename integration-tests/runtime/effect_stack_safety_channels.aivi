@@ -1,0 +1,39 @@
+@no_prelude
+module integrationTests.runtime.effectStackSafetyChannels
+
+use aivi
+use aivi.testing
+use aivi.concurrency
+
+@test "effect loop over channel recv stays stack safe"
+effectLoopOverChannelRecvStaysStackSafe = do Effect {
+  iterations = 5000
+  (tx, rx) <- make 0
+
+  _ <- spawn (do Effect {
+      loop n = 0 => {
+        if n >= iterations
+          then close tx
+          else do Effect {
+            send tx n
+            recurse (n + 1)
+          }
+      }
+  })
+
+  total <- do Effect {
+    loop state = { count: 0, acc: 0 } => {
+      if state.count >= iterations
+        then pure state.acc
+        else do Effect {
+          result <- recv rx
+          result match
+            | Ok n       => recurse { count: state.count + 1, acc: state.acc + n }
+            | Err Closed => fail "channel closed before all values were received"
+        }
+    }
+  }
+
+  expected = (iterations * (iterations - 1)) / 2
+  assertEq total expected
+}

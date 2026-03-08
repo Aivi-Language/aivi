@@ -57,9 +57,15 @@ mod linux_impl {
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
     use std::ffi::{CStr, CString};
+    use std::fs;
+    use std::io::{BufRead, BufReader, Write};
     use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
+    use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
     use std::sync::{mpsc, Mutex, OnceLock};
+    use std::time::Duration;
+
+    use serde_json::{json, Map, Value};
 
     use super::{BuildResult, Gtk4Error, GtkNode, SignalEvent};
 
@@ -328,6 +334,12 @@ mod linux_impl {
     unsafe impl Send for ScrollFadeData {}
     unsafe impl Sync for ScrollFadeData {}
 
+    struct UiDebugServer {
+        socket_path: String,
+        token: String,
+        listener: UnixListener,
+    }
+
     /// Mirrors the live GTK widget tree for reconciliation.
     #[derive(Clone, Debug)]
     struct LiveNode {
@@ -373,6 +385,8 @@ mod linux_impl {
         resources_registered: bool,
         /// Root widget id → LiveNode tree for reconciliation.
         live_trees: HashMap<i64, LiveNode>,
+        ui_debug: Option<UiDebugServer>,
+        ui_debug_tick_registered: bool,
     }
 
     enum SignalAction {
@@ -598,6 +612,899 @@ mod linux_impl {
             .get(&id)
             .copied()
             .ok_or_else(|| Gtk4Error::new(format!("gtk4.{ctx} unknown widget id {id}")))
+    }
+
+    fn created_widget_kind_name(kind: CreatedWidgetKind) -> &'static str {
+        match kind {
+            CreatedWidgetKind::Box => "box",
+            CreatedWidgetKind::Button => "button",
+            CreatedWidgetKind::HeaderBar => "header_bar",
+            CreatedWidgetKind::ScrolledWindow => "scrolled_window",
+            CreatedWidgetKind::Overlay => "overlay",
+            CreatedWidgetKind::ListBox => "list_box",
+            CreatedWidgetKind::SplitView => "split_view",
+            CreatedWidgetKind::Stack => "stack",
+            CreatedWidgetKind::Revealer => "revealer",
+            CreatedWidgetKind::PreferencesDialog => "preferences_dialog",
+            CreatedWidgetKind::PreferencesPage => "preferences_page",
+            CreatedWidgetKind::PreferencesGroup => "preferences_group",
+            CreatedWidgetKind::ActionRow => "action_row",
+            CreatedWidgetKind::Other => "other",
+        }
+    }
+
+    fn is_text_input_class(class_name: &str) -> bool {
+        matches!(
+            class_name,
+            "GtkEntry" | "GtkPasswordEntry" | "AdwEntryRow" | "AdwPasswordEntryRow"
+        )
+    }
+
+    fn is_toggle_class(class_name: &str) -> bool {
+        matches!(class_name, "GtkCheckButton" | "AdwSwitchRow")
+    }
+
+    fn widget_bool_property(widget: *mut c_void, prop: &str) -> Option<bool> {
+        let prop_c = CString::new(prop).ok()?;
+        Some(unsafe { gobject_get_bool(widget, &prop_c) != 0 })
+    }
+
+    fn widget_dimensions_json(state: &RealGtkState, widget_id: i64) -> Value {
+        match widget_ptr(state, widget_id, "uiDebugDimensions") {
+            Ok(widget) => json!({
+                "width": unsafe { gtk_widget_get_width(widget) },
+                "height": unsafe { gtk_widget_get_height(widget) }
+            }),
+            Err(_) => json!({
+                "width": 0,
+                "height": 0
+            }),
+        }
+    }
+
+    fn widget_capabilities_json(live: &LiveNode) -> Value {
+        let click = live
+            .signals
+            .iter()
+            .any(|binding| matches!(binding.signal.as_str(), "clicked" | "activate"));
+        let input = is_text_input_class(&live.class_name);
+        let select =
+            matches!(live.kind, CreatedWidgetKind::Stack) || is_toggle_class(&live.class_name);
+        json!({
+            "inspect": true,
+            "click": click,
+            "type": input,
+            "select": select,
+            "keyPress": false
+        })
+    }
+
+    fn widget_runtime_state_json(state: &RealGtkState, live: &LiveNode) -> Value {
+        let mut runtime = Map::new();
+        if let Ok(widget) = widget_ptr(state, live.widget_id, "uiDebugState") {
+            if let Some(visible) = widget_bool_property(widget, "visible") {
+                runtime.insert("visible".to_string(), Value::Bool(visible));
+            }
+            if let Some(sensitive) = widget_bool_property(widget, "sensitive") {
+                runtime.insert("sensitive".to_string(), Value::Bool(sensitive));
+            }
+            if is_text_input_class(&live.class_name) {
+                let text_ptr = unsafe { gtk_editable_get_text(widget) };
+                let text = if text_ptr.is_null() {
+                    String::new()
+                } else {
+                    unsafe { CStr::from_ptr(text_ptr) }
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                runtime.insert("text".to_string(), Value::String(text));
+            }
+            if live.class_name == "GtkCheckButton" {
+                runtime.insert(
+                    "active".to_string(),
+                    Value::Bool(unsafe { gtk_check_button_get_active(widget) != 0 }),
+                );
+            } else if is_toggle_class(&live.class_name) {
+                if let Some(active) = widget_bool_property(widget, "active") {
+                    runtime.insert("active".to_string(), Value::Bool(active));
+                }
+            }
+        }
+        if matches!(live.kind, CreatedWidgetKind::Stack) {
+            if let Some(page) = live.props.get("visible-child-name") {
+                runtime.insert("visibleChildName".to_string(), Value::String(page.clone()));
+            }
+        }
+        Value::Object(runtime)
+    }
+
+    fn signal_bindings_json(live: &LiveNode) -> Value {
+        Value::Array(
+            live.signals
+                .iter()
+                .map(|binding| {
+                    json!({
+                        "signal": binding.signal,
+                        "handler": binding.handler
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    fn live_node_json(
+        state: &RealGtkState,
+        root_id: i64,
+        parent_id: Option<i64>,
+        child_type: Option<&str>,
+        live: &LiveNode,
+    ) -> Value {
+        let children = live
+            .children
+            .iter()
+            .map(|child| {
+                live_node_json(
+                    state,
+                    root_id,
+                    Some(live.widget_id),
+                    child.child_type.as_deref(),
+                    &child.node,
+                )
+            })
+            .collect::<Vec<_>>();
+        json!({
+            "id": live.widget_id,
+            "name": live.node_id,
+            "className": live.class_name,
+            "kind": created_widget_kind_name(live.kind),
+            "rootId": root_id,
+            "parentId": parent_id,
+            "childType": child_type,
+            "props": live.props,
+            "signals": signal_bindings_json(live),
+            "dimensions": widget_dimensions_json(state, live.widget_id),
+            "state": widget_runtime_state_json(state, live),
+            "capabilities": widget_capabilities_json(live),
+            "children": children
+        })
+    }
+
+    fn collect_widget_summaries(
+        state: &RealGtkState,
+        out: &mut Vec<Value>,
+        root_id: i64,
+        parent_id: Option<i64>,
+        child_type: Option<&str>,
+        live: &LiveNode,
+    ) {
+        out.push(json!({
+            "id": live.widget_id,
+            "name": live.node_id,
+            "className": live.class_name,
+            "kind": created_widget_kind_name(live.kind),
+            "rootId": root_id,
+            "parentId": parent_id,
+            "childType": child_type,
+            "dimensions": widget_dimensions_json(state, live.widget_id),
+            "state": widget_runtime_state_json(state, live),
+            "capabilities": widget_capabilities_json(live)
+        }));
+        for child in &live.children {
+            collect_widget_summaries(
+                state,
+                out,
+                root_id,
+                Some(live.widget_id),
+                child.child_type.as_deref(),
+                &child.node,
+            );
+        }
+    }
+
+    fn find_live_node_mut(live: &mut LiveNode, widget_id: i64) -> Option<&mut LiveNode> {
+        if live.widget_id == widget_id {
+            return Some(live);
+        }
+        for child in &mut live.children {
+            if let Some(found) = find_live_node_mut(&mut child.node, widget_id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn find_widget_context(
+        state: &RealGtkState,
+        widget_id: i64,
+    ) -> Option<(i64, Option<i64>, Option<String>, &LiveNode)> {
+        fn walk<'a>(
+            live: &'a LiveNode,
+            widget_id: i64,
+            root_id: i64,
+            parent_id: Option<i64>,
+            child_type: Option<&str>,
+        ) -> Option<(i64, Option<i64>, Option<String>, &'a LiveNode)> {
+            if live.widget_id == widget_id {
+                return Some((root_id, parent_id, child_type.map(str::to_string), live));
+            }
+            for child in &live.children {
+                if let Some(found) = walk(
+                    &child.node,
+                    widget_id,
+                    root_id,
+                    Some(live.widget_id),
+                    child.child_type.as_deref(),
+                ) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+
+        for (&root_id, live) in &state.live_trees {
+            if let Some(found) = walk(live, widget_id, root_id, None, None) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn resolve_widget_id(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<i64, Gtk4Error> {
+        let named_id = params
+            .get("name")
+            .and_then(|value| value.as_str())
+            .map(|name| {
+                state.named_widgets.get(name).copied().ok_or_else(|| {
+                    Gtk4Error::new(format!("gtk ui debug unknown widget name '{name}'"))
+                })
+            })
+            .transpose()?;
+        let numeric_id = params.get("id").and_then(|value| value.as_i64());
+
+        match (named_id, numeric_id) {
+            (Some(name_id), Some(id)) if name_id != id => Err(Gtk4Error::new(format!(
+                "gtk ui debug widget target mismatch: name resolved to {name_id}, id was {id}"
+            ))),
+            (Some(id), _) => {
+                let _ = widget_ptr(state, id, "uiDebugResolve")?;
+                Ok(id)
+            }
+            (None, Some(id)) => {
+                let _ = widget_ptr(state, id, "uiDebugResolve")?;
+                Ok(id)
+            }
+            (None, None) => Err(Gtk4Error::new(
+                "gtk ui debug expected one of: name (string) or id (integer)",
+            )),
+        }
+    }
+
+    fn enqueue_signal_event(
+        state: &mut RealGtkState,
+        widget_id: i64,
+        signal: &str,
+        handler: &str,
+        payload: &str,
+    ) -> Result<(), Gtk4Error> {
+        if widget_id != 0 {
+            let _ = widget_ptr(state, widget_id, "uiDebugEmit")?;
+        }
+        let event = SignalEventState {
+            widget_id,
+            signal: signal.to_string(),
+            handler: handler.to_string(),
+            payload: payload.to_string(),
+        };
+        let widget_name = state
+            .widget_id_to_name
+            .get(&widget_id)
+            .cloned()
+            .unwrap_or_default();
+        let typed_event = make_signal_event(event.clone(), widget_name);
+        state
+            .signal_senders
+            .retain(|sender| sender.send(typed_event.clone()).is_ok());
+        state.signal_events.push_back(event);
+        Ok(())
+    }
+
+    fn update_live_prop(state: &mut RealGtkState, widget_id: i64, key: &str, value: String) {
+        for live in state.live_trees.values_mut() {
+            if let Some(node) = find_live_node_mut(live, widget_id) {
+                node.props.insert(key.to_string(), value);
+                return;
+            }
+        }
+    }
+
+    fn ui_debug_ok_response(id: Value, result: Value) -> Value {
+        json!({
+            "ok": true,
+            "id": id,
+            "result": result
+        })
+    }
+
+    fn ui_debug_error_response(id: Value, message: impl Into<String>) -> Value {
+        json!({
+            "ok": false,
+            "id": id,
+            "error": {
+                "message": message.into()
+            }
+        })
+    }
+
+    fn ui_debug_all_root_ids(state: &RealGtkState) -> Vec<i64> {
+        let mut root_ids = state.live_trees.keys().copied().collect::<Vec<_>>();
+        root_ids.sort_unstable();
+        root_ids
+    }
+
+    fn ui_debug_all_window_ids(state: &RealGtkState) -> Vec<i64> {
+        let mut window_ids = state.windows.keys().copied().collect::<Vec<_>>();
+        window_ids.sort_unstable();
+        window_ids
+    }
+
+    fn ui_debug_window_json(state: &RealGtkState, window_id: i64) -> Result<Value, Gtk4Error> {
+        let widget =
+            state.windows.get(&window_id).copied().ok_or_else(|| {
+                Gtk4Error::new(format!("gtk ui debug unknown window id {window_id}"))
+            })?;
+        Ok(json!({
+            "id": window_id,
+            "name": state.widget_id_to_name.get(&window_id),
+            "className": "GtkWindow",
+            "kind": "window",
+            "rootId": Value::Null,
+            "parentId": Value::Null,
+            "childType": Value::Null,
+            "props": {},
+            "signals": [],
+            "dimensions": widget_dimensions_json(state, window_id),
+            "state": {
+                "visible": widget_bool_property(widget, "visible"),
+                "sensitive": widget_bool_property(widget, "sensitive")
+            },
+            "capabilities": {
+                "inspect": true,
+                "click": false,
+                "type": false,
+                "select": false,
+                "keyPress": true
+            },
+            "children": []
+        }))
+    }
+
+    fn ui_debug_hello_result(state: &RealGtkState) -> Value {
+        let root_ids = ui_debug_all_root_ids(state);
+        let window_ids = ui_debug_all_window_ids(state);
+        json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootIds": root_ids,
+            "windowIds": window_ids,
+            "windowCount": state.windows.len(),
+            "widgetCount": state.widgets.len(),
+            "namedWidgetCount": state.named_widgets.len(),
+            "actions": ["click", "type", "select", "keyPress"],
+            "inspectors": ["listWidgets", "inspectWidget", "dumpTree"]
+        })
+    }
+
+    fn ui_debug_list_widgets_result(state: &RealGtkState) -> Value {
+        let root_ids = ui_debug_all_root_ids(state);
+        let mut widgets = Vec::new();
+        for root_id in &root_ids {
+            if let Some(root) = state.live_trees.get(root_id) {
+                collect_widget_summaries(state, &mut widgets, *root_id, None, None, root);
+            }
+        }
+        widgets.sort_by_key(|widget| widget.get("id").and_then(Value::as_i64).unwrap_or_default());
+        json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootIds": root_ids,
+            "widgetCount": widgets.len(),
+            "widgets": widgets
+        })
+    }
+
+    fn ui_debug_dump_tree_result(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        if let Some(root_id) = params.get("rootId").and_then(Value::as_i64) {
+            let root = state
+                .live_trees
+                .get(&root_id)
+                .ok_or_else(|| Gtk4Error::new(format!("gtk ui debug unknown root id {root_id}")))?;
+            return Ok(json!({
+                "protocol": "aivi.gtk.debug.v1",
+                "rootId": root_id,
+                "tree": live_node_json(state, root_id, None, None, root)
+            }));
+        }
+
+        let root_ids = ui_debug_all_root_ids(state);
+        let trees = root_ids
+            .iter()
+            .filter_map(|root_id| {
+                state
+                    .live_trees
+                    .get(root_id)
+                    .map(|root| live_node_json(state, *root_id, None, None, root))
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootIds": root_ids,
+            "trees": trees
+        }))
+    }
+
+    fn ui_debug_inspect_widget_result(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_widget_id(state, params)?;
+        if state.windows.contains_key(&widget_id) && find_widget_context(state, widget_id).is_none()
+        {
+            return Ok(json!({
+                "protocol": "aivi.gtk.debug.v1",
+                "widget": ui_debug_window_json(state, widget_id)?
+            }));
+        }
+        let (root_id, parent_id, child_type, live) = find_widget_context(state, widget_id)
+            .ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live)
+        }))
+    }
+
+    fn resolve_key_press_target_id(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<i64, Gtk4Error> {
+        let has_explicit_target =
+            params.get("name").is_some() || params.get("id").and_then(Value::as_i64).is_some();
+        if has_explicit_target {
+            return resolve_widget_id(state, params);
+        }
+
+        let window_ids = ui_debug_all_window_ids(state);
+        if window_ids.len() == 1 {
+            return Ok(window_ids[0]);
+        }
+
+        let root_ids = ui_debug_all_root_ids(state);
+        if root_ids.len() == 1 {
+            return Ok(root_ids[0]);
+        }
+
+        Err(Gtk4Error::new(
+            "gtk ui debug keyPress needs an explicit target when the session has multiple windows or roots",
+        ))
+    }
+
+    fn ui_debug_key_press_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_key_press_target_id(state, params)?;
+        let key = params
+            .get("key")
+            .and_then(Value::as_str)
+            .ok_or_else(|| Gtk4Error::new("gtk ui debug keyPress requires key"))?;
+        let detail = params
+            .get("detail")
+            .and_then(Value::as_str)
+            .unwrap_or("mcp");
+        let payload = format!("{key}\n{detail}");
+        enqueue_signal_event(state, widget_id, "key-pressed", "", &payload)?;
+
+        let target = if let Some((root_id, parent_id, child_type, live)) =
+            find_widget_context(state, widget_id)
+        {
+            json!({
+                "rootId": root_id,
+                "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live)
+            })
+        } else if state.windows.contains_key(&widget_id) {
+            json!({
+                "rootId": Value::Null,
+                "widget": ui_debug_window_json(state, widget_id)?
+            })
+        } else {
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug keyPress target {widget_id} disappeared after dispatch"
+            )));
+        };
+
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "targetId": widget_id,
+            "key": key,
+            "detail": detail,
+            "emitted": [{
+                "signal": "key-pressed",
+                "handler": "",
+                "payload": payload
+            }],
+            "target": target
+        }))
+    }
+
+    fn ui_debug_click_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_widget_id(state, params)?;
+        let (root_id, bindings) = {
+            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+            let bindings = live
+                .signals
+                .iter()
+                .filter(|binding| matches!(binding.signal.as_str(), "clicked" | "activate"))
+                .cloned()
+                .collect::<Vec<_>>();
+            (root_id, bindings)
+        };
+        if bindings.is_empty() {
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug widget {widget_id} has no clickable signal bindings"
+            )));
+        }
+        let mut emitted = Vec::new();
+        for binding in &bindings {
+            enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, "")?;
+            emitted.push(json!({
+                "signal": binding.signal,
+                "handler": binding.handler
+            }));
+        }
+        let (_, parent_id, child_type, live) =
+            find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} disappeared after click dispatch"
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootId": root_id,
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+            "emitted": emitted
+        }))
+    }
+
+    fn ui_debug_type_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_widget_id(state, params)?;
+        let text = params
+            .get("text")
+            .and_then(Value::as_str)
+            .ok_or_else(|| Gtk4Error::new("gtk ui debug type requires text"))?;
+        let (root_id, class_name, bindings) = {
+            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+            (
+                root_id,
+                live.class_name.clone(),
+                live.signals
+                    .iter()
+                    .filter(|binding| {
+                        binding.signal == "changed" || binding.signal == "notify::text"
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+        };
+        if !is_text_input_class(&class_name) {
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug widget {widget_id} does not support typing"
+            )));
+        }
+        let widget = widget_ptr(state, widget_id, "uiDebugType")?;
+        let text_c = c_text(text, "gtk ui debug invalid text payload")?;
+        unsafe {
+            if matches!(class_name.as_str(), "GtkEntry" | "GtkPasswordEntry") {
+                gtk_editable_set_text(widget, text_c.as_ptr());
+            } else {
+                let prop_c = CString::new("text").unwrap();
+                gobject_set_str(widget, &prop_c, &text_c);
+            }
+        }
+        update_live_prop(state, widget_id, "text", text.to_string());
+        let mut emitted = Vec::new();
+        for binding in &bindings {
+            enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, text)?;
+            emitted.push(json!({
+                "signal": binding.signal,
+                "handler": binding.handler
+            }));
+        }
+        let (_, parent_id, child_type, live) =
+            find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} disappeared after typing"
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootId": root_id,
+            "text": text,
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+            "emitted": emitted
+        }))
+    }
+
+    fn ui_debug_select_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_widget_id(state, params)?;
+        let value = params
+            .get("value")
+            .and_then(Value::as_str)
+            .ok_or_else(|| Gtk4Error::new("gtk ui debug select requires value"))?;
+        let (root_id, class_name, kind, bindings) = {
+            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+            (
+                root_id,
+                live.class_name.clone(),
+                live.kind,
+                live.signals.clone(),
+            )
+        };
+        let widget = widget_ptr(state, widget_id, "uiDebugSelect")?;
+        let mut emitted = Vec::new();
+
+        if matches!(kind, CreatedWidgetKind::Stack) {
+            let page_c = c_text(value, "gtk ui debug invalid stack page name")?;
+            unsafe { gtk_stack_set_visible_child_name(widget, page_c.as_ptr()) };
+            update_live_prop(state, widget_id, "visible-child-name", value.to_string());
+            for binding in bindings
+                .iter()
+                .filter(|binding| binding.signal == "notify::visible-child-name")
+            {
+                enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, value)?;
+                emitted.push(json!({
+                    "signal": binding.signal,
+                    "handler": binding.handler
+                }));
+            }
+        } else if is_toggle_class(&class_name) {
+            let active = parse_bool_text(value).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug select expected a boolean-like value for widget {widget_id}"
+                ))
+            })?;
+            let prop_c = CString::new("active").unwrap();
+            unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(active)) };
+            update_live_prop(state, widget_id, "active", active.to_string());
+            let payload = if active { "true" } else { "false" };
+            for binding in bindings
+                .iter()
+                .filter(|binding| binding.signal == "toggled" || binding.signal == "notify::active")
+            {
+                enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, payload)?;
+                emitted.push(json!({
+                    "signal": binding.signal,
+                    "handler": binding.handler
+                }));
+            }
+        } else {
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug widget {widget_id} does not support select"
+            )));
+        }
+
+        let (_, parent_id, child_type, live) =
+            find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} disappeared after selection"
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootId": root_id,
+            "value": value,
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+            "emitted": emitted
+        }))
+    }
+
+    fn ui_debug_handle_request(state: &mut RealGtkState, token: &str, request: &Value) -> Value {
+        let id = request.get("id").cloned().unwrap_or(Value::Null);
+        let request_token = request
+            .get("token")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if request_token != token {
+            return ui_debug_error_response(id, "unauthorized");
+        }
+        let method = match request.get("method").and_then(Value::as_str) {
+            Some(method) => method,
+            None => return ui_debug_error_response(id, "missing method"),
+        };
+        let params = match request.get("params") {
+            Some(Value::Object(map)) => map,
+            Some(_) => return ui_debug_error_response(id, "params must be an object"),
+            None => {
+                static EMPTY_PARAMS: OnceLock<Map<String, Value>> = OnceLock::new();
+                EMPTY_PARAMS.get_or_init(Map::new)
+            }
+        };
+
+        let result = match method {
+            "hello" => Ok(ui_debug_hello_result(state)),
+            "listNamedWidgets" => Ok(ui_debug_list_widgets_result(state)),
+            "dumpLiveTree" => ui_debug_dump_tree_result(state, params),
+            "inspectWidget" => ui_debug_inspect_widget_result(state, params),
+            "click" => ui_debug_click_result(state, params),
+            "type" => ui_debug_type_result(state, params),
+            "select" => ui_debug_select_result(state, params),
+            "keyPress" => ui_debug_key_press_result(state, params),
+            _ => Err(Gtk4Error::new(format!(
+                "gtk ui debug unknown method {method}"
+            ))),
+        };
+
+        match result {
+            Ok(result) => ui_debug_ok_response(id, result),
+            Err(err) => ui_debug_error_response(id, err.to_string()),
+        }
+    }
+
+    fn ui_debug_handle_line(state: &mut RealGtkState, token: &str, line: &str) -> Value {
+        match serde_json::from_str::<Value>(line) {
+            Ok(request) => ui_debug_handle_request(state, token, &request),
+            Err(err) => ui_debug_error_response(Value::Null, format!("invalid json: {err}")),
+        }
+    }
+
+    fn process_ui_debug_connection(
+        state: &mut RealGtkState,
+        token: &str,
+        stream: UnixStream,
+    ) -> Result<(), Gtk4Error> {
+        stream
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug read timeout failed: {err}")))?;
+        stream
+            .set_write_timeout(Some(Duration::from_millis(200)))
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug write timeout failed: {err}")))?;
+        let reader_stream = stream
+            .try_clone()
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug clone failed: {err}")))?;
+        let mut reader = BufReader::new(reader_stream);
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug read failed: {err}")))?;
+        let response = ui_debug_handle_line(state, token, line.trim_end_matches('\n'));
+        let mut writer = stream;
+        let mut bytes = serde_json::to_vec(&response)
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug encode failed: {err}")))?;
+        bytes.push(b'\n');
+        writer
+            .write_all(&bytes)
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug write failed: {err}")))?;
+        Ok(())
+    }
+
+    fn process_ui_debug_requests(state: &mut RealGtkState) -> Result<(), Gtk4Error> {
+        let token = match state.ui_debug.as_ref() {
+            Some(server) => server.token.clone(),
+            None => return Ok(()),
+        };
+        let mut streams = Vec::new();
+        if let Some(server) = state.ui_debug.as_mut() {
+            loop {
+                match server.listener.accept() {
+                    Ok((stream, _)) => streams.push(stream),
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(err) => {
+                        return Err(Gtk4Error::new(format!("gtk ui debug accept failed: {err}")))
+                    }
+                }
+            }
+        }
+        for stream in streams {
+            if let Err(err) = process_ui_debug_connection(state, &token, stream) {
+                eprintln!("AIVI GTK UI debug request failed: {}", err);
+            }
+        }
+        Ok(())
+    }
+
+    unsafe extern "C" fn ui_debug_tick_cb(_data: *mut c_void) -> c_int {
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if let Err(err) = process_ui_debug_requests(&mut state) {
+                eprintln!("AIVI GTK UI debug server error: {}", err);
+            }
+        });
+        1
+    }
+
+    fn maybe_start_ui_debug_server(state: &mut RealGtkState) -> Result<(), Gtk4Error> {
+        if state.ui_debug.is_some() {
+            return Ok(());
+        }
+        let enabled = std::env::var("AIVI_UI_DEBUG")
+            .ok()
+            .and_then(|value| parse_bool_text(&value))
+            .unwrap_or(false);
+        if !enabled {
+            return Ok(());
+        }
+        let socket_path = std::env::var("AIVI_UI_DEBUG_SOCKET")
+            .map_err(|_| Gtk4Error::new("AIVI_UI_DEBUG_SOCKET is required when AIVI_UI_DEBUG=1"))?;
+        let token = std::env::var("AIVI_UI_DEBUG_TOKEN")
+            .map_err(|_| Gtk4Error::new("AIVI_UI_DEBUG_TOKEN is required when AIVI_UI_DEBUG=1"))?;
+        if socket_path.is_empty() {
+            return Err(Gtk4Error::new("AIVI_UI_DEBUG_SOCKET cannot be empty"));
+        }
+        if token.is_empty() {
+            return Err(Gtk4Error::new("AIVI_UI_DEBUG_TOKEN cannot be empty"));
+        }
+        match fs::remove_file(&socket_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(Gtk4Error::new(format!(
+                    "failed to remove stale ui debug socket {socket_path}: {err}"
+                )))
+            }
+        }
+        let listener = UnixListener::bind(&socket_path).map_err(|err| {
+            Gtk4Error::new(format!(
+                "failed to bind ui debug socket {socket_path}: {err}"
+            ))
+        })?;
+        listener.set_nonblocking(true).map_err(|err| {
+            Gtk4Error::new(format!(
+                "failed to mark ui debug socket non-blocking: {err}"
+            ))
+        })?;
+        state.ui_debug = Some(UiDebugServer {
+            socket_path,
+            token,
+            listener,
+        });
+        if !state.ui_debug_tick_registered {
+            unsafe { g_timeout_add(16, ui_debug_tick_cb, null_mut()) };
+            state.ui_debug_tick_registered = true;
+        }
+        Ok(())
+    }
+
+    fn shutdown_ui_debug_server(state: &mut RealGtkState) {
+        if let Some(server) = state.ui_debug.take() {
+            let _ = fs::remove_file(server.socket_path);
+        }
     }
 
     fn parse_i32_text(text: &str) -> Option<i32> {
@@ -2791,6 +3698,12 @@ mod linux_impl {
                         g_main_context_iteration(ctx, 0);
                     }
                 }
+                GTK_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if let Err(err) = process_ui_debug_requests(&mut state) {
+                        eprintln!("AIVI GTK UI debug server error: {}", err);
+                    }
+                });
                 let actions: Vec<String> = pending_tray_actions()
                     .lock()
                     .map(|mut q| q.drain(..).collect())
@@ -2860,8 +3773,9 @@ mod linux_impl {
             let mut state = state.borrow_mut();
             let id = state.alloc_id();
             state.apps.insert(id, raw);
-            id
-        });
+            maybe_start_ui_debug_server(&mut state)?;
+            Ok(id)
+        })?;
         GTK_PUMP_ACTIVE.with(|active| *active.borrow_mut() = true);
         Ok(id)
     }
@@ -2878,6 +3792,7 @@ mod linux_impl {
         unsafe {
             let _ = g_application_run(app, 0, null_mut());
         }
+        GTK_STATE.with(|state| shutdown_ui_debug_server(&mut state.borrow_mut()));
         Ok(())
     }
 
