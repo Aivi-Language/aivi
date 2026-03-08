@@ -1688,6 +1688,41 @@ topoSmoke = do Effect {
 
 ---
 
+## 21 REPL (`aivi repl`)
+
+`aivi repl` opens an interactive session with the prelude pre-loaded. It is the fastest way to try snippets without creating a project.
+
+```bash
+aivi repl            # full-screen TUI (default when stdin is a terminal)
+aivi repl --plain    # plain read-eval-print, pipe-friendly
+aivi repl --color    # force ANSI colour
+aivi repl --no-color # disable ANSI colour
+```
+
+**Inside the session**
+
+- Type any AIVI expression or definition and press Enter to evaluate.
+- Use Shift+Enter for multi-line input; Ctrl+D (on empty input) to exit.
+- Ctrl+L clears the transcript. Tab toggles the symbol pane.
+
+**Key slash commands**
+
+| Command | What it does |
+| --- | --- |
+| `/help` | Print all commands |
+| `/use aivi.text` | Add a module import for this session |
+| `/types`, `/values`, `/functions`, `/modules` | Browse symbols in scope |
+| `/history [n]` | Show the last n inputs |
+| `/load path/to/file.aivi` | Load a file into the session |
+| `/clear` | Clear transcript (keep definitions) |
+| `/reset` | Clear transcript and all session state |
+| `/openapi file spec.yaml [as petstore]` | Inject OpenAPI spec file as a typed module |
+| `/openapi url https://... [as petstore]` | Inject OpenAPI spec from URL as a typed module |
+
+The `/openapi` commands inject `@static`-style bindings (typed per the OpenAPI schema) so you can call the API's operations immediately. The module name defaults to a slug of the spec's `info.title`; pass `as <name>` to override it.
+
+---
+
 ## Anti-Patterns (Do NOT write these)
 
 | Wrong                  | Why                              | Correct                                             |

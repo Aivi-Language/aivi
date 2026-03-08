@@ -51,6 +51,7 @@ If you are skimming, start from the workflow you want:
 | type-check quickly | `aivi check` |
 | format code | `aivi fmt` |
 | run AIVI tests | `aivi test` |
+| explore and experiment interactively | `aivi repl` |
 | inspect compiler stages | `aivi parse`, `aivi desugar`, `aivi kernel`, `aivi rust-ir` |
 | start editor tooling | `aivi lsp` |
 | expose tooling over MCP | `aivi mcp serve` |
@@ -324,6 +325,52 @@ aivi rust-ir [--debug-trace] <path|dir/...>
 ```
 
 These inspection commands (`parse`, `desugar`, `kernel`, `rust-ir`) are mainly for debugging compiler behavior. Most application authors can ignore them until they need to understand how a program is being lowered.
+
+#### `repl`
+
+Starts an interactive Read-Eval-Print Loop for the AIVI language.
+
+```bash
+aivi repl [--color] [--no-color] [--plain]
+```
+
+- `--color`: force ANSI color output even when stdout is not a terminal.
+- `--no-color`: disable ANSI color output.
+- `--plain`: plain read-eval-print mode — no TUI, pipe-friendly. Automatically selected when stdin is not a terminal.
+
+With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and all stdlib symbols are immediately in scope.
+
+**Keyboard shortcuts (TUI mode)**
+
+| Key | Action |
+| --- | --- |
+| Enter | Submit input |
+| Shift+Enter | Insert newline (multi-line input) |
+| ↑ / ↓ | Navigate history |
+| Ctrl+L | Clear transcript |
+| Ctrl+C | Cancel current input |
+| Ctrl+D | Exit (on empty input) |
+| Tab | Toggle symbol pane |
+| Esc | Close symbol pane |
+
+**Slash commands**
+
+| Command | Description |
+| --- | --- |
+| `/help` | Print command reference |
+| `/use <module.path>` | Add an import to the session (e.g. `/use aivi.text`) |
+| `/types [filter]` | List types in scope (stdlib + session); optional substring filter |
+| `/values [filter]` | List session-defined values with their inferred types |
+| `/functions [filter]` | List functions in scope (stdlib + session) |
+| `/modules` | Show loaded modules in the session |
+| `/clear` | Clear the transcript while keeping all session state |
+| `/reset` | Clear the transcript and reset all session state |
+| `/history [n]` | Show the last `n` inputs (default: 20) |
+| `/load <path>` | Load a `.aivi` file into the session |
+| `/openapi file <path> [as <name>]` | Inject an OpenAPI spec file as a `@static` module |
+| `/openapi url <url> [as <name>]` | Inject an OpenAPI spec from a URL as a `@static` module |
+
+The `/openapi` commands inject typed API bindings into the session under the given module name (or a name derived from the spec's `info.title`). They use the same `@static` OpenAPI mechanism as the language's compile-time external source support.
 
 ### Services
 

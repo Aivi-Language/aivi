@@ -438,7 +438,7 @@ mod linux_impl {
         payload: String,
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     #[allow(dead_code)]
     enum SignalPayloadKind {
         None,
@@ -466,7 +466,7 @@ mod linux_impl {
         }
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum CreatedWidgetKind {
         Box,
         Button,
@@ -630,6 +630,159 @@ mod linux_impl {
             CreatedWidgetKind::PreferencesGroup => "preferences_group",
             CreatedWidgetKind::ActionRow => "action_row",
             CreatedWidgetKind::Other => "other",
+        }
+    }
+
+    fn widget_debug_label(widget_id: i64, class_name: &str, node_id: Option<&str>) -> String {
+        let class_name = if class_name.is_empty() {
+            "<unknown-class>"
+        } else {
+            class_name
+        };
+        match node_id {
+            Some(node_id) => format!("widget #{widget_id} ({class_name} id={node_id})"),
+            None => format!("widget #{widget_id} ({class_name})"),
+        }
+    }
+
+    fn known_signals_for_class(class_name: &str) -> &'static [&'static str] {
+        match class_name {
+            "GtkButton" => &["clicked"],
+            "GtkEntry" | "GtkPasswordEntry" => &["changed", "activate"],
+            "AdwEntryRow" | "AdwPasswordEntryRow" => &["changed"],
+            "GtkCheckButton" | "AdwSwitchRow" => &["toggled"],
+            "GtkRange" | "GtkScale" => &["value-changed"],
+            "AdwOverlaySplitView" => &["notify::show-sidebar"],
+            _ => &[],
+        }
+    }
+
+    fn known_signal_note(class_name: &str) -> String {
+        let signals = known_signals_for_class(class_name);
+        if signals.is_empty() {
+            "Known supported signals for this class: none.".to_string()
+        } else {
+            format!(
+                "Known supported signals for this class: {}.",
+                signals.join(", ")
+            )
+        }
+    }
+
+    fn invalid_signal_error(
+        operation: &str,
+        widget_id: i64,
+        class_name: &str,
+        node_id: Option<&str>,
+        binding: &SignalBindingState,
+    ) -> Gtk4Error {
+        Gtk4Error::new(format!(
+            "gtk4.{operation} unsupported signal `{}` on {} bound to `{}`. {}",
+            binding.signal,
+            widget_debug_label(widget_id, class_name, node_id),
+            binding.handler,
+            known_signal_note(class_name)
+        ))
+    }
+
+    fn expected_preferences_child(
+        parent_kind: CreatedWidgetKind,
+    ) -> Option<(CreatedWidgetKind, &'static str, &'static str)> {
+        match parent_kind {
+            CreatedWidgetKind::PreferencesDialog => Some((
+                CreatedWidgetKind::PreferencesPage,
+                "AdwPreferencesPage",
+                "libadwaita preferences dialogs only accept AdwPreferencesPage children.",
+            )),
+            CreatedWidgetKind::PreferencesPage => Some((
+                CreatedWidgetKind::PreferencesGroup,
+                "AdwPreferencesGroup",
+                "libadwaita preferences pages only accept AdwPreferencesGroup children.",
+            )),
+            _ => None,
+        }
+    }
+
+    fn validate_special_child_attachment(
+        operation: &str,
+        parent_id: i64,
+        parent_class: &str,
+        parent_kind: CreatedWidgetKind,
+        parent_node_id: Option<&str>,
+        child_id: i64,
+        child_class: &str,
+        child_kind: CreatedWidgetKind,
+        child_node_id: Option<&str>,
+    ) -> Result<(), Gtk4Error> {
+        let Some((expected_kind, expected_class, note)) = expected_preferences_child(parent_kind)
+        else {
+            return Ok(());
+        };
+        if child_kind == expected_kind {
+            return Ok(());
+        }
+        Err(Gtk4Error::new(format!(
+            "gtk4.{operation} invalid child attachment: {} expected a child with class `{expected_class}`, but got {}. {note}",
+            widget_debug_label(parent_id, parent_class, parent_node_id),
+            widget_debug_label(child_id, child_class, child_node_id),
+        )))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn adw_switch_row_reports_toggle_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("AdwSwitchRow", "toggled"),
+                Some(SignalPayloadKind::ToggleActive)
+            );
+            assert_eq!(known_signals_for_class("AdwSwitchRow"), &["toggled"]);
+        }
+
+        #[test]
+        fn unsupported_signal_error_includes_widget_context() {
+            let binding = SignalBindingState {
+                signal: "clicked".to_string(),
+                handler: "Save".to_string(),
+            };
+            let err = invalid_signal_error(
+                "buildFromNode",
+                12,
+                "GtkBox",
+                Some("settings-panel"),
+                &binding,
+            );
+            assert!(err
+                .message
+                .contains("widget #12 (GtkBox id=settings-panel)"));
+            assert!(err.message.contains("bound to `Save`"));
+            assert!(err
+                .message
+                .contains("Known supported signals for this class: none."));
+        }
+
+        #[test]
+        fn preferences_page_child_mismatch_names_expected_class() {
+            let err = validate_special_child_attachment(
+                "buildFromNode",
+                4,
+                "AdwPreferencesPage",
+                CreatedWidgetKind::PreferencesPage,
+                Some("settings-page"),
+                9,
+                "GtkBox",
+                CreatedWidgetKind::Box,
+                Some("account-connection"),
+            )
+            .expect_err("expected invalid child mismatch");
+            assert!(err
+                .message
+                .contains("expected a child with class `AdwPreferencesGroup`"));
+            assert!(err
+                .message
+                .contains("widget #9 (GtkBox id=account-connection)"));
         }
     }
 
@@ -2057,7 +2210,9 @@ mod linux_impl {
             | ("GtkPasswordEntry", "activate")
             | ("AdwEntryRow", "changed")
             | ("AdwPasswordEntryRow", "changed") => Some(SignalPayloadKind::EditableText),
-            ("GtkCheckButton", "toggled") => Some(SignalPayloadKind::ToggleActive),
+            ("GtkCheckButton", "toggled") | ("AdwSwitchRow", "toggled") => {
+                Some(SignalPayloadKind::ToggleActive)
+            }
             ("GtkRange", "value-changed") | ("GtkScale", "value-changed") => {
                 Some(SignalPayloadKind::FloatValue)
             }
@@ -2070,13 +2225,14 @@ mod linux_impl {
         widget: *mut c_void,
         widget_id: i64,
         class_name: &str,
+        node_id: Option<&str>,
+        operation: &str,
         binding: &SignalBindingState,
     ) -> Result<c_ulong, Gtk4Error> {
         let Some(payload_kind) = signal_payload_kind_for(class_name, &binding.signal) else {
-            return Err(Gtk4Error::new(format!(
-                "gtk4.buildFromNode unsupported signal `{}` on class `{class_name}`",
-                binding.signal
-            )));
+            return Err(invalid_signal_error(
+                operation, widget_id, class_name, node_id, binding,
+            ));
         };
         let signal_c = c_text(&binding.signal, "gtk4.buildFromNode invalid signal name")?;
         let callback_data = Box::new(SignalCallbackData {
@@ -3118,7 +3274,8 @@ mod linux_impl {
         }
 
         let id = state.alloc_id();
-        if let Some(object_id) = node_attr(attrs, "id") {
+        let node_id = node_attr(attrs, "id").map(str::to_string);
+        if let Some(object_id) = node_id.as_deref() {
             id_map.insert(object_id.to_string(), id);
             if let Ok(name_c) = CString::new(object_id.as_bytes()) {
                 unsafe {
@@ -3189,7 +3346,14 @@ mod linux_impl {
         apply_widget_properties(raw, class_name, &props, state)?;
         let mut signal_handler_ids = Vec::new();
         for binding in &signal_bindings {
-            let hid = connect_widget_signal(raw, id, class_name, binding)?;
+            let hid = connect_widget_signal(
+                raw,
+                id,
+                class_name,
+                node_id.as_deref(),
+                "buildFromNode",
+                binding,
+            )?;
             signal_handler_ids.push(hid);
         }
 
@@ -3230,6 +3394,17 @@ mod linux_impl {
 
             let (child_id, child_live) = build_widget_from_node_real(state, child.node, id_map)?;
             let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
+            validate_special_child_attachment(
+                "buildFromNode",
+                id,
+                class_name,
+                kind,
+                node_id.as_deref(),
+                child_id,
+                &child_live.class_name,
+                child_live.kind,
+                child_live.node_id.as_deref(),
+            )?;
 
             // Track for scroll-fade auto-wiring
             if matches!(kind, CreatedWidgetKind::Overlay) {
@@ -3329,7 +3504,6 @@ mod linux_impl {
             }
         }
 
-        let node_id = node_attr(attrs, "id").map(str::to_string);
         let live = LiveNode {
             widget_id: id,
             class_name: class_name.to_string(),
@@ -3443,11 +3617,29 @@ mod linux_impl {
     /// Add a child widget to a parent container (mirrors the build logic).
     fn add_child_to_parent(
         parent_raw: *mut c_void,
+        parent_id: i64,
         parent_kind: CreatedWidgetKind,
+        parent_class: &str,
+        parent_node_id: Option<&str>,
         child_raw: *mut c_void,
+        child_id: i64,
+        child_kind: CreatedWidgetKind,
+        child_class: &str,
+        child_node_id: Option<&str>,
         child_type: Option<&str>,
         overlay_index: usize,
-    ) {
+    ) -> Result<(), Gtk4Error> {
+        validate_special_child_attachment(
+            "reconcileNode",
+            parent_id,
+            parent_class,
+            parent_kind,
+            parent_node_id,
+            child_id,
+            child_class,
+            child_kind,
+            child_node_id,
+        )?;
         match parent_kind {
             CreatedWidgetKind::Box => unsafe { gtk_box_append(parent_raw, child_raw) },
             CreatedWidgetKind::Button => unsafe { gtk_button_set_child(parent_raw, child_raw) },
@@ -3498,6 +3690,7 @@ mod linux_impl {
             }
             CreatedWidgetKind::Other => {}
         }
+        Ok(())
     }
 
     /// Reconcile a single live node against a new GtkNode.
@@ -3548,7 +3741,14 @@ mod linux_impl {
         // Reconnect signals
         let mut new_handler_ids = Vec::new();
         for binding in &new_signals {
-            let hid = connect_widget_signal(raw, live.widget_id, new_class, binding)?;
+            let hid = connect_widget_signal(
+                raw,
+                live.widget_id,
+                new_class,
+                live.node_id.as_deref(),
+                "reconcileNode",
+                binding,
+            )?;
             new_handler_ids.push(hid);
         }
         live.signals = new_signals;
@@ -3625,20 +3825,34 @@ mod linux_impl {
                     } else {
                         add_child_to_parent(
                             parent_raw,
+                            parent_id,
                             parent_kind,
+                            &parent.class_name,
+                            parent.node_id.as_deref(),
                             new_raw,
+                            new_id,
+                            new_live.kind,
+                            &new_live.class_name,
+                            new_live.node_id.as_deref(),
                             new_children[i].child_type.as_deref(),
                             i,
-                        );
+                        )?;
                     }
                 } else {
                     add_child_to_parent(
                         parent_raw,
+                        parent_id,
                         parent_kind,
+                        &parent.class_name,
+                        parent.node_id.as_deref(),
                         new_raw,
+                        new_id,
+                        new_live.kind,
+                        &new_live.class_name,
+                        new_live.node_id.as_deref(),
                         new_children[i].child_type.as_deref(),
                         i,
-                    );
+                    )?;
                 }
                 parent.children[i] = LiveChild {
                     child_type: new_children[i].child_type.clone(),
@@ -3672,11 +3886,18 @@ mod linux_impl {
             let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
             add_child_to_parent(
                 parent_raw,
+                parent_id,
                 parent_kind,
+                &parent.class_name,
+                parent.node_id.as_deref(),
                 new_raw,
+                new_id,
+                new_live.kind,
+                &new_live.class_name,
+                new_live.node_id.as_deref(),
                 new_spec.child_type.as_deref(),
                 i,
-            );
+            )?;
             parent.children.push(LiveChild {
                 child_type: new_spec.child_type.clone(),
                 node: new_live,
