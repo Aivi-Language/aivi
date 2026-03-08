@@ -57,6 +57,8 @@ hmac = "0.12"
 bcrypt = "0.17"
 hex = "0.4"
 subtle = "2"
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
 
 [features]
 default = ["gtk4-libadwaita"]

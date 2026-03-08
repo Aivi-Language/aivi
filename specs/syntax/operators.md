@@ -80,7 +80,7 @@ Some operators are built in, and some are resolved through imported domains when
 
 In AIVI:
 
-- domain-resolved when a non-`Int` carrier is involved: `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`
+- domain-resolved (operators whose behavior depends on the types of their operands, resolved through the active domain) when a non-`Int` carrier is involved: `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`
 - always built in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`
 - domain-resolved through registered `(++)` bindings: `++`
 
@@ -88,7 +88,7 @@ In AIVI:
 
 Domain operator resolution is a static rewrite to an in-scope function such as `(+)` or `(<)`.
 
-### Within-domain overloads (RHS-typed)
+### Within-domain overloads (RHS-typed (right-hand-side-typed))
 
 A domain may define several entries for the same operator token as long as their full types differ. After the compiler knows the left-hand carrier, it can use the right-hand type to choose the correct operator definition.
 

@@ -1,0 +1,8 @@
+JsonValue
+  = JsonNull
+  | JsonBool Bool
+  | JsonInt Int
+  | JsonFloat Float
+  | JsonString Text
+  | JsonArray (List JsonValue)
+  | JsonObject (List (Text, JsonValue))

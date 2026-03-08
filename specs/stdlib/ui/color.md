@@ -72,7 +72,7 @@ The literal templates live inside the domain: `1l`, `1s`, and `1h` create `Delta
 | **adjustSaturation** color amount<br><code>Rgb -> Int -> Rgb</code> | Make a color more vivid or more muted without hand-editing the channels yourself. Negative amounts desaturate. |
 | **adjustHue** color degrees<br><code>Rgb -> Int -> Rgb</code> | Rotate a color around the hue wheel by degrees. Useful when deriving related accents from one base color. |
 | **toRgb** hsl<br><code>Hsl -> Rgb</code> | Convert an `Hsl` value into `Rgb` when another API expects RGB data. Saturation and lightness are clamped into the valid `0.0..1.0` range during conversion. |
-| **toHsl** rgb<br><code>Rgb -> Hsl</code> | Convert `Rgb` into `Hsl` so you can work with hue, saturation, and lightness directly. |
+| **toHsl** rgb<br><code>Rgb -> Hsl</code> | Convert `Rgb` into `Hsl` so you can work with hue, saturation, and lightness directly. Hue wraps at 360 degrees; Saturation and Lightness are each clamped to the `0.0..1.0` range. |
 | **toHex** rgb<br><code>Rgb -> Hex</code> | Render an RGB value as lowercase hex text such as `#4a90e2`. Channels outside `0..255` are clamped while rendering. |
 | **negateDelta** delta<br><code>Delta -> Delta</code> | Reverse a `Lightness`, `Saturation`, or `Hue` delta so subtraction and undo operations stay readable. |
 

@@ -34,7 +34,7 @@ If this is your first pass, skim these and keep moving. The query and migration 
 | **default / ambient connection helper** | a helper such as `db.load` that uses the process-wide connection previously configured with `db.configure` |
 | **delta** | a value that describes a write such as “insert this row” or “update rows matching this predicate” |
 | **savepoint** | a named rollback marker inside a larger transaction |
-| **portable subset** | query shapes that cleanly translate to SQL instead of falling back to older in-memory behavior |
+| **portable subset** | query shapes that translate cleanly to SQL without backend-specific extensions, instead of falling back to older in-memory behavior |
 
 ### First successful workflow
 

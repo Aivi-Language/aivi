@@ -1,7 +1,7 @@
 # `@static` — Compile-Time Evaluation
 
 <!-- quick-info: {"kind":"decorator","name":"@static"} -->
-`@static` evaluates deterministic source reads at compile time and embeds the resulting value into the program as a constant. The running program does not re-read, re-fetch, or re-decode that binding.
+`@static` evaluates deterministic source reads (reads whose inputs are fully known at compile time, such as checked-in files or build metadata) at compile time and embeds the resulting value into the program as a constant. The running program does not re-read, re-fetch, or re-decode that binding.
 <!-- /quick-info -->
 
 Use `@static` when a value should be fetched, read, or generated during compilation instead of at runtime.

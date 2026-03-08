@@ -90,4 +90,4 @@ Predicate sugar does **not** unwrap `Option` or `Result` for you. If a field has
 
 The same rule applies to `Result`: write the structure you mean, for example `(Ok value when value > 10)`, rather than expecting predicate sugar to look through `Ok` or `Err` automatically.
 
-The reason is practical: predicates influence **cardinality**. A failed match inside a predicate is not the same thing as “filter this element out”, so the language requires you to make that choice explicitly.
+The reason is practical: predicates influence **cardinality** (how many results are produced). A failed match inside a predicate is not the same thing as “filter this element out”, so the language requires you to make that choice explicitly.

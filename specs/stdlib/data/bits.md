@@ -20,7 +20,7 @@ The module uses named functions instead of operator symbols. That makes examples
 ## Core ideas
 
 - `Bits` is an immutable byte sequence viewed as binary data.
-- `BitStream` adds a read position so you can step through bytes in order.
+- `BitStream` adds a read position so you can step through bytes in order. Despite the name, the v0.1 `BitStream` API advances in whole bytes.
 - Bit positions are **MSB-first**: bit `0` is the most significant bit of the first byte.
 - Most functions work on whole bytes, but you can also inspect or update individual bits.
 
@@ -69,7 +69,7 @@ Bit indexes are MSB-first, so bit `0` is the left-most bit in the first byte.
 
 `BitStream` is a simple sequential reader. It is helpful when a binary format is laid out field-by-field and you want each read to return the next chunk plus the updated stream.
 
-Despite the name, the v0.1 `BitStream` API advances in whole bytes. `streamRead 2` reads two bytes, `streamSkip 1` skips one byte, and `streamRemaining` reports the number of unread bytes.
+`streamRead 2` reads two bytes, `streamSkip 1` skips one byte, and `streamRemaining` reports the number of unread bytes.
 
 | Function | Type | What it does |
 |:---------|:-----|:-------------|

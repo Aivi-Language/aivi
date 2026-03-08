@@ -61,9 +61,6 @@ A common pattern is:
 - export `domain ...` only when operator or literal syntax is part of the public API
 - export class instances as needed
 
-<<< ../../snippets/from_md/syntax/types/opaque_types/block_04.aivi{aivi}
-
-
 Callers then work through the exported surface instead of the hidden representation:
 
 <<< ../../snippets/from_md/syntax/types/opaque_types/block_01.aivi{aivi}

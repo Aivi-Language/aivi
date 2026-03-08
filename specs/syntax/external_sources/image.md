@@ -33,7 +33,7 @@ Reading only metadata can be cheaper and simpler when you are validating uploads
 
 If you care about the original file/container format, keep the metadata read.
 In the current v0.1 runtime, `file.image` decodes pixels into RGB rows for processing, so its `format` field describes the decoded pixel layout rather than the original on-disk container.
-That conversion also drops alpha information today, because the runtime normalizes successful full-image loads to RGB tuples.
+That conversion also drops alpha information today, because the runtime normalizes successful full-image loads to RGB byte triples (one byte each for red, green, and blue).
 
 ## Current decoded shape in v0.1
 

@@ -45,11 +45,7 @@ Every structured source has one canonical decode stage supplied by its declarati
 
 You do not need to memorize the illustrative model below to use the feature. The everyday API is the set of combinators after it.
 
-Conceptually:
-
-<<< ../../snippets/from_md/syntax/external_sources/composition/block_01.aivi{aivi}
-
-The composition model is expressed with pure combinators. The currently verified surface is:
+Conceptually, every composed source bundles a decode stage from the declaration plus optional policy layers. The composition model is expressed with pure combinators. The currently verified surface is:
 
 <<< ../../snippets/from_md/syntax/external_sources/composition/block_01.aivi{aivi}
 

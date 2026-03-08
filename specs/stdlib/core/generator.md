@@ -34,7 +34,7 @@ The underlying encoding is:
 
 `Generator A ≡ ∀R. (R -> A -> R) -> R -> R`
 
-You do not need that type equation for everyday use. In plain language, it means a generator can feed values into whatever consumer you provide without exposing loops or mutable iteration state. Another way to say it: a generator is a value-producing plan that already knows how to cooperate with folds.
+You do not need that type equation for everyday use. In plain language, a generator takes a fold function (a way to accumulate results one value at a time) and an initial accumulator, then produces a final result — without exposing loops or mutable iteration state. Another way to say it: a generator is a value-producing plan that already knows how to cooperate with folds.
 
 ## What generators are for
 

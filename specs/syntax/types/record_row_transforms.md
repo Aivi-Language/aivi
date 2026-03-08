@@ -17,7 +17,7 @@ For example, `Pick (id, name) User` means “start from `User`, then keep only `
 Likewise, `Rename { createdAt: created_at } User` means “start from `User`, then rename `createdAt` to `created_at`”.
 
 These operators work at the type level only.
-After elaboration, the compiler still works with ordinary closed record types.
+After elaboration (the compiler's expansion of shorthand into full record types), the compiler still works with ordinary closed record types.
 
 ## What each transform does
 
@@ -50,7 +50,7 @@ You can chain these transforms with type-level piping. It mirrors expression pip
 
 <<< ../../snippets/from_md/syntax/types/record_row_transforms_02.aivi{aivi}
 
-desugars to:
+desugars to (rewrites into):
 
 <<< ../../snippets/from_md/syntax/types/record_row_transforms_03.aivi{aivi}
 

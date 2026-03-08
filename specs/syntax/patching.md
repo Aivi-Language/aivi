@@ -94,7 +94,7 @@ Inside a map predicate, the current element is an entry record `{ key, value }`.
 
 ### Constructor focus
 
-Patches can also focus on one constructor inside a sum type.
+Patches can also use constructor-based focuses (selecting a specific constructor branch of an ADT) inside a sum type.
 For example, `Circle.radius` means “only continue if the current value is a `Circle`, then select its `radius` field”.
 
 <<< ../snippets/from_md/syntax/patching/sum_type_focus_prisms.aivi{aivi}

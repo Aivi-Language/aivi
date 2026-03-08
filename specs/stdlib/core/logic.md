@@ -144,7 +144,7 @@ A `Functor` lets you transform values **inside** another structure without chang
 
 ### Applicative
 
-An `Applicative` can lift a plain value into the context with `of` and combine independent computations. In plainer terms: you can prepare several wrapped inputs separately, then combine them at the end.
+An `Applicative` can lift a plain value into the context with `of` and combine independent computations — steps whose results do not depend on each other, so they can be prepared separately before combining. In plainer terms: you can prepare several wrapped inputs separately, then combine them at the end.
 
 <<< ../../snippets/from_md/stdlib/core/logic/applicative.aivi{aivi}
 

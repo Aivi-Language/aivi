@@ -36,7 +36,7 @@ In this document, that “photo” is called a **workspace snapshot**.
 | **fingerprint** | a content-based cache key for an input or checkpoint; if the fingerprint changes, cached results from the old fingerprint are stale |
 | **open-document overlay** | unsaved editor text that temporarily overrides the file on disk for the current LSP session |
 | **definition group** | the chunk of top-level definitions that must be checked together because they refer to one another |
-| **strongly connected component (SCC)** | graph terminology for “a set of definitions where each one can reach the others through references,” so the compiler cannot safely split them apart; if `a` calls `b` and `b` calls `a`, they are in the same SCC |
+| **strongly connected component (SCC)** | a group of definitions where each one can reach the others through references. For example, if function `a` calls `b` and `b` calls `a`, they form an SCC because they depend on each other. The compiler cannot safely split them apart, so they are always rechecked together |
 
 ## One concrete scenario
 

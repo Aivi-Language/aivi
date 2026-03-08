@@ -47,7 +47,7 @@ Available built-in defaults include:
 - `use aivi.defaults (Int, Float, Text)` enables `0`, `0.0`, and `""`
 
 For other types, importing `ToDefault` enables instance-driven filling.
-For each missing field whose expected type has a matching instance in scope, the compiler inserts a `toDefault()` call in the elaborated record.
+For each missing field whose expected type has a matching instance in scope, the compiler inserts a `toDefault()` call in the elaborated (fully expanded) record.
 
 Defaults are prepended before user-written fields, so explicit fields and later spreads still win.
 

@@ -43,7 +43,7 @@ The exact internal representation is not part of the public API. The sketch belo
 <<< ../../snippets/from_md/syntax/external_sources/schema_first/block_02.aivi{aivi}
 
 
-See [External Sources](../external_sources.md#1211-sourceerror) for the shared error model.
+See [External Sources](../external_sources.md#128-sourceerror) for the shared error model.
 
 ## The stable v0.1 schema strategy
 

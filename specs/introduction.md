@@ -10,10 +10,10 @@ That can still sound abstract if you do not already live in functional-programmi
 
 If this is your first pass through the docs, use this order:
 
-1. Read [Language at a Glance](language-overview.md) for a short syntax tour.
-2. Continue into the **Learn AIVI** track: [Bindings & Scope](syntax/bindings.md), [Functions & Pipes](syntax/functions.md), [Primitive Types](syntax/types/primitive_types.md), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types.md), [Records](syntax/types/closed_records.md), and [Effects](syntax/effects.md).
-3. Read [Modules](syntax/modules.md) and [External Sources](syntax/external_sources.md) when you are ready to work with files, APIs, or other outside data.
-4. Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md) if your goal is desktop UI work.
+1. Read [Language at a Glance](language-overview) for a short syntax tour.
+2. Continue into the **Learn AIVI** track: [Bindings & Scope](syntax/bindings), [Functions & Pipes](syntax/functions), [Primitive Types](syntax/types/primitive_types), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types), [Records](syntax/types/closed_records), and [Effects](syntax/effects).
+3. Read [Modules](syntax/modules) and [External Sources](syntax/external_sources) when you are ready to work with files, APIs, or other outside data.
+4. Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps) if your goal is desktop UI work.
 
 ## What AIVI is for
 
@@ -86,7 +86,7 @@ This is one of the biggest differences from mainstream languages:
 - side effects are visible in the type system,
 - error handling stays structured instead of spreading through ad-hoc `try/catch` logic.
 
-The detailed model lives in [Effects](syntax/effects.md), [do Notation](syntax/do_notation.md), and [Resources](syntax/resources.md).
+The detailed model lives in [Effects](syntax/effects), [do Notation](syntax/do_notation), and [Resources](syntax/resources).
 
 ## Missing values and failures stay explicit
 
@@ -121,7 +121,7 @@ AIVI puts special emphasis on **typed external sources**. The goal is simple: wh
 
 In many languages, the risky part of a boundary is hidden in manual parsing code. In AIVI, boundary operations are part of the language and the type system, so decoding, failure modes, and expected structure are easier to see.
 
-Start with [External Sources](syntax/external_sources.md) if this is the part of the language you care about most.
+Start with [External Sources](syntax/external_sources) if this is the part of the language you care about most.
 
 ## Functional programming concepts, in plain language
 
@@ -134,7 +134,7 @@ If some of the formal terms are new, this is the shortest useful translation:
 
 ## Where to go next
 
-- **Just learning the language?** Follow the **Learn AIVI** track in this order: [Bindings & Scope](syntax/bindings.md), [Functions & Pipes](syntax/functions.md), [Primitive Types](syntax/types/primitive_types.md), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types.md), [Records](syntax/types/closed_records.md), then [Effects](syntax/effects.md).
-- **Working with real-world inputs?** Continue with [Modules](syntax/modules.md) and [External Sources](syntax/external_sources.md).
-- **Building desktop apps?** Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md) and [App Architecture](stdlib/ui/app_architecture.md).
+- **Just learning the language?** Follow the **Learn AIVI** track in this order: [Bindings & Scope](syntax/bindings), [Functions & Pipes](syntax/functions), [Primitive Types](syntax/types/primitive_types), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types), [Records](syntax/types/closed_records), then [Effects](syntax/effects).
+- **Working with real-world inputs?** Continue with [Modules](syntax/modules) and [External Sources](syntax/external_sources).
+- **Building desktop apps?** Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps) and [App Architecture](stdlib/ui/app_architecture).
 - **Need exact rules or advanced features?** Use the rest of the sidebar as a reference, especially Advanced Features, Standard Library, and Internals.

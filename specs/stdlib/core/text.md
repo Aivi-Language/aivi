@@ -166,7 +166,7 @@ protocol, or external API.
 Notes:
 
 - In v0.1, `Utf16` and `Utf32` use little-endian byte order and do not add or require a BOM.
-- `toBytes Latin1 text` replaces characters outside Latin-1 with `?`.
+- ⚠️ `toBytes Latin1 text` replaces characters outside Latin-1 with `?` — this is lossy, so verify your input if exact encoding matters.
 - Handle `fromBytes` with `match`, `attempt`, or `or` so decode failures stay explicit.
 
 <<< ../../snippets/from_md/stdlib/core/text/block_02.aivi{aivi}

@@ -8,7 +8,7 @@ It includes helpers for building graphs, querying neighbors, and running common 
 
 If you have worked with social networks, dependency graphs, road maps, or workflow graphs, this is the domain you want.
 
-This module models **directed** graphs. `NodeId` is currently `Int`, each `Edge` stores `{ from, to, weight }`, and `fromEdges` is shorthand for building weighted edges with `1.0` everywhere.
+This module models **directed** graphs. In a directed graph, each edge runs one way — from a source node to a target node. `NodeId` is currently `Int`, each `Edge` stores `{ from, to, weight }`, and `fromEdges` is shorthand for building weighted edges with `1.0` everywhere.
 
 ## What it is for
 

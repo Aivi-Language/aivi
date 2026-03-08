@@ -16,7 +16,7 @@ Read them as complementary pieces: primitives and records describe data, ADTs mo
 - [3.4 Record Row Transforms](types/record_row_transforms.md) — derive nearby record shapes with tools such as `Pick`, `Omit`, `Optional`, and `Rename`.
 - [3.5 Classes and Higher-Kinded Types (HKTs)](types/classes_and_hkts.md) — shared behaviour across concrete types and container shapes.
 - [3.6 Expected-Type Coercions](types/expected_type_coercions.md) — context-sensitive rewrites such as `toText`, `Body`, record defaults, and `Option` wrapping when the destination type is already known.
-- [Opaque Types](types/opaque_types.md) — expose a public type name while hiding its representation outside the defining module.
+- [3.7 Opaque Types](types/opaque_types.md) — expose a public type name while hiding its representation outside the defining module.
 
 ## Closely related pages
 

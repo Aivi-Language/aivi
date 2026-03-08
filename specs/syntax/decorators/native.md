@@ -22,7 +22,7 @@ In both forms, the AIVI type signature is the contract that keeps the binding ty
 
 | Form | Best when | Resolved when |
 |:---- |:--------- |:------------- |
-| **runtime native** | the function is already exposed by the AIVI runtime as a builtin | when the program runs |
+| **runtime native** | the function is already exposed by the AIVI runtime as a built-in | when the program runs |
 | **crate native** | the function lives in a Rust crate listed in your project dependencies | when `aivi build` generates the native bridge |
 
 An **AOT** (ahead-of-time) build means the program is compiled to a native binary before it runs. Crate natives use that build step, so they work with `aivi build` rather than `aivi run`.
@@ -30,7 +30,7 @@ An **AOT** (ahead-of-time) build means the program is compiled to a native binar
 ## Runtime natives (dot-path)
 
 Runtime natives bind to functions registered in the runtime's global environment.
-This is the right choice when the function is already exposed by the runtime as a builtin module record.
+This is the right choice when the function is already exposed by the runtime as a built-in module record.
 
 ### Syntax
 
@@ -51,10 +51,10 @@ The friendlier `aivi.system.args` wrapper is implemented the same way, but hides
 
 ### How resolution works
 
-The string in `@native` is a runtime record path.
+The string in `@native` is a runtime record path — a dotted identifier path such as `'system.args'` that names a field nested in the runtime's global environment.
 In plain language, that means a dotted path such as `"system.args"`, `"system.env.get"`, or `"gtk4.windowPresent"`:
 
-- the first segment selects a builtin module record in the global environment,
+- the first segment selects a built-in module record in the global environment,
 - later segments walk through fields on that record.
 
 The runtime-facing module name is chosen by AIVI itself and may differ from the Cargo crate name behind it.
@@ -68,6 +68,9 @@ The runtime-facing module name is chosen by AIVI itself and may differ from the 
 5. A zero-parameter signature forwards to a bare field access; a function signature forwards all parameters in order.
 
 ### Adding a new runtime native
+
+> [!NOTE]
+> This section is for contributors extending AIVI itself. Application developers can skip to the examples above.
 
 If you are extending AIVI itself rather than consuming it, adding a new runtime native usually means:
 

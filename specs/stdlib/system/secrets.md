@@ -40,9 +40,9 @@ Missing secrets are reported as `None` by `get`, not as `SecretError`.
 
 ### `EncryptedBlob`
 
-A structured encrypted value with the metadata needed to store and later inspect ciphertext.
+An opaque encrypted value containing the metadata needed to store and later inspect ciphertext (a chunk of binary data that is unreadable without decryption).
 
-<<< ../../snippets/from_md/stdlib/system/secrets/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/secrets/block_04.aivi{aivi}
 
 
 ## Core API
