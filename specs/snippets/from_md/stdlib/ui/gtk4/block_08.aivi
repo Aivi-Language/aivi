@@ -1,14 +1,13 @@
 Msg = Save | ProjectNameChanged Text
 
 formView : GtkNode
-formView =
-  ~<gtk>
-    <object class="GtkBox" props={{ orientation: "vertical", spacing: 8 }}>
-      <object class="GtkEntry" onInput={ ProjectNameChanged } />
-      <object class="GtkButton" onClick={ Save }>
-        <property name="label">
-          Save
-        </property>
-      </object>
+formView = ~<gtk>
+  <object class="GtkBox" props={{ orientation: "vertical", spacing: 8 }}>
+    <object class="GtkEntry" onInput={ ProjectNameChanged } />
+    <object class="GtkButton" onClick={ Save }>
+      <property name="label">
+        Save
+      </property>
     </object>
-  </gtk>
+  </object>
+</gtk>
