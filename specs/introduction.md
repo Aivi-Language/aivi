@@ -11,7 +11,7 @@ That can still sound abstract if you do not already live in functional-programmi
 If this is your first pass through the docs, use this order:
 
 1. Read [Language at a Glance](language-overview.md) for a short syntax tour.
-2. Continue into the **Learn AIVI** track: [Bindings & Scope](syntax/bindings.md), [Functions & Pipes](syntax/functions.md), then the core data and effects pages.
+2. Continue into the **Learn AIVI** track: [Bindings & Scope](syntax/bindings.md), [Functions & Pipes](syntax/functions.md), [Primitive Types](syntax/types/primitive_types.md), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types.md), [Records](syntax/types/closed_records.md), and [Effects](syntax/effects.md).
 3. Read [Modules](syntax/modules.md) and [External Sources](syntax/external_sources.md) when you are ready to work with files, APIs, or other outside data.
 4. Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md) if your goal is desktop UI work.
 
@@ -75,8 +75,8 @@ Instead of mutating counters or building collections step by step, you usually t
 ```aivi
 activeNames =
   users
-  |> filter (_.active)
-  |> map .name
+  |> filter (user => user.active)
+  |> map (user => user.name)
 ```
 
 That pipeline says: start with `users`, keep only the active ones, then extract each `name`.
@@ -138,7 +138,7 @@ If some of the formal terms are new, this is the shortest useful translation:
 - **Pure function**: a function whose result depends only on its inputs and does not change anything outside itself.
 - **Algebraic data type (ADT)**: a custom type made from named cases, such as `Option` being either `None` or `Some value`.
 - **Pattern matching**: unpacking a value by shape instead of manually checking flags or tags.
-- **Higher-kinded type / type class**: abstraction tools for reusable container-style behavior such as mapping, chaining, and combining values. You can ignore the theory at first and still write practical AIVI code.
+- **Higher-kinded type / type class**: reusable abstractions over container shapes such as `List` or `Option`, used for operations like `map`, `chain`, and combining values. You can ignore the theory at first and still write practical AIVI code.
 
 ## Where to go next
 

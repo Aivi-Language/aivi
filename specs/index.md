@@ -8,22 +8,24 @@ title: AIVI Language Specification
 
 # AIVI language guide
 
-AIVI is a statically typed, purely functional language for software that has to handle real data carefully: APIs, data pipelines, automation, services, and user interfaces.
+AIVI is a statically typed, purely functional language for software that needs clear data models, predictable behavior, and explicit handling of side effects. It is built for APIs, data pipelines, automation, services, and user interfaces—places where you want the compiler to help catch missing cases, invalid data shapes, and boundary mistakes before the program runs.
 
-If you can already program but terms like *algebraic data type* (a custom type with named cases), *effect tracking* (making I/O and failure visible in types), or *domain-driven design* (shaping code around the problem space) are not everyday tools for you, start here. These docs explain what AIVI is for, how its pieces fit together, and where to look when you want a concrete answer.
+If you already know how to program but terms like *algebraic data type* (a custom type with named cases), *effect tracking* (making I/O and failure visible in types), or *domain-driven design* (shaping code around the problem space) are new, start here. These docs explain what AIVI is for, how the pieces fit together, and where to look when you want either a quick tour or a precise rule.
 
 ## Start here
 
 - **New to AIVI?** Read [Language at a Glance](language-overview) for a quick tour of the syntax and the most important ideas.
-- **Want the bigger picture?** Read [Introduction](introduction) to understand the language model, what problems AIVI is designed to solve, and how it approaches effects, data, and boundaries.
-- **Need a precise rule?** Jump into the reference sections below.
+- **Want the bigger picture?** Read [Introduction](introduction) for the plain-language explanation of what AIVI is for and how it approaches data, effects, and boundaries.
+- **Need a precise rule?** Use the table of contents below to jump straight to the reference page you need.
 
 ## A simple learning path
 
-1. Read **Start Here** first.
+If you want a full guided tour instead of jumping around, follow this order:
+
+1. Read [Language at a Glance](language-overview) and [Introduction](introduction).
 2. Work through **Learn AIVI** in order: Basics → Data & Types → Effects & Workflows → Modules & External Data.
 3. Jump to **Build Native Apps** when you are ready to build GTK or libadwaita interfaces.
-4. Use **Standard Library**, **Testing & Tooling**, and **Internals** as lookup sections.
+4. Keep **Standard Library**, **Testing & Tooling**, and **Internals** open as lookup sections once you start building.
 
 ## What makes AIVI different?
 
@@ -35,14 +37,14 @@ If you can already program but terms like *algebraic data type* (a custom type w
 
 ## How to use this specification
 
-Use the table of contents as a map:
+Use the table of contents below as a map once you know the kind of answer you need:
 
-- **Start Here** gives you the quickest orientation.
-- **Learn AIVI** is the main language-learning track.
-- **Build Native Apps** keeps the desktop UI material together.
+- **Start Here** gives you a first-reading path and the quickest orientation.
+- **Learn AIVI** is the main track for learning the language itself.
+- **Build Native Apps** keeps the GTK and libadwaita UI material together.
 - **Standard Library** documents the built-in modules you use in everyday code.
 - **Testing & Tooling** covers tests, the CLI, the language server, and editor support.
-- **Internals** is useful when you want to understand how the compiler and backend are structured.
+- **Internals** is where to go when you want compiler and backend design details.
 
 ## Table of Contents
 

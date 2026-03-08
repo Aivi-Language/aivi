@@ -1,44 +1,84 @@
 # Standard Library: Prelude
 
 <!-- quick-info: {"kind":"module","name":"aivi.prelude"} -->
-The **Prelude** is your default toolkit. It acts as the "standard library of the standard library," automatically using the core types and domains you use in almost every program (like `Int`, `List`, `Text`, and `Result`). It ensures you don't have to write fifty `use` lines just to add two numbers or print "Hello World".
+The `aivi.prelude` module is imported implicitly into every module. It brings the core types, common constructors, small helper functions, and a handful of widely used domains into scope so ordinary AIVI code can start without boilerplate imports.
 <!-- /quick-info -->
 
 <div class="import-badge">use aivi.prelude</div>
 
-<<< ../../snippets/from_md/stdlib/core/prelude/standard_library_prelude.aivi{aivi}
+You usually do **not** write this line yourself: every module implicitly starts with `use aivi.prelude`. Write it explicitly only when re-enabling the prelude after [`@no_prelude`](/syntax/decorators/no_prelude) or when showing imports in teaching material.
 
 ## What the Prelude does
 
-The Prelude gathers the names that most programs need all the time. In many languages, this is the part of the standard library that “just works” without ceremony, and AIVI follows the same idea.
+The Prelude is the default namespace for day-to-day AIVI code. Its job is to make common programs readable from the first line while still leaving an escape hatch for modules that want a fully explicit import list.
 
-That means you can focus on your program first and think about extra imports only when you need more specialized modules.
+That is why simple code can use names such as `Int`, `Text`, `Option`, `Some`, `None`, `Result`, `Ok`, and `Err` without extra `use` lines.
+
+```aivi
+module docs.prelude.example
+
+status : Option Int
+status = Some 3
+
+summary : Text
+summary = status match
+  | Some n => "count = {n}"
+  | None   => "no value"
+```
 
 ## What is typically included
 
-The Prelude brings the common building blocks of everyday AIVI code into scope, including core types, common domains, and the small helpers that make basic programs readable.
+The Prelude is a curated surface, not the entire standard library. In practice it brings the names most programs reach for immediately:
 
-In practical terms, it is the reason simple files do not start with a long wall of `use` lines.
+- core types and constructors such as `Int`, `Float`, `Bool`, `Text`, `List`, `Option`, `Result`, `Tuple`, `Some`, `None`, `Ok`, and `Err`
+- common interfaces and helpers such as `ToText`, `toText`, `not`, and `any`
+- commonly used domains such as `Calendar`, `Duration`, `Color`, and `Vector`
+- constructor introspection helpers such as `constructorName` and `constructorOrdinal`
+
+When you need a broader API, import the specific module directly instead of treating the Prelude as a replacement for the rest of the standard library. For example, see [`aivi.text`](/stdlib/core/text) and [`aivi.logic`](/stdlib/core/logic) for the full text and logic toolboxes.
 
 ## Opting out
 
-Most projects will keep the Prelude enabled. If you need very tight control over what is in scope, you can opt out and import only the pieces you want.
+Most projects should keep the Prelude enabled. If you want a fully explicit environment, opt out with [`@no_prelude`](/syntax/decorators/no_prelude) as described in [Modules: The Prelude](/syntax/modules#106-the-prelude).
 
-<<< ../../snippets/from_md/stdlib/core/prelude/opting_out.aivi{aivi}
+```aivi
+@no_prelude
+module docs.explicit
 
-This is mainly useful for advanced setups, generated code, or situations where you want every dependency to be explicit.
+use aivi (Bool, Int, Result, Text, Ok, Err)
+
+isPositive : Int -> Bool
+isPositive = n => n > 0
+
+status : Result Text Int
+status = Ok 1
+```
+
+Once you opt out, even basic names must be imported explicitly. This is mainly useful for low-level modules, generated code, compiler tests, or teaching material that wants every dependency to be visible. If you only wanted to turn the implicit import off temporarily, you can also re-enable it later with `use aivi.prelude`.
 
 ## Why the Prelude exists
 
-- Common domains such as dates, colors, and vectors appear in many programs.
-- Delta literals and other everyday conveniences should work immediately.
+- Everyday code should compile without a wall of setup imports.
+- The most common names should be available consistently across examples, tutorials, and production modules.
 - A clear opt-out path keeps the language convenient without taking away control.
 
 ## Constructor introspection
 
-The Prelude also exposes two helpers for algebraic data type values. These are useful for debugging, logging, tooling, and generic UI code.
+The Prelude also makes constructor introspection available for algebraic data type values. These helpers are most useful for logging, diagnostics, tests, and generic UI tooling; when you are making control-flow decisions, pattern matching is usually clearer.
 
 | Function | Type | Description |
 | --- | --- | --- |
 | `constructorName value` | `A -> Text` | Returns the constructor tag name, such as `Some`, `Err`, or `Published`. |
 | `constructorOrdinal value` | `A -> Int` | Returns the zero-based declaration index of the constructor inside its ADT definition. |
+
+```aivi
+Status = Draft | Published | Archived
+
+tag : Text
+tag = constructorName Published
+
+position : Int
+position = constructorOrdinal Published
+```
+
+In this example, `tag` is `"Published"` and `position` is `1` because `Draft` is the first constructor.

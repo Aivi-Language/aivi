@@ -1,38 +1,65 @@
 # Doc Snippets
 
-This folder contains canonical AIVI code snippets that the documentation can embed directly.
+This folder holds canonical `.aivi` files that the docs can include directly.
 
-The goal is practical: write an example once, reuse it in the docs, and keep it close enough to the real language that it stays trustworthy.
+Use snippets when an example is long enough to distract from the surrounding prose, when the same example appears in more than one place, or when you want the docs to reuse code that can be verified by the existing snippet tooling.
+
+Most generated doc snippets live under `specs/snippets/from_md/`; hand-authored shared examples can live elsewhere in this folder as long as they are listed in the manifest.
 
 ## Why snippets exist
 
-Using shared snippets helps in two ways:
+Shared snippets make the docs easier to trust and easier to maintain:
 
-- **Readers get realistic examples.** The code shown in the docs comes from dedicated snippet files instead of being copied by hand into many markdown pages.
-- **Docs stay easier to maintain.** When an example changes, you update the snippet once instead of chasing duplicates.
+- **Readers see real AIVI code.** Examples come from dedicated `.aivi` files instead of being copied by hand into multiple markdown pages.
+- **Docs stay in sync.** You update one snippet file instead of editing every page that mentions the example.
+- **Snippet tooling can verify them.** Formatting, parsing, and typechecking can be driven from the snippet manifest instead of relying on manual review.
 
-## How snippets are used
+## How snippets are included in docs
 
-Markdown pages include snippets with VitePress `<<<` includes.
+Markdown pages in `specs/` include snippets with a block-level VitePress `<<<` include and the `{aivi}` language hint.
+
+For example, from a page such as `specs/introduction.md`:
 
 ```md
-<<< ./snippets/example.aivi
+<<< ./snippets/from_md/introduction/block_01.aivi{aivi}
 ```
 
-That keeps longer examples readable in the docs while preserving a single source of truth for the code itself.
+Keep the include directive on its own line with blank lines around it so the markdown stays readable and consistent with the existing include-normalization tooling.
 
-## Checking snippets
+## Authoring and verification workflow
 
-Use the existing snippet commands when you want to verify or normalize them locally:
+If you are drafting a new multi-line AIVI example inside a markdown page, start with a normal fenced block:
+
+````md
+```aivi
+value = 41
+next = value + 1
+```
+````
+
+Then use the existing commands from the repo root:
 
 ```bash
+pnpm -C specs snippets:extract:dry
+pnpm -C specs snippets:extract
 pnpm -C specs snippets:check
 pnpm -C specs snippets:fix
 ```
 
-- `snippets:check` verifies snippet formatting and consistency.
-- `snippets:fix` rewrites snippets into the expected form when possible.
+- `snippets:extract:dry` previews which fenced ` ```aivi ` blocks would be moved into `specs/snippets/from_md/` and added to the manifest.
+- `snippets:extract` performs that extraction and rewrites the markdown page to use `<<< ...{aivi}` includes.
+- `snippets:check` runs manifest-driven verification. Depending on each manifest entry, that can include `fmt`, `parse`, and `check`.
+- `snippets:fix` applies formatter output for snippets that fail `fmt`; parse or typecheck failures still need a manual fix.
+
+If you only changed an existing snippet file, you usually need `snippets:check` and, if formatting drifted, `snippets:fix`.
 
 ## Configuration
 
-See `specs/snippets/manifest.json` for per-snippet verification settings and other snippet metadata.
+[`manifest.json`](./manifest.json) is the source of truth for snippet metadata and verification settings.
+
+Each entry declares the snippet path plus the verification context it needs, such as:
+
+- `module` for the temporary verification harness module name
+- `verify` for which checks to run (`fmt`, `parse`, `check`)
+- `uses` or `prelude` when the harness needs extra imports or support code
+- `stdlib` when a snippet should run without the embedded standard library
