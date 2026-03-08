@@ -79,14 +79,15 @@ fetchUsers = rest.get ~u(https://api.example.com/users)
 
 @test "fetch users with a mocked request"
 fetchUsersWithMock =
-  mock rest.get      = _ => pure [{ id: 1, name: "Ada" }]
-in do Effect {
-  users <- fetchUsers
-  _     <- assertEq (length users) 1
-  users match
-    | [u, ..._] => assertEq u.name "Ada"
-    | []        => fail "expected one mocked user"
-}
+  mock
+    rest.get = _ => pure [{ id: 1, name: "Ada" }]
+  in do Effect {
+    users <- fetchUsers
+    _     <- assertEq (length users) 1
+    users match
+      | [u, ..._] => assertEq u.name "Ada"
+      | []        => fail "expected one mocked user"
+  }
 ```
 
 Here the mock replaces `rest.get` only inside the test body, so the example can exercise the surrounding logic without making a real network call.
