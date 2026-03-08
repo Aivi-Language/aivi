@@ -57,6 +57,15 @@ When the `Units` domain is in scope, `Quantity` supports a small arithmetic surf
 
 <<< ../../snippets/from_md/stdlib/core/units/block_03.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.units
+distance = 100.0 m
+time = 9.58 s
+speed = distance / time
+// => 10.438... m/s
+```
+:::
 
 ## Helper functions
 

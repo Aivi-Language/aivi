@@ -11,6 +11,15 @@ These are the core scalar types you can rely on without introducing a record, AD
 
 <<< ../../snippets/from_md/syntax/types/primitive_types/block_01.aivi{aivi}
 
+::: repl
+```aivi
+x = 42
+pi = 3.14159
+name = "AIVI"
+"{name} version {x}"
+// => "AIVI version 42"
+```
+:::
 
 - `Unit` means “no interesting value here”.
 - `Bool`, `Int`, and `Float` cover control flow and everyday arithmetic.

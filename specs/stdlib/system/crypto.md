@@ -88,16 +88,6 @@ Store the returned hash string as an opaque value and hand it back to `verifyPas
 | **toHex** bytes<br><code>Bytes -> Text</code> | Encodes bytes as lowercase hexadecimal text. |
 | **fromHex** text<br><code>Text -> Result Text Bytes</code> | Decodes hexadecimal text into raw bytes. Returns `Err message` when the input is not valid hexadecimal. |
 
-## Capabilities
-
-Pure hashing and HMAC helpers stay pure. The following operations consume secure randomness at runtime:
-
-- `randomUuid`
-- `randomBytes`
-- `hashPassword`
-
-`verifyPassword` is still effectful because malformed stored hashes or backend failures can produce `Text` errors, but it does not generate randomness itself.
-
 ## Verification
 
 The exported `aivi.crypto` module surface is exercised in `integration-tests/stdlib/aivi/crypto/crypto.aivi`, covering digest lengths, HMAC round-trips, password hashing and verification, random byte lengths, UUID generation, and hex encode/decode helpers.

@@ -77,6 +77,18 @@ The comparison operators `<`, `<=`, `>`, and `>=` are built in for `Text` and fo
 
 <<< ../../snippets/from_md/stdlib/core/text/block_01.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.text
+greeting = "Hello, AIVI!"
+length greeting
+// => 12
+split " " greeting
+// => ["Hello,", "AIVI!"]
+toUpper greeting
+// => "HELLO, AIVI!"
+```
+:::
 
 Notes:
 

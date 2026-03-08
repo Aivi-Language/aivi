@@ -1,9 +1,0 @@
-do Effect {
-  cfg <- load (
-    env.decode {
-      prefix: "AIVI_APP"
-      schema: source.schema.derive
-    }
-  )
-  pure cfg
-}

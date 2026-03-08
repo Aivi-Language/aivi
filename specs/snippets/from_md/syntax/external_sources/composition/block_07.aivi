@@ -32,12 +32,12 @@ usersSource =
     backoff: source.backoff.exponential {
       baseMs: 200
       factor: 2
-      maxMs: 2_000
+      maxMs: 2000
     }
 }
-|> source.timeout 5_000
+|> source.timeout 5000
 |> source.cache {
-    ttlMs: 60_000
+    ttlMs: 60000
 }
 |> source.provenance {
     name: "users-api"

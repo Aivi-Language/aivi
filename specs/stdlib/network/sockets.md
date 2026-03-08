@@ -20,16 +20,6 @@ If you are building a web API or consuming one, [`aivi.net.http`](./http.md), [`
 
 If your protocol naturally works in chunks, pair this module with [`aivi.net.streams`](./streams.md) instead of writing every `recv` loop by hand.
 
-## Capabilities
-
-Socket operations perform network I/O:
-
-| Operation | Capability |
-| --- | --- |
-| `listen` | `network.socket.listen` (or the broader `network`) |
-| `connect` | `network.socket.connect` (or the broader `network`) |
-| `accept`, `send`, `recv`, `close` | `network` |
-
 ## Types
 
 <<< ../../snippets/from_md/stdlib/network/sockets/types.aivi{aivi}

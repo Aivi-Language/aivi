@@ -1,11 +1,15 @@
 use aivi.matrix
 use aivi.vector (vec2)
 
-scale2 = ~mat[2.0  0.0
-              0.0  2.0]
-rot90  = ~mat[0.0 -1.0
-              1.0  0.0]
-point  = vec2 1.0 0.0
+scale2 = ~mat[
+  2.0 0.0
+  0.0 2.0
+]
+rot90 = ~mat[
+  0.0 -1.0
+  1.0 0.0
+]
+point = vec2 1.0 0.0
 
 combined = rot90 × scale2
 explicit = multiply2 rot90 scale2

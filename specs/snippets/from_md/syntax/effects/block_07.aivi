@@ -1,6 +1,0 @@
-result = do Result {
-  x <- parseFloat input
-  y <- validate x
-  Ok (x + y)
-}
-// result : Result E Float   Err if parsing or validation fails

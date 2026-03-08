@@ -2,10 +2,9 @@ use aivi.system (env)
 
 main = do Effect {
   portOpt <- env.get "PORT"
-  port =
-    portOpt match
-      | Some p => p
-      | None   => "8080"
+  port = portOpt match
+    | Some p => p
+    | None   => "8080"
 
-  print "Server will listen on {port}"
+    print "Server will listen on {port}"
 }

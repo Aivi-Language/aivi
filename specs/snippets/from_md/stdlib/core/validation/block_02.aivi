@@ -1,7 +1,5 @@
 MkPerson : Text -> Int -> { name: Text, age: Int }
-MkPerson = name age => { name: name, age: age }
-
+MkPerson  = name age => { name: name, age: age }
 nameCheck = Invalid ["Name is required"]
-ageCheck = Invalid ["Age must be non-negative"]
-
-result = ap (ap (Valid MkPerson) nameCheck) ageCheck
+ageCheck  = Invalid ["Age must be non-negative"]
+result    = ap (ap (Valid MkPerson) nameCheck) ageCheck

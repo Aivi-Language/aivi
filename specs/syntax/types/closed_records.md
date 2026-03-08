@@ -13,6 +13,16 @@ AIVI records are:
 
 <<< ../../snippets/from_md/syntax/types/closed_records/block_01.aivi{aivi}
 
+::: repl
+```aivi
+user = { name: "Ada", age: 30 }
+user.name
+// => "Ada"
+updated = { ...user, age: 31 }
+updated.age
+// => 31
+```
+:::
 
 Here `Option Text` means the `email` field always exists, but its value is either `Some "ada@example.com"` or `None`.
 If `Option` is new to you, see [3.2 Algebraic Data Types](algebraic_data_types.md).

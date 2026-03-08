@@ -33,6 +33,13 @@ To use a domain, bring the domain itself into scope. The most explicit form is:
 
 <<< ../snippets/from_md/syntax/domains/block_02.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.chronos.duration
+gap = 2h + 30m
+// => Duration: 2h 30m
+```
+:::
 
 The first example uses a module that exports its domain directly. The second shows a companion-module pattern (a separate module that provides extra operations for a domain type) used by some standard-library areas: one module provides the named helpers, and another exports the domain sugar.
 

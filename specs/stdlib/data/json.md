@@ -41,6 +41,14 @@ In current AIVI, the practical typed-decoding path is a structured source such a
 
 Here `loadUser` succeeds with a normal `User` value or fails with `SourceError File`. If the file can be read but the JSON does not match `User`, the failure is `DecodeError (List aivi.validation.DecodeError)`, so callers get a list of path-aware problems rather than a partially decoded value.
 
+::: repl
+```aivi
+/use aivi.json
+toJson { name: "Ada", age: 30 }
+// => "{\"name\":\"Ada\",\"age\":30}"
+```
+:::
+
 See also:
 
 - [`file sources`](../../syntax/external_sources/file.md) for the boundary-decoding workflow,

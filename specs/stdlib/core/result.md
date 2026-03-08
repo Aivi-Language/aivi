@@ -58,6 +58,17 @@ AIVI uses the shared name `chain` for “run the next fallible step if this one 
 
 <<< ../../snippets/from_md/stdlib/core/result/extracting.aivi{aivi}
 
+::: repl
+```aivi
+Ok 42 |> isOk
+// => True
+Err "fail" |> getOrElse 0
+// => 0
+Ok 10 |> map (_ * 2)
+// => Ok 20
+```
+:::
+
 `getOrElseLazy` is handy when the fallback depends on the error details.
 
 ## Transformations

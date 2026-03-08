@@ -55,23 +55,21 @@ runActiveUserNamesDefault = do Effect {
 
 // Functional pipeline form (no do-block) composes with |>
 cheapActiveNames : Query Text
-cheapActiveNames =
-  db.from userTable
-|> db.where_ _.active
-|> db.select _.name
+cheapActiveNames = db.from userTable
+  |> db.where_ _.active
+  |> db.select _.name
 
 // Sorting and paging — all run in memory in v0.1 (no SQL pushdown yet)
 // orderBy : (A -> B) -> Query A -> Query A
 // limit   : Int -> Query A -> Query A
 // offset  : Int -> Query A -> Query A
 recentActiveNames : Query Text
-recentActiveNames =
-  db.from userTable
-|> db.where_ _.active
-|> db.orderBy _.createdAt // sort ascending by creation time (in memory)
-|> db.offset 10 // skip the first 10 rows
-|> db.limit 5 // then take at most 5
-|> db.select _.name
+recentActiveNames = db.from userTable
+  |> db.where_ _.active
+  |> db.orderBy _.createdAt // sort ascending by creation time (in memory)
+  |> db.offset 10 // skip the first 10 rows
+  |> db.limit 5 // then take at most 5
+  |> db.select _.name
 
 runRecentActiveNames : Effect DbError (List Text)
 runRecentActiveNames = do Effect {

@@ -51,7 +51,6 @@ mod number_facade;
 mod option;
 mod path;
 mod prelude;
-mod probability;
 mod quaternion;
 mod rational;
 mod regex;
@@ -130,10 +129,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: units::MODULE_NAME,
         source: units::SOURCE,
-    },
-    EmbeddedModule {
-        name: probability::MODULE_NAME,
-        source: probability::SOURCE,
     },
     EmbeddedModule {
         name: calendar::MODULE_NAME,

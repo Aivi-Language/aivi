@@ -5,10 +5,10 @@ Model = {
   searchError: Option GtkError
 }
 
-Msg
-= SearchQueryChanged Text
-| SearchFinished (List Text)
-| SearchFailed GtkError
+Msg =
+  | SearchQueryChanged Text
+  | SearchFinished (List Text)
+  | SearchFailed GtkError
 
 update = msg => model =>
   pure (

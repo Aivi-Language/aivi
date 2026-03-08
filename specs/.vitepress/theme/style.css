@@ -45,6 +45,56 @@ pre {
   overflow-wrap: normal;
 }
 
+/* ── REPL "Try it" blocks ─────────────────────────────────────────── */
+
+.repl-block {
+  margin: 16px 0;
+  border-radius: 8px;
+  border: 1.5px solid var(--vp-c-brand-1, #8b5cf6);
+  background: var(--vp-c-bg-soft);
+  overflow: hidden;
+}
+
+.repl-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-brand-1, #8b5cf6);
+  background: var(--vp-c-brand-soft, rgba(139, 92, 246, 0.08));
+  border-bottom: 1px solid var(--vp-c-brand-1, rgba(139, 92, 246, 0.25));
+  letter-spacing: 0.02em;
+}
+
+.repl-prompt {
+  font-size: 11px;
+}
+
+.repl-body {
+  padding: 0;
+}
+
+.repl-body .language-aivi,
+.repl-body div[class*="language-"] {
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+.dark .repl-block {
+  border-color: var(--vp-c-brand-2, #a78bfa);
+}
+
+.dark .repl-header {
+  color: var(--vp-c-brand-2, #a78bfa);
+  background: rgba(139, 92, 246, 0.12);
+  border-bottom-color: rgba(139, 92, 246, 0.3);
+}
+
+/* ── Responsive tables ────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   .vp-doc table {
     width: 100%;

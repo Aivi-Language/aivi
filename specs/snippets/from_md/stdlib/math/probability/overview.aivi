@@ -1,7 +1,0 @@
-use aivi.probability
-
-// Create a uniform distribution between 0 and 1.
-distribution = uniform 0.0 1.0
-
-// Ask how likely one concrete value is under that distribution.
-densityAtHalf = distribution.pdf 0.5

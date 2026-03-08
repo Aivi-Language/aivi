@@ -1,7 +1,0 @@
-use aivi.regex (Regex)
-
-emailPattern = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/
-match        = Regex.test emailPattern "user@example.com"
-
-// With flags (example: case-insensitive)
-emailCi = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/i

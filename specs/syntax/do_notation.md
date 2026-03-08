@@ -16,6 +16,17 @@ Use `do M` when you want the same step-by-step reading style as `do Effect`, but
 
 <<< ../snippets/from_md/syntax/do_notation/block_01.aivi{aivi}
 
+::: repl
+```aivi
+safeDiv = a b => if b == 0 then None else Some (a / b)
+do Option {
+  x <- safeDiv 10 2
+  y <- safeDiv x 0
+  pure (x + y)
+}
+// => None
+```
+:::
 
 If either lookup returns `None`, the whole block returns `None`. Otherwise the final line produces `Some profile.displayName`.
 

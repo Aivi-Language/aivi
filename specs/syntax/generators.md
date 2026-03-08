@@ -22,6 +22,18 @@ A small example shows the overall shape:
 
 <<< ../snippets/from_md/syntax/generators/block_01.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.generator
+xs = [1, -2, 3, -4, 5]
+result = generate {
+  value <- xs
+  value -> value > 0
+  yield value * 2
+} |> toList
+// => [2, 6, 10]
+```
+:::
 
 Read that block top to bottom:
 

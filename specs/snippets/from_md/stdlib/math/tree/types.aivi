@@ -1,2 +1,1 @@
-Tree A =
-  | Node A (List (Tree A))
+Tree A = Node A (List (Tree A))

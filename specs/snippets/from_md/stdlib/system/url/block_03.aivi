@@ -1,9 +1,6 @@
 use aivi.url
 
 loadSearchUrl : Text -> Result Text Text
-loadSearchUrl = raw =>
-  parse raw match
-    | Ok url =>
-        Ok (toString (url + ("page", "1")))
-    | Err message =>
-        Err "invalid configuration URL: {message}"
+loadSearchUrl = raw => parse raw match
+  | Ok url      => Ok (toString (url + ("page", "1")))
+  | Err message => Err "invalid configuration URL: {message}"

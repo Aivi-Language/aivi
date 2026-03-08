@@ -1,6 +1,0 @@
-use aivi.linearAlgebra (solve, eigen)
-
-// Matrix A and Vector b
-// Solve for x in: Ax = b
-// (Finds the inputs that produce the known output)
-x = solve A b

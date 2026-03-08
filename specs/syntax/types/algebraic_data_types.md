@@ -61,6 +61,23 @@ To create an ADT value, call its constructor like an ordinary function:
 
 <<< ../../snippets/from_md/syntax/types/creating_values_objects_02.aivi{aivi}
 
+::: repl
+```aivi
+type Shape
+  = Circle Float
+  | Rect Float Float
+
+area = s => s match
+  | Circle r   => 3.14159 * r * r
+  | Rect w h   => w * h
+
+area (Circle 5.0)
+// => 78.53975
+area (Rect 3.0 4.0)
+// => 12.0
+```
+:::
+
 Nullary constructors such as `None`, `True`, and `False` are already complete values, so they do not take arguments.
 If a constructor carries several values, pass them in order, for example `Connected "db" 5432`.
 

@@ -29,10 +29,6 @@ For image-specific file-backed reads such as metadata inspection or decoded pixe
 
 The examples on this page use the compact path-only form. When you want a reusable declaration with an explicit schema contract, see [Schema-First Source Definitions](schema_first.md).
 
-## Capability mapping
-
-Loading `file.read`, `file.json`, or `file.csv` requires `file.read` (or the broader `file` family shorthand). Image-backed file sources also require `file.read`; see [Image Sources](image.md).
-
 ## Example
 
 <<< ../../snippets/from_md/syntax/external_sources/file/block_02.aivi{aivi}

@@ -31,6 +31,16 @@ The caller-side benefit is simple:
 - the caller writes one operation name, such as `toText value`
 - the compiler picks the matching implementation from the value’s type
 
+::: repl
+```aivi
+/use aivi.logic
+map (_ + 1) (Some 5)
+// => Some 6
+map (_ + 1) [1, 2, 3]
+// => [2, 3, 4]
+```
+:::
+
 ## What HKTs add
 
 Ordinary type parameters talk about finished types such as `Int`, `Text`, or `User`.

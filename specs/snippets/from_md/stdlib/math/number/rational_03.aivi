@@ -1,5 +1,0 @@
-use aivi.number.rational
-
-// exact 1/2
-half = normalize (fromInt 1 / fromInt 2)
-sum  = half + half

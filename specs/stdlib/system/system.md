@@ -15,13 +15,6 @@ The most common `aivi.system` workflow is "read host-provided configuration, app
 <<< ../../snippets/from_md/stdlib/system/system/block_01.aivi{aivi}
 
 
-## Capabilities
-
-- `env.get` and `env.decode` require `process.env.read`.
-- `env.set` and `env.remove` require `process.env.write`.
-- `args` and `localeTag` require `process.args`.
-- `exit` requires `process.exit`.
-
 ## Environment helpers
 
 Environment variables are a common way to pass configuration into a program without editing source code.

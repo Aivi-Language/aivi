@@ -74,6 +74,15 @@ Duplicate values are removed automatically because sets only keep unique members
 
 <<< ../../snippets/from_md/stdlib/core/collections/block_04.aivi{aivi}
 
+::: repl
+```aivi
+xs = [1, 2, 3] ++ [4, 5]
+// => [1, 2, 3, 4, 5]
+m = ~map{ "a" => 1, "b" => 2 }
+s = ~set[1, 2, 3, 2, 1]
+// => ~set[1, 2, 3]
+```
+:::
 
 ## List helpers (`aivi.list`)
 

@@ -1,3 +1,0 @@
-do Effect {
-  concurrent.spawnDetached logger.run
-}

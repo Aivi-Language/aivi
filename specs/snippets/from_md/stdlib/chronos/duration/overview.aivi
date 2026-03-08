@@ -6,7 +6,6 @@ delay   = 2s
 
 // Type-safe comparison
 if delay > timeout then
-// delay exceeds timeout
-True
+  True
 else
-False
+  False

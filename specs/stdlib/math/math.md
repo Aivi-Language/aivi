@@ -14,6 +14,18 @@ In the sketch below, assume `r : Float` is a radius and `x : Float` is an input 
 
 <<< ../../snippets/from_md/stdlib/math/math/overview.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.math
+abs (-7)
+// => 7
+clamp 0.0 1.0 3.5
+// => 1.0
+round 2.7
+// => 3
+```
+:::
+
 ## Constants
 
 `inf` is positive infinity and `negInf` is negative infinity. `nan` is the IEEE 754 “not a number” value. These are `Float`-only concepts, so `Int` has no infinity or NaN value. The other named constants in this module, such as `pi`, `tau`, `e`, and `phi`, are ordinary `Float` values.

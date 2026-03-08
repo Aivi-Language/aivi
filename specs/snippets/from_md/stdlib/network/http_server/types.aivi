@@ -21,13 +21,13 @@ ServerConfig = {
 HttpError = { message: Text }
 WsError   = { message: Text }
 
-WsMessage
-= TextMsg Text
-| BinaryMsg (List Int)
-| Ping
-| Pong
-| Close
+WsMessage =
+  | TextMsg Text
+  | BinaryMsg (List Int)
+  | Ping
+  | Pong
+  | Close
 
-ServerReply
-= Http Response
-| Ws (WebSocket -> Effect WsError Unit)
+ServerReply =
+  | Http Response
+  | Ws (WebSocket -> Effect WsError Unit)

@@ -41,6 +41,15 @@ Duration literals use the suffixes `ms`, `s`, `min`, and `h`. If your timing ide
 
 <<< ../../snippets/from_md/stdlib/chronos/duration/overview.aivi{aivi}
 
+::: repl
+```aivi
+/use aivi.chronos.duration
+gap = 2h + 30m
+toMinutes gap
+// => 150
+```
+:::
+
 ## Common operations
 
 These examples show the basic shapes and conversions you will use most often. A common pattern is: choose a named duration such as a `requestTimeout`, then combine it with an [`Instant`](./instant.md) when you need a precise deadline.

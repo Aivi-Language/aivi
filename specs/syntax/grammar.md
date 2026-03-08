@@ -200,12 +200,7 @@ Useful reading rules:
 - `do`, `generate`, and `resource` are expression forms
 
 ```ebnf
-Expr           := WithCapsExpr
-
-WithCapsExpr   := "with" CapabilityScope "in" Expr
-               | IfExpr
-CapabilityScope := "{" [ CapabilityScopeEntry { FieldSep CapabilityScopeEntry } ] "}"
-CapabilityScopeEntry := CapabilityPath [ "=" Expr ]
+Expr           := IfExpr
 
 IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr

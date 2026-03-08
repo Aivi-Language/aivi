@@ -25,10 +25,9 @@ main = do Effect {
   poolRes <- Pool.create cfg
   poolRes match
     | Err e   => pure (Err e)
-    | Ok pool =>
-      Pool.withConn pool (conn =>
-        db.inTransactionOn conn (do Effect {
+    | Ok pool => Pool.withConn pool (conn =>
+      db.inTransactionOn conn (do Effect {
           pure 123
-        })
-      )
+      })
+    )
 }
