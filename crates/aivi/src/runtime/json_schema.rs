@@ -5,6 +5,12 @@ use aivi_core::cg_type::CgType;
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct EnumVariant {
+    pub(crate) json_value: String,
+    pub(crate) constructor_name: String,
+}
+
 /// Lightweight type schema for validating JSON values at source boundaries.
 ///
 /// Derived from `CgType` at codegen time and attached to `SourceValue` so that
@@ -20,8 +26,8 @@ pub(crate) enum JsonSchema {
     Tuple(Vec<JsonSchema>),
     Record(BTreeMap<String, JsonSchema>),
     Option(Box<JsonSchema>),
-    /// All-nullary ADT: accepts a JSON string matching one of the constructor names.
-    Enum(Vec<String>),
+    /// All-nullary ADT: accepts a JSON string matching one of the serialized enum values.
+    Enum(Vec<EnumVariant>),
     /// No validation — accepts any JSON value.
     Any,
 }
@@ -62,7 +68,7 @@ impl fmt::Display for JsonSchema {
                     if i > 0 {
                         write!(f, " | ")?;
                     }
-                    write!(f, "{v}")?;
+                    write!(f, "{}", v.json_value)?;
                 }
                 write!(f, ")")
             }
@@ -140,14 +146,14 @@ pub(crate) fn validate_json(
         (JsonSchema::Option(inner), v) => validate_json(v, inner, path, errors),
 
         (JsonSchema::Enum(variants), JV::String(s)) => {
-            if !variants.contains(s) {
+            if !variants.iter().any(|variant| variant.json_value == *s) {
                 errors.push(JsonMismatch {
                     path: path.to_string(),
                     expected: format!(
                         "one of {}",
                         variants
                             .iter()
-                            .map(|v| format!("\"{v}\""))
+                            .map(|v| format!("\"{}\"", v.json_value))
                             .collect::<Vec<_>>()
                             .join(", ")
                     ),
@@ -162,7 +168,7 @@ pub(crate) fn validate_json(
                 "one of {}",
                 variants
                     .iter()
-                    .map(|v| format!("\"{v}\""))
+                    .map(|v| format!("\"{}\"", v.json_value))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -541,11 +547,49 @@ pub(crate) fn cg_type_to_json_schema(ty: &CgType) -> JsonSchema {
             }
             // All-nullary constructors → Enum (string matching constructor names)
             if !constructors.is_empty() && constructors.iter().all(|(_, args)| args.is_empty()) {
-                return JsonSchema::Enum(constructors.iter().map(|(n, _)| n.clone()).collect());
+                return JsonSchema::Enum(
+                    constructors
+                        .iter()
+                        .map(|(name, _)| EnumVariant {
+                            json_value: camel_to_snake(name),
+                            constructor_name: name.clone(),
+                        })
+                        .collect(),
+                );
             }
             JsonSchema::Any
         }
     }
+}
+
+pub(crate) fn constructor_name_for_enum_value<'a>(
+    variants: &'a [EnumVariant],
+    value: &str,
+) -> Option<&'a str> {
+    variants
+        .iter()
+        .find(|variant| variant.json_value == value)
+        .map(|variant| variant.constructor_name.as_str())
+}
+
+fn camel_to_snake(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut result = String::new();
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch.is_uppercase() {
+            if i > 0 {
+                let prev = chars[i - 1];
+                let next_is_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());
+                if prev.is_lowercase() || (prev.is_uppercase() && next_is_lower) {
+                    result.push('_');
+                }
+            }
+            result.push(ch.to_lowercase().next().unwrap_or(ch));
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -717,18 +761,60 @@ mod tests {
         assert_eq!(
             schema,
             JsonSchema::Enum(vec![
-                "Active".to_string(),
-                "Inactive".to_string(),
-                "Pending".to_string(),
+                EnumVariant {
+                    json_value: "active".to_string(),
+                    constructor_name: "Active".to_string(),
+                },
+                EnumVariant {
+                    json_value: "inactive".to_string(),
+                    constructor_name: "Inactive".to_string(),
+                },
+                EnumVariant {
+                    json_value: "pending".to_string(),
+                    constructor_name: "Pending".to_string(),
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn enum_adt_with_acronyms_produces_snake_case_schema() {
+        let cg = CgType::Adt {
+            name: "SecurityAction".to_string(),
+            constructors: vec![
+                ("TwoFaCode".to_string(), vec![]),
+                ("USD".to_string(), vec![]),
+            ],
+        };
+        assert_eq!(
+            cg_type_to_json_schema(&cg),
+            JsonSchema::Enum(vec![
+                EnumVariant {
+                    json_value: "two_fa_code".to_string(),
+                    constructor_name: "TwoFaCode".to_string(),
+                },
+                EnumVariant {
+                    json_value: "usd".to_string(),
+                    constructor_name: "USD".to_string(),
+                },
             ])
         );
     }
 
     #[test]
     fn validate_enum_accepts_valid_constructor() {
-        let schema = JsonSchema::Enum(vec!["Active".to_string(), "Inactive".to_string()]);
+        let schema = JsonSchema::Enum(vec![
+            EnumVariant {
+                json_value: "active".to_string(),
+                constructor_name: "Active".to_string(),
+            },
+            EnumVariant {
+                json_value: "inactive".to_string(),
+                constructor_name: "Inactive".to_string(),
+            },
+        ]);
 
-        let json: serde_json::Value = serde_json::from_str(r#""Active""#).unwrap();
+        let json: serde_json::Value = serde_json::from_str(r#""active""#).unwrap();
         let mut errors = Vec::new();
         validate_json(&json, &schema, "$", &mut errors);
         assert!(errors.is_empty());
@@ -736,19 +822,37 @@ mod tests {
 
     #[test]
     fn validate_enum_rejects_unknown_variant() {
-        let schema = JsonSchema::Enum(vec!["Active".to_string(), "Inactive".to_string()]);
+        let schema = JsonSchema::Enum(vec![
+            EnumVariant {
+                json_value: "active".to_string(),
+                constructor_name: "Active".to_string(),
+            },
+            EnumVariant {
+                json_value: "inactive".to_string(),
+                constructor_name: "Inactive".to_string(),
+            },
+        ]);
 
         let json: serde_json::Value = serde_json::from_str(r#""Deleted""#).unwrap();
         let mut errors = Vec::new();
         validate_json(&json, &schema, "$", &mut errors);
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].expected.contains("Active"));
-        assert!(errors[0].expected.contains("Inactive"));
+        assert!(errors[0].expected.contains("active"));
+        assert!(errors[0].expected.contains("inactive"));
     }
 
     #[test]
     fn validate_enum_rejects_non_string() {
-        let schema = JsonSchema::Enum(vec!["Active".to_string(), "Inactive".to_string()]);
+        let schema = JsonSchema::Enum(vec![
+            EnumVariant {
+                json_value: "active".to_string(),
+                constructor_name: "Active".to_string(),
+            },
+            EnumVariant {
+                json_value: "inactive".to_string(),
+                constructor_name: "Inactive".to_string(),
+            },
+        ]);
 
         let json: serde_json::Value = serde_json::from_str("42").unwrap();
         let mut errors = Vec::new();
@@ -774,7 +878,7 @@ mod tests {
 
         // Valid JSON
         let json: serde_json::Value =
-            serde_json::from_str(r#"{"name": "Alice", "status": "Active"}"#).unwrap();
+            serde_json::from_str(r#"{"name": "Alice", "status": "active"}"#).unwrap();
         let mut errors = Vec::new();
         validate_json(&json, &schema, "$", &mut errors);
         assert!(errors.is_empty());

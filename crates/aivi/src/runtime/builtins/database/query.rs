@@ -677,7 +677,7 @@ fn build_query_table_mirror(
                     column.name
                 ))
             })?;
-            values.push(runtime_value_to_query_cell(value, column.kind)?);
+            values.push(runtime_value_to_query_cell(value, column.kind, column.not_null)?);
         }
         query_rows.push(QueryRow {
             row_index: index as i64,
@@ -692,7 +692,25 @@ fn build_query_table_mirror(
     }))
 }
 
-fn runtime_value_to_query_cell(value: &Value, kind: QueryColumnType) -> Result<QueryCell, RuntimeError> {
+fn runtime_value_to_query_cell(
+    value: &Value,
+    kind: QueryColumnType,
+    not_null: bool,
+) -> Result<QueryCell, RuntimeError> {
+    match value {
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+            return runtime_value_to_query_cell(&args[0], kind, not_null);
+        }
+        Value::Constructor { name, args } if name == "None" && args.is_empty() => {
+            if not_null {
+                return Err(RuntimeError::Message(
+                    "database.query mirror cannot persist None into a NOT NULL column".to_string(),
+                ));
+            }
+            return Ok(QueryCell::Null);
+        }
+        _ => {}
+    }
     match (value, kind) {
         (Value::Int(value), QueryColumnType::Int) => Ok(QueryCell::Int(*value)),
         (Value::Bool(value), QueryColumnType::Bool) => Ok(QueryCell::Bool(*value)),
@@ -717,4 +735,60 @@ fn sync_query_table_if_possible(
         connection.sync_query_table(table).map_err(RuntimeError::Message)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod query_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_value_to_query_cell_unwraps_some_text() {
+        let cell = match runtime_value_to_query_cell(
+            &Value::Constructor {
+                name: "Some".to_string(),
+                args: vec![Value::Text("hello".to_string())],
+            },
+            QueryColumnType::Text,
+            false,
+        ) {
+            Ok(cell) => cell,
+            Err(_) => panic!("Some text should persist"),
+        };
+        assert!(matches!(cell, QueryCell::Text(value) if value == "hello"));
+    }
+
+    #[test]
+    fn runtime_value_to_query_cell_maps_none_to_null_for_nullable_columns() {
+        let cell = match runtime_value_to_query_cell(
+            &Value::Constructor {
+                name: "None".to_string(),
+                args: Vec::new(),
+            },
+            QueryColumnType::Text,
+            false,
+        ) {
+            Ok(cell) => cell,
+            Err(_) => panic!("None should map to NULL for nullable columns"),
+        };
+        assert!(matches!(cell, QueryCell::Null));
+    }
+
+    #[test]
+    fn runtime_value_to_query_cell_rejects_none_for_not_null_columns() {
+        let err = runtime_value_to_query_cell(
+            &Value::Constructor {
+                name: "None".to_string(),
+                args: Vec::new(),
+            },
+            QueryColumnType::Text,
+            true,
+        )
+        .expect_err("NOT NULL columns should reject None");
+        match err {
+            RuntimeError::Message(message) => {
+                assert!(message.contains("NOT NULL"));
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
 }

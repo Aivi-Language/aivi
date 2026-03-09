@@ -380,6 +380,17 @@ pub(in crate::runtime::builtins) fn json_to_runtime_with_schema(
                 Value::Text(n.to_string())
             }
         }
+        JsonValue::String(s) if matches!(schema, Some(JsonSchema::Enum(_))) => {
+            let constructor_name = match schema {
+                Some(JsonSchema::Enum(variants)) => crate::runtime::json_schema::constructor_name_for_enum_value(variants, s)
+                    .unwrap_or(s.as_str()),
+                _ => s.as_str(),
+            };
+            Value::Constructor {
+                name: constructor_name.to_string(),
+                args: Vec::new(),
+            }
+        }
         JsonValue::String(s) => Value::Text(s.clone()),
         JsonValue::Array(items) => {
             let elem_schema = match schema {
@@ -451,4 +462,55 @@ fn source_decode_error(
         ));
     }
     out
+}
+
+#[cfg(test)]
+mod system_json_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn json_to_runtime_with_schema_maps_enum_strings_to_constructors() {
+        let schema = crate::runtime::json_schema::JsonSchema::Enum(vec![
+            crate::runtime::json_schema::EnumVariant {
+                json_value: "notification".to_string(),
+                constructor_name: "Notification".to_string(),
+            },
+            crate::runtime::json_schema::EnumVariant {
+                json_value: "billing".to_string(),
+                constructor_name: "Billing".to_string(),
+            },
+        ]);
+        let value = json_to_runtime_with_schema(&json!("notification"), Some(&schema));
+        assert!(matches!(
+            value,
+            Value::Constructor { name, args } if name == "Notification" && args.is_empty()
+        ));
+    }
+
+    #[test]
+    fn json_to_runtime_with_schema_wraps_optional_enums_in_some_constructor() {
+        let schema = crate::runtime::json_schema::JsonSchema::Option(Box::new(
+            crate::runtime::json_schema::JsonSchema::Enum(vec![
+                crate::runtime::json_schema::EnumVariant {
+                    json_value: "critical".to_string(),
+                    constructor_name: "Critical".to_string(),
+                },
+                crate::runtime::json_schema::EnumVariant {
+                    json_value: "normal".to_string(),
+                    constructor_name: "Normal".to_string(),
+                },
+            ]),
+        ));
+        let value = json_to_runtime_with_schema(&json!("critical"), Some(&schema));
+        assert!(matches!(
+            value,
+            Value::Constructor { name, args }
+                if name == "Some"
+                    && matches!(
+                        args.as_slice(),
+                        [Value::Constructor { name, args }] if name == "Critical" && args.is_empty()
+                    )
+        ));
+    }
 }

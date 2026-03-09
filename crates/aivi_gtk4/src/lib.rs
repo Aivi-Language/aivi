@@ -78,6 +78,15 @@ mod linux_impl {
         pub height: c_int,
     }
 
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct GdkRgba {
+        pub red: f32,
+        pub green: f32,
+        pub blue: f32,
+        pub alpha: f32,
+    }
+
     #[link(name = "gtk-4")]
     unsafe extern "C" {
         fn gtk_init();
@@ -242,6 +251,158 @@ mod linux_impl {
         fn gtk_progress_bar_new() -> *mut c_void;
         fn gtk_progress_bar_set_fraction(progress_bar: *mut c_void, fraction: f64);
 
+        fn gtk_check_button_new() -> *mut c_void;
+        fn gtk_check_button_new_with_label(label: *const c_char) -> *mut c_void;
+        fn gtk_check_button_set_active(check_button: *mut c_void, is_active: c_int);
+
+        fn gtk_scale_new_with_range(
+            orientation: c_int,
+            min: f64,
+            max: f64,
+            step: f64,
+        ) -> *mut c_void;
+        fn gtk_scale_set_digits(scale: *mut c_void, digits: c_int);
+        fn gtk_scale_set_draw_value(scale: *mut c_void, draw_value: c_int);
+        fn gtk_scale_set_value_pos(scale: *mut c_void, pos: c_int);
+        fn gtk_range_set_value(range: *mut c_void, value: f64);
+
+        fn gtk_switch_new() -> *mut c_void;
+
+        fn gtk_spinner_new() -> *mut c_void;
+        fn gtk_spinner_start(spinner: *mut c_void);
+        fn gtk_spinner_stop(spinner: *mut c_void);
+
+        fn gtk_search_entry_new() -> *mut c_void;
+
+        fn gtk_toggle_button_new() -> *mut c_void;
+        fn gtk_toggle_button_new_with_label(label: *const c_char) -> *mut c_void;
+        fn gtk_toggle_button_get_active(toggle_button: *mut c_void) -> c_int;
+
+        fn gtk_link_button_new(uri: *const c_char) -> *mut c_void;
+        fn gtk_link_button_new_with_label(uri: *const c_char, label: *const c_char) -> *mut c_void;
+
+        fn gtk_paned_new(orientation: c_int) -> *mut c_void;
+        fn gtk_paned_set_start_child(paned: *mut c_void, child: *mut c_void);
+        fn gtk_paned_set_end_child(paned: *mut c_void, child: *mut c_void);
+
+        fn gtk_frame_new(label: *const c_char) -> *mut c_void;
+        fn gtk_frame_set_child(frame: *mut c_void, child: *mut c_void);
+
+        fn gtk_expander_new(label: *const c_char) -> *mut c_void;
+        fn gtk_expander_set_child(expander: *mut c_void, child: *mut c_void);
+
+        fn gtk_notebook_new() -> *mut c_void;
+        fn gtk_notebook_append_page(
+            notebook: *mut c_void,
+            child: *mut c_void,
+            tab_label: *mut c_void,
+        ) -> c_int;
+        fn gtk_notebook_set_current_page(notebook: *mut c_void, page_num: c_int);
+
+        fn gtk_stack_switcher_new() -> *mut c_void;
+
+        fn gtk_flow_box_new() -> *mut c_void;
+        fn gtk_flow_box_append(flow_box: *mut c_void, child: *mut c_void);
+        fn gtk_flow_box_remove(flow_box: *mut c_void, child: *mut c_void);
+        fn gtk_flow_box_set_max_children_per_line(flow_box: *mut c_void, n_children: c_uint);
+        fn gtk_flow_box_set_min_children_per_line(flow_box: *mut c_void, n_children: c_uint);
+        fn gtk_flow_box_set_row_spacing(flow_box: *mut c_void, spacing: c_uint);
+        fn gtk_flow_box_set_column_spacing(flow_box: *mut c_void, spacing: c_uint);
+        fn gtk_flow_box_set_homogeneous(flow_box: *mut c_void, homogeneous: c_int);
+        fn gtk_flow_box_set_selection_mode(flow_box: *mut c_void, mode: c_int);
+
+        fn gtk_grid_new() -> *mut c_void;
+        fn gtk_grid_attach(
+            grid: *mut c_void,
+            child: *mut c_void,
+            column: c_int,
+            row: c_int,
+            width: c_int,
+            height: c_int,
+        );
+        fn gtk_grid_set_row_spacing(grid: *mut c_void, spacing: c_uint);
+        fn gtk_grid_set_column_spacing(grid: *mut c_void, spacing: c_uint);
+        fn gtk_grid_set_row_homogeneous(grid: *mut c_void, homogeneous: c_int);
+        fn gtk_grid_set_column_homogeneous(grid: *mut c_void, homogeneous: c_int);
+
+        fn gtk_aspect_frame_new(
+            xalign: f32,
+            yalign: f32,
+            ratio: f32,
+            obey_child: c_int,
+        ) -> *mut c_void;
+        fn gtk_aspect_frame_set_child(aspect_frame: *mut c_void, child: *mut c_void);
+        fn gtk_aspect_frame_set_ratio(aspect_frame: *mut c_void, ratio: f32);
+        fn gtk_aspect_frame_set_obey_child(aspect_frame: *mut c_void, obey_child: c_int);
+
+        fn gtk_spin_button_new_with_range(min: f64, max: f64, step: f64) -> *mut c_void;
+        fn gtk_spin_button_get_value(spin_button: *mut c_void) -> f64;
+        fn gtk_spin_button_set_value(spin_button: *mut c_void, value: f64);
+        fn gtk_spin_button_set_digits(spin_button: *mut c_void, digits: c_uint);
+        fn gtk_spin_button_set_wrap(spin_button: *mut c_void, wrap: c_int);
+        fn gtk_spin_button_set_snap_to_ticks(spin_button: *mut c_void, snap_to_ticks: c_int);
+        fn gtk_spin_button_set_range(spin_button: *mut c_void, min: f64, max: f64);
+        fn gtk_spin_button_set_increments(spin_button: *mut c_void, step: f64, page: f64);
+
+        fn gtk_combo_box_text_new() -> *mut c_void;
+        fn gtk_combo_box_text_append_text(combo_box: *mut c_void, text: *const c_char);
+        fn gtk_combo_box_text_get_active_text(combo_box: *mut c_void) -> *mut c_char;
+        fn gtk_combo_box_set_active(combo_box: *mut c_void, index: c_int);
+
+        // GtkColorDialog / GtkColorDialogButton (GTK 4.10+)
+        fn gtk_color_dialog_new() -> *mut c_void;
+        fn gtk_color_dialog_button_new(dialog: *mut c_void) -> *mut c_void;
+        fn gtk_color_dialog_button_get_rgba(button: *mut c_void) -> *const GdkRgba;
+        fn gtk_color_dialog_button_set_rgba(button: *mut c_void, color: *const GdkRgba);
+
+        // GtkFontDialog / GtkFontDialogButton (GTK 4.10+)
+        fn gtk_font_dialog_new() -> *mut c_void;
+        fn gtk_font_dialog_button_new(dialog: *mut c_void) -> *mut c_void;
+        fn gtk_font_dialog_button_get_font_desc(button: *mut c_void) -> *mut c_void;
+        fn gtk_font_dialog_button_set_font_desc(button: *mut c_void, font_desc: *mut c_void);
+
+        // GtkSearchBar (GTK 4)
+        fn gtk_search_bar_new() -> *mut c_void;
+        fn gtk_search_bar_set_child(bar: *mut c_void, child: *mut c_void);
+        fn gtk_search_bar_set_search_mode(bar: *mut c_void, search_mode: c_int);
+        fn gtk_search_bar_set_show_close_button(bar: *mut c_void, visible: c_int);
+        fn gtk_search_bar_connect_entry(bar: *mut c_void, entry: *mut c_void);
+
+        // GtkPicture (GTK 4)
+        fn gtk_picture_new() -> *mut c_void;
+        fn gtk_picture_set_filename(picture: *mut c_void, filename: *const c_char);
+        fn gtk_picture_set_resource(picture: *mut c_void, resource_path: *const c_char);
+        fn gtk_picture_set_content_fit(picture: *mut c_void, content_fit: c_int);
+        fn gtk_picture_set_can_shrink(picture: *mut c_void, can_shrink: c_int);
+        fn gtk_picture_set_keep_aspect_ratio(picture: *mut c_void, keep_aspect_ratio: c_int);
+        fn gtk_picture_set_alternative_text(picture: *mut c_void, alternative_text: *const c_char);
+
+        // GtkCalendar (GTK 4)
+        fn gtk_calendar_new() -> *mut c_void;
+        fn gtk_calendar_set_show_heading(calendar: *mut c_void, value: c_int);
+        fn gtk_calendar_set_show_day_names(calendar: *mut c_void, value: c_int);
+        fn gtk_calendar_set_show_week_numbers(calendar: *mut c_void, value: c_int);
+
+        // GtkActionBar (GTK 4)
+        fn gtk_action_bar_new() -> *mut c_void;
+        fn gtk_action_bar_pack_start(bar: *mut c_void, child: *mut c_void);
+        fn gtk_action_bar_pack_end(bar: *mut c_void, child: *mut c_void);
+        fn gtk_action_bar_set_center_widget(bar: *mut c_void, center_widget: *mut c_void);
+        fn gtk_action_bar_set_revealed(bar: *mut c_void, revealed: c_int);
+
+        // GtkCenterBox (GTK 4)
+        fn gtk_center_box_new() -> *mut c_void;
+        fn gtk_center_box_set_start_widget(center_box: *mut c_void, child: *mut c_void);
+        fn gtk_center_box_set_center_widget(center_box: *mut c_void, child: *mut c_void);
+        fn gtk_center_box_set_end_widget(center_box: *mut c_void, child: *mut c_void);
+
+    }
+
+    #[link(name = "pango-1.0")]
+    unsafe extern "C" {
+        fn pango_font_description_from_string(str: *const c_char) -> *mut c_void;
+        fn pango_font_description_to_string(desc: *mut c_void) -> *mut c_char;
+        fn pango_font_description_free(desc: *mut c_void);
     }
 
     #[link(name = "gio-2.0")]
@@ -265,6 +426,7 @@ mod linux_impl {
             function: unsafe extern "C" fn(*mut c_void) -> c_int,
             data: *mut c_void,
         ) -> c_uint;
+        fn g_free(ptr: *mut c_void);
     }
 
     #[link(name = "gobject-2.0")]
@@ -449,6 +611,10 @@ mod linux_impl {
         FloatValue,
         NotifyBool,
         NotifyU32,
+        SpinButtonValue,
+        ComboBoxText,
+        NotifyRgba,
+        NotifyFontDesc,
     }
 
     struct SignalCallbackData {
@@ -480,10 +646,20 @@ mod linux_impl {
         SplitView,
         Stack,
         Revealer,
+        Paned,
+        Frame,
+        Expander,
+        Notebook,
+        FlowBox,
+        Grid,
+        AspectFrame,
         PreferencesDialog,
         PreferencesPage,
         PreferencesGroup,
         ActionRow,
+        SearchBar,
+        ActionBar,
+        CenterBox,
         Other,
     }
 
@@ -658,10 +834,20 @@ mod linux_impl {
             CreatedWidgetKind::SplitView => "split_view",
             CreatedWidgetKind::Stack => "stack",
             CreatedWidgetKind::Revealer => "revealer",
+            CreatedWidgetKind::Paned => "paned",
+            CreatedWidgetKind::Frame => "frame",
+            CreatedWidgetKind::Expander => "expander",
+            CreatedWidgetKind::Notebook => "notebook",
+            CreatedWidgetKind::FlowBox => "flow_box",
+            CreatedWidgetKind::Grid => "grid",
+            CreatedWidgetKind::AspectFrame => "aspect_frame",
             CreatedWidgetKind::PreferencesDialog => "preferences_dialog",
             CreatedWidgetKind::PreferencesPage => "preferences_page",
             CreatedWidgetKind::PreferencesGroup => "preferences_group",
             CreatedWidgetKind::ActionRow => "action_row",
+            CreatedWidgetKind::SearchBar => "search_bar",
+            CreatedWidgetKind::ActionBar => "action_bar",
+            CreatedWidgetKind::CenterBox => "center_box",
             CreatedWidgetKind::Other => "other",
         }
     }
@@ -684,9 +870,18 @@ mod linux_impl {
             "GtkEntry" | "GtkPasswordEntry" => &["changed", "activate"],
             "AdwEntryRow" | "AdwPasswordEntryRow" => &["changed"],
             "GtkCheckButton" | "AdwSwitchRow" => &["toggled"],
+            "GtkToggleButton" => &["toggled"],
+            "GtkSwitch" => &["notify::active"],
             "GtkRange" | "GtkScale" => &["value-changed"],
+            "GtkSpinButton" => &["value-changed"],
+            "GtkSearchEntry" => &["changed", "search-changed"],
+            "GtkComboBoxText" => &["changed"],
+            "GtkNotebook" => &["switch-page"],
             "GtkDropDown" => &["notify::selected"],
             "AdwOverlaySplitView" => &["notify::show-sidebar"],
+            "GtkColorDialogButton" => &["notify::rgba"],
+            "GtkFontDialogButton" => &["notify::font-desc"],
+            "GtkCalendar" => &["day-selected"],
             _ => &[],
         }
     }
@@ -836,17 +1031,413 @@ mod linux_impl {
                 .message
                 .contains("widget #9 (GtkBox id=account-connection)"));
         }
+        #[test]
+        fn adw_abstract_animation_gives_helpful_error() {
+            let err = create_adw_widget("AdwAnimation")
+                .expect_err("AdwAnimation must not be directly creatable");
+            assert!(err.message.contains("abstract base class"));
+            assert!(err.message.contains("AdwTimedAnimation"));
+            assert!(err.message.contains("AdwSpringAnimation"));
+        }
+
+        #[test]
+        fn adw_abstract_animation_target_gives_helpful_error() {
+            let err = create_adw_widget("AdwAnimationTarget")
+                .expect_err("AdwAnimationTarget must not be directly creatable");
+            assert!(err.message.contains("abstract base class"));
+            assert!(err.message.contains("AdwCallbackAnimationTarget"));
+            assert!(err.message.contains("AdwPropertyAnimationTarget"));
+        }
+
+        #[test]
+        fn adw_enum_list_item_gives_helpful_error() {
+            let err = create_adw_widget("AdwEnumListItem")
+                .expect_err("AdwEnumListItem must not be directly creatable");
+            assert!(err.message.contains("AdwEnumListModel"));
+        }
+
+        #[test]
+        fn adw_parent_managed_page_types_give_helpful_errors() {
+            for (class, owner) in [
+                ("AdwLeafletPage", "AdwLeaflet"),
+                ("AdwSqueezerPage", "AdwSqueezer"),
+                ("AdwTabPage", "AdwTabView"),
+                ("AdwViewStackPage", "AdwViewStack"),
+                ("AdwViewStackPages", "AdwViewStack"),
+            ] {
+                let err = create_adw_widget(class)
+                    .expect_err(&format!("{class} must not be directly creatable"));
+                assert!(
+                    err.message.contains(owner),
+                    "{class} error should mention {owner}, got: {}",
+                    err.message
+                );
+            }
+        }
+
+        fn build_gtk_widget_error(class_name: &str) -> Gtk4Error {
+            let mut state = RealGtkState::default();
+            let mut id_map = HashMap::new();
+            let node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![("class".to_string(), class_name.to_string())],
+                children: vec![],
+            };
+            build_widget_from_node_real(&mut state, &node, &mut id_map)
+                .expect_err(&format!("{class_name} must not be directly creatable"))
+        }
+
+        #[test]
+        fn gtk_documented_filter_sorter_and_expression_types_give_helpful_errors() {
+            for (class, needle) in [
+                ("GtkCustomFilter", "filter` property of GtkFilterListModel"),
+                ("GtkStringFilter", "filter` property of GtkFilterListModel"),
+                ("GtkBoolFilter", "filter` property of GtkFilterListModel"),
+                ("GtkMultiFilter", "GtkEveryFilter or GtkAnyFilter"),
+                ("GtkEveryFilter", "filter` property of GtkFilterListModel"),
+                ("GtkAnyFilter", "filter` property of GtkFilterListModel"),
+                ("GtkCustomSorter", "sorter` property of GtkSortListModel"),
+                ("GtkStringSorter", "sorter` property of GtkSortListModel"),
+                ("GtkNumericSorter", "sorter` property of GtkSortListModel"),
+                ("GtkMultiSorter", "priority order"),
+                ("GtkPropertyExpression", "prefer pure AIVI derivations"),
+                ("GtkConstantExpression", "prefer pure AIVI derivations"),
+                ("GtkCClosureExpression", "prefer pure AIVI derivations"),
+                ("GtkObjectExpression", "prefer pure AIVI derivations"),
+            ] {
+                let err = build_gtk_widget_error(class);
+                assert!(
+                    err.message.contains(needle),
+                    "{class} error should mention `{needle}`, got: {}",
+                    err.message
+                );
+            }
+        }
+
+        #[test]
+        fn gtk_documented_factory_and_column_view_types_give_helpful_errors() {
+            for (class, needle) in [
+                (
+                    "GtkSignalListItemFactory",
+                    "factory` property of GtkListView or GtkColumnView",
+                ),
+                (
+                    "GtkBuilderListItemFactory",
+                    "prefer the ~<gtk> sigil over raw Builder XML",
+                ),
+                (
+                    "GtkColumnViewColumn",
+                    "added to GtkColumnView programmatically",
+                ),
+                ("GtkColumnViewRow", "managed internally by GtkColumnView"),
+                (
+                    "GtkColumnViewCell",
+                    "managed internally by the column factory",
+                ),
+                (
+                    "GtkColumnViewSorter",
+                    "obtained from the `sorter` property of GtkColumnView",
+                ),
+            ] {
+                let err = build_gtk_widget_error(class);
+                assert!(
+                    err.message.contains(needle),
+                    "{class} error should mention `{needle}`, got: {}",
+                    err.message
+                );
+            }
+        }
+
+        #[test]
+        fn gtk_documented_shortcut_and_media_types_give_helpful_errors() {
+            for (class, needle) in [
+                ("GtkShortcut", "GtkShortcutController"),
+                ("GtkShortcutAction", "GtkActivateAction"),
+                ("GtkShortcutTrigger", "GtkKeyvalTrigger"),
+                ("GtkActivateAction", "shortcut action"),
+                ("GtkSignalAction", "shortcut action"),
+                ("GtkNamedAction", "shortcut action"),
+                ("GtkNothingAction", "shortcut action"),
+                ("GtkMnemonicAction", "shortcut action"),
+                ("GtkKeyvalTrigger", "shortcut trigger"),
+                ("GtkMnemonicTrigger", "shortcut trigger"),
+                ("GtkAlternativeTrigger", "shortcut trigger"),
+                ("GtkNeverTrigger", "shortcut trigger"),
+                ("GtkAnyTrigger", "shortcut trigger"),
+                ("GtkMediaStream", "set it as the `stream` property"),
+                ("GtkMediaFile", "set it as the `stream` property"),
+                ("GtkVideo", "does not yet expose it in ~<gtk> widget trees"),
+                (
+                    "GtkMediaControls",
+                    "does not yet expose it in ~<gtk> widget trees",
+                ),
+            ] {
+                let err = build_gtk_widget_error(class);
+                assert!(
+                    err.message.contains(needle),
+                    "{class} error should mention `{needle}`, got: {}",
+                    err.message
+                );
+            }
+        }
+
+        #[test]
+        fn gtk_future_surface_and_programmatic_helper_types_give_helpful_errors() {
+            for (class, needle) in [
+                (
+                    "GtkListView",
+                    "use GtkListBox with <each> for simple read-only lists today",
+                ),
+                (
+                    "GtkColumnView",
+                    "use GtkListBox with <each> for simple read-only lists today",
+                ),
+                (
+                    "GtkGridView",
+                    "use GtkListBox with <each> for simple read-only lists today",
+                ),
+                ("GtkApplication", "managed by appNew or gtkApp"),
+                ("GtkPrintOperation", "printing is not part of the AIVI v0.1"),
+                ("GtkPrinter", "printing is not part of the AIVI v0.1"),
+                ("GtkPrintContext", "printing is not part of the AIVI v0.1"),
+                ("GtkPageSetup", "printing is not part of the AIVI v0.1"),
+                ("GtkPaperSize", "printing is not part of the AIVI v0.1"),
+                ("GtkPrintSettings", "printing is not part of the AIVI v0.1"),
+                ("GtkWindow", "managed by windowNew or gtkApp"),
+                ("GtkApplicationWindow", "managed by windowNew or gtkApp"),
+                ("GtkAboutDialog", "AdwAboutDialog"),
+                ("GtkAlertDialog", "present it programmatically"),
+                ("GtkDialog", "prefer GtkAlertDialog"),
+                ("GtkMessageDialog", "prefer GtkAlertDialog"),
+                ("GtkShortcutsWindow", "AdwShortcutsDialog"),
+                ("GtkPopover", "GtkMenuButton with a menu model"),
+                ("GtkPopoverMenu", "GtkMenuButton with a menu model"),
+                ("GtkPopoverMenuBar", "menu model"),
+                ("GtkFileDialog", "AIVI does not yet expose file dialogs"),
+                ("GtkFileChooserDialog", "prefer GtkFileDialog"),
+                ("GtkFileChooserNative", "prefer GtkFileDialog"),
+                ("GtkFileChooserWidget", "prefer GtkFileDialog"),
+                ("GtkPrintDialog", "printing is not part of the AIVI v0.1"),
+                ("GtkPrintJob", "printing is not part of the AIVI v0.1"),
+                (
+                    "GtkPageSetupUnixDialog",
+                    "printing is not part of the AIVI v0.1",
+                ),
+                (
+                    "GtkPrintUnixDialog",
+                    "printing is not part of the AIVI v0.1",
+                ),
+            ] {
+                let err = build_gtk_widget_error(class);
+                assert!(
+                    err.message.contains(needle),
+                    "{class} error should mention `{needle}`, got: {}",
+                    err.message
+                );
+            }
+        }
+
+        #[test]
+        fn adw_breakpoint_condition_gives_helpful_error() {
+            let err = create_adw_widget("AdwBreakpointCondition")
+                .expect_err("AdwBreakpointCondition must not be directly creatable");
+            assert!(err.message.contains("condition descriptor"));
+            assert!(err.message.contains("AdwBreakpoint"));
+        }
+
+        #[test]
+        fn gtk_check_button_has_toggle_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkCheckButton", "toggled"),
+                Some(SignalPayloadKind::ToggleActive)
+            );
+            assert_eq!(known_signals_for_class("GtkCheckButton"), &["toggled"]);
+        }
+
+        #[test]
+        fn gtk_toggle_button_has_toggle_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkToggleButton", "toggled"),
+                Some(SignalPayloadKind::ToggleActive)
+            );
+            assert_eq!(known_signals_for_class("GtkToggleButton"), &["toggled"]);
+        }
+
+        #[test]
+        fn gtk_switch_has_notify_active_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkSwitch", "notify::active"),
+                Some(SignalPayloadKind::NotifyBool)
+            );
+            assert_eq!(known_signals_for_class("GtkSwitch"), &["notify::active"]);
+        }
+
+        #[test]
+        fn gtk_scale_has_value_changed_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkScale", "value-changed"),
+                Some(SignalPayloadKind::FloatValue)
+            );
+            assert_eq!(
+                signal_payload_kind_for("GtkRange", "value-changed"),
+                Some(SignalPayloadKind::FloatValue)
+            );
+            assert_eq!(known_signals_for_class("GtkScale"), &["value-changed"]);
+        }
+
+        #[test]
+        fn gtk_search_entry_has_changed_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkSearchEntry", "changed"),
+                Some(SignalPayloadKind::EditableText)
+            );
+            assert_eq!(
+                signal_payload_kind_for("GtkSearchEntry", "search-changed"),
+                Some(SignalPayloadKind::EditableText)
+            );
+        }
+
+        #[test]
+        fn new_gtk_classes_are_toggle_or_text_input_as_expected() {
+            assert!(is_toggle_class("GtkCheckButton"));
+            assert!(is_toggle_class("GtkToggleButton"));
+            assert!(is_toggle_class("GtkSwitch"));
+            assert!(is_toggle_class("AdwSwitchRow"));
+            assert!(!is_toggle_class("GtkButton"));
+            assert!(!is_toggle_class("GtkScale"));
+
+            assert!(is_text_input_class("GtkSearchEntry"));
+            assert!(is_text_input_class("GtkEntry"));
+            assert!(!is_text_input_class("GtkCheckButton"));
+        }
+
+        #[test]
+        fn gtk_spin_button_has_value_changed_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkSpinButton", "value-changed"),
+                Some(SignalPayloadKind::SpinButtonValue)
+            );
+            assert_eq!(known_signals_for_class("GtkSpinButton"), &["value-changed"]);
+        }
+
+        #[test]
+        fn gtk_combo_box_text_has_changed_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkComboBoxText", "changed"),
+                Some(SignalPayloadKind::ComboBoxText)
+            );
+            assert_eq!(known_signals_for_class("GtkComboBoxText"), &["changed"]);
+        }
+
+        #[test]
+        fn parse_grid_position_defaults() {
+            assert_eq!(parse_grid_position(None), (0, 0, 1, 1));
+            assert_eq!(parse_grid_position(Some("0,0")), (0, 0, 1, 1));
+            assert_eq!(parse_grid_position(Some("2,3")), (2, 3, 1, 1));
+            assert_eq!(parse_grid_position(Some("1,2,3,4")), (1, 2, 3, 4));
+            assert_eq!(parse_grid_position(Some("0,1,2")), (0, 1, 2, 1));
+        }
+
+        #[test]
+        fn gtk_grid_has_grid_kind() {
+            // Verify the kind name is correct for diagnostics
+            assert_eq!(created_widget_kind_name(CreatedWidgetKind::Grid), "grid");
+            assert_eq!(
+                created_widget_kind_name(CreatedWidgetKind::AspectFrame),
+                "aspect_frame"
+            );
+        }
+
+        #[test]
+        fn gtk_color_dialog_button_has_notify_rgba_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkColorDialogButton", "notify::rgba"),
+                Some(SignalPayloadKind::NotifyRgba)
+            );
+            assert_eq!(
+                known_signals_for_class("GtkColorDialogButton"),
+                &["notify::rgba"]
+            );
+        }
+
+        #[test]
+        fn gtk_font_dialog_button_has_notify_font_desc_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkFontDialogButton", "notify::font-desc"),
+                Some(SignalPayloadKind::NotifyFontDesc)
+            );
+            assert_eq!(
+                known_signals_for_class("GtkFontDialogButton"),
+                &["notify::font-desc"]
+            );
+        }
+
+        #[test]
+        fn parse_rgba_str_three_components() {
+            let rgba = parse_rgba_str("0.1,0.2,0.3").expect("should parse");
+            assert!((rgba.red - 0.1).abs() < 1e-5);
+            assert!((rgba.green - 0.2).abs() < 1e-5);
+            assert!((rgba.blue - 0.3).abs() < 1e-5);
+            assert!((rgba.alpha - 1.0).abs() < 1e-5);
+        }
+
+        #[test]
+        fn parse_rgba_str_four_components() {
+            let rgba = parse_rgba_str("0.5,0.6,0.7,0.8").expect("should parse");
+            assert!((rgba.red - 0.5).abs() < 1e-5);
+            assert!((rgba.green - 0.6).abs() < 1e-5);
+            assert!((rgba.blue - 0.7).abs() < 1e-5);
+            assert!((rgba.alpha - 0.8).abs() < 1e-5);
+        }
+
+        #[test]
+        fn parse_rgba_str_rejects_invalid_input() {
+            assert!(parse_rgba_str("").is_none());
+            assert!(parse_rgba_str("not-a-color").is_none());
+            assert!(parse_rgba_str("0.1,0.2").is_none());
+            assert!(parse_rgba_str("0.1,0.2,0.3,0.4,0.5").is_none());
+        }
+
+        #[test]
+        fn gtk_color_button_removed_error_mentions_replacement() {
+            // This is a compile-time check — the error branch is in the widget builder
+            // rather than create_adw_widget, so we verify the signal metadata instead.
+            assert_eq!(signal_payload_kind_for("GtkColorButton", "clicked"), None);
+            assert_eq!(known_signals_for_class("GtkColorButton"), &[] as &[&str]);
+        }
+
+        #[test]
+        fn gtk_app_chooser_classes_have_no_known_signals() {
+            for class in &[
+                "GtkAppChooserButton",
+                "GtkAppChooserDialog",
+                "GtkAppChooserWidget",
+            ] {
+                assert_eq!(
+                    known_signals_for_class(class),
+                    &[] as &[&str],
+                    "{class} should have no registered signals (removed in GTK 4.10)"
+                );
+            }
+        }
     }
 
     fn is_text_input_class(class_name: &str) -> bool {
         matches!(
             class_name,
-            "GtkEntry" | "GtkPasswordEntry" | "AdwEntryRow" | "AdwPasswordEntryRow"
+            "GtkEntry"
+                | "GtkPasswordEntry"
+                | "GtkSearchEntry"
+                | "AdwEntryRow"
+                | "AdwPasswordEntryRow"
         )
     }
 
     fn is_toggle_class(class_name: &str) -> bool {
-        matches!(class_name, "GtkCheckButton" | "AdwSwitchRow")
+        matches!(
+            class_name,
+            "GtkCheckButton" | "GtkToggleButton" | "GtkSwitch" | "AdwSwitchRow"
+        )
     }
 
     fn widget_bool_property(widget: *mut c_void, prop: &str) -> Option<bool> {
@@ -1429,7 +2020,10 @@ mod linux_impl {
         let widget = widget_ptr(state, widget_id, "uiDebugType")?;
         let text_c = c_text(text, "gtk ui debug invalid text payload")?;
         unsafe {
-            if matches!(class_name.as_str(), "GtkEntry" | "GtkPasswordEntry") {
+            if matches!(
+                class_name.as_str(),
+                "GtkEntry" | "GtkPasswordEntry" | "GtkSearchEntry"
+            ) {
                 gtk_editable_set_text(widget, text_c.as_ptr());
             } else {
                 let prop_c = CString::new("text").unwrap();
@@ -1886,6 +2480,40 @@ mod linux_impl {
         }
     }
 
+    /// Call a no-argument libadwaita function that returns a `*mut c_void` (e.g., singletons).
+    fn call_adw_singleton(fn_name: &str) -> Result<*mut c_void, Gtk4Error> {
+        const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else {
+                continue;
+            };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
+            if handle.is_null() {
+                continue;
+            }
+            let Ok(sym) = CString::new(fn_name) else {
+                break;
+            };
+            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
+            let _ = unsafe { dlclose(handle) };
+            if !ptr.is_null() {
+                let f: unsafe extern "C" fn() -> *mut c_void = unsafe { std::mem::transmute(ptr) };
+                let result = unsafe { f() };
+                if result.is_null() {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk4.buildFromNode {fn_name} returned null"
+                    )));
+                }
+                return Ok(result);
+            }
+            break;
+        }
+        Err(Gtk4Error::new(format!(
+            "gtk4.buildFromNode could not call {fn_name} (libadwaita not available)"
+        )))
+    }
+
     fn maybe_register_gresource_bundle() -> Result<(), Gtk4Error> {
         const GRESOURCE_ENV: &str = "AIVI_GTK4_GRESOURCE_PATH";
         let path = match std::env::var(GRESOURCE_ENV) {
@@ -2045,12 +2673,32 @@ mod linux_impl {
                 }
             }
             SignalPayloadKind::ToggleActive => {
-                let active = unsafe { gtk_check_button_get_active(instance) };
-                if active != 0 { "true" } else { "false" }.to_string()
+                if let Ok(prop_c) = CString::new("active") {
+                    let active = unsafe { gobject_get_bool(instance, &prop_c) };
+                    if active != 0 { "true" } else { "false" }.to_string()
+                } else {
+                    String::new()
+                }
             }
             SignalPayloadKind::FloatValue => {
                 let val = unsafe { gtk_range_get_value(instance) };
                 val.to_string()
+            }
+            SignalPayloadKind::SpinButtonValue => {
+                let val = unsafe { gtk_spin_button_get_value(instance) };
+                val.to_string()
+            }
+            SignalPayloadKind::ComboBoxText => {
+                let text_ptr = unsafe { gtk_combo_box_text_get_active_text(instance) };
+                if text_ptr.is_null() {
+                    String::new()
+                } else {
+                    let s = unsafe { CStr::from_ptr(text_ptr) }
+                        .to_string_lossy()
+                        .into_owned();
+                    unsafe { g_free(text_ptr as *mut c_void) };
+                    s
+                }
             }
             SignalPayloadKind::NotifyBool => {
                 let prop_name = binding
@@ -2075,6 +2723,9 @@ mod linux_impl {
                     String::new()
                 }
             }
+            // NotifyRgba and NotifyFontDesc are notify:: signals and are handled
+            // exclusively by gtk_notify_callback; they cannot arrive here.
+            SignalPayloadKind::NotifyRgba | SignalPayloadKind::NotifyFontDesc => String::new(),
         };
         // Collect all deferred GTK mutations while holding the borrow,
         // then execute them after releasing it.  GTK C calls (g_object_set,
@@ -2285,6 +2936,32 @@ mod linux_impl {
                 SignalPayloadKind::NotifyU32 => {
                     unsafe { gobject_get_u32(instance, &prop_c) }.to_string()
                 }
+                SignalPayloadKind::NotifyRgba => {
+                    let rgba = unsafe { gtk_color_dialog_button_get_rgba(instance) };
+                    if rgba.is_null() {
+                        String::new()
+                    } else {
+                        let c = unsafe { &*rgba };
+                        format!("{},{},{},{}", c.red, c.green, c.blue, c.alpha)
+                    }
+                }
+                SignalPayloadKind::NotifyFontDesc => {
+                    let desc = unsafe { gtk_font_dialog_button_get_font_desc(instance) };
+                    if desc.is_null() {
+                        String::new()
+                    } else {
+                        let s_ptr = unsafe { pango_font_description_to_string(desc) };
+                        if s_ptr.is_null() {
+                            String::new()
+                        } else {
+                            let s = unsafe { CStr::from_ptr(s_ptr) }
+                                .to_string_lossy()
+                                .into_owned();
+                            unsafe { g_free(s_ptr as *mut c_void) };
+                            s
+                        }
+                    }
+                }
                 _ => String::new(),
             })
             .unwrap_or_default();
@@ -2318,14 +2995,24 @@ mod linux_impl {
             | ("GtkPasswordEntry", "activate")
             | ("AdwEntryRow", "changed")
             | ("AdwPasswordEntryRow", "changed") => Some(SignalPayloadKind::EditableText),
+            ("GtkSearchEntry", "changed") | ("GtkSearchEntry", "search-changed") => {
+                Some(SignalPayloadKind::EditableText)
+            }
             ("GtkCheckButton", "toggled") | ("AdwSwitchRow", "toggled") => {
                 Some(SignalPayloadKind::ToggleActive)
             }
+            ("GtkToggleButton", "toggled") => Some(SignalPayloadKind::ToggleActive),
+            ("GtkSwitch", "notify::active") => Some(SignalPayloadKind::NotifyBool),
             ("GtkRange", "value-changed") | ("GtkScale", "value-changed") => {
                 Some(SignalPayloadKind::FloatValue)
             }
+            ("GtkSpinButton", "value-changed") => Some(SignalPayloadKind::SpinButtonValue),
+            ("GtkComboBoxText", "changed") => Some(SignalPayloadKind::ComboBoxText),
             ("GtkDropDown", "notify::selected") => Some(SignalPayloadKind::NotifyU32),
             ("AdwOverlaySplitView", "notify::show-sidebar") => Some(SignalPayloadKind::NotifyBool),
+            ("GtkColorDialogButton", "notify::rgba") => Some(SignalPayloadKind::NotifyRgba),
+            ("GtkFontDialogButton", "notify::font-desc") => Some(SignalPayloadKind::NotifyFontDesc),
+            ("GtkCalendar", "day-selected") => Some(SignalPayloadKind::None),
             _ => None,
         }
     }
@@ -2536,6 +3223,16 @@ mod linux_impl {
             "AdwAboutWindow" => create_adw_widget_type("AdwAboutWindow"),
             "AdwActionRow" => create_adw_widget_type("AdwActionRow"),
             "AdwAlertDialog" => create_adw_widget_type("AdwAlertDialog"),
+            "AdwAnimation" => Err(Gtk4Error::new(
+                "AdwAnimation is an abstract base class and cannot be created directly; \
+                 use AdwTimedAnimation or AdwSpringAnimation instead"
+                    .to_string(),
+            )),
+            "AdwAnimationTarget" => Err(Gtk4Error::new(
+                "AdwAnimationTarget is an abstract base class and cannot be created directly; \
+                 use AdwCallbackAnimationTarget or AdwPropertyAnimationTarget instead"
+                    .to_string(),
+            )),
             "AdwApplication" => create_adw_widget_type("AdwApplication"),
             "AdwApplicationWindow" => create_adw_widget_type("AdwApplicationWindow"),
             "AdwAvatar" => create_adw_widget_type("AdwAvatar"),
@@ -2543,6 +3240,12 @@ mod linux_impl {
             "AdwBin" => create_adw_widget_type("AdwBin"),
             "AdwBottomSheet" => create_adw_widget_type("AdwBottomSheet"),
             "AdwBreakpoint" => create_adw_widget_type("AdwBreakpoint"),
+            "AdwBreakpointCondition" => Err(Gtk4Error::new(
+                "AdwBreakpointCondition is a condition descriptor, not a widget-tree node; \
+                 create it with adw_breakpoint_condition_parse() and set it as the `condition` \
+                 property of AdwBreakpoint"
+                    .to_string(),
+            )),
             "AdwBreakpointBin" => create_adw_widget_type("AdwBreakpointBin"),
             "AdwButtonContent" => create_adw_widget_type("AdwButtonContent"),
             "AdwButtonRow" => create_adw_widget_type("AdwButtonRow"),
@@ -2557,6 +3260,11 @@ mod linux_impl {
             "AdwDialog" => create_adw_widget_type("AdwDialog"),
             "AdwEntryRow" => create_adw_widget_type("AdwEntryRow"),
             "AdwEnumListModel" => create_adw_widget_type("AdwEnumListModel"),
+            "AdwEnumListItem" => Err(Gtk4Error::new(
+                "AdwEnumListItem is created internally by AdwEnumListModel and cannot be \
+                 created directly; use AdwEnumListModel in your widget tree instead"
+                    .to_string(),
+            )),
             "AdwExpanderRow" => create_adw_widget_type("AdwExpanderRow"),
             "AdwFlap" => create_adw_widget_type("AdwFlap"),
             "AdwHeaderBar" => create_adw_widget_type("AdwHeaderBar"),
@@ -2564,6 +3272,11 @@ mod linux_impl {
             "AdwLayout" => create_adw_widget_type("AdwLayout"),
             "AdwLayoutSlot" => create_adw_widget_type("AdwLayoutSlot"),
             "AdwLeaflet" => create_adw_widget_type("AdwLeaflet"),
+            "AdwLeafletPage" => Err(Gtk4Error::new(
+                "AdwLeafletPage is managed by AdwLeaflet and cannot be created directly; \
+                 add child widgets directly inside AdwLeaflet instead"
+                    .to_string(),
+            )),
             "AdwMessageDialog" => create_adw_widget_type("AdwMessageDialog"),
             "AdwMultiLayoutView" => create_adw_widget_type("AdwMultiLayoutView"),
             "AdwNavigationPage" => create_adw_widget_type("AdwNavigationPage"),
@@ -2588,12 +3301,26 @@ mod linux_impl {
             "AdwSpringAnimation" => create_adw_widget_type("AdwSpringAnimation"),
             "AdwSpringParams" => create_adw_widget_type("AdwSpringParams"),
             "AdwSqueezer" => create_adw_widget_type("AdwSqueezer"),
+            "AdwSqueezerPage" => Err(Gtk4Error::new(
+                "AdwSqueezerPage is managed by AdwSqueezer and cannot be created directly; \
+                 add child widgets directly inside AdwSqueezer instead"
+                    .to_string(),
+            )),
             "AdwStatusPage" => create_adw_widget_type("AdwStatusPage"),
+            "AdwStyleManager" => {
+                try_adw_init();
+                call_adw_singleton("adw_style_manager_get_default")
+            }
             "AdwSwipeTracker" => create_adw_widget_type("AdwSwipeTracker"),
             "AdwSwitchRow" => create_adw_widget_type("AdwSwitchRow"),
             "AdwTabBar" => create_adw_widget_type("AdwTabBar"),
             "AdwTabButton" => create_adw_widget_type("AdwTabButton"),
             "AdwTabOverview" => create_adw_widget_type("AdwTabOverview"),
+            "AdwTabPage" => Err(Gtk4Error::new(
+                "AdwTabPage is managed by AdwTabView and cannot be created directly; \
+                 add child widgets directly inside AdwTabView instead"
+                    .to_string(),
+            )),
             "AdwTabView" => create_adw_widget_type("AdwTabView"),
             "AdwTimedAnimation" => create_adw_widget_type("AdwTimedAnimation"),
             "AdwToast" => create_adw_widget_type("AdwToast"),
@@ -2602,6 +3329,16 @@ mod linux_impl {
             "AdwToggleGroup" => create_adw_widget_type("AdwToggleGroup"),
             "AdwToolbarView" => create_adw_widget_type("AdwToolbarView"),
             "AdwViewStack" => create_adw_widget_type("AdwViewStack"),
+            "AdwViewStackPage" => Err(Gtk4Error::new(
+                "AdwViewStackPage is managed by AdwViewStack and cannot be created directly; \
+                 add child widgets directly inside AdwViewStack instead"
+                    .to_string(),
+            )),
+            "AdwViewStackPages" => Err(Gtk4Error::new(
+                "AdwViewStackPages is an internal list model owned by AdwViewStack and cannot \
+                 be created directly"
+                    .to_string(),
+            )),
             "AdwViewSwitcher" => create_adw_widget_type("AdwViewSwitcher"),
             "AdwViewSwitcherBar" => create_adw_widget_type("AdwViewSwitcherBar"),
             "AdwViewSwitcherTitle" => create_adw_widget_type("AdwViewSwitcherTitle"),
@@ -2612,6 +3349,54 @@ mod linux_impl {
             _ => Err(Gtk4Error::new(format!(
                 "gtk4.buildFromNode unsupported class {class_name}"
             ))),
+        }
+    }
+
+    /// Parse a GtkGrid child position from a `child_type` string.
+    /// Accepts: `"col,row"` or `"col,row,colspan,rowspan"`.
+    /// Defaults: col=0, row=0, colspan=1, rowspan=1.
+    fn parse_grid_position(child_type: Option<&str>) -> (c_int, c_int, c_int, c_int) {
+        let s = child_type.unwrap_or("0,0");
+        let parts: Vec<&str> = s.split(',').collect();
+        let get_int = |i: usize| {
+            parts
+                .get(i)
+                .and_then(|v| v.trim().parse::<c_int>().ok())
+                .unwrap_or(0)
+        };
+        let col = get_int(0);
+        let row = get_int(1);
+        let col_span = parts
+            .get(2)
+            .and_then(|v| v.trim().parse::<c_int>().ok())
+            .unwrap_or(1);
+        let row_span = parts
+            .get(3)
+            .and_then(|v| v.trim().parse::<c_int>().ok())
+            .unwrap_or(1);
+        (col, row, col_span, row_span)
+    }
+
+    /// Parse an RGBA color string in `"r,g,b"` or `"r,g,b,a"` format (components in 0..=1).
+    fn parse_rgba_str(s: &str) -> Option<GdkRgba> {
+        let parts: Vec<f32> = s
+            .split(',')
+            .map(|v| v.trim().parse::<f32>().ok())
+            .collect::<Option<Vec<_>>>()?;
+        match parts.len() {
+            3 => Some(GdkRgba {
+                red: parts[0],
+                green: parts[1],
+                blue: parts[2],
+                alpha: 1.0,
+            }),
+            4 => Some(GdkRgba {
+                red: parts[0],
+                green: parts[1],
+                blue: parts[2],
+                alpha: parts[3],
+            }),
+            _ => None,
         }
     }
 
@@ -3130,6 +3915,205 @@ mod linux_impl {
                     }
                 }
             }
+            "GtkCheckButton" => {
+                if let Some(value) = props.get("active").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_check_button_set_active(widget, bool_to_c(value)) };
+                }
+                set_obj_str(widget, props, "label", "GtkCheckButton")?;
+            }
+            "GtkToggleButton" => {
+                set_obj_bool(widget, props, "active");
+                set_obj_str(widget, props, "label", "GtkToggleButton")?;
+            }
+            "GtkSwitch" => {
+                set_obj_bool(widget, props, "active");
+            }
+            "GtkSpinner" => {
+                if let Some(spinning) = props.get("spinning").and_then(|v| parse_bool_text(v)) {
+                    if spinning {
+                        unsafe { gtk_spinner_start(widget) };
+                    } else {
+                        unsafe { gtk_spinner_stop(widget) };
+                    }
+                }
+            }
+            "GtkScale" | "GtkRange" => {
+                if let Some(value) = props.get("value").and_then(|v| parse_f64_text(v)) {
+                    unsafe { gtk_range_set_value(widget, value) };
+                }
+                if class_name == "GtkScale" {
+                    if let Some(digits) = props.get("digits").and_then(|v| parse_i32_text(v)) {
+                        unsafe { gtk_scale_set_digits(widget, digits) };
+                    }
+                    if let Some(dv) = props.get("draw-value").and_then(|v| parse_bool_text(v)) {
+                        unsafe { gtk_scale_set_draw_value(widget, bool_to_c(dv)) };
+                    }
+                    if let Some(pos) = props.get("value-pos") {
+                        let p: c_int = match pos.as_str() {
+                            "left" => 0,
+                            "right" => 1,
+                            "top" => 2,
+                            "bottom" => 3,
+                            _ => 2,
+                        };
+                        unsafe { gtk_scale_set_value_pos(widget, p) };
+                    }
+                }
+            }
+            "GtkSearchEntry" => {
+                if let Some(value) = props.get("text") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkSearchEntry text")?;
+                    unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                }
+                set_obj_str(widget, props, "placeholder-text", "GtkSearchEntry")?;
+            }
+            "GtkLinkButton" => {
+                set_obj_str(widget, props, "uri", "GtkLinkButton")?;
+                set_obj_str(widget, props, "label", "GtkLinkButton")?;
+            }
+            "GtkPaned" => {
+                if let Some(value) = props.get("position").and_then(|v| parse_i32_text(v)) {
+                    let prop_c = CString::new("position").unwrap();
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                }
+                set_obj_bool(widget, props, "wide-handle");
+            }
+            "GtkFrame" => {
+                set_obj_str(widget, props, "label", "GtkFrame")?;
+            }
+            "GtkExpander" => {
+                set_obj_str(widget, props, "label", "GtkExpander")?;
+                set_obj_bool(widget, props, "expanded");
+            }
+            "GtkNotebook" => {
+                if let Some(page) = props.get("current-page").and_then(|v| parse_i32_text(v)) {
+                    // deferred until children added; stored in props for post-child apply
+                    let _ = page;
+                }
+                set_obj_bool(widget, props, "show-tabs");
+                set_obj_bool(widget, props, "show-border");
+                if let Some(pos) = props.get("tab-pos") {
+                    let p: c_int = match pos.as_str() {
+                        "top" => 0,
+                        "bottom" => 1,
+                        "left" => 2,
+                        "right" => 3,
+                        _ => 0,
+                    };
+                    let prop_c = CString::new("tab-pos").unwrap();
+                    unsafe { gobject_set_i32(widget, &prop_c, p) };
+                }
+            }
+            "GtkFlowBox" => {
+                if let Some(v) = props
+                    .get("max-children-per-line")
+                    .and_then(|v| v.parse::<c_uint>().ok())
+                {
+                    unsafe { gtk_flow_box_set_max_children_per_line(widget, v) };
+                }
+                if let Some(v) = props
+                    .get("min-children-per-line")
+                    .and_then(|v| v.parse::<c_uint>().ok())
+                {
+                    unsafe { gtk_flow_box_set_min_children_per_line(widget, v) };
+                }
+                if let Some(v) = props
+                    .get("row-spacing")
+                    .and_then(|v| v.parse::<c_uint>().ok())
+                {
+                    unsafe { gtk_flow_box_set_row_spacing(widget, v) };
+                }
+                if let Some(v) = props
+                    .get("column-spacing")
+                    .and_then(|v| v.parse::<c_uint>().ok())
+                {
+                    unsafe { gtk_flow_box_set_column_spacing(widget, v) };
+                }
+                if let Some(v) = props.get("homogeneous").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_flow_box_set_homogeneous(widget, bool_to_c(v)) };
+                }
+                if let Some(mode) = props.get("selection-mode") {
+                    let m: c_int = match mode.as_str() {
+                        "none" => 0,
+                        "single" => 1,
+                        "browse" => 2,
+                        "multiple" => 3,
+                        _ => 0,
+                    };
+                    unsafe { gtk_flow_box_set_selection_mode(widget, m) };
+                }
+            }
+            "GtkGrid" => {
+                if let Some(v) = props
+                    .get("row-spacing")
+                    .and_then(|v| v.parse::<c_uint>().ok())
+                {
+                    unsafe { gtk_grid_set_row_spacing(widget, v) };
+                }
+                if let Some(v) = props
+                    .get("column-spacing")
+                    .and_then(|v| v.parse::<c_uint>().ok())
+                {
+                    unsafe { gtk_grid_set_column_spacing(widget, v) };
+                }
+                if let Some(v) = props
+                    .get("row-homogeneous")
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe { gtk_grid_set_row_homogeneous(widget, bool_to_c(v)) };
+                }
+                if let Some(v) = props
+                    .get("column-homogeneous")
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe { gtk_grid_set_column_homogeneous(widget, bool_to_c(v)) };
+                }
+            }
+            "GtkAspectFrame" => {
+                if let Some(v) = props.get("ratio").and_then(|v| v.parse::<f32>().ok()) {
+                    unsafe { gtk_aspect_frame_set_ratio(widget, v) };
+                }
+                if let Some(v) = props.get("obey-child").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_aspect_frame_set_obey_child(widget, bool_to_c(v)) };
+                }
+            }
+            "GtkSpinButton" => {
+                if let Some(value) = props.get("value").and_then(|v| parse_f64_text(v)) {
+                    unsafe { gtk_spin_button_set_value(widget, value) };
+                }
+                if let Some(digits) = props.get("digits").and_then(|v| v.parse::<c_uint>().ok()) {
+                    unsafe { gtk_spin_button_set_digits(widget, digits) };
+                }
+                if let Some(wrap) = props.get("wrap").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_spin_button_set_wrap(widget, bool_to_c(wrap)) };
+                }
+                if let Some(snap) = props.get("snap-to-ticks").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_spin_button_set_snap_to_ticks(widget, bool_to_c(snap)) };
+                }
+                let min = props
+                    .get("min")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(0.0);
+                let max = props
+                    .get("max")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(100.0);
+                let step = props
+                    .get("step")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(1.0);
+                if props.contains_key("min") || props.contains_key("max") {
+                    unsafe { gtk_spin_button_set_range(widget, min, max) };
+                }
+                if props.contains_key("step") {
+                    unsafe { gtk_spin_button_set_increments(widget, step, step * 10.0) };
+                }
+            }
+            "GtkComboBoxText" => {
+                if let Some(idx) = props.get("active").and_then(|v| v.parse::<c_int>().ok()) {
+                    unsafe { gtk_combo_box_set_active(widget, idx) };
+                }
+            }
             "AdwPreferencesDialog" => {
                 set_obj_str(widget, props, "title", "AdwPreferencesDialog")?;
                 set_obj_bool(widget, props, "search-enabled");
@@ -3161,6 +4145,87 @@ mod linux_impl {
                 set_obj_str(widget, props, "title", "AdwSwitchRow")?;
                 set_obj_str(widget, props, "subtitle", "AdwSwitchRow")?;
                 set_obj_bool(widget, props, "active");
+            }
+            "GtkColorDialogButton" => {
+                if let Some(rgba_str) = props.get("rgba") {
+                    if let Some(rgba) = parse_rgba_str(rgba_str) {
+                        unsafe { gtk_color_dialog_button_set_rgba(widget, &rgba) };
+                    }
+                }
+            }
+            "GtkFontDialogButton" => {
+                if let Some(font_str) = props.get("font-desc") {
+                    let font_c = c_text(
+                        font_str,
+                        "gtk4.buildFromNode invalid GtkFontDialogButton font-desc",
+                    )?;
+                    let desc = unsafe { pango_font_description_from_string(font_c.as_ptr()) };
+                    if !desc.is_null() {
+                        unsafe { gtk_font_dialog_button_set_font_desc(widget, desc) };
+                        unsafe { pango_font_description_free(desc) };
+                    }
+                }
+            }
+            "GtkSearchBar" => {
+                if let Some(value) = props.get("search-mode").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_search_bar_set_search_mode(widget, bool_to_c(value)) };
+                }
+                if let Some(value) = props
+                    .get("show-close-button")
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe { gtk_search_bar_set_show_close_button(widget, bool_to_c(value)) };
+                }
+            }
+            "GtkPicture" => {
+                if let Some(filename) = props.get("file").or_else(|| props.get("filename")) {
+                    let file_c =
+                        c_text(filename, "gtk4.buildFromNode invalid GtkPicture filename")?;
+                    unsafe { gtk_picture_set_filename(widget, file_c.as_ptr()) };
+                }
+                if let Some(resource) = props.get("resource") {
+                    let res_c = c_text(resource, "gtk4.buildFromNode invalid GtkPicture resource")?;
+                    unsafe { gtk_picture_set_resource(widget, res_c.as_ptr()) };
+                }
+                if let Some(value) = props.get("content-fit") {
+                    let fit: c_int = match value.as_str() {
+                        "fill" => 0,
+                        "contain" => 1,
+                        "cover" => 2,
+                        "scale-down" => 3,
+                        _ => 1,
+                    };
+                    unsafe { gtk_picture_set_content_fit(widget, fit) };
+                }
+                if let Some(value) = props.get("can-shrink").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_picture_set_can_shrink(widget, bool_to_c(value)) };
+                }
+                if let Some(value) = props.get("alternative-text").or_else(|| props.get("alt")) {
+                    let alt_c = c_text(
+                        value,
+                        "gtk4.buildFromNode invalid GtkPicture alternative-text",
+                    )?;
+                    unsafe { gtk_picture_set_alternative_text(widget, alt_c.as_ptr()) };
+                }
+            }
+            "GtkCalendar" => {
+                if let Some(value) = props.get("show-heading").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_calendar_set_show_heading(widget, bool_to_c(value)) };
+                }
+                if let Some(value) = props.get("show-day-names").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_calendar_set_show_day_names(widget, bool_to_c(value)) };
+                }
+                if let Some(value) = props
+                    .get("show-week-numbers")
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe { gtk_calendar_set_show_week_numbers(widget, bool_to_c(value)) };
+                }
+            }
+            "GtkActionBar" => {
+                if let Some(value) = props.get("revealed").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_action_bar_set_revealed(widget, bool_to_c(value)) };
+                }
             }
             _ => {}
         }
@@ -3314,7 +4379,166 @@ mod linux_impl {
             "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
             "GtkRevealer" => (unsafe { gtk_revealer_new() }, CreatedWidgetKind::Revealer),
             "GtkProgressBar" => (unsafe { gtk_progress_bar_new() }, CreatedWidgetKind::Other),
+            "GtkCheckButton" => {
+                let label = props.get("label").cloned().unwrap_or_default();
+                let raw = if label.is_empty() {
+                    unsafe { gtk_check_button_new() }
+                } else {
+                    let label_c =
+                        c_text(&label, "gtk4.buildFromNode invalid GtkCheckButton label")?;
+                    unsafe { gtk_check_button_new_with_label(label_c.as_ptr()) }
+                };
+                (raw, CreatedWidgetKind::Other)
+            }
+            "GtkScale" | "GtkRange" => {
+                let orientation = props
+                    .get("orientation")
+                    .map(|v| parse_orientation_text(v))
+                    .unwrap_or(0);
+                let min = props
+                    .get("min")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(0.0);
+                let max = props
+                    .get("max")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(100.0);
+                let step = props
+                    .get("step")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(1.0);
+                (
+                    unsafe { gtk_scale_new_with_range(orientation, min, max, step) },
+                    CreatedWidgetKind::Other,
+                )
+            }
+            "GtkSwitch" => (unsafe { gtk_switch_new() }, CreatedWidgetKind::Other),
+            "GtkSpinner" => (unsafe { gtk_spinner_new() }, CreatedWidgetKind::Other),
+            "GtkSearchEntry" => (unsafe { gtk_search_entry_new() }, CreatedWidgetKind::Other),
+            "GtkToggleButton" => {
+                let label = props.get("label").cloned().unwrap_or_default();
+                let raw = if label.is_empty() {
+                    unsafe { gtk_toggle_button_new() }
+                } else {
+                    let label_c =
+                        c_text(&label, "gtk4.buildFromNode invalid GtkToggleButton label")?;
+                    unsafe { gtk_toggle_button_new_with_label(label_c.as_ptr()) }
+                };
+                (raw, CreatedWidgetKind::Button)
+            }
+            "GtkLinkButton" => {
+                let uri = props.get("uri").cloned().unwrap_or_default();
+                let uri_c = c_text(&uri, "gtk4.buildFromNode invalid GtkLinkButton uri")?;
+                let raw = if let Some(label) = props.get("label") {
+                    let label_c = c_text(label, "gtk4.buildFromNode invalid GtkLinkButton label")?;
+                    unsafe { gtk_link_button_new_with_label(uri_c.as_ptr(), label_c.as_ptr()) }
+                } else {
+                    unsafe { gtk_link_button_new(uri_c.as_ptr()) }
+                };
+                (raw, CreatedWidgetKind::Other)
+            }
+            "GtkPaned" => {
+                let orientation = props
+                    .get("orientation")
+                    .map(|v| parse_orientation_text(v))
+                    .unwrap_or(0);
+                (
+                    unsafe { gtk_paned_new(orientation) },
+                    CreatedWidgetKind::Paned,
+                )
+            }
+            "GtkFrame" => {
+                let label = props.get("label").cloned().unwrap_or_default();
+                let raw = if label.is_empty() {
+                    unsafe { gtk_frame_new(std::ptr::null()) }
+                } else {
+                    let label_c = c_text(&label, "gtk4.buildFromNode invalid GtkFrame label")?;
+                    unsafe { gtk_frame_new(label_c.as_ptr()) }
+                };
+                (raw, CreatedWidgetKind::Frame)
+            }
+            "GtkExpander" => {
+                let label = props.get("label").cloned().unwrap_or_default();
+                let raw = if label.is_empty() {
+                    unsafe { gtk_expander_new(std::ptr::null()) }
+                } else {
+                    let label_c = c_text(&label, "gtk4.buildFromNode invalid GtkExpander label")?;
+                    unsafe { gtk_expander_new(label_c.as_ptr()) }
+                };
+                (raw, CreatedWidgetKind::Expander)
+            }
+            "GtkNotebook" => (unsafe { gtk_notebook_new() }, CreatedWidgetKind::Notebook),
+            "GtkStackSwitcher" => (
+                unsafe { gtk_stack_switcher_new() },
+                CreatedWidgetKind::Other,
+            ),
+            "GtkFlowBox" => (unsafe { gtk_flow_box_new() }, CreatedWidgetKind::FlowBox),
+            "GtkGrid" => (unsafe { gtk_grid_new() }, CreatedWidgetKind::Grid),
+            "GtkAspectFrame" => {
+                let xalign = props
+                    .get("xalign")
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.5);
+                let yalign = props
+                    .get("yalign")
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.5);
+                let ratio = props
+                    .get("ratio")
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(1.0);
+                let obey_child = props
+                    .get("obey-child")
+                    .and_then(|v| parse_bool_text(v))
+                    .unwrap_or(false);
+                (
+                    unsafe { gtk_aspect_frame_new(xalign, yalign, ratio, bool_to_c(obey_child)) },
+                    CreatedWidgetKind::AspectFrame,
+                )
+            }
+            "GtkSpinButton" => {
+                let min = props
+                    .get("min")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(0.0);
+                let max = props
+                    .get("max")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(100.0);
+                let step = props
+                    .get("step")
+                    .and_then(|v| parse_f64_text(v))
+                    .unwrap_or(1.0);
+                (
+                    unsafe { gtk_spin_button_new_with_range(min, max, step) },
+                    CreatedWidgetKind::Other,
+                )
+            }
+            "GtkComboBoxText" => {
+                let raw = unsafe { gtk_combo_box_text_new() };
+                let strings = props.get("strings").cloned().unwrap_or_default();
+                for item in strings.split('\n').filter(|s| !s.trim().is_empty()) {
+                    if let Ok(item_c) = CString::new(item.trim()) {
+                        unsafe { gtk_combo_box_text_append_text(raw, item_c.as_ptr()) };
+                    }
+                }
+                (raw, CreatedWidgetKind::Other)
+            }
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
+            "GtkSearchBar" => (
+                unsafe { gtk_search_bar_new() },
+                CreatedWidgetKind::SearchBar,
+            ),
+            "GtkPicture" => (unsafe { gtk_picture_new() }, CreatedWidgetKind::Other),
+            "GtkCalendar" => (unsafe { gtk_calendar_new() }, CreatedWidgetKind::Other),
+            "GtkActionBar" => (
+                unsafe { gtk_action_bar_new() },
+                CreatedWidgetKind::ActionBar,
+            ),
+            "GtkCenterBox" => (
+                unsafe { gtk_center_box_new() },
+                CreatedWidgetKind::CenterBox,
+            ),
             "AdwPreferencesDialog" => (
                 create_adw_widget(class_name)?,
                 CreatedWidgetKind::PreferencesDialog,
@@ -3332,6 +4556,8 @@ mod linux_impl {
             "AdwAboutDialog"
             | "AdwAboutWindow"
             | "AdwAlertDialog"
+            | "AdwAnimation"
+            | "AdwAnimationTarget"
             | "AdwApplication"
             | "AdwApplicationWindow"
             | "AdwAvatar"
@@ -3339,6 +4565,7 @@ mod linux_impl {
             | "AdwBin"
             | "AdwBottomSheet"
             | "AdwBreakpoint"
+            | "AdwBreakpointCondition"
             | "AdwBreakpointBin"
             | "AdwButtonContent"
             | "AdwButtonRow"
@@ -3351,12 +4578,14 @@ mod linux_impl {
             | "AdwComboRow"
             | "AdwDialog"
             | "AdwEntryRow"
+            | "AdwEnumListItem"
             | "AdwEnumListModel"
             | "AdwFlap"
             | "AdwInlineViewSwitcher"
             | "AdwLayout"
             | "AdwLayoutSlot"
             | "AdwLeaflet"
+            | "AdwLeafletPage"
             | "AdwMessageDialog"
             | "AdwMultiLayoutView"
             | "AdwNavigationPage"
@@ -3377,12 +4606,15 @@ mod linux_impl {
             | "AdwSpringAnimation"
             | "AdwSpringParams"
             | "AdwSqueezer"
+            | "AdwSqueezerPage"
             | "AdwStatusPage"
+            | "AdwStyleManager"
             | "AdwSwipeTracker"
             | "AdwSwitchRow"
             | "AdwTabBar"
             | "AdwTabButton"
             | "AdwTabOverview"
+            | "AdwTabPage"
             | "AdwTabView"
             | "AdwTimedAnimation"
             | "AdwToast"
@@ -3391,6 +4623,8 @@ mod linux_impl {
             | "AdwToggleGroup"
             | "AdwToolbarView"
             | "AdwViewStack"
+            | "AdwViewStackPage"
+            | "AdwViewStackPages"
             | "AdwViewSwitcher"
             | "AdwViewSwitcherBar"
             | "AdwViewSwitcherTitle"
@@ -3398,6 +4632,463 @@ mod linux_impl {
             | "AdwWindowTitle"
             | "AdwWrapBox"
             | "AdwWrapLayout" => (create_adw_widget(class_name)?, CreatedWidgetKind::Other),
+            "GtkColorDialogButton" => {
+                let dialog = unsafe { gtk_color_dialog_new() };
+                (
+                    unsafe { gtk_color_dialog_button_new(dialog) },
+                    CreatedWidgetKind::Other,
+                )
+            }
+            "GtkFontDialogButton" => {
+                let dialog = unsafe { gtk_font_dialog_new() };
+                (
+                    unsafe { gtk_font_dialog_button_new(dialog) },
+                    CreatedWidgetKind::Other,
+                )
+            }
+            "GtkColorButton" => {
+                return Err(Gtk4Error::new(
+                    "GtkColorButton was removed in GTK 4.10; \
+                     use GtkColorDialogButton instead"
+                        .to_string(),
+                ));
+            }
+            "GtkFontButton" => {
+                return Err(Gtk4Error::new(
+                    "GtkFontButton was removed in GTK 4.10; \
+                     use GtkFontDialogButton instead"
+                        .to_string(),
+                ));
+            }
+            "GtkAppChooserButton" | "GtkAppChooserDialog" | "GtkAppChooserWidget" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} was removed in GTK 4.10 and has no direct GTK replacement; \
+                     use OS file manager integration or application-specific logic instead"
+                )));
+            }
+            // Abstract base classes
+            "GtkWidget" => {
+                return Err(Gtk4Error::new(
+                    "GtkWidget is an abstract base class and cannot be created directly; \
+                     use a concrete widget subclass such as GtkLabel, GtkButton, or GtkBox"
+                        .to_string(),
+                ));
+            }
+            "GtkEventController" => {
+                return Err(Gtk4Error::new(
+                    "GtkEventController is an abstract base class; use a concrete subclass \
+                     such as GtkEventControllerKey, GtkEventControllerFocus, or GtkGestureClick, \
+                     and attach it with <child type=\"controller\">"
+                        .to_string(),
+                ));
+            }
+            "GtkGesture" => {
+                return Err(Gtk4Error::new(
+                    "GtkGesture is an abstract base class; use GtkGestureClick, GtkGestureDrag, \
+                     GtkGestureSwipe, or another concrete gesture and attach it with \
+                     <child type=\"controller\">"
+                        .to_string(),
+                ));
+            }
+            "GtkFilter" => {
+                return Err(Gtk4Error::new(
+                    "GtkFilter is an abstract base class; use GtkCustomFilter, GtkStringFilter, \
+                     or GtkBoolFilter and set it as the `filter` property of GtkFilterListModel"
+                        .to_string(),
+                ));
+            }
+            "GtkSorter" => {
+                return Err(Gtk4Error::new(
+                    "GtkSorter is an abstract base class; use GtkCustomSorter, GtkStringSorter, \
+                     or GtkNumericSorter and set it as the `sorter` property of GtkSortListModel"
+                        .to_string(),
+                ));
+            }
+            "GtkExpression" => {
+                return Err(Gtk4Error::new(
+                    "GtkExpression is an abstract base class; use GtkPropertyExpression or \
+                     GtkConstantExpression and wire them via the relevant property"
+                        .to_string(),
+                ));
+            }
+            "GtkLayoutManager" => {
+                return Err(Gtk4Error::new(
+                    "GtkLayoutManager is an abstract base class; use GtkBoxLayout, GtkGridLayout, \
+                     GtkFixedLayout, or GtkConstraintLayout and set it as the \
+                     `layout-manager` property of the container"
+                        .to_string(),
+                ));
+            }
+            "GtkSelectionModel" => {
+                return Err(Gtk4Error::new(
+                    "GtkSelectionModel is an interface; use GtkNoSelection, GtkSingleSelection, \
+                     or GtkMultiSelection and set it as the `model` property of the list view"
+                        .to_string(),
+                ));
+            }
+            "GtkListItemFactory" => {
+                return Err(Gtk4Error::new(
+                    "GtkListItemFactory is an abstract base class; use \
+                     GtkSignalListItemFactory or GtkBuilderListItemFactory"
+                        .to_string(),
+                ));
+            }
+            // Concrete widget families that are not yet exposed in AIVI widget trees
+            "GtkWindow" | "GtkApplicationWindow" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a top-level window type managed by windowNew or gtkApp, not \
+                     a ~<gtk> widget-tree node"
+                )));
+            }
+            "GtkListView" | "GtkColumnView" | "GtkGridView" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a concrete GTK list widget, but AIVI does not yet expose it \
+                     in ~<gtk> widget trees; use GtkListBox with <each> for simple read-only \
+                     lists today"
+                )));
+            }
+            "GtkPopover" | "GtkPopoverMenu" | "GtkPopoverMenuBar" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a popup/menu surface that AIVI does not yet expose directly \
+                     in ~<gtk> widget trees; use GtkMenuButton with a menu model or custom header \
+                     bar buttons today"
+                )));
+            }
+            "GtkVideo" | "GtkMediaControls" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a concrete GTK media widget, but AIVI does not yet expose it \
+                     in ~<gtk> widget trees; use GtkPicture/GtkImage for static media today or \
+                     programmatic GTK integration for playback"
+                )));
+            }
+            "GtkAboutDialog" => {
+                return Err(Gtk4Error::new(
+                    "GtkAboutDialog is a top-level about dialog that AIVI does not yet expose in \
+                     ~<gtk> widget trees; prefer AdwAboutDialog or AdwAboutWindow"
+                        .to_string(),
+                ));
+            }
+            "GtkAlertDialog" => {
+                return Err(Gtk4Error::new(
+                    "GtkAlertDialog is an asynchronous dialog API object, not a widget-tree node; \
+                     create and present it programmatically from GTK integration code"
+                        .to_string(),
+                ));
+            }
+            "GtkDialog" | "GtkMessageDialog" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a legacy dialog surface not exposed in AIVI widget trees; \
+                     prefer GtkAlertDialog or the libadwaita dialog APIs"
+                )));
+            }
+            "GtkShortcutsWindow" => {
+                return Err(Gtk4Error::new(
+                    "GtkShortcutsWindow is a top-level shortcuts help window that AIVI does not \
+                     yet expose in ~<gtk> widget trees; prefer AdwShortcutsDialog"
+                        .to_string(),
+                ));
+            }
+            "GtkFileDialog" => {
+                return Err(Gtk4Error::new(
+                    "GtkFileDialog is an asynchronous file dialog API object, not a widget-tree \
+                     node; AIVI does not yet expose file dialogs in the v0.1 stdlib UI surface"
+                        .to_string(),
+                ));
+            }
+            "GtkFileChooserDialog" | "GtkFileChooserNative" | "GtkFileChooserWidget" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a legacy GTK file chooser surface not exposed in AIVI widget \
+                     trees; prefer GtkFileDialog when working directly with GTK"
+                )));
+            }
+            // List model and selection infrastructure (not widget-tree nodes)
+            "GtkCustomFilter" | "GtkStringFilter" | "GtkBoolFilter" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a GTK filter object, not a widget; set it as the `filter` \
+                     property of GtkFilterListModel"
+                )));
+            }
+            "GtkMultiFilter" => {
+                return Err(Gtk4Error::new(
+                    "GtkMultiFilter is an abstract GTK filter combiner, not a widget; use \
+                     GtkEveryFilter or GtkAnyFilter and set it as the `filter` property of \
+                     GtkFilterListModel"
+                        .to_string(),
+                ));
+            }
+            "GtkEveryFilter" | "GtkAnyFilter" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} combines multiple GTK filters and is not a widget; set it as the \
+                     `filter` property of GtkFilterListModel"
+                )));
+            }
+            "GtkCustomSorter" | "GtkStringSorter" | "GtkNumericSorter" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a GTK sorter object, not a widget; set it as the `sorter` \
+                     property of GtkSortListModel"
+                )));
+            }
+            "GtkMultiSorter" => {
+                return Err(Gtk4Error::new(
+                    "GtkMultiSorter composes multiple GTK sorters in priority order and is not a \
+                     widget; set it as the `sorter` property of GtkSortListModel"
+                        .to_string(),
+                ));
+            }
+            "GtkPropertyExpression"
+            | "GtkConstantExpression"
+            | "GtkCClosureExpression"
+            | "GtkObjectExpression" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a GTK expression object, not a widget-tree node; wire it \
+                     through the relevant property or prefer pure AIVI derivations"
+                )));
+            }
+            "GtkAdjustment" => {
+                return Err(Gtk4Error::new(
+                    "GtkAdjustment is not a widget; set it as the `adjustment` property of \
+                     GtkSpinButton, GtkScale, GtkScrollbar, or GtkScrolledWindow"
+                        .to_string(),
+                ));
+            }
+            "GtkStringList" => {
+                return Err(Gtk4Error::new(
+                    "GtkStringList is a list model, not a widget; set it as the `model` property \
+                     of GtkDropDown, GtkNoSelection, GtkSingleSelection, or GtkMultiSelection"
+                        .to_string(),
+                ));
+            }
+            "GtkFilterListModel"
+            | "GtkSortListModel"
+            | "GtkSliceListModel"
+            | "GtkFlattenListModel" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a list model wrapper, not a widget; set it as the `model` \
+                     property of a list view or selection model"
+                )));
+            }
+            "GtkNoSelection" | "GtkSingleSelection" | "GtkMultiSelection" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a selection model, not a widget; set it as the `model` \
+                     property of GtkListView, GtkColumnView, or GtkGridView"
+                )));
+            }
+            "GtkSignalListItemFactory" => {
+                return Err(Gtk4Error::new(
+                    "GtkSignalListItemFactory is a list item factory, not a widget-tree node; set \
+                     it as the `factory` property of GtkListView or GtkColumnView when that \
+                     surface is exposed in AIVI"
+                        .to_string(),
+                ));
+            }
+            "GtkBuilderListItemFactory" => {
+                return Err(Gtk4Error::new(
+                    "GtkBuilderListItemFactory is a list item factory, not a widget-tree node; \
+                     use it as the `factory` property of GtkListView or GtkColumnView, and prefer \
+                     the ~<gtk> sigil over raw Builder XML in AIVI"
+                        .to_string(),
+                ));
+            }
+            "GtkListItem" => {
+                return Err(Gtk4Error::new(
+                    "GtkListItem is created and recycled internally by GtkListItemFactory; \
+                     do not construct it directly"
+                        .to_string(),
+                ));
+            }
+            "GtkColumnViewColumn" => {
+                return Err(Gtk4Error::new(
+                    "GtkColumnViewColumn is added to GtkColumnView programmatically and is not a \
+                     widget-tree element"
+                        .to_string(),
+                ));
+            }
+            "GtkColumnViewRow" => {
+                return Err(Gtk4Error::new(
+                    "GtkColumnViewRow is managed internally by GtkColumnView and is not a \
+                     widget-tree node"
+                        .to_string(),
+                ));
+            }
+            "GtkColumnViewCell" => {
+                return Err(Gtk4Error::new(
+                    "GtkColumnViewCell is managed internally by the column factory and is not a \
+                     widget-tree node"
+                        .to_string(),
+                ));
+            }
+            "GtkColumnViewSorter" => {
+                return Err(Gtk4Error::new(
+                    "GtkColumnViewSorter wraps column sort state and is obtained from the \
+                     `sorter` property of GtkColumnView; it is not a widget-tree node"
+                        .to_string(),
+                ));
+            }
+            "GtkMediaStream" => {
+                return Err(Gtk4Error::new(
+                    "GtkMediaStream is an abstract media stream base, not a widget-tree node; set \
+                     it as the `stream` property of GtkVideo or GtkMediaControls"
+                        .to_string(),
+                ));
+            }
+            "GtkMediaFile" => {
+                return Err(Gtk4Error::new(
+                    "GtkMediaFile is a media stream object, not a widget-tree node; create it \
+                     programmatically and set it as the `stream` property of GtkVideo or \
+                     GtkMediaControls"
+                        .to_string(),
+                ));
+            }
+            // Event controllers (attach via child type="controller", not as tree nodes)
+            "GtkEventControllerKey"
+            | "GtkEventControllerFocus"
+            | "GtkEventControllerMotion"
+            | "GtkEventControllerScroll"
+            | "GtkEventControllerLegacy"
+            | "GtkGestureDrag"
+            | "GtkGestureLongPress"
+            | "GtkGestureSwipe"
+            | "GtkGestureZoom"
+            | "GtkGestureRotate"
+            | "GtkGesturePan"
+            | "GtkGestureStylus"
+            | "GtkShortcutController"
+            | "GtkDropControllerMotion" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is an event controller, not a widget; attach it to a widget \
+                     using <child type=\"controller\"> inside the target widget element"
+                )));
+            }
+            "GtkShortcut" => {
+                return Err(Gtk4Error::new(
+                    "GtkShortcut is not a widget; add it to a GtkShortcutController \
+                     programmatically"
+                        .to_string(),
+                ));
+            }
+            "GtkShortcutAction" => {
+                return Err(Gtk4Error::new(
+                    "GtkShortcutAction is an abstract shortcut action, not a widget; use \
+                     GtkActivateAction, GtkSignalAction, or GtkNamedAction inside a GtkShortcut"
+                        .to_string(),
+                ));
+            }
+            "GtkShortcutTrigger" => {
+                return Err(Gtk4Error::new(
+                    "GtkShortcutTrigger is an abstract shortcut trigger, not a widget; use \
+                     GtkKeyvalTrigger, GtkMnemonicTrigger, or GtkAlternativeTrigger inside a \
+                     GtkShortcut"
+                        .to_string(),
+                ));
+            }
+            "GtkActivateAction" | "GtkSignalAction" | "GtkNamedAction" | "GtkNothingAction"
+            | "GtkMnemonicAction" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a shortcut action, not a widget-tree node; use it inside \
+                     GtkShortcut/GtkShortcutController wiring"
+                )));
+            }
+            "GtkKeyvalTrigger"
+            | "GtkMnemonicTrigger"
+            | "GtkAlternativeTrigger"
+            | "GtkNeverTrigger"
+            | "GtkAnyTrigger" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a shortcut trigger, not a widget-tree node; use it inside \
+                     GtkShortcut/GtkShortcutController wiring"
+                )));
+            }
+            // Text buffer model items (owned by GtkTextBuffer)
+            "GtkTextTag" | "GtkTextTagTable" | "GtkTextMark" | "GtkTextChildAnchor" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is part of the GtkTextBuffer model and is not a widget; \
+                     create it through GtkTextBuffer or its tag table, not as a widget-tree node"
+                )));
+            }
+            // Deprecated cell-renderer and tree-model infrastructure
+            "GtkCellRenderer"
+            | "GtkCellRendererText"
+            | "GtkCellRendererToggle"
+            | "GtkCellRendererPixbuf"
+            | "GtkCellRendererProgress"
+            | "GtkCellRendererSpin"
+            | "GtkCellRendererCombo"
+            | "GtkCellRendererAccel" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is part of the deprecated GtkTreeView cell-renderer architecture; \
+                     use GtkColumnView with GtkSignalListItemFactory instead"
+                )));
+            }
+            "GtkTreeModel" | "GtkListStore" | "GtkTreeStore" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is deprecated in GTK4; use GtkStringList or a custom \
+                     GListModel with GtkNoSelection/GtkSingleSelection instead"
+                )));
+            }
+            // Layout manager infrastructure (set as layout-manager property, not widget nodes)
+            "GtkBoxLayout"
+            | "GtkGridLayout"
+            | "GtkFixedLayout"
+            | "GtkBinLayout"
+            | "GtkOverlayLayout"
+            | "GtkConstraintLayout"
+            | "GtkConstraint"
+            | "GtkConstraintGuide" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a layout manager type, not a widget; set it as the \
+                     `layout-manager` property of the container widget"
+                )));
+            }
+            // Builder-only and singleton types
+            "GtkBuilder" => {
+                return Err(Gtk4Error::new(
+                    "GtkBuilder is a programmatic XML builder, not a widget; \
+                     use buildFromNode or the ~<gtk> sigil to construct widget trees in AIVI"
+                        .to_string(),
+                ));
+            }
+            "GtkApplication" => {
+                return Err(Gtk4Error::new(
+                    "GtkApplication is managed by appNew or gtkApp and is not a widget-tree node"
+                        .to_string(),
+                ));
+            }
+            "GtkPrintOperation"
+            | "GtkPrintDialog"
+            | "GtkPrinter"
+            | "GtkPrintJob"
+            | "GtkPrintContext"
+            | "GtkPageSetup"
+            | "GtkPageSetupUnixDialog"
+            | "GtkPaperSize"
+            | "GtkPrintSettings"
+            | "GtkPrintUnixDialog" => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is part of GTK printing infrastructure, not a widget-tree node; \
+                     printing is not part of the AIVI v0.1 stdlib UI surface"
+                )));
+            }
+            "GtkSettings" => {
+                return Err(Gtk4Error::new(
+                    "GtkSettings is a global singleton; it is fetched automatically via \
+                     gtk_settings_get_default() and is not a widget-tree node"
+                        .to_string(),
+                ));
+            }
+            "GtkStyleContext" => {
+                return Err(Gtk4Error::new(
+                    "GtkStyleContext is attached to widgets internally and is not a widget; \
+                     use widgetSetCss or appSetCss to apply styles"
+                        .to_string(),
+                ));
+            }
+            "GtkCssProvider" => {
+                return Err(Gtk4Error::new(
+                    "GtkCssProvider is applied programmatically; use appSetCss or widgetSetCss \
+                     to apply CSS styles — it is not a widget-tree node"
+                        .to_string(),
+                ));
+            }
             _ => {
                 return Err(Gtk4Error::new(format!(
                     "gtk4.buildFromNode unsupported class {class_name}"
@@ -3449,7 +5140,7 @@ mod linux_impl {
             "GtkLabel" => {
                 state.labels.insert(id, raw);
             }
-            "GtkEntry" | "GtkPasswordEntry" => {
+            "GtkEntry" | "GtkPasswordEntry" | "GtkSearchEntry" => {
                 state.entries.insert(id, raw);
             }
             "GtkImage" => {
@@ -3595,6 +5286,36 @@ mod linux_impl {
                 }
                 CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
                 CreatedWidgetKind::Revealer => unsafe { gtk_revealer_set_child(raw, child_raw) },
+                CreatedWidgetKind::Paned => {
+                    let is_end = child.child_type.as_deref() == Some("end");
+                    if is_end {
+                        unsafe { gtk_paned_set_end_child(raw, child_raw) };
+                    } else {
+                        unsafe { gtk_paned_set_start_child(raw, child_raw) };
+                    }
+                }
+                CreatedWidgetKind::Frame => unsafe { gtk_frame_set_child(raw, child_raw) },
+                CreatedWidgetKind::Expander => unsafe { gtk_expander_set_child(raw, child_raw) },
+                CreatedWidgetKind::Notebook => {
+                    let tab_label_text = child.child_type.as_deref().unwrap_or("").to_string();
+                    let tab_label_raw = if tab_label_text.is_empty() {
+                        std::ptr::null_mut()
+                    } else if let Ok(lc) = CString::new(tab_label_text.as_bytes()) {
+                        unsafe { gtk_label_new(lc.as_ptr()) }
+                    } else {
+                        std::ptr::null_mut()
+                    };
+                    unsafe { gtk_notebook_append_page(raw, child_raw, tab_label_raw) };
+                }
+                CreatedWidgetKind::FlowBox => unsafe { gtk_flow_box_append(raw, child_raw) },
+                CreatedWidgetKind::Grid => {
+                    let (col, row, col_span, row_span) =
+                        parse_grid_position(child.child_type.as_deref());
+                    unsafe { gtk_grid_attach(raw, child_raw, col, row, col_span, row_span) };
+                }
+                CreatedWidgetKind::AspectFrame => unsafe {
+                    gtk_aspect_frame_set_child(raw, child_raw)
+                },
                 CreatedWidgetKind::Stack => {
                     let page_name = child.child_type.as_deref().unwrap_or("page");
                     if let Ok(name_c) = CString::new(page_name) {
@@ -3622,6 +5343,17 @@ mod linux_impl {
                 CreatedWidgetKind::ActionRow => {
                     call_adw_fn_pp("adw_action_row_add_suffix", raw, child_raw);
                 }
+                CreatedWidgetKind::SearchBar => unsafe { gtk_search_bar_set_child(raw, child_raw) },
+                CreatedWidgetKind::ActionBar => match child.child_type.as_deref() {
+                    Some("end") => unsafe { gtk_action_bar_pack_end(raw, child_raw) },
+                    Some("center") => unsafe { gtk_action_bar_set_center_widget(raw, child_raw) },
+                    _ => unsafe { gtk_action_bar_pack_start(raw, child_raw) },
+                },
+                CreatedWidgetKind::CenterBox => match child.child_type.as_deref() {
+                    Some("center") => unsafe { gtk_center_box_set_center_widget(raw, child_raw) },
+                    Some("end") => unsafe { gtk_center_box_set_end_widget(raw, child_raw) },
+                    _ => unsafe { gtk_center_box_set_start_widget(raw, child_raw) },
+                },
             }
             live_children.push(LiveChild {
                 child_type: child.child_type.clone(),
@@ -3641,6 +5373,28 @@ mod linux_impl {
             if let Some(value) = props.get("visible-child-name") {
                 if let Ok(name_c) = CString::new(value.as_str()) {
                     unsafe { gtk_stack_set_visible_child_name(raw, name_c.as_ptr()) };
+                }
+            }
+        }
+
+        // Deferred: set current-page on GtkNotebook after children are added
+        if matches!(kind, CreatedWidgetKind::Notebook) {
+            if let Some(page) = props.get("current-page").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_notebook_set_current_page(raw, page) };
+            }
+        }
+
+        // Deferred: connect GtkSearchBar's child entry for keyboard capture
+        if matches!(kind, CreatedWidgetKind::SearchBar) {
+            for lc in &live_children {
+                if matches!(
+                    lc.node.class_name.as_str(),
+                    "GtkSearchEntry" | "GtkEntry" | "GtkPasswordEntry"
+                ) {
+                    if let Some(&entry_raw) = state.widgets.get(&lc.node.widget_id) {
+                        unsafe { gtk_search_bar_connect_entry(raw, entry_raw) };
+                    }
+                    break;
                 }
             }
         }
@@ -3739,6 +5493,7 @@ mod linux_impl {
         match parent_kind {
             CreatedWidgetKind::Box => unsafe { gtk_box_remove(parent_raw, child_raw) },
             CreatedWidgetKind::ListBox => unsafe { gtk_list_box_remove(parent_raw, child_raw) },
+            CreatedWidgetKind::FlowBox => unsafe { gtk_flow_box_remove(parent_raw, child_raw) },
             CreatedWidgetKind::Overlay => {
                 if child_type == Some("overlay") {
                     unsafe { gtk_overlay_remove_overlay(parent_raw, child_raw) };
@@ -3810,6 +5565,52 @@ mod linux_impl {
             CreatedWidgetKind::ActionRow => {
                 call_adw_fn_pp("adw_action_row_add_suffix", parent.raw, child.raw);
             }
+            CreatedWidgetKind::Paned => {
+                let is_end = placement.child_type == Some("end");
+                if is_end {
+                    unsafe { gtk_paned_set_end_child(parent.raw, child.raw) };
+                } else {
+                    unsafe { gtk_paned_set_start_child(parent.raw, child.raw) };
+                }
+            }
+            CreatedWidgetKind::Frame => unsafe { gtk_frame_set_child(parent.raw, child.raw) },
+            CreatedWidgetKind::Expander => unsafe { gtk_expander_set_child(parent.raw, child.raw) },
+            CreatedWidgetKind::Notebook => {
+                let tab_text = placement.child_type.unwrap_or("").to_string();
+                let tab_raw = if tab_text.is_empty() {
+                    std::ptr::null_mut()
+                } else if let Ok(lc) = CString::new(tab_text.as_bytes()) {
+                    unsafe { gtk_label_new(lc.as_ptr()) }
+                } else {
+                    std::ptr::null_mut()
+                };
+                unsafe { gtk_notebook_append_page(parent.raw, child.raw, tab_raw) };
+            }
+            CreatedWidgetKind::FlowBox => unsafe { gtk_flow_box_append(parent.raw, child.raw) },
+            CreatedWidgetKind::Grid => {
+                let (col, row, col_span, row_span) = parse_grid_position(placement.child_type);
+                unsafe { gtk_grid_attach(parent.raw, child.raw, col, row, col_span, row_span) };
+            }
+            CreatedWidgetKind::AspectFrame => unsafe {
+                gtk_aspect_frame_set_child(parent.raw, child.raw)
+            },
+            CreatedWidgetKind::SearchBar => unsafe {
+                gtk_search_bar_set_child(parent.raw, child.raw)
+            },
+            CreatedWidgetKind::ActionBar => match placement.child_type {
+                Some("end") => unsafe { gtk_action_bar_pack_end(parent.raw, child.raw) },
+                Some("center") => unsafe {
+                    gtk_action_bar_set_center_widget(parent.raw, child.raw)
+                },
+                _ => unsafe { gtk_action_bar_pack_start(parent.raw, child.raw) },
+            },
+            CreatedWidgetKind::CenterBox => match placement.child_type {
+                Some("center") => unsafe {
+                    gtk_center_box_set_center_widget(parent.raw, child.raw)
+                },
+                Some("end") => unsafe { gtk_center_box_set_end_widget(parent.raw, child.raw) },
+                _ => unsafe { gtk_center_box_set_start_widget(parent.raw, child.raw) },
+            },
             CreatedWidgetKind::Other => {}
         }
         Ok(())

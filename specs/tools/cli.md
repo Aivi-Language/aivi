@@ -344,7 +344,7 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 
 | Key | Action |
 | --- | --- |
-| Enter | Submit input, or accept the highlighted suggestion |
+| Enter | Submit the current input |
 | Shift+Enter | Insert newline (multi-line input) |
 | ↑ / ↓ | Navigate history or inline suggestions |
 | Ctrl+L | Clear transcript |
@@ -358,6 +358,7 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 | Command | Description |
 | --- | --- |
 | `/help` | Print command reference |
+| `/explain <name>` | Show quick info, the best available signature, and the module where that symbol lives |
 | `/use <module.path>` | Add an import to the session (e.g. `/use aivi.text`); unknown modules error immediately |
 | `/types [filter]` | List types in scope (stdlib + session); optional substring filter |
 | `/values [filter]` | List session-defined values with their inferred types |
@@ -373,7 +374,9 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 
 The `/openapi` commands inject typed API bindings into the session under the given module name (or a name derived from the spec's `info.title`). They use the same `@static` OpenAPI mechanism as the language's compile-time external source support.
 
-When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. `/functions <filter>` also suggests matching function names for the filter slot, and ordinary identifier input shows typed suggestions for constructors (uppercase) plus values/functions (lowercase) that are currently in scope. The suggestion popup shows five rows at a time, but `↑` / `↓` scroll through the full result set. Use `Tab` or `Enter` to accept the highlighted item.
+`/explain` accepts a function, value, type, or module name and prints the indexed quick-info text together with the best available signature and module name. When the same name exists in multiple modules, use a qualified form such as `/explain aivi.text.isAlnum`.
+
+When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. `/functions <filter>` also suggests matching function names for the filter slot, and ordinary identifier input shows typed suggestions for constructors (uppercase) plus values/functions (lowercase) that are currently in scope. The suggestion popup shows five rows at a time, but `↑` / `↓` scroll through the full result set. Use `Tab` to accept the highlighted item; `Enter` always runs the current input buffer.
 
 ### Services
 

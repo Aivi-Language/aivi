@@ -333,3 +333,12 @@ Before finishing any change:
 - [ ] VSCode extension compiles (`pnpm compile` in `vscode/`) if LSP or grammar changed
 - [ ] Aivi builds without warnings (also pre-existing ones).
  
+---
+
+# Acceptance criteria
+
+- Produce complete, working code.
+- Do not leave TODOs, placeholders, or stub functions.
+- Every function must contain a full implementation.
+- If something is complex, implement a simple working version rather than leaving a stub.
+- If the solution is long, continue generating until the implementation is complete.
