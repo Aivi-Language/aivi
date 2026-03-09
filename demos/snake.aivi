@@ -231,6 +231,6 @@ main = gtkApp {
   }
   subscriptions
   view
-  toMsg: auto
+  toMsg
   update
 }
