@@ -63,11 +63,15 @@ pub mod resolver {
 
 pub mod typecheck {
     pub use aivi_core::{
-        check_types, check_types_including_stdlib, elaborate_expected_coercions,
-        elaborate_stdlib_checkpoint, elaborate_with_checkpoint, infer_value_types,
-        infer_value_types_fast, infer_value_types_full, ordered_module_names,
-        reverse_module_dependencies, summarize_module_export_surface, ElaborationCheckpoint,
-        InferResult, ModuleExportSurfaceSummary,
+        check_types, check_types_including_stdlib, check_types_with_checkpoint_incremental,
+        elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
+        elaborate_with_checkpoint_incremental, infer_value_types, infer_value_types_fast,
+        infer_value_types_fast_incremental, infer_value_types_full,
+        infer_value_types_full_incremental, ordered_module_names, reverse_module_dependencies,
+        summarize_module_export_surface, CheckTypesCheckpoint, CheckTypesIncrementalResult,
+        CheckedModule, ElaboratedModule, ElaborationCheckpoint, ElaborationIncrementalResult,
+        InferCheckpoint, InferMode, InferModuleCache, InferResult,
+        InferValueTypesIncrementalResult, ModuleExportSurfaceSummary,
     };
 }
 
@@ -93,11 +97,14 @@ pub use aivi_core::lex_cst;
 pub use aivi_core::check_modules;
 pub use aivi_core::desugar_blocks;
 pub use aivi_core::{
-    check_types, check_types_including_stdlib, elaborate_expected_coercions,
-    elaborate_stdlib_checkpoint, elaborate_with_checkpoint, infer_value_types,
-    infer_value_types_fast, infer_value_types_full, ordered_module_names,
-    reverse_module_dependencies, summarize_module_export_surface, ElaborationCheckpoint,
-    InferResult, ModuleExportSurfaceSummary,
+    check_types, check_types_including_stdlib, check_types_with_checkpoint_incremental,
+    elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
+    elaborate_with_checkpoint_incremental, infer_value_types, infer_value_types_fast,
+    infer_value_types_fast_incremental, infer_value_types_full, infer_value_types_full_incremental,
+    ordered_module_names, reverse_module_dependencies, summarize_module_export_surface,
+    CheckTypesCheckpoint, CheckTypesIncrementalResult, CheckedModule, ElaboratedModule,
+    ElaborationCheckpoint, ElaborationIncrementalResult, InferCheckpoint, InferMode,
+    InferModuleCache, InferResult, InferValueTypesIncrementalResult, ModuleExportSurfaceSummary,
 };
 pub use aivi_core::{
     embedded_stdlib_modules, embedded_stdlib_source, lower_modules_to_arena, parse_modules,
@@ -128,9 +135,9 @@ pub use aivi_mcp::{
 };
 use cranelift_backend::run_cranelift_jit_cancellable;
 pub use cranelift_backend::{
-    compile_to_object, destroy_aot_runtime, evaluate_binding_jit, init_aot_runtime,
-    init_aot_runtime_base, register_crate_natives_on_ctx, run_cranelift_jit, run_test_suite_jit,
-    CrateNativeRegistrar, CrateNativeValue,
+    compile_to_object, destroy_aot_runtime, evaluate_binding_jit, evaluate_binding_jit_detailed,
+    init_aot_runtime, init_aot_runtime_base, register_crate_natives_on_ctx, run_cranelift_jit,
+    run_test_suite_jit, CrateNativeRegistrar, CrateNativeValue, EvaluatedBinding,
 };
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
@@ -213,10 +220,11 @@ pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 
 pub use aivi_driver::{
-    desugar_target, desugar_target_lenient, desugar_target_typed, desugar_target_with_cg_types,
-    desugar_target_with_cg_types_and_surface, format_target, kernel_target,
-    load_module_diagnostics, load_modules, load_modules_from_paths, parse_file, parse_target,
-    resolve_target, AiviError, Pipeline,
+    assemble_target, desugar_target, desugar_target_lenient, desugar_target_typed,
+    desugar_target_with_cg_types, desugar_target_with_cg_types_and_surface, format_target,
+    kernel_target, load_module_diagnostics, load_modules, load_modules_from_paths, parse_file,
+    parse_target, resolve_target, AiviError, AssemblyStats, FrontendAssembly, FrontendAssemblyMode,
+    Pipeline, WorkspaceSession,
 };
 
 pub fn rust_ir_target(target: &str) -> Result<rust_ir::RustIrProgram, AiviError> {

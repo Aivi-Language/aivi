@@ -22,10 +22,10 @@ getFocusPair = event => event match
   | GtkFocusIn wid name => (wid, name)
   | _                   => (0, "")
 
-TestMsg     = Save | NameChanged Text | ToggledMsg Bool
-TestMsg2    = TitleChanged Text | BodyChanged Text
-SignalRow   = { name: Text }
-SignalModel = { title: Text, rows: List SignalRow }
+TestMsg      = Save | NameChanged Text | ToggledMsg Bool
+TestMsg2     = TitleChanged Text | BodyChanged Text
+DerivedRow   = { name: Text }
+DerivedModel = { title: Text, rows: List DerivedRow }
 
 toTestMsg = event => event match
   | GtkClicked _ _          => Some Save
@@ -38,22 +38,22 @@ toTestMsg2 = event => event match
   | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
   | _                                  => None
 
-titleSignal : SignalModel -> Text
-titleSignal =
-  computed "gtk4.tests.titleSignal" (state =>
+titleDerived : DerivedModel -> Text
+titleDerived =
+  memo "gtk4.tests.titleDerived" (state =>
     "Title: {state.title}"
   )
 
-rowSignal : SignalModel -> List SignalRow
-rowSignal =
-  signal (state => state.rows)
+rowDerived : DerivedModel -> List DerivedRow
+rowDerived =
+  derive (state => state.rows)
 
-signalView : SignalModel -> GtkNode
-signalView = _ =>
+derivedView : DerivedModel -> GtkNode
+derivedView = _ =>
   ~<gtk>
     <GtkBox orientation="vertical" spacing="4">
-      <GtkLabel label={titleSignal} />
-      <each items={rowSignal} as={row}>
+      <GtkLabel label={titleDerived} />
+      <each items={rowDerived} as={row}>
         <GtkLabel label={row.name} />
       </each>
     </GtkBox>
@@ -138,15 +138,15 @@ command_and_subscription_shapes = do Effect {
   assertEq (List.length [subscription]) 1
 }
 
-@test "computed remains callable as a pure derived helper"
-computed_pure_helper = do Effect {
-  doubled = computed "gtk4.tests.double" (state => state.count + state.count)
+@test "memo remains callable as a pure derived helper"
+memo_pure_helper = do Effect {
+  doubled = memo "gtk4.tests.double" (state => state.count + state.count)
   assertEq (doubled { count: 3 }) 6
 }
 
-@test "computed can drive subscription configuration from committed state"
-computed_subscription_shape = do Effect {
-  tickMillis = computed "gtk4.tests.tickMillis" (state =>
+@test "memo can drive subscription configuration from committed state"
+memo_subscription_shape = do Effect {
+  tickMillis = memo "gtk4.tests.tickMillis" (state =>
     if state.fast then 50 else 120
   )
   subscriptions = state => [
@@ -166,17 +166,17 @@ computed_subscription_shape = do Effect {
   assertEq (tickMillis { fast: False }) 120
 }
 
-@test "signal remains callable and readSignal is explicit"
-signal_pure_helper = do Effect {
-  title = signal (state => state.title)
+@test "derive remains callable and readDerived is explicit"
+derive_pure_helper = do Effect {
+  title = derive (state => state.title)
   state = { title: "hello" }
   assertEq (title state) "hello"
-  assertEq (readSignal title state) "hello"
+  assertEq (readDerived title state) "hello"
 }
 
-@test "signal bindings compile inside gtk sigils"
-signal_bindings_compile = do Effect {
-  _ = signalView
+@test "derived helpers compile inside gtk sigils"
+derived_helpers_compile = do Effect {
+  _ = derivedView
   assertEq True True
 }
 

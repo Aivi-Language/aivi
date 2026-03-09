@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::io::{IsTerminal, Write};
+use std::io::IsTerminal;
 use std::sync::Arc;
 
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
 use super::super::util::{builtin, expect_record, expect_text, make_err, make_ok};
-use crate::runtime::{format_value, EffectValue, RuntimeError, Value};
+use crate::runtime::{format_value, write_stderr, write_stdout, EffectValue, RuntimeError, Value};
 
 pub(in crate::runtime::builtins) fn build_console_record() -> Value {
     let mut fields = HashMap::new();
@@ -16,8 +16,8 @@ pub(in crate::runtime::builtins) fn build_console_record() -> Value {
             let value = args.remove(0);
             let text = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    println!("{text}");
+                func: Arc::new(move |runtime| {
+                    write_stdout(runtime, &text, true);
                     Ok(Value::Unit)
                 }),
             };
@@ -30,8 +30,8 @@ pub(in crate::runtime::builtins) fn build_console_record() -> Value {
             let value = args.remove(0);
             let text = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    println!("{text}");
+                func: Arc::new(move |runtime| {
+                    write_stdout(runtime, &text, true);
                     Ok(Value::Unit)
                 }),
             };
@@ -44,10 +44,8 @@ pub(in crate::runtime::builtins) fn build_console_record() -> Value {
             let value = args.remove(0);
             let text = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    print!("{text}");
-                    let mut out = std::io::stdout();
-                    let _ = out.flush();
+                func: Arc::new(move |runtime| {
+                    write_stdout(runtime, &text, false);
                     Ok(Value::Unit)
                 }),
             };
@@ -60,8 +58,8 @@ pub(in crate::runtime::builtins) fn build_console_record() -> Value {
             let value = args.remove(0);
             let text = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    eprintln!("{text}");
+                func: Arc::new(move |runtime| {
+                    write_stderr(runtime, &text, true);
                     Ok(Value::Unit)
                 }),
             };

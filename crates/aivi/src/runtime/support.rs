@@ -258,6 +258,32 @@ pub(crate) fn format_value(value: &Value) -> String {
     }
 }
 
+pub(crate) fn write_stdout(runtime: &Runtime, text: &str, newline: bool) {
+    if runtime.ctx.capture_stdout(text, newline) {
+        return;
+    }
+    if newline {
+        println!("{text}");
+    } else {
+        print!("{text}");
+        let mut out = std::io::stdout();
+        let _ = std::io::Write::flush(&mut out);
+    }
+}
+
+pub(crate) fn write_stderr(runtime: &Runtime, text: &str, newline: bool) {
+    if runtime.ctx.capture_stderr(text, newline) {
+        return;
+    }
+    if newline {
+        eprintln!("{text}");
+    } else {
+        eprint!("{text}");
+        let mut err = std::io::stderr();
+        let _ = std::io::Write::flush(&mut err);
+    }
+}
+
 fn date_to_record(date: NaiveDate) -> HashMap<String, Value> {
     let mut map = HashMap::new();
     map.insert("year".to_string(), Value::Int(date.year() as i64));

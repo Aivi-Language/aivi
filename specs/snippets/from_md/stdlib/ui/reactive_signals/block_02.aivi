@@ -12,7 +12,7 @@ Msg = SearchQueryChanged Text | Tick
 
 heading : Model -> Text
 heading =
-  signal (model =>
+  derive (model =>
     if model.searchQuery == ""
       then "All Projects"
       else "Search · {model.searchQuery}"
@@ -20,13 +20,13 @@ heading =
 
 projectNames : Model -> List Text
 projectNames =
-  computed "projects.names" (model =>
+  memo "projects.names" (model =>
     map (project => project.name) model.visibleProjects
   )
 
 refreshMillis : Model -> Int
 refreshMillis =
-  signal (model =>
+  derive (model =>
     if model.fastRefresh then 250 else 1000
   )
 
@@ -45,7 +45,7 @@ subscriptions : Model -> List (Subscription Msg)
 subscriptions = model => [
   subscriptionEvery {
     key: "tick"
-    millis: readSignal refreshMillis model
+    millis: readDerived refreshMillis model
     tag: Tick
   }
 ]

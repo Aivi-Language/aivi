@@ -72,10 +72,14 @@ pub use surface::{
 };
 pub use typecheck::{
     check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
-    check_types_with_checkpoint, elaborate_expected_coercions, elaborate_stdlib_checkpoint,
-    elaborate_with_checkpoint, infer_value_types, infer_value_types_fast, infer_value_types_full,
+    check_types_with_checkpoint, check_types_with_checkpoint_incremental,
+    elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
+    elaborate_with_checkpoint_incremental, infer_value_types, infer_value_types_fast,
+    infer_value_types_fast_incremental, infer_value_types_full, infer_value_types_full_incremental,
     ordered_module_names, reverse_module_dependencies, summarize_module_export_surface,
-    CheckTypesCheckpoint, ElaborationCheckpoint, InferResult, ModuleExportSurfaceSummary,
+    CheckTypesCheckpoint, CheckTypesIncrementalResult, CheckedModule, ElaboratedModule,
+    ElaborationCheckpoint, ElaborationIncrementalResult, InferCheckpoint, InferMode,
+    InferModuleCache, InferResult, InferValueTypesIncrementalResult, ModuleExportSurfaceSummary,
 };
 
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {

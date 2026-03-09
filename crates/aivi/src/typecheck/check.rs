@@ -5,10 +5,10 @@ use crate::diagnostics::FileDiagnostic;
 use crate::surface::{DomainDecl, DomainItem, Module, ModuleItem, ScopeItemKind};
 
 use super::checker::TypeChecker;
-use super::setup_module;
+use super::class_env::{ClassDeclInfo, InstanceDeclInfo};
 use super::types::Scheme;
+use super::{module_interface_from_setup, setup_module, ModuleInterface, ModuleInterfaceMaps};
 
-use super::class_env::{collect_exported_class_env, ClassDeclInfo, InstanceDeclInfo};
 use super::global::collect_global_type_info;
 use super::ordering::ordered_modules;
 
@@ -24,10 +24,21 @@ pub fn check_types_including_stdlib(modules: &[Module]) -> Vec<FileDiagnostic> {
 /// Avoids re-running `setup_module` on all embedded stdlib modules per keystroke.
 #[derive(Clone)]
 pub struct CheckTypesCheckpoint {
-    module_exports: HashMap<String, HashMap<String, Vec<Scheme>>>,
-    module_domain_exports: HashMap<String, HashMap<String, Vec<String>>>,
-    module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>>,
-    module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>>,
+    state: ModuleInterfaceMaps,
+}
+
+#[derive(Clone)]
+pub struct CheckedModule {
+    pub module_name: String,
+    pub diagnostics: Vec<FileDiagnostic>,
+    interface: ModuleInterface,
+}
+
+#[derive(Clone)]
+pub struct CheckTypesIncrementalResult {
+    pub diagnostics: Vec<FileDiagnostic>,
+    pub checkpoint: CheckTypesCheckpoint,
+    pub modules: Vec<CheckedModule>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,10 +51,7 @@ pub struct ModuleExportSurfaceSummary {
 /// Intended to be built once at LSP startup and reused for every keystroke.
 pub fn check_types_stdlib_checkpoint(stdlib_modules: &[Module]) -> CheckTypesCheckpoint {
     let mut checker = TypeChecker::new();
-    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
-    let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
-    let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
-    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
+    let mut state = ModuleInterfaceMaps::default();
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, stdlib_modules);
@@ -58,30 +66,18 @@ pub fn check_types_stdlib_checkpoint(stdlib_modules: &[Module]) -> CheckTypesChe
         let setup = setup_module(
             &mut checker,
             module,
-            &module_exports,
-            &module_domain_exports,
-            &module_class_exports,
-            &module_instance_exports,
+            &state.module_exports,
+            &state.module_domain_exports,
+            &state.module_class_exports,
+            &state.module_instance_exports,
             &mut discarded,
         );
         // Don't check_module_defs — stdlib bodies may be incomplete in v0.1.
-        collect_exports(
-            module,
-            &checker,
-            &setup,
-            &mut module_exports,
-            &mut module_domain_exports,
-            &mut module_class_exports,
-            &mut module_instance_exports,
-        );
+        let interface = module_interface_from_setup(module, &checker, &setup);
+        state.apply_module_interface(&module.name.name, &interface);
     }
 
-    CheckTypesCheckpoint {
-        module_exports,
-        module_domain_exports,
-        module_class_exports,
-        module_instance_exports,
-    }
+    CheckTypesCheckpoint { state }
 }
 
 /// Run type-checking using a pre-built stdlib checkpoint.
@@ -91,17 +87,25 @@ pub fn check_types_with_checkpoint(
     modules: &[Module],
     checkpoint: &CheckTypesCheckpoint,
 ) -> Vec<FileDiagnostic> {
+    check_types_with_checkpoint_incremental(modules, modules, checkpoint).diagnostics
+}
+
+/// Run type-checking on a subset of `modules`, using a checkpoint built from prior modules.
+/// `all_modules` must contain the full active workspace so global type information stays correct.
+pub fn check_types_with_checkpoint_incremental(
+    all_modules: &[Module],
+    modules: &[Module],
+    checkpoint: &CheckTypesCheckpoint,
+) -> CheckTypesIncrementalResult {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
-    let mut module_exports = checkpoint.module_exports.clone();
-    let mut module_domain_exports = checkpoint.module_domain_exports.clone();
-    let mut module_class_exports = checkpoint.module_class_exports.clone();
-    let mut module_instance_exports = checkpoint.module_instance_exports.clone();
+    let mut state = checkpoint.state.clone();
+    let mut module_results = Vec::new();
 
     // collect_global_type_info is cheap (just extracts type names); run on all modules
     // so user-defined types are visible alongside stdlib types.
     let (global_type_constructors, global_aliases, global_opaque_types) =
-        collect_global_type_info(&mut checker, modules);
+        collect_global_type_info(&mut checker, all_modules);
     checker.set_global_type_info(
         global_type_constructors,
         global_aliases,
@@ -113,30 +117,50 @@ pub fn check_types_with_checkpoint(
             // Stdlib already registered via checkpoint; skip setup_module entirely.
             continue;
         }
+        let start = diagnostics.len();
         let setup = setup_module(
             &mut checker,
             module,
-            &module_exports,
-            &module_domain_exports,
-            &module_class_exports,
-            &module_instance_exports,
+            &state.module_exports,
+            &state.module_domain_exports,
+            &state.module_class_exports,
+            &state.module_instance_exports,
             &mut diagnostics,
         );
         let mut module_diags =
             checker.check_module_defs(module, &setup.sigs, &mut setup.env.clone());
         diagnostics.append(&mut module_diags);
-        collect_exports(
-            module,
-            &checker,
-            &setup,
-            &mut module_exports,
-            &mut module_domain_exports,
-            &mut module_class_exports,
-            &mut module_instance_exports,
-        );
+        let interface = module_interface_from_setup(module, &checker, &setup);
+        state.apply_module_interface(&module.name.name, &interface);
+        module_results.push(CheckedModule {
+            module_name: module.name.name.clone(),
+            diagnostics: diagnostics[start..].to_vec(),
+            interface,
+        });
     }
 
-    diagnostics
+    CheckTypesIncrementalResult {
+        diagnostics,
+        checkpoint: CheckTypesCheckpoint { state },
+        modules: module_results,
+    }
+}
+
+impl CheckTypesCheckpoint {
+    pub fn empty() -> Self {
+        Self {
+            state: ModuleInterfaceMaps::default(),
+        }
+    }
+
+    pub fn apply_cached_module(&mut self, module: &CheckedModule) {
+        self.state
+            .apply_module_interface(&module.module_name, &module.interface);
+    }
+
+    pub fn remove_module(&mut self, module_name: &str) {
+        self.state.remove_module(module_name);
+    }
 }
 
 pub fn summarize_module_export_surface(module: &Module) -> ModuleExportSurfaceSummary {
@@ -349,73 +373,13 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
             diagnostics.append(&mut module_diags);
         }
 
-        collect_exports(
-            module,
-            &checker,
-            &setup,
-            &mut module_exports,
-            &mut module_domain_exports,
-            &mut module_class_exports,
-            &mut module_instance_exports,
-        );
+        let interface = module_interface_from_setup(module, &checker, &setup);
+        module_exports.insert(module.name.name.clone(), interface.exports.clone());
+        module_domain_exports.insert(module.name.name.clone(), interface.domain_exports.clone());
+        module_class_exports.insert(module.name.name.clone(), interface.class_exports.clone());
+        module_instance_exports
+            .insert(module.name.name.clone(), interface.instance_exports.clone());
     }
 
     diagnostics
-}
-
-/// Collect and record all export maps for a module after it has been set up.
-#[allow(clippy::too_many_arguments)]
-fn collect_exports(
-    module: &Module,
-    checker: &TypeChecker,
-    setup: &super::ModuleSetup,
-    module_exports: &mut HashMap<String, HashMap<String, Vec<Scheme>>>,
-    module_domain_exports: &mut HashMap<String, HashMap<String, Vec<String>>>,
-    module_class_exports: &mut HashMap<String, HashMap<String, ClassDeclInfo>>,
-    module_instance_exports: &mut HashMap<String, Vec<InstanceDeclInfo>>,
-) {
-    let mut exports = HashMap::new();
-    for export in &module.exports {
-        if export.kind != crate::surface::ScopeItemKind::Value {
-            continue;
-        }
-        if let Some(schemes) = setup.sigs.get(&export.name.name) {
-            exports.insert(export.name.name.clone(), schemes.clone());
-        } else if let Some(schemes) = setup.env.get_all(&export.name.name) {
-            exports.insert(export.name.name.clone(), schemes.to_vec());
-        }
-    }
-    module_exports.insert(module.name.name.clone(), exports);
-
-    let mut domain_exports = HashMap::new();
-    for export in &module.exports {
-        if export.kind != crate::surface::ScopeItemKind::Domain {
-            continue;
-        }
-        let domain_name = export.name.name.as_str();
-        let mut members = Vec::new();
-        for item in &module.items {
-            let ModuleItem::DomainDecl(domain) = item else {
-                continue;
-            };
-            if domain.name.name != domain_name {
-                continue;
-            }
-            for domain_item in &domain.items {
-                match domain_item {
-                    DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                        members.push(def.name.name.clone());
-                    }
-                    DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
-                }
-            }
-        }
-        domain_exports.insert(domain_name.to_string(), members);
-    }
-    module_domain_exports.insert(module.name.name.clone(), domain_exports);
-
-    let (class_exports, instance_exports) =
-        collect_exported_class_env(module, &checker.classes, &checker.instances);
-    module_class_exports.insert(module.name.name.clone(), class_exports);
-    module_instance_exports.insert(module.name.name.clone(), instance_exports);
 }

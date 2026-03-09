@@ -13,6 +13,7 @@ use aivi_core::{
     render_diagnostics, resolve_import_names, CstBundle, CstFile, Diagnostic, FileDiagnostic,
     HirProgram, Module,
 };
+pub use workspace::{AssemblyStats, FrontendAssembly, FrontendAssemblyMode, WorkspaceSession};
 
 type CgTypesMap = std::collections::HashMap<
     String,
@@ -234,19 +235,8 @@ pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
 pub fn desugar_target_with_cg_types(
     target: &str,
 ) -> Result<(HirProgram, CgTypesMap, MonomorphPlan), AiviError> {
-    let mut pipeline = Pipeline::from_target(target)?;
-    if pipeline.has_parse_errors() {
-        emit_diagnostics(pipeline.parse_diagnostics());
-        return Err(AiviError::Diagnostics);
-    }
-    let diags = pipeline.typecheck();
-    if file_diagnostics_have_errors(&diags) {
-        emit_diagnostics(&diags);
-        return Err(AiviError::Diagnostics);
-    }
-    let infer = pipeline.infer_types_full();
-    let program = pipeline.desugar();
-    Ok((program, infer.cg_types, infer.monomorph_plan))
+    let (program, cg_types, monomorph_plan, _) = desugar_target_with_cg_types_and_surface(target)?;
+    Ok((program, cg_types, monomorph_plan))
 }
 
 /// Like [`desugar_target_with_cg_types`] but also returns the surface modules
@@ -256,24 +246,24 @@ pub fn desugar_target_with_cg_types_and_surface(
 ) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
     let trace = trace_timing();
     let t_total = if trace { Some(Instant::now()) } else { None };
-
-    let mut pipeline = timing_step!(trace, "pipeline init (parse + resolve)", {
-        Pipeline::from_target(target)?
+    let mut session = WorkspaceSession::new();
+    let assembly = timing_step!(trace, "frontend assembly", {
+        session.assemble_target(target, FrontendAssemblyMode::InferFast)?
     });
-    if pipeline.has_parse_errors() {
-        emit_diagnostics(pipeline.parse_diagnostics());
+    if file_diagnostics_have_errors(&assembly.parse_diagnostics) {
+        emit_diagnostics(&assembly.parse_diagnostics);
         return Err(AiviError::Diagnostics);
     }
-
-    let diags = timing_step!(trace, "typecheck (check + elaborate)", pipeline.typecheck());
-    if file_diagnostics_have_errors(&diags) {
-        emit_diagnostics(&diags);
+    let mut diagnostics = assembly.resolver_diagnostics.clone();
+    diagnostics.extend(assembly.typecheck_diagnostics.clone());
+    if file_diagnostics_have_errors(&diagnostics) {
+        emit_diagnostics(&diagnostics);
         return Err(AiviError::Diagnostics);
     }
-
-    let infer = timing_step!(trace, "infer_value_types_fast", pipeline.infer_types_fast());
-    let program = timing_step!(trace, "desugar_modules (HIR)", pipeline.desugar());
-
+    let program = timing_step!(trace, "desugar_modules (HIR)", assembly.desugar());
+    let infer = assembly
+        .inference
+        .expect("infer-fast assembly should always include inference");
     if let Some(t0) = t_total {
         eprintln!(
             "[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL frontend",
@@ -281,9 +271,12 @@ pub fn desugar_target_with_cg_types_and_surface(
             t0.elapsed().as_secs_f64() * 1000.0
         );
     }
-
-    let modules = pipeline.into_modules();
-    Ok((program, infer.cg_types, infer.monomorph_plan, modules))
+    Ok((
+        program,
+        infer.cg_types,
+        infer.monomorph_plan,
+        assembly.modules,
+    ))
 }
 
 /// Lowers a typed HIR program through block desugaring for backend code generation.
@@ -307,6 +300,15 @@ pub fn format_target(target: &str) -> Result<String, AiviError> {
 /// Resolves a target string into concrete source file paths consumed by driver commands.
 pub fn resolve_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
     workspace::expand_target(target)
+}
+
+/// Assembles a target through the shared incremental frontend session API.
+pub fn assemble_target(
+    target: &str,
+    mode: FrontendAssemblyMode,
+) -> Result<FrontendAssembly, AiviError> {
+    let mut session = WorkspaceSession::new();
+    session.assemble_target(target, mode)
 }
 
 #[cfg(test)]

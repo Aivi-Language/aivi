@@ -342,7 +342,7 @@ The helper surface includes:
 - `auto` for common constructor-style `toMsg` routing
 - command helpers: `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`
 - subscription helpers: `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, `subscriptionSource`
-- reactive helper: `computed`
+- derived helpers: `derive`, `memo`, `readDerived`
 - compatibility helpers: `noSubscriptions`, `appStep`, `appStepWith`, `liftAppUpdate`
 
 `commandPerform` and `subscriptionSource` operate on `Msg` directly today (`run : Effect GtkError msg`, `open : Resource GtkError (Recv msg)`), which keeps many ordinary apps straightforward to write. `appStep` and `appStepWith` are optional shorthand for the same `{ model, commands }` record shape that `update` returns.

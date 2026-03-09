@@ -62,8 +62,8 @@ fn stdlib_gtk4_exports_reactive_helpers() {
         .expect("aivi.ui.gtk4 module exists");
 
     assert!(
-        gtk4.exports.iter().any(|e| e.name.name == "computed"),
-        "expected aivi.ui.gtk4 to export computed, exports={:?}",
+        gtk4.exports.iter().any(|e| e.name.name == "memo"),
+        "expected aivi.ui.gtk4 to export memo, exports={:?}",
         gtk4.exports
             .iter()
             .map(|e| e.name.name.as_str())
@@ -79,7 +79,7 @@ fn stdlib_gtk4_exports_reactive_helpers() {
         })
         .collect();
 
-    for expected in ["signal", "computed", "readSignal", "auto"] {
+    for expected in ["derive", "memo", "readDerived", "auto"] {
         assert!(
             gtk4.exports.iter().any(|e| e.name.name == expected),
             "expected aivi.ui.gtk4 to export {expected}, exports={:?}",

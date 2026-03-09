@@ -338,7 +338,7 @@ aivi repl [--color] [--no-color] [--plain]
 - `--no-color`: disable ANSI color output.
 - `--plain`: plain read-eval-print mode — no TUI, pipe-friendly. Automatically selected when stdin is not a terminal.
 
-With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and all stdlib symbols are immediately in scope. Successful expression inputs are compiled and evaluated, so the transcript shows `value :: Type` instead of only a type summary.
+With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and all stdlib symbols are immediately in scope. Successful expression inputs are compiled and evaluated, so the transcript shows `value :: Type` instead of only a type summary. Top-level effect expressions also autorun by default, which means inputs like `print "hi"` or `println "hi"` execute immediately and replay their console output into the REPL transcript; use `/autorun off` if you want top-level effects to remain inert values.
 
 **Keyboard shortcuts (TUI mode)**
 
@@ -362,6 +362,7 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 | `/types [filter]` | List types in scope (stdlib + session); optional substring filter |
 | `/values [filter]` | List session-defined values with their inferred types |
 | `/functions [filter]` | List functions in scope with their module names (prelude, manual `/use` imports, and session bindings) |
+| `/autorun [on\|off]` | Toggle whether top-level effect expressions execute automatically; default is `on` |
 | `/modules` | Show loaded modules in the session |
 | `/clear` | Clear the transcript while keeping all session state |
 | `/reset` | Clear the transcript and reset all session state |
@@ -372,7 +373,7 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 
 The `/openapi` commands inject typed API bindings into the session under the given module name (or a name derived from the spec's `info.title`). They use the same `@static` OpenAPI mechanism as the language's compile-time external source support.
 
-When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. `/functions <filter>` also suggests matching function names for the filter slot, and ordinary identifier input shows typed suggestions for constructors (uppercase) plus values/functions (lowercase) that are currently in scope. Use `↑` / `↓` to move through suggestions and `Tab` or `Enter` to accept the highlighted item.
+When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. `/functions <filter>` also suggests matching function names for the filter slot, and ordinary identifier input shows typed suggestions for constructors (uppercase) plus values/functions (lowercase) that are currently in scope. The suggestion popup shows five rows at a time, but `↑` / `↓` scroll through the full result set. Use `Tab` or `Enter` to accept the highlighted item.
 
 ### Services
 

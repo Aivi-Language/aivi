@@ -1,10 +1,10 @@
 # Native GTK & libadwaita Apps
 
 <!-- quick-info: {"kind":"topic","name":"native gtk apps"} -->
-AIVI's main desktop-app story is native GTK4 and libadwaita software. Use `gtkApp` for the app loop, `~<gtk>...</gtk>` for the widget tree, GTK signals for user input, commands and subscriptions for effects, and `signal` or `computed` for reusable pure view logic.
+AIVI's main desktop-app story is native GTK4 and libadwaita software. Use `gtkApp` for the app loop, `~<gtk>...</gtk>` for the widget tree, GTK signals for user input, commands and subscriptions for effects, and `derive` or `memo` for reusable pure view logic.
 <!-- /quick-info -->
 
-This page is the broad guide. If you want the details afterward, follow up with [`aivi.ui.gtk4`](./gtk4.md), [GTK App Architecture](./app_architecture.md), [Reactive Signals](./reactive_signals.md), [Reactive Dataflow](./reactive_dataflow.md), and [`aivi.ui.forms`](./forms.md).
+This page is the broad guide. If you want the details afterward, follow up with [`aivi.ui.gtk4`](./gtk4.md), [GTK App Architecture](./app_architecture.md), [Derived Values](./reactive_signals.md), [Derived Dataflow](./reactive_dataflow.md), and [`aivi.ui.forms`](./forms.md).
 
 ## When to use this page
 
@@ -16,18 +16,16 @@ Read this page when you want the big picture before diving into API reference de
 
 A simpler mental model is: **`gtkApp` runs the app loop, your `Model` is the source of truth, and `Msg` values describe what just happened.**
 
-## Two different meanings of “signal”
+## GTK signals vs derived values
 
-If the word **signal** feels ambiguous, this is the quick disambiguation. For the fuller explanation, see [Reactive Signals](./reactive_signals.md#two-different-meanings-of-signal).
-
-AIVI UI docs use the word **signal** in two different ways:
+AIVI now reserves the word **signal** for GTK widget events. Pure model-derived helpers use `derive`, `memo`, and `readDerived` instead. For the fuller explanation, see [Derived Values](./reactive_signals.md).
 
 | Term | Meaning |
 | --- | --- |
 | **GTK signal** | widget input such as clicks, text changes, focus, and toggles |
-| **reactive signal** | pure derived data created with `signal` or `computed` |
+| **derived value** | pure derived data created with `derive` or `memo` |
 
-GTK signals flow **into** your app as `GtkSignalEvent`. Reactive signals are read **inside** your app from the committed model.
+GTK signals flow **into** your app as `GtkSignalEvent`. Derived values are read **inside** your app from the committed model.
 
 ## What GTK and libadwaita mean in AIVI
 
@@ -69,7 +67,7 @@ widget
   -> reconcileNode
 ```
 
-Commands and subscriptions feed the same loop by producing more `Msg` values. Reactive helpers such as `signal` and `computed` stay inside that model-driven flow.
+Commands and subscriptions feed the same loop by producing more `Msg` values. Derived helpers such as `derive` and `memo` stay inside that model-driven flow.
 
 ## Putting the pieces together
 
@@ -121,17 +119,17 @@ Use subscriptions for long-lived sources that should stay active while the model
 - network streams,
 - device or IPC feeds.
 
-### 5. Know the two meanings of “signal”
+### 5. Keep GTK signals and derived values distinct
 
-GTK signals are widget events coming **into** the app. Reactive signals are pure derived values read **inside** the app from the committed model. If you want the longer explanation or examples, jump to [Reactive Signals](./reactive_signals.md).
+GTK signals are widget events coming **into** the app. Derived values are pure model reads used **inside** the app from the committed model. If you want the longer explanation or examples, jump to [Derived Values](./reactive_signals.md).
 
-### 6. Use reactive dataflow for pure derived values
+### 6. Use derived dataflow for pure derived values
 
-Keep authoritative state in the model, then derive reusable data with ordinary helpers, `signal`, or `computed`.
+Keep authoritative state in the model, then derive reusable data with ordinary helpers, `derive`, or `memo`.
 
 - use a plain helper when the logic is simple,
-- use `signal` when a named reader makes the code clearer,
-- use `computed` when the same pure derivation should be memoized and reused.
+- use `derive` when a named reader makes the code clearer,
+- use `memo` when the same pure derivation should be memoized and reused.
 
 Good examples include filtered lists, derived labels, grouped rows, and expensive view-only projections.
 
@@ -199,7 +197,7 @@ When a screen has several unnamed widgets producing the same signal, either give
 | Need | Preferred tool |
 | --- | --- |
 | Standard single-window app | `gtkApp` |
-| Pure derived UI data | plain helper, `signal`, or `computed` |
+| Pure derived UI data | plain helper, `derive`, or `memo` |
 | Form state and validation | `aivi.ui.forms` |
 | One-shot delayed or effectful follow-up work | commands such as `commandAfter` or `commandPerform` |
 | Repeating or long-lived event source | subscriptions such as `subscriptionEvery` or `subscriptionSource` |
@@ -212,5 +210,5 @@ For most app code, you can think in terms of: **model, messages, `gtkApp`, and a
 
 - [`aivi.ui.gtk4`](./gtk4.md) — runtime API reference, GTK sigil details, typed signal events, and low-level primitives
 - [GTK App Architecture](./app_architecture.md) — deeper detail on `gtkApp`, commands, and subscriptions
-- [Reactive Dataflow](./reactive_dataflow.md) — `signal`, `computed`, invalidation, and memoization
+- [Derived Dataflow](./reactive_dataflow.md) — `derive`, `memo`, invalidation, and memoization
 - [`aivi.ui.forms`](./forms.md) — field state, validation helpers, and form-focused examples

@@ -1219,11 +1219,11 @@ GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gs
 </gtk>
 ```
 
-Inside `gtkApp`, GTK sigils may read reactive helpers directly in bindings. `signal` marks a pure derived reader, `computed "key"` adds memoization, and `readSignal` is the explicit non-sigil form:
+Inside `gtkApp`, GTK sigils may read derived helpers directly in bindings. `derive` marks a pure named reader, `memo "key"` adds memoization, and `readDerived` is the explicit non-sigil form:
 
 ```aivi
-titleText = computed "counter.title" (state => "Count: {toText state.count}")
-rows      = signal (state => state.rows)
+titleText = memo "counter.title" (state => "Count: {toText state.count}")
+rows      = derive (state => state.rows)
 
 view = _ =>
   ~<gtk>
@@ -1318,9 +1318,9 @@ main = gtkApp {
 }
 ```
 
-`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `auto` for common constructor-style signal routing, `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `computed`, `noSubscriptions`, `appStep`, `appStepWith`, and `liftAppUpdate` compatibility helpers. `appStep` and `appStepWith` are just shorthand for the same record shape shown above.
+`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `auto` for common constructor-style signal routing, `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `derive`, `memo`, `readDerived`, `noSubscriptions`, `appStep`, `appStepWith`, and `liftAppUpdate` compatibility helpers. `appStep` and `appStepWith` are just shorthand for the same record shape shown above.
 
-The Phase 4 reactive model keeps authoritative source snapshots inside the committed model. Plain derived helpers stay pure, while computed values are memoized pure projections invalidated when committed source snapshots change and reevaluated lazily on the next read. Commands and subscriptions remain the only effectful boundaries: they may capture derived values by value, but they never mutate reactive values directly.
+The Phase 4 reactive model keeps authoritative source snapshots inside the committed model. Plain derived helpers stay pure, while `memo` values are memoized pure projections invalidated when committed source snapshots change and reevaluated lazily on the next read. Commands and subscriptions remain the only effectful boundaries: they may capture derived values by value, but they never mutate reactive values directly.
 
 `onStart` is for one-time startup work such as registering CSS and actions. `signalStream`, `buildFromNode`, `reconcileNode`, and the deprecated `gtkSetInterval` remain available as lower-level primitives for custom loops and legacy code, but they are not a competing blessed architecture. By default, closing the primary `gtkApp` window ends the host loop; if `onStart` enables `hideOnClose`, the loop stays alive and the window is hidden instead. For advanced window setup such as decoration or hide-on-close tweaks, keep `gtkApp` and call the lower-level window helpers from `onStart`.
 

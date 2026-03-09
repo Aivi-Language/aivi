@@ -27,20 +27,26 @@ mod infer_and_class_env_tests;
 
 pub use check::{
     check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
-    check_types_with_checkpoint, summarize_module_export_surface, CheckTypesCheckpoint,
-    ModuleExportSurfaceSummary,
+    check_types_with_checkpoint, check_types_with_checkpoint_incremental,
+    summarize_module_export_surface, CheckTypesCheckpoint, CheckTypesIncrementalResult,
+    CheckedModule, ModuleExportSurfaceSummary,
 };
 pub use elaborate::{
     elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
-    ElaborationCheckpoint,
+    elaborate_with_checkpoint_incremental, ElaboratedModule, ElaborationCheckpoint,
+    ElaborationIncrementalResult,
 };
-pub use infer::{infer_value_types, infer_value_types_fast, infer_value_types_full, InferResult};
+pub use infer::{
+    infer_value_types, infer_value_types_fast, infer_value_types_fast_incremental,
+    infer_value_types_full, infer_value_types_full_incremental, InferCheckpoint, InferMode,
+    InferModuleCache, InferResult, InferValueTypesIncrementalResult,
+};
 pub use ordering::{ordered_module_names, reverse_module_dependencies};
 
 use checker::TypeChecker;
 use class_env::{
-    collect_imported_class_env, collect_local_class_env, expand_classes,
-    synthesize_auto_forward_instances, ClassDeclInfo, InstanceDeclInfo,
+    collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
+    expand_classes, synthesize_auto_forward_instances, ClassDeclInfo, InstanceDeclInfo,
 };
 use types::{Scheme, TypeEnv};
 
@@ -48,6 +54,42 @@ use types::{Scheme, TypeEnv};
 struct ModuleSetup {
     env: TypeEnv,
     sigs: HashMap<String, Vec<Scheme>>,
+}
+
+#[derive(Clone, Default)]
+pub struct ModuleInterface {
+    exports: HashMap<String, Vec<Scheme>>,
+    domain_exports: HashMap<String, Vec<String>>,
+    class_exports: HashMap<String, ClassDeclInfo>,
+    instance_exports: Vec<InstanceDeclInfo>,
+}
+
+#[derive(Clone, Default)]
+struct ModuleInterfaceMaps {
+    module_exports: HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_domain_exports: HashMap<String, HashMap<String, Vec<String>>>,
+    module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>>,
+    module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>>,
+}
+
+impl ModuleInterfaceMaps {
+    fn apply_module_interface(&mut self, module_name: &str, interface: &ModuleInterface) {
+        self.module_exports
+            .insert(module_name.to_string(), interface.exports.clone());
+        self.module_domain_exports
+            .insert(module_name.to_string(), interface.domain_exports.clone());
+        self.module_class_exports
+            .insert(module_name.to_string(), interface.class_exports.clone());
+        self.module_instance_exports
+            .insert(module_name.to_string(), interface.instance_exports.clone());
+    }
+
+    fn remove_module(&mut self, module_name: &str) {
+        self.module_exports.remove(module_name);
+        self.module_domain_exports.remove(module_name);
+        self.module_class_exports.remove(module_name);
+        self.module_instance_exports.remove(module_name);
+    }
 }
 
 /// Runs the full per-module registration sequence shared by all type-checking passes:
@@ -87,4 +129,69 @@ fn setup_module(
     checker.register_module_defs(module, &sigs, &mut env);
 
     ModuleSetup { env, sigs }
+}
+
+fn module_interface_from_setup(
+    module: &Module,
+    checker: &TypeChecker,
+    setup: &ModuleSetup,
+) -> ModuleInterface {
+    build_module_interface(module, checker, &setup.sigs, &setup.env)
+}
+
+fn build_module_interface(
+    module: &Module,
+    checker: &TypeChecker,
+    sigs: &HashMap<String, Vec<Scheme>>,
+    env: &TypeEnv,
+) -> ModuleInterface {
+    let mut exports = HashMap::new();
+    for export in &module.exports {
+        if export.kind != crate::surface::ScopeItemKind::Value {
+            continue;
+        }
+        if let Some(schemes) = sigs.get(&export.name.name) {
+            exports.insert(export.name.name.clone(), schemes.clone());
+        } else if let Some(schemes) = env.get_all(&export.name.name) {
+            exports.insert(export.name.name.clone(), schemes.to_vec());
+        }
+    }
+
+    let mut domain_exports = HashMap::new();
+    for export in &module.exports {
+        if export.kind != crate::surface::ScopeItemKind::Domain {
+            continue;
+        }
+        let domain_name = export.name.name.as_str();
+        let mut members = Vec::new();
+        for item in &module.items {
+            let crate::surface::ModuleItem::DomainDecl(domain) = item else {
+                continue;
+            };
+            if domain.name.name != domain_name {
+                continue;
+            }
+            for domain_item in &domain.items {
+                match domain_item {
+                    crate::surface::DomainItem::Def(def)
+                    | crate::surface::DomainItem::LiteralDef(def) => {
+                        members.push(def.name.name.clone());
+                    }
+                    crate::surface::DomainItem::TypeAlias(_)
+                    | crate::surface::DomainItem::TypeSig(_) => {}
+                }
+            }
+        }
+        domain_exports.insert(domain_name.to_string(), members);
+    }
+
+    let (class_exports, instance_exports) =
+        collect_exported_class_env(module, &checker.classes, &checker.instances);
+
+    ModuleInterface {
+        exports,
+        domain_exports,
+        class_exports,
+        instance_exports,
+    }
 }

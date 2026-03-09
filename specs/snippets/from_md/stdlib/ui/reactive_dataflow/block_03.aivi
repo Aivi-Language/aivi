@@ -1,2 +1,2 @@
-summaryText = readSignal resultsSummary model
+summaryText = readDerived resultsSummary model
 saveCommand = buildSaveCommand summaryText

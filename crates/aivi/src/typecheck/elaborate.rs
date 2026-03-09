@@ -1,26 +1,15 @@
-use std::collections::HashMap;
-
 use crate::diagnostics::FileDiagnostic;
 use crate::surface::{DomainItem, Module, ModuleItem};
 
 use super::checker::TypeChecker;
-use super::setup_module;
-use super::types::Scheme;
-
-use super::class_env::{collect_exported_class_env, ClassDeclInfo, InstanceDeclInfo};
 use super::global::collect_global_type_info;
 use super::ordering::ordered_module_indices;
+use super::{module_interface_from_setup, setup_module, ModuleInterface, ModuleInterfaceMaps};
 
 pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
-    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
-    let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
-    let mut module_class_exports: HashMap<
-        String,
-        HashMap<String, super::class_env::ClassDeclInfo>,
-    > = HashMap::new();
-    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
+    let mut state = ModuleInterfaceMaps::default();
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, modules);
@@ -30,16 +19,7 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
         global_opaque_types,
     );
 
-    elaborate_modules(
-        modules,
-        &mut checker,
-        &mut diagnostics,
-        &mut module_exports,
-        &mut module_domain_exports,
-        &mut module_class_exports,
-        &mut module_instance_exports,
-        false,
-    );
+    elaborate_modules(modules, &mut checker, &mut diagnostics, &mut state, false);
 
     diagnostics
 }
@@ -48,20 +28,28 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
 /// when the same stdlib is shared across many user files.
 #[derive(Clone)]
 pub struct ElaborationCheckpoint {
-    module_exports: HashMap<String, HashMap<String, Vec<Scheme>>>,
-    module_domain_exports: HashMap<String, HashMap<String, Vec<String>>>,
-    module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>>,
-    module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>>,
+    state: ModuleInterfaceMaps,
+}
+
+#[derive(Clone)]
+pub struct ElaboratedModule {
+    pub module_name: String,
+    pub diagnostics: Vec<FileDiagnostic>,
+    interface: ModuleInterface,
+}
+
+#[derive(Clone)]
+pub struct ElaborationIncrementalResult {
+    pub diagnostics: Vec<FileDiagnostic>,
+    pub checkpoint: ElaborationCheckpoint,
+    pub modules: Vec<ElaboratedModule>,
 }
 
 /// Build a checkpoint by elaborating only stdlib (embedded) modules.
 /// The returned checkpoint can be cloned and reused for multiple user files.
 pub fn elaborate_stdlib_checkpoint(stdlib_modules: &mut [Module]) -> ElaborationCheckpoint {
     let mut checker = TypeChecker::new();
-    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
-    let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
-    let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
-    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
+    let mut state = ModuleInterfaceMaps::default();
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
         collect_global_type_info(&mut checker, stdlib_modules);
@@ -76,19 +64,11 @@ pub fn elaborate_stdlib_checkpoint(stdlib_modules: &mut [Module]) -> Elaboration
         stdlib_modules,
         &mut checker,
         &mut diagnostics,
-        &mut module_exports,
-        &mut module_domain_exports,
-        &mut module_class_exports,
-        &mut module_instance_exports,
+        &mut state,
         false,
     );
 
-    ElaborationCheckpoint {
-        module_exports,
-        module_domain_exports,
-        module_class_exports,
-        module_instance_exports,
-    }
+    ElaborationCheckpoint { state }
 }
 
 /// Elaborate user modules using a pre-built stdlib checkpoint.
@@ -98,63 +78,64 @@ pub fn elaborate_with_checkpoint(
     modules: &mut [Module],
     checkpoint: &ElaborationCheckpoint,
 ) -> Vec<FileDiagnostic> {
+    let all_modules = modules.to_vec();
+    elaborate_with_checkpoint_incremental(&all_modules, modules, checkpoint).diagnostics
+}
+
+/// Elaborate a subset of modules using a checkpoint built from earlier modules in dependency
+/// order. `all_modules` must contain the full active workspace so global type info stays current.
+pub fn elaborate_with_checkpoint_incremental(
+    all_modules: &[Module],
+    modules: &mut [Module],
+    checkpoint: &ElaborationCheckpoint,
+) -> ElaborationIncrementalResult {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
-    let mut module_exports = checkpoint.module_exports.clone();
-    let mut module_domain_exports = checkpoint.module_domain_exports.clone();
-    let mut module_class_exports = checkpoint.module_class_exports.clone();
-    let mut module_instance_exports = checkpoint.module_instance_exports.clone();
+    let mut state = checkpoint.state.clone();
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
-        collect_global_type_info(&mut checker, modules);
+        collect_global_type_info(&mut checker, all_modules);
     checker.set_global_type_info(
         global_type_constructors,
         global_aliases,
         global_opaque_types,
     );
 
-    elaborate_modules(
-        modules,
-        &mut checker,
-        &mut diagnostics,
-        &mut module_exports,
-        &mut module_domain_exports,
-        &mut module_class_exports,
-        &mut module_instance_exports,
-        true,
-    );
+    let modules = elaborate_modules(modules, &mut checker, &mut diagnostics, &mut state, true);
 
-    diagnostics
+    ElaborationIncrementalResult {
+        diagnostics,
+        checkpoint: ElaborationCheckpoint { state },
+        modules,
+    }
 }
 
 /// Core elaboration loop shared by both the full and checkpoint paths.
 /// When `skip_embedded` is true, modules whose path starts with `<embedded:` are skipped
 /// (their exports are assumed to already be present in the export maps).
-#[allow(clippy::too_many_arguments)]
 fn elaborate_modules(
     modules: &mut [Module],
     checker: &mut TypeChecker,
     diagnostics: &mut Vec<FileDiagnostic>,
-    module_exports: &mut HashMap<String, HashMap<String, Vec<Scheme>>>,
-    module_domain_exports: &mut HashMap<String, HashMap<String, Vec<String>>>,
-    module_class_exports: &mut HashMap<String, HashMap<String, ClassDeclInfo>>,
-    module_instance_exports: &mut HashMap<String, Vec<InstanceDeclInfo>>,
+    state: &mut ModuleInterfaceMaps,
     skip_embedded: bool,
-) {
+) -> Vec<ElaboratedModule> {
+    let mut module_results = Vec::new();
     for idx in ordered_module_indices(modules) {
         let is_embedded = modules[idx].path.starts_with("<embedded:");
         if skip_embedded && is_embedded {
             continue;
         }
 
+        let start = diagnostics.len();
         let module = &mut modules[idx];
         let setup = setup_module(
             checker,
             module,
-            module_exports,
-            module_domain_exports,
-            module_class_exports,
-            module_instance_exports,
+            &state.module_exports,
+            &state.module_domain_exports,
+            &state.module_class_exports,
+            &state.module_instance_exports,
             diagnostics,
         );
 
@@ -200,77 +181,30 @@ fn elaborate_modules(
             }
         }
 
-        let mut exports = HashMap::new();
-        for export in &module.exports {
-            if export.kind != crate::surface::ScopeItemKind::Value {
-                continue;
-            }
-            if let Some(schemes) = setup.sigs.get(&export.name.name) {
-                exports.insert(export.name.name.clone(), schemes.clone());
-            } else if let Some(schemes) = setup.env.get_all(&export.name.name) {
-                exports.insert(export.name.name.clone(), schemes.to_vec());
-            }
-        }
-        // Also add domain member schemes to module_exports so that
-        // wildcard imports and explicit domain imports can resolve them.
-        for export in &module.exports {
-            if export.kind != crate::surface::ScopeItemKind::Domain {
-                continue;
-            }
-            for item in &module.items {
-                let ModuleItem::DomainDecl(domain) = item else {
-                    continue;
-                };
-                if domain.name.name != export.name.name {
-                    continue;
-                }
-                for domain_item in &domain.items {
-                    let def_name = match domain_item {
-                        DomainItem::Def(def) | DomainItem::LiteralDef(def) => &def.name.name,
-                        _ => continue,
-                    };
-                    if exports.contains_key(def_name) {
-                        continue;
-                    }
-                    if let Some(schemes) = setup.sigs.get(def_name) {
-                        exports.insert(def_name.clone(), schemes.clone());
-                    } else if let Some(schemes) = setup.env.get_all(def_name) {
-                        exports.insert(def_name.clone(), schemes.to_vec());
-                    }
-                }
-            }
-        }
-        module_exports.insert(module.name.name.clone(), exports);
+        let interface = module_interface_from_setup(module, checker, &setup);
+        state.apply_module_interface(&module.name.name, &interface);
+        module_results.push(ElaboratedModule {
+            module_name: module.name.name.clone(),
+            diagnostics: diagnostics[start..].to_vec(),
+            interface,
+        });
+    }
+    module_results
+}
 
-        let mut domain_exports = HashMap::new();
-        for export in &module.exports {
-            if export.kind != crate::surface::ScopeItemKind::Domain {
-                continue;
-            }
-            let domain_name = export.name.name.as_str();
-            let mut members = Vec::new();
-            for item in &module.items {
-                let ModuleItem::DomainDecl(domain) = item else {
-                    continue;
-                };
-                if domain.name.name != domain_name {
-                    continue;
-                }
-                for domain_item in &domain.items {
-                    match domain_item {
-                        DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                            members.push(def.name.name.clone());
-                        }
-                        DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
-                    }
-                }
-            }
-            domain_exports.insert(domain_name.to_string(), members);
+impl ElaborationCheckpoint {
+    pub fn empty() -> Self {
+        Self {
+            state: ModuleInterfaceMaps::default(),
         }
-        module_domain_exports.insert(module.name.name.clone(), domain_exports);
-        let (class_exports, instance_exports) =
-            collect_exported_class_env(module, &checker.classes, &checker.instances);
-        module_class_exports.insert(module.name.name.clone(), class_exports);
-        module_instance_exports.insert(module.name.name.clone(), instance_exports);
+    }
+
+    pub fn apply_cached_module(&mut self, module: &ElaboratedModule) {
+        self.state
+            .apply_module_interface(&module.module_name, &module.interface);
+    }
+
+    pub fn remove_module(&mut self, module_name: &str) {
+        self.state.remove_module(module_name);
     }
 }

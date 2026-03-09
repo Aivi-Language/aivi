@@ -60,6 +60,7 @@ pub(crate) fn print_repl_help() {
         \x20 /types [filter]                    Types in scope\n\
         \x20 /values [filter]                   Session-defined values with types\n\
         \x20 /functions [filter]                Functions in scope with module names\n\
+        \x20 /autorun [on|off]                  Toggle top-level effect autorun (default: on)\n\
         \x20 /modules                           Show loaded modules\n\
         \x20 /clear                             Clear transcript (keep session state)\n\
         \x20 /reset                             Clear transcript + session state\n\
@@ -67,6 +68,9 @@ pub(crate) fn print_repl_help() {
         \x20 /load <path>                       Load .aivi file into session\n\
         \x20 /openapi file <path> [as <name>]   Inject OpenAPI spec file as module\n\
         \x20 /openapi url <url> [as <name>]     Inject OpenAPI spec URL as module\n\
+        \n\
+        Top-level effect expressions autorun by default so `print` / `println` show output.\n\
+        Use `/autorun off` if you want effect values to stay inert.\n\
         \n\
         KEYBOARD SHORTCUTS:\n\
         \x20 Enter          Submit input / accept suggestion\n\

@@ -51,21 +51,21 @@ fn reactive_commit_builtin() -> Value {
     })
 }
 
-fn signal_builtin() -> Value {
-    builtin("gtk4.signal", 1, |mut args, _| {
+fn derive_builtin() -> Value {
+    builtin("gtk4.derive", 1, |mut args, _| {
         let derive = args.remove(0);
-        Ok(builtin("gtk4.signal.read", 1, move |mut args, runtime| {
+        Ok(builtin("gtk4.derive.read", 1, move |mut args, runtime| {
             let model = args.remove(0);
             runtime.apply(derive.clone(), model)
         }))
     })
 }
 
-fn computed_builtin() -> Value {
-    builtin("gtk4.computed", 2, |mut args, _| {
+fn memo_builtin() -> Value {
+    builtin("gtk4.memo", 2, |mut args, _| {
         let derive = args.remove(1);
-        let key = expect_text(args.remove(0), "gtk4.computed key")?;
-        Ok(builtin("gtk4.computed.read", 1, move |mut args, runtime| {
+        let key = expect_text(args.remove(0), "gtk4.memo key")?;
+        Ok(builtin("gtk4.memo.read", 1, move |mut args, runtime| {
             let model = args.remove(0);
             runtime.reactive_read_computed(&key, derive.clone(), model)
         }))
@@ -80,7 +80,7 @@ fn is_reactive_signal(value: &Value) -> bool {
                 && builtin.imp.arity == 1
                 && matches!(
                     builtin.imp.name.as_str(),
-                    "gtk4.signal.read" | "gtk4.computed.read"
+                    "gtk4.derive.read" | "gtk4.memo.read"
                 )
     )
 }
@@ -97,7 +97,7 @@ fn resolve_reactive_attr_value(value: Value, runtime: &mut crate::runtime::Runti
         .map(|state| state.current_model.clone())
         .ok_or_else(|| RuntimeError::InvalidArgument {
             context: "gtk4 reactive binding".to_string(),
-            reason: "signal values inside gtk sigils require gtkApp or an initialized reactive host".to_string(),
+            reason: "derived values inside gtk sigils require gtkApp or an initialized reactive host".to_string(),
         })?;
     runtime.apply(value, model)
 }
@@ -597,8 +597,8 @@ fn build_gtk4_stubs() -> Value {
     let mut fields = HashMap::new();
     fields.insert("reactiveInit".to_string(), reactive_init_builtin());
     fields.insert("reactiveCommit".to_string(), reactive_commit_builtin());
-    fields.insert("signal".to_string(), signal_builtin());
-    fields.insert("computed".to_string(), computed_builtin());
+    fields.insert("derive".to_string(), derive_builtin());
+    fields.insert("memo".to_string(), memo_builtin());
     fields.insert("autoBindingsSet".to_string(), auto_bindings_set_builtin());
     fields.insert("autoToMsg".to_string(), auto_to_msg_builtin());
     fields.insert("serializeAttr".to_string(), serialize_attr_builtin());

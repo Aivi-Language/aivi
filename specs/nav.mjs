@@ -115,11 +115,11 @@ export const sidebar = [
         ]
       },
       {
-        text: 'Reactive UI',
+        text: 'Derived UI',
         collapsed: true,
         items: [
-          { text: 'Reactive Signals', link: '/stdlib/ui/reactive_signals' },
-          { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' }
+          { text: 'Derived Values', link: '/stdlib/ui/reactive_signals' },
+          { text: 'Derived Dataflow', link: '/stdlib/ui/reactive_dataflow' }
         ]
       },
       {

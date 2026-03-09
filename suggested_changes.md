@@ -23,19 +23,17 @@ It is intentionally focused on cross-file work, language/runtime decisions, and 
   - Resolve the `aivi.rest` JSON-body mismatch between spec text and runtime parsing behavior.
 
 - **Decorator semantics**
-  - Either make `@debug` work on ordinary `name = x => ...` definitions or document the current resolver limitation consistently everywhere.
+  - make `@debug` work on ordinary `name = x => ...` definitions
   - Keep `type.jsonSchema` documentation, hover text, and examples aligned around the embedded-schema-value + `toText` workflow.
-  - Decide whether compile-time `env.get` should fail on missing variables or keep the current empty-string fallback.
+  - compile-time `env.get` should fail on missing variables
 
 - **Effect / machine / query semantics**
   - Resolve the spec/implementation drift around `loop` / `recurse` in generic `do M` blocks.
-  - Decide whether duplicate exact capability bindings in `with { ... }` should stay "last binding wins" or become a compiler error.
   - Keep all machine docs aligned on init-state semantics: machines start in the init target state, and later init/boot calls should fail.
-  - Clarify whether `preload`, `join`, and `groupBy` belong in the documented `aivi.database` surface or should remain out of v0.1 docs.
+  - `join`, and `groupBy` belong in the documented `aivi.database` surface and implement if missing
 
 - **Text / regex / operator behavior**
-  - Choose an official stance on `Text` `++` support versus interpolation-only guidance.
-  - Decide whether regex sigils should be parse-time validated or remain runtime-validated.
+  - regex sigils should be parse-time validated.
   - Reconcile text runtime/spec behavior for `fromBytes`, indexing/slicing, `reverse`, `capitalize`, and `titleCase`.
 
 - **Other API consistency items**
@@ -69,7 +67,7 @@ The highest-value cleanup is to either refresh them to executable examples or re
 
 - **Core**: `option`, `result`, `validation`, `prelude`, `collections`, `json`, `i18n`, `regex`
 - **Chronos**: `instant`, `timezone`, `calendar`
-- **Math**: `graph`, `geometry`, `linear_algebra`, `number`, `probability`, `signal`, `tree`, `vector`
+- **Math**: `graph`, `geometry`, `linear_algebra`, `number`, `tree`, `vector`
 - **System / IO**: `database`, `crypto`, `path`, `system`, `file`
 - **UI**: `color`, `forms`
 - **Syntax**: `bindings`, `decorators/test`, `opaque_types` / URL-related snippets
@@ -82,7 +80,6 @@ Suggested rule of thumb:
 ## Validation and coverage gaps worth addressing
 
 - Add explicit automated coverage for:
-  - probability-module semantics;
   - negative-weight `shortestPath` behavior in `aivi.graph`;
   - resource cleanup during cancellation plus multiple-`yield` diagnostics;
   - duplicate exact capability bindings in effect handlers;
@@ -91,11 +88,3 @@ Suggested rule of thumb:
   - compile-time `env.get` missing-variable behavior;
   - any publicly intended `Tree` class-style operations.
 
-- Investigate the unrelated LSP timeout failures seen during some `nextest` runs so doc audits do not get re-blocked by non-doc noise.
-
-## Suggested rollout order
-
-1. Refresh or retire stale shared snippets.
-2. Resolve the biggest language/runtime mismatches (time literals, domain imports, REST decode, `@debug`, `type.jsonSchema`).
-3. Add targeted regression coverage for the semantics above.
-4. Do a final shared-reference pass over `AIVI_LANGUAGE.md` and cross-linked overview pages once those decisions land.

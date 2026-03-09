@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde_json::Value as JsonValue;
 
 use super::util::{builtin, expect_text};
-use crate::runtime::{format_value, EffectValue, RuntimeError, Value};
+use crate::runtime::{format_value, write_stderr, write_stdout, EffectValue, RuntimeError, Value};
 
 fn level_name(value: Value, ctx: &str) -> Result<String, RuntimeError> {
     match value {
@@ -58,7 +58,7 @@ fn context_map(value: Value, ctx: &str) -> Result<HashMap<String, String>, Runti
 
 fn emit_log(level: String, message: String, context: HashMap<String, String>) -> Value {
     let effect = EffectValue::Thunk {
-        func: Arc::new(move |_| {
+        func: Arc::new(move |runtime| {
             let ctx_json: serde_json::Map<String, JsonValue> = context
                 .iter()
                 .map(|(key, value)| (key.clone(), JsonValue::String(value.clone())))
@@ -75,8 +75,8 @@ fn emit_log(level: String, message: String, context: HashMap<String, String>) ->
             let line = serde_json::to_string(&payload)
                 .map_err(|err| RuntimeError::Message(format!("log serialization failed: {err}")))?;
             match level.as_str() {
-                "warn" | "error" => eprintln!("{line}"),
-                _ => println!("{line}"),
+                "warn" | "error" => write_stderr(runtime, &line, true),
+                _ => write_stdout(runtime, &line, true),
             }
             Ok(Value::Unit)
         }),
