@@ -507,6 +507,29 @@ main = do Effect {
 }
 
 #[test]
+fn typecheck_attempt_allows_outer_error_rebinding() {
+    let source = r#"
+module test.attempt_outer_error
+export main, loadSecret
+
+Result E A = Err E | Ok A
+Option A = None | Some A
+
+loadSecret : Effect (Option Text) Text
+loadSecret = fail (Some "missing")
+
+main : Effect Text Text
+main = do Effect {
+  secret <- attempt loadSecret
+  pure (secret match
+    | Ok value => value
+    | Err _    => "fallback"
+  )
+}"#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_effect_block_bare_expr_discards_non_unit() {
     // A bare expression in a do-block desugars to `chain (λ_. body) expr`, so any
     // `Effect E A` is valid as a statement — the value is discarded, equivalent to `_ <- expr`.

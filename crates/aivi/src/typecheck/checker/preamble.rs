@@ -452,14 +452,15 @@ impl TypeChecker {
         );
         let a = self.fresh_var_id();
         let e = self.fresh_var_id();
+        let f = self.fresh_var_id();
         env.insert(
             "attempt".to_string(),
             Scheme {
-                vars: vec![e, a],
+                vars: vec![e, f, a],
                 ty: Type::Func(
                     Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
                     Box::new(Type::con("Effect").app(vec![
-                        Type::Var(e),
+                        Type::Var(f),
                         Type::con("Result").app(vec![Type::Var(e), Type::Var(a)]),
                     ])),
                 ),

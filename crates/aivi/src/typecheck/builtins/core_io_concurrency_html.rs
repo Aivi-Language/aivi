@@ -147,14 +147,15 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     );
     let a = checker.fresh_var_id();
     let e = checker.fresh_var_id();
+    let f = checker.fresh_var_id();
     env.insert(
         "attempt".to_string(),
         Scheme {
-            vars: vec![e, a],
+            vars: vec![e, f, a],
             ty: Type::Func(
                 Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
                 Box::new(Type::con("Effect").app(vec![
-                    Type::Var(e),
+                    Type::Var(f),
                     Type::con("Result").app(vec![Type::Var(e), Type::Var(a)]),
                 ])),
             ),

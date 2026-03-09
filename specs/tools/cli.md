@@ -344,13 +344,13 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 
 | Key | Action |
 | --- | --- |
-| Enter | Submit input |
+| Enter | Submit input, or accept the highlighted suggestion |
 | Shift+Enter | Insert newline (multi-line input) |
-| ↑ / ↓ | Navigate history or slash-command suggestions |
+| ↑ / ↓ | Navigate history or inline suggestions |
 | Ctrl+L | Clear transcript |
 | Ctrl+C | Cancel current input |
 | Ctrl+D | Exit (on empty input) |
-| Tab | Accept the current slash-command suggestion, or toggle the symbol pane when no suggestion is shown |
+| Tab | Accept the highlighted suggestion, or toggle the symbol pane when no suggestion is shown |
 | Esc | Close symbol pane |
 
 **Slash commands**
@@ -358,10 +358,10 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 | Command | Description |
 | --- | --- |
 | `/help` | Print command reference |
-| `/use <module.path>` | Add an import to the session (e.g. `/use aivi.text`) |
+| `/use <module.path>` | Add an import to the session (e.g. `/use aivi.text`); unknown modules error immediately |
 | `/types [filter]` | List types in scope (stdlib + session); optional substring filter |
 | `/values [filter]` | List session-defined values with their inferred types |
-| `/functions [filter]` | List functions in scope (stdlib + session) |
+| `/functions [filter]` | List functions in scope with their module names (prelude, manual `/use` imports, and session bindings) |
 | `/modules` | Show loaded modules in the session |
 | `/clear` | Clear the transcript while keeping all session state |
 | `/reset` | Clear the transcript and reset all session state |
@@ -372,7 +372,7 @@ With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and al
 
 The `/openapi` commands inject typed API bindings into the session under the given module name (or a name derived from the spec's `info.title`). They use the same `@static` OpenAPI mechanism as the language's compile-time external source support.
 
-When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. Use `↑` / `↓` to move through the suggestions and `Tab` to accept the highlighted command.
+When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. `/functions <filter>` also suggests matching function names for the filter slot, and ordinary identifier input shows typed suggestions for constructors (uppercase) plus values/functions (lowercase) that are currently in scope. Use `↑` / `↓` to move through suggestions and `Tab` or `Enter` to accept the highlighted item.
 
 ### Services
 

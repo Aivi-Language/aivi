@@ -4,13 +4,14 @@
 //! `ReplEngine` via `snapshot()` and `submit()`. A plain-text fallback is available via
 //! `run_plain()`.
 
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use aivi::{
     check_modules, check_types, desugar_modules, embedded_stdlib_modules, evaluate_binding_jit,
     file_diagnostics_have_errors, infer_value_types_full, parse_modules, render_diagnostics,
-    AiviError, FileDiagnostic, Module, ModuleItem,
+    AiviError, DomainItem, FileDiagnostic, Module, ModuleItem, TypeDecl, TypeExpr, TypeSig,
 };
 
 use super::{ColorMode, ReplOptions, SymbolPane};
@@ -57,10 +58,49 @@ pub(crate) enum SymbolKind {
     Module,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CompletionKind {
+    Command,
+    Constructor,
+    Function,
+    Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompletionMode {
+    Command,
+    SlashFilter,
+    Symbol,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolEntry {
     pub(crate) kind: SymbolKind,
     pub(crate) name: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CompletionItem {
+    pub(crate) kind: CompletionKind,
+    pub(crate) label: String,
+    pub(crate) insert_text: String,
+    pub(crate) detail: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CompletionState {
+    pub(crate) mode: CompletionMode,
+    pub(crate) replace_start: usize,
+    pub(crate) replace_end: usize,
+    pub(crate) items: Vec<CompletionItem>,
+}
+
+#[derive(Debug, Clone)]
+struct SymbolCompletion {
+    kind: CompletionKind,
+    name: String,
+    detail: String,
+    module: String,
 }
 
 // ── Session snapshot (TUI-facing read API) ─────────────────────────────────────
@@ -95,13 +135,28 @@ pub(crate) struct ReplEngine {
     cached_symbols: Vec<SymbolEntry>,
     /// Evaluation turn counter.
     turn: usize,
+    /// Stdlib modules that are visible by default through the prelude bootstrap.
+    default_visible_modules: Vec<String>,
+    /// Builtin values/constructors that are available from the core scope.
+    builtin_completions: Vec<SymbolCompletion>,
     /// Inferred type strings for session-defined names. Updated after every successful compile.
-    session_types: std::collections::HashMap<String, String>,
+    session_types: HashMap<String, String>,
+    /// Static inventory of stdlib symbols grouped by module for scope-aware completions.
+    stdlib_module_completions: HashMap<String, Vec<SymbolCompletion>>,
+    /// Session-local ADT constructors derived from successful definitions and loads.
+    session_constructors: Vec<SymbolCompletion>,
 }
 
 impl ReplEngine {
     /// Create a new engine, pre-loading the stdlib symbol inventory.
     pub(crate) fn new(options: &ReplOptions) -> Result<Self, AiviError> {
+        let stdlib = embedded_stdlib_modules();
+        let default_visible_modules = collect_default_visible_modules(&stdlib);
+        let visible_stdlib_count: usize = stdlib
+            .iter()
+            .filter(|module| default_visible_modules.contains(&module.name.name))
+            .map(count_exportable_items)
+            .sum();
         let mut engine = ReplEngine {
             options: options.clone(),
             imports: Vec::new(),
@@ -111,17 +166,18 @@ impl ReplEngine {
             active_pane: None,
             cached_symbols: Vec::new(),
             turn: 0,
-            session_types: std::collections::HashMap::new(),
+            default_visible_modules,
+            builtin_completions: builtin_symbol_completions(),
+            session_types: HashMap::new(),
+            stdlib_module_completions: collect_module_completion_symbols(&stdlib, false),
+            session_constructors: Vec::new(),
         };
-
-        let stdlib = embedded_stdlib_modules();
-        let stdlib_count: usize = stdlib.iter().map(count_exportable_items).sum();
 
         engine.transcript.push(TranscriptEntry {
             kind: TranscriptKind::System,
             text: format!(
                 "aivi repl 0.1  ·  prelude loaded  ·  {} symbols in scope",
-                stdlib_count
+                visible_stdlib_count
             ),
         });
 
@@ -169,6 +225,17 @@ impl ReplEngine {
             symbols: self.cached_symbols.clone(),
             turn: self.turn,
         }
+    }
+
+    pub(crate) fn completion_state(&self, input: &str, cursor: usize) -> Option<CompletionState> {
+        let cursor = cursor.min(input.len());
+        if let Some(state) = self.command_completion_state(input, cursor) {
+            return Some(state);
+        }
+        if let Some(state) = self.functions_filter_completion_state(input, cursor) {
+            return Some(state);
+        }
+        self.symbol_completion_state(input, cursor)
     }
 
     // ── Plain (non-TUI) run loop ─────────────────────────────────────────────
@@ -284,10 +351,10 @@ impl ReplEngine {
 Command Reference
 
   /help                         print this reference
-  /use <module.path>            add import to session
+  /use <module.path>            add import to session (errors on unknown modules)
   /types [filter]               types in scope (stdlib + session)
   /values [filter]              session-defined values + inferred types
-  /functions [filter]           functions in scope (stdlib + session)
+  /functions [filter]           functions in scope with module names
   /modules                      show loaded modules in session
   /clear                        clear transcript (keep session state)
   /reset                        clear transcript + session state
@@ -296,7 +363,7 @@ Command Reference
   /openapi file <path> [as <n>] inject OpenAPI spec file as module
   /openapi url <url> [as <n>]   inject OpenAPI spec URL as module
 
-  Ctrl+D on empty input: exit   Tab: toggle symbol pane";
+  Ctrl+D on empty input: exit   Tab/Enter: accept suggestion";
         self.push_command_output(text.to_owned());
         self.set_symbol_pane(SymbolPane::Types);
     }
@@ -314,6 +381,7 @@ Command Reference
         self.definitions.clear();
         self.history.clear();
         self.session_types.clear();
+        self.session_constructors.clear();
         self.turn = 0;
         self.cached_symbols.clear();
         self.active_pane = None;
@@ -430,6 +498,12 @@ Command Reference
             self.push_error("/use expects a module path. Example: /use aivi.text".to_owned());
             return;
         }
+        if !self.module_exists(module_path) {
+            self.push_error(format!(
+                "Unknown module `{module_path}`. Example: /use aivi.text"
+            ));
+            return;
+        }
         if !self.imports.contains(&module_path.to_owned()) {
             self.imports.push(module_path.to_owned());
         }
@@ -467,6 +541,7 @@ Command Reference
                 }
                 self.definitions.push(content.clone());
                 self.session_types = self.current_session_types().into_iter().collect();
+                self.session_constructors = self.current_session_constructors();
                 self.transcript.push(TranscriptEntry {
                     kind: TranscriptKind::System,
                     text: format!("loaded `{path_str}`"),
@@ -556,6 +631,7 @@ Command Reference
                 self.definitions.push(snippet);
                 self.session_types
                     .insert(binding_name.clone(), binding_type);
+                self.session_constructors = self.current_session_constructors();
                 if let Some(pane) = self.active_pane {
                     self.cached_symbols = self.build_symbol_entries(pane, "");
                 }
@@ -657,6 +733,8 @@ Command Reference
                     }
                 }
 
+                self.session_constructors = self.current_session_constructors();
+
                 // Rebuild cached symbols.
                 if let Some(pane) = self.active_pane {
                     self.cached_symbols = self.build_symbol_entries(pane, "");
@@ -722,7 +800,6 @@ Command Reference
     // ── Symbol inventory ────────────────────────────────────────────────────
 
     fn build_symbol_entries(&self, pane: SymbolPane, filter: &str) -> Vec<SymbolEntry> {
-        let stdlib = embedded_stdlib_modules();
         let session_types: Vec<(String, String)> = self
             .session_types
             .iter()
@@ -731,7 +808,10 @@ Command Reference
         match pane {
             SymbolPane::Types => {
                 let mut names: Vec<String> = Vec::new();
-                for module in &stdlib {
+                for module in embedded_stdlib_modules()
+                    .into_iter()
+                    .filter(|module| self.module_is_visible(&module.name.name))
+                {
                     for item in &module.items {
                         let name = match item {
                             ModuleItem::TypeDecl(td) => Some(td.name.name.clone()),
@@ -749,14 +829,14 @@ Command Reference
                 names.sort();
                 let mut entries: Vec<SymbolEntry> = names
                     .into_iter()
-                    .filter(|n| filter.is_empty() || n.starts_with(filter))
+                    .filter(|n| matches_filter(n, filter))
                     .map(|name| SymbolEntry {
                         kind: SymbolKind::Type,
                         name,
                     })
                     .collect();
                 for (name, type_str) in session_types {
-                    if filter.is_empty() || name.starts_with(filter) {
+                    if matches_filter(&name, filter) {
                         entries.push(SymbolEntry {
                             kind: SymbolKind::Type,
                             name: format!("{name} :: {type_str}"),
@@ -765,41 +845,20 @@ Command Reference
                 }
                 entries
             }
-            SymbolPane::Functions => {
-                let mut names: Vec<String> = Vec::new();
-                for module in &stdlib {
-                    for item in &module.items {
-                        if let ModuleItem::TypeSig(sig) = item {
-                            let n = sig.name.name.clone();
-                            if !names.contains(&n) {
-                                names.push(n);
-                            }
-                        }
-                    }
-                }
-                names.sort();
-                let mut entries: Vec<SymbolEntry> = names
-                    .into_iter()
-                    .filter(|n| filter.is_empty() || n.starts_with(filter))
-                    .map(|name| SymbolEntry {
-                        kind: SymbolKind::Function,
-                        name,
-                    })
-                    .collect();
-                for (name, type_str) in session_types {
-                    if type_str.contains("->") && (filter.is_empty() || name.starts_with(filter)) {
-                        entries.push(SymbolEntry {
-                            kind: SymbolKind::Function,
-                            name: format!("{name} :: {type_str}"),
-                        });
-                    }
-                }
-                entries
-            }
+            SymbolPane::Functions => self
+                .function_value_inventory()
+                .into_iter()
+                .filter(|item| matches!(item.kind, CompletionKind::Function))
+                .filter(|item| matches_filter(&item.name, filter))
+                .map(|item| SymbolEntry {
+                    kind: SymbolKind::Function,
+                    name: format_function_entry(&item),
+                })
+                .collect(),
             SymbolPane::Values => {
                 let mut entries: Vec<SymbolEntry> = session_types
                     .into_iter()
-                    .filter(|(name, _)| filter.is_empty() || name.starts_with(filter))
+                    .filter(|(name, _)| matches_filter(name, filter))
                     .map(|(name, type_str)| SymbolEntry {
                         kind: SymbolKind::Value,
                         name: if type_str.contains("->") {
@@ -818,7 +877,7 @@ Command Reference
                     name: "aivi.prelude".to_owned(),
                 }];
                 for imp in &self.imports {
-                    if filter.is_empty() || imp.starts_with(filter) {
+                    if matches_filter(imp, filter) {
                         entries.push(SymbolEntry {
                             kind: SymbolKind::Module,
                             name: imp.clone(),
@@ -877,6 +936,267 @@ Command Reference
             .collect();
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         entries
+    }
+
+    fn current_session_constructors(&self) -> Vec<SymbolCompletion> {
+        let modules = self.current_session_modules();
+        modules
+            .iter()
+            .flat_map(|module| collect_completion_symbols(module, true))
+            .filter(|item| item.kind == CompletionKind::Constructor)
+            .collect()
+    }
+
+    fn current_session_modules(&self) -> Vec<Module> {
+        if self.definitions.is_empty() {
+            return Vec::new();
+        }
+
+        let mut lines = vec!["module repl_session".to_owned(), String::new()];
+        lines.push("use aivi.prelude".to_owned());
+        for imp in &self.imports {
+            lines.push(format!("use {imp}"));
+        }
+        lines.push(String::new());
+        for def in &self.definitions {
+            lines.push(def.clone());
+            lines.push(String::new());
+        }
+        let source = lines.join("\n");
+        let path = Path::new("<repl_session>");
+        let (session_modules, parse_diags) = parse_modules(path, &source);
+        if file_diagnostics_have_errors(&parse_diags) {
+            Vec::new()
+        } else {
+            session_modules
+        }
+    }
+
+    fn command_completion_state(&self, input: &str, cursor: usize) -> Option<CompletionState> {
+        let trimmed = input.trim_start();
+        if !trimmed.starts_with('/') {
+            return None;
+        }
+        let leading_ws = input.len() - trimmed.len();
+        if cursor < leading_ws {
+            return None;
+        }
+
+        let command_end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
+        let replace_start = leading_ws;
+        let replace_end = leading_ws + command_end;
+        if cursor > replace_end {
+            return None;
+        }
+
+        let fragment = &input[replace_start..replace_end];
+        let mut items: Vec<CompletionItem> = slash_command_suggestions(fragment)
+            .into_iter()
+            .map(|name| CompletionItem {
+                kind: CompletionKind::Command,
+                label: name.to_owned(),
+                insert_text: name.to_owned(),
+                detail: command_summary(name).to_owned(),
+            })
+            .collect();
+        items.truncate(5);
+
+        if items.is_empty() {
+            None
+        } else {
+            Some(CompletionState {
+                mode: CompletionMode::Command,
+                replace_start,
+                replace_end,
+                items,
+            })
+        }
+    }
+
+    fn functions_filter_completion_state(
+        &self,
+        input: &str,
+        cursor: usize,
+    ) -> Option<CompletionState> {
+        const COMMAND: &str = "/functions";
+
+        let trimmed = input.trim_start();
+        if !trimmed.starts_with(COMMAND) {
+            return None;
+        }
+
+        let leading_ws = input.len() - trimmed.len();
+        let rest = &trimmed[COMMAND.len()..];
+        if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
+            return None;
+        }
+
+        let command_end = leading_ws + COMMAND.len();
+        if cursor < command_end {
+            return None;
+        }
+
+        let filter_start = if rest.trim().is_empty() {
+            input.len()
+        } else {
+            leading_ws + COMMAND.len() + rest.find(|c: char| !c.is_whitespace()).unwrap_or(0)
+        };
+        let filter = rest.trim();
+        let mut items: Vec<CompletionItem> = self
+            .function_value_inventory()
+            .into_iter()
+            .filter(|item| item.kind == CompletionKind::Function)
+            .filter(|item| matches_filter(&item.name, filter))
+            .map(|item| CompletionItem {
+                kind: CompletionKind::Function,
+                label: item.name.clone(),
+                insert_text: item.name,
+                detail: item.detail,
+            })
+            .collect();
+        items.truncate(5);
+
+        if items.is_empty() {
+            None
+        } else {
+            Some(CompletionState {
+                mode: CompletionMode::SlashFilter,
+                replace_start: filter_start.min(input.len()),
+                replace_end: input.len(),
+                items,
+            })
+        }
+    }
+
+    fn symbol_completion_state(&self, input: &str, cursor: usize) -> Option<CompletionState> {
+        let (replace_start, replace_end) = completion_token_range(input, cursor);
+        if replace_start == replace_end || cursor < replace_start {
+            return None;
+        }
+
+        let fragment = &input[replace_start..cursor];
+        if fragment.is_empty() {
+            return None;
+        }
+
+        let mut items: Vec<CompletionItem> = if starts_with_upper(fragment) {
+            self.constructor_inventory()
+                .into_iter()
+                .filter(|item| item.name.starts_with(fragment))
+                .map(symbol_completion_item)
+                .collect()
+        } else if starts_with_lower_or_underscore(fragment) {
+            self.function_value_inventory()
+                .into_iter()
+                .filter(|item| item.name.starts_with(fragment))
+                .map(symbol_completion_item)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        items.truncate(5);
+
+        if items.is_empty() {
+            None
+        } else {
+            Some(CompletionState {
+                mode: CompletionMode::Symbol,
+                replace_start,
+                replace_end,
+                items,
+            })
+        }
+    }
+
+    fn function_value_inventory(&self) -> Vec<SymbolCompletion> {
+        let mut session_items: Vec<SymbolCompletion> = self
+            .session_types
+            .iter()
+            .filter_map(|(name, ty)| {
+                let kind = if ty.contains("->") {
+                    CompletionKind::Function
+                } else {
+                    CompletionKind::Value
+                };
+                Some(SymbolCompletion {
+                    kind,
+                    name: name.clone(),
+                    detail: ty.clone(),
+                    module: "repl_session".to_owned(),
+                })
+            })
+            .collect();
+        session_items.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let stdlib_items = self
+            .visible_stdlib_completions()
+            .into_iter()
+            .filter(|item| matches!(item.kind, CompletionKind::Function | CompletionKind::Value));
+        let builtin_items = self
+            .builtin_completions
+            .iter()
+            .filter(|item| matches!(item.kind, CompletionKind::Function | CompletionKind::Value))
+            .cloned()
+            .collect();
+
+        merge_symbol_completions(
+            merge_symbol_completions(session_items, stdlib_items.collect()),
+            builtin_items,
+        )
+    }
+
+    fn constructor_inventory(&self) -> Vec<SymbolCompletion> {
+        merge_symbol_completions(
+            merge_symbol_completions(
+                self.session_constructors.clone(),
+                self.builtin_constructor_completions(),
+            ),
+            self.visible_stdlib_completions()
+                .into_iter()
+                .filter(|item| item.kind == CompletionKind::Constructor)
+                .collect(),
+        )
+    }
+
+    fn builtin_constructor_completions(&self) -> Vec<SymbolCompletion> {
+        self.builtin_completions
+            .iter()
+            .filter(|item| item.kind == CompletionKind::Constructor)
+            .cloned()
+            .collect()
+    }
+
+    fn visible_stdlib_completions(&self) -> Vec<SymbolCompletion> {
+        self.visible_stdlib_module_names()
+            .into_iter()
+            .filter_map(|module_name| self.stdlib_module_completions.get(&module_name))
+            .flat_map(|items| items.iter().cloned())
+            .collect()
+    }
+
+    fn visible_stdlib_module_names(&self) -> Vec<String> {
+        let mut names = self.default_visible_modules.clone();
+        for import in &self.imports {
+            if !names.contains(import) {
+                names.push(import.clone());
+            }
+        }
+        names
+    }
+
+    fn module_is_visible(&self, module_name: &str) -> bool {
+        self.default_visible_modules
+            .iter()
+            .any(|visible| visible == module_name)
+            || self.imports.iter().any(|import| import == module_name)
+    }
+
+    fn module_exists(&self, module_name: &str) -> bool {
+        self.stdlib_module_completions.contains_key(module_name)
+            || self
+                .current_session_modules()
+                .into_iter()
+                .any(|module| module.name.name == module_name)
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -1010,6 +1330,116 @@ fn count_exportable_items(module: &Module) -> usize {
         .count()
 }
 
+fn collect_default_visible_modules(stdlib: &[Module]) -> Vec<String> {
+    let mut modules = vec!["aivi.prelude".to_owned()];
+    if let Some(prelude) = stdlib
+        .iter()
+        .find(|module| module.name.name == "aivi.prelude")
+    {
+        for use_decl in &prelude.uses {
+            if !modules.contains(&use_decl.module.name) {
+                modules.push(use_decl.module.name.clone());
+            }
+        }
+    }
+    modules
+}
+
+fn builtin_symbol_completions() -> Vec<SymbolCompletion> {
+    vec![
+        SymbolCompletion {
+            kind: CompletionKind::Value,
+            name: "Unit".to_owned(),
+            detail: "Unit".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name: "True".to_owned(),
+            detail: "Bool".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name: "False".to_owned(),
+            detail: "Bool".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name: "None".to_owned(),
+            detail: "Option A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name: "Some".to_owned(),
+            detail: "A -> Option A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name: "Ok".to_owned(),
+            detail: "A -> Result E A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name: "Err".to_owned(),
+            detail: "E -> Result E A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "pure".to_owned(),
+            detail: "A -> Effect E A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "fail".to_owned(),
+            detail: "E -> Effect E A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "attempt".to_owned(),
+            detail: "Effect E A -> Effect E (Result E A)".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "load".to_owned(),
+            detail: "Effect E A -> Effect E A".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "constructorName".to_owned(),
+            detail: "A -> Text".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "constructorOrdinal".to_owned(),
+            detail: "A -> Int".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "print".to_owned(),
+            detail: "Text -> Effect Text Unit".to_owned(),
+            module: "aivi".to_owned(),
+        },
+        SymbolCompletion {
+            kind: CompletionKind::Function,
+            name: "println".to_owned(),
+            detail: "Text -> Effect Text Unit".to_owned(),
+            module: "aivi".to_owned(),
+        },
+    ]
+}
+
 // ── Plain display ─────────────────────────────────────────────────────────────
 
 fn plain_entry_text(entry: &TranscriptEntry) -> String {
@@ -1084,6 +1514,23 @@ pub(crate) fn command_accepts_argument(command: &str) -> bool {
     )
 }
 
+pub(crate) fn command_summary(command: &str) -> &'static str {
+    match command {
+        "/help" => "print command reference",
+        "/use" => "add import to session",
+        "/types" => "list types in scope",
+        "/values" => "list session values with types",
+        "/functions" => "list functions in scope",
+        "/modules" => "show loaded modules",
+        "/clear" => "clear transcript",
+        "/reset" => "reset transcript and session state",
+        "/history" => "show recent inputs",
+        "/load" => "load a .aivi file",
+        "/openapi" => "inject an OpenAPI module",
+        _ => "",
+    }
+}
+
 fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -1105,6 +1552,284 @@ fn levenshtein(a: &str, b: &str) -> usize {
         }
     }
     dp[m][n]
+}
+
+fn matches_filter(name: &str, filter: &str) -> bool {
+    filter.is_empty() || name.contains(filter)
+}
+
+fn starts_with_upper(text: &str) -> bool {
+    text.chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_uppercase())
+}
+
+fn starts_with_lower_or_underscore(text: &str) -> bool {
+    text.chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_lowercase() || ch == '_')
+}
+
+fn completion_token_range(input: &str, cursor: usize) -> (usize, usize) {
+    let cursor = cursor.min(input.len());
+    let mut start = cursor;
+    while start > 0 {
+        let prev = input[..start]
+            .char_indices()
+            .next_back()
+            .map(|(idx, ch)| (idx, ch));
+        let Some((idx, ch)) = prev else { break };
+        if !is_identifier_completion_char(ch) {
+            break;
+        }
+        start = idx;
+    }
+
+    let mut end = cursor;
+    while end < input.len() {
+        let Some(ch) = input[end..].chars().next() else {
+            break;
+        };
+        if !is_identifier_completion_char(ch) {
+            break;
+        }
+        end += ch.len_utf8();
+    }
+
+    (start, end)
+}
+
+fn is_identifier_completion_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_' || ch == '\''
+}
+
+fn format_function_entry(item: &SymbolCompletion) -> String {
+    format!("{} :: {}  ({})", item.name, item.detail, item.module)
+}
+
+fn symbol_completion_item(item: SymbolCompletion) -> CompletionItem {
+    CompletionItem {
+        kind: item.kind,
+        label: item.name.clone(),
+        insert_text: item.name,
+        detail: item.detail,
+    }
+}
+
+fn merge_symbol_completions(
+    primary: Vec<SymbolCompletion>,
+    secondary: Vec<SymbolCompletion>,
+) -> Vec<SymbolCompletion> {
+    let mut seen = HashSet::new();
+    let mut merged = Vec::new();
+
+    for item in primary.into_iter().chain(secondary) {
+        if seen.insert(item.name.clone()) {
+            merged.push(item);
+        }
+    }
+
+    merged.sort_by(|a, b| a.name.cmp(&b.name).then(a.kind.cmp(&b.kind)));
+    merged
+}
+
+fn collect_module_completion_symbols(
+    modules: &[Module],
+    include_opaque_ctors: bool,
+) -> HashMap<String, Vec<SymbolCompletion>> {
+    let mut by_module = HashMap::new();
+    for module in modules {
+        by_module.insert(
+            module.name.name.clone(),
+            collect_completion_symbols(module, include_opaque_ctors),
+        );
+    }
+    by_module
+}
+
+fn collect_completion_symbols(
+    module: &Module,
+    include_opaque_ctors: bool,
+) -> Vec<SymbolCompletion> {
+    let mut seen = HashSet::new();
+    let mut symbols = Vec::new();
+
+    for item in &module.items {
+        match item {
+            ModuleItem::TypeSig(sig) => {
+                push_type_sig_completion(&mut symbols, &mut seen, &module.name.name, sig);
+            }
+            ModuleItem::TypeDecl(type_decl) => {
+                push_type_decl_constructors(
+                    &mut symbols,
+                    &mut seen,
+                    &module.name.name,
+                    type_decl,
+                    include_opaque_ctors,
+                );
+            }
+            ModuleItem::DomainDecl(domain) => {
+                for domain_item in &domain.items {
+                    match domain_item {
+                        DomainItem::TypeSig(sig) => {
+                            push_type_sig_completion(
+                                &mut symbols,
+                                &mut seen,
+                                &module.name.name,
+                                sig,
+                            );
+                        }
+                        DomainItem::TypeAlias(type_decl) => {
+                            push_type_decl_constructors(
+                                &mut symbols,
+                                &mut seen,
+                                &module.name.name,
+                                type_decl,
+                                true,
+                            );
+                        }
+                        DomainItem::Def(_) | DomainItem::LiteralDef(_) => {}
+                    }
+                }
+            }
+            ModuleItem::Def(_)
+            | ModuleItem::TypeAlias(_)
+            | ModuleItem::ClassDecl(_)
+            | ModuleItem::InstanceDecl(_)
+            | ModuleItem::MachineDecl(_) => {}
+        }
+    }
+
+    symbols.sort_by(|a, b| a.name.cmp(&b.name).then(a.kind.cmp(&b.kind)));
+    symbols
+}
+
+fn push_type_sig_completion(
+    symbols: &mut Vec<SymbolCompletion>,
+    seen: &mut HashSet<String>,
+    module: &str,
+    sig: &TypeSig,
+) {
+    let name = sig.name.name.clone();
+    if !seen.insert(name.clone()) {
+        return;
+    }
+
+    let detail = render_type_expr(&sig.ty);
+    let kind = if detail.contains("->") {
+        CompletionKind::Function
+    } else {
+        CompletionKind::Value
+    };
+    symbols.push(SymbolCompletion {
+        kind,
+        name,
+        detail,
+        module: module.to_owned(),
+    });
+}
+
+fn push_type_decl_constructors(
+    symbols: &mut Vec<SymbolCompletion>,
+    seen: &mut HashSet<String>,
+    module: &str,
+    type_decl: &TypeDecl,
+    include_opaque_ctors: bool,
+) {
+    if type_decl.opaque && !include_opaque_ctors {
+        return;
+    }
+
+    for ctor in &type_decl.constructors {
+        let name = ctor.name.name.clone();
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        symbols.push(SymbolCompletion {
+            kind: CompletionKind::Constructor,
+            name,
+            detail: render_constructor_type(type_decl, ctor),
+            module: module.to_owned(),
+        });
+    }
+}
+
+fn render_constructor_type(type_decl: &TypeDecl, ctor: &aivi::TypeCtor) -> String {
+    let result_type = if type_decl.params.is_empty() {
+        type_decl.name.name.clone()
+    } else {
+        let params = type_decl
+            .params
+            .iter()
+            .map(|param| param.name.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!("{} {params}", type_decl.name.name)
+    };
+
+    if ctor.args.is_empty() {
+        result_type
+    } else {
+        let args = ctor
+            .args
+            .iter()
+            .map(render_type_expr_as_arg)
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        format!("{args} -> {result_type}")
+    }
+}
+
+fn render_type_expr_as_arg(ty: &TypeExpr) -> String {
+    match ty {
+        TypeExpr::Func { .. } => format!("({})", render_type_expr(ty)),
+        _ => render_type_expr(ty),
+    }
+}
+
+fn render_type_expr(ty: &TypeExpr) -> String {
+    match ty {
+        TypeExpr::Name(name) => name.name.clone(),
+        TypeExpr::And { items, .. } => items
+            .iter()
+            .map(render_type_expr)
+            .collect::<Vec<_>>()
+            .join(" & "),
+        TypeExpr::Apply { base, args, .. } => {
+            let base_str = match base.as_ref() {
+                TypeExpr::Func { .. } => format!("({})", render_type_expr(base)),
+                _ => render_type_expr(base),
+            };
+            let args_str = args.iter().map(render_type_expr_as_arg).collect::<Vec<_>>();
+            format!("{} {}", base_str, args_str.join(" "))
+        }
+        TypeExpr::Func { params, result, .. } => {
+            let params = params
+                .iter()
+                .map(render_type_expr_as_arg)
+                .collect::<Vec<_>>()
+                .join(" -> ");
+            format!("{params} -> {}", render_type_expr(result))
+        }
+        TypeExpr::Record { fields, .. } => {
+            let fields = fields
+                .iter()
+                .map(|(name, ty)| format!("{}: {}", name.name, render_type_expr(ty)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{ {fields} }}")
+        }
+        TypeExpr::Tuple { items, .. } => format!(
+            "({})",
+            items
+                .iter()
+                .map(render_type_expr)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        TypeExpr::Star { .. } => "*".to_owned(),
+        TypeExpr::Unknown { .. } => "_".to_owned(),
+    }
 }
 
 fn parse_openapi_args(rest: &str) -> (&str, Option<String>) {
@@ -1341,6 +2066,21 @@ mod tests {
     }
 
     #[test]
+    fn slash_use_invalid_module_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/use aivi.not_a_real_module").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::Error)
+                && entry
+                    .text
+                    .contains("Unknown module `aivi.not_a_real_module`")
+        }));
+        assert!(!engine
+            .imports
+            .contains(&"aivi.not_a_real_module".to_owned()));
+    }
+
+    #[test]
     fn unknown_slash_command_shows_error() {
         let mut engine = make_engine();
         let snap = engine.submit("/bogus").unwrap();
@@ -1406,7 +2146,22 @@ mod tests {
         assert!(snap
             .symbols
             .iter()
-            .any(|entry| entry.name.contains("double :: Int -> Int")));
+            .any(|entry| entry.name.contains("double :: Int -> Int  (repl_session)")));
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::CommandOutput)
+                && entry.text.contains("double :: Int -> Int  (repl_session)")
+        }));
+    }
+
+    #[test]
+    fn functions_pane_shows_imported_module_names() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.json").unwrap();
+        let snap = engine.submit("/functions decodeText").unwrap();
+        assert!(snap
+            .symbols
+            .iter()
+            .any(|entry| entry.name.contains("decodeText") && entry.name.contains("(aivi.json)")));
     }
 
     #[test]
@@ -1501,6 +2256,59 @@ mod tests {
     #[test]
     fn slash_command_suggestions_filter_by_prefix() {
         assert_eq!(slash_command_suggestions("/va"), vec!["/values"]);
+    }
+
+    #[test]
+    fn slash_functions_filter_suggests_matching_function_names() {
+        let engine = make_engine();
+        let completion = engine
+            .completion_state("/functions an", "/functions an".len())
+            .expect("expected completion state for /functions filter");
+        assert_eq!(completion.mode, CompletionMode::SlashFilter);
+        assert!(completion.items.iter().any(|item| item.label == "any"));
+    }
+
+    #[test]
+    fn lowercase_symbol_completion_uses_default_prelude_scope() {
+        let engine = make_engine();
+        let completion = engine
+            .completion_state("jo", 2)
+            .expect("expected join suggestion from prelude-visible modules");
+        assert!(completion.items.iter().any(|item| item.label == "join"));
+    }
+
+    #[test]
+    fn uppercase_symbol_completion_suggests_constructors() {
+        let engine = make_engine();
+        let completion = engine
+            .completion_state("S", 1)
+            .expect("expected constructor completion for uppercase prefix");
+        assert!(completion
+            .items
+            .iter()
+            .any(|item| item.kind == CompletionKind::Constructor && item.label == "Some"));
+    }
+
+    #[test]
+    fn importing_module_expands_completion_scope() {
+        let mut engine = make_engine();
+        let before = engine
+            .completion_state("decodeT", "decodeT".len())
+            .map(|state| {
+                state
+                    .items
+                    .into_iter()
+                    .map(|item| item.label)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        assert!(!before.iter().any(|label| label == "decodeText"));
+
+        engine.submit("/use aivi.json").unwrap();
+        let after = engine
+            .completion_state("decodeT", "decodeT".len())
+            .expect("expected completions after /use aivi.json");
+        assert!(after.items.iter().any(|item| item.label == "decodeText"));
     }
 
     // ── /openapi command ────────────────────────────────────────────────────
