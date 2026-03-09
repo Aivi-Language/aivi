@@ -26,7 +26,7 @@ These operations live in AIVI's ordinary effect system. They do not create a sep
 Most GTK apps only need this smaller subset:
 
 - `Signal` values for authoritative UI state
-- `map` and `combine2` for derived reactive state
+- `derive` and `combineAll` for derived reactive state
 - `~<gtk>...</gtk>` with a root `GtkWindow` or `GtkApplicationWindow`
 - callback attrs such as `onClick={handler}` or `onClick={eventHandle}`
 - structural bindings such as `<show>` and `<each key={...}>`
@@ -38,7 +38,7 @@ Most GTK apps only need this smaller subset:
 | --- | --- |
 | build a normal single-window desktop app | a root `~<gtk>` tree with signals |
 | describe a widget tree in the most readable way | `~<gtk>...</gtk>` with shorthand tags |
-| derive reactive UI data | `map` and `combine2` |
+| derive reactive UI data | `derive` and `combineAll` |
 | run effectful UI work from a callback | `Event` handles or direct runtime functions |
 | consume the raw GTK event queue in a library or test | `signalStream`, `signalPoll`, `signalEmit` |
 | grab widget ids for direct low-level access | `buildWithIds` |
@@ -50,7 +50,7 @@ use aivi.reactive
 use aivi.ui.gtk4
 
 state = signal { count: 0 }
-title = state |> map (_.count) |> map "Count {_}"
+title = derive state (s => "Count {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
 view = ~<gtk>
@@ -71,7 +71,7 @@ use aivi.reactive
 use aivi.ui.gtk4
 
 state = signal { count: 0 }
-title = state |> map (_.count) |> map "Count {_}"
+title = derive state (s => "Count {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
 view = ~<gtk>
@@ -98,8 +98,8 @@ There is no required `Model -> Msg -> update` host. Signals are the source of tr
 
 The core surface is:
 
-- reactive values: `signal`, `get`, `set`, `update`, `map`, `combine2`, `watch`, `on`, `batch`, `peek`
-- effect handles: `event (do Effect { ... })` with `result`, `error`, `done`, and `running`
+- reactive values: `signal`, `get`, `set`, `update`, `derive`, `combineAll`, `watch`, `on`, `batch`, `peek`
+- effect handles: `do Event { ... }` with `result`, `error`, `done`, and `running`
 - GTK binding surface: `~<gtk>...</gtk>`, callback attributes, `<show>`, `<each>`, and widget/window helpers
 - low-level escape hatches: `buildFromNode`, `buildWithIds`, `signalStream`, `signalPoll`, `signalEmit`
 

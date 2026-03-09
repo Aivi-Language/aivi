@@ -1,7 +1,7 @@
 # Signals
 
 <!-- quick-info: {"kind":"topic","name":"signals"} -->
-AIVI signals are first-class reactive values. Create writable source cells with `signal`, derive more signals with `map` and `combine2`, mutate them with `set` or `update`, and observe them with `watch` or `on`.
+AIVI signals are first-class reactive values. Create writable source cells with `signal`, derive more signals with `derive` and `combineAll`, mutate them with `set` or `update`, and observe them with `watch` or `on`.
 <!-- /quick-info -->
 
 If you want the big-picture app guide, start with [`aivi.ui.gtk4`](./gtk4.md). If you want the runtime semantics, read [Reactive Dataflow](./reactive_dataflow.md). This page focuses on the day-to-day API shape.
@@ -28,8 +28,8 @@ Derived UI state is no longer a separate architecture. If a value should stay re
 | `get s` | Read the current value. Best for callbacks, events, and low-level code. |
 | `set s value` | Replace the current value. |
 | `update s fn` | Transform the current value. May also accept patch-style record updates. |
-| `map fn s` | Derive a new signal from one source signal. |
-| `combine2` | Derive one signal from two source signals. |
+| `derive s fn` | Derive a new signal from one source signal. |
+| `combineAll { a: s1, b: s2 } fn` | Derive one signal from a record of source signals. |
 | `watch s fn` / `on s fn` | Observe changes and run a callback or effect. Returns a disposable. |
 | `batch fn` | Group several writes into one propagation batch. |
 | `peek s` | Read without recording a dependency. |
@@ -40,7 +40,7 @@ The common style is: use signals and combinators in normal UI code, then reach f
 
 ```aivi
 state = signal { count: 0 }
-title = state |> map (_.count) |> map "Count {_}"
+title = derive state (s => "Count {s.count}")
 
 increment = _ => update state (patch { count: _ + 1 })
 reset = _ => set state { count: 0 }
@@ -50,23 +50,22 @@ reset = _ => set state { count: 0 }
 
 ## Multi-signal composition
 
-AIVI needs multi-signal combinators because real UI state rarely depends on just one source.
+AIVI needs multi-signal combinators because real UI state rarely depends on just one source. `combineAll` takes a record of signals and a function that receives a record of their current values:
 
 ```aivi
-firstName = signal "Ada"
-lastName = signal "Lovelace"
+firstName = signal “Ada”
+lastName = signal “Lovelace”
 saveBusy = saveProfile.running
 
-fullName = combine2 firstName lastName (first => last => "{first} {last}")
-canSaveBase = combine2 firstName lastName (first => last =>
-  first != "" and last != ""
+fullName = combineAll { first: firstName, last: lastName } (vals =>
+  “{vals.first} {vals.last}”
 )
-canSave = combine2 canSaveBase saveBusy (ready => running =>
-  ready and not running
+canSave = combineAll { first: firstName, last: lastName, busy: saveBusy } (vals =>
+  vals.first != “” and vals.last != “” and not vals.busy
 )
 ```
 
-Use `combine2` when one derived value depends on two live sources. If the runtime grows higher-arity combinators later, they should stay ergonomic; until then, compose them explicitly.
+Use `combineAll` when one derived value depends on multiple live sources. The record-based API scales to any number of inputs without needing `combine2`/`combine3`/etc.
 
 ## Record-valued signals and patch updates
 
@@ -114,13 +113,12 @@ Useful rules:
 `Event` handles fit the same model. They are effectful runtime values with reactive lifecycle fields:
 
 ```aivi
-saveDraft : Event GtkError Text
-saveDraft = event (do Effect {
+saveDraft = do Event {
   persistDraft (get draft)
   pure "Saved"
-})
+}
 
-saveMessage = saveDraft.result |> map (maybeResult =>
+saveMessage = derive saveDraft.result (maybeResult =>
   maybeResult match
     | Some text => text
     | None      => ""
@@ -134,7 +132,7 @@ Important fields:
 - `saveDraft.done`
 - `saveDraft.running`
 
-Because those fields are signals, you can combine them with other state through the same `map` and `combine2` APIs.
+Because those fields are signals, you can combine them with other state through the same `derive` and `combineAll` APIs.
 
 ## When not to introduce a signal
 

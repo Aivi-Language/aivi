@@ -24,7 +24,7 @@ AIVI's answer is a signal graph, not a reducer loop over committed model snapsho
 | Term | Meaning |
 | --- | --- |
 | **source signal** | Writable cell created with `signal`, `set`, and `update`. |
-| **derived signal** | Read-only signal created with `map` or `combine2`. |
+| **derived signal** | Read-only signal created with `derive` or `combineAll`. |
 | **watcher** | Callback/effect subscribed to a signal. Mounted widget bindings are watchers owned by the host. |
 | **batch** | One propagation pass that coalesces several writes before notifying observers. |
 | **mounted scope** | Lifetime bucket for widget bindings, structural binders, GTK handlers, and cleanup callbacks. |
@@ -50,15 +50,15 @@ AIVI does not split “computed state” into a separate subsystem. If a value i
 
 That means:
 
-- `map` is the normal one-input computed form,
-- `combine2` is the normal two-input computed form,
+- `derive` is the normal one-input computed form,
+- `combineAll` is the record-based multi-input computed form,
 - if a convenience `computed` helper exists, it is only sugar for producing another `Signal`.
 
 Example:
 
 ```aivi
-visibleCount = projects |> map length
-saveEnabled = combine2 dirty saveEvent.running (d => running => d and not running)
+visibleCount = derive projects length
+saveEnabled = combineAll { dirty: dirty, running: saveEvent.running } (vals => vals.dirty and not vals.running)
 ```
 
 ## Batching
@@ -83,7 +83,7 @@ Within one batch:
 
 ## Tracking and untracking
 
-Most dependencies are explicit because `map` and `combine2` name their source signals directly. For watcher code and lower-level helpers, the runtime still needs tracking rules:
+Most dependencies are explicit because `derive` and `combineAll` name their source signals directly. For watcher code and lower-level helpers, the runtime still needs tracking rules:
 
 - reading with `get` inside a watcher or derived callback records a dependency,
 - `peek` reads without subscribing.
@@ -133,13 +133,14 @@ This is the boundary that keeps long-lived reactive graphs from leaking after a 
 `Event` handles are not a separate async architecture. They are graph nodes with lifecycle signals.
 
 ```aivi
-refreshData : Event GtkError (List Row)
-refreshData = event fetchRows
+refreshData = do Event {
+  fetchRows
+}
 
-rows = combine2 cachedRows refreshData.result (fallback => maybeFresh =>
-  maybeFresh match
-    | Some fresh => fresh
-    | None       => fallback
+rows = combineAll { cached: cachedRows, fresh: refreshData.result } (vals =>
+  vals.fresh match
+    | Some rows => rows
+    | None      => vals.cached
 )
 ```
 
