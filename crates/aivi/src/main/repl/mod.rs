@@ -56,10 +56,10 @@ pub(crate) fn print_repl_help() {
         \n\
         SLASH COMMANDS (inside the REPL):\n\
         \x20 /help                              Print command reference\n\
-        \x20 /use <module.path>                 Add import to session\n\
+        \x20 /use <module.path>                 Add import to session (errors on unknown modules)\n\
         \x20 /types [filter]                    Types in scope\n\
         \x20 /values [filter]                   Session-defined values with types\n\
-        \x20 /functions [filter]                Functions in scope\n\
+        \x20 /functions [filter]                Functions in scope with module names\n\
         \x20 /modules                           Show loaded modules\n\
         \x20 /clear                             Clear transcript (keep session state)\n\
         \x20 /reset                             Clear transcript + session state\n\
@@ -69,13 +69,13 @@ pub(crate) fn print_repl_help() {
         \x20 /openapi url <url> [as <name>]     Inject OpenAPI spec URL as module\n\
         \n\
         KEYBOARD SHORTCUTS:\n\
-        \x20 Enter          Submit input\n\
+        \x20 Enter          Submit input / accept suggestion\n\
         \x20 Shift+Enter    Insert newline (multi-line input)\n\
-        \x20 ↑ / ↓          Navigate history or command suggestions\n\
+        \x20 ↑ / ↓          Navigate history or suggestions\n\
         \x20 Ctrl+L         Clear transcript\n\
         \x20 Ctrl+C         Cancel current input\n\
         \x20 Ctrl+D         Exit (on empty input)\n\
-        \x20 Tab            Accept command suggestion or toggle symbol pane\n\
+        \x20 Tab            Accept suggestion or toggle symbol pane\n\
         \x20 Esc            Close symbol pane"
     );
 }

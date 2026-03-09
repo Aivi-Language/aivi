@@ -528,6 +528,11 @@ mod linux_impl {
         g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
     }
 
+    /// Set a GObject i32 property.
+    unsafe fn gobject_set_i32(widget: *mut c_void, prop: &CStr, val: i32) {
+        g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
+    }
+
     /// Set a GObject pointer property.
     unsafe fn gobject_set_ptr(widget: *mut c_void, prop: &CStr, val: *mut c_void) {
         g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
@@ -576,6 +581,14 @@ mod linux_impl {
         if let Some(value) = props.get(key).and_then(|v| parse_f64_text(v)) {
             let prop_c = CString::new(key).unwrap();
             unsafe { gobject_set_f64(widget, &prop_c, value) };
+        }
+    }
+
+    /// Set a GObject i32 property from a props map entry.
+    fn set_obj_i32(widget: *mut c_void, props: &HashMap<String, String>, key: &str) {
+        if let Some(value) = props.get(key).and_then(|v| parse_i32_text(v)) {
+            let prop_c = CString::new(key).unwrap();
+            unsafe { gobject_set_i32(widget, &prop_c, value) };
         }
     }
 
@@ -3009,6 +3022,10 @@ mod linux_impl {
             }
             "AdwPreferencesDialog" => {
                 set_obj_str(widget, props, "title", "AdwPreferencesDialog")?;
+                set_obj_bool(widget, props, "search-enabled");
+                set_obj_bool(widget, props, "follows-content-size");
+                set_obj_i32(widget, props, "content-width");
+                set_obj_i32(widget, props, "content-height");
             }
             "AdwPreferencesPage" => {
                 set_obj_str(widget, props, "title", "AdwPreferencesPage")?;

@@ -26,8 +26,8 @@ use ratatui::{
 use aivi::AiviError;
 
 use super::engine::{
-    command_accepts_argument, slash_command_suggestions, ReplEngine, ReplSnapshot, SymbolEntry,
-    SymbolKind, TranscriptEntry, TranscriptKind,
+    command_accepts_argument, CompletionItem, CompletionKind, CompletionMode, CompletionState,
+    ReplEngine, ReplSnapshot, SymbolEntry, SymbolKind, TranscriptEntry, TranscriptKind,
 };
 use super::{ColorMode, ReplOptions, SymbolPane};
 
@@ -172,6 +172,16 @@ impl Palette {
         }
     }
 
+    fn symbol_badge_ctor(self) -> Style {
+        if self.use_color {
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::DIM)
+        } else {
+            Style::default()
+        }
+    }
+
     fn border(self) -> Style {
         if self.use_color {
             Style::default()
@@ -277,6 +287,7 @@ struct TuiState {
     snapshot: ReplSnapshot,
     palette: Palette,
     suggestion_index: usize,
+    completion_state: Option<CompletionState>,
 }
 
 impl TuiState {
@@ -292,6 +303,7 @@ impl TuiState {
             snapshot,
             palette,
             suggestion_index: 0,
+            completion_state: None,
         }
     }
 
@@ -361,25 +373,27 @@ impl TuiState {
         self.history_saved.clear();
     }
 
-    fn command_suggestions(&self) -> Vec<&'static str> {
-        visible_command_suggestions(&self.input)
+    fn refresh_completions(&mut self, engine: &ReplEngine) {
+        self.completion_state = engine.completion_state(&self.input, self.cursor);
+        let max_index = self
+            .completion_state
+            .as_ref()
+            .map_or(0, |state| state.items.len().saturating_sub(1));
+        self.suggestion_index = self.suggestion_index.min(max_index);
     }
 
-    fn has_command_suggestions(&self) -> bool {
-        !self.command_suggestions().is_empty()
+    fn suggestions(&self) -> &[CompletionItem] {
+        self.completion_state
+            .as_ref()
+            .map_or(&[], |state| state.items.as_slice())
     }
 
-    fn selected_suggestion(&self) -> Option<&'static str> {
-        let suggestions = self.command_suggestions();
-        if suggestions.is_empty() {
-            None
-        } else {
-            Some(suggestions[self.suggestion_index.min(suggestions.len() - 1)])
-        }
+    fn has_suggestions(&self) -> bool {
+        !self.suggestions().is_empty()
     }
 
     fn suggestion_up(&mut self) {
-        let suggestions = self.command_suggestions();
+        let suggestions = self.suggestions();
         if suggestions.is_empty() {
             return;
         }
@@ -390,22 +404,37 @@ impl TuiState {
     }
 
     fn suggestion_down(&mut self) {
-        let suggestions = self.command_suggestions();
+        let suggestions = self.suggestions();
         if suggestions.is_empty() {
             return;
         }
         self.suggestion_index = (self.suggestion_index + 1) % suggestions.len();
     }
 
-    fn accept_command_suggestion(&mut self) -> bool {
-        let Some(suggestion) = self.selected_suggestion() else {
+    fn accept_suggestion(&mut self) -> bool {
+        let Some(completion_state) = self.completion_state.clone() else {
             return false;
         };
-        self.input = suggestion.to_owned();
-        if command_accepts_argument(suggestion) {
-            self.input.push(' ');
+        if completion_state.items.is_empty() {
+            return false;
         }
-        self.cursor = self.input.len();
+
+        let selected_index = self
+            .suggestion_index
+            .min(completion_state.items.len().saturating_sub(1));
+        let selected = &completion_state.items[selected_index];
+        let mut replacement = selected.insert_text.clone();
+        if matches!(completion_state.mode, CompletionMode::Command)
+            && command_accepts_argument(&replacement)
+        {
+            replacement.push(' ');
+        }
+
+        self.input.replace_range(
+            completion_state.replace_start..completion_state.replace_end,
+            &replacement,
+        );
+        self.cursor = completion_state.replace_start + replacement.len();
         self.suggestion_index = 0;
         true
     }
@@ -468,6 +497,7 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AiviError::Io)?;
     let mut state = TuiState::new(snapshot, palette);
+    state.refresh_completions(&engine);
 
     let result = event_loop(&mut terminal, &mut engine, &mut state);
 
@@ -533,6 +563,7 @@ fn handle_key(
             state.cursor = 0;
             state.history_idx = None;
             state.suggestion_index = 0;
+            state.refresh_completions(engine);
         }
 
         // Clear transcript display (session state survives).
@@ -544,32 +575,41 @@ fn handle_key(
 
         // Submit input.
         KeyCode::Enter if !shift => {
-            let input = std::mem::take(&mut state.input);
-            state.cursor = 0;
-            state.scroll_offset = 0;
-            state.suggestion_index = 0;
-            state.record_history(input.clone());
-            state.snapshot = engine.submit(&input)?;
+            if state.has_suggestions() {
+                state.accept_suggestion();
+                state.refresh_completions(engine);
+            } else {
+                let input = std::mem::take(&mut state.input);
+                state.cursor = 0;
+                state.scroll_offset = 0;
+                state.suggestion_index = 0;
+                state.record_history(input.clone());
+                state.snapshot = engine.submit(&input)?;
+                state.refresh_completions(engine);
+            }
         }
 
         // Shift+Enter → insert literal newline (multi-line mode).
         KeyCode::Enter if shift => {
             state.push_char('\n');
+            state.refresh_completions(engine);
         }
 
         // History navigation or command suggestion selection.
         KeyCode::Up => {
-            if state.has_command_suggestions() {
+            if state.has_suggestions() {
                 state.suggestion_up();
             } else {
                 state.history_up();
+                state.refresh_completions(engine);
             }
         }
         KeyCode::Down => {
-            if state.has_command_suggestions() {
+            if state.has_suggestions() {
                 state.suggestion_down();
             } else {
                 state.history_down();
+                state.refresh_completions(engine);
             }
         }
 
@@ -583,7 +623,9 @@ fn handle_key(
 
         // Accept a command suggestion, otherwise toggle the symbol pane.
         KeyCode::Tab => {
-            if !state.accept_command_suggestion() {
+            if state.accept_suggestion() {
+                state.refresh_completions(engine);
+            } else {
                 engine.toggle_symbol_pane();
                 state.snapshot = engine.snapshot();
             }
@@ -594,8 +636,14 @@ fn handle_key(
         }
 
         // Text editing.
-        KeyCode::Char(c) => state.push_char(c),
-        KeyCode::Backspace => state.delete_back(),
+        KeyCode::Char(c) => {
+            state.push_char(c);
+            state.refresh_completions(engine);
+        }
+        KeyCode::Backspace => {
+            state.delete_back();
+            state.refresh_completions(engine);
+        }
 
         KeyCode::Left => {
             if state.cursor > 0 {
@@ -606,6 +654,7 @@ fn handle_key(
                     .unwrap_or(0);
                 state.cursor = prev;
             }
+            state.refresh_completions(engine);
         }
         KeyCode::Right => {
             if state.cursor < state.input.len() {
@@ -615,18 +664,21 @@ fn handle_key(
                     .map_or(0, char::len_utf8);
                 state.cursor += step;
             }
+            state.refresh_completions(engine);
         }
         KeyCode::Home => {
             state.cursor = state.input[..state.cursor]
                 .rfind('\n')
                 .map(|i| i + 1)
                 .unwrap_or(0);
+            state.refresh_completions(engine);
         }
         KeyCode::End => {
             state.cursor = state.input[state.cursor..]
                 .find('\n')
                 .map(|i| state.cursor + i)
                 .unwrap_or(state.input.len());
+            state.refresh_completions(engine);
         }
 
         _ => {}
@@ -642,7 +694,7 @@ fn render(frame: &mut Frame, state: &TuiState) {
     let show_pane = snap.symbol_pane.is_some();
 
     // Vertical split: main area / status bar / input area.
-    let suggestion_count = visible_command_suggestions(&state.input).len() as u16;
+    let suggestion_count = state.suggestions().len() as u16;
     let input_height = (count_input_lines(&state.input) as u16).clamp(1, 5) + suggestion_count + 2;
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -761,7 +813,7 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
         Span::styled(after.to_string(), palette.input_text()),
     ])];
 
-    let suggestions = visible_command_suggestions(&state.input);
+    let suggestions = state.suggestions();
     let selected_index = state
         .suggestion_index
         .min(suggestions.len().saturating_sub(1));
@@ -771,11 +823,25 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
         } else {
             palette.suggestion()
         };
+        let badge_style = completion_badge_style(suggestion.kind, palette);
+        let badge = completion_badge(suggestion.kind);
+        let detail = match suggestion.kind {
+            CompletionKind::Command => suggestion.detail.clone(),
+            _ => format!(":: {}", suggestion.detail),
+        };
         lines.push(Line::from(vec![
             Span::styled("  ", palette.hint()),
-            Span::styled(*suggestion, style),
+            Span::styled(badge, badge_style),
+            Span::raw(" "),
+            Span::styled(suggestion.label.clone(), style),
+            Span::raw(" "),
+            Span::styled(detail, palette.type_annotation()),
             Span::styled(
-                if idx == 0 { "  [Tab: accept]" } else { "" },
+                if idx == 0 {
+                    "  [Tab/Enter: accept]"
+                } else {
+                    ""
+                },
                 palette.hint(),
             ),
         ]));
@@ -900,11 +966,22 @@ pub(crate) fn count_input_lines(input: &str) -> usize {
     }
 }
 
-fn visible_command_suggestions(input: &str) -> Vec<&'static str> {
-    slash_command_suggestions(input)
-        .into_iter()
-        .take(5)
-        .collect()
+fn completion_badge(kind: CompletionKind) -> &'static str {
+    match kind {
+        CompletionKind::Command => "[cmd]",
+        CompletionKind::Constructor => "[ctor]",
+        CompletionKind::Function => "[fn] ",
+        CompletionKind::Value => "[val]",
+    }
+}
+
+fn completion_badge_style(kind: CompletionKind, palette: Palette) -> Style {
+    match kind {
+        CompletionKind::Command => palette.suggestion(),
+        CompletionKind::Constructor => palette.symbol_badge_ctor(),
+        CompletionKind::Function => palette.symbol_badge_fn(),
+        CompletionKind::Value => palette.symbol_badge_val(),
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -953,12 +1030,27 @@ mod tests {
 
     #[test]
     fn visible_command_suggestions_show_matches() {
-        let suggestions = visible_command_suggestions("/va");
-        assert_eq!(suggestions, vec!["/values"]);
+        let engine = ReplEngine::new(&ReplOptions {
+            color_mode: ColorMode::Never,
+            plain_mode: false,
+        })
+        .unwrap();
+        let snapshot = engine.snapshot();
+        let palette = Palette::new(ColorMode::Never, true);
+        let mut state = TuiState::new(snapshot, palette);
+        state.input = "/va".to_owned();
+        state.cursor = state.input.len();
+        state.refresh_completions(&engine);
+        assert_eq!(state.suggestions()[0].label, "/values");
     }
 
     #[test]
     fn tab_completion_accepts_command_and_adds_space_for_args() {
+        let engine = ReplEngine::new(&ReplOptions {
+            color_mode: ColorMode::Never,
+            plain_mode: false,
+        })
+        .unwrap();
         let snapshot = ReplSnapshot {
             transcript: Vec::new(),
             symbol_pane: None,
@@ -969,9 +1061,35 @@ mod tests {
         let mut state = TuiState::new(snapshot, palette);
         state.input = "/op".to_owned();
         state.cursor = state.input.len();
+        state.refresh_completions(&engine);
 
-        assert!(state.accept_command_suggestion());
+        assert!(state.accept_suggestion());
         assert_eq!(state.input, "/openapi ");
+    }
+
+    #[test]
+    fn enter_accepts_symbol_completion_without_submitting() {
+        let mut engine = ReplEngine::new(&ReplOptions {
+            color_mode: ColorMode::Never,
+            plain_mode: false,
+        })
+        .unwrap();
+        engine.submit("/use aivi.text").unwrap();
+        let snapshot = engine.snapshot();
+        let palette = Palette::new(ColorMode::Never, true);
+        let mut state = TuiState::new(snapshot, palette);
+        state.input = "/functions jo".to_owned();
+        state.cursor = state.input.len();
+        state.refresh_completions(&engine);
+
+        handle_key(KeyCode::Enter, KeyModifiers::NONE, &mut engine, &mut state).unwrap();
+
+        assert_eq!(state.input, "/functions join");
+        assert!(state
+            .snapshot
+            .transcript
+            .iter()
+            .all(|entry| entry.text != state.input));
     }
 
     #[test]
