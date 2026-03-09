@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use super::bits::build_bits_record;
@@ -320,10 +319,8 @@ pub(crate) fn register_builtins(env: &Env) {
             let value = args.remove(0);
             let text = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: std::sync::Arc::new(move |_| {
-                    print!("{text}");
-                    let mut out = std::io::stdout();
-                    let _ = out.flush();
+                func: std::sync::Arc::new(move |runtime| {
+                    crate::runtime::write_stdout(runtime, &text, false);
                     Ok(Value::Unit)
                 }),
             };
@@ -337,8 +334,8 @@ pub(crate) fn register_builtins(env: &Env) {
             let value = args.remove(0);
             let text = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: std::sync::Arc::new(move |_| {
-                    println!("{text}");
+                func: std::sync::Arc::new(move |runtime| {
+                    crate::runtime::write_stdout(runtime, &text, true);
                     Ok(Value::Unit)
                 }),
             };

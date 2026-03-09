@@ -19,7 +19,7 @@ The open desktop is having a moment. Governments, enterprises, and individuals a
 
 - 🦀 **Rust-powered runtime** — no GC pauses, no Electron bloat, no 200 MB runtime. Your app links against GTK4 directly.
 - 🧠 **Purely functional** — immutable by default, exhaustive pattern matching, no nulls, typed errors. The compiler catches whole classes of bugs before they ship.
-- 🖥️ **GTK4 as a first-class citizen** — a dedicated XML sigil, the blessed `gtkApp` architecture, typed subscriptions, and reactive `computed` helpers make native UI code feel like it belongs in the language.
+- 🖥️ **GTK4 as a first-class citizen** — a dedicated XML sigil, the blessed `gtkApp` architecture, typed subscriptions, and `memo`-backed derived helpers make native UI code feel like it belongs in the language.
 - 📦 **Schema-first data pipelines** — typed `Source K A` declarations keep connector config, schema, transforms, and validation visible before `load` performs any effect.
 - ⚡ **Developer experience that doesn't quit** — a built-in LSP with workspace-aware incremental checking, autocomplete, hover, diagnostics, formatting, and VS Code integration.
 
@@ -101,7 +101,7 @@ No callback spaghetti. Signal handlers are typed ADT constructors — the compil
 
 ### Blessed app loop with `gtkApp`
 
-The primary public UI story is `Model -> View -> Msg -> Update` hosted by `gtkApp`. Timers become subscriptions, post-update work becomes commands, and expensive pure reads can be memoized with `computed` and embedded directly into GTK sigils:
+The primary public UI story is `Model -> View -> Msg -> Update` hosted by `gtkApp`. Timers become subscriptions, post-update work becomes commands, and expensive pure reads can be memoized with `memo` and embedded directly into GTK sigils:
 
 ```ocaml
 Msg = Increment | Tick
@@ -109,7 +109,7 @@ Msg = Increment | Tick
 Model = { count: Int, ticking: Bool }
 
 countLabel : Model -> Text
-countLabel = state => "Count: { Int.toString state.count }"
+countLabel = memo "counter.countLabel" (state => "Count: { Int.toString state.count }")
 
 subscriptions : Model -> List (Subscription Msg)
 subscriptions = state =>
@@ -126,9 +126,9 @@ main = gtkApp {
   model: { count: 0, ticking: True },
   onStart: _ _ => pure Unit,
   subscriptions: subscriptions,
-  view: state => ~<gtk>
+  view: _ => ~<gtk>
     <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
-      <GtkLabel label={countLabel state} />
+      <GtkLabel label={countLabel} />
       <GtkButton label="Increment" onClick={ Increment } />
     </GtkBox>
   </gtk>,
@@ -141,7 +141,7 @@ main = gtkApp {
 }
 ```
 
-Lower-level `signalStream`, `buildFromNode`, and `reconcileNode` still exist for custom loops and library code, but `gtkApp` is the single blessed host for standard applications. Inside a GTK sigil, `label={countLabel}` and `<each items={visibleRows}>` auto-read reactive signal helpers against the committed model. `demos/snake.aivi` shows this pattern with `subscriptionEvery` and reactive `computed` helpers in a complete app.
+Lower-level `signalStream`, `buildFromNode`, and `reconcileNode` still exist for custom loops and library code, but `gtkApp` is the single blessed host for standard applications. Inside a GTK sigil, `label={countLabel}` and `<each items={visibleRows}>` auto-read derived helpers against the committed model. `demos/snake.aivi` shows this pattern with `subscriptionEvery` and `memo` helpers in a complete app.
 
 ### Dynamic lists with `<each>`
 

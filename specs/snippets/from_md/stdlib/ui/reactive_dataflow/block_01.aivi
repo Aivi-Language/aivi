@@ -1,4 +1,4 @@
 projectNames : Model -> List Text
-projectNames = signal (model =>
+projectNames = derive (model =>
   model.projects |> map (project => project.name)
 )

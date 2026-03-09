@@ -54,7 +54,7 @@ export commandNone, commandBatch, commandEmit, commandPerform, commandAfter, com
 export subscriptionNone, subscriptionBatch, subscriptionEvery, subscriptionSource
 export gtkApp
 export gtkSetInterval
-export signal, computed, readSignal
+export derive, memo, readDerived
 
 use aivi
 use aivi.concurrency as concurrent
@@ -174,14 +174,14 @@ noSubscriptions = _ => []
 auto : GtkSignalEvent -> Option msg
 auto = event => gtk4.autoToMsg event
 
-computed : Text -> (model -> a) -> model -> a
-computed = key derive => gtk4.computed key derive
+memo : Text -> (model -> a) -> model -> a
+memo = key deriveFn => gtk4.memo key deriveFn
 
-signal : (model -> a) -> model -> a
-signal = derive => gtk4.signal derive
+derive : (model -> a) -> model -> a
+derive = deriveFn => gtk4.derive deriveFn
 
-readSignal : (model -> a) -> model -> a
-readSignal = signalValue => model => signalValue model
+readDerived : (model -> a) -> model -> a
+readDerived = derivedValue => model => derivedValue model
 
 commandNone : Command msg
 commandNone = CommandNone

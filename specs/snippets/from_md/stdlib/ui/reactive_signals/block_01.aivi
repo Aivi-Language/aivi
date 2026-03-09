@@ -3,12 +3,12 @@ projectHeading = model =>
     then "All Projects"
     else "Search · {model.searchQuery}"
 
-projectHeadingSignal = signal (model =>
+projectHeadingDerived = derive (model =>
   if model.searchQuery == ""
     then "All Projects"
     else "Search · {model.searchQuery}"
 )
 
-visibleProjectNames = computed "projects.visibleNames" (model =>
+visibleProjectNames = memo "projects.visibleNames" (model =>
   map (project => project.name) model.visibleProjects
 )

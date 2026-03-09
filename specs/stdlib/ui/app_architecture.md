@@ -40,16 +40,16 @@ Before reading the full API surface, keep this checklist in mind:
 
 Everything else on this page explains how `gtkApp` hosts that loop.
 
-## Two different meanings of “signal”
+## GTK signals vs derived values
 
-AIVI UI docs use the word **signal** in two different ways:
+AIVI now reserves the word **signal** for GTK widget events. Pure model-derived UI helpers use `derive`, `memo`, and `readDerived` instead.
 
 | Term | Meaning |
 | --- | --- |
 | **GTK signal event** | widget input such as clicks, text changes, and focus changes |
-| **reactive signal** | pure derived data created with `signal` or `computed` |
+| **derived value** | pure data created with `derive`, `memo`, and `readDerived` |
 
-GTK signal events flow **into** your app as `GtkSignalEvent` values. Reactive signals are read **inside** your app from the committed model. If you want the beginner-friendly version of that distinction, read [Reactive Signals](./reactive_signals.md#two-different-meanings-of-signal).
+GTK signal events flow **into** your app as `GtkSignalEvent` values. Derived values are read **inside** your app from the committed model. If you want the beginner-friendly version of that distinction, read [Derived Values](./reactive_signals.md).
 
 ## Core types
 
@@ -132,20 +132,20 @@ The important idea is that there is still **one official loop**:
 - `view` redraws from that committed model,
 - `gtkApp` handles the side effects after the state transition.
 
-## Reactive dataflow fits inside the same loop
+## Derived dataflow fits inside the same loop
 
-Reactive helpers such as `signal` and `computed` are useful when you want named pure derived values. They do **not** replace the app loop.
+Derived helpers such as `derive` and `memo` are useful when you want named pure derived values. They do **not** replace the app loop.
 
 - source snapshots still live in the model,
 - commands and subscriptions still own IO and timers,
-- reactive helpers only derive reusable pure values from committed model state.
+- derived helpers only derive reusable pure values from committed model state.
 
 A small example:
 
 <<< ../../snippets/from_md/stdlib/ui/app_architecture/block_05.aivi{aivi}
 
 
-Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readSignal` or ordinary function application. If you want the beginner-friendly introduction first, read [Reactive Signals](./reactive_signals.md#start-simple-helper-first-then-signal-then-computed). If you want the full invalidation and memoization rules, read [Reactive Dataflow](./reactive_dataflow.md).
+Inside the GTK sigil, `gtkApp` reads those helpers against the current committed model for you. Outside the sigil, use `readDerived` or ordinary function application. If you want the beginner-friendly introduction first, read [Derived Values](./reactive_signals.md). If you want the full invalidation and memoization rules, read [Derived Dataflow](./reactive_dataflow.md).
 
 ## Forms and validation stay in the same architecture
 
@@ -356,6 +356,6 @@ If you want to compare this guide with real project code, these are useful follo
 
 - [`aivi.ui.gtk4`](./gtk4.md) — GTK signal event types, `~<gtk>` sigil details, and low-level primitives
 - [Native GTK & libadwaita Apps](./native_gtk_apps.md) — the broader overview and guided app examples
-- [Reactive Signals](./reactive_signals.md) — pure derived readers in day-to-day app code
-- [Reactive Dataflow](./reactive_dataflow.md) — invalidation, dependency tracking, and memoization semantics
+- [Derived Values](./reactive_signals.md) — pure derived readers in day-to-day app code
+- [Derived Dataflow](./reactive_dataflow.md) — invalidation, dependency tracking, and memoization semantics
 - [`aivi.ui.forms`](./forms.md) — field state, validation helpers, and form-focused patterns

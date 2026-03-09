@@ -369,7 +369,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "computed".to_string(),
+                "memo".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
                     Box::new(Type::Func(
@@ -385,7 +385,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "signal".to_string(),
+                "derive".to_string(),
                 Type::Func(
                     Box::new(Type::Func(
                         Box::new(Type::Var(gtk4_signal_model)),

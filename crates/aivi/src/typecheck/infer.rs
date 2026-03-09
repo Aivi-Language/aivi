@@ -1,21 +1,23 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 use crate::cg_type::CgType;
 use crate::diagnostics::{FileDiagnostic, Span};
 use crate::surface::{DomainItem, Module, ModuleItem};
 
+use super::check::summarize_module_export_surface;
 use super::checker::TypeChecker;
-use super::types::Scheme;
-
 use super::class_env::{
-    collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
-    expand_classes, synthesize_auto_forward_instances, InstanceDeclInfo,
+    collect_imported_class_env, collect_local_class_env, expand_classes,
+    synthesize_auto_forward_instances, InstanceDeclInfo,
 };
 use super::global::collect_global_type_info;
 use super::ordering::ordered_modules;
+use super::{build_module_interface, ModuleInterface, ModuleInterfaceMaps};
 
 /// Result of type inference: diagnostics, pretty-printed type strings, and codegen-friendly
 /// type annotations.
+#[derive(Clone)]
 pub struct InferResult {
     pub diagnostics: Vec<FileDiagnostic>,
     /// Module → definition name → rendered type string (for LSP / display).
@@ -32,6 +34,37 @@ pub struct InferResult {
     pub source_schemas: HashMap<String, Vec<CgType>>,
 }
 
+#[derive(Clone)]
+pub struct InferCheckpoint {
+    state: ModuleInterfaceMaps,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InferMode {
+    Full,
+    Fast,
+}
+
+#[derive(Clone)]
+pub struct InferModuleCache {
+    pub module_name: String,
+    pub diagnostics: Vec<FileDiagnostic>,
+    pub type_strings: HashMap<String, String>,
+    pub cg_types: HashMap<String, CgType>,
+    pub monomorph_plan: HashMap<String, Vec<CgType>>,
+    pub span_types: Vec<(Span, String)>,
+    pub source_schemas: HashMap<String, Vec<CgType>>,
+    pub invalidate_fingerprint: u64,
+    interface: ModuleInterface,
+}
+
+#[derive(Clone)]
+pub struct InferValueTypesIncrementalResult {
+    pub result: InferResult,
+    pub checkpoint: InferCheckpoint,
+    pub modules: Vec<InferModuleCache>,
+}
+
 #[allow(clippy::type_complexity)]
 pub fn infer_value_types(
     modules: &[Module],
@@ -45,7 +78,7 @@ pub fn infer_value_types(
 }
 
 pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
-    infer_value_types_impl(modules, false)
+    infer_value_types_full_incremental(modules, modules, &InferCheckpoint::empty()).result
 }
 
 /// Like [`infer_value_types_full`] but skips `check_module_defs` for embedded stdlib modules.
@@ -55,30 +88,44 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
 /// `aivi run` invocation. CgTypes for stdlib definitions are derived from their declared
 /// type signatures instead of from inference.
 pub fn infer_value_types_fast(modules: &[Module]) -> InferResult {
-    infer_value_types_impl(modules, true)
+    infer_value_types_fast_incremental(modules, modules, &InferCheckpoint::empty()).result
 }
 
-fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> InferResult {
+pub fn infer_value_types_full_incremental(
+    all_modules: &[Module],
+    modules: &[Module],
+    checkpoint: &InferCheckpoint,
+) -> InferValueTypesIncrementalResult {
+    infer_value_types_incremental_impl(all_modules, modules, checkpoint, InferMode::Full)
+}
+
+pub fn infer_value_types_fast_incremental(
+    all_modules: &[Module],
+    modules: &[Module],
+    checkpoint: &InferCheckpoint,
+) -> InferValueTypesIncrementalResult {
+    infer_value_types_incremental_impl(all_modules, modules, checkpoint, InferMode::Fast)
+}
+
+fn infer_value_types_incremental_impl(
+    all_modules: &[Module],
+    modules: &[Module],
+    checkpoint: &InferCheckpoint,
+    mode: InferMode,
+) -> InferValueTypesIncrementalResult {
+    let skip_stdlib_body_check = matches!(mode, InferMode::Fast);
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     let mut checker = TypeChecker::new();
-    // In fast mode (aivi run), clear the subst map between defs to prevent quadratic blow-up.
-    // This is safe because span_types are not used by the run path.
     checker.compact_subst_between_defs = skip_stdlib_body_check;
     let mut diagnostics = Vec::new();
-    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
-    let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
-    let mut module_class_exports: HashMap<
-        String,
-        HashMap<String, super::class_env::ClassDeclInfo>,
-    > = HashMap::new();
-    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
+    let mut state = checkpoint.state.clone();
     let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut cg_types: HashMap<String, HashMap<String, CgType>> = HashMap::new();
     let mut monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
     let mut all_span_types: HashMap<String, Vec<(Span, String)>> = HashMap::new();
     let mut all_source_schemas: HashMap<String, Vec<CgType>> = HashMap::new();
+    let mut module_results = Vec::new();
 
-    // Per-step cumulative timing (only when tracing).
     let mut t_reset = 0u128;
     let mut t_reg_types = 0u128;
     let mut t_type_expr_diags = 0u128;
@@ -91,7 +138,7 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
     let mut t_export_collect = 0u128;
 
     let (global_type_constructors, global_aliases, global_opaque_types) =
-        collect_global_type_info(&mut checker, modules);
+        collect_global_type_info(&mut checker, all_modules);
     checker.set_global_type_info(
         global_type_constructors,
         global_aliases,
@@ -113,6 +160,7 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
             }};
         }
 
+        let start = diagnostics.len();
         timed!(t_reset, checker.reset_module_context(module));
         let mut env = if trace {
             let t0 = std::time::Instant::now();
@@ -134,12 +182,21 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
         );
         timed!(
             t_reg_imports,
-            checker.register_imports(module, &module_exports, &module_domain_exports, &mut env)
+            checker.register_imports(
+                module,
+                &state.module_exports,
+                &state.module_domain_exports,
+                &mut env,
+            )
         );
 
         let (imported_classes, imported_instances) = timed!(
             t_class_env,
-            collect_imported_class_env(module, &module_class_exports, &module_instance_exports)
+            collect_imported_class_env(
+                module,
+                &state.module_class_exports,
+                &state.module_instance_exports
+            )
         );
         let (local_classes, local_instances) = timed!(t_class_env, collect_local_class_env(module));
         let local_class_names: HashSet<String> =
@@ -161,9 +218,9 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
             t_reg_defs,
             checker.register_module_defs(module, &sigs, &mut env)
         );
+        let mut module_monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
 
         if !(skip_stdlib_body_check && is_embedded) {
-            // Full type-checking: infer def bodies and collect diagnostics.
             let t_module_check = if trace {
                 Some(std::time::Instant::now())
             } else {
@@ -184,24 +241,25 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
             }
             diagnostics.append(&mut module_diags);
 
-            // Extract polymorphic call-site instantiations recorded during type checking.
             for (qname, resolved_type) in checker.take_poly_instantiations() {
                 let cg = checker.type_to_cg_type(&resolved_type, &env);
                 if cg.is_closed() {
-                    let entry = monomorph_plan.entry(qname).or_default();
+                    let entry = monomorph_plan.entry(qname.clone()).or_default();
                     if !entry.contains(&cg) {
-                        entry.push(cg);
+                        entry.push(cg.clone());
+                    }
+                    let module_entry = module_monomorph_plan.entry(qname).or_default();
+                    if !module_entry.contains(&cg) {
+                        module_entry.push(cg);
                     }
                 }
             }
 
-            // Extract load-call source schemas for JSON validation.
             for (mod_name, def_name, inner_cg) in checker.take_load_source_schemas() {
                 let key = format!("{}.{}", mod_name, def_name);
                 all_source_schemas.entry(key).or_default().push(inner_cg);
             }
 
-            // Extract span→type pairs recorded during type checking (for LSP hover).
             let module_span_types = checker.take_span_types();
             if !module_span_types.is_empty() {
                 all_span_types.insert(module.name.name.clone(), module_span_types);
@@ -250,7 +308,6 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
                         rendered.clone(),
                     );
                     module_types.insert(name.clone(), rendered);
-                    // Monomorphic (no quantified vars) → try to produce a CgType.
                     if schemes[0].vars.is_empty() {
                         module_cg_types.insert(name, checker.type_to_cg_type(&schemes[0].ty, &env));
                     } else {
@@ -277,58 +334,31 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
                         rendered.clone(),
                     );
                     module_types.insert(name.clone(), rendered);
-                    // Multi-clause overloads are always Dynamic for now.
                     module_cg_types.insert(name, CgType::Dynamic);
                 }
             }
         }
-        inferred.insert(module.name.name.clone(), module_types);
-        cg_types.insert(module.name.name.clone(), module_cg_types);
+        inferred.insert(module.name.name.clone(), module_types.clone());
+        cg_types.insert(module.name.name.clone(), module_cg_types.clone());
 
         timed!(t_export_collect, {
-            let mut exports = HashMap::new();
-            for export in &module.exports {
-                if export.kind != crate::surface::ScopeItemKind::Value {
-                    continue;
-                }
-                if let Some(schemes) = sigs.get(&export.name.name) {
-                    exports.insert(export.name.name.clone(), schemes.clone());
-                } else if let Some(schemes) = env.get_all(&export.name.name) {
-                    exports.insert(export.name.name.clone(), schemes.to_vec());
-                }
-            }
-            module_exports.insert(module.name.name.clone(), exports);
-
-            let mut domain_exports = HashMap::new();
-            for export in &module.exports {
-                if export.kind != crate::surface::ScopeItemKind::Domain {
-                    continue;
-                }
-                let domain_name = export.name.name.as_str();
-                let mut members = Vec::new();
-                for item in &module.items {
-                    let ModuleItem::DomainDecl(domain) = item else {
-                        continue;
-                    };
-                    if domain.name.name != domain_name {
-                        continue;
-                    }
-                    for domain_item in &domain.items {
-                        match domain_item {
-                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                members.push(def.name.name.clone());
-                            }
-                            DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
-                        }
-                    }
-                }
-                domain_exports.insert(domain_name.to_string(), members);
-            }
-            module_domain_exports.insert(module.name.name.clone(), domain_exports);
-            let (class_exports, instance_exports) =
-                collect_exported_class_env(module, &checker.classes, &checker.instances);
-            module_class_exports.insert(module.name.name.clone(), class_exports);
-            module_instance_exports.insert(module.name.name.clone(), instance_exports);
+            let interface = build_module_interface(module, &checker, &sigs, &env);
+            state.apply_module_interface(&module.name.name, &interface);
+            let invalidate_fingerprint = infer_invalidation_fingerprint(module, &module_types);
+            module_results.push(InferModuleCache {
+                module_name: module.name.name.clone(),
+                diagnostics: diagnostics[start..].to_vec(),
+                type_strings: module_types,
+                cg_types: module_cg_types,
+                monomorph_plan: module_monomorph_plan,
+                span_types: all_span_types
+                    .get(&module.name.name)
+                    .cloned()
+                    .unwrap_or_default(),
+                source_schemas: source_schemas_for_module(&all_source_schemas, &module.name.name),
+                invalidate_fingerprint,
+                interface,
+            });
         });
     }
 
@@ -375,12 +405,60 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
         );
     }
 
-    InferResult {
-        diagnostics,
-        type_strings: inferred,
-        cg_types,
-        monomorph_plan,
-        span_types: all_span_types,
-        source_schemas: all_source_schemas,
+    InferValueTypesIncrementalResult {
+        result: InferResult {
+            diagnostics,
+            type_strings: inferred,
+            cg_types,
+            monomorph_plan,
+            span_types: all_span_types,
+            source_schemas: all_source_schemas,
+        },
+        checkpoint: InferCheckpoint { state },
+        modules: module_results,
+    }
+}
+
+fn infer_invalidation_fingerprint(module: &Module, module_types: &HashMap<String, String>) -> u64 {
+    let summary = summarize_module_export_surface(module);
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    summary.fingerprint.hash(&mut hasher);
+    summary.body_sensitive.hash(&mut hasher);
+    for export in &module.exports {
+        if export.kind != crate::surface::ScopeItemKind::Value {
+            continue;
+        }
+        export.name.name.hash(&mut hasher);
+        module_types.get(&export.name.name).hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn source_schemas_for_module(
+    source_schemas: &HashMap<String, Vec<CgType>>,
+    module_name: &str,
+) -> HashMap<String, Vec<CgType>> {
+    let prefix = format!("{module_name}.");
+    source_schemas
+        .iter()
+        .filter(|(name, _)| name.starts_with(&prefix))
+        .map(|(name, schemas)| (name.clone(), schemas.clone()))
+        .collect()
+}
+
+impl InferCheckpoint {
+    pub fn empty() -> Self {
+        Self {
+            state: ModuleInterfaceMaps::default(),
+        }
+    }
+
+    pub fn apply_cached_module(&mut self, module: &InferModuleCache) {
+        self.state
+            .apply_module_interface(&module.module_name, &module.interface);
+    }
+
+    pub fn remove_module(&mut self, module_name: &str) {
+        self.state.remove_module(module_name);
     }
 }

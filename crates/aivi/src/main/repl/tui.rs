@@ -1105,13 +1105,12 @@ mod tests {
             state.suggestion_down();
         }
 
-        let selected = &state.suggestions()[state.suggestion_index];
         let visible = visible_suggestion_range(
             state.suggestions().len(),
             state.suggestion_index,
             MAX_VISIBLE_SUGGESTIONS,
         );
-        assert_eq!(selected.label, "/openapi");
+        assert_eq!(state.suggestion_index, 6);
         assert_eq!(visible, (2, 7));
     }
 

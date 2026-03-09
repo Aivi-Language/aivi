@@ -40,12 +40,6 @@ State = {
 gridW = 30
 gridH = 20
 
-// Join a list of texts into one
-joinTexts : List Text -> Text
-joinTexts =
-  | []           => ""
-  | [x, ...rest] => "{x}{joinTexts rest}"
-
 contains : Pixel -> List Pixel -> Bool
 contains = pos xs => find (_ == pos) xs match
   | Some _ => True
@@ -144,23 +138,23 @@ cellChar = x y state => {
 
 rowText : Int -> State -> Text
 rowText = y state =>
-  joinTexts (map (x => cellChar x y state) [0.. gridW - 1])
+  [0.. gridW - 1] |> map (x => cellChar x y state) |> join ""
 
 gridRows : State -> List Text
 gridRows =
-  computed "snake.gridRows" (state =>
+  memo "snake.gridRows" (state =>
     map (y => rowText y state) [0.. gridH - 1]
   )
 
 scoreText : State -> Text
 scoreText =
-  computed "snake.scoreText" (state =>
+  memo "snake.scoreText" (state =>
     "Snake · Score: {toText state.score}"
   )
 
 statusText : State -> Text
 statusText =
-  computed "snake.statusText" (state =>
+  memo "snake.statusText" (state =>
     if state.gameOver then "Game Over — press R to restart" else "Arrow keys to move"
   )
 
@@ -207,10 +201,24 @@ update = msg state => msg match
 // CSS for monospace grid
 
 css : Text
-css = ~`.snakerow { font-family: monospace; font-size: 14px; letter-spacing: 2px; } .snakeheader { font-family: monospace; font-size: 13px; margin-bottom: 4px; } .snakestatus { font-family: monospace; font-size: 12px; margin-top: 4px; }`
+css = ~`
+.snakerow { 
+   font-family: monospace;
+   font-size: 14px; 
+   letter-spacing: 2px; 
+} 
+.snakeheader {
+   font-family: monospace;
+   font-size: 13px;
+   margin-bottom: 4px; 
+}
+.snakestatus {
+   font-family: monospace;
+   font-size: 12px;
+   margin-top: 4px;
+}`
 
 // Entry point
-
 main : Effect GtkError Unit
 main = gtkApp {
   id: "demos.snake"
@@ -221,8 +229,8 @@ main = gtkApp {
     _ <- appSetCss appId css
     pure Unit
   }
-  subscriptions: subscriptions
-  view: view
-  toMsg: toMsg
-  update: update
+  subscriptions
+  view
+  toMsg: auto
+  update
 }

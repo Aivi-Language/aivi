@@ -122,7 +122,7 @@ impl Runtime {
 
         if self.reactive_stack_contains(&key_owned) {
             return Err(RuntimeError::InvalidArgument {
-                context: "gtk4.computed".to_string(),
+                context: "gtk4.memo".to_string(),
                 reason: format!("reactive cycle detected while evaluating `{key}`"),
             });
         }

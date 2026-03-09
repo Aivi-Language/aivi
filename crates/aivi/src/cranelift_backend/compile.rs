@@ -531,15 +531,24 @@ pub fn run_cranelift_jit(
     run_main_effect(&mut runtime)
 }
 
-/// JIT-compile a program and return the formatted runtime value of one binding.
-pub fn evaluate_binding_jit(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvaluatedBinding {
+    pub value_text: String,
+    pub was_effect: bool,
+    pub effect_ran: bool,
+    pub stdout_text: String,
+    pub stderr_text: String,
+}
+
+fn evaluate_binding_jit_internal(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
     source_schemas: HashMap<String, Vec<CgType>>,
     surface_modules: &[crate::surface::Module],
     binding_name: &str,
-) -> Result<String, AiviError> {
+    autorun_effects: bool,
+) -> Result<EvaluatedBinding, AiviError> {
     let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
     if !crate_natives.is_empty() {
         let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
@@ -578,7 +587,73 @@ pub fn evaluate_binding_jit(
         return Err(AiviError::Runtime(format_runtime_error(err)));
     }
 
-    Ok(format_value(&value))
+    let was_effect = matches!(value, Value::Effect(_));
+    if autorun_effects && was_effect {
+        runtime.ctx.begin_console_capture();
+        let result = runtime
+            .run_effect_value(value)
+            .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+        let capture = runtime.ctx.take_console_capture();
+        if let Some(err) = runtime.jit_pending_error.take() {
+            return Err(AiviError::Runtime(format_runtime_error(err)));
+        }
+        Ok(EvaluatedBinding {
+            value_text: format_value(&result),
+            was_effect: true,
+            effect_ran: true,
+            stdout_text: capture.stdout,
+            stderr_text: capture.stderr,
+        })
+    } else {
+        Ok(EvaluatedBinding {
+            value_text: format_value(&value),
+            was_effect,
+            effect_ran: false,
+            stdout_text: String::new(),
+            stderr_text: String::new(),
+        })
+    }
+}
+
+/// JIT-compile a program and return the formatted runtime value of one binding.
+pub fn evaluate_binding_jit(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
+    surface_modules: &[crate::surface::Module],
+    binding_name: &str,
+) -> Result<String, AiviError> {
+    Ok(evaluate_binding_jit_internal(
+        program,
+        cg_types,
+        monomorph_plan,
+        source_schemas,
+        surface_modules,
+        binding_name,
+        false,
+    )?
+    .value_text)
+}
+
+pub fn evaluate_binding_jit_detailed(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
+    surface_modules: &[crate::surface::Module],
+    binding_name: &str,
+    autorun_effects: bool,
+) -> Result<EvaluatedBinding, AiviError> {
+    evaluate_binding_jit_internal(
+        program,
+        cg_types,
+        monomorph_plan,
+        source_schemas,
+        surface_modules,
+        binding_name,
+        autorun_effects,
+    )
 }
 
 /// Like [`run_cranelift_jit`] but accepts an external cancel token so the

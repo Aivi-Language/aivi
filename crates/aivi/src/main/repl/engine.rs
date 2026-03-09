@@ -9,9 +9,10 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use aivi::{
-    check_modules, check_types, desugar_modules, embedded_stdlib_modules, evaluate_binding_jit,
-    file_diagnostics_have_errors, infer_value_types_full, parse_modules, render_diagnostics,
-    AiviError, DomainItem, FileDiagnostic, Module, ModuleItem, TypeDecl, TypeExpr, TypeSig,
+    check_modules, check_types, desugar_modules, embedded_stdlib_modules,
+    evaluate_binding_jit_detailed, file_diagnostics_have_errors, infer_value_types_full,
+    parse_modules, render_diagnostics, AiviError, DomainItem, FileDiagnostic, Module, ModuleItem,
+    TypeDecl, TypeExpr, TypeSig,
 };
 
 use super::{ColorMode, ReplOptions, SymbolPane};
@@ -145,6 +146,8 @@ pub(crate) struct ReplEngine {
     stdlib_module_completions: HashMap<String, Vec<SymbolCompletion>>,
     /// Session-local ADT constructors derived from successful definitions and loads.
     session_constructors: Vec<SymbolCompletion>,
+    /// Whether top-level effect expressions should be executed automatically.
+    autorun_effects: bool,
 }
 
 impl ReplEngine {
@@ -171,6 +174,7 @@ impl ReplEngine {
             session_types: HashMap::new(),
             stdlib_module_completions: collect_module_completion_symbols(&stdlib, false),
             session_constructors: Vec::new(),
+            autorun_effects: true,
         };
 
         engine.transcript.push(TranscriptEntry {
@@ -334,6 +338,7 @@ impl ReplEngine {
             "/use" => self.cmd_use(arg1),
             "/load" => self.cmd_load(arg1),
             "/openapi" => self.cmd_openapi(arg1, rest),
+            "/autorun" => self.cmd_autorun(arg1),
             _ => {
                 let msg = match closest_command(cmd) {
                     Some(sug) => format!(
@@ -362,6 +367,7 @@ Command Reference
   /load <path>                  load .aivi file into session
   /openapi file <path> [as <n>] inject OpenAPI spec file as module
   /openapi url <url> [as <n>]   inject OpenAPI spec URL as module
+  /autorun [on|off]             toggle top-level effect autorun (default: on)
 
   Ctrl+D on empty input: exit   Tab/Enter: accept suggestion";
         self.push_command_output(text.to_owned());
@@ -382,6 +388,7 @@ Command Reference
         self.history.clear();
         self.session_types.clear();
         self.session_constructors.clear();
+        self.autorun_effects = true;
         self.turn = 0;
         self.cached_symbols.clear();
         self.active_pane = None;
@@ -390,6 +397,26 @@ Command Reference
             kind: TranscriptKind::System,
             text: "session reset".to_owned(),
         });
+    }
+
+    fn cmd_autorun(&mut self, arg: &str) {
+        match arg {
+            "" => self.push_command_output(format!(
+                "autorun is {}",
+                if self.autorun_effects { "on" } else { "off" }
+            )),
+            "on" => {
+                self.autorun_effects = true;
+                self.push_command_output("autorun enabled for top-level effects".to_owned());
+            }
+            "off" => {
+                self.autorun_effects = false;
+                self.push_command_output("autorun disabled for top-level effects".to_owned());
+            }
+            other => self.push_error(format!(
+                "Invalid /autorun mode `{other}`. Use `/autorun on` or `/autorun off`."
+            )),
+        }
     }
 
     fn cmd_types(&mut self, filter: &str) {
@@ -746,18 +773,27 @@ Command Reference
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
                 let program = desugar_modules(&all_modules);
-                match evaluate_binding_jit(
+                match evaluate_binding_jit_detailed(
                     program,
                     infer.cg_types,
                     infer.monomorph_plan,
                     infer.source_schemas,
                     &all_modules,
                     "_replResult",
+                    self.autorun_effects,
                 ) {
-                    Ok(value_text) => self.transcript.push(TranscriptEntry {
-                        kind: TranscriptKind::ValueResult,
-                        text: format!("{value_text} :: {result_type}"),
-                    }),
+                    Ok(result) => {
+                        self.push_captured_stream(
+                            TranscriptKind::CommandOutput,
+                            &result.stdout_text,
+                        );
+                        self.push_captured_stream(TranscriptKind::Error, &result.stderr_text);
+                        let suffix = if result.effect_ran { "  (autorun)" } else { "" };
+                        self.transcript.push(TranscriptEntry {
+                            kind: TranscriptKind::ValueResult,
+                            text: format!("{} :: {}{}", result.value_text, result_type, suffix),
+                        });
+                    }
                     Err(err) => self.push_error(err.to_string()),
                 }
             }
@@ -1209,6 +1245,19 @@ Command Reference
         });
     }
 
+    fn push_captured_stream(&mut self, kind: TranscriptKind, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        for chunk in text.split_inclusive('\n') {
+            let line = chunk.strip_suffix('\n').unwrap_or(chunk).to_owned();
+            self.transcript.push(TranscriptEntry {
+                kind: kind.clone(),
+                text: line,
+            });
+        }
+    }
+
     fn use_color(&self) -> bool {
         match self.options.color_mode {
             ColorMode::Auto => io::stdout().is_terminal(),
@@ -1454,6 +1503,7 @@ pub(crate) const SLASH_COMMANDS: &[&str] = &[
     "/types",
     "/values",
     "/functions",
+    "/autorun",
     "/modules",
     "/clear",
     "/reset",
@@ -1504,7 +1554,14 @@ pub(crate) fn slash_command_suggestions(input: &str) -> Vec<&'static str> {
 pub(crate) fn command_accepts_argument(command: &str) -> bool {
     matches!(
         command,
-        "/use" | "/types" | "/values" | "/functions" | "/history" | "/load" | "/openapi"
+        "/use"
+            | "/types"
+            | "/values"
+            | "/functions"
+            | "/autorun"
+            | "/history"
+            | "/load"
+            | "/openapi"
     )
 }
 
@@ -1515,6 +1572,7 @@ pub(crate) fn command_summary(command: &str) -> &'static str {
         "/types" => "list types in scope",
         "/values" => "list session values with types",
         "/functions" => "list functions in scope",
+        "/autorun" => "toggle top-level effect autorun",
         "/modules" => "show loaded modules",
         "/clear" => "clear transcript",
         "/reset" => "reset transcript and session state",
@@ -2087,6 +2145,53 @@ mod tests {
     }
 
     #[test]
+    fn slash_autorun_reports_current_state() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/autorun").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::CommandOutput) && entry.text == "autorun is on"
+        }));
+    }
+
+    #[test]
+    fn slash_autorun_off_disables_execution() {
+        let mut engine = make_engine();
+        engine.submit("/autorun off").unwrap();
+        let snap = engine.submit("println \"hi\"").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult)
+                && entry.text.starts_with("<effect> :: Effect Text")
+        }));
+        assert!(!snap.transcript.iter().any(|entry| entry.text == "hi"));
+    }
+
+    #[test]
+    fn slash_autorun_on_reenables_execution() {
+        let mut engine = make_engine();
+        engine.submit("/autorun off").unwrap();
+        engine.submit("/autorun on").unwrap();
+        let snap = engine.submit("println \"hi\"").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::CommandOutput) && entry.text == "hi"
+        }));
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult)
+                && entry.text.starts_with("Unit :: Effect Text")
+                && entry.text.ends_with("  (autorun)")
+        }));
+    }
+
+    #[test]
+    fn slash_autorun_invalid_mode_shows_error() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/autorun maybe").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::Error)
+                && entry.text.contains("Use `/autorun on` or `/autorun off`")
+        }));
+    }
+
+    #[test]
     fn slash_values_empty_session_hint() {
         let mut engine = make_engine();
         let snap = engine.submit("/values").unwrap();
@@ -2128,6 +2233,20 @@ mod tests {
         let snap = engine.submit("x + 1").unwrap();
         assert!(snap.transcript.iter().any(|entry| {
             matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "42 :: Int"
+        }));
+    }
+
+    #[test]
+    fn expression_submit_autoruns_top_level_console_effects() {
+        let mut engine = make_engine();
+        let snap = engine.submit("println \"hi\"").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::CommandOutput) && entry.text == "hi"
+        }));
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult)
+                && entry.text.starts_with("Unit :: Effect Text")
+                && entry.text.ends_with("  (autorun)")
         }));
     }
 

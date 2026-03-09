@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use super::values::Value;
 
@@ -61,6 +61,7 @@ pub(crate) struct RuntimeContext {
     machine_states: RwLock<HashMap<String, String>>,
     machine_handlers: RwLock<HashMap<(String, String), Vec<Value>>>,
     pub(crate) gtk_auto_bindings: RwLock<GtkAutoBindingsState>,
+    console_capture: Mutex<Option<ConsoleCapture>>,
 }
 
 #[derive(Clone, Default)]
@@ -81,6 +82,12 @@ pub(crate) struct MachineTransitionError {
     pub(crate) from: String,
     pub(crate) event: String,
     pub(crate) expected_from: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ConsoleCapture {
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 impl MachineTransitionError {
@@ -117,7 +124,41 @@ impl RuntimeContext {
             machine_states: RwLock::new(HashMap::new()),
             machine_handlers: RwLock::new(HashMap::new()),
             gtk_auto_bindings: RwLock::new(GtkAutoBindingsState::default()),
+            console_capture: Mutex::new(None),
         }
+    }
+
+    pub(crate) fn begin_console_capture(&self) {
+        *self.console_capture.lock() = Some(ConsoleCapture::default());
+    }
+
+    pub(crate) fn take_console_capture(&self) -> ConsoleCapture {
+        self.console_capture.lock().take().unwrap_or_default()
+    }
+
+    pub(crate) fn capture_stdout(&self, text: &str, newline: bool) -> bool {
+        self.capture_console_text(text, newline, false)
+    }
+
+    pub(crate) fn capture_stderr(&self, text: &str, newline: bool) -> bool {
+        self.capture_console_text(text, newline, true)
+    }
+
+    fn capture_console_text(&self, text: &str, newline: bool, stderr: bool) -> bool {
+        let mut guard = self.console_capture.lock();
+        let Some(capture) = guard.as_mut() else {
+            return false;
+        };
+        let target = if stderr {
+            &mut capture.stderr
+        } else {
+            &mut capture.stdout
+        };
+        target.push_str(text);
+        if newline {
+            target.push('\n');
+        }
+        true
     }
 
     pub(crate) fn constructor_ordinal(&self, name: &str) -> Option<Option<usize>> {
