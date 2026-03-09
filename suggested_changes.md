@@ -47,7 +47,7 @@ It is intentionally focused on cross-file work, language/runtime decisions, and 
   - Keep one clear “start here” path and let the other pages specialize.
 
 - **Centralize GTK architecture guidance**
-  - Unify `gtkApp`, `toMsg: auto`, helper-taxonomy, and routing-limit guidance across:
+  - Unify helper-taxonomy and routing-limit guidance across:
     - `specs/stdlib/ui/app_architecture.md`
     - `specs/stdlib/ui/gtk4.md`
     - `specs/stdlib/ui/native_gtk_apps.md`

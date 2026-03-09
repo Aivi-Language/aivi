@@ -1228,20 +1228,20 @@ view = ~<gtk>
 </gtk>
 ```
 
-Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `map` or `combine2`/`combine3`/higher-arity combinators, and mutate them with `set` or `update`:
+Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `derive` or `combineAll`, and mutate them with `set` or `update`:
 
 ```aivi
 state = signal { count: 0, query: "" }
-title = state |> map (_.count) |> map "Count {_}"
-canSearch = combine2 state searchEvent.running (current => running =>
-  current.query != "" and not running
+title = derive state (s => "Count {s.count}")
+canSearch = combineAll { st: state, running: searchEvent.running } (vals =>
+  vals.st.query != "" and not vals.running
 )
 
 update state (patch { count: _ + 1 })
 update state (patch { query: "gtk" })
 ```
 
-Event attrs accept either runtime functions or event/effect-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles look like `ev = event (do Effect { ... })` and expose reactive fields such as `result`, `error`, `done`, and `running`.
+Event attrs accept either runtime functions or event-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles are created with `do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`.
 
 GTK sigils also support signal sugar in v0.1:
 

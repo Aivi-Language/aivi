@@ -82,7 +82,7 @@ The primary public UI story is signal-first: state lives in `Signal` values, GTK
 use aivi.reactive
 
 state = signal { count: 0 }
-countLabel = state |> map (_.count) |> map "Count: {_}"
+countLabel = derive state (s => "Count: {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
 view = ~<gtk>

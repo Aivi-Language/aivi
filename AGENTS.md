@@ -153,7 +153,7 @@ When writing GTK4 UI code, **prefer the signal-first runtime**. Signals are the 
 use aivi.reactive
 
 state = signal { count: 0 }
-title = state |> map (_.count) |> map "Count {_}"
+title = derive state (s => "Count {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
 view = ~<gtk>
