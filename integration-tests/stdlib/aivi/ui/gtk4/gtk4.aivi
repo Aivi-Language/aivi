@@ -22,6 +22,10 @@ getFocusPair = event => event match
   | GtkFocusIn wid name => (wid, name)
   | _                   => (0, "")
 
+getValueTriple = event => event match
+  | GtkValueChanged wid name val => (wid, name, val)
+  | _                            => (0, "", 0.0)
+
 TestMsg      = Save | NameChanged Text | ToggledMsg Bool
 TestMsg2     = TitleChanged Text | BodyChanged Text
 DerivedRow   = { name: Text }
@@ -185,4 +189,102 @@ auto_adapter_available = do Effect {
   mapped : Option TestMsg
   mapped = auto (GtkClicked 1 "")
   assertEq mapped None
+}
+
+@test "GtkValueChanged carries widget name and float value"
+signal_value_changed = do Effect {
+  assertEq (getValueTriple (GtkValueChanged 5 "slider" 0.75)) (5, "slider", 0.75)
+}
+
+@test "GtkGrid child position parses from type string"
+gtk_grid_node_constructors = do Effect {
+  elem   = gtkElement "GtkGrid" [gtkAttr "row-spacing" "8", gtkAttr "column-spacing" "4"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkGrid"
+}
+
+@test "GtkSpinButton node is constructable"
+gtk_spin_button_node = do Effect {
+  elem   = gtkElement "GtkSpinButton" [gtkAttr "min" "0", gtkAttr "max" "100", gtkAttr "step" "1"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkSpinButton"
+}
+
+@test "GtkAspectFrame node is constructable"
+gtk_aspect_frame_node = do Effect {
+  elem   = gtkElement "GtkAspectFrame" [gtkAttr "ratio" "1.333", gtkAttr "xalign" "0.5"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkAspectFrame"
+}
+
+@test "GtkComboBoxText node is constructable"
+gtk_combo_box_text_node = do Effect {
+  elem   = gtkElement "GtkComboBoxText" [gtkAttr "strings" "Option A\nOption B\nOption C"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkComboBoxText"
+}
+
+@test "GtkSearchBar node is constructable"
+gtk_search_bar_node = do Effect {
+  elem   = gtkElement "GtkSearchBar" [gtkAttr "search-mode" "true", gtkAttr "show-close-button" "false"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkSearchBar"
+}
+
+@test "GtkPicture node is constructable"
+gtk_picture_node = do Effect {
+  elem   = gtkElement "GtkPicture" [gtkAttr "content-fit" "contain", gtkAttr "can-shrink" "true", gtkAttr "alternative-text" "My photo"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkPicture"
+}
+
+@test "GtkCalendar node is constructable"
+gtk_calendar_node = do Effect {
+  elem   = gtkElement "GtkCalendar" [gtkAttr "show-heading" "true", gtkAttr "show-day-names" "true", gtkAttr "show-week-numbers" "false"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkCalendar"
+}
+
+@test "GtkCalendar day-selected signal is known"
+gtk_calendar_signal = do Effect {
+  event = GtkActivated 1 "calendar"
+  pair  = event match
+    | GtkActivated wid name => (wid, name)
+    | _                     => (0, "")
+    assertEq pair (1, "calendar")
+}
+
+@test "GtkActionBar node is constructable"
+gtk_action_bar_node = do Effect {
+  elem   = gtkElement "GtkActionBar" [gtkAttr "revealed" "true"] []
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkActionBar"
+}
+
+@test "GtkCenterBox node is constructable"
+gtk_center_box_node = do Effect {
+  startChild  = gtkElement "GtkLabel" [gtkAttr "label" "Left"] []
+  centerChild = gtkElement "GtkLabel" [gtkAttr "label" "Center"] []
+  endChild    = gtkElement "GtkLabel" [gtkAttr "label" "Right"] []
+  elem        = gtkElement "GtkCenterBox" [] [startChild, centerChild, endChild]
+  getTag      = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkCenterBox"
 }

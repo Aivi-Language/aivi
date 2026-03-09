@@ -577,18 +577,13 @@ fn handle_key(
 
         // Submit input.
         KeyCode::Enter if !shift => {
-            if state.has_suggestions() {
-                state.accept_suggestion();
-                state.refresh_completions(engine);
-            } else {
-                let input = std::mem::take(&mut state.input);
-                state.cursor = 0;
-                state.scroll_offset = 0;
-                state.suggestion_index = 0;
-                state.record_history(input.clone());
-                state.snapshot = engine.submit(&input)?;
-                state.refresh_completions(engine);
-            }
+            let input = std::mem::take(&mut state.input);
+            state.cursor = 0;
+            state.scroll_offset = 0;
+            state.suggestion_index = 0;
+            state.record_history(input.clone());
+            state.snapshot = engine.submit(&input)?;
+            state.refresh_completions(engine);
         }
 
         // Shift+Enter → insert literal newline (multi-line mode).
@@ -842,11 +837,7 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
             Span::raw(" "),
             Span::styled(detail, palette.type_annotation()),
             Span::styled(
-                if idx == 0 {
-                    "  [Tab/Enter: accept]"
-                } else {
-                    ""
-                },
+                if idx == 0 { "  [Tab: accept]" } else { "" },
                 palette.hint(),
             ),
         ]));
@@ -953,10 +944,15 @@ fn transcript_entry_to_lines(entry: &TranscriptEntry, palette: Palette) -> Vec<L
             Span::styled("  ✓ ", palette.system_message()),
             Span::styled(text, palette.system_message()),
         ])],
-        TranscriptKind::CommandOutput => vec![Line::from(vec![
-            Span::raw("  "),
-            Span::styled(text, palette.command_output()),
-        ])],
+        TranscriptKind::CommandOutput => text
+            .lines()
+            .map(|line| {
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(line.to_string(), palette.command_output()),
+                ])
+            })
+            .collect(),
         TranscriptKind::TypeAnnotation => vec![Line::from(vec![
             Span::raw("    "),
             Span::styled(text, palette.type_annotation()),
@@ -1138,7 +1134,7 @@ mod tests {
     }
 
     #[test]
-    fn enter_accepts_symbol_completion_without_submitting() {
+    fn enter_submits_current_input_even_when_suggestions_are_visible() {
         let mut engine = ReplEngine::new(&ReplOptions {
             color_mode: ColorMode::Never,
             plain_mode: false,
@@ -1154,12 +1150,12 @@ mod tests {
 
         handle_key(KeyCode::Enter, KeyModifiers::NONE, &mut engine, &mut state).unwrap();
 
-        assert_eq!(state.input, "/functions join");
-        assert!(state
-            .snapshot
-            .transcript
-            .iter()
-            .all(|entry| entry.text != state.input));
+        assert!(state.input.is_empty());
+        assert!(state.snapshot.transcript.iter().any(|entry| matches!(
+            entry.kind,
+            TranscriptKind::CommandOutput
+        ) && entry.text.contains("function")
+            && entry.text.contains("filter: jo")));
     }
 
     #[test]
@@ -1183,5 +1179,34 @@ mod tests {
             text: "ready".into(),
         };
         assert!(entry_to_plain(&s).contains('✓'));
+    }
+
+    #[test]
+    fn command_output_renders_multiline_entries_as_multiple_lines() {
+        let entry = TranscriptEntry {
+            kind: TranscriptKind::CommandOutput,
+            text: "Function `join`\nmodule: aivi.text\nsignature: Text -> List Text -> Text\n\nQuick info:\n  no indexed docs available for this symbol yet.".into(),
+        };
+        let lines = transcript_entry_to_lines(&entry, Palette::new(ColorMode::Never, true));
+        let rendered: Vec<String> = lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect();
+        assert_eq!(
+            rendered,
+            vec![
+                "  Function `join`".to_owned(),
+                "  module: aivi.text".to_owned(),
+                "  signature: Text -> List Text -> Text".to_owned(),
+                "  ".to_owned(),
+                "  Quick info:".to_owned(),
+                "    no indexed docs available for this symbol yet.".to_owned(),
+            ]
+        );
     }
 }

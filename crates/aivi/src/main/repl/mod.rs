@@ -1,3 +1,4 @@
+mod doc_index;
 mod engine;
 mod tui;
 
@@ -56,6 +57,7 @@ pub(crate) fn print_repl_help() {
         \n\
         SLASH COMMANDS (inside the REPL):\n\
         \x20 /help                              Print command reference\n\
+        \x20 /explain <name>                    Show quick info, signature, and module\n\
         \x20 /use <module.path>                 Add import to session (errors on unknown modules)\n\
         \x20 /types [filter]                    Types in scope\n\
         \x20 /values [filter]                   Session-defined values with types\n\
@@ -73,7 +75,7 @@ pub(crate) fn print_repl_help() {
         Use `/autorun off` if you want effect values to stay inert.\n\
         \n\
         KEYBOARD SHORTCUTS:\n\
-        \x20 Enter          Submit input / accept suggestion\n\
+        \x20 Enter          Submit current input\n\
         \x20 Shift+Enter    Insert newline (multi-line input)\n\
         \x20 ↑ / ↓          Navigate history or suggestions\n\
         \x20 Ctrl+L         Clear transcript\n\

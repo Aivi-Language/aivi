@@ -11,10 +11,11 @@ use std::path::Path;
 use aivi::{
     check_modules, check_types, desugar_modules, embedded_stdlib_modules,
     evaluate_binding_jit_detailed, file_diagnostics_have_errors, infer_value_types_full,
-    parse_modules, render_diagnostics, AiviError, DomainItem, FileDiagnostic, Module, ModuleItem,
-    TypeDecl, TypeExpr, TypeSig,
+    parse_modules, render_diagnostics, AiviError, ClassDecl, DomainDecl, DomainItem,
+    FileDiagnostic, Module, ModuleItem, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
+use super::doc_index::{DocIndex, QuickInfoEntry, DOC_INDEX_JSON};
 use super::{ColorMode, ReplOptions, SymbolPane};
 
 // ── Transcript types ──────────────────────────────────────────────────────────
@@ -104,6 +105,26 @@ struct SymbolCompletion {
     module: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExplainKind {
+    Module,
+    Type,
+    Class,
+    Domain,
+    Function,
+    Value,
+    Constructor,
+}
+
+#[derive(Debug, Clone)]
+struct ExplainSubject {
+    kind: ExplainKind,
+    name: String,
+    module: Option<String>,
+    signature: Option<String>,
+    quick_info: Option<QuickInfoEntry>,
+}
+
 // ── Session snapshot (TUI-facing read API) ─────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -122,6 +143,7 @@ pub(crate) struct ReplSnapshot {
 
 pub(crate) struct ReplEngine {
     options: ReplOptions,
+    doc_index: DocIndex,
     /// Accumulated `use` module paths (e.g. `"aivi.text"`).
     imports: Vec<String>,
     /// Accumulated user definition source snippets (verbatim lines).
@@ -154,6 +176,9 @@ impl ReplEngine {
     /// Create a new engine, pre-loading the stdlib symbol inventory.
     pub(crate) fn new(options: &ReplOptions) -> Result<Self, AiviError> {
         let stdlib = embedded_stdlib_modules();
+        let doc_index = DocIndex::from_json(DOC_INDEX_JSON).map_err(|err| {
+            AiviError::InvalidCommand(format!("internal REPL doc index error: {err}"))
+        })?;
         let default_visible_modules = collect_default_visible_modules(&stdlib);
         let visible_stdlib_count: usize = stdlib
             .iter()
@@ -162,6 +187,7 @@ impl ReplEngine {
             .sum();
         let mut engine = ReplEngine {
             options: options.clone(),
+            doc_index,
             imports: Vec::new(),
             definitions: Vec::new(),
             history: Vec::new(),
@@ -328,6 +354,7 @@ impl ReplEngine {
 
         match cmd {
             "/help" => self.cmd_help(),
+            "/explain" => self.cmd_explain(arg1),
             "/clear" => self.cmd_clear(),
             "/reset" => self.cmd_reset(),
             "/types" => self.cmd_types(arg1),
@@ -356,6 +383,7 @@ impl ReplEngine {
 Command Reference
 
   /help                         print this reference
+  /explain <name>               show quick info, signature, and module
   /use <module.path>            add import to session (errors on unknown modules)
   /types [filter]               types in scope (stdlib + session)
   /values [filter]              session-defined values + inferred types
@@ -369,9 +397,29 @@ Command Reference
   /openapi url <url> [as <n>]   inject OpenAPI spec URL as module
   /autorun [on|off]             toggle top-level effect autorun (default: on)
 
-  Ctrl+D on empty input: exit   Tab/Enter: accept suggestion";
+  Ctrl+D on empty input: exit   Tab: accept suggestion";
         self.push_command_output(text.to_owned());
         self.set_symbol_pane(SymbolPane::Types);
+    }
+
+    fn cmd_explain(&mut self, query: &str) {
+        let query = query.trim();
+        if query.is_empty() {
+            self.push_error(
+                "/explain expects a type, function, value, or module name. Example: /explain isAlnum"
+                    .to_owned(),
+            );
+            return;
+        }
+
+        let matches = self.resolve_explain_subjects(query);
+        match matches.as_slice() {
+            [] => self.push_error(format!(
+                "Nothing matched `{query}`. Try `/types`, `/functions`, or a qualified name like `aivi.text.isAlnum`."
+            )),
+            [subject] => self.push_command_output(render_explain_subject(subject)),
+            many => self.push_error(render_explain_ambiguity(query, many)),
+        }
     }
 
     fn cmd_clear(&mut self) {
@@ -1229,6 +1277,224 @@ Command Reference
                 .any(|module| module.name.name == module_name)
     }
 
+    fn resolve_explain_subjects(&self, query: &str) -> Vec<ExplainSubject> {
+        let inventory = self.explain_inventory();
+
+        let module_matches: Vec<ExplainSubject> = inventory
+            .iter()
+            .filter(|subject| subject.kind == ExplainKind::Module && subject.name == query)
+            .cloned()
+            .collect();
+        if !module_matches.is_empty() {
+            return module_matches;
+        }
+
+        if let Some((module, name)) = query.rsplit_once('.') {
+            let qualified: Vec<ExplainSubject> = inventory
+                .iter()
+                .filter(|subject| subject.name == name && subject.module.as_deref() == Some(module))
+                .cloned()
+                .collect();
+            if !qualified.is_empty() {
+                return qualified;
+            }
+        }
+
+        inventory
+            .into_iter()
+            .filter(|subject| subject.name == query)
+            .collect()
+    }
+
+    fn explain_inventory(&self) -> Vec<ExplainSubject> {
+        let mut subjects = Vec::new();
+        let mut seen = HashSet::new();
+        let session_modules = self.current_session_modules();
+        let stdlib_modules = embedded_stdlib_modules();
+
+        for module in stdlib_modules.iter().chain(session_modules.iter()) {
+            self.push_module_explain_subject(module, &mut subjects, &mut seen);
+            for item in &module.items {
+                self.push_item_explain_subjects(&module.name.name, item, &mut subjects, &mut seen);
+            }
+        }
+
+        for (name, ty) in &self.session_types {
+            self.push_explain_subject(
+                &mut subjects,
+                &mut seen,
+                ExplainKind::from_type_string(ty),
+                name.clone(),
+                Some("repl_session".to_owned()),
+                Some(ty.clone()),
+            );
+        }
+
+        for item in &self.builtin_completions {
+            let kind = match item.kind {
+                CompletionKind::Constructor => ExplainKind::Constructor,
+                CompletionKind::Function => ExplainKind::Function,
+                CompletionKind::Value => ExplainKind::Value,
+                CompletionKind::Command => continue,
+            };
+            self.push_explain_subject(
+                &mut subjects,
+                &mut seen,
+                kind,
+                item.name.clone(),
+                Some(item.module.clone()),
+                Some(item.detail.clone()),
+            );
+        }
+
+        subjects.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then(subject_module_name(a).cmp(subject_module_name(b)))
+                .then(a.kind.label().cmp(b.kind.label()))
+        });
+        subjects
+    }
+
+    fn push_module_explain_subject(
+        &self,
+        module: &Module,
+        subjects: &mut Vec<ExplainSubject>,
+        seen: &mut HashSet<String>,
+    ) {
+        self.push_explain_subject(
+            subjects,
+            seen,
+            ExplainKind::Module,
+            module.name.name.clone(),
+            None,
+            None,
+        );
+    }
+
+    fn push_item_explain_subjects(
+        &self,
+        module_name: &str,
+        item: &ModuleItem,
+        subjects: &mut Vec<ExplainSubject>,
+        seen: &mut HashSet<String>,
+    ) {
+        match item {
+            ModuleItem::TypeSig(sig) => {
+                self.push_explain_subject(
+                    subjects,
+                    seen,
+                    ExplainKind::from_type_expr(&sig.ty),
+                    sig.name.name.clone(),
+                    Some(module_name.to_owned()),
+                    Some(render_type_expr(&sig.ty)),
+                );
+            }
+            ModuleItem::TypeDecl(type_decl) => {
+                self.push_explain_subject(
+                    subjects,
+                    seen,
+                    ExplainKind::Type,
+                    type_decl.name.name.clone(),
+                    Some(module_name.to_owned()),
+                    Some(render_type_decl_signature(type_decl)),
+                );
+            }
+            ModuleItem::TypeAlias(type_alias) => {
+                self.push_explain_subject(
+                    subjects,
+                    seen,
+                    ExplainKind::Type,
+                    type_alias.name.name.clone(),
+                    Some(module_name.to_owned()),
+                    Some(render_type_alias_signature(type_alias)),
+                );
+            }
+            ModuleItem::ClassDecl(class_decl) => {
+                self.push_explain_subject(
+                    subjects,
+                    seen,
+                    ExplainKind::Class,
+                    class_decl.name.name.clone(),
+                    Some(module_name.to_owned()),
+                    Some(render_class_signature(class_decl)),
+                );
+            }
+            ModuleItem::DomainDecl(domain_decl) => {
+                self.push_explain_subject(
+                    subjects,
+                    seen,
+                    ExplainKind::Domain,
+                    domain_decl.name.name.clone(),
+                    Some(module_name.to_owned()),
+                    Some(render_domain_signature(domain_decl)),
+                );
+                for domain_item in &domain_decl.items {
+                    match domain_item {
+                        DomainItem::TypeSig(sig) => {
+                            self.push_explain_subject(
+                                subjects,
+                                seen,
+                                ExplainKind::from_type_expr(&sig.ty),
+                                sig.name.name.clone(),
+                                Some(module_name.to_owned()),
+                                Some(render_type_expr(&sig.ty)),
+                            );
+                        }
+                        DomainItem::TypeAlias(type_decl) => {
+                            self.push_explain_subject(
+                                subjects,
+                                seen,
+                                ExplainKind::Type,
+                                type_decl.name.name.clone(),
+                                Some(module_name.to_owned()),
+                                Some(render_type_decl_signature(type_decl)),
+                            );
+                        }
+                        DomainItem::Def(_) | DomainItem::LiteralDef(_) => {}
+                    }
+                }
+            }
+            ModuleItem::Def(_) | ModuleItem::InstanceDecl(_) | ModuleItem::MachineDecl(_) => {}
+        }
+    }
+
+    fn push_explain_subject(
+        &self,
+        subjects: &mut Vec<ExplainSubject>,
+        seen: &mut HashSet<String>,
+        kind: ExplainKind,
+        name: String,
+        module: Option<String>,
+        signature: Option<String>,
+    ) {
+        let key = format!(
+            "{}|{}|{}",
+            kind.label(),
+            module.as_deref().unwrap_or(""),
+            name
+        );
+        if !seen.insert(key) {
+            return;
+        }
+
+        let quick_info = match kind {
+            ExplainKind::Module => self.doc_index.lookup_module(&name).cloned(),
+            _ => self
+                .doc_index
+                .lookup_best(&name, module.as_deref())
+                .cloned(),
+        };
+
+        subjects.push(ExplainSubject {
+            kind,
+            name,
+            module,
+            signature,
+            quick_info,
+        });
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     fn push_error(&mut self, text: String) {
@@ -1499,6 +1765,7 @@ fn plain_entry_text(entry: &TranscriptEntry) -> String {
 
 pub(crate) const SLASH_COMMANDS: &[&str] = &[
     "/help",
+    "/explain",
     "/use",
     "/types",
     "/values",
@@ -1554,7 +1821,8 @@ pub(crate) fn slash_command_suggestions(input: &str) -> Vec<&'static str> {
 pub(crate) fn command_accepts_argument(command: &str) -> bool {
     matches!(
         command,
-        "/use"
+        "/explain"
+            | "/use"
             | "/types"
             | "/values"
             | "/functions"
@@ -1568,6 +1836,7 @@ pub(crate) fn command_accepts_argument(command: &str) -> bool {
 pub(crate) fn command_summary(command: &str) -> &'static str {
     match command {
         "/help" => "print command reference",
+        "/explain" => "show quick info for a symbol",
         "/use" => "add import to session",
         "/types" => "list types in scope",
         "/values" => "list session values with types",
@@ -1608,6 +1877,65 @@ fn levenshtein(a: &str, b: &str) -> usize {
 
 fn matches_filter(name: &str, filter: &str) -> bool {
     filter.is_empty() || name.contains(filter)
+}
+
+fn render_type_decl_signature(type_decl: &TypeDecl) -> String {
+    let head = render_type_head(&type_decl.name.name, &type_decl.params);
+    if type_decl.opaque {
+        format!("opaque {head}")
+    } else {
+        format!("type {head}")
+    }
+}
+
+fn render_type_alias_signature(type_alias: &TypeAlias) -> String {
+    let head = render_type_head(&type_alias.name.name, &type_alias.params);
+    let prefix = if type_alias.opaque { "opaque" } else { "type" };
+    format!(
+        "{prefix} {head} = {}",
+        render_type_expr(&type_alias.aliased)
+    )
+}
+
+fn render_class_signature(class_decl: &ClassDecl) -> String {
+    if class_decl.params.is_empty() {
+        format!("class {}", class_decl.name.name)
+    } else {
+        format!(
+            "class {} {}",
+            class_decl.name.name,
+            class_decl
+                .params
+                .iter()
+                .map(render_type_expr)
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
+}
+
+fn render_domain_signature(domain_decl: &DomainDecl) -> String {
+    format!(
+        "domain {} over {}",
+        domain_decl.name.name,
+        render_type_expr(&domain_decl.over)
+    )
+}
+
+fn render_type_head(name: &str, params: &[aivi::SpannedName]) -> String {
+    if params.is_empty() {
+        name.to_owned()
+    } else {
+        format!(
+            "{} {}",
+            name,
+            params
+                .iter()
+                .map(|param| param.name.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
 }
 
 fn starts_with_upper(text: &str) -> bool {
@@ -1885,6 +2213,66 @@ fn render_type_expr(ty: &TypeExpr) -> String {
     }
 }
 
+fn render_explain_subject(subject: &ExplainSubject) -> String {
+    let mut lines = vec![format!("{} `{}`", subject.kind.heading(), subject.name)];
+    lines.push(format!("module: {}", subject_module_name(subject)));
+    if let Some(signature) = subject_signature(subject) {
+        lines.push(format!("signature: {signature}"));
+    }
+    lines.push(String::new());
+    lines.push("Quick info:".to_owned());
+    match &subject.quick_info {
+        Some(entry) => {
+            let content = entry.content.trim();
+            if content.is_empty() {
+                lines.push("  no indexed docs available for this symbol yet.".to_owned());
+            } else {
+                lines.extend(content.lines().map(|line| {
+                    if line.is_empty() {
+                        String::new()
+                    } else {
+                        format!("  {line}")
+                    }
+                }));
+            }
+        }
+        None => lines.push("  no indexed docs available for this symbol yet.".to_owned()),
+    }
+    lines.join("\n")
+}
+
+fn render_explain_ambiguity(query: &str, subjects: &[ExplainSubject]) -> String {
+    let mut lines = vec![format!(
+        "`{query}` matches multiple symbols. Use `/explain module.name` to disambiguate:"
+    )];
+    for subject in subjects {
+        let mut line = format!(
+            "  [{}] {} ({})",
+            subject.kind.label(),
+            subject.name,
+            subject_module_name(subject)
+        );
+        if let Some(signature) = subject_signature(subject) {
+            line.push_str(&format!(" :: {signature}"));
+        }
+        lines.push(line);
+    }
+    lines.join("\n")
+}
+
+fn subject_signature(subject: &ExplainSubject) -> Option<&str> {
+    subject.signature.as_deref().or_else(|| {
+        subject
+            .quick_info
+            .as_ref()
+            .and_then(|entry| entry.signature.as_deref())
+    })
+}
+
+fn subject_module_name(subject: &ExplainSubject) -> &str {
+    subject.module.as_deref().unwrap_or(subject.name.as_str())
+}
+
 fn parse_openapi_args(rest: &str) -> (&str, Option<String>) {
     if let Some(as_pos) = rest.find(" as ") {
         let source = rest[..as_pos].trim();
@@ -1924,6 +2312,48 @@ fn derive_module_name(source: &str) -> String {
 #[allow(dead_code)]
 pub(crate) fn format_function_placeholder(type_str: &str) -> String {
     format!("<function :: {type_str}>")
+}
+
+impl ExplainKind {
+    fn from_type_expr(ty: &TypeExpr) -> Self {
+        if render_type_expr(ty).contains("->") {
+            Self::Function
+        } else {
+            Self::Value
+        }
+    }
+
+    fn from_type_string(type_str: &str) -> Self {
+        if type_str.contains("->") {
+            Self::Function
+        } else {
+            Self::Value
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            ExplainKind::Module => "module",
+            ExplainKind::Type => "type",
+            ExplainKind::Class => "class",
+            ExplainKind::Domain => "domain",
+            ExplainKind::Function => "function",
+            ExplainKind::Value => "value",
+            ExplainKind::Constructor => "constructor",
+        }
+    }
+
+    fn heading(self) -> &'static str {
+        match self {
+            ExplainKind::Module => "Module",
+            ExplainKind::Type => "Type",
+            ExplainKind::Class => "Class",
+            ExplainKind::Domain => "Domain",
+            ExplainKind::Function => "Function",
+            ExplainKind::Value => "Value",
+            ExplainKind::Constructor => "Constructor",
+        }
+    }
 }
 
 /// Format an opaque/complex value for the `/values` pane.
@@ -2064,6 +2494,50 @@ mod tests {
             .iter()
             .any(|e| matches!(e.kind, TranscriptKind::CommandOutput) && e.text.contains("/help"));
         assert!(has_cmd);
+    }
+
+    #[test]
+    fn slash_explain_requires_argument() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/explain").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::Error)
+                && entry
+                    .text
+                    .contains("/explain expects a type, function, value, or module name")
+        }));
+    }
+
+    #[test]
+    fn slash_explain_shows_doc_signature_and_module() {
+        let mut engine = make_engine();
+        let snap = engine.submit("/explain isAlnum").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::CommandOutput)
+                && entry.text.contains("Function `isAlnum`")
+                && entry.text.contains("module: aivi.text")
+                && entry.text.contains("signature: Char -> Bool")
+                && entry.text.contains("\n\nQuick info:\n")
+                && entry.text.contains("Unicode letter or digit")
+        }));
+    }
+
+    #[test]
+    fn slash_explain_uses_session_type_info_when_docs_are_missing() {
+        let mut engine = make_engine();
+        engine
+            .submit("double : Int -> Int\ndouble = n => n * 2")
+            .unwrap();
+        let snap = engine.submit("/explain double").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::CommandOutput)
+                && entry.text.contains("Function `double`")
+                && entry.text.contains("module: repl_session")
+                && entry.text.contains("signature: Int -> Int")
+                && entry
+                    .text
+                    .contains("\n\nQuick info:\n  no indexed docs available for this symbol yet.")
+        }));
     }
 
     #[test]
