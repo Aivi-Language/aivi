@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::{Arc, Once, OnceLock};
+use std::sync::{Arc, Once};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -62,26 +62,14 @@ struct AiviConfig {
 }
 
 static PANIC_HOOK_INSTALLED: Once = Once::new();
-static STDLIB_TYPECHECK_CHECKPOINT: OnceLock<aivi::CheckTypesCheckpoint> = OnceLock::new();
-
 #[derive(Clone)]
 struct DiagnosticTarget {
     uri: Url,
     version: Option<i32>,
     text: String,
-    parse_diags: Option<Vec<aivi::FileDiagnostic>>,
 }
 
 impl Backend {
-    fn stdlib_typecheck_checkpoint() -> aivi::CheckTypesCheckpoint {
-        STDLIB_TYPECHECK_CHECKPOINT
-            .get_or_init(|| {
-                let stdlib = aivi::embedded_stdlib_modules();
-                aivi::check_types_stdlib_checkpoint(&stdlib)
-            })
-            .clone()
-    }
-
     fn changed_module_names(
         previous: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
         current: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
@@ -185,7 +173,6 @@ impl Backend {
                 uri: indexed.uri.clone(),
                 version: Some(document.version),
                 text: document.text.clone(),
-                parse_diags: Some(document.parse_diags.clone()),
             });
         }
         targets
@@ -217,8 +204,10 @@ impl Backend {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn compute_target_diagnostics(
         client: &tower_lsp::Client,
+        state_arc: &Arc<Mutex<crate::state::BackendState>>,
         operation: &str,
         target: DiagnosticTarget,
         workspace: HashMap<String, IndexedModule>,
@@ -229,21 +218,35 @@ impl Backend {
         Vec<tower_lsp::lsp_types::Diagnostic>,
         Option<aivi::CheckTypesCheckpoint>,
     ) {
+        let path = PathBuf::from(Self::path_from_uri(&target.uri));
+        let workspace_folders = {
+            let state = state_arc.lock().await;
+            state.workspace_folders.clone()
+        };
+        let Some(root) = Self::project_root_for_path(&path, &workspace_folders) else {
+            return (Vec::new(), checkpoint);
+        };
+        let session = {
+            let mut state = state_arc.lock().await;
+            state
+                .sessions
+                .entry(root.clone())
+                .or_insert_with(|| {
+                    Arc::new(std::sync::Mutex::new(aivi_driver::WorkspaceSession::new()))
+                })
+                .clone()
+        };
+
         match tokio::task::spawn_blocking(move || {
-            let (cp, is_new) = match checkpoint {
-                Some(cp) => (cp, false),
-                None => (Self::stdlib_typecheck_checkpoint(), true),
-            };
-            let diags = Backend::build_diagnostics_with_workspace(
+            let diags = Backend::build_diagnostics_with_session(
                 &target.text,
                 &target.uri,
                 &workspace,
                 include_specs_snippets,
                 &strict,
-                target.parse_diags,
-                Some(&cp),
+                &session,
             );
-            (diags, is_new.then_some(cp))
+            (diags, checkpoint)
         })
         .await
         {
@@ -277,6 +280,7 @@ impl Backend {
         if let Some(target) = current_target {
             let (diagnostics, new_checkpoint) = Backend::compute_target_diagnostics(
                 &client,
+                &state_arc,
                 operation,
                 target.clone(),
                 workspace.clone(),
@@ -350,6 +354,7 @@ impl Backend {
 
             let (diagnostics, new_checkpoint) = Backend::compute_target_diagnostics(
                 &client,
+                &state_arc,
                 operation,
                 target.clone(),
                 workspace.clone(),
@@ -744,14 +749,6 @@ impl LanguageServer for Backend {
             .await;
         let (include_specs_snippets, strict_level, strict, checkpoint) =
             self.diagnostics_context().await;
-        let parse_diags = {
-            let state = self.state.lock().await;
-            state
-                .documents
-                .get(&uri)
-                .map(|doc| doc.parse_diags.clone())
-                .unwrap_or_default()
-        };
         let mut changed_module_names: Vec<String> = changed_modules.into_iter().collect();
         changed_module_names.sort();
         let diagnostics_started = Instant::now();
@@ -760,7 +757,6 @@ impl LanguageServer for Backend {
             uri: uri.clone(),
             version: Some(version),
             text,
-            parse_diags: Some(parse_diags),
         };
         let handle = self.spawn_diagnostics_publish_task(
             snapshot,
@@ -817,12 +813,13 @@ impl LanguageServer for Backend {
         // a concurrently executed stale handler cannot overwrite the document state with its
         // own (potentially broken) parse results and corrupt what we pass to the type-checker.
         let previous_summaries = self.document_module_export_summaries(&uri).await;
-        let Some(parse_diags) = self
+        if self
             .update_document(uri.clone(), text.clone(), version)
             .await
-        else {
+            .is_none()
+        {
             return;
-        };
+        }
         let current_summaries = self.document_module_export_summaries(&uri).await;
         let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
         let export_changed = !changed_modules.is_empty();
@@ -835,7 +832,6 @@ impl LanguageServer for Backend {
             uri: uri.clone(),
             version: Some(version),
             text,
-            parse_diags: Some(parse_diags),
         };
         let backend = Backend {
             client: self.client.clone(),
@@ -995,7 +991,6 @@ impl LanguageServer for Backend {
                         uri: uri.clone(),
                         version: Some(document.version),
                         text: document.text.clone(),
-                        parse_diags: Some(document.parse_diags.clone()),
                     })
                     .collect::<Vec<_>>(),
                 state.diagnostics_in_specs_snippets,

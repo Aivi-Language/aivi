@@ -298,16 +298,36 @@ impl Backend {
         self.workspace_modules_for(uri).await
     }
 
-    pub(super) async fn update_document(
+    pub(super) async fn session_for_path(
         &self,
-        uri: Url,
-        text: String,
-        version: i32,
-    ) -> Option<Vec<aivi::FileDiagnostic>> {
+        path: &Path,
+    ) -> Option<(
+        PathBuf,
+        std::sync::Arc<std::sync::Mutex<aivi_driver::WorkspaceSession>>,
+    )> {
+        let workspace_folders = {
+            let state = self.state.lock().await;
+            state.workspace_folders.clone()
+        };
+        let root = Self::project_root_for_path(path, &workspace_folders)?;
+        let mut state = self.state.lock().await;
+        let session = state
+            .sessions
+            .entry(root.clone())
+            .or_insert_with(|| {
+                std::sync::Arc::new(std::sync::Mutex::new(aivi_driver::WorkspaceSession::new()))
+            })
+            .clone();
+        Some((root, session))
+    }
+
+    pub(super) async fn update_document(&self, uri: Url, text: String, version: i32) -> Option<()> {
         let path = PathBuf::from(Self::path_from_uri(&uri));
-        let text_clone = text.clone();
-        let (modules, parse_diags) =
-            tokio::task::spawn_blocking(move || parse_modules(&path, &text_clone))
+        let parse_path = path.clone();
+        let text_for_session = text.clone();
+        let text_for_parse = text.clone();
+        let (modules, _parse_diags) =
+            tokio::task::spawn_blocking(move || parse_modules(&parse_path, &text_for_parse))
                 .await
                 .unwrap_or_default();
 
@@ -344,24 +364,31 @@ impl Backend {
             );
         }
         state.open_modules_by_uri.insert(uri.clone(), module_names);
-        state.documents.insert(
-            uri,
-            DocumentState {
-                text,
-                version,
-                parse_diags: parse_diags.clone(),
-            },
-        );
-        Some(parse_diags)
+        state.documents.insert(uri, DocumentState { text, version });
+        drop(state);
+
+        if let Some((_, session)) = self.session_for_path(&path).await {
+            if let Ok(mut session) = session.lock() {
+                session.upsert_source(path, text_for_session);
+            }
+        }
+        Some(())
     }
 
     pub(super) async fn remove_document(&self, uri: &Url) {
+        let path = PathBuf::from(Self::path_from_uri(uri));
         let mut state = self.state.lock().await;
         state.documents.remove(uri);
         if let Some(existing) = state.open_modules_by_uri.remove(uri) {
             for module_name in existing {
                 state.open_module_index.remove(&module_name);
                 state.module_export_summaries.remove(&module_name);
+            }
+        }
+        drop(state);
+        if let Some((_, session)) = self.session_for_path(&path).await {
+            if let Ok(mut session) = session.lock() {
+                session.clear_source_override(&path);
             }
         }
     }

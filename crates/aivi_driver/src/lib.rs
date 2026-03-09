@@ -250,12 +250,37 @@ pub fn desugar_target_with_cg_types_and_surface(
     let assembly = timing_step!(trace, "frontend assembly", {
         session.assemble_target(target, FrontendAssemblyMode::InferFast)?
     });
+    typed_codegen_from_assembly(assembly, trace, t_total)
+}
+
+/// Like [`desugar_target_with_cg_types_and_surface`] but reuses a caller-owned
+/// [`WorkspaceSession`] so repeated invocations can preserve frontend caches.
+pub fn desugar_target_with_cg_types_and_surface_in_session(
+    session: &mut WorkspaceSession,
+    target: &str,
+) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
+    let trace = trace_timing();
+    let t_total = if trace { Some(Instant::now()) } else { None };
+    let assembly = timing_step!(trace, "frontend assembly", {
+        session.assemble_target(target, FrontendAssemblyMode::InferFast)?
+    });
+    typed_codegen_from_assembly(assembly, trace, t_total)
+}
+
+fn typed_codegen_from_assembly(
+    assembly: FrontendAssembly,
+    trace: bool,
+    t_total: Option<Instant>,
+) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
     if file_diagnostics_have_errors(&assembly.parse_diagnostics) {
         emit_diagnostics(&assembly.parse_diagnostics);
         return Err(AiviError::Diagnostics);
     }
     let mut diagnostics = assembly.resolver_diagnostics.clone();
     diagnostics.extend(assembly.typecheck_diagnostics.clone());
+    if let Some(inference) = &assembly.inference {
+        diagnostics.extend(inference.diagnostics.clone());
+    }
     if file_diagnostics_have_errors(&diagnostics) {
         emit_diagnostics(&diagnostics);
         return Err(AiviError::Diagnostics);

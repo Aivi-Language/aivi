@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex as StdMutex;
 
-use aivi::{
-    check_modules, check_types_with_checkpoint, embedded_stdlib_modules, infer_value_types,
-    parse_modules, ModuleItem, ScopeItemKind,
-};
+#[cfg(test)]
+use aivi::{check_modules, check_types_with_checkpoint};
+use aivi::{embedded_stdlib_modules, infer_value_types, parse_modules, ModuleItem, ScopeItemKind};
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, DiagnosticRelatedInformation,
     DiagnosticSeverity, Location, NumberOrString, Position, Range, TextEdit, Url, WorkspaceEdit,
@@ -86,6 +86,7 @@ impl Backend {
         )
     }
 
+    #[cfg(test)]
     pub(super) fn build_diagnostics_with_workspace(
         text: &str,
         uri: &Url,
@@ -177,6 +178,92 @@ impl Backend {
         ));
         out.extend(Self::build_source_tooling_diagnostics(&file_modules));
 
+        out
+    }
+
+    pub(super) fn build_diagnostics_with_session(
+        text: &str,
+        uri: &Url,
+        workspace_modules: &HashMap<String, IndexedModule>,
+        include_specs_snippets: bool,
+        strict: &StrictConfig,
+        session: &StdMutex<aivi_driver::WorkspaceSession>,
+    ) -> Vec<Diagnostic> {
+        let path = PathBuf::from(Self::path_from_uri(uri));
+        if !include_specs_snippets && Self::is_specs_snippet_path(&path) {
+            return Vec::new();
+        }
+
+        let mut target_paths: Vec<PathBuf> = workspace_modules
+            .values()
+            .filter_map(|indexed| indexed.uri.to_file_path().ok())
+            .filter(|module_path| {
+                module_path.extension().and_then(|ext| ext.to_str()) == Some("aivi")
+            })
+            .collect();
+        if !target_paths.contains(&path) {
+            target_paths.push(path.clone());
+        }
+        target_paths.sort();
+        target_paths.dedup();
+        let assembly = match session.lock() {
+            Ok(mut session) => {
+                match session
+                    .assemble_paths(&target_paths, aivi_driver::FrontendAssemblyMode::InferFast)
+                {
+                    Ok(assembly) => assembly,
+                    Err(err) => {
+                        return vec![Diagnostic {
+                            range: Range::new(Position::new(0, 0), Self::end_position(text)),
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            code: Some(NumberOrString::String("LSP-INTERNAL".to_string())),
+                            code_description: None,
+                            source: Some("aivi.lsp".to_string()),
+                            message: format!("workspace assembly failed: {err}"),
+                            related_information: None,
+                            tags: None,
+                            data: None,
+                        }];
+                    }
+                }
+            }
+            Err(_) => {
+                return vec![Diagnostic {
+                    range: Range::new(Position::new(0, 0), Self::end_position(text)),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(NumberOrString::String("LSP-INTERNAL".to_string())),
+                    code_description: None,
+                    source: Some("aivi.lsp".to_string()),
+                    message: "workspace session lock poisoned".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                }];
+            }
+        };
+
+        let path_text = path.to_string_lossy().to_string();
+        let file_modules = assembly
+            .modules
+            .iter()
+            .filter(|module| module.path == path_text)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let mut out = assembly
+            .all_diagnostics()
+            .into_iter()
+            .filter(|file_diag| file_diag.path == path_text)
+            .map(|file_diag| Self::file_diag_to_lsp(uri, file_diag))
+            .collect::<Vec<_>>();
+        out.extend(build_strict_diagnostics(
+            text,
+            uri,
+            &path,
+            strict,
+            workspace_modules,
+        ));
+        out.extend(Self::build_source_tooling_diagnostics(&file_modules));
         out
     }
 

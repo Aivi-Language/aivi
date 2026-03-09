@@ -1,5 +1,4 @@
 use aivi::{
-    check_modules, check_types,
     embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
     parse_target, render_diagnostics,
     rust_ir_target, serve_mcp_stdio_with_policy, validate_publish_preflight, write_scaffold,
@@ -13,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 use std::time::Duration;
 
@@ -91,16 +90,10 @@ fn run() -> Result<(), AiviError> {
                 print_help();
                 return Ok(());
             };
-            let pipeline = Pipeline::from_target(&target_ctx.target)?;
-            let mut diagnostics = pipeline.parse_diagnostics().to_vec();
-            diagnostics.extend(check_modules(pipeline.modules()));
-            if !aivi::file_diagnostics_have_errors(&diagnostics) {
-                if check_stdlib {
-                    diagnostics.extend(aivi::check_types_including_stdlib(pipeline.modules()));
-                } else {
-                    diagnostics.extend(check_types(pipeline.modules()));
-                }
-            }
+            let mut session = aivi::WorkspaceSession::new();
+            let assembly =
+                session.assemble_target(&target_ctx.target, aivi::FrontendAssemblyMode::Check)?;
+            let mut diagnostics = assembly.all_diagnostics();
             if !check_stdlib {
                 diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));
             }
@@ -382,9 +375,14 @@ fn run() -> Result<(), AiviError> {
                         return Ok(());
                     };
                     maybe_enable_debug_trace(opts.debug_trace);
-                    let _modules = load_checked_modules_with_progress(&opts.input, use_color)?;
-                    let (program, cg_types, monomorph_plan, surface_modules) =
-                        aivi::desugar_target_with_cg_types_and_surface(&opts.input)?;
+                    let mut spinner = Spinner::new("assembling frontend".to_string());
+                    let mut session = aivi::WorkspaceSession::new();
+                    let result = aivi::desugar_target_with_cg_types_and_surface_in_session(
+                        &mut session,
+                        &opts.input,
+                    );
+                    spinner.stop();
+                    let (program, cg_types, monomorph_plan, surface_modules) = result?;
                     let object_bytes =
                         aivi::compile_to_object(program, cg_types, monomorph_plan, &surface_modules)?;
                     let out_dir = opts
@@ -420,7 +418,14 @@ fn run() -> Result<(), AiviError> {
                             .to_path_buf();
                         return watch::run_watch(&opts.input, &watch_dir);
                     }
-                    let (program, cg_types, monomorph_plan, surface_modules) = aivi::desugar_target_with_cg_types_and_surface(&opts.input)?;
+                    let mut spinner = Spinner::new("assembling frontend".to_string());
+                    let mut session = aivi::WorkspaceSession::new();
+                    let result = aivi::desugar_target_with_cg_types_and_surface_in_session(
+                        &mut session,
+                        &opts.input,
+                    );
+                    spinner.stop();
+                    let (program, cg_types, monomorph_plan, surface_modules) = result?;
                     aivi::run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
                 }
             }
@@ -876,47 +881,26 @@ fn collect_test_entries_with_paths(
 
 struct Spinner {
     stop: Arc<AtomicBool>,
-    message: Arc<Mutex<String>>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Spinner {
     fn new(message: String) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
-        let message_state = Arc::new(Mutex::new(message));
         let stop_clone = Arc::clone(&stop);
-        let message_clone = Arc::clone(&message_state);
         let handle = std::thread::spawn(move || {
             let frames = ["|", "/", "-", "\\"];
             let mut idx = 0usize;
             while !stop_clone.load(Ordering::Relaxed) {
-                let msg = message_clone
-                    .lock()
-                    .map(|guard| guard.clone())
-                    .unwrap_or_default();
-                eprint!("\r{} {}", frames[idx], msg);
+                eprint!("\r{} {}", frames[idx], message);
                 let _ = std::io::stderr().flush();
                 idx = (idx + 1) % frames.len();
                 std::thread::sleep(Duration::from_millis(80));
             }
-            let msg = message_clone
-                .lock()
-                .map(|guard| guard.clone())
-                .unwrap_or_default();
-            eprint!("\rdone {}\n", msg);
+            eprint!("\rdone {}\n", message);
             let _ = std::io::stderr().flush();
         });
-        Self {
-            stop,
-            message: message_state,
-            handle: Some(handle),
-        }
-    }
-
-    fn set_message(&self, message: String) {
-        if let Ok(mut guard) = self.message.lock() {
-            *guard = message;
-        }
+        Self { stop, handle: Some(handle) }
     }
 
     fn stop(&mut self) {
@@ -931,44 +915,6 @@ impl Drop for Spinner {
     fn drop(&mut self) {
         self.stop();
     }
-}
-
-fn load_checked_modules_with_progress(
-    target: &str,
-    use_color: bool,
-) -> Result<Vec<aivi::Module>, AiviError> {
-    let paths = aivi::resolve_target(target)?;
-    let mut spinner = Spinner::new("checking sources".to_string());
-    let mut diagnostics = Vec::new();
-    let mut modules = Vec::new();
-
-    for path in &paths {
-        spinner.set_message(format!("checking {}", path.display()));
-        let content = std::fs::read_to_string(path)?;
-        let (mut parsed, mut file_diags) = aivi::parse_modules(path, &content);
-        modules.append(&mut parsed);
-        diagnostics.append(&mut file_diags);
-    }
-
-    spinner.stop();
-
-    let mut stdlib_modules = aivi::embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    diagnostics.extend(check_modules(&stdlib_modules));
-    if !aivi::file_diagnostics_have_errors(&diagnostics) {
-        diagnostics.extend(check_types(&stdlib_modules));
-    }
-    if !aivi::file_diagnostics_have_errors(&diagnostics) {
-        return Ok(stdlib_modules);
-    }
-    for diag in diagnostics {
-        let rendered =
-            render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
-        if !rendered.is_empty() {
-            eprintln!("{rendered}");
-        }
-    }
-    Err(AiviError::Diagnostics)
 }
 
 #[cfg(test)]
