@@ -1199,65 +1199,70 @@ If every non-empty line in a multiline raw-text sigil starts with optional inden
 
 The VSCode extension recognizes the first line of a multiline raw-text sigil as an embedded-language header when it is one of `css`, `html`, `xml`, `json`, `sql`, `js`, `javascript`, `ts`, or `typescript`. That header is editor metadata only and is not part of the resulting `Text`.
 
-GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="...">` where attributes become props automatically:
+GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="...">` where attributes become props, bindings, or callback hooks automatically:
 
 ```aivi
 // Shorthand (preferred)
-~<gtk>
-  <GtkBox spacing="24" marginTop="12">
-    <GtkLabel label="Hello" />
-    <GtkButton label="Save" onClick={ Msg.Save } />
-  </GtkBox>
+count = signal 0
+title = count.map (value => "Count {value}")
+saveCounter = do Event {
+  run: persistCount (get count)
+}
+
+main = ~<gtk>
+  <GtkWindow title={title}>
+    <GtkBox spacing="24" marginTop="12">
+      <GtkLabel label={title} />
+      <GtkButton label="Increment" onClick={_ => update count (_ + 1)} />
+      <GtkButton label="Save" onClick={saveCounter} />
+    </GtkBox>
+  </GtkWindow>
 </gtk>
 
 // Equivalent verbose form
-~<gtk>
-  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-    <object class="GtkLabel" props={{ label: "Hello" }} />
-    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
+main = ~<gtk>
+  <object class="GtkWindow" props={{ title: title }}>
+    <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+      <object class="GtkLabel" props={{ label: title }} />
+      <object class="GtkButton" props={{ label: "Increment" }} onClick={_ => update count (_ + 1)} />
+      <object class="GtkButton" props={{ label: "Save" }} onClick={saveCounter} />
+    </object>
   </object>
 </gtk>
 ```
 
-Inside `gtkApp`, GTK sigils may read derived helpers directly in bindings. `derive` marks a pure named reader, `memo "key"` adds memoization, and `readDerived` is the explicit non-sigil form:
+Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `.map` or `combine2`/`combine3`/higher-arity combinators, and mutate them with `set` or `update`:
 
 ```aivi
-titleText = memo "counter.title" (state => "Count: {toText state.count}")
-rows      = derive (state => state.rows)
+state = signal { count: 0, query: "" }
+title = state.map (current => "Count {current.count}")
+canSearch = combine2 state searchEvent.running (current => running =>
+  current.query != "" and not running
+)
 
-view = _ =>
-  ~<gtk>
-    <GtkBox orientation="vertical">
-      <GtkLabel label={titleText} />
-      <each items={rows} as={row}>
-        <GtkLabel label={row.name} />
-      </each>
-    </GtkBox>
-  </gtk>
+update state <| { count: _ + 1 }
+update state <| { query: "gtk" }
 ```
+
+Event attrs accept either runtime functions or event/effect-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles look like `ev = do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`.
 
 GTK sigils also support signal sugar in v0.1:
 
 ```aivi
 ~<gtk>
-  <object class="GtkButton" onClick={ Msg.Save } />
-  <object class="GtkEntry" onInput={ Msg.Changed } />
-  <object class="GtkEntry" onActivate={ Msg.Submit } />
-  <object class="GtkCheckButton" onToggle={ Msg.Toggled } />
-  <object class="GtkScale" onValueChanged={ Msg.VolumeChanged } />
-  <object class="GtkEntry" onFocusIn={ Msg.Focused } onFocusOut={ Msg.Blurred } />
-  <object class="GtkButton">
-    <signal name="clicked" on={ Msg.Save } />
-  </object>
+  <GtkButton onClick={_ => update count (_ + 1)} />
+  <GtkEntry onInput={txt => set query txt} />
+  <GtkEntry onActivate={submitSearch} />
+  <GtkCheckButton onToggle={active => set enabled active} />
+  <GtkScale onValueChanged={value => set volume value} />
+  <GtkEntry onFocusIn={_ => set focused True} onFocusOut={_ => set focused False} />
+  <GtkButton>
+    <signal name="clicked" on={saveEvent} />
+  </GtkButton>
 </gtk>
 ```
 
-Signal handlers must be compile-time expressions; they lower into typed GTK signal bindings.
-Sugar attrs: `onClick`→`clicked`, `onInput`→`changed`, `onActivate`→`activate`, `onToggle`→`toggled`,
-`onValueChanged`→`value-changed`, `onFocusIn`→`focus-enter`, `onFocusOut`→`focus-leave`.
-Invalid dynamic handlers produce `E1614`.
-
-GTK signals arrive as typed `GtkSignalEvent` constructors (second field is the widget's `id="..."` name, `""` if unset):
+`GtkSignalEvent` remains the low-level queue/event type used by `signalStream`, `signalPoll`, and tests:
 
 ```aivi
 GtkSignalEvent =
@@ -1272,16 +1277,16 @@ GtkSignalEvent =
   | GtkUnknownSignal WidgetId Text Text Text Text
 ```
 
-For custom loops and library code, consume events via `signalStream` (preferred) or `signalPoll`:
+For custom integrations and library code, consume raw events via `signalStream` (preferred) or `signalPoll`:
 
 ```aivi
-events <- signalStream {}      // Recv GtkSignalEvent — push-based, no polling loop needed
+events <- signalStream {}
 concurrency.forEach events (event =>
   event match
-    | GtkClicked _ _            => handleSave
-    | GtkInputChanged _ _ txt   => handleInput txt
-    | GtkToggled _ _ active     => handleToggle active
-    | _                         => yield {}
+    | GtkClicked _ _          => handleSave
+    | GtkInputChanged _ _ txt => handleInput txt
+    | GtkToggled _ _ active   => handleToggle active
+    | _                       => yield {}
 )
 ```
 
@@ -1289,69 +1294,21 @@ concurrency.forEach events (event =>
 `concurrency.forEach` runs an action on each event: `forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit`.
 Both are exported from `aivi.concurrency`.
 
-`buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — avoids separate `widgetById` calls.
+`buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — useful for tests or low-level integrations that need direct widget ids.
 
-`reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId` diffs a new node tree against the live widget tree and applies minimal updates. Returns the (possibly new) root `WidgetId`.
+A standard GTK app now exports a root `GtkWindow`/`GtkApplicationWindow` tree directly. The host mounts that tree once and keeps bound props, text nodes, classes, and structural child scopes live from signal writes. `<show>` and `<each key={...}>` are mounted structural bindings rather than full-tree rerenders.
 
-`gtkApp` is the one blessed GTK application architecture. It encapsulates init, startup, window creation, event loop handling, and reconciliation:
+For forms, keep `aivi.ui.forms.Field` values inside a signal or a record-valued signal, update them directly from `onInput`/`onFocusOut`, derive visible errors as signals, and let submit IO live in an `Event` handle.
 
-```aivi
-main = gtkApp {
-  id:     "com.example.app",
-  title:  "My App",
-  size:   (800, 600),
-  model:  { count: 0 },
-  onStart: _ _ => pure Unit,
-  subscriptions: noSubscriptions,
-  view:   state => ~<gtk>
-    <GtkBox orientation="vertical" spacing="8">
-      <GtkLabel label={ Int.toString state.count } />
-      <GtkButton label="Increment" onClick={ Increment } />
-    </GtkBox>
-  </gtk>,
-  toMsg:  auto,
-  update: msg => state =>
-    pure {
-      model: state <| { count: state.count + 1 }
-      commands: []
-    }
-}
-```
-
-`AppStep model msg = { model, commands }` is the steady-state return type for `gtkApp` updates. The runtime currently ships `auto` for common constructor-style signal routing, `commandNone`, `commandBatch`, `commandEmit`, `commandPerform`, `commandAfter`, `commandCancel`, `subscriptionNone`, `subscriptionBatch`, `subscriptionEvery`, and `subscriptionSource`, plus `derive`, `memo`, `readDerived`, `noSubscriptions`, `appStep`, `appStepWith`, and `liftAppUpdate` compatibility helpers. `appStep` and `appStepWith` are just shorthand for the same record shape shown above.
-
-The Phase 4 reactive model keeps authoritative source snapshots inside the committed model. Plain derived helpers stay pure, while `memo` values are memoized pure projections invalidated when committed source snapshots change and reevaluated lazily on the next read. Commands and subscriptions remain the only effectful boundaries: they may capture derived values by value, but they never mutate reactive values directly.
-
-`onStart` is for one-time startup work such as registering CSS and actions. `signalStream`, `buildFromNode`, `reconcileNode`, and the deprecated `gtkSetInterval` remain available as lower-level primitives for custom loops and legacy code, but they are not a competing blessed architecture. By default, closing the primary `gtkApp` window ends the host loop; if `onStart` enables `hideOnClose`, the loop stays alive and the window is hidden instead. For advanced window setup such as decoration or hide-on-close tweaks, keep `gtkApp` and call the lower-level window helpers from `onStart`.
-
-The LSP reinforces this public path: completions scaffold the blessed `gtkApp` loop, hover docs cover `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`, and lower-level signal APIs are documented as escape hatches rather than a second recommended architecture.
-
-For forms, keep editable input in `aivi.ui.forms.Field` values inside the model, map `GtkInputChanged` to `setValue`, map `GtkFocusOut` to `touch`, and flip a `submitted: Bool` flag on your submit message. Render inline errors with `visibleErrors submitted validator field`, and construct the final typed payload with the existing `Validation` applicative:
-
-```aivi
-use aivi.ui.forms
-use aivi.validation
-
-Model = {
-  submitted: Bool
-  name: Field Text
-}
-
-nameRule : Text -> Validation (List Text) Text
-nameRule = allOf [required, minLength 2]
-
-nameErrors = model => visibleErrors model.submitted nameRule model.name
-```
-
-Dynamic child lists are supported with `<each>`:
+Dynamic child lists are supported with keyed `<each>` bindings:
 
 ```aivi
 ~<gtk>
-  <object class="GtkBox">
-    <each items={items} as={item}>
-      <object class="GtkLabel"><property name="label">{ item }</property></object>
+  <GtkBox>
+    <each items={items} as={item} key={item => item.id}>
+      <GtkLabel label={item.name} />
     </each>
-  </object>
+  </GtkBox>
 </gtk>
 ```
 
@@ -1361,15 +1318,15 @@ Component-style tags (uppercase/dotted) use **record-based lowering** in both si
 // HTML component: Ui.Card { title: "Hello", children: [vElement "span" ...] }
 ~<html><Ui.Card title="Hello"><span>Body</span></Ui.Card></html>
 
-// GTK component: Ui.Row { id: "r1", onClick: Save }
-~<gtk><Ui.Row id="r1" onClick={ Save } /></gtk>
+// GTK component: Ui.Row { id: "r1", onClick: saveEvent }
+~<gtk><Ui.Row id="r1" onClick={saveEvent} /></gtk>
 ```
 
 GTK sigils also support **function-call tags** for local lowerCamel helpers. A simple uppercase self-closing tag with positional arguments lowers by lowercasing the first letter of the tag name:
 
 ```aivi
-// Equivalent to: { navRailNode model.appState.activeSection "sidebar" }
-~<gtk><NavRailNode model.appState.activeSection "sidebar" /></gtk>
+// Equivalent to: { navRailNode activeSection "sidebar" }
+~<gtk><NavRailNode activeSection "sidebar" /></gtk>
 ```
 
 Function-call tags do not use component record lowering, cannot mix positional arguments with attributes, and must be self-closing.

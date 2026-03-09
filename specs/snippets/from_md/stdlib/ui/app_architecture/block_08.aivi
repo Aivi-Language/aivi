@@ -1,6 +1,0 @@
-subscriptionSource {
-  key: "config-watch"
-  open: watchConfigMessages "./config.json"
-  onError: Some ConfigWatchFailed
-  onClosed: Some ConfigWatchClosed
-}

@@ -93,7 +93,7 @@ Machines do not replace records, ADTs, or `Effect`. They work alongside them:
 - use `machine` when the order of effectful steps matters
 - use `currentState` and `can` to connect workflow state to UI or control flow
 
-For GTK applications, machines are often a clear way to model submission flows, setup wizards, sync pipelines, or multi-step tasks while `gtkApp` still owns rendering and message handling.
+For GTK applications, machines are often a clear way to model submission flows, setup wizards, sync pipelines, or multi-step tasks while the signal-first GTK runtime owns rendering and widget bindings.
 
 ## When not to use a machine
 

@@ -557,19 +557,19 @@ impl Backend {
             "given guard (in do block)",
         ),
         (
-            "gtkApp architecture",
-            "gtkApp {\n  id: \"${1:com.example.app}\",\n  title: \"${2:Example}\",\n  size: (${3:960}, ${4:640}),\n  model: ${5:initialModel},\n  onStart: ${6:_ _ => pure Unit},\n  subscriptions: ${7:noSubscriptions},\n  view: ${8:state => ~<gtk>\n    <GtkBox orientation=\"vertical\" spacing=\"12\">\n      <GtkButton label=\"${9:Save}\" onClick={ ${10:Save} } />\n    </GtkBox>\n  </gtk>},\n  toMsg: auto,\n  update: ${11:msg => state =>\n    pure {\n      model: state\n      commands: []\n    }\n  }\n}",
-            "blessed GTK app architecture snippet",
+            "gtk signal-first app",
+            "use aivi.reactive\n\n${1:count} = signal ${2:0}\n${3:title} = map ${1:count} (value => \"${4:Count }{value}\")\n${5:increment} = _ => update ${1:count} (_ + 1)\n\n${6:view} = ~<gtk>\n  <GtkBox orientation=\"vertical\" spacing=\"12\">\n    <GtkLabel label={${3:title}} />\n    <GtkButton label=\"${7:Increment}\" onClick={${5:increment}} />\n  </GtkBox>\n</gtk>\n\nmain = do Effect {\n  _ <- init Unit\n  appId <- appNew \"${8:com.example.app}\"\n  win <- windowNew appId \"${9:Example}\" ${10:960} ${11:640}\n  root <- buildFromNode ${6:view}\n  _ <- windowSetChild win root\n  _ <- windowPresent win\n  appRun appId\n}",
+            "signal-first GTK app snippet",
         ),
         (
             "gtk toMsg",
             "event match\n  | GtkInputChanged _ \"${1:fieldId}\" value => Some (${2:Changed value})\n  | GtkFocusOut _ \"${1:fieldId}\" => Some ${3:Blurred}\n  | GtkClicked _ \"${4:buttonId}\" => Some ${5:Submitted}\n  | _ => None",
-            "GTK signal-to-message mapping snippet",
+            "GTK signal event matching snippet",
         ),
         (
-            "gtk subscriptionEvery",
-            "subscriptionEvery { key: \"${1:tick}\", millis: ${2:1000}, tag: ${0:Tick} }",
-            "repeating GTK app subscription snippet",
+            "gtk timer stream",
+            "_ <- gtkSetInterval ${1:1000}\nrx <- signalStream {}\n_ <- concurrent.forEach rx (event =>\n  event match\n    | GtkTick => ${0:pure Unit}\n    | _       => pure Unit\n)",
+            "GTK timer and signal stream snippet",
         ),
         (
             "gtk form setValue",
@@ -594,20 +594,20 @@ impl Backend {
                  - `where_ pred query` — functional filter (alternative to `guard_`)\n\n\
                  Pass the resulting `Query A` to `runQueryOn conn query` to execute it.",
             ),
-            "gtkApp architecture" => Some(
-                "Scaffold the blessed `gtkApp` loop with `subscriptions`, `view`, `toMsg`, and `update` in one place.\n\nStart with `toMsg: auto` for common constructor bindings and return direct `{ model, commands }` records in `update`. `appStep` and `appStepWith` remain optional shorthands, while `signalStream` stays the lower-level escape hatch.",
+            "gtk signal-first app" => Some(
+                "Scaffold a signal-first GTK app.\n\nCreate source signals, derive more signals with `map`, mount the tree once with `buildFromNode`, and let callbacks mutate the signals directly.",
             ),
             "gtk toMsg" => Some(
-                "Match typed `GtkSignalEvent` constructors inside `toMsg`.\n\nUse `GtkInputChanged` to feed `setValue`, `GtkFocusOut` to trigger `touch`, and `GtkClicked` to raise domain messages from named widgets.",
+                "Match typed `GtkSignalEvent` constructors from the raw GTK stream.\n\nUse this in lower-level `signalStream` integrations or tests when you need explicit event routing by widget name.",
             ),
-            "gtk subscriptionEvery" => Some(
-                "Create a repeating timer subscription derived from the current model.\n\nPrefer `subscriptionEvery` for long-lived ticks and `commandAfter` for one-shot delayed messages.",
+            "gtk timer stream" => Some(
+                "Create a repeating GTK tick source with `gtkSetInterval` and consume it with `signalStream`.\n\nUse this for lower-level integrations that need raw `GtkTick` events instead of direct callback bindings.",
             ),
             "gtk form setValue" => Some(
                 "Update a `Field A` from a GTK input event.\n\nThe blessed forms flow is `GtkInputChanged` → `setValue`, `GtkFocusOut` → `touch`, and `visibleErrors` for render-time feedback.",
             ),
             "gtk visibleErrors" => Some(
-                "Render form validation errors only after submit or blur.\n\nPair this with `touch` in `toMsg` and a `submitted` flag in the `gtkApp` model.",
+                "Render form validation errors only after submit or blur.\n\nPair this with `touch` from a callback or `signalStream` handler and a signal-driven `submitted` flag.",
             ),
             _ => None,
         }?;
@@ -1288,16 +1288,16 @@ impl Backend {
         };
 
         let guidance = match sugar {
-            "onInput" => "Use this with `toMsg: auto` for the simple one-input case, or with explicit `toMsg` arms that feed `setValue` for `Field A` state.",
+            "onInput" => "Bind this to a function such as `txt => set query txt`, or to an `Event` handle when input should trigger effectful work.",
             "onFocusOut" => {
-                "Use this with `toMsg` arms that emit a blur message and call `touch` in `update`."
+                "Use this to mark blur/touch state directly from a callback or lower-level signal handler."
             }
-            "onClick" => "Use `toMsg: auto` for straightforward constructor bindings; otherwise prefer matching by the widget `id=\"...\"` name in `toMsg`.",
-            _ => "Map the resulting typed event into a domain `Msg` from `toMsg`.",
+            "onClick" => "Bind this to a runtime function or an `Event` handle. Direct signal mutation is the normal path.",
+            _ => "Handle the typed event directly in a callback or route it through a lower-level `signalStream` consumer.",
         };
 
         format!(
-            "Sugar for GTK signal `{signal_name}`.\n\nThis signal feeds the typed event constructor {typed_event} inside the blessed `gtkApp` architecture.\n\n{guidance}"
+            "Sugar for GTK signal `{signal_name}`.\n\nThis signal corresponds to the typed event constructor {typed_event}.\n\n{guidance}"
         )
     }
 }

@@ -114,5 +114,5 @@ A dedicated `select { ... }` surface form is not part of `aivi.concurrency` toda
 
 ## How this fits GTK apps
 
-The same concurrency ideas show up in [GTK App Architecture](../ui/app_architecture.md) and [`aivi.ui.gtk4`](../ui/gtk4.md).
-Commands and subscriptions are built on ordinary effects and channels, which means UI code gets the same guarantees around cancellation, ordering, and cleanup as non-UI code.
+The same concurrency ideas show up in [`aivi.ui.gtk4`](../ui/gtk4.md).
+Signal-first GTK apps still rely on ordinary effects and channels, which means UI code gets the same guarantees around cancellation, ordering, and cleanup as non-UI code.

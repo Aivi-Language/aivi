@@ -82,6 +82,11 @@ impl TaggedValue {
 }
 
 #[derive(Clone)]
+pub(crate) struct ReactiveSignalValue {
+    pub(crate) id: usize,
+}
+
+#[derive(Clone)]
 pub(crate) enum Value {
     Unit,
     Bool(bool),
@@ -109,6 +114,7 @@ pub(crate) enum Value {
     Resource(Arc<ResourceValue>),
     Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),
+    Signal(Arc<ReactiveSignalValue>),
     ChannelSend(Arc<ChannelSend>),
     ChannelRecv(Arc<ChannelRecv>),
     FileHandle(Arc<Mutex<std::fs::File>>),
@@ -154,6 +160,7 @@ impl std::fmt::Debug for Value {
             Value::Resource(_) => write!(f, "Resource(<scope>)"),
             Value::Thunk(_) => write!(f, "Thunk(<lazy>)"),
             Value::MultiClause(v) => f.debug_tuple("MultiClause").field(v).finish(),
+            Value::Signal(signal) => f.debug_tuple("Signal").field(&signal.id).finish(),
             Value::ChannelSend(_) => write!(f, "ChannelSend(<chan>)"),
             Value::ChannelRecv(_) => write!(f, "ChannelRecv(<chan>)"),
             Value::FileHandle(_) => write!(f, "FileHandle(<fd>)"),
@@ -182,16 +189,9 @@ pub(crate) struct BuiltinImpl {
 }
 
 pub(crate) enum EffectValue {
-    Thunk {
-        func: Arc<ThunkFunc>,
-    },
-    Bind {
-        effect: Value,
-        func: Value,
-    },
-    WithResourceScope {
-        effect: Value,
-    },
+    Thunk { func: Arc<ThunkFunc> },
+    Bind { effect: Value, func: Value },
+    WithResourceScope { effect: Value },
 }
 
 pub(crate) struct ResourceValue {

@@ -1,13 +1,13 @@
 module demos.snake
 
 use aivi
+use aivi.concurrency as concurrent
 use aivi.list
+use aivi.reactive (Signal, signal, set, update, map as signalMap)
 use aivi.text
 use aivi.ui.gtk4
 
 export main
-
-// Types
 
 Direction = Up | Down | Left | Right
 
@@ -24,8 +24,6 @@ domain Pixels over Pixel = {
     | Right => (x + 1, y)
 }
 
-Msg = Arrow Direction | Tick | Restart
-
 State = {
   snake: List Pixel
   food: Pixel
@@ -34,8 +32,6 @@ State = {
   seed: Int
   gameOver: Bool
 }
-
-// Grid size
 
 gridW = 30
 gridH = 20
@@ -48,8 +44,6 @@ contains = pos xs => find (_ == pos) xs match
 dropLast : List a -> List a
 dropLast = xs => take (List.length xs - 1) xs
 
-// Initial state
-
 initialState : State
 initialState = {
   snake: [(5, 10), (4, 10), (3, 10)]
@@ -60,16 +54,12 @@ initialState = {
   gameOver: False
 }
 
-// Direction helpers
-
 opposite : Direction -> Direction
 opposite =
   | Up    => Down
   | Down  => Up
   | Left  => Right
   | Right => Left
-
-// Pseudo-random food placement (LCG)
 
 placeFood : Int -> List Pixel -> (Pixel, Int)
 placeFood = seed snake => {
@@ -82,8 +72,6 @@ placeFood = seed snake => {
     then placeFood (s + 1) snake
     else (pos, s)
 }
-
-// Advance the snake one step
 
 step : Direction -> State -> State
 step = newDir state => {
@@ -124,8 +112,6 @@ step = newDir state => {
       }
 }
 
-// Rendering helpers
-
 cellChar : Int -> Int -> State -> Text
 cellChar = x y state => {
   pos     = (x, y)
@@ -140,77 +126,80 @@ rowText : Int -> State -> Text
 rowText = y state =>
   [0.. gridW - 1] |> map (x => cellChar x y state) |> join ""
 
-gridRows : State -> List Text
-gridRows =
-  memo "snake.gridRows" (state =>
-    map (y => rowText y state) [0.. gridH - 1]
+gridRows : Signal State -> Signal (List Text)
+gridRows = state =>
+  signalMap state (current =>
+    map (y => rowText y current) [0.. gridH - 1]
   )
 
-scoreText : State -> Text
-scoreText =
-  memo "snake.scoreText" (state =>
-    "Snake · Score: {toText state.score}"
+scoreText : Signal State -> Signal Text
+scoreText = state =>
+  signalMap state (current => "Snake · Score: {toText current.score}")
+
+statusText : Signal State -> Signal Text
+statusText = state =>
+  signalMap state (current =>
+    if current.gameOver then "Game Over — press R to restart" else "Arrow keys to move"
   )
 
-statusText : State -> Text
-statusText =
-  memo "snake.statusText" (state =>
-    if state.gameOver then "Game Over — press R to restart" else "Arrow keys to move"
-  )
-
-// View
-
-view : State -> GtkNode
+view : Signal State -> GtkNode
 view = state =>
   ~<gtk>
     <GtkBox orientation="vertical" spacing="0" marginTop="8" marginStart="8" marginEnd="8" marginBottom="8">
-      <GtkLabel label={scoreText} cssClass="snakeheader" />
-      <each items={gridRows} as={row}>
+      <GtkLabel label={scoreText state} cssClass="snakeheader" />
+      <each items={gridRows state} as={row}>
         <GtkLabel label={row} cssClass="snakerow" />
       </each>
-      <GtkLabel label={statusText} cssClass="snakestatus" />
+      <GtkLabel label={statusText state} cssClass="snakestatus" />
     </GtkBox>
   </gtk>
 
-// Event handling
-
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event => event match
-  | GtkKeyPressed _ _ "Up" _    => Some (Arrow Up)
-  | GtkKeyPressed _ _ "Down" _  => Some (Arrow Down)
-  | GtkKeyPressed _ _ "Left" _  => Some (Arrow Left)
-  | GtkKeyPressed _ _ "Right" _ => Some (Arrow Right)
-  | GtkKeyPressed _ _ "r" _     => Some Restart
-  | _                           => None
-
-subscriptions : State -> List (Subscription Msg)
-subscriptions = _ => [
-  subscriptionEvery {
-    key: "snake.tick"
-    millis: 150
-    tag: Tick
+setDirection : Signal State -> Direction -> Effect GtkError Unit
+setDirection = state => dir =>
+  do Effect {
+    _ = update state (current =>
+      if current.gameOver then current else current <| { dir: dir }
+    )
+    pure Unit
   }
-]
 
-update : Msg -> State -> Effect GtkError (AppStep State Msg)
-update = msg state => msg match
-  | Arrow dir => pure (appStep (if state.gameOver then state else state <| { dir: dir }))
-  | Tick      => pure (appStep (if state.gameOver then state else step state.dir state))
-  | Restart   => pure (appStep initialState)
+tickState : Signal State -> Effect GtkError Unit
+tickState = state =>
+  do Effect {
+    _ = update state (current =>
+      if current.gameOver then current else step current.dir current
+    )
+    pure Unit
+  }
 
-// CSS for monospace grid
+handleEvent : Signal State -> GtkSignalEvent -> Effect GtkError Unit
+handleEvent = state => event => event match
+  | GtkTick                     => tickState state
+  | GtkKeyPressed _ _ "Up" _    => setDirection state Up
+  | GtkKeyPressed _ _ "Down" _  => setDirection state Down
+  | GtkKeyPressed _ _ "Left" _  => setDirection state Left
+  | GtkKeyPressed _ _ "Right" _ => setDirection state Right
+  | GtkKeyPressed _ _ "r" _     => do Effect {
+      _ = set state initialState
+      pure Unit
+    }
+  | GtkKeyPressed _ _ "R" _ => do Effect {
+      _ = set state initialState
+      pure Unit
+    }
+  | _ => pure Unit
 
 css : Text
 css = ~`
-.snakerow { 
+.snakerow {
    font-family: monospace;
-   font-size: 14px; 
-   letter-spacing: 2px; 
-} 
+   font-size: 14px;
+   letter-spacing: 2px;
+}
 .snakeheader {
    font-family: monospace;
    font-size: 13px;
-   margin-bottom: 4px; 
+   margin-bottom: 4px;
 }
 .snakestatus {
    font-family: monospace;
@@ -218,19 +207,19 @@ css = ~`
    margin-top: 4px;
 }`
 
-// Entry point
 main : Effect GtkError Unit
-main = gtkApp {
-  id: "demos.snake"
-  title: "Snake"
-  size: (540, 420)
-  model: initialState
-  onStart: appId _ => do Effect {
-    _ <- appSetCss appId css
-    pure Unit
-  }
-  subscriptions
-  view
-  toMsg
-  update
-}
+main =
+  concurrent.scope (_ => do Effect {
+      state = signal initialState
+      _      <- init Unit
+      appId  <- appNew "demos.snake"
+      win    <- windowNew appId "Snake" 540 420
+      _      <- appSetCss appId css
+      root   <- buildFromNode (view state)
+      _      <- windowSetChild win root
+      events <- signalStream {}
+      _      <- gtkSetInterval 150
+      _      <- concurrent.spawn (concurrent.forEach events (handleEvent state))
+      _      <- windowPresent win
+      appRun appId
+  })

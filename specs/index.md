@@ -106,8 +106,7 @@ Use the table of contents below as a map once you know the kind of answer you ne
 
 ### Build Native Apps
 #### Getting Started
-- [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps)
-- [App Architecture](stdlib/ui/app_architecture)
+- [GTK & libadwaita System Manual](stdlib/ui/gtk4)
 - [GTK & libadwaita Runtime](stdlib/ui/gtk4)
 #### Derived UI
 - [Derived Values](stdlib/ui/reactive_signals)

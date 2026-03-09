@@ -1,3 +1,0 @@
-derive: (model -> a) -> model -> a
-memo: Text -> (model -> a) -> model -> a
-readDerived: (model -> a) -> model -> a

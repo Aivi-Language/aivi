@@ -109,17 +109,15 @@ export const sidebar = [
         text: 'Getting Started',
         collapsed: false,
         items: [
-          { text: 'GTK & libadwaita Apps', link: '/stdlib/ui/native_gtk_apps' },
-          { text: 'App Architecture', link: '/stdlib/ui/app_architecture' },
-          { text: 'GTK & libadwaita Runtime', link: '/stdlib/ui/gtk4' }
+          { text: 'GTK & libadwaita System Manual', link: '/stdlib/ui/gtk4' }
         ]
       },
       {
-        text: 'Derived UI',
+        text: 'Reactive UI',
         collapsed: true,
         items: [
-          { text: 'Derived Values', link: '/stdlib/ui/reactive_signals' },
-          { text: 'Derived Dataflow', link: '/stdlib/ui/reactive_dataflow' }
+          { text: 'Signals', link: '/stdlib/ui/reactive_signals' },
+          { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' }
         ]
       },
       {

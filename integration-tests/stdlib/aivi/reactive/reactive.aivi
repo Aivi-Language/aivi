@@ -1,0 +1,97 @@
+@no_prelude
+module integrationTests.stdlib.aivi.reactive.tests
+
+use aivi
+use aivi.reactive
+use aivi.testing
+
+@test "signal stores and updates current value"
+signal_set_update = do Effect {
+  count = signal 1
+
+  assertEq (get count) 1
+  assertEq (peek count) 1
+
+  assertEq (set count 4) Unit
+  assertEq (get count) 4
+
+  assertEq (update count (_ + 3)) Unit
+  assertEq (get count) 7
+}
+
+@test "map derives from a source signal"
+map_updates_from_source = do Effect {
+  count   = signal 2
+  doubled = map count (_ * 2)
+
+  assertEq (get doubled) 4
+  assertEq (set count 5) Unit
+  assertEq (get doubled) 10
+}
+
+@test "combine2 derives from both source signals"
+combine2_updates_from_inputs = do Effect {
+  firstName = signal "Ada"
+  lastName  = signal "Lovelace"
+  fullName  = combine2 firstName lastName (first => last => "{first} {last}")
+
+  assertEq (get fullName) "Ada Lovelace"
+
+  assertEq (set firstName "Grace") Unit
+  assertEq (get fullName) "Grace Lovelace"
+
+  assertEq (set lastName "Hopper") Unit
+  assertEq (get fullName) "Grace Hopper"
+}
+
+@test "watch observes signal changes"
+watch_observes_changes = do Effect {
+  count         = signal 0
+  seen          = signal 0
+  _subscription = watch count (value => set seen value)
+
+  assertEq (set count 3) Unit
+  assertEq (get seen) 3
+}
+
+@test "dispose stops further watcher notifications"
+dispose_stops_notifications = do Effect {
+  count         = signal 0
+  notifications = signal 0
+  subscription  = watch count (_ => update notifications (_ + 1))
+
+  assertEq (set count 1) Unit
+  assertEq (get notifications) 1
+
+  assertEq (dispose subscription) Unit
+  assertEq (set count 2) Unit
+  assertEq (get notifications) 1
+}
+
+@test "batch can group multiple writes"
+batch_groups_writes = do Effect {
+  first  = signal 1
+  second = signal 2
+  sum    = combine2 first second (left => right => left + right)
+
+  assertEq (batch (_ => (set first 3, set second 4))) (Unit, Unit)
+  assertEq (get sum) 7
+}
+
+@test "event exposes lifecycle signals"
+event_exposes_lifecycle_signals = do Effect {
+  saveEvent = event (pure 42)
+
+  assertEq (get saveEvent.result) None
+  assertEq (get saveEvent.error) None
+  assertEq (get saveEvent.done) False
+  assertEq (get saveEvent.running) False
+
+  outcome <- attempt saveEvent.run
+
+  assertEq outcome (Ok 42)
+  assertEq (get saveEvent.result) (Some 42)
+  assertEq (get saveEvent.error) None
+  assertEq (get saveEvent.done) True
+  assertEq (get saveEvent.running) False
+}

@@ -2035,7 +2035,10 @@ x = ~<gtk><object class="GtkButton" label="Click me" /></gtk>
         })
         .expect("x def");
     use super::expr_contains_ident;
-    assert!(expr_contains_ident(&def.expr, "gtkAttr"));
+    assert!(
+        expr_contains_ident(&def.expr, "gtkStaticAttr")
+            || expr_contains_ident(&def.expr, "gtkStaticProp")
+    );
 }
 
 #[test]
@@ -2213,7 +2216,7 @@ x =
     </object>
   </gtk>
 "#;
-    // signal on must be compile-time value - this should produce diagnostic E1614
+    // runtime signal handler values are accepted; this test just ensures no panic
     let (_modules, _diags) = parse_modules(Path::new("test.aivi"), src);
     // We just ensure no panic
 }

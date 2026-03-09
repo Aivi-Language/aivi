@@ -4,6 +4,7 @@ impl Runtime {
             .duration_since(UNIX_EPOCH)
             .map(|dur| dur.as_nanos() as u64)
             .unwrap_or(0x1234_5678);
+        let reactive_graph = ctx.reactive_graph.clone();
         Self {
             ctx,
             cancel,
@@ -28,6 +29,7 @@ impl Runtime {
             snapshot_failure: None,
             resource_cleanups: Vec::new(),
             reactive_host: None,
+            reactive_graph,
         }
     }
 

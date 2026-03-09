@@ -51,6 +51,12 @@ pub struct BuildResult {
     pub named_widgets: HashMap<String, i64>,
 }
 
+pub struct BuildWithBindingsResult {
+    pub root_id: i64,
+    pub named_widgets: HashMap<String, i64>,
+    pub binding_widgets: HashMap<String, i64>,
+}
+
 #[cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod linux_impl {
@@ -67,7 +73,7 @@ mod linux_impl {
 
     use serde_json::{json, Map, Value};
 
-    use super::{BuildResult, Gtk4Error, GtkNode, SignalEvent};
+    use super::{BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, SignalEvent};
 
     #[repr(C)]
     #[derive(Debug, Clone, Copy, Default)]
@@ -434,6 +440,8 @@ mod linux_impl {
         fn g_type_from_name(name: *const c_char) -> usize;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
             -> *mut c_void;
+        fn g_object_ref(object: *mut c_void) -> *mut c_void;
+        fn g_object_unref(object: *mut c_void);
         fn g_object_ref_sink(object: *mut c_void) -> *mut c_void;
         fn g_object_set(object: *mut c_void, first_property_name: *const c_char, ...);
         fn g_object_get(object: *mut c_void, first_property_name: *const c_char, ...);
@@ -511,6 +519,8 @@ mod linux_impl {
         class_name: String,
         kind: CreatedWidgetKind,
         node_id: Option<String>,
+        key: Option<String>,
+        binding_id: Option<String>,
         props: HashMap<String, String>,
         signals: Vec<SignalBindingState>,
         signal_handler_ids: Vec<c_ulong>,
@@ -1078,12 +1088,13 @@ mod linux_impl {
         fn build_gtk_widget_error(class_name: &str) -> Gtk4Error {
             let mut state = RealGtkState::default();
             let mut id_map = HashMap::new();
+            let mut binding_map = HashMap::new();
             let node = GtkNode::Element {
                 tag: "object".to_string(),
                 attrs: vec![("class".to_string(), class_name.to_string())],
                 children: vec![],
             };
-            build_widget_from_node_real(&mut state, &node, &mut id_map)
+            build_widget_from_node_real(&mut state, &node, &mut id_map, &mut binding_map)
                 .expect_err(&format!("{class_name} must not be directly creatable"))
         }
 
@@ -1196,15 +1207,24 @@ mod linux_impl {
                     "GtkGridView",
                     "use GtkListBox with <each> for simple read-only lists today",
                 ),
-                ("GtkApplication", "managed by appNew or gtkApp"),
+                (
+                    "GtkApplication",
+                    "managed by appNew during manual GTK startup",
+                ),
                 ("GtkPrintOperation", "printing is not part of the AIVI v0.1"),
                 ("GtkPrinter", "printing is not part of the AIVI v0.1"),
                 ("GtkPrintContext", "printing is not part of the AIVI v0.1"),
                 ("GtkPageSetup", "printing is not part of the AIVI v0.1"),
                 ("GtkPaperSize", "printing is not part of the AIVI v0.1"),
                 ("GtkPrintSettings", "printing is not part of the AIVI v0.1"),
-                ("GtkWindow", "managed by windowNew or gtkApp"),
-                ("GtkApplicationWindow", "managed by windowNew or gtkApp"),
+                (
+                    "GtkWindow",
+                    "managed by windowNew during manual GTK startup",
+                ),
+                (
+                    "GtkApplicationWindow",
+                    "managed by windowNew during manual GTK startup",
+                ),
                 ("GtkAboutDialog", "AdwAboutDialog"),
                 ("GtkAlertDialog", "present it programmatically"),
                 ("GtkDialog", "prefer GtkAlertDialog"),
@@ -1607,6 +1627,32 @@ mod linux_impl {
             }
         }
         None
+    }
+
+    fn live_tree_contains_widget(live: &LiveNode, widget_id: i64) -> bool {
+        live.widget_id == widget_id
+            || live
+                .children
+                .iter()
+                .any(|child| live_tree_contains_widget(&child.node, widget_id))
+    }
+
+    fn collect_binding_widgets(live: &LiveNode, out: &mut HashMap<String, i64>) {
+        if let Some(binding_id) = live.binding_id.as_ref() {
+            out.insert(binding_id.clone(), live.widget_id);
+        }
+        for child in &live.children {
+            collect_binding_widgets(&child.node, out);
+        }
+    }
+
+    fn collect_binding_widget_ids(live: &LiveNode, out: &mut Vec<i64>) {
+        if live.binding_id.is_some() {
+            out.push(live.widget_id);
+        }
+        for child in &live.children {
+            collect_binding_widget_ids(&child.node, out);
+        }
     }
 
     fn find_widget_context(
@@ -3586,6 +3632,13 @@ mod linux_impl {
         out
     }
 
+    fn child_spec_key(child: &ChildSpec<'_>) -> Option<String> {
+        let GtkNode::Element { attrs, .. } = child.node else {
+            return None;
+        };
+        node_attr(attrs, "aivi-key").map(str::to_string)
+    }
+
     fn first_object_in_interface(node: &GtkNode) -> Result<&GtkNode, Gtk4Error> {
         let GtkNode::Element { tag, children, .. } = node else {
             return Err(invalid("gtk4.buildFromNode expects GtkNode root element"));
@@ -4236,6 +4289,7 @@ mod linux_impl {
         state: &mut RealGtkState,
         node: &GtkNode,
         id_map: &mut HashMap<String, i64>,
+        binding_map: &mut HashMap<String, i64>,
     ) -> Result<(i64, LiveNode), Gtk4Error> {
         let GtkNode::Element {
             tag,
@@ -4260,6 +4314,8 @@ mod linux_impl {
                 class_name: String::new(),
                 kind: CreatedWidgetKind::Other,
                 node_id: Some(ref_id.to_string()),
+                key: None,
+                binding_id: None,
                 props: HashMap::new(),
                 signals: Vec::new(),
                 signal_handler_ids: Vec::new(),
@@ -4736,7 +4792,7 @@ mod linux_impl {
             // Concrete widget families that are not yet exposed in AIVI widget trees
             "GtkWindow" | "GtkApplicationWindow" => {
                 return Err(Gtk4Error::new(format!(
-                    "{class_name} is a top-level window type managed by windowNew or gtkApp, not \
+                    "{class_name} is a top-level window type managed by windowNew during manual GTK startup, not \
                      a ~<gtk> widget-tree node"
                 )));
             }
@@ -5049,7 +5105,7 @@ mod linux_impl {
             }
             "GtkApplication" => {
                 return Err(Gtk4Error::new(
-                    "GtkApplication is managed by appNew or gtkApp and is not a widget-tree node"
+                    "GtkApplication is managed by appNew during manual GTK startup and is not a widget-tree node"
                         .to_string(),
                 ));
             }
@@ -5103,6 +5159,7 @@ mod linux_impl {
 
         let id = state.alloc_id();
         let node_id = node_attr(attrs, "id").map(str::to_string);
+        let binding_id = node_attr(attrs, "aivi-binding-id").map(str::to_string);
         if let Some(object_id) = node_id.as_deref() {
             id_map.insert(object_id.to_string(), id);
             if let Ok(name_c) = CString::new(object_id.as_bytes()) {
@@ -5128,6 +5185,9 @@ mod linux_impl {
                     );
                 }
             }
+        }
+        if let Some(binding_id) = binding_id.as_deref() {
+            binding_map.insert(binding_id.to_string(), id);
         }
         state.widgets.insert(id, raw);
         match class_name {
@@ -5220,7 +5280,8 @@ mod linux_impl {
                 String::new()
             };
 
-            let (child_id, child_live) = build_widget_from_node_real(state, child.node, id_map)?;
+            let (child_id, child_live) =
+                build_widget_from_node_real(state, child.node, id_map, binding_map)?;
             let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
             validate_special_child_attachment(
                 "buildFromNode",
@@ -5404,6 +5465,8 @@ mod linux_impl {
             class_name: class_name.to_string(),
             kind,
             node_id,
+            key: node_attr(attrs, "aivi-key").map(str::to_string),
+            binding_id,
             props,
             signals: signal_bindings,
             signal_handler_ids,
@@ -5685,6 +5748,8 @@ mod linux_impl {
             }
             live.node_id = new_node_id;
         }
+        live.key = node_attr(attrs, "aivi-key").map(str::to_string);
+        live.binding_id = node_attr(attrs, "aivi-binding-id").map(str::to_string);
 
         // Reconcile children
         let mut new_child_objects = collect_child_objects(children);
@@ -5704,12 +5769,171 @@ mod linux_impl {
     }
 
     /// Reconcile the children of a live node against new child specs.
+    fn reconcile_children_keyed(
+        state: &mut RealGtkState,
+        parent: &mut LiveNode,
+        new_children: &[ChildSpec<'_>],
+        id_map: &mut HashMap<String, i64>,
+    ) -> Result<(), Gtk4Error> {
+        let parent_id = parent.widget_id;
+        let parent_kind = parent.kind;
+        let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
+        let old_children = std::mem::take(&mut parent.children);
+        let mut old_placements = HashMap::new();
+        let mut keyed_old: HashMap<String, std::collections::VecDeque<LiveChild>> = HashMap::new();
+        let mut unkeyed_old = std::collections::VecDeque::new();
+
+        for child in old_children {
+            old_placements.insert(child.node.widget_id, child.child_type.clone());
+            if let Some(key) = child.node.key.clone() {
+                keyed_old.entry(key).or_default().push_back(child);
+            } else {
+                unkeyed_old.push_back(child);
+            }
+        }
+
+        let mut next_children = Vec::new();
+        let mut reused_ids = std::collections::HashSet::new();
+        for new_spec in new_children {
+            let old_child = if let Some(key) = child_spec_key(new_spec) {
+                keyed_old
+                    .get_mut(&key)
+                    .and_then(std::collections::VecDeque::pop_front)
+            } else {
+                unkeyed_old.pop_front()
+            };
+
+            if let Some(mut old_child) = old_child {
+                let old_widget_id = old_child.node.widget_id;
+                let patched = reconcile_node(state, &mut old_child.node, new_spec.node, id_map)?;
+                old_child.child_type = new_spec.child_type.clone();
+                if patched {
+                    reused_ids.insert(old_widget_id);
+                    next_children.push(old_child);
+                } else {
+                    let old_ct = old_placements
+                        .get(&old_widget_id)
+                        .cloned()
+                        .unwrap_or(old_child.child_type.clone());
+                    let old_live = old_child.node.clone();
+                    remove_child_from_parent(
+                        state,
+                        parent_id,
+                        parent_kind,
+                        old_widget_id,
+                        old_ct.as_deref(),
+                        Some(&old_live),
+                    )?;
+                    let mut binding_map = HashMap::new();
+                    let (new_id, new_live) = build_widget_from_node_real(
+                        state,
+                        new_spec.node,
+                        id_map,
+                        &mut binding_map,
+                    )?;
+                    next_children.push(LiveChild {
+                        child_type: new_spec.child_type.clone(),
+                        node: new_live,
+                    });
+                    let _ = new_id;
+                }
+            } else {
+                let mut binding_map = HashMap::new();
+                let (_new_id, new_live) =
+                    build_widget_from_node_real(state, new_spec.node, id_map, &mut binding_map)?;
+                next_children.push(LiveChild {
+                    child_type: new_spec.child_type.clone(),
+                    node: new_live,
+                });
+            }
+        }
+
+        for child in keyed_old
+            .into_values()
+            .flat_map(|children| children.into_iter())
+            .chain(unkeyed_old.into_iter())
+        {
+            let old_wid = child.node.widget_id;
+            let old_ct = child.child_type.clone();
+            let old_live = child.node.clone();
+            let _ = remove_child_from_parent(
+                state,
+                parent_id,
+                parent_kind,
+                old_wid,
+                old_ct.as_deref(),
+                Some(&old_live),
+            );
+        }
+
+        for child in &next_children {
+            if reused_ids.contains(&child.node.widget_id) {
+                let child_raw = widget_ptr(state, child.node.widget_id, "reconcile")?;
+                unsafe { g_object_ref(child_raw) };
+                let old_ct = old_placements
+                    .get(&child.node.widget_id)
+                    .cloned()
+                    .unwrap_or_default();
+                remove_child_from_parent(
+                    state,
+                    parent_id,
+                    parent_kind,
+                    child.node.widget_id,
+                    old_ct.as_deref(),
+                    None,
+                )?;
+            }
+        }
+
+        for (i, child) in next_children.iter().enumerate() {
+            let child_id = child.node.widget_id;
+            let child_raw = widget_ptr(state, child_id, "reconcile")?;
+            add_child_to_parent(
+                WidgetAttachmentTarget {
+                    raw: parent_raw,
+                    info: WidgetAttachmentInfo {
+                        id: parent_id,
+                        class_name: &parent.class_name,
+                        kind: parent_kind,
+                        node_id: parent.node_id.as_deref(),
+                    },
+                },
+                WidgetAttachmentTarget {
+                    raw: child_raw,
+                    info: WidgetAttachmentInfo {
+                        id: child_id,
+                        class_name: &child.node.class_name,
+                        kind: child.node.kind,
+                        node_id: child.node.node_id.as_deref(),
+                    },
+                },
+                ChildPlacement {
+                    child_type: child.child_type.as_deref(),
+                    overlay_index: i,
+                },
+            )?;
+            if reused_ids.contains(&child.node.widget_id) {
+                unsafe { g_object_unref(child_raw) };
+            }
+        }
+
+        parent.children = next_children;
+        Ok(())
+    }
+
     fn reconcile_children(
         state: &mut RealGtkState,
         parent: &mut LiveNode,
         new_children: &[ChildSpec<'_>],
         id_map: &mut HashMap<String, i64>,
     ) -> Result<(), Gtk4Error> {
+        if parent.children.iter().any(|child| child.node.key.is_some())
+            || new_children
+                .iter()
+                .any(|child| child_spec_key(child).is_some())
+        {
+            return reconcile_children_keyed(state, parent, new_children, id_map);
+        }
         let parent_id = parent.widget_id;
         let parent_kind = parent.kind;
         let min_len = parent.children.len().min(new_children.len());
@@ -5736,8 +5960,13 @@ mod linux_impl {
                     old_ct.as_deref(),
                     Some(&old_live),
                 )?;
-                let (new_id, new_live) =
-                    build_widget_from_node_real(state, new_children[i].node, id_map)?;
+                let mut binding_map = HashMap::new();
+                let (new_id, new_live) = build_widget_from_node_real(
+                    state,
+                    new_children[i].node,
+                    id_map,
+                    &mut binding_map,
+                )?;
                 let new_raw = widget_ptr(state, new_id, "reconcile")?;
                 let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
                 // For GtkBox, insert at position using the previous sibling
@@ -5824,7 +6053,9 @@ mod linux_impl {
 
         // Build and add new children
         for (i, new_spec) in new_children.iter().enumerate().skip(min_len) {
-            let (new_id, new_live) = build_widget_from_node_real(state, new_spec.node, id_map)?;
+            let mut binding_map = HashMap::new();
+            let (new_id, new_live) =
+                build_widget_from_node_real(state, new_spec.node, id_map, &mut binding_map)?;
             let new_raw = widget_ptr(state, new_id, "reconcile")?;
             let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
             add_child_to_parent(
@@ -7240,8 +7471,10 @@ mod linux_impl {
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let mut id_map = HashMap::new();
+            let mut binding_map = HashMap::new();
             let root = first_object_in_interface(node)?;
-            let (id, live) = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+            let (id, live) =
+                build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
@@ -7255,8 +7488,10 @@ mod linux_impl {
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let mut id_map = HashMap::new();
+            let mut binding_map = HashMap::new();
             let root = first_object_in_interface(node)?;
-            let (id, live) = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+            let (id, live) =
+                build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
@@ -7266,6 +7501,81 @@ mod linux_impl {
                 root_id: id,
                 named_widgets: id_map,
             })
+        })
+    }
+
+    pub(super) fn build_with_bindings(
+        node: &super::GtkNode,
+    ) -> Result<BuildWithBindingsResult, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let mut id_map = HashMap::new();
+            let mut binding_map = HashMap::new();
+            let root = first_object_in_interface(node)?;
+            let (id, live) =
+                build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
+            state.named_widgets.extend(id_map.clone());
+            for (name, wid) in &id_map {
+                state.widget_id_to_name.insert(*wid, name.clone());
+            }
+            state.live_trees.insert(id, live);
+            Ok(BuildWithBindingsResult {
+                root_id: id,
+                named_widgets: id_map,
+                binding_widgets: binding_map,
+            })
+        })
+    }
+
+    pub(super) fn reconcile_widget(
+        widget_id: i64,
+        node: &super::GtkNode,
+    ) -> Result<HashMap<String, i64>, Gtk4Error> {
+        let new_node = first_object_in_interface(node)?;
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let root_id = state
+                .live_trees
+                .iter()
+                .find_map(|(root_id, live)| {
+                    live_tree_contains_widget(live, widget_id).then_some(*root_id)
+                })
+                .ok_or_else(|| {
+                    Gtk4Error::new(format!(
+                        "gtk4.reconcileWidget no live tree contains widget id {widget_id}"
+                    ))
+                })?;
+            let mut live_root = state.live_trees.remove(&root_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk4.reconcileWidget missing live tree for root id {root_id}"
+                ))
+            })?;
+            let mut id_map = HashMap::new();
+            let target = find_live_node_mut(&mut live_root, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk4.reconcileWidget could not locate widget id {widget_id} in live tree"
+                ))
+            })?;
+            let patched = reconcile_node(&mut state, target, new_node, &mut id_map)?;
+            if !patched {
+                state.live_trees.insert(root_id, live_root);
+                return Err(Gtk4Error::new(
+                    "gtk4.reconcileWidget target subtree changed widget class".to_string(),
+                ));
+            }
+            let mut binding_map = HashMap::new();
+            let target = find_live_node_mut(&mut live_root, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk4.reconcileWidget lost widget id {widget_id} after reconcile"
+                ))
+            })?;
+            collect_binding_widgets(target, &mut binding_map);
+            state.named_widgets.extend(id_map.clone());
+            for (name, wid) in &id_map {
+                state.widget_id_to_name.insert(*wid, name.clone());
+            }
+            state.live_trees.insert(root_id, live_root);
+            Ok(binding_map)
         })
     }
 
@@ -7283,8 +7593,13 @@ mod linux_impl {
             let final_id = if !patched {
                 let old_live = live;
                 cleanup_widget_state(&mut state, &old_live);
-                let (new_id, new_live) =
-                    build_widget_from_node_real(&mut state, new_root, &mut id_map)?;
+                let mut binding_map = HashMap::new();
+                let (new_id, new_live) = build_widget_from_node_real(
+                    &mut state,
+                    new_root,
+                    &mut id_map,
+                    &mut binding_map,
+                )?;
                 state.live_trees.insert(new_id, new_live);
                 new_id
             } else {
@@ -7296,6 +7611,43 @@ mod linux_impl {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
             Ok(final_id)
+        })
+    }
+
+    pub(super) fn widget_child_count(id: i64) -> Result<i64, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            find_widget_context(&state, id)
+                .map(|(_, _, _, node)| node.children.len() as i64)
+                .ok_or_else(|| Gtk4Error::new(format!("unknown widget id {id}")))
+        })
+    }
+
+    pub(super) fn widget_exists(id: i64) -> Result<bool, Gtk4Error> {
+        GTK_STATE.with(|state| Ok(state.borrow().widgets.contains_key(&id)))
+    }
+
+    pub(super) fn binding_widget_ids(id: i64) -> Result<Vec<i64>, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let (_, _, _, node) = find_widget_context(&state, id)
+                .ok_or_else(|| Gtk4Error::new(format!("unknown widget id {id}")))?;
+            let mut ids = Vec::new();
+            collect_binding_widget_ids(node, &mut ids);
+            Ok(ids)
+        })
+    }
+
+    pub(super) fn widget_child_ids(id: i64) -> Result<Vec<i64>, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let (_, _, _, node) = find_widget_context(&state, id)
+                .ok_or_else(|| Gtk4Error::new(format!("unknown widget id {id}")))?;
+            Ok(node
+                .children
+                .iter()
+                .map(|child| child.node.widget_id)
+                .collect())
         })
     }
 
@@ -7475,6 +7827,12 @@ delegate!(signal_bind_dialog_present(handler: &str, dialog_id: i64, parent_id: i
 delegate!(signal_bind_stack_page(handler: &str, stack_id: i64, page_name: &str) -> Result<(), Gtk4Error>);
 delegate!(build_from_node(node: &GtkNode) -> Result<i64, Gtk4Error>);
 delegate!(build_with_ids(node: &GtkNode) -> Result<BuildResult, Gtk4Error>);
+delegate!(build_with_bindings(node: &GtkNode) -> Result<BuildWithBindingsResult, Gtk4Error>);
+delegate!(reconcile_widget(widget_id: i64, node: &GtkNode) -> Result<HashMap<String, i64>, Gtk4Error>);
+delegate!(widget_child_count(id: i64) -> Result<i64, Gtk4Error>);
+delegate!(widget_exists(id: i64) -> Result<bool, Gtk4Error>);
+delegate!(binding_widget_ids(id: i64) -> Result<Vec<i64>, Gtk4Error>);
+delegate!(widget_child_ids(id: i64) -> Result<Vec<i64>, Gtk4Error>);
 delegate!(set_interval(ms: u32) -> Result<(), Gtk4Error>);
 
 pub fn reconcile_node(root_id: i64, node: &GtkNode) -> Result<i64, Gtk4Error> {

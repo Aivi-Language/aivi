@@ -143,70 +143,56 @@ When writing `.aivi` code in `integration-tests/`, `specs/` snippets, or doc exa
 - Spawn tasks inside a scope (`concurrent.scope`).
 - Communicate via typed channels (`Send`/`Recv`), not shared mutable state.
 
-### 4.4 GTK4 UI — Signal Streams
+### 4.4 GTK4 UI — Signal-First Runtime
 
-When writing GTK4 UI code, **prefer `gtkApp` for new apps** and **`signalStream` for custom event loops**. The old `on Msg => handler` callback style and the `signalBind*` helper family (`signalBindBoolProperty`, `signalBindCssClass`, `signalBindToggleBoolProperty`, `signalToggleCssClass`, `signalBindDialogPresent`, `signalBindStackPage`) are **deprecated** and must not appear in new code.
+When writing GTK4 UI code, **prefer the signal-first runtime**. Signals are the source of truth, GTK sigils bind widget props and child structure directly to those signals, and callbacks mutate signals or trigger `Event` handles. Do **not** introduce `gtkApp`, `Model -> Msg -> update` host loops, or the deprecated `signalBind*` helper family in new code.
 
-**Preferred pattern — Elm-architecture with `gtkApp`:**
+**Preferred pattern — mount a live GTK tree backed by signals:**
 
 ```aivi
-Msg = Save | NameChanged Text
+use aivi.reactive
 
-myView : { name: Text } -> GtkNode
-myView = state => ~<gtk>
+count = signal 0
+title = count.map (value => "Count {value}")
+increment = _ => update count (_ + 1)
+
+view = ~<gtk>
   <GtkBox orientation="vertical" spacing="8">
-    <GtkEntry id="nameInput" placeholderText="Name" onInput={ NameChanged } />
-    <GtkButton label="Save" onClick={ Save } />
+    <GtkLabel label={title} />
+    <GtkButton label="Increment" onClick={increment} />
   </GtkBox>
 </gtk>
 
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event =>
-  event match
-    | GtkClicked _ _                    => Some Save
-    | GtkInputChanged _ "nameInput" txt => Some (NameChanged txt)
-    | _                                 => None
-
-update : Msg -> { name: Text } -> Effect GtkError { name: Text }
-update = msg => state =>
-  msg match
-    | Save            => do Effect { _ <- saveData state; pure state }
-    | NameChanged txt => pure (state <| { name: txt })
-
-main = gtkApp {
-  id:     "com.example.app",
-  title:  "My App",
-  size:   (800, 600),
-  model:  { name: "" },
-  onStart: _ _ => pure Unit,
-  view:   myView,
-  toMsg:  toMsg,
-  update: update
+main = do Effect {
+  _ <- init Unit
+  appId <- appNew "com.example.app"
+  win <- windowNew appId "My App" 800 600
+  root <- buildFromNode view
+  _ <- windowSetChild win root
+  _ <- windowPresent win
+  appRun appId
 }
 ```
 
-**Manual pattern — `signalStream` + `channel.fold`:**
+**Lower-level pattern — `signalStream` for manual integrations:**
 
 ```aivi
-root <- buildFromNode myNode
-rx   <- signalStream {}
-channel.fold initState (state => event =>
+rx <- signalStream {}
+concurrent.forEach rx (event =>
   event match
-    | GtkClicked _ _                    => handleSave state
-    | GtkInputChanged _ "nameInput" txt => pure (state <| { name: txt })
-    | _                                 => pure state
-) rx
+    | GtkTick                            => update state step
+    | GtkInputChanged _ "nameInput" txt  => set name txt
+    | _                                  => pure Unit
+)
 ```
 
 **Rules for agents:**
 
-- **Prefer `gtkApp`** for standard single-window apps; use manual `signalStream` only when you need multi-window or custom lifecycle control.
-- Use `gtkApp` for the host loop and lower-level window helpers/manual signal primitives only as escape hatches.
-- `gtkApp` automatically reconciles the widget tree on state changes — no manual `buildFromNode`/`windowSetChild` needed.
-- `reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId` patches the live tree in place. Returns the (possibly new) root id.
+- Prefer mounted signal-bound trees over host loops.
+- Use `buildFromNode` / `buildWithIds` to mount once; later signal writes should drive the UI directly.
+- `reconcileNode` is a low-level escape hatch for structural hosting work, not the primary architecture.
 - Signal events carry both `WidgetId` and the widget's `id="..."` name (e.g., `GtkClicked widgetId "saveBtn"`). Match by name string instead of comparing integer IDs.
-- Call `signalStream {}` **once** per UI flow; pass the `rx` value down through the loop.
-- For manual flows, use `reconcileNode` instead of `buildFromNode` → `windowSetChild` for state-driven re-renders.
+- Call `signalStream {}` once per manual event flow and keep ownership/cleanup explicit.
 - Use `attempt (widgetById "id")` when a widget may not exist yet (e.g., dialog content not yet built).
 - Prefer typed variants (`GtkClicked`, `GtkInputChanged`, `GtkToggled`, etc.) over `GtkUnknownSignal` wherever possible.
 - `signalPoll` is available for one-shot reads; `signalStream` is preferred for continuous loops.

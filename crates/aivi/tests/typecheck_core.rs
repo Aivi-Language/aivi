@@ -231,6 +231,35 @@ node =
 }
 
 #[test]
+fn typecheck_reactive_core_surface() {
+    let source = r#"
+module test.reactive
+export total, save
+
+use aivi
+use aivi.reactive
+
+state : Signal { count: Int, label: Text }
+state = signal { count: 0, label: "" }
+
+other : Signal Int
+other = signal 5
+
+countText : Signal Text
+countText = map state (current => current.label)
+
+total : Signal Int
+total = combine2 state other (current => extra => current.count + extra)
+
+save : EventHandle Text Int
+save = event (do Effect {
+  pure (get total)
+})
+"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.reactive"]);
+}
+
+#[test]
 fn typecheck_record_field_mismatch_points_at_value() {
     let source = "module test.user\n\
 User = { name: Text, age: Int }\n\

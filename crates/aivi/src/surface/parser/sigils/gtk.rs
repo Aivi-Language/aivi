@@ -100,6 +100,15 @@ impl Parser {
             }
         }
 
+        fn static_value_expr_text(expr: &Expr) -> Option<String> {
+            match expr {
+                Expr::Literal(_)
+                | Expr::UnaryNeg { .. }
+                | Expr::Suffixed { .. } => compile_time_expr_text(expr),
+                _ => None,
+            }
+        }
+
         // Compute the body offset inside the full sigil token (`~<gtk> ... </gtk>`).
         let body_start_offset = sigil
             .text
@@ -458,7 +467,7 @@ impl Parser {
         }
 
         // Lower parsed GTK XML nodes to `aivi.ui.gtk4` helper constructors.
-        fn lower_attr(attr: GtkAttr, span: &Span) -> Expr {
+        fn lower_raw_attr(attr: GtkAttr, span: &Span) -> Expr {
             let mk_ui = |name: &str| {
                 Expr::Ident(SpannedName {
                     name: name.into(),
@@ -476,12 +485,138 @@ impl Parser {
                 args: vec![a, b],
                 span: span.clone(),
             };
-            let value_expr = match attr.value {
-                GtkAttrValue::Text(v) => mk_string(&v),
-                GtkAttrValue::Splice(expr) => expr,
-                GtkAttrValue::Bare => mk_string("true"),
+            match attr.name.as_str() {
+                "id" => match attr.value {
+                    GtkAttrValue::Text(v) => Expr::Call {
+                        func: Box::new(mk_ui("gtkIdAttr")),
+                        args: vec![mk_string(&v)],
+                        span: span.clone(),
+                    },
+                    GtkAttrValue::Splice(expr) => {
+                        if let Some(text) = static_value_expr_text(&expr) {
+                            Expr::Call {
+                                func: Box::new(mk_ui("gtkIdAttr")),
+                                args: vec![mk_string(&text)],
+                                span: span.clone(),
+                            }
+                        } else {
+                            call2("gtkBoundAttr", mk_string("id"), expr)
+                        }
+                    }
+                    GtkAttrValue::Bare => Expr::Call {
+                        func: Box::new(mk_ui("gtkIdAttr")),
+                        args: vec![mk_string("true")],
+                        span: span.clone(),
+                    },
+                },
+                "ref" => match attr.value {
+                    GtkAttrValue::Text(v) => Expr::Call {
+                        func: Box::new(mk_ui("gtkRefAttr")),
+                        args: vec![mk_string(&v)],
+                        span: span.clone(),
+                    },
+                    GtkAttrValue::Splice(expr) => {
+                        if let Some(text) = static_value_expr_text(&expr) {
+                            Expr::Call {
+                                func: Box::new(mk_ui("gtkRefAttr")),
+                                args: vec![mk_string(&text)],
+                                span: span.clone(),
+                            }
+                        } else {
+                            call2("gtkBoundAttr", mk_string("ref"), expr)
+                        }
+                    }
+                    GtkAttrValue::Bare => Expr::Call {
+                        func: Box::new(mk_ui("gtkRefAttr")),
+                        args: vec![mk_string("true")],
+                        span: span.clone(),
+                    },
+                },
+                _ => match attr.value {
+                    GtkAttrValue::Text(v) => {
+                        call2("gtkStaticAttr", mk_string(&attr.name), mk_string(&v))
+                    }
+                    GtkAttrValue::Splice(expr) => {
+                        if let Some(text) = static_value_expr_text(&expr) {
+                            call2("gtkStaticAttr", mk_string(&attr.name), mk_string(&text))
+                        } else {
+                            call2("gtkBoundAttr", mk_string(&attr.name), expr)
+                        }
+                    }
+                    GtkAttrValue::Bare => {
+                        call2("gtkStaticAttr", mk_string(&attr.name), mk_string("true"))
+                    }
+                },
+            }
+        }
+
+        fn lower_prop_attr(name: &str, value: GtkAttrValue, span: &Span) -> Expr {
+            let mk_ui = |fname: &str| {
+                Expr::Ident(SpannedName {
+                    name: fname.into(),
+                    span: span.clone(),
+                })
             };
-            call2("gtkAttr", mk_string(&attr.name), value_expr)
+            let mk_string = |value: &str| {
+                Expr::Literal(Literal::String {
+                    text: value.to_string(),
+                    span: span.clone(),
+                })
+            };
+            let call2 = |fname: &str, a: Expr, b: Expr| Expr::Call {
+                func: Box::new(mk_ui(fname)),
+                args: vec![a, b],
+                span: span.clone(),
+            };
+            match value {
+                GtkAttrValue::Text(v) => call2("gtkStaticProp", mk_string(name), mk_string(&v)),
+                GtkAttrValue::Splice(expr) => {
+                    if let Some(text) = static_value_expr_text(&expr) {
+                        call2("gtkStaticProp", mk_string(name), mk_string(&text))
+                    } else {
+                        call2("gtkBoundProp", mk_string(name), expr)
+                    }
+                }
+                GtkAttrValue::Bare => call2("gtkStaticProp", mk_string(name), mk_string("true")),
+            }
+        }
+
+        fn lower_event_attr(
+            this: &mut Parser,
+            signal_name: &str,
+            source_name: &str,
+            value: GtkAttrValue,
+            span: &Span,
+        ) -> Option<Expr> {
+            let mk_ui = |fname: &str| {
+                Expr::Ident(SpannedName {
+                    name: fname.into(),
+                    span: span.clone(),
+                })
+            };
+            let mk_string = |value: &str| {
+                Expr::Literal(Literal::String {
+                    text: value.to_string(),
+                    span: span.clone(),
+                })
+            };
+            let handler_expr = match value {
+                GtkAttrValue::Splice(expr) => expr,
+                GtkAttrValue::Text(v) => mk_string(&v),
+                GtkAttrValue::Bare => {
+                    this.emit_diag(
+                        "E1614",
+                        &format!("`{source_name}` handler requires a value expression"),
+                        span.clone(),
+                    );
+                    return None;
+                }
+            };
+            Some(Expr::Call {
+                func: Box::new(mk_ui("gtkEventAttr")),
+                args: vec![mk_string(signal_name), handler_expr],
+                span: span.clone(),
+            })
         }
 
         fn gtk_attr_name_end(chars: &[char], start: usize) -> Option<usize> {
@@ -662,7 +797,7 @@ impl Parser {
                     });
                     continue;
                 };
-                if tag != "each" {
+                if tag != "each" && tag != "show" {
                     lowered_items.push(ListItem {
                         expr: lower_node(
                             this,
@@ -679,8 +814,60 @@ impl Parser {
                     continue;
                 }
 
+                if tag == "show" {
+                    let mut when_expr: Option<Expr> = None;
+                    for attr in attrs {
+                        if attr.name == "when" {
+                            if let GtkAttrValue::Splice(expr) = attr.value {
+                                when_expr = Some(expr);
+                            } else {
+                                this.emit_diag(
+                                    "E1615",
+                                    "<show> `when` must be a splice expression: when={visible}",
+                                    span.clone(),
+                                );
+                            }
+                        }
+                    }
+                    let Some(when_expr) = when_expr else {
+                        this.emit_diag("E1615", "<show> requires `when={...}`", span.clone());
+                        continue;
+                    };
+                    let mut show_children_iter = each_children.into_iter();
+                    let Some(show_child) = show_children_iter.next() else {
+                        this.emit_diag(
+                            "E1615",
+                            "<show> requires exactly one child node",
+                            span.clone(),
+                        );
+                        continue;
+                    };
+                    if show_children_iter.next().is_some() {
+                        this.emit_diag(
+                            "E1615",
+                            "<show> requires exactly one child node",
+                            span.clone(),
+                        );
+                        continue;
+                    }
+                    lowered_items.push(ListItem {
+                        expr: Expr::Call {
+                            func: Box::new(Expr::Ident(SpannedName {
+                                name: "gtkShow".into(),
+                                span: span.clone(),
+                            })),
+                            args: vec![when_expr, lower_node(this, show_child, span)],
+                            span: span.clone(),
+                        },
+                        spread: false,
+                        span: span.clone(),
+                    });
+                    continue;
+                }
+
                 let mut each_items: Option<Expr> = None;
                 let mut each_binder: Option<SpannedName> = None;
+                let mut each_key: Option<Expr> = None;
                 for attr in attrs {
                     if attr.name == "items" {
                         if let GtkAttrValue::Splice(expr) = attr.value {
@@ -699,6 +886,16 @@ impl Parser {
                             this.emit_diag(
                                 "E1615",
                                 "<each> `as` must be an identifier splice: as={item}",
+                                span.clone(),
+                            );
+                        }
+                    } else if attr.name == "key" {
+                        if let GtkAttrValue::Splice(expr) = attr.value {
+                            each_key = Some(expr);
+                        } else {
+                            this.emit_diag(
+                                "E1615",
+                                "<each> `key` must be a splice expression: key={item => item.id}",
                                 span.clone(),
                             );
                         }
@@ -736,17 +933,26 @@ impl Parser {
                     body: Box::new(lower_node(this, each_template_node, span)),
                     span: span.clone(),
                 };
-                let mapped_expr = Expr::Call {
-                    func: Box::new(Expr::Ident(SpannedName {
-                        name: "gtkEachItems".into(),
-                        span: span.clone(),
-                    })),
-                    args: vec![items_expr, lambda_expr],
-                    span: span.clone(),
+                let func_name = if each_key.is_some() {
+                    "gtkEachKeyed"
+                } else {
+                    "gtkEach"
                 };
+                let mut args = vec![items_expr];
+                if let Some(key_expr) = each_key {
+                    args.push(key_expr);
+                }
+                args.push(lambda_expr);
                 lowered_items.push(ListItem {
-                    expr: mapped_expr,
-                    spread: true,
+                    expr: Expr::Call {
+                        func: Box::new(Expr::Ident(SpannedName {
+                            name: func_name.into(),
+                            span: span.clone(),
+                        })),
+                        args,
+                        span: span.clone(),
+                    },
+                    spread: false,
                     span: span.clone(),
                 });
             }
@@ -825,19 +1031,8 @@ impl Parser {
                         // Rewrite: <GtkButton label="Hello" onClick={handler}>
                         // → <object class="GtkButton" props={{ label: "Hello" }} onClick={handler}>
                         let mut lowered_attrs = Vec::new();
-                        lowered_attrs.push(call2("gtkAttr", mk_string("class"), mk_string(&tag)));
-
-                        let attr_handler_text =
-                            |attr_name: &str, value: GtkAttrValue| -> Option<String> {
-                                match value {
-                                    GtkAttrValue::Text(v) => Some(v),
-                                    GtkAttrValue::Splice(expr) => compile_time_expr_text(&expr),
-                                    GtkAttrValue::Bare => {
-                                        let _ = attr_name;
-                                        None
-                                    }
-                                }
-                            };
+                        lowered_attrs
+                            .push(call2("gtkStaticAttr", mk_string("class"), mk_string(&tag)));
                         for attr in attrs {
                             // Signal sugar (onClick, onInput, etc.)
                             let signal_name_opt = match attr.name.as_str() {
@@ -852,58 +1047,27 @@ impl Parser {
                                 _ => None,
                             };
                             if let Some(signal_name) = signal_name_opt {
-                                let handler_expr = match attr.value {
-                                    GtkAttrValue::Splice(expr) => expr,
-                                    GtkAttrValue::Text(v) => mk_string(&v),
-                                    GtkAttrValue::Bare => {
-                                        this.emit_diag(
-                                            "E1614",
-                                            &format!(
-                                                "`{}` handler requires a value expression",
-                                                attr.name
-                                            ),
-                                            span.clone(),
-                                        );
-                                        continue;
-                                    }
-                                };
-                                lowered_attrs.push(call2(
-                                    "gtkSignalAttr",
-                                    mk_string(&format!("signal:{signal_name}")),
-                                    handler_expr,
-                                ));
+                                if let Some(lowered) = lower_event_attr(
+                                    this,
+                                    signal_name,
+                                    &attr.name,
+                                    attr.value,
+                                    span,
+                                ) {
+                                    lowered_attrs.push(lowered);
+                                }
                                 continue;
                             }
 
                             // Skip standard XML attrs that are handled separately
                             if attr.name == "id" || attr.name == "ref" {
-                                lowered_attrs.push(lower_attr(attr, span));
+                                lowered_attrs.push(lower_raw_attr(attr, span));
                                 continue;
                             }
 
                             // Everything else is a prop: normalize and emit as prop:name
                             let prop_name = normalize_prop_name(&attr.name);
-                            let value_expr = match attr.value {
-                                GtkAttrValue::Text(v) => mk_string(&v),
-                                GtkAttrValue::Splice(expr) => match &expr {
-                                    Expr::Literal(_)
-                                    | Expr::UnaryNeg { .. }
-                                    | Expr::Suffixed { .. } => {
-                                        if let Some(text) = compile_time_expr_text(&expr) {
-                                            mk_string(&text)
-                                        } else {
-                                            expr
-                                        }
-                                    }
-                                    _ => expr,
-                                },
-                                GtkAttrValue::Bare => mk_string("true"),
-                            };
-                            lowered_attrs.push(call2(
-                                "gtkAttr",
-                                mk_string(&format!("prop:{prop_name}")),
-                                value_expr,
-                            ));
+                            lowered_attrs.push(lower_prop_attr(&prop_name, attr.value, span));
                         }
 
                         // Process children same as <object>
@@ -919,15 +1083,24 @@ impl Parser {
                                 }
                             };
                             if child_tag == "signal" {
-                                let (mut signal_name, mut signal_handler) =
-                                    (None::<String>, None::<String>);
+                                let mut signal_name = None::<String>;
+                                let mut signal_handler = None::<Expr>;
                                 if let GtkNode::Element { attrs, .. } = child {
                                     for attr in attrs {
                                         if attr.name == "name" {
-                                            signal_name = attr_handler_text("name", attr.value);
+                                            signal_name = match attr.value {
+                                                GtkAttrValue::Text(v) => Some(v),
+                                                GtkAttrValue::Splice(expr) => {
+                                                    compile_time_expr_text(&expr)
+                                                }
+                                                GtkAttrValue::Bare => None,
+                                            };
                                         } else if attr.name == "handler" || attr.name == "on" {
-                                            signal_handler =
-                                                attr_handler_text(&attr.name, attr.value);
+                                            signal_handler = match attr.value {
+                                                GtkAttrValue::Splice(expr) => Some(expr),
+                                                GtkAttrValue::Text(v) => Some(mk_string(&v)),
+                                                GtkAttrValue::Bare => None,
+                                            };
                                         }
                                     }
                                 }
@@ -942,16 +1115,12 @@ impl Parser {
                                 let Some(handler) = signal_handler else {
                                     this.emit_diag(
                                         "E1614",
-                                        "signal tag requires a compile-time `handler` or `on` attribute",
+                                        "signal tag requires a `handler` or `on` value expression",
                                         span.clone(),
                                     );
                                     continue;
                                 };
-                                lowered_attrs.push(call2(
-                                    "gtkAttr",
-                                    mk_string(&format!("signal:{name}")),
-                                    mk_string(&handler),
-                                ));
+                                lowered_attrs.push(call2("gtkEventAttr", mk_string(&name), handler));
                                 continue;
                             }
                             if child_tag == "child" {
@@ -1034,17 +1203,6 @@ impl Parser {
 
                     // Built-in GTK element lowering (lowercase tags).
                     let mut lowered_attrs = Vec::new();
-                    let attr_handler_text =
-                        |attr_name: &str, value: GtkAttrValue| -> Option<String> {
-                            match value {
-                                GtkAttrValue::Text(v) => Some(v),
-                                GtkAttrValue::Splice(expr) => compile_time_expr_text(&expr),
-                                GtkAttrValue::Bare => {
-                                    let _ = attr_name;
-                                    None
-                                }
-                            }
-                        };
                     for attr in attrs {
                         if attr.name == "props" {
                             match attr.value {
@@ -1083,30 +1241,11 @@ impl Parser {
                                             );
                                             continue;
                                         }
-                                        // Literals (strings, numbers, bools) are stringified
-                                        // at compile time. Everything else — idents, field
-                                        // accesses, match expressions, etc. — is kept as a
-                                        // runtime expression so variables resolve to their
-                                        // actual values.
                                         let prop_name = normalize_prop_name(&name.name);
-                                        let value_expr = match &field.value {
-                                            Expr::Literal(_)
-                                            | Expr::UnaryNeg { .. }
-                                            | Expr::Suffixed { .. } => {
-                                                if let Some(text) =
-                                                    compile_time_expr_text(&field.value)
-                                                {
-                                                    mk_string(&text)
-                                                } else {
-                                                    field.value
-                                                }
-                                            }
-                                            _ => field.value,
-                                        };
-                                        lowered_attrs.push(call2(
-                                            "gtkAttr",
-                                            mk_string(&format!("prop:{prop_name}")),
-                                            value_expr,
+                                        lowered_attrs.push(lower_prop_attr(
+                                            &prop_name,
+                                            GtkAttrValue::Splice(field.value),
+                                            span,
                                         ));
                                     }
                                 }
@@ -1132,29 +1271,14 @@ impl Parser {
                             _ => None,
                         };
                         if let Some(signal_name) = signal_name_opt {
-                            let handler_expr = match attr.value {
-                                GtkAttrValue::Splice(expr) => expr,
-                                GtkAttrValue::Text(v) => mk_string(&v),
-                                GtkAttrValue::Bare => {
-                                    this.emit_diag(
-                                        "E1614",
-                                        &format!(
-                                            "`{}` handler requires a value expression",
-                                            attr.name
-                                        ),
-                                        span.clone(),
-                                    );
-                                    continue;
-                                }
-                            };
-                            lowered_attrs.push(call2(
-                                "gtkSignalAttr",
-                                mk_string(&format!("signal:{signal_name}")),
-                                handler_expr,
-                            ));
+                            if let Some(lowered) =
+                                lower_event_attr(this, signal_name, &attr.name, attr.value, span)
+                            {
+                                lowered_attrs.push(lowered);
+                            }
                             continue;
                         }
-                        lowered_attrs.push(lower_attr(attr, span));
+                        lowered_attrs.push(lower_raw_attr(attr, span));
                     }
 
                     let mut kept_children = Vec::new();
@@ -1169,14 +1293,24 @@ impl Parser {
                             }
                         };
                         if child_tag == "signal" {
-                            let (mut signal_name, mut signal_handler) =
-                                (None::<String>, None::<String>);
+                            let mut signal_name = None::<String>;
+                            let mut signal_handler = None::<Expr>;
                             if let GtkNode::Element { attrs, .. } = child {
                                 for attr in attrs {
                                     if attr.name == "name" {
-                                        signal_name = attr_handler_text("name", attr.value);
+                                        signal_name = match attr.value {
+                                            GtkAttrValue::Text(v) => Some(v),
+                                            GtkAttrValue::Splice(expr) => {
+                                                compile_time_expr_text(&expr)
+                                            }
+                                            GtkAttrValue::Bare => None,
+                                        };
                                     } else if attr.name == "handler" || attr.name == "on" {
-                                        signal_handler = attr_handler_text(&attr.name, attr.value);
+                                        signal_handler = match attr.value {
+                                            GtkAttrValue::Splice(expr) => Some(expr),
+                                            GtkAttrValue::Text(v) => Some(mk_string(&v)),
+                                            GtkAttrValue::Bare => None,
+                                        };
                                     }
                                 }
                             }
@@ -1191,16 +1325,12 @@ impl Parser {
                             let Some(handler) = signal_handler else {
                                 this.emit_diag(
                                     "E1614",
-                                    "signal tag requires a compile-time `handler` or `on` attribute",
+                                    "signal tag requires a `handler` or `on` value expression",
                                     span.clone(),
                                 );
                                 continue;
                             };
-                            lowered_attrs.push(call2(
-                                "gtkAttr",
-                                mk_string(&format!("signal:{name}")),
-                                mk_string(&handler),
-                            ));
+                            lowered_attrs.push(call2("gtkEventAttr", mk_string(&name), handler));
                             continue;
                         }
                         if child_tag == "child" {
@@ -1230,11 +1360,17 @@ impl Parser {
                         let wrapped: Vec<GtkNode> = kept_children
                             .into_iter()
                             .map(|child| match child {
-                                GtkNode::Splice(expr) => GtkNode::Splice(Expr::Call {
-                                    func: Box::new(mk_ui("gtkTextNode")),
-                                    args: vec![expr],
-                                    span: span.clone(),
-                                }),
+                                GtkNode::Splice(expr) => {
+                                    if let Some(text) = static_value_expr_text(&expr) {
+                                        GtkNode::Text(text)
+                                    } else {
+                                        GtkNode::Splice(Expr::Call {
+                                            func: Box::new(mk_ui("gtkBoundText")),
+                                            args: vec![expr],
+                                            span: span.clone(),
+                                        })
+                                    }
+                                }
                                 other => other,
                             })
                             .collect();
@@ -1255,10 +1391,10 @@ impl Parser {
         if nodes.len() == 1 {
             let root = nodes.remove(0);
             if let GtkNode::Element { tag, .. } = &root {
-                if tag == "each" {
+                if tag == "each" || tag == "show" {
                     self.emit_diag(
                         "E1615",
-                        "<each> is only valid inside a GTK element",
+                        &format!("<{tag}> is only valid inside a GTK element"),
                         root_span.clone(),
                     );
                 }

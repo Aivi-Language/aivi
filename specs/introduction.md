@@ -13,7 +13,7 @@ If this is your first pass through the docs, use this order:
 1. Read [Language at a Glance](language-overview) for a short syntax tour.
 2. Continue into the **Learn AIVI** track: [Bindings & Scope](syntax/bindings), [Functions & Pipes](syntax/functions), [Primitive Types](syntax/types/primitive_types), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types), [Records](syntax/types/closed_records), and [Effects](syntax/effects).
 3. Read [Modules](syntax/modules) and [External Sources](syntax/external_sources) when you are ready to work with files, APIs, or other outside data.
-4. Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps) if your goal is desktop UI work.
+4. Jump to [`aivi.ui.gtk4`](stdlib/ui/gtk4) if your goal is desktop UI work.
 
 ## What AIVI is for
 
@@ -136,5 +136,5 @@ If some of the formal terms are new, this is the shortest useful translation:
 
 - **Just learning the language?** Follow the **Learn AIVI** track in this order: [Bindings & Scope](syntax/bindings), [Functions & Pipes](syntax/functions), [Primitive Types](syntax/types/primitive_types), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types), [Records](syntax/types/closed_records), then [Effects](syntax/effects).
 - **Working with real-world inputs?** Continue with [Modules](syntax/modules) and [External Sources](syntax/external_sources).
-- **Building desktop apps?** Jump to [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps) and [App Architecture](stdlib/ui/app_architecture).
+- **Building desktop apps?** Jump to [`aivi.ui.gtk4`](stdlib/ui/gtk4), then follow [Signals](stdlib/ui/reactive_signals) and [Reactive Dataflow](stdlib/ui/reactive_dataflow).
 - **Need exact rules or advanced features?** Use the rest of the sidebar as a reference, especially Advanced Features, Standard Library, and Internals.

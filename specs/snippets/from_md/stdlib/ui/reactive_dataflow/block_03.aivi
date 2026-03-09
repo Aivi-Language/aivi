@@ -1,2 +1,0 @@
-summaryText = readDerived resultsSummary model
-saveCommand = buildSaveCommand summaryText

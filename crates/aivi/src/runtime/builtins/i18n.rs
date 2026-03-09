@@ -313,6 +313,7 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::Resource(_) => "Resource",
         Value::Thunk(_) => "Thunk",
         Value::MultiClause(_) => "MultiClause",
+        Value::Signal(_) => "Signal",
         Value::ChannelSend(_) => "Send",
         Value::ChannelRecv(_) => "Recv",
         Value::FileHandle(_) => "FileHandle",

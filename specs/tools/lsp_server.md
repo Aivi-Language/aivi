@@ -47,7 +47,7 @@ When this page mentions a **workspace snapshot**, it means the full per-request 
 - **Hover**: shows type information and documentation. The server first tries definition-based lookup, then falls back to inferred type information for the smallest matching span so hover still works for expressions that do not have a named definition.
 - **Signature Help**: shows function signatures and parameter information while you type in a call.
 - **Schema and source help**: hover content also documents source-oriented helpers such as `load`, `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
-- **GTK architecture help**: hover content and completion scaffolds document `gtkApp`, `appStep`, `noSubscriptions`, `commandAfter`, `commandPerform`, `subscriptionEvery`, and `subscriptionSource`.
+- **GTK architecture help**: hover content and completion scaffolds document the signal-first GTK runtime, including `Signal`, `Event`, `buildFromNode`, `signalStream`, and GTK callback attrs.
 
 ### Editing support
 
@@ -57,7 +57,7 @@ When this page mentions a **workspace snapshot**, it means the full per-request 
 - **Semantic Tokens**: token-aware highlighting that distinguishes language concepts more precisely than plain text grammars can.
 - **Formatting**: document formatting through the built-in formatter.
 
-Completion also includes scaffolds for the recommended `gtkApp` architecture so editors guide users toward the main public GTK app loop.
+Completion also includes scaffolds for the recommended signal-first GTK architecture so editors guide users toward mounted signal-bound trees instead of a message-loop host.
 
 ### Other protocol features
 
