@@ -81,10 +81,9 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 ### Build Native Apps
 #### Getting Started
 - [GTK & libadwaita System Manual](stdlib/ui/gtk4.md)
-- [GTK & libadwaita Runtime](stdlib/ui/gtk4.md)
-#### Derived UI
-- [Derived Values](stdlib/ui/reactive_signals.md)
-- [Derived Dataflow](stdlib/ui/reactive_dataflow.md)
+#### Reactive UI
+- [Signals](stdlib/ui/reactive_signals.md)
+- [Reactive Dataflow](stdlib/ui/reactive_dataflow.md)
 #### UI Building Blocks
 - [Forms](stdlib/ui/forms.md)
 - [Layout](stdlib/ui/layout.md)
