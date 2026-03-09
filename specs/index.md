@@ -107,10 +107,9 @@ Use the table of contents below as a map once you know the kind of answer you ne
 ### Build Native Apps
 #### Getting Started
 - [GTK & libadwaita System Manual](stdlib/ui/gtk4)
-- [GTK & libadwaita Runtime](stdlib/ui/gtk4)
-#### Derived UI
-- [Derived Values](stdlib/ui/reactive_signals)
-- [Derived Dataflow](stdlib/ui/reactive_dataflow)
+#### Reactive UI
+- [Signals](stdlib/ui/reactive_signals)
+- [Reactive Dataflow](stdlib/ui/reactive_dataflow)
 #### UI Building Blocks
 - [Forms](stdlib/ui/forms)
 - [Layout](stdlib/ui/layout)
