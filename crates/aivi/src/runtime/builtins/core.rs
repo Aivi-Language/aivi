@@ -16,6 +16,7 @@ use super::linalg::build_linalg_record;
 use super::list::build_list_record;
 use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
+use super::reactive::build_reactive_record;
 use super::regex::build_regex_record;
 use super::secrets::build_secrets_record;
 use super::source::build_source_record;
@@ -476,6 +477,7 @@ pub(crate) fn register_builtins(env: &Env) {
         super::database::build_query_error_builtin(),
     );
     env.set("gtk4".to_string(), build_gtk4_record());
+    env.set("reactive".to_string(), build_reactive_record());
     env.set("secrets".to_string(), build_secrets_record());
     env.set("i18n".to_string(), build_i18n_record());
 

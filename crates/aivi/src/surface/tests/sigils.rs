@@ -195,7 +195,9 @@ x =
         .expect("x def");
 
     assert!(
-        expr_contains_ident(&def.expr, "gtkElement") && expr_contains_ident(&def.expr, "gtkAttr"),
+        expr_contains_ident(&def.expr, "gtkElement")
+            && expr_contains_ident(&def.expr, "gtkStaticAttr")
+            && expr_contains_ident(&def.expr, "gtkStaticProp"),
         "expected ~<gtk> to lower into GTK helper constructors"
     );
 }
@@ -375,15 +377,16 @@ x = ~<gtk><object class="GtkButton" onClick={ Msg.Save } /></gtk>
         })
         .expect("x def");
     assert!(
-        expr_contains_string(&def.expr, "signal:clicked")
+        expr_contains_ident(&def.expr, "gtkEventAttr")
+            && expr_contains_string(&def.expr, "clicked")
             && expr_contains_ident(&def.expr, "Msg")
             && expr_contains_ident(&def.expr, "Save"),
-        "expected onClick sugar to lower into signal:clicked attribute with Msg.Save handler"
+        "expected onClick sugar to lower into gtkEventAttr with Msg.Save handler"
     );
 }
 
 #[test]
-fn gtk_sigil_signal_on_requires_compile_time_value() {
+fn gtk_sigil_signal_on_accepts_runtime_handler_value() {
     let src = r#"
 module Example
 
@@ -394,16 +397,28 @@ x =
     </object>
   </gtk>
 "#;
-    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    let codes = diag_codes(&diags);
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
-        codes.iter().any(|code| code == "E1614"),
-        "expected E1614 for non-compile-time signal handler, got: {codes:?}"
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEventAttr"),
+        "expected <signal on={{...}}> to lower into gtkEventAttr"
     );
 }
 
 #[test]
-fn gtk_sigil_each_lowers_to_mapped_children() {
+fn gtk_sigil_each_lowers_to_structural_binding() {
     let src = r#"
 module Example
 
@@ -439,9 +454,82 @@ x =
         .expect("x def");
 
     assert!(
-        expr_contains_ident(&def.expr, "gtkEachItems")
-            && expr_contains_ident(&def.expr, "gtkElement"),
-        "expected <each> to lower via gtkEachItems into GtkNode children"
+        expr_contains_ident(&def.expr, "gtkEach") && expr_contains_ident(&def.expr, "gtkElement"),
+        "expected <each> to lower via gtkEach into a structural GTK node"
+    );
+}
+
+#[test]
+fn gtk_sigil_each_key_lowers_to_keyed_structural_binding() {
+    let src = r#"
+module Example
+
+items = [{ id: "a", label: "A" }]
+x =
+  ~<gtk>
+    <object class="GtkBox">
+      <each items={items} as={item} key={item => item.id}>
+        <child>
+          <object class="GtkLabel">
+            <property name="label">{ item.label }</property>
+          </object>
+        </child>
+      </each>
+    </object>
+  </gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEachKeyed"),
+        "expected keyed <each> to lower into gtkEachKeyed"
+    );
+}
+
+#[test]
+fn gtk_sigil_show_lowers_to_structural_binding() {
+    let src = r#"
+module Example
+
+visible = True
+x =
+  ~<gtk>
+    <object class="GtkBox">
+      <show when={visible}>
+        <object class="GtkLabel" />
+      </show>
+    </object>
+  </gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkShow"),
+        "expected <show> to lower into gtkShow"
     );
 }
 
@@ -584,7 +672,8 @@ fn gtk_sigil_with_id_attribute() {
         })
         .expect("x");
     assert!(
-        expr_contains_ident(&def.expr, "gtkElement") || expr_contains_ident(&def.expr, "gtkAttr")
+        expr_contains_ident(&def.expr, "gtkIdAttr"),
+        "expected id attr to lower via gtkIdAttr"
     );
 }
 
@@ -605,7 +694,9 @@ fn gtk_sigil_splice_in_property() {
             _ => None,
         })
         .expect("x");
-    assert!(expr_contains_ident(&def.expr, "myLabel"));
+    assert!(
+        expr_contains_ident(&def.expr, "gtkBoundText") && expr_contains_ident(&def.expr, "myLabel")
+    );
 }
 
 #[test]

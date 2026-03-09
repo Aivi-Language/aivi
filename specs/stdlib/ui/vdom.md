@@ -5,7 +5,7 @@ The `aivi.ui` module defines a typed virtual DOM, `VNode msg`. You build `VNode`
 <!-- /quick-info -->
 <div class="import-badge">use aivi.ui</div>
 
-Most AIVI apps building native GTK UIs do not need VDOM directly — `gtkApp` handles widget diffing for you. Use VDOM when building server-rendered HTML views or when you need manual control over HTML output.
+Most native GTK apps do not use VDOM directly. GTK now follows the signal-first binding model in [`aivi.ui.gtk4`](./gtk4.md), while `aivi.ui` remains the tree/diff layer for HTML-oriented rendering and manual DOM-style workflows.
 
 If you have used React, Elm, or other virtual-DOM systems, the idea will feel familiar. The difference here is that the tree, attributes, and events are ordinary typed AIVI values rather than framework-specific objects.
 

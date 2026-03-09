@@ -502,26 +502,29 @@ fn gtk_arch_completion_includes_architecture_snippets() {
     );
 
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
-    assert!(labels.contains(&"gtkApp architecture"));
+    assert!(labels.contains(&"gtk signal-first app"));
     assert!(labels.contains(&"gtk toMsg"));
-    assert!(labels.contains(&"gtk subscriptionEvery"));
+    assert!(labels.contains(&"gtk timer stream"));
     assert!(labels.contains(&"gtk form setValue"));
     assert!(labels.contains(&"gtk visibleErrors"));
 
     let gtk_app = items
         .iter()
-        .find(|item| item.label == "gtkApp architecture")
-        .expect("gtkApp snippet");
-    let insert_text = gtk_app.insert_text.as_deref().expect("gtkApp snippet body");
-    assert!(insert_text.contains("subscriptions:"));
-    assert!(insert_text.contains("toMsg: auto"));
-    assert!(insert_text.contains("commands: []"));
+        .find(|item| item.label == "gtk signal-first app")
+        .expect("signal-first gtk snippet");
+    let insert_text = gtk_app
+        .insert_text
+        .as_deref()
+        .expect("signal-first gtk snippet body");
+    assert!(insert_text.contains("signal "));
+    assert!(insert_text.contains("buildFromNode"));
+    assert!(insert_text.contains("windowSetChild"));
 
-    let docs = gtk_app.documentation.as_ref().expect("gtkApp snippet docs");
+    let docs = gtk_app.documentation.as_ref().expect("signal-first gtk snippet docs");
     let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
         panic!("expected markdown docs");
     };
-    assert!(markup.value.contains("blessed `gtkApp` loop"));
+    assert!(markup.value.contains("signal-first GTK app"));
 }
 
 #[test]
@@ -545,7 +548,7 @@ view = ~<gtk><GtkButton onC /></gtk>
         panic!("expected markdown docs");
     };
     assert!(markup.value.contains("GtkClicked"));
-    assert!(markup.value.contains("toMsg"));
+    assert!(markup.value.contains("runtime function"));
 }
 
 #[test]
@@ -565,37 +568,24 @@ toMsg = event =>
         panic!("expected markup hover");
     };
     assert!(markup.value.contains("GtkInputChanged WidgetId Text Text"));
-    assert!(markup.value.contains("setValue"));
+    assert!(markup.value.contains("bind `onInput` directly"));
 }
 
 #[test]
-fn gtk_arch_hover_documents_gtk_app_field() {
+fn gtk_arch_hover_documents_build_from_node() {
     let text = r#"@no_prelude
-module examples.gtk_hover_field
-main = gtkApp {
-  id: "com.example.app"
-  title: "Demo"
-  size: (640, 480)
-  model: 0
-  onStart: _ _ => pure Unit
-  subscriptions: noSubscriptions
-  view: _ => ~<gtk><GtkBox /></gtk>
-  toMsg: event =>
-    event match
-      | _ => None
-  update: msg => state =>
-    pure (appStep state)
-}
+module examples.gtk_hover_mount
+main = buildFromNode
 "#;
     let uri = sample_uri();
-    let position = position_for(text, "subscriptions:");
+    let position = position_for(text, "buildFromNode");
     let hover = Backend::build_hover(text, &uri, position, &DocIndex::default())
-        .expect("subscriptions hover");
+        .expect("buildFromNode hover");
     let HoverContents::Markup(markup) = hover.contents else {
         panic!("expected markup hover");
     };
-    assert!(markup.value.contains("List (Subscription msg)"));
-    assert!(markup.value.contains("noSubscriptions"));
+    assert!(markup.value.contains("GtkNode -> Effect GtkError WidgetId"));
+    assert!(markup.value.contains("Mount a GTK node tree once"));
 }
 
 #[test]

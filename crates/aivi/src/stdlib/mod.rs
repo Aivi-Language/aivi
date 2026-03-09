@@ -53,6 +53,7 @@ mod path;
 mod prelude;
 mod quaternion;
 mod rational;
+mod reactive;
 mod regex;
 mod rest;
 mod result;
@@ -185,6 +186,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: graph::MODULE_NAME,
         source: graph::SOURCE,
+    },
+    EmbeddedModule {
+        name: reactive::MODULE_NAME,
+        source: reactive::SOURCE,
     },
     EmbeddedModule {
         name: gtk4::MODULE_NAME,
@@ -329,7 +334,7 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
 ];
 
 /// Cache of parsed embedded stdlib modules. Parsed once per process; subsequent calls clone
-/// from this cache. Avoids re-parsing 63 modules on every LSP operation or `--watch` rerun.
+/// from this cache. Avoids re-parsing 64 modules on every LSP operation or `--watch` rerun.
 static STDLIB_MODULES_CACHE: OnceLock<Vec<Module>> = OnceLock::new();
 
 pub fn embedded_stdlib_modules() -> Vec<Module> {

@@ -80,8 +80,7 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 
 ### Build Native Apps
 #### Getting Started
-- [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps.md)
-- [App Architecture](stdlib/ui/app_architecture.md)
+- [GTK & libadwaita System Manual](stdlib/ui/gtk4.md)
 - [GTK & libadwaita Runtime](stdlib/ui/gtk4.md)
 #### Derived UI
 - [Derived Values](stdlib/ui/reactive_signals.md)

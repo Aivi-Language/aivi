@@ -91,6 +91,7 @@ impl TypeChecker {
             "GtkNode",
             "GtkSignalEvent",
             "JsonValue",
+            "Disposable",
         ] {
             self.builtin_types.insert(name.to_string(), star.clone());
         }
@@ -121,6 +122,12 @@ impl TypeChecker {
         );
         self.builtin_types.insert(
             "Effect".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
+        self.builtin_types
+            .insert("Signal".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types.insert(
+            "EventHandle".to_string(),
             arrow(star.clone(), arrow(star.clone(), star.clone())),
         );
         self.builtin_types.insert(

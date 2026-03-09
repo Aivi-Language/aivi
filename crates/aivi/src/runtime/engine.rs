@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Datelike, NaiveDate, TimeZone as ChronoTimeZone};
+use parking_lot::Mutex as ParkingMutex;
 use regex::RegexBuilder;
 use url::Url;
 
@@ -130,6 +131,7 @@ pub(crate) struct Runtime {
     /// a do-block scope exits. Scope boundaries are explicit markers.
     pub(crate) resource_cleanups: Vec<ResourceCleanupEntry>,
     pub(crate) reactive_host: Option<ReactiveHostState>,
+    pub(crate) reactive_graph: Arc<ParkingMutex<ReactiveGraphState>>,
 }
 
 pub(crate) enum ResourceCleanupEntry {
@@ -173,6 +175,40 @@ pub(crate) struct ReactiveHostState {
     pub(crate) signals: HashMap<String, ReactiveSignalEntry>,
     pub(crate) dependents: HashMap<String, HashSet<String>>,
     pub(crate) eval_stack: Vec<ReactiveEvalFrame>,
+}
+
+pub(crate) struct ReactiveGraphState {
+    pub(crate) next_signal_id: usize,
+    pub(crate) next_watcher_id: usize,
+    pub(crate) batch_depth: usize,
+    pub(crate) flushing: bool,
+    pub(crate) signals: HashMap<usize, ReactiveCellEntry>,
+    pub(crate) watchers: HashMap<usize, ReactiveWatcherEntry>,
+    pub(crate) watchers_by_signal: HashMap<usize, HashSet<usize>>,
+    pub(crate) pending_notifications: HashSet<usize>,
+}
+
+pub(crate) struct ReactiveCellEntry {
+    pub(crate) kind: ReactiveCellKind,
+    pub(crate) value: Value,
+    pub(crate) revision: u64,
+    pub(crate) dirty: bool,
+    pub(crate) dependents: HashSet<usize>,
+}
+
+pub(crate) enum ReactiveCellKind {
+    Source,
+    Derived {
+        dependencies: Vec<usize>,
+        compute: Value,
+    },
+}
+
+pub(crate) struct ReactiveWatcherEntry {
+    pub(crate) signal_id: usize,
+    pub(crate) callback: Value,
+    pub(crate) active: bool,
+    pub(crate) last_revision: u64,
 }
 
 #[derive(Clone)]
@@ -673,5 +709,6 @@ pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
 include!("runtime_impl/lifecycle_and_cancel.rs");
 include!("runtime_impl/eval_and_apply.rs");
 include!("runtime_impl/reactive.rs");
+include!("runtime_impl/reactive_signals.rs");
 include!("runtime_impl/resources.rs");
 include!("runtime_impl/trampoline.rs");

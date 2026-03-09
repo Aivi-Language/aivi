@@ -1,4 +1,3 @@
-
 pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Option<Value> {
     match (op, left, right) {
         ("..", Value::Int(start), Value::Int(end)) => {
@@ -158,18 +157,15 @@ pub(crate) fn values_equal(left: &Value, right: &Value) -> bool {
                 && aa.len() == bb.len()
                 && aa.iter().zip(bb.iter()).all(|(x, y)| values_equal(x, y))
         }
+        (Value::Signal(a), Value::Signal(b)) => a.id == b.id,
         // Sources are effectful and are not meaningfully comparable.
         (Value::Source(_), Value::Source(_)) => false,
         _ => false,
     }
 }
 
-
 fn is_callable(value: &Value) -> bool {
-    matches!(
-        value,
-        Value::Builtin(_) | Value::MultiClause(_)
-    )
+    matches!(value, Value::Builtin(_) | Value::MultiClause(_))
 }
 
 /// Legacy check for string-based match failure messages. Kept for backward
@@ -178,7 +174,6 @@ fn is_callable(value: &Value) -> bool {
 fn is_match_failure_message(message: &str) -> bool {
     message == "non-exhaustive match" || message.starts_with("non-exhaustive match ")
 }
-
 
 pub(crate) fn format_value(value: &Value) -> String {
     match value {
@@ -245,6 +240,7 @@ pub(crate) fn format_value(value: &Value) -> String {
         Value::Resource(_) => "<resource>".to_string(),
         Value::Thunk(_) => "<thunk>".to_string(),
         Value::MultiClause(_) => "<multi-clause>".to_string(),
+        Value::Signal(signal) => format!("<signal:{}>", signal.id),
         Value::ChannelSend(_) => "<send>".to_string(),
         Value::ChannelRecv(_) => "<recv>".to_string(),
         Value::FileHandle(_) => "<file>".to_string(),
@@ -396,20 +392,16 @@ pub(crate) fn eval_sigil_literal(
                     _ => {}
                 }
             }
-            let regex = builder.build().map_err(|err| {
-                RuntimeError::ParseError {
-                    context: "regex literal".to_string(),
-                    input: format!("{err}"),
-                }
+            let regex = builder.build().map_err(|err| RuntimeError::ParseError {
+                context: "regex literal".to_string(),
+                input: format!("{err}"),
             })?;
             Ok(Value::Regex(Arc::new(regex)))
         }
         "u" | "url" => {
-            let parsed = Url::parse(body).map_err(|err| {
-                RuntimeError::ParseError {
-                    context: "url literal".to_string(),
-                    input: format!("{err}"),
-                }
+            let parsed = Url::parse(body).map_err(|err| RuntimeError::ParseError {
+                context: "url literal".to_string(),
+                input: format!("{err}"),
             })?;
             Ok(Value::Record(Arc::new(url_to_record(&parsed))))
         }
@@ -472,11 +464,9 @@ pub(crate) fn eval_sigil_literal(
         }
         "tz" => {
             let zone_id = body.trim();
-            let _: chrono_tz::Tz = zone_id.parse().map_err(|_| {
-                RuntimeError::ParseError {
-                    context: "timezone literal".to_string(),
-                    input: zone_id.to_string(),
-                }
+            let _: chrono_tz::Tz = zone_id.parse().map_err(|_| RuntimeError::ParseError {
+                context: "timezone literal".to_string(),
+                input: zone_id.to_string(),
             })?;
             let mut map = HashMap::new();
             map.insert("id".to_string(), Value::Text(zone_id.to_string()));
@@ -485,11 +475,9 @@ pub(crate) fn eval_sigil_literal(
         "zdt" => {
             let text = body.trim();
             let (dt_text, zone_id) = parse_zdt_parts(text)?;
-            let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| {
-                RuntimeError::ParseError {
-                    context: "timezone literal".to_string(),
-                    input: zone_id.to_string(),
-                }
+            let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| RuntimeError::ParseError {
+                context: "timezone literal".to_string(),
+                input: zone_id.to_string(),
             })?;
 
             let zdt = if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt_text) {
@@ -498,11 +486,9 @@ pub(crate) fn eval_sigil_literal(
                 let naive = parse_naive_datetime(dt_text)?;
                 tz.from_local_datetime(&naive)
                     .single()
-                    .ok_or_else(|| {
-                        RuntimeError::ParseError {
-                            context: "zoned datetime literal".to_string(),
-                            input: "ambiguous or invalid local time".to_string(),
-                        }
+                    .ok_or_else(|| RuntimeError::ParseError {
+                        context: "zoned datetime literal".to_string(),
+                        input: "ambiguous or invalid local time".to_string(),
                     })?
             };
 
@@ -525,11 +511,9 @@ pub(crate) fn eval_sigil_literal(
             Ok(Value::Record(Arc::new(map)))
         }
         "k" => {
-            validate_key_text(body).map_err(|msg| {
-                RuntimeError::ParseError {
-                    context: "i18n key literal".to_string(),
-                    input: msg,
-                }
+            validate_key_text(body).map_err(|msg| RuntimeError::ParseError {
+                context: "i18n key literal".to_string(),
+                input: msg,
             })?;
             let mut map = HashMap::new();
             map.insert("tag".to_string(), Value::Text(tag.to_string()));
@@ -538,11 +522,9 @@ pub(crate) fn eval_sigil_literal(
             Ok(Value::Record(Arc::new(map)))
         }
         "m" => {
-            let parsed = parse_message_template(body).map_err(|msg| {
-                RuntimeError::ParseError {
-                    context: "i18n message literal".to_string(),
-                    input: msg,
-                }
+            let parsed = parse_message_template(body).map_err(|msg| RuntimeError::ParseError {
+                context: "i18n message literal".to_string(),
+                input: msg,
             })?;
             let mut map = HashMap::new();
             map.insert("tag".to_string(), Value::Text(tag.to_string()));

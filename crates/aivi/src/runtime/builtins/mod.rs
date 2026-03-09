@@ -18,6 +18,7 @@ mod list;
 mod log;
 mod math;
 mod number;
+mod reactive;
 mod regex;
 mod secrets;
 mod sockets;

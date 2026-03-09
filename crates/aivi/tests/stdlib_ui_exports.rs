@@ -54,21 +54,12 @@ fn stdlib_ui_exports_v_element() {
 }
 
 #[test]
-fn stdlib_gtk4_exports_reactive_helpers() {
+fn stdlib_gtk4_exports_signal_first_binding_surface() {
     let modules = embedded_stdlib_modules();
     let gtk4 = modules
         .iter()
         .find(|m| m.name.name == "aivi.ui.gtk4")
         .expect("aivi.ui.gtk4 module exists");
-
-    assert!(
-        gtk4.exports.iter().any(|e| e.name.name == "memo"),
-        "expected aivi.ui.gtk4 to export memo, exports={:?}",
-        gtk4.exports
-            .iter()
-            .map(|e| e.name.name.as_str())
-            .collect::<Vec<_>>()
-    );
 
     let def_names: Vec<&str> = gtk4
         .items
@@ -79,7 +70,24 @@ fn stdlib_gtk4_exports_reactive_helpers() {
         })
         .collect();
 
-    for expected in ["derive", "memo", "readDerived", "auto"] {
+    for expected in [
+        "gtkBoundText",
+        "gtkShow",
+        "gtkEach",
+        "gtkEachKeyed",
+        "gtkStaticProp",
+        "gtkBoundProp",
+        "gtkEventAttr",
+        "gtkIdAttr",
+        "gtkRefAttr",
+        "buildFromNode",
+        "buildWithIds",
+        "reconcileNode",
+        "signalPoll",
+        "signalStream",
+        "signalEmit",
+        "gtkSetInterval",
+    ] {
         assert!(
             gtk4.exports.iter().any(|e| e.name.name == expected),
             "expected aivi.ui.gtk4 to export {expected}, exports={:?}",
@@ -91,6 +99,67 @@ fn stdlib_gtk4_exports_reactive_helpers() {
         assert!(
             def_names.contains(&expected),
             "expected aivi.ui.gtk4 to define {expected}; defs={def_names:?}"
+        );
+    }
+
+    for removed in [
+        "gtkApp",
+        "AppStep",
+        "Command",
+        "Subscription",
+        "auto",
+        "derive",
+        "memo",
+        "readDerived",
+        "signalBindBoolProperty",
+        "signalBindCssClass",
+        "signalBindToggleBoolProperty",
+        "signalToggleCssClass",
+    ] {
+        assert!(
+            !gtk4.exports.iter().any(|e| e.name.name == removed),
+            "did not expect aivi.ui.gtk4 to export {removed}, exports={:?}",
+            gtk4.exports
+                .iter()
+                .map(|e| e.name.name.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn stdlib_reactive_exports_core_primitives() {
+    let modules = embedded_stdlib_modules();
+    let reactive = modules
+        .iter()
+        .find(|m| m.name.name == "aivi.reactive")
+        .expect("aivi.reactive module exists");
+
+    let export_names: Vec<&str> = reactive
+        .exports
+        .iter()
+        .map(|e| e.name.name.as_str())
+        .collect();
+    for expected in [
+        "Signal",
+        "Disposable",
+        "EventHandle",
+        "signal",
+        "get",
+        "peek",
+        "set",
+        "update",
+        "map",
+        "combine2",
+        "watch",
+        "on",
+        "batch",
+        "dispose",
+        "event",
+    ] {
+        assert!(
+            export_names.contains(&expected),
+            "expected aivi.reactive to export {expected}, exports={export_names:?}"
         );
     }
 }

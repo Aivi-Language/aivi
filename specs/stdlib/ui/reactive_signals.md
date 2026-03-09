@@ -1,102 +1,154 @@
-# Derived Values
+# Signals
 
-<!-- quick-info: {"kind":"topic","name":"derived values"} -->
-Derived values are pure readers over committed model state. Use `derive` to give reusable UI data a name, and promote it to `memo` when the same pure derivation should be cached. They are not the same thing as GTK signal events.
+<!-- quick-info: {"kind":"topic","name":"signals"} -->
+AIVI signals are first-class reactive values. Create writable source cells with `signal`, derive more signals with `map` and `combine2`, mutate them with `set` or `update`, and observe them with `watch` or `on`.
 <!-- /quick-info -->
 
-If you want the big-picture app guide, start with [Native GTK & libadwaita Apps](./native_gtk_apps.md). If you want the turn-by-turn host flow around these helpers, read [GTK App Architecture](./app_architecture.md). If you want the detailed semantics, read [Derived Dataflow](./reactive_dataflow.md). This page focuses on practical use.
+If you want the big-picture app guide, start with [`aivi.ui.gtk4`](./gtk4.md). If you want the runtime semantics, read [Reactive Dataflow](./reactive_dataflow.md). This page focuses on the day-to-day API shape.
 
-## GTK signals vs derived values
+## What a signal is
 
-AIVI now reserves the word **signal** for GTK widget events. Pure model-derived UI helpers use different names:
+Treat `Signal a` like a first-class reactive container.
 
-| Term | Meaning |
+In practice that means:
+
+- it holds a current value,
+- other signals can be derived from it,
+- widgets can bind to it directly,
+- callbacks and event handles can update it,
+- imported signals stay shared across modules because the runtime cell itself is the value.
+
+Derived UI state is no longer a separate architecture. If a value should stay reactive, make it a `Signal`.
+
+## Core surface
+
+| API | Meaning |
 | --- | --- |
-| **GTK signal event** | Input coming from widgets, represented as `GtkSignalEvent` values such as `GtkClicked` or `GtkInputChanged` |
-| **derived value** | Pure derived data read from the committed model via `derive`, `memo`, and `readDerived` |
+| `signal initial` | Create a writable source signal. |
+| `get s` | Read the current value. Best for callbacks, events, and low-level code. |
+| `set s value` | Replace the current value. |
+| `update s fn` | Transform the current value. May also accept patch-style record updates. |
+| `map s fn` | Derive a new signal from one source signal. |
+| `combine2` | Derive one signal from two source signals. |
+| `watch s fn` / `on s fn` | Observe changes and run a callback or effect. Returns a disposable. |
+| `batch fn` | Group several writes into one propagation batch. |
+| `peek s` | Read without recording a dependency. |
 
-They do different jobs:
+The common style is: use signals and combinators in normal UI code, then reach for `get` or `peek` in callbacks and lower-level runtime integrations.
 
-- GTK signal events tell the app that something happened,
-- derived values help the app derive what to render from current state.
+## Start simple
 
-## What derived values are for
+```aivi
+count = signal 0
+title = map count (value => "Count {value}")
 
-Use derived values when a GTK app has pure derived values that deserve a name:
+increment = _ => update count (_ + 1)
+reset = _ => set count 0
+```
 
-- a heading derived from the current model,
-- a filtered or grouped view of rows,
-- a status label,
-- a timer interval derived from settings,
-- a summary reused in several places.
+`title` is already the “computed” form. There is no need to switch into a separate derived-value API just because the data is read-only.
 
-Derived values do **not** perform IO, do **not** mutate state, and do **not** emit messages.
+## Multi-signal composition
 
-A good mental model is: a derived value is a named read of the current model, not a background listener.
+AIVI needs multi-signal combinators because real UI state rarely depends on just one source.
 
-## Start simple: helper first, then `derive`, then `memo`
+```aivi
+firstName = signal "Ada"
+lastName = signal "Lovelace"
+saveBusy = saveProfile.running
 
-There are three common levels:
+fullName = combine2 firstName lastName (first => last => "{first} {last}")
+canSaveBase = combine2 firstName lastName (first => last =>
+  first != "" and last != ""
+)
+canSave = combine2 canSaveBase saveBusy (ready => running =>
+  ready and not running
+)
+```
 
-1. plain helper function,
-2. `derive` for a named derived reader,
-3. `memo` for a named reader with memoization.
+Use `combine2` when one derived value depends on two live sources. If the runtime grows higher-arity combinators later, they should stay ergonomic; until then, compose them explicitly.
 
-For `memo`, the first argument is a stable descriptive key that identifies the cached derivation across app turns.
+## Record-valued signals and patch updates
 
-<<< ../../snippets/from_md/stdlib/ui/reactive_signals/block_01.aivi{aivi}
+Signals that hold records should support ergonomic patch-style updates:
 
+```aivi
+profile = signal {
+  name: ""
+  subscribed: False
+  saveCount: 0
+}
 
-Use a plain helper when the value is small and local. Use `derive` when a named reader makes the code easier to follow. Use `memo` when the same pure work is read repeatedly and should be cached until its dependencies change.
+update profile <| { name: "AIVI" }
+update profile <| { subscribed: not _ }
+update profile <| { saveCount: _ + 1 }
+```
 
-### Decision guide
+When that is not expressive enough, fall back to a normal function:
 
-| Reach for... | When it is usually the best choice |
-| --- | --- |
-| plain helper | the derivation is local, short, and only read in one place |
-| `derive` | the same derived value deserves a name or is reused in a couple of places |
-| `memo` | the derivation is reused heavily or expensive enough that caching clearly helps |
+```aivi
+update profile (state =>
+  state <| {
+    name: normalize state.name
+    saveCount: state.saveCount + 1
+  }
+)
+```
 
-## How they fit into a GTK app
+## Watching and side effects
 
-Derived values read from the app model and fit into the normal `gtkApp` loop:
+`watch` and `on` are for code that should react when a signal changes:
 
-The snippet below shows only the pure derived-data slice. The surrounding `toMsg`, `update`, and `gtkApp` wiring stays the same as in the normal app architecture.
+```aivi
+dispose <- on query (text => logDebug "search query: {text}")
+```
 
-<<< ../../snippets/from_md/stdlib/ui/reactive_signals/block_02.aivi{aivi}
+Useful rules:
 
+- mounted UI bindings are just host-managed watchers,
+- ordinary application code should keep watchers small and lifecycle-bound,
+- use `peek` when a watcher needs a value without subscribing to it.
 
-This shows the usual pattern:
+## Event handles expose signals too
 
-- `view` reads `heading` and `projectNames`,
-- `projectNames` is memoized because it may be reused and carries a stable cache key (`"projects.names"`),
-- `subscriptions` uses `readDerived` explicitly outside the GTK sigil.
+`Event` handles fit the same model. They are effectful runtime values with reactive lifecycle fields:
 
-## GTK sigils auto-read derived values
+```aivi
+saveDraft : Event GtkError Text
+saveDraft = do Event {
+  run: do Effect {
+    persistDraft (get draft)
+    pure "Saved"
+  }
+}
 
-Inside `~<gtk>...</gtk>` hosted by `gtkApp`, derived values are read automatically in common binding positions such as:
+saveMessage = map saveDraft.result (maybeResult =>
+  maybeResult match
+    | Some text => text
+    | None      => ""
+)
+```
 
-- attribute splices like `label={heading}`,
-- `<each items={projectNames} as={projectName}>`.
+Important fields:
 
-Outside the sigil, derived values stay ordinary function values of shape `Model -> A`, so use `readDerived` or plain function application.
+- `saveDraft.result`
+- `saveDraft.error`
+- `saveDraft.done`
+- `saveDraft.running`
 
-For example, `readDerived refreshMillis model` and `refreshMillis model` evaluate the same pure reader; `readDerived` simply makes that boundary explicit in examples and app code.
+Because those fields are signals, you can combine them with other state through the same `map` and `combine2` APIs.
 
-## When not to use derived values
+## When not to introduce a signal
 
-Derived values are the wrong tool when the work is effectful or long-lived. Use:
+Use an ordinary helper function when all of these are true:
 
-- `GtkSignalEvent` + `toMsg` for user input,
-- commands for post-update effects,
-- subscriptions for timers and external feeds,
-- model fields for authoritative state.
+- the value is local,
+- it is computed once in one place,
+- it does not need reactive lifetime or sharing.
 
-Derived values should stay pure and synchronous.
+If the value needs to stay live across widget bindings, watchers, or event-handle state, make it a `Signal`.
 
 ## Where to go next
 
-- [Derived Dataflow](./reactive_dataflow.md) — invalidation, memoization, dependency tracking, and semantics
-- [GTK App Architecture](./app_architecture.md) — where `view`, `subscriptions`, commands, and turn boundaries fit together
-- [Native GTK & libadwaita Apps](./native_gtk_apps.md) — how derived values fit into the full app loop
-- [`aivi.ui.gtk4`](./gtk4.md) — GTK signal events and widget-side signal bindings
+- [Reactive Dataflow](./reactive_dataflow.md) — invalidation, batching, dependency tracking, and lifecycle cleanup
+- [`aivi.ui.gtk4`](./gtk4.md) — full-app guidance, GTK widget binding rules, and low-level event helpers

@@ -7,80 +7,78 @@
 
 <div class="import-badge">use aivi.ui.forms</div>
 
-This module works inside the standard Model / Msg / update pattern described in [GTK App Architecture](./app_architecture.md).
-
-This module is designed to fit naturally into [`gtkApp`](./app_architecture.md):
-
-- the **model** owns the editable values,
-- **`Msg`** constructors describe input, blur, and submit events,
-- **`update`** changes field state with pure helpers,
-- **`view`** renders inline feedback,
-- **commands** can consume the validated result when submission needs IO.
-
-If you know ordinary web-form patterns, think of `Field A` as “the input value plus the small amount of UI metadata you usually track by hand”.
+This module fits directly into signal-first GTK apps. Keep `Field A` values inside a signal or a record-valued signal, update them from widget callbacks, derive visible errors as signals, and use an `Event` handle when submission needs IO.
 
 ## Public API
 
 <<< ../../snippets/from_md/stdlib/ui/forms/block_01.aivi{aivi}
 
-
 ## `Field A`
 
-`Field A` is the recommended model shape for one editable input.
+`Field A` is the recommended shape for one editable input.
 
 - `value` is the current draft value,
 - `touched` becomes `True` after the user leaves the field,
 - `dirty` becomes `True` after any input change.
 
-In practice, `touched` is usually what controls when validation feedback becomes visible, while `dirty` is useful for “Save” button state or unsaved-changes prompts.
-
-The module deliberately stays small. Instead of forcing a single giant `Form` type, it lets you keep your overall screen model as a normal AIVI record and use `Field A` only where it helps.
+In practice, `touched` is usually what controls when validation feedback becomes visible, while `dirty` is useful for save-button state or unsaved-changes prompts.
 
 ## The usual GTK event flow
 
-A typical field follows this mapping:
+A typical field now stays inside direct signal updates:
 
-| GTK event | `Msg` | Typical model update |
-| --- | --- | --- |
-| `GtkInputChanged _ "fieldId" txt` | `FieldChanged txt` | `setValue txt field` |
-| `GtkFocusOut _ "fieldId"` | `FieldBlurred` | `touch field` |
-| `GtkClicked _ "submitBtn"` | `Submit` | `model <| { submitted: True }` |
+| GTK binding | Typical signal update |
+| --- | --- |
+| `onInput={txt => ...}` | `update form <| { name: setValue txt }` |
+| `onFocusOut={_ => ...}` | `update form <| { name: touch }` |
+| `onClick={submitEvent}` | trigger an `Event` handle that reads the validated payload |
 
-That keeps forms inside the same event pipeline as the rest of the app. There is no hidden widget-owned form state and no second validation loop to learn.
+That keeps forms inside the same signal graph as the rest of the UI. There is no hidden widget-owned form state and no second validation loop to learn.
 
 ## Field-level validation
 
-Validators stay as plain pure functions. The built-in helpers in this module mostly validate `Text`, but custom rules can use the same `Validation (List E) A` shape:
+Validators stay plain pure functions. The built-in helpers mostly validate `Text`, but custom rules can use the same `Validation (List E) A` shape.
 
-<<< ../../snippets/from_md/stdlib/ui/forms/block_02.aivi{aivi}
+`visibleErrors submitted validator field` is still the helper most apps want for rendering:
 
+- before blur and before submit -> `[]`,
+- after blur -> the field's current validation errors,
+- after submit -> all field errors, even for untouched fields.
 
-`minLength`, `maxLength`, and `email` treat empty input as valid so that `required` can be layered on separately. That avoids duplicate messages such as “required” and “too short” for the same blank field.
+In a signal-first app, the usual pattern is to derive the visible errors as another signal:
 
-`visibleErrors submitted validator field` is the helper most apps want for rendering:
-
-- before blur and before submit → `[]`,
-- after blur → the field's current validation errors,
-- after submit → all field errors, even for untouched fields.
+```aivi
+nameErrors = map form (state =>
+  visibleErrors state.submitted nameRule state.name
+)
+```
 
 ## Form-level validation
 
-Field-level checks are great for inline feedback. On submit, you usually want one typed domain value, and `Validation` lets you accumulate all field errors instead of stopping at the first one.
-
-<<< ../../snippets/from_md/stdlib/ui/forms/block_01.aivi{aivi}
-
-
+Field-level checks are great for inline feedback. On submit, you usually want one typed domain value, and `Validation` still lets you accumulate all field errors instead of stopping at the first one.
 
 A good rule of thumb is:
 
-1. keep editable draft state in the GTK app model,
-2. show field errors with `visibleErrors`,
-3. build the final domain value with `Validation`.
+1. keep editable draft state in a signal,
+2. show field errors through derived signals,
+3. build the final domain value with `Validation`,
+4. run submission IO through an `Event` handle.
 
-## Full GTK app example
+## Async submit pattern
 
-<<< ../../snippets/from_md/stdlib/ui/forms/block_02.aivi{aivi}
+When submission needs IO, keep the validated payload as plain data and let an `Event` handle own the effectful work:
 
+```aivi
+submitProfile : Event GtkError SavedProfile
+submitProfile = do Event {
+  run: saveProfile (buildProfile (get form))
+}
+```
 
+Because `submitProfile.running`, `submitProfile.result`, and `submitProfile.error` are signals, the UI can bind loading, success, and failure state directly.
 
-This example stops before command execution on purpose. If submission should trigger IO, first produce the validated payload, then launch the command from `update` as described in [`gtkApp` architecture](./app_architecture.md).
+## Where to go next
+
+- [`aivi.ui.gtk4`](./gtk4.md) — how forms fit into mounted GTK bindings and signal-first app structure
+- [Signals](./reactive_signals.md) — writable state, derived state, and watchers
+- [`aivi.ui.gtk4`](./gtk4.md) — callback binding rules for `onInput`, `onFocusOut`, and submit buttons

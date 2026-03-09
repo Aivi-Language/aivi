@@ -124,7 +124,7 @@ the same session.
 - Avoid deeply nested expressions — extract inner logic into named helper functions
 
 ### GTK4 UI
-Prefer `gtkApp` for new apps. The `on Msg => handler` callback style and `signalBind*` helpers are **deprecated**. See `AGENTS.md §4.4` for the preferred Elm-architecture pattern with `gtkApp`.
+Prefer the signal-first GTK runtime for new apps. Signals should drive widget props and structure directly, callbacks should mutate signals or trigger `Event` handles, and `gtkApp` / `signalBind*` helpers should not appear in new code. See `AGENTS.md §4.4`.
 
 ### Decorators
 Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1.

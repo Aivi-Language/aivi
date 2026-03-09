@@ -19,7 +19,7 @@ The open desktop is having a moment. Governments, enterprises, and individuals a
 
 - 🦀 **Rust-powered runtime** — no GC pauses, no Electron bloat, no 200 MB runtime. Your app links against GTK4 directly.
 - 🧠 **Purely functional** — immutable by default, exhaustive pattern matching, no nulls, typed errors. The compiler catches whole classes of bugs before they ship.
-- 🖥️ **GTK4 as a first-class citizen** — a dedicated XML sigil, the blessed `gtkApp` architecture, typed subscriptions, and `memo`-backed derived helpers make native UI code feel like it belongs in the language.
+- 🖥️ **GTK4 as a first-class citizen** — a dedicated XML sigil, first-class `Signal` / `Event` values, direct widget bindings, and mounted structural updates make native UI code feel like it belongs in the language.
 - 📦 **Schema-first data pipelines** — typed `Source K A` declarations keep connector config, schema, transforms, and validation visible before `load` performs any effect.
 - ⚡ **Developer experience that doesn't quit** — a built-in LSP with workspace-aware incremental checking, autocomplete, hover, diagnostics, formatting, and VS Code integration.
 
@@ -99,49 +99,37 @@ editorNode =
 
 No callback spaghetti. Signal handlers are typed ADT constructors — the compiler rejects anything that isn't a valid `Msg`.
 
-### Blessed app loop with `gtkApp`
+### Signal-first native apps
 
-The primary public UI story is `Model -> View -> Msg -> Update` hosted by `gtkApp`. Timers become subscriptions, post-update work becomes commands, and expensive pure reads can be memoized with `memo` and embedded directly into GTK sigils:
+The primary public UI story is signal-first: state lives in `Signal` values, GTK props and child structure bind directly to those signals, and callbacks mutate signals or trigger `Event` handles.
 
 ```ocaml
-Msg = Increment | Tick
+use aivi.reactive
 
-Model = { count: Int, ticking: Bool }
+count = signal 0
+countLabel = map count (value => "Count: { Int.toString value }")
+increment = _ => update count (_ + 1)
 
-countLabel : Model -> Text
-countLabel = memo "counter.countLabel" (state => "Count: { Int.toString state.count }")
-
-subscriptions : Model -> List (Subscription Msg)
-subscriptions = state =>
-  if state.ticking then
-    [subscriptionEvery { key: "counter.tick", millis: 1000, tag: Tick }]
-  else
-    []
+view = ~<gtk>
+  <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
+    <GtkLabel label={countLabel} />
+    <GtkButton label="Increment" onClick={increment} />
+  </GtkBox>
+</gtk>
 
 main : Effect GtkError Unit
-main = gtkApp {
-  id: "com.example.counter",
-  title: "Counter",
-  size: (480, 240),
-  model: { count: 0, ticking: True },
-  onStart: _ _ => pure Unit,
-  subscriptions: subscriptions,
-  view: _ => ~<gtk>
-    <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
-      <GtkLabel label={countLabel} />
-      <GtkButton label="Increment" onClick={ Increment } />
-    </GtkBox>
-  </gtk>,
-  toMsg: auto,
-  update: msg => state => pure (
-    msg match
-      | Increment => { model: state <| { count: state.count + 1 }, commands: [] }
-      | Tick      => { model: state <| { count: state.count + 1 }, commands: [] }
-  )
+main = do Effect {
+  _ <- init Unit
+  appId <- appNew "com.example.counter"
+  win <- windowNew appId "Counter" 480 240
+  root <- buildFromNode view
+  _ <- windowSetChild win root
+  _ <- windowPresent win
+  appRun appId
 }
 ```
 
-Lower-level `signalStream`, `buildFromNode`, and `reconcileNode` still exist for custom loops and library code, but `gtkApp` is the single blessed host for standard applications. Inside a GTK sigil, `label={countLabel}` and `<each items={visibleRows}>` auto-read derived helpers against the committed model. `demos/snake.aivi` shows this pattern with `subscriptionEvery` and `memo` helpers in a complete app.
+Lower-level `signalStream`, `signalPoll`, `gtkSetInterval`, `buildWithIds`, and `reconcileNode` remain available for custom hosting and integrations, but the normal app shape is: mount once with `buildFromNode`, then let signals keep the widgets live.
 
 ### Dynamic lists with `<each>`
 
@@ -326,9 +314,9 @@ Phase 4 also tightens the editor/compiler story:
 - cached checkpoints are reused only when their fingerprints still match,
 - dependent modules are rechecked incrementally when an edited module's export surface or exported schema summary changes.
 
-That same tooling layer now knows about the blessed GTK and schema-first source stories: hover/completion cover `gtkApp`, `appStep`, `noSubscriptions`, `subscriptionEvery`, `commandAfter`, `commandPerform`, `file.json`, `env.decode`, `source.transform`, `source.validate`, and `source.schema.derive`.
+That same tooling layer now knows about the signal-first GTK and schema-first source stories: hover/completion cover `Signal`, `Event`, `buildFromNode`, `signalStream`, GTK callback attrs, `file.json`, `env.decode`, `source.transform`, `source.validate`, and `source.schema.derive`.
 
-For concrete proof points, see `demos/snake.aivi` for the reactive GTK host and `integration-tests/runtime/source_pipeline.aivi` for the schema-first source pipeline slice.
+For concrete proof points, see `integration-tests/stdlib/aivi/ui/gtk4/gtk4.aivi` for signal-first GTK coverage and `integration-tests/runtime/source_pipeline.aivi` for the schema-first source pipeline slice.
 
 Works equally well with a local file: `openapi.fromFile "./specs/api.yaml"`. The same type-driven decoding applies everywhere — HTTP sources, file sources, environment variables — if the type is known at the call site, AIVI decodes into it automatically.
 

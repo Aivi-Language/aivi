@@ -85,8 +85,14 @@ fn is_reactive_signal(value: &Value) -> bool {
     )
 }
 
-fn resolve_reactive_attr_value(value: Value, runtime: &mut crate::runtime::Runtime) -> Result<Value, RuntimeError> {
+pub(super) fn resolve_reactive_attr_value(
+    value: Value,
+    runtime: &mut crate::runtime::Runtime,
+) -> Result<Value, RuntimeError> {
     let value = runtime.force_value(value)?;
+    if matches!(value, Value::Signal(_)) {
+        return runtime.reactive_get_signal(value);
+    }
     if !is_reactive_signal(&value) {
         return Ok(value);
     }
@@ -97,7 +103,9 @@ fn resolve_reactive_attr_value(value: Value, runtime: &mut crate::runtime::Runti
         .map(|state| state.current_model.clone())
         .ok_or_else(|| RuntimeError::InvalidArgument {
             context: "gtk4 reactive binding".to_string(),
-            reason: "derived values inside gtk sigils require gtkApp or an initialized reactive host".to_string(),
+            reason:
+                "derived values inside gtk sigils require gtkApp or an initialized reactive host"
+                    .to_string(),
         })?;
     runtime.apply(value, model)
 }
@@ -136,97 +144,317 @@ fn serialize_attr_builtin() -> Value {
     })
 }
 
-fn each_items_builtin() -> Value {
-    builtin("gtk4.eachItems", 2, |mut args, runtime| {
-        let template = args.remove(1);
-        let items = resolve_reactive_attr_value(args.remove(0), runtime)?;
-        let items = runtime.force_value(items)?;
-        let Value::List(items) = items else {
-            return Err(RuntimeError::TypeError {
-                context: "gtk4.eachItems".to_string(),
-                expected: "List".to_string(),
-                got: crate::runtime::format_value(&items),
-            });
-        };
-        let mut out = Vec::with_capacity(items.len());
-        for item in items.iter() {
-            out.push(runtime.apply(template.clone(), item.clone())?);
+fn capture_binding_builtin() -> Value {
+    builtin("gtk4.captureBinding", 1, |mut args, runtime| {
+        let value = args.remove(0);
+        Ok(Value::Int(runtime.ctx.capture_gtk_binding(value)))
+    })
+}
+
+fn serialize_signal_text(value: &Value) -> Option<String> {
+    Some(match value {
+        Value::Text(text) => text.clone(),
+        Value::Int(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Constructor { name, args } if args.is_empty() => name.clone(),
+        Value::Constructor { name, args } => {
+            let values = args
+                .iter()
+                .map(crate::runtime::format_value)
+                .collect::<Vec<_>>();
+            format!("{}({})", name, values.join(","))
         }
-        Ok(Value::List(Arc::new(out)))
+        _ => return None,
     })
 }
 
 fn serialize_signal_builtin() -> Value {
     builtin("gtk4.serializeSignal", 1, |mut args, _| {
         let value = args.remove(0);
-        Ok(Value::Text(match value {
-            Value::Text(text) => text,
-            Value::Int(value) => value.to_string(),
-            Value::Bool(value) => value.to_string(),
-            Value::Float(value) => value.to_string(),
-            Value::Constructor { name, args } if args.is_empty() => name,
-            Value::Constructor { name, args } => {
-                let values = args
-                    .iter()
-                    .map(crate::runtime::format_value)
-                    .collect::<Vec<_>>();
-                format!("{}({})", name, values.join(","))
-            }
-            _ => String::new(),
-        }))
+        Ok(Value::Text(
+            serialize_signal_text(&value).unwrap_or_default(),
+        ))
     })
 }
 
-fn collect_auto_bindings_into(
-    node: &Value,
-    named_handlers: &mut HashMap<(String, String), String>,
-    unique_handlers_by_signal: &mut HashMap<String, Option<String>>,
-) -> Result<(), RuntimeError> {
-    let Value::Constructor { name, args } = node else {
-        return Ok(());
+#[derive(Clone)]
+pub(super) enum ResolvedGtkAttr {
+    StaticAttr { name: String, value: String },
+    BoundAttr { name: String, value: Value },
+    StaticProp { name: String, value: String },
+    BoundProp { name: String, value: Value },
+    EventProp { name: String, handler: Value },
+    Id(String),
+    Ref(String),
+}
+
+#[derive(Clone)]
+pub(super) enum ResolvedGtkNode {
+    Element {
+        tag: String,
+        attrs: Vec<ResolvedGtkAttr>,
+        children: Vec<ResolvedGtkNode>,
+    },
+    Text(String),
+    DynamicText(Value),
+    Show {
+        when: Value,
+        child: Box<ResolvedGtkNode>,
+    },
+    Each {
+        items: Value,
+        template: Value,
+        _key: Option<Value>,
+    },
+}
+
+fn decode_binding_handle(
+    value: &Value,
+    runtime: &crate::runtime::Runtime,
+    context: &str,
+) -> Result<Value, RuntimeError> {
+    let Value::Int(handle) = value else {
+        return Err(RuntimeError::TypeError {
+            context: context.to_string(),
+            expected: "GtkBindingHandle".to_string(),
+            got: crate::runtime::format_value(value),
+        });
+    };
+    runtime
+        .ctx
+        .resolve_gtk_binding(*handle)
+        .ok_or_else(|| RuntimeError::InvalidArgument {
+            context: context.to_string(),
+            reason: format!("unknown gtk binding handle {handle}"),
+        })
+}
+
+fn decode_resolved_attr(
+    value: &Value,
+    runtime: &crate::runtime::Runtime,
+) -> Result<ResolvedGtkAttr, RuntimeError> {
+    let Value::Constructor { name, args } = value else {
+        return Err(RuntimeError::Message(
+            "gtk4 expected a GtkAttr constructor".to_string(),
+        ));
     };
     match (name.as_str(), args.as_slice()) {
-        ("GtkTextNode", [_]) => Ok(()),
-        ("GtkElement", [_, attrs, children]) => {
+        ("GtkStaticAttr", [name, value]) => Ok(ResolvedGtkAttr::StaticAttr {
+            name: decode_text(name).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid static attr name".to_string())
+            })?,
+            value: decode_text(value).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid static attr value".to_string())
+            })?,
+        }),
+        ("GtkBoundAttr", [name, value]) => Ok(ResolvedGtkAttr::BoundAttr {
+            name: decode_text(name)
+                .ok_or_else(|| RuntimeError::Message("gtk4 invalid bound attr name".to_string()))?,
+            value: decode_binding_handle(value, runtime, "gtk4 bound attr")?,
+        }),
+        ("GtkStaticProp", [name, value]) => Ok(ResolvedGtkAttr::StaticProp {
+            name: decode_text(name).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid static prop name".to_string())
+            })?,
+            value: decode_text(value).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid static prop value".to_string())
+            })?,
+        }),
+        ("GtkBoundProp", [name, value]) => Ok(ResolvedGtkAttr::BoundProp {
+            name: decode_text(name)
+                .ok_or_else(|| RuntimeError::Message("gtk4 invalid bound prop name".to_string()))?,
+            value: decode_binding_handle(value, runtime, "gtk4 bound prop")?,
+        }),
+        ("GtkEventProp", [name, handler]) => Ok(ResolvedGtkAttr::EventProp {
+            name: decode_text(name)
+                .ok_or_else(|| RuntimeError::Message("gtk4 invalid event prop name".to_string()))?,
+            handler: decode_binding_handle(handler, runtime, "gtk4 event prop")?,
+        }),
+        ("GtkIdAttr", [value]) => Ok(ResolvedGtkAttr::Id(
+            decode_text(value)
+                .ok_or_else(|| RuntimeError::Message("gtk4 invalid id attr".to_string()))?,
+        )),
+        ("GtkRefAttr", [value]) => Ok(ResolvedGtkAttr::Ref(
+            decode_text(value)
+                .ok_or_else(|| RuntimeError::Message("gtk4 invalid ref attr".to_string()))?,
+        )),
+        ("GtkAttribute", [name, value]) => {
+            let key = decode_text(name).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid legacy attr name".to_string())
+            })?;
+            let raw = decode_text(value).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid legacy attr value".to_string())
+            })?;
+            if key == "id" {
+                Ok(ResolvedGtkAttr::Id(raw))
+            } else if key == "ref" {
+                Ok(ResolvedGtkAttr::Ref(raw))
+            } else if let Some(signal_name) = key.strip_prefix("signal:") {
+                Ok(ResolvedGtkAttr::StaticAttr {
+                    name: format!("signal:{signal_name}"),
+                    value: raw,
+                })
+            } else if let Some(prop_name) = key.strip_prefix("prop:") {
+                Ok(ResolvedGtkAttr::StaticProp {
+                    name: prop_name.to_string(),
+                    value: raw,
+                })
+            } else {
+                Ok(ResolvedGtkAttr::StaticAttr {
+                    name: key,
+                    value: raw,
+                })
+            }
+        }
+        _ => Err(RuntimeError::Message(format!(
+            "gtk4 expected a GtkAttr constructor, got {name}"
+        ))),
+    }
+}
+
+pub(super) fn resolve_gtk_node(
+    node: &Value,
+    runtime: &crate::runtime::Runtime,
+) -> Result<ResolvedGtkNode, RuntimeError> {
+    let Value::Constructor { name, args } = node else {
+        return Err(RuntimeError::Message(
+            "gtk4.buildFromNode expects GtkNode".to_string(),
+        ));
+    };
+    match (name.as_str(), args.as_slice()) {
+        ("GtkTextNode", [text]) => {
+            Ok(ResolvedGtkNode::Text(decode_text(text).ok_or_else(
+                || RuntimeError::Message("gtk4 invalid GtkTextNode text".to_string()),
+            )?))
+        }
+        ("GtkBoundText", [value]) => Ok(ResolvedGtkNode::DynamicText(decode_binding_handle(
+            value,
+            runtime,
+            "gtk4 bound text",
+        )?)),
+        ("GtkShowNode", [when, child]) => Ok(ResolvedGtkNode::Show {
+            when: decode_binding_handle(when, runtime, "gtk4 show binding")?,
+            child: Box::new(resolve_gtk_node(child, runtime)?),
+        }),
+        ("GtkEachNode", [items, template, key]) => {
+            let key = match key {
+                Value::Constructor { name, args } if name == "None" && args.is_empty() => None,
+                Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+                    Some(decode_binding_handle(&args[0], runtime, "gtk4 each key")?)
+                }
+                other => {
+                    return Err(RuntimeError::TypeError {
+                        context: "gtk4 each key".to_string(),
+                        expected: "Option GtkBindingHandle".to_string(),
+                        got: crate::runtime::format_value(other),
+                    })
+                }
+            };
+            Ok(ResolvedGtkNode::Each {
+                items: decode_binding_handle(items, runtime, "gtk4 each items")?,
+                template: decode_binding_handle(template, runtime, "gtk4 each template")?,
+                _key: key,
+            })
+        }
+        ("GtkElement", [tag, attrs, children]) => {
+            let tag = decode_text(tag)
+                .ok_or_else(|| RuntimeError::Message("gtk4 invalid GtkElement tag".to_string()))?;
             let Value::List(attrs) = attrs else {
                 return Err(RuntimeError::Message(
-                    "gtk4.autoBindingsSet: GtkElement attrs must be a List".to_string(),
+                    "gtk4 GtkElement attrs must be a List".to_string(),
                 ));
             };
             let Value::List(children) = children else {
                 return Err(RuntimeError::Message(
-                    "gtk4.autoBindingsSet: GtkElement children must be a List".to_string(),
+                    "gtk4 GtkElement children must be a List".to_string(),
                 ));
             };
+            let attrs = attrs
+                .iter()
+                .map(|attr| decode_resolved_attr(attr, runtime))
+                .collect::<Result<Vec<_>, _>>()?;
+            let children = children
+                .iter()
+                .map(|child| resolve_gtk_node(child, runtime))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ResolvedGtkNode::Element {
+                tag,
+                attrs,
+                children,
+            })
+        }
+        _ => Err(RuntimeError::Message(
+            "gtk4.buildFromNode expects GtkNode".to_string(),
+        )),
+    }
+}
 
+fn collect_auto_bindings_into(
+    node: &ResolvedGtkNode,
+    runtime: &mut crate::runtime::Runtime,
+    named_handlers: &mut HashMap<(String, String), String>,
+    unique_handlers_by_signal: &mut HashMap<String, Option<String>>,
+) -> Result<(), RuntimeError> {
+    match node {
+        ResolvedGtkNode::Text(_) | ResolvedGtkNode::DynamicText(_) => Ok(()),
+        ResolvedGtkNode::Show { child, .. } => {
+            collect_auto_bindings_into(child, runtime, named_handlers, unique_handlers_by_signal)
+        }
+        ResolvedGtkNode::Each {
+            items,
+            template,
+            _key: _,
+        } => {
+            let items = resolve_reactive_attr_value(items.clone(), runtime)?;
+            let items = runtime.force_value(items)?;
+            let Value::List(items) = items else {
+                return Err(RuntimeError::TypeError {
+                    context: "gtk4.autoBindingsSet each items".to_string(),
+                    expected: "List".to_string(),
+                    got: crate::runtime::format_value(&items),
+                });
+            };
+            for item in items.iter() {
+                let node = runtime.apply(template.clone(), item.clone())?;
+                let node = runtime.force_value(node)?;
+                let node = resolve_gtk_node(&node, runtime)?;
+                collect_auto_bindings_into(
+                    &node,
+                    runtime,
+                    named_handlers,
+                    unique_handlers_by_signal,
+                )?;
+            }
+            Ok(())
+        }
+        ResolvedGtkNode::Element {
+            attrs, children, ..
+        } => {
             let mut widget_name = String::new();
             let mut signal_handlers = Vec::new();
-            for attr in attrs.iter() {
-                let Value::Constructor { name, args } = attr else {
-                    continue;
-                };
-                if name != "GtkAttribute" || args.len() != 2 {
-                    continue;
-                }
-                let Some(key) = decode_text(&args[0]) else {
-                    continue;
-                };
-                let Some(value) = decode_text(&args[1]) else {
-                    continue;
-                };
-                if key == "id" {
-                    widget_name = value;
-                } else if let Some(signal_name) = key.strip_prefix("signal:") {
-                    signal_handlers.push((signal_name.to_string(), value));
+            for attr in attrs {
+                match attr {
+                    ResolvedGtkAttr::Id(value) => widget_name = value.clone(),
+                    ResolvedGtkAttr::EventProp { name, handler } => {
+                        if let Some(serialized) = serialize_signal_text(handler) {
+                            signal_handlers.push((name.clone(), serialized));
+                        }
+                    }
+                    ResolvedGtkAttr::StaticAttr { name, value } if name.starts_with("signal:") => {
+                        signal_handlers.push((
+                            name.trim_start_matches("signal:").to_string(),
+                            value.clone(),
+                        ));
+                    }
+                    _ => {}
                 }
             }
 
             for (signal_name, handler) in signal_handlers {
                 if !widget_name.is_empty() {
-                    named_handlers.insert(
-                        (widget_name.clone(), signal_name.clone()),
-                        handler.clone(),
-                    );
+                    named_handlers
+                        .insert((widget_name.clone(), signal_name.clone()), handler.clone());
                 }
                 unique_handlers_by_signal
                     .entry(signal_name)
@@ -237,12 +465,16 @@ fn collect_auto_bindings_into(
                     .or_insert_with(|| Some(handler));
             }
 
-            for child in children.iter() {
-                collect_auto_bindings_into(child, named_handlers, unique_handlers_by_signal)?;
+            for child in children {
+                collect_auto_bindings_into(
+                    child,
+                    runtime,
+                    named_handlers,
+                    unique_handlers_by_signal,
+                )?;
             }
             Ok(())
         }
-        _ => Ok(()),
     }
 }
 
@@ -252,10 +484,12 @@ fn auto_bindings_set_builtin() -> Value {
         Ok(Value::Effect(Arc::new(EffectValue::Thunk {
             func: Arc::new(move |runtime| {
                 let node = runtime.force_value(node.clone())?;
+                let node = resolve_gtk_node(&node, runtime)?;
                 let mut named_handlers = HashMap::new();
                 let mut unique_handlers_by_signal = HashMap::new();
                 collect_auto_bindings_into(
                     &node,
+                    runtime,
                     &mut named_handlers,
                     &mut unique_handlers_by_signal,
                 )?;
@@ -401,17 +635,16 @@ fn auto_to_msg_builtin() -> Value {
                 None,
                 None,
             ),
-            Value::Constructor { name, args } if name == "GtkTick" && args.is_empty() => (
-                "tick".to_string(),
-                String::new(),
-                None,
-                None,
-            ),
+            Value::Constructor { name, args } if name == "GtkTick" && args.is_empty() => {
+                ("tick".to_string(), String::new(), None, None)
+            }
             Value::Constructor { name, args } if name == "GtkUnknownSignal" && args.len() == 5 => (
                 decode_text(&args[2]).unwrap_or_default(),
                 decode_text(&args[1]).unwrap_or_default(),
                 decode_text(&args[3]),
-                decode_text(&args[4]).filter(|text| !text.is_empty()).map(Value::Text),
+                decode_text(&args[4])
+                    .filter(|text| !text.is_empty())
+                    .map(Value::Text),
             ),
             _ => {
                 return Ok(Value::Constructor {
@@ -603,9 +836,80 @@ fn build_gtk4_stubs() -> Value {
     fields.insert("autoToMsg".to_string(), auto_to_msg_builtin());
     fields.insert("serializeAttr".to_string(), serialize_attr_builtin());
     fields.insert("serializeSignal".to_string(), serialize_signal_builtin());
-    fields.insert("eachItems".to_string(), each_items_builtin());
+    fields.insert("captureBinding".to_string(), capture_binding_builtin());
     for &(name, arity) in stubs {
         fields.insert(name.to_string(), gtk4_stub(name, arity));
     }
     Value::Record(Arc::new(fields))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use super::{collect_auto_bindings_into, ResolvedGtkNode};
+    use crate::runtime::builtins::util::builtin;
+    use crate::runtime::{build_runtime_base, Value};
+
+    #[test]
+    fn auto_bindings_collect_handlers_inside_each_templates() {
+        let mut runtime = build_runtime_base();
+        let handler = Value::Constructor {
+            name: "Save".to_string(),
+            args: vec![],
+        };
+        let handler_handle = runtime.ctx.capture_gtk_binding(handler);
+        let template = builtin("template", 1, move |mut args, _| {
+            let item = args.remove(0);
+            let widget_id = match item {
+                Value::Text(text) => text,
+                other => panic!("expected template item text, got {other:?}"),
+            };
+            Ok(Value::Constructor {
+                name: "GtkElement".to_string(),
+                args: vec![
+                    Value::Text("object".to_string()),
+                    Value::List(Arc::new(vec![
+                        Value::Constructor {
+                            name: "GtkIdAttr".to_string(),
+                            args: vec![Value::Text(widget_id)],
+                        },
+                        Value::Constructor {
+                            name: "GtkEventProp".to_string(),
+                            args: vec![
+                                Value::Text("clicked".to_string()),
+                                Value::Int(handler_handle),
+                            ],
+                        },
+                    ])),
+                    Value::List(Arc::new(vec![])),
+                ],
+            })
+        });
+        let node = ResolvedGtkNode::Each {
+            items: Value::List(Arc::new(vec![Value::Text("saveBtn".to_string())])),
+            template,
+            _key: None,
+        };
+        let mut named_handlers = HashMap::new();
+        let mut unique_handlers_by_signal = HashMap::new();
+
+        collect_auto_bindings_into(
+            &node,
+            &mut runtime,
+            &mut named_handlers,
+            &mut unique_handlers_by_signal,
+        )
+        .unwrap_or_else(|error| panic!("collect auto bindings failed: {}", error));
+
+        assert_eq!(
+            named_handlers.get(&("saveBtn".to_string(), "clicked".to_string())),
+            Some(&"Save".to_string())
+        );
+        assert_eq!(
+            unique_handlers_by_signal.get("clicked"),
+            Some(&Some("Save".to_string()))
+        );
+    }
 }

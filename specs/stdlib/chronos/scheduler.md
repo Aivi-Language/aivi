@@ -17,7 +17,7 @@ Use this domain when a simple in-process timer is not enough. Typical cases incl
 - concurrency control per tenant,
 - explicit lease and heartbeat management.
 
-If the timing only matters while one GUI app is running, lighter tools from [App architecture](/stdlib/ui/app_architecture) such as `commandAfter` or `subscriptionEvery` are usually a better fit; [Native GTK apps](/stdlib/ui/native_gtk_apps) shows the same “app-local timer vs durable schedule” split in a full UI context.
+If the timing only matters while one GUI app is running, lighter in-process tools from [`aivi.ui.gtk4`](/stdlib/ui/gtk4) such as `gtkSetInterval`, `signalStream`, or an `Event`-driven task are usually a better fit.
 
 ## Mental model
 

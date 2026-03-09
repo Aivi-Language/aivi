@@ -342,13 +342,152 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         text_ty.clone(),
         Type::con("List").app(vec![text_ty.clone()]),
     ]);
+    let reactive_signal_a = checker.fresh_var_id();
+    let reactive_signal_b = checker.fresh_var_id();
+    let reactive_signal_c = checker.fresh_var_id();
+    let reactive_watch_r = checker.fresh_var_id();
+    let reactive_batch_a = checker.fresh_var_id();
+    let reactive_event_e = checker.fresh_var_id();
+    let reactive_event_a = checker.fresh_var_id();
+    let reactive_record = Type::Record {
+        fields: vec![
+            (
+                "signal".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(reactive_signal_a)),
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                ),
+            ),
+            (
+                "get".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Var(reactive_signal_a)),
+                ),
+            ),
+            (
+                "peek".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Var(reactive_signal_a)),
+                ),
+            ),
+            (
+                "set".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(reactive_signal_a)),
+                        Box::new(Type::con("Unit")),
+                    )),
+                ),
+            ),
+            (
+                "update".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(reactive_signal_a)),
+                            Box::new(Type::Var(reactive_signal_a)),
+                        )),
+                        Box::new(Type::con("Unit")),
+                    )),
+                ),
+            ),
+            (
+                "map".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(reactive_signal_a)),
+                            Box::new(Type::Var(reactive_signal_b)),
+                        )),
+                        Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_b)])),
+                    )),
+                ),
+            ),
+            (
+                "combine2".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_b)])),
+                        Box::new(Type::Func(
+                            Box::new(Type::Func(
+                                Box::new(Type::Var(reactive_signal_a)),
+                                Box::new(Type::Func(
+                                    Box::new(Type::Var(reactive_signal_b)),
+                                    Box::new(Type::Var(reactive_signal_c)),
+                                )),
+                            )),
+                            Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_c)])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "watch".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(reactive_signal_a)),
+                            Box::new(Type::Var(reactive_watch_r)),
+                        )),
+                        Box::new(Type::con("Disposable")),
+                    )),
+                ),
+            ),
+            (
+                "batch".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Unit")),
+                        Box::new(Type::Var(reactive_batch_a)),
+                    )),
+                    Box::new(Type::Var(reactive_batch_a)),
+                ),
+            ),
+            (
+                "makeEvent".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::Var(reactive_event_e),
+                        Type::Var(reactive_event_a),
+                    ])),
+                    Box::new(Type::con("EventHandle").app(vec![
+                        Type::Var(reactive_event_e),
+                        Type::Var(reactive_event_a),
+                    ])),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert(
+        "reactive".to_string(),
+        Scheme {
+            vars: vec![
+                reactive_signal_a,
+                reactive_signal_b,
+                reactive_signal_c,
+                reactive_watch_r,
+                reactive_batch_a,
+                reactive_event_e,
+                reactive_event_a,
+            ],
+            ty: reactive_record,
+            origin: None,
+        },
+    );
     let gtk4_model = checker.fresh_var_id();
     let gtk4_value = checker.fresh_var_id();
     let gtk4_signal_model = checker.fresh_var_id();
     let gtk4_signal_value = checker.fresh_var_id();
     let gtk4_attr_value = checker.fresh_var_id();
-    let gtk4_each_source = checker.fresh_var_id();
-    let gtk4_each_item = checker.fresh_var_id();
     let gtk4_record = Type::Record {
         fields: vec![
             (
@@ -405,16 +544,10 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "eachItems".to_string(),
+                "captureBinding".to_string(),
                 Type::Func(
-                    Box::new(Type::Var(gtk4_each_source)),
-                    Box::new(Type::Func(
-                        Box::new(Type::Func(
-                            Box::new(Type::Var(gtk4_each_item)),
-                            Box::new(Type::con("GtkNode")),
-                        )),
-                        Box::new(Type::con("List").app(vec![Type::con("GtkNode")])),
-                    )),
+                    Box::new(Type::Var(gtk4_attr_value)),
+                    Box::new(int_ty.clone()),
                 ),
             ),
             (

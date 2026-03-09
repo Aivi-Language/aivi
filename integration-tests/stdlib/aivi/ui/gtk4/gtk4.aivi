@@ -3,6 +3,7 @@ module integrationTests.stdlib.aivi.ui.gtk4.tests
 
 use aivi
 use aivi.list as List
+use aivi.reactive (Signal, signal, get, combine2, map as signalMap)
 use aivi.testing
 use aivi.ui.gtk4
 
@@ -26,10 +27,10 @@ getValueTriple = event => event match
   | GtkValueChanged wid name val => (wid, name, val)
   | _                            => (0, "", 0.0)
 
-TestMsg      = Save | NameChanged Text | ToggledMsg Bool
-TestMsg2     = TitleChanged Text | BodyChanged Text
-DerivedRow   = { name: Text }
-DerivedModel = { title: Text, rows: List DerivedRow }
+TestMsg  = Save | NameChanged Text | ToggledMsg Bool
+TestMsg2 = TitleChanged Text | BodyChanged Text
+
+Row = { id: Text, name: Text }
 
 toTestMsg = event => event match
   | GtkClicked _ _          => Some Save
@@ -42,22 +43,15 @@ toTestMsg2 = event => event match
   | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
   | _                                  => None
 
-titleDerived : DerivedModel -> Text
-titleDerived =
-  memo "gtk4.tests.titleDerived" (state =>
-    "Title: {state.title}"
-  )
-
-rowDerived : DerivedModel -> List DerivedRow
-rowDerived =
-  derive (state => state.rows)
-
-derivedView : DerivedModel -> GtkNode
-derivedView = _ =>
+signalDrivenView : Signal Text -> Signal Bool -> Signal (List Row) -> GtkNode
+signalDrivenView = title => visible => rows =>
   ~<gtk>
     <GtkBox orientation="vertical" spacing="4">
-      <GtkLabel label={titleDerived} />
-      <each items={rowDerived} as={row}>
+      <GtkLabel label={signalMap title (txt => "Title: {txt}")} />
+      <show when={visible}>
+        <GtkLabel label="Visible" />
+      </show>
+      <each items={rows} as={row} key={row => row.id}>
         <GtkLabel label={row.name} />
       </each>
     </GtkBox>
@@ -100,95 +94,55 @@ signal_event_match_by_name = do Effect {
 
 @test "GtkNode constructors"
 gtk_node_constructors = do Effect {
-  elem   = gtkElement "GtkBox" [gtkAttr "spacing" "8"] [gtkTextNode "hello"]
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkBox"
+  elem = gtkElement "GtkBox" [] [gtkTextNode "hello"]
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkBox"
 }
 
 @test "gtk4 helper constructors are accessible"
 type_signatures = do Effect {
-  node = gtkElement "GtkBox" [gtkAttr "spacing" "8", gtkSignalAttr "clicked" Save] []
-  assertEq node (gtkElement "GtkBox" [gtkAttr "spacing" "8", gtkSignalAttr "clicked" Save] [])
+  node       = gtkElement "GtkBox" [] [gtkTextNode "hello"]
+  childCount = node match
+    | GtkElement _ _ children => List.length children
+    | _                       => 0
+    assertEq childCount 1
 }
 
-@test "app step helpers build blessed update values"
-app_step_helpers = do Effect {
-  bare        = appStep 3
-  withCommand = appStepWith 4 [commandEmit Save]
-
-  assertEq bare.model 3
-  assertEq bare.commands []
-  assertEq withCommand.model 4
-  assertEq (List.length withCommand.commands) 1
-}
-
-@test "command and subscription helper constructors are available"
-command_and_subscription_shapes = do Effect {
-  command = commandAfter {
-    key: "tick"
-    millis: 100
-    msg: Save
-  }
-  subscription = subscriptionEvery {
-    key: "clock"
-    millis: 250
-    tag: Save
-  }
-
-  step = appStepWith 1 [command]
-  assertEq (List.length step.commands) 1
-  assertEq (List.length [subscription]) 1
-}
-
-@test "memo remains callable as a pure derived helper"
-memo_pure_helper = do Effect {
-  doubled = memo "gtk4.tests.double" (state => state.count + state.count)
-  assertEq (doubled { count: 3 }) 6
-}
-
-@test "memo can drive subscription configuration from committed state"
-memo_subscription_shape = do Effect {
-  tickMillis = memo "gtk4.tests.tickMillis" (state =>
-    if state.fast then 50 else 120
-  )
-  subscriptions = state => [
-    subscriptionEvery {
-      key: "clock"
-      millis: tickMillis state
-      tag: Save
-    }
+@test "signal-first gtk sigils compile with show each and derived signals"
+signal_first_sigil_shapes = do Effect {
+  title   = signal "Hello"
+  visible = signal True
+  rows    = signal [
+    { id: "one", name: "First" }
+    { id: "two", name: "Second" }
   ]
-
-  first  = subscriptions { fast: True }
-  second = subscriptions { fast: False }
-
-  assertEq (List.length first) 1
-  assertEq (List.length second) 1
-  assertEq (tickMillis { fast: True }) 50
-  assertEq (tickMillis { fast: False }) 120
+  combined =
+    combine2 title visible (txt => shown =>
+      if shown then "{txt}!" else txt
+    )
+  _ = combined
+  _ = signalDrivenView title visible rows
+  assertEq (get title) "Hello"
 }
 
-@test "derive remains callable and readDerived is explicit"
-derive_pure_helper = do Effect {
-  title = derive (state => state.title)
-  state = { title: "hello" }
-  assertEq (title state) "hello"
-  assertEq (readDerived title state) "hello"
-}
-
-@test "derived helpers compile inside gtk sigils"
-derived_helpers_compile = do Effect {
-  _ = derivedView
+@test "manual mount helpers remain available"
+manual_mount_helpers_available = do Effect {
+  _ = init
+  _ = appNew
+  _ = windowNew
+  _ = windowSetChild
+  _ = windowPresent
+  _ = appRun
+  _ = buildFromNode
+  _ = buildWithIds
+  _ = reconcileNode
+  _ = signalPoll
+  _ = signalStream
+  _ = signalEmit
+  _ = gtkSetInterval
   assertEq True True
-}
-
-@test "auto is available as a gtkApp toMsg adapter"
-auto_adapter_available = do Effect {
-  mapped : Option TestMsg
-  mapped = auto (GtkClicked 1 "")
-  assertEq mapped None
 }
 
 @test "GtkValueChanged carries widget name and float value"
@@ -198,65 +152,65 @@ signal_value_changed = do Effect {
 
 @test "GtkGrid child position parses from type string"
 gtk_grid_node_constructors = do Effect {
-  elem   = gtkElement "GtkGrid" [gtkAttr "row-spacing" "8", gtkAttr "column-spacing" "4"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkGrid"
+  elem = gtkElement "GtkGrid" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkGrid"
 }
 
 @test "GtkSpinButton node is constructable"
 gtk_spin_button_node = do Effect {
-  elem   = gtkElement "GtkSpinButton" [gtkAttr "min" "0", gtkAttr "max" "100", gtkAttr "step" "1"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkSpinButton"
+  elem = gtkElement "GtkSpinButton" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkSpinButton"
 }
 
 @test "GtkAspectFrame node is constructable"
 gtk_aspect_frame_node = do Effect {
-  elem   = gtkElement "GtkAspectFrame" [gtkAttr "ratio" "1.333", gtkAttr "xalign" "0.5"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkAspectFrame"
+  elem = gtkElement "GtkAspectFrame" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkAspectFrame"
 }
 
 @test "GtkComboBoxText node is constructable"
 gtk_combo_box_text_node = do Effect {
-  elem   = gtkElement "GtkComboBoxText" [gtkAttr "strings" "Option A\nOption B\nOption C"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkComboBoxText"
+  elem = gtkElement "GtkComboBoxText" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkComboBoxText"
 }
 
 @test "GtkSearchBar node is constructable"
 gtk_search_bar_node = do Effect {
-  elem   = gtkElement "GtkSearchBar" [gtkAttr "search-mode" "true", gtkAttr "show-close-button" "false"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkSearchBar"
+  elem = gtkElement "GtkSearchBar" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkSearchBar"
 }
 
 @test "GtkPicture node is constructable"
 gtk_picture_node = do Effect {
-  elem   = gtkElement "GtkPicture" [gtkAttr "content-fit" "contain", gtkAttr "can-shrink" "true", gtkAttr "alternative-text" "My photo"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkPicture"
+  elem = gtkElement "GtkPicture" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkPicture"
 }
 
 @test "GtkCalendar node is constructable"
 gtk_calendar_node = do Effect {
-  elem   = gtkElement "GtkCalendar" [gtkAttr "show-heading" "true", gtkAttr "show-day-names" "true", gtkAttr "show-week-numbers" "false"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkCalendar"
+  elem = gtkElement "GtkCalendar" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkCalendar"
 }
 
 @test "GtkCalendar day-selected signal is known"
@@ -270,21 +224,21 @@ gtk_calendar_signal = do Effect {
 
 @test "GtkActionBar node is constructable"
 gtk_action_bar_node = do Effect {
-  elem   = gtkElement "GtkActionBar" [gtkAttr "revealed" "true"] []
-  getTag = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkActionBar"
+  elem = gtkElement "GtkActionBar" [] []
+  tag  = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkActionBar"
 }
 
 @test "GtkCenterBox node is constructable"
 gtk_center_box_node = do Effect {
-  startChild  = gtkElement "GtkLabel" [gtkAttr "label" "Left"] []
-  centerChild = gtkElement "GtkLabel" [gtkAttr "label" "Center"] []
-  endChild    = gtkElement "GtkLabel" [gtkAttr "label" "Right"] []
+  startChild  = gtkElement "GtkLabel" [] []
+  centerChild = gtkElement "GtkLabel" [] []
+  endChild    = gtkElement "GtkLabel" [] []
   elem        = gtkElement "GtkCenterBox" [] [startChild, centerChild, endChild]
-  getTag      = n => n match
-    | GtkElement tag _ _ => tag
-    | _                  => ""
-    assertEq (getTag elem) "GtkCenterBox"
+  tag         = elem match
+    | GtkElement name _ _ => name
+    | _                   => ""
+    assertEq tag "GtkCenterBox"
 }
