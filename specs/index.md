@@ -109,9 +109,9 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [GTK & libadwaita Apps](stdlib/ui/native_gtk_apps)
 - [App Architecture](stdlib/ui/app_architecture)
 - [GTK & libadwaita Runtime](stdlib/ui/gtk4)
-#### Reactive UI
-- [Reactive Signals](stdlib/ui/reactive_signals)
-- [Reactive Dataflow](stdlib/ui/reactive_dataflow)
+#### Derived UI
+- [Derived Values](stdlib/ui/reactive_signals)
+- [Derived Dataflow](stdlib/ui/reactive_dataflow)
 #### UI Building Blocks
 - [Forms](stdlib/ui/forms)
 - [Layout](stdlib/ui/layout)
