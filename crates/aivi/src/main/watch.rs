@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use aivi::{AiviError, CancelHandle};
+use aivi::{AiviError, CancelHandle, WorkspaceSession};
 use notify::RecursiveMode;
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
@@ -30,29 +30,50 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
         watch_dir.display()
     );
 
+    let mut session = WorkspaceSession::new();
+
     loop {
         let since = SystemTime::now();
         let cancel = CancelHandle::new();
         let target_owned = target.to_string();
         let cancel_for_thread = cancel.clone();
 
-        let runner = thread::spawn(move || -> Result<(), AiviError> {
-            let (program, cg_types, monomorph_plan, surface_modules) =
-                aivi::desugar_target_with_cg_types_and_surface(&target_owned)?;
-            aivi::run_cranelift_jit_with_handle(
-                program,
-                cg_types,
-                monomorph_plan,
-                &cancel_for_thread,
-                &surface_modules,
-            )
+        let mut worker_session = std::mem::take(&mut session);
+        let runner = thread::spawn(move || -> (WorkspaceSession, Result<(), AiviError>) {
+            let result = (|| {
+                let (program, cg_types, monomorph_plan, surface_modules) =
+                    aivi::desugar_target_with_cg_types_and_surface_in_session(
+                        &mut worker_session,
+                        &target_owned,
+                    )?;
+                aivi::run_cranelift_jit_with_handle(
+                    program,
+                    cg_types,
+                    monomorph_plan,
+                    &cancel_for_thread,
+                    &surface_modules,
+                )
+            })();
+            (worker_session, result)
         });
+
+        let mut restore_session =
+            |joined: std::thread::Result<(WorkspaceSession, Result<(), AiviError>)>| match joined {
+                Ok((returned_session, result)) => {
+                    session = returned_session;
+                    Ok(result)
+                }
+                Err(_panic) => {
+                    session = WorkspaceSession::new();
+                    Err(())
+                }
+            };
 
         // Wait for file change, program exit, or Ctrl-C
         let restart = loop {
             if ctrl_c.load(Ordering::Relaxed) {
                 cancel.cancel();
-                let _ = runner.join();
+                let _ = restore_session(runner.join());
                 eprintln!("\n\x1b[1;36m[watch]\x1b[0m interrupted — exiting.");
                 return Ok(());
             }
@@ -70,7 +91,7 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     cancel.cancel();
-                    let _ = runner.join();
+                    let _ = restore_session(runner.join());
                     return Err(AiviError::Io(std::io::Error::other(
                         "file watcher disconnected",
                     )));
@@ -80,13 +101,13 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
 
         if restart {
             cancel.cancel();
-            let _ = runner.join();
+            let _ = restore_session(runner.join());
             eprintln!(
                 "\n\x1b[1;36m[watch]\x1b[0m file changed — restarting…\n\
                  ─────────────────────────────────────────────"
             );
         } else {
-            match runner.join() {
+            match restore_session(runner.join()) {
                 Ok(Ok(())) => {
                     eprintln!("\x1b[1;32m[watch]\x1b[0m program exited successfully.");
                 }
@@ -96,7 +117,7 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
                 Ok(Err(err)) => {
                     eprintln!("\x1b[1;31m[watch]\x1b[0m error: {err}");
                 }
-                Err(_panic) => {
+                Err(()) => {
                     eprintln!("\x1b[1;31m[watch]\x1b[0m program panicked — waiting for changes…");
                 }
             }

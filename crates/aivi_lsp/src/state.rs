@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
 use aivi::Module;
 use tower_lsp::lsp_types::Url;
@@ -13,8 +14,6 @@ use crate::strict::StrictConfig;
 pub(super) struct DocumentState {
     pub(super) text: String,
     pub(super) version: i32,
-    /// Parse diagnostics from the last `update_document` call; avoids re-parsing in diagnostics.
-    pub(super) parse_diags: Vec<aivi::FileDiagnostic>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -30,6 +29,7 @@ pub(super) struct BackendState {
     pub(super) open_modules_by_uri: HashMap<Url, Vec<String>>,
     pub(super) open_module_index: HashMap<String, IndexedModule>,
     pub(super) disk_indexes: HashMap<PathBuf, DiskIndex>,
+    pub(super) sessions: HashMap<PathBuf, Arc<StdMutex<aivi_driver::WorkspaceSession>>>,
     pub(super) format_options: aivi::FormatOptions,
     pub(super) format_options_from_config: bool,
     pub(super) diagnostics_in_specs_snippets: bool,
@@ -57,6 +57,7 @@ impl Default for BackendState {
             open_modules_by_uri: HashMap::new(),
             open_module_index: HashMap::new(),
             disk_indexes: HashMap::new(),
+            sessions: HashMap::new(),
             format_options: aivi::FormatOptions::default(),
             format_options_from_config: false,
             diagnostics_in_specs_snippets: false,

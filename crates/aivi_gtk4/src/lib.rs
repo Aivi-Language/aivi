@@ -148,6 +148,8 @@ mod linux_impl {
         fn gtk_button_new_with_label(label: *const c_char) -> *mut c_void;
         fn gtk_button_set_label(button: *mut c_void, label: *const c_char);
         fn gtk_button_new_from_icon_name(icon_name: *const c_char) -> *mut c_void;
+        fn gtk_drop_down_new_from_strings(strings: *const *const c_char) -> *mut c_void;
+        fn gtk_string_list_new(strings: *const *const c_char) -> *mut c_void;
 
         fn gtk_label_new(text: *const c_char) -> *mut c_void;
         fn gtk_label_set_text(label: *mut c_void, text: *const c_char);
@@ -446,6 +448,7 @@ mod linux_impl {
         ToggleActive,
         FloatValue,
         NotifyBool,
+        NotifyU32,
     }
 
     struct SignalCallbackData {
@@ -533,6 +536,11 @@ mod linux_impl {
         g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
     }
 
+    /// Set a GObject u32 property.
+    unsafe fn gobject_set_u32(widget: *mut c_void, prop: &CStr, val: c_uint) {
+        g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
+    }
+
     /// Set a GObject pointer property.
     unsafe fn gobject_set_ptr(widget: *mut c_void, prop: &CStr, val: *mut c_void) {
         g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
@@ -545,6 +553,18 @@ mod linux_impl {
             widget,
             prop.as_ptr(),
             &mut val as *mut c_int,
+            std::ptr::null::<c_char>(),
+        );
+        val
+    }
+
+    /// Get a GObject u32 property.
+    unsafe fn gobject_get_u32(widget: *mut c_void, prop: &CStr) -> c_uint {
+        let mut val: c_uint = 0;
+        g_object_get(
+            widget,
+            prop.as_ptr(),
+            &mut val as *mut c_uint,
             std::ptr::null::<c_char>(),
         );
         val
@@ -665,6 +685,7 @@ mod linux_impl {
             "AdwEntryRow" | "AdwPasswordEntryRow" => &["changed"],
             "GtkCheckButton" | "AdwSwitchRow" => &["toggled"],
             "GtkRange" | "GtkScale" => &["value-changed"],
+            "GtkDropDown" => &["notify::selected"],
             "AdwOverlaySplitView" => &["notify::show-sidebar"],
             _ => &[],
         }
@@ -1778,6 +1799,46 @@ mod linux_impl {
         Gtk4Error::new(name.to_string())
     }
 
+    fn dropdown_string_ptrs(
+        value: &str,
+        context: &str,
+    ) -> Result<(Vec<CString>, Vec<*const c_char>), Gtk4Error> {
+        let items: Vec<&str> = if value.is_empty() {
+            vec![""]
+        } else {
+            value.split('\n').collect()
+        };
+        let strings = items
+            .iter()
+            .map(|item| c_text(item, context))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut ptrs = strings.iter().map(|item| item.as_ptr()).collect::<Vec<_>>();
+        ptrs.push(std::ptr::null());
+        Ok((strings, ptrs))
+    }
+
+    fn dropdown_new_from_strings(value: &str, context: &str) -> Result<*mut c_void, Gtk4Error> {
+        let (_strings, ptrs) = dropdown_string_ptrs(value, context)?;
+        let raw = unsafe { gtk_drop_down_new_from_strings(ptrs.as_ptr()) };
+        if raw.is_null() {
+            return Err(Gtk4Error::new(format!(
+                "{context} failed to create GtkDropDown"
+            )));
+        }
+        Ok(raw)
+    }
+
+    fn dropdown_model_from_strings(value: &str, context: &str) -> Result<*mut c_void, Gtk4Error> {
+        let (_strings, ptrs) = dropdown_string_ptrs(value, context)?;
+        let raw = unsafe { gtk_string_list_new(ptrs.as_ptr()) };
+        if raw.is_null() {
+            return Err(Gtk4Error::new(format!(
+                "{context} failed to create GtkStringList"
+            )));
+        }
+        Ok(raw)
+    }
+
     fn try_adw_init() {
         const RTLD_NOW: c_int = 2;
         const RTLD_NODELETE: c_int = 0x1000;
@@ -1992,7 +2053,6 @@ mod linux_impl {
                 val.to_string()
             }
             SignalPayloadKind::NotifyBool => {
-                // `notify::PROPERTY` signal — extract the property name and read it.
                 let prop_name = binding
                     .signal_name
                     .strip_prefix("notify::")
@@ -2000,6 +2060,17 @@ mod linux_impl {
                 if let Ok(prop_c) = CString::new(prop_name) {
                     let val = unsafe { gobject_get_bool(instance, &prop_c) };
                     if val != 0 { "true" } else { "false" }.to_string()
+                } else {
+                    String::new()
+                }
+            }
+            SignalPayloadKind::NotifyU32 => {
+                let prop_name = binding
+                    .signal_name
+                    .strip_prefix("notify::")
+                    .unwrap_or("selected");
+                if let Ok(prop_c) = CString::new(prop_name) {
+                    unsafe { gobject_get_u32(instance, &prop_c) }.to_string()
                 } else {
                     String::new()
                 }
@@ -2202,13 +2273,19 @@ mod linux_impl {
         let binding = unsafe { &*(data as *const SignalCallbackData) };
         let property_name = binding.signal_name.strip_prefix("notify::").unwrap_or("");
         let payload = CString::new(property_name)
-            .map(|prop_c| {
-                let val = unsafe { gobject_get_bool(instance, &prop_c) };
-                if val != 0 {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
+            .map(|prop_c| match binding.payload_kind {
+                SignalPayloadKind::NotifyBool => {
+                    let val = unsafe { gobject_get_bool(instance, &prop_c) };
+                    if val != 0 {
+                        "true".to_string()
+                    } else {
+                        "false".to_string()
+                    }
                 }
+                SignalPayloadKind::NotifyU32 => {
+                    unsafe { gobject_get_u32(instance, &prop_c) }.to_string()
+                }
+                _ => String::new(),
             })
             .unwrap_or_default();
         GTK_STATE.with(|state| {
@@ -2247,6 +2324,7 @@ mod linux_impl {
             ("GtkRange", "value-changed") | ("GtkScale", "value-changed") => {
                 Some(SignalPayloadKind::FloatValue)
             }
+            ("GtkDropDown", "notify::selected") => Some(SignalPayloadKind::NotifyU32),
             ("AdwOverlaySplitView", "notify::show-sidebar") => Some(SignalPayloadKind::NotifyBool),
             _ => None,
         }
@@ -2836,6 +2914,20 @@ mod linux_impl {
                     unsafe { gtk_button_set_label(widget, text_c.as_ptr()) };
                 }
             }
+            "GtkDropDown" => {
+                if let Some(value) = props.get("strings") {
+                    let model = dropdown_model_from_strings(
+                        value,
+                        "gtk4.buildFromNode invalid GtkDropDown strings",
+                    )?;
+                    let prop_c = CString::new("model").unwrap();
+                    unsafe { gobject_set_ptr(widget, &prop_c, model) };
+                }
+                if let Some(value) = props.get("selected").and_then(|v| parse_i32_text(v)) {
+                    let prop_c = CString::new("selected").unwrap();
+                    unsafe { gobject_set_u32(widget, &prop_c, value.max(0) as c_uint) };
+                }
+            }
             "GtkEntry" | "GtkPasswordEntry" => {
                 if let Some(value) = props.get("text") {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid GtkEntry text")?;
@@ -3208,6 +3300,16 @@ mod linux_impl {
                 }
             }
             "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
+            "GtkDropDown" => {
+                let strings = props.get("strings").map(String::as_str).unwrap_or("");
+                (
+                    dropdown_new_from_strings(
+                        strings,
+                        "gtk4.buildFromNode invalid GtkDropDown strings",
+                    )?,
+                    CreatedWidgetKind::Other,
+                )
+            }
             "GtkMenuButton" => (unsafe { gtk_menu_button_new() }, CreatedWidgetKind::Other),
             "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
             "GtkRevealer" => (unsafe { gtk_revealer_new() }, CreatedWidgetKind::Revealer),

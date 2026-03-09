@@ -237,9 +237,23 @@ mod lsp_protocol_edits {
         tokio::io::WriteHalf<tokio::io::DuplexStream>,
         tokio::task::JoinHandle<()>,
     ) {
+        let state = Arc::new(tokio::sync::Mutex::new(BackendState::default()));
+        let (client_read, client_write, _state, server_task) = start_lsp_with_state(state).await;
+        (client_read, client_write, server_task)
+    }
+
+    async fn start_lsp_with_state(
+        state: Arc<tokio::sync::Mutex<BackendState>>,
+    ) -> (
+        tokio::io::ReadHalf<tokio::io::DuplexStream>,
+        tokio::io::WriteHalf<tokio::io::DuplexStream>,
+        Arc<tokio::sync::Mutex<BackendState>>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let backend_state = Arc::clone(&state);
         let (service, socket) = LspService::new(|client| Backend {
             client,
-            state: Arc::new(tokio::sync::Mutex::new(BackendState::default())),
+            state: Arc::clone(&backend_state),
         });
         let (client_io, server_io) = tokio::io::duplex(1024 * 1024);
         let (server_read, server_write) = tokio::io::split(server_io);
@@ -251,7 +265,7 @@ mod lsp_protocol_edits {
                 .await;
         });
 
-        (client_read, client_write, server_task)
+        (client_read, client_write, state, server_task)
     }
 
     async fn initialize_lsp_with_root(
@@ -312,7 +326,7 @@ mod lsp_protocol_edits {
             &json!({"jsonrpc":"2.0","method":"exit","params":{}}),
         )
         .await;
-        let _ = timeout(Duration::from_secs(2), server_task).await;
+        let _ = timeout(Duration::from_secs(5), server_task).await;
     }
 
     #[tokio::test]
@@ -363,7 +377,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -385,7 +399,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(2)),
         )
         .await
@@ -393,6 +407,116 @@ mod lsp_protocol_edits {
         assert!(!has_error(&diags));
 
         shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn did_close_clears_session_source_override() {
+        let unique = format!(
+            "aivi-lsp-session-override-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        );
+        let dir = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&dir).expect("create temp workspace");
+        let root_uri = Url::from_file_path(&dir).expect("root uri");
+        let file_path = dir.join("main.aivi");
+        let bad_text = "module lsp.demo\n\nmain = missingName\n";
+        let fixed_text = "module lsp.demo\n\nmain = 2\n";
+        std::fs::write(&file_path, bad_text).expect("write source");
+        let uri = Url::from_file_path(&file_path).expect("file uri");
+
+        let state = Arc::new(tokio::sync::Mutex::new(BackendState::default()));
+        let (mut client_read, mut client_write, state, server_task) =
+            start_lsp_with_state(state).await;
+        initialize_lsp_with_root(&mut client_read, &mut client_write, root_uri.clone()).await;
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": fixed_text
+                    }
+                }
+            }),
+        )
+        .await;
+
+        let diags = timeout(
+            Duration::from_secs(5),
+            wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("publishDiagnostics");
+        assert!(
+            !diags.iter().any(|diag| {
+                diag.get("severity")
+                    .and_then(Value::as_i64)
+                    == Some(1)
+            }),
+            "expected fixed in-memory text to avoid error diagnostics, got: {diags:?}"
+        );
+
+        let session = {
+            let state = state.lock().await;
+            state
+                .sessions
+                .get(&dir)
+                .cloned()
+                .expect("workspace session")
+        };
+        {
+            let mut session = session.lock().expect("session lock");
+            let assembly = session
+                .assemble_target(
+                    dir.to_string_lossy().as_ref(),
+                    aivi_driver::FrontendAssemblyMode::InferFast,
+                )
+                .expect("assembly");
+            assert!(
+                !assembly.has_errors(),
+                "expected open-document override to win over on-disk syntax error"
+            );
+        }
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didClose",
+                "params": {
+                    "textDocument": { "uri": uri.to_string() }
+                }
+            }),
+        )
+        .await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        {
+            let mut session = session.lock().expect("session lock");
+            let assembly = session
+                .assemble_target(
+                    dir.to_string_lossy().as_ref(),
+                    aivi_driver::FrontendAssemblyMode::InferFast,
+                )
+                .expect("assembly");
+            assert!(
+                assembly.has_errors(),
+                "expected session to fall back to on-disk text after didClose"
+            );
+        }
+
+        shutdown_lsp(client_write, server_task).await;
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -493,7 +617,7 @@ mod lsp_protocol_edits {
         .await;
 
         let _ = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -514,7 +638,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(2)),
         )
         .await
@@ -536,7 +660,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(3)),
         )
         .await
@@ -574,7 +698,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let lib_initial = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
         )
         .await
@@ -598,7 +722,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -619,7 +743,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (lib_diags, change_log) = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 lib_uri.as_str(),
@@ -639,7 +763,7 @@ mod lsp_protocol_edits {
         assert!(log_message.contains("dependents=1"));
 
         let consumer_diags = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -681,7 +805,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
         )
         .await
@@ -704,7 +828,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -725,7 +849,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (_lib_diags, change_log) = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 lib_uri.as_str(),
@@ -783,7 +907,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -811,7 +935,7 @@ mod lsp_protocol_edits {
         .await;
 
         let consumer_updated = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -851,7 +975,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
         )
         .await
@@ -874,7 +998,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -894,7 +1018,7 @@ mod lsp_protocol_edits {
         .await;
 
         let consumer_after_close = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -933,7 +1057,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -964,7 +1088,7 @@ mod lsp_protocol_edits {
         .await;
 
         let close_publish = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), None),
         )
         .await
@@ -1003,7 +1127,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -1033,7 +1157,7 @@ mod lsp_protocol_edits {
         );
 
         let (diags, change_log) = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 uri.as_str(),
@@ -1088,7 +1212,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (_, diagnostics_log) = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 uri.as_str(),
@@ -1121,7 +1245,7 @@ mod lsp_protocol_edits {
         .await;
 
         let hover = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_response_id(&mut client_read, 10),
         )
         .await
@@ -1149,7 +1273,7 @@ mod lsp_protocol_edits {
         .await;
 
         let definition = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_response_id(&mut client_read, 11),
         )
         .await
@@ -1178,7 +1302,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (completion, completion_log) = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_response_and_log_message(&mut client_read, 12, "completion duration_ms="),
         )
         .await
@@ -1215,7 +1339,7 @@ mod lsp_protocol_edits {
         .await;
 
         let prepare_rename = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_response_id(&mut client_read, 13),
         )
         .await

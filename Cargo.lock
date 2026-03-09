@@ -115,6 +115,7 @@ name = "aivi-lsp"
 version = "0.1.0"
 dependencies = [
  "aivi_core",
+ "aivi_driver",
  "quick-xml",
  "serde",
  "serde_json",

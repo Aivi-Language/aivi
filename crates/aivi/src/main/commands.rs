@@ -374,9 +374,12 @@ fn cmd_project_build_cranelift(
     release: bool,
 ) -> Result<(), AiviError> {
     let source_target = resolve_project_source_target(root, &cfg.project.entry);
-
-    let (program, cg_types, monomorph_plan, surface_modules) =
-        aivi::desugar_target_with_cg_types_and_surface(&source_target)?;
+    let mut spinner = Spinner::new("assembling frontend".to_string());
+    let mut session = aivi::WorkspaceSession::new();
+    let result =
+        aivi::desugar_target_with_cg_types_and_surface_in_session(&mut session, &source_target);
+    spinner.stop();
+    let (program, cg_types, monomorph_plan, surface_modules) = result?;
 
     // 1a. Collect crate-native bindings and validate dependencies
     let crate_natives =
@@ -513,8 +516,12 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
         return watch::run_watch(&source_target, &watch_dir);
     }
     aivi::run_pre_run_scripts(&cfg.scripts)?;
-    let (program, cg_types, monomorph_plan, surface_modules) =
-        aivi::desugar_target_with_cg_types_and_surface(&source_target)?;
+    let mut spinner = Spinner::new("assembling frontend".to_string());
+    let mut session = aivi::WorkspaceSession::new();
+    let result =
+        aivi::desugar_target_with_cg_types_and_surface_in_session(&mut session, &source_target);
+    spinner.stop();
+    let (program, cg_types, monomorph_plan, surface_modules) = result?;
     aivi::run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
 }
 
