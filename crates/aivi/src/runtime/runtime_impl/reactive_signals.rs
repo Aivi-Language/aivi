@@ -73,24 +73,47 @@ impl Runtime {
         }
     }
 
-    pub(crate) fn reactive_map_signal(
+    pub(crate) fn reactive_derive_signal(
         &mut self,
         signal: Value,
         mapper: Value,
     ) -> Result<Value, RuntimeError> {
-        let signal_id = self.reactive_signal_id_from_value(signal, "reactive.map")?;
+        let signal_id = self.reactive_signal_id_from_value(signal, "reactive.derive")?;
         self.reactive_create_derived_signal(vec![signal_id], mapper)
     }
 
-    pub(crate) fn reactive_combine2_signals(
+    pub(crate) fn reactive_combine_all(
         &mut self,
-        left: Value,
-        right: Value,
+        signals_record: Value,
         combine: Value,
     ) -> Result<Value, RuntimeError> {
-        let left_id = self.reactive_signal_id_from_value(left, "reactive.combine2 left")?;
-        let right_id = self.reactive_signal_id_from_value(right, "reactive.combine2 right")?;
-        self.reactive_create_derived_signal(vec![left_id, right_id], combine)
+        let signals_record = self.force_value(signals_record)?;
+        let Value::Record(fields) = signals_record else {
+            return Err(RuntimeError::InvalidArgument {
+                context: "reactive.combineAll".to_string(),
+                reason: "expected a record of signals".to_string(),
+            });
+        };
+        let mut sorted_fields: Vec<(String, Value)> = fields
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        sorted_fields.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut signal_ids = Vec::with_capacity(sorted_fields.len());
+        let mut field_names = Vec::with_capacity(sorted_fields.len());
+        for (name, value) in &sorted_fields {
+            let id = self.reactive_signal_id_from_value(
+                value.clone(),
+                &format!("reactive.combineAll field '{name}'"),
+            )?;
+            signal_ids.push(id);
+            field_names.push(name.clone());
+        }
+
+        // Create a derived signal that reconstructs the record with resolved values,
+        // then applies the combine function.
+        self.reactive_create_derived_signal_with_record(signal_ids, field_names, combine)
     }
 
     pub(crate) fn reactive_watch_signal(
@@ -254,7 +277,7 @@ impl Runtime {
             for dependency in &dependencies {
                 if !graph.signals.contains_key(dependency) {
                     return Err(RuntimeError::InvalidArgument {
-                        context: "reactive.combine".to_string(),
+                        context: "reactive.derive".to_string(),
                         reason: format!("unknown signal id {dependency}"),
                     });
                 }
@@ -268,6 +291,49 @@ impl Runtime {
                 ReactiveCellEntry {
                     kind: ReactiveCellKind::Derived {
                         dependencies: dependencies.clone(),
+                        compute,
+                    },
+                    value: Value::Unit,
+                    revision: 0,
+                    dirty: true,
+                    dependents: HashSet::new(),
+                },
+            );
+            for dependency in dependencies {
+                if let Some(entry) = graph.signals.get_mut(&dependency) {
+                    entry.dependents.insert(signal_id);
+                }
+            }
+        }
+        Ok(self.reactive_signal_value(signal_id))
+    }
+
+    fn reactive_create_derived_signal_with_record(
+        &mut self,
+        dependencies: Vec<usize>,
+        field_names: Vec<String>,
+        compute: Value,
+    ) -> Result<Value, RuntimeError> {
+        {
+            let graph = self.reactive_graph.lock();
+            for dependency in &dependencies {
+                if !graph.signals.contains_key(dependency) {
+                    return Err(RuntimeError::InvalidArgument {
+                        context: "reactive.combineAll".to_string(),
+                        reason: format!("unknown signal id {dependency}"),
+                    });
+                }
+            }
+        }
+        let signal_id = self.reactive_alloc_signal_id();
+        {
+            let mut graph = self.reactive_graph.lock();
+            graph.signals.insert(
+                signal_id,
+                ReactiveCellEntry {
+                    kind: ReactiveCellKind::DerivedRecord {
+                        dependencies: dependencies.clone(),
+                        field_names,
                         compute,
                     },
                     value: Value::Unit,
@@ -422,6 +488,15 @@ impl Runtime {
                     dependencies: dependencies.clone(),
                     compute: compute.clone(),
                 },
+                ReactiveCellKind::DerivedRecord {
+                    dependencies,
+                    field_names,
+                    compute,
+                } => ReactiveCellKind::DerivedRecord {
+                    dependencies: dependencies.clone(),
+                    field_names: field_names.clone(),
+                    compute: compute.clone(),
+                },
             };
             (entry.dirty, kind)
         };
@@ -461,6 +536,48 @@ impl Runtime {
                 for dependency in values {
                     value = self.apply(value, dependency)?;
                 }
+                stack.pop();
+
+                let mut changed = false;
+                {
+                    let mut graph = self.reactive_graph.lock();
+                    let entry = graph.signals.get_mut(&signal_id).expect("derived signal exists");
+                    if !reactive_values_match(&entry.value, &value) {
+                        entry.value = value;
+                        entry.revision = entry.revision.saturating_add(1).max(1);
+                        changed = true;
+                    }
+                    entry.dirty = false;
+                }
+                if changed {
+                    self.reactive_graph
+                        .lock()
+                        .pending_notifications
+                        .insert(signal_id);
+                }
+                Ok(())
+            }
+            ReactiveCellKind::DerivedRecord {
+                dependencies,
+                field_names,
+                compute,
+            } => {
+                stack.push(signal_id);
+                let mut record_fields = HashMap::new();
+                for (i, dependency) in dependencies.iter().enumerate() {
+                    self.reactive_ensure_signal_fresh(*dependency, stack)?;
+                    let dep_value = self
+                        .reactive_graph
+                        .lock()
+                        .signals
+                        .get(dependency)
+                        .expect("dependency exists")
+                        .value
+                        .clone();
+                    record_fields.insert(field_names[i].clone(), dep_value);
+                }
+                let record = Value::Record(Arc::new(record_fields));
+                let value = self.apply(compute, record)?;
                 stack.pop();
 
                 let mut changed = false;
@@ -680,16 +797,23 @@ mod tests {
             .reactive_create_signal(Value::Int(2))
             .unwrap_or_else(|err| panic!("second signal: {}", format_runtime_error(err)));
 
-        let combine = runtime_builtin("test.combine_left", 1, |mut args, _| {
-            let left = expect_int(args.remove(0));
-            Ok(runtime_builtin("test.combine_right", 1, move |mut args, _| {
-                let right = expect_int(args.remove(0));
-                Ok(Value::Int(left + right))
-            }))
+        let combine = runtime_builtin("test.combine_record", 1, |mut args, _| {
+            let record = args.remove(0);
+            let Value::Record(fields) = record else {
+                panic!("expected record");
+            };
+            let left = expect_int(fields.get("first").unwrap().clone());
+            let right = expect_int(fields.get("second").unwrap().clone());
+            Ok(Value::Int(left + right))
         });
 
+        let mut signals_fields = HashMap::new();
+        signals_fields.insert("first".to_string(), first.clone());
+        signals_fields.insert("second".to_string(), second.clone());
+        let signals_record = Value::Record(Arc::new(signals_fields));
+
         let sum = runtime
-            .reactive_combine2_signals(first.clone(), second.clone(), combine)
+            .reactive_combine_all(signals_record, combine)
             .unwrap_or_else(|err| panic!("sum signal: {}", format_runtime_error(err)));
 
         let notifications = Arc::new(std::sync::atomic::AtomicUsize::new(0));

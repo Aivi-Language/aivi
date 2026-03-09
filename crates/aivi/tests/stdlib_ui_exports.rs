@@ -149,13 +149,12 @@ fn stdlib_reactive_exports_core_primitives() {
         "peek",
         "set",
         "update",
-        "map",
-        "combine2",
+        "derive",
+        "combineAll",
         "watch",
         "on",
         "batch",
         "dispose",
-        "event",
     ] {
         assert!(
             export_names.contains(&expected),

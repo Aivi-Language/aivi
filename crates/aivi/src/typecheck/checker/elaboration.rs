@@ -514,7 +514,7 @@ impl TypeChecker {
                 // item-by-item elaboration and defer to infer_generic_do_block
                 // via check_or_coerce. The elaboration's bind processing uses
                 // shared substitution state that conflicts with the inference pass.
-                if matches!(&kind, BlockKind::Do { monad } if monad.name != "Effect") {
+                if matches!(&kind, BlockKind::Do { monad } if monad.name != "Effect" && monad.name != "Event") {
                     let out = Expr::Block { kind, items, span };
                     return self.check_or_coerce(out, expected, env);
                 }

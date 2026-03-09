@@ -1,9 +1,18 @@
-Msg = Save | ProjectNameChanged Text
+use aivi.ui.gtk4
+
+state = signal { projectName: "", saved: False }
+
+onInput : Text -> Unit
+onInput = txt => update state (patch { projectName: txt })
+
+onSave : a -> Unit
+onSave = _ => update state (patch { saved: True })
 
 formView : GtkNode
-formView = ~<gtk>
-  <GtkBox orientation="vertical" spacing="8">
-    <GtkEntry onInput={ ProjectNameChanged } />
-    <GtkButton label="Save" onClick={ Save } />
-  </GtkBox>
-</gtk>
+formView =
+  ~<gtk>
+    <GtkBox orientation="vertical" spacing="8">
+      <GtkEntry onInput={onInput} />
+      <GtkButton label="Save" onClick={onSave} />
+    </GtkBox>
+  </gtk>

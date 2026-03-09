@@ -29,8 +29,8 @@ A typical field now stays inside direct signal updates:
 
 | GTK binding | Typical signal update |
 | --- | --- |
-| `onInput={txt => ...}` | `update form <| { name: setValue txt }` |
-| `onFocusOut={_ => ...}` | `update form <| { name: touch }` |
+| `onInput={txt => ...}` | `update form (patch { name: setValue txt })` |
+| `onFocusOut={_ => ...}` | `update form (patch { name: touch })` |
 | `onClick={submitEvent}` | trigger an `Event` handle that reads the validated payload |
 
 That keeps forms inside the same signal graph as the rest of the UI. There is no hidden widget-owned form state and no second validation loop to learn.
@@ -48,7 +48,7 @@ Validators stay plain pure functions. The built-in helpers mostly validate `Text
 In a signal-first app, the usual pattern is to derive the visible errors as another signal:
 
 ```aivi
-nameErrors = map form (state =>
+nameErrors = form |> map (state =>
   visibleErrors state.submitted nameRule state.name
 )
 ```
@@ -70,9 +70,7 @@ When submission needs IO, keep the validated payload as plain data and let an `E
 
 ```aivi
 submitProfile : Event GtkError SavedProfile
-submitProfile = do Event {
-  run: saveProfile (buildProfile (get form))
-}
+submitProfile = event (saveProfile (buildProfile (get form)))
 ```
 
 Because `submitProfile.running`, `submitProfile.result`, and `submitProfile.error` are signals, the UI can bind loading, success, and failure state directly.

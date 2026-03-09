@@ -104,7 +104,7 @@ pub(super) fn resolve_reactive_attr_value(
         .ok_or_else(|| RuntimeError::InvalidArgument {
             context: "gtk4 reactive binding".to_string(),
             reason:
-                "derived values inside gtk sigils require gtkApp or an initialized reactive host"
+                "derived values inside gtk sigils require an initialized reactive host"
                     .to_string(),
         })?;
     runtime.apply(value, model)

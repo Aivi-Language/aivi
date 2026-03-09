@@ -1,7 +1,13 @@
+save : a -> Unit
+save = _ => Unit
+
+onChange : Text -> Unit
+onChange = _ => Unit
+
 ~<gtk>
-  <object class="GtkButton" onClick={ Msg.Save } />
-  <object class="GtkEntry" onInput={ Msg.Changed } />
+  <object class="GtkButton" onClick={save} />
+  <object class="GtkEntry" onInput={onChange} />
   <object class="GtkButton">
-    <signal name="clicked" on={ Msg.Save } />
+    <signal name="clicked" on={save} />
   </object>
 </gtk>

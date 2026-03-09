@@ -57,7 +57,7 @@ That means:
 Example:
 
 ```aivi
-visibleCount = map projects length
+visibleCount = projects |> map length
 saveEnabled = combine2 dirty saveEvent.running (d => running => d and not running)
 ```
 
@@ -68,7 +68,7 @@ saveEnabled = combine2 dirty saveEvent.running (d => running => d and not runnin
 ```aivi
 batch (_ =>
   do Effect {
-    update state <| { saving: True }
+    update state (patch { saving: True })
     set lastError None
     pure Unit
   }
@@ -134,9 +134,7 @@ This is the boundary that keeps long-lived reactive graphs from leaking after a 
 
 ```aivi
 refreshData : Event GtkError (List Row)
-refreshData = do Event {
-  run: fetchRows
-}
+refreshData = event fetchRows
 
 rows = combine2 cachedRows refreshData.result (fallback => maybeFresh =>
   maybeFresh match

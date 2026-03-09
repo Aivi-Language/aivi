@@ -1203,54 +1203,51 @@ GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gs
 
 ```aivi
 // Shorthand (preferred)
-count = signal 0
-title = count.map (value => "Count {value}")
-saveCounter = do Event {
-  run: persistCount (get count)
-}
+state = signal { count: 0 }
+title = state |> map (_.count) |> map "Count {_}"
+saveCounter = event (do Effect {
+  current = get state
+  persistCount current.count
+})
 
-main = ~<gtk>
-  <GtkWindow title={title}>
-    <GtkBox spacing="24" marginTop="12">
-      <GtkLabel label={title} />
-      <GtkButton label="Increment" onClick={_ => update count (_ + 1)} />
-      <GtkButton label="Save" onClick={saveCounter} />
-    </GtkBox>
-  </GtkWindow>
+view = ~<gtk>
+  <GtkBox spacing="24" marginTop="12">
+    <GtkLabel label={title} />
+    <GtkButton label="Increment" onClick={_ => update state (patch { count: _ + 1 })} />
+    <GtkButton label="Save" onClick={saveCounter} />
+  </GtkBox>
 </gtk>
 
 // Equivalent verbose form
-main = ~<gtk>
-  <object class="GtkWindow" props={{ title: title }}>
-    <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-      <object class="GtkLabel" props={{ label: title }} />
-      <object class="GtkButton" props={{ label: "Increment" }} onClick={_ => update count (_ + 1)} />
-      <object class="GtkButton" props={{ label: "Save" }} onClick={saveCounter} />
-    </object>
+view = ~<gtk>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="GtkLabel" props={{ label: title }} />
+    <object class="GtkButton" props={{ label: "Increment" }} onClick={_ => update state (patch { count: _ + 1 })} />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={saveCounter} />
   </object>
 </gtk>
 ```
 
-Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `.map` or `combine2`/`combine3`/higher-arity combinators, and mutate them with `set` or `update`:
+Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `map` or `combine2`/`combine3`/higher-arity combinators, and mutate them with `set` or `update`:
 
 ```aivi
 state = signal { count: 0, query: "" }
-title = state.map (current => "Count {current.count}")
+title = state |> map (_.count) |> map "Count {_}"
 canSearch = combine2 state searchEvent.running (current => running =>
   current.query != "" and not running
 )
 
-update state <| { count: _ + 1 }
-update state <| { query: "gtk" }
+update state (patch { count: _ + 1 })
+update state (patch { query: "gtk" })
 ```
 
-Event attrs accept either runtime functions or event/effect-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles look like `ev = do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`.
+Event attrs accept either runtime functions or event/effect-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles look like `ev = event (do Effect { ... })` and expose reactive fields such as `result`, `error`, `done`, and `running`.
 
 GTK sigils also support signal sugar in v0.1:
 
 ```aivi
 ~<gtk>
-  <GtkButton onClick={_ => update count (_ + 1)} />
+  <GtkButton onClick={_ => update state (patch { count: _ + 1 })} />
   <GtkEntry onInput={txt => set query txt} />
   <GtkEntry onActivate={submitSearch} />
   <GtkCheckButton onToggle={active => set enabled active} />

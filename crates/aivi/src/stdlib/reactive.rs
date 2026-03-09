@@ -5,9 +5,8 @@ pub const SOURCE: &str = r#"
 module aivi.reactive
 export Signal, Disposable, EventHandle
 export signal, get, peek, set, update
-export map, combine2
+export derive, combineAll
 export watch, on, batch, dispose
-export event
 
 use aivi
 
@@ -40,11 +39,11 @@ set = sig value => reactive.set sig value
 update : Signal A -> (A -> A) -> Unit
 update = sig updater => reactive.update sig updater
 
-map : Signal A -> (A -> B) -> Signal B
-map = sig mapper => reactive.map sig mapper
+derive : Signal A -> (A -> B) -> Signal B
+derive = sig mapper => reactive.derive sig mapper
 
-combine2 : Signal A -> Signal B -> (A -> B -> C) -> Signal C
-combine2 = left right combine => reactive.combine2 left right combine
+combineAll : A -> (B -> C) -> Signal C
+combineAll = signals fn => reactive.combineAll signals fn
 
 watch : Signal A -> (A -> R) -> Disposable
 watch = sig callback => reactive.watch sig callback
@@ -57,7 +56,4 @@ batch = callback => reactive.batch callback
 
 dispose : Disposable -> Unit
 dispose = disposable => disposable.dispose Unit
-
-event : Effect E A -> EventHandle E A
-event = runEffect => reactive.event runEffect
 "#;

@@ -19,21 +19,31 @@ signal_set_update = do Effect {
   assertEq (get count) 7
 }
 
-@test "map derives from a source signal"
-map_updates_from_source = do Effect {
+@test "derive creates a derived signal from one source"
+derive_updates_from_source = do Effect {
   count   = signal 2
-  doubled = map count (_ * 2)
+  doubled = derive count (_ * 2)
 
   assertEq (get doubled) 4
   assertEq (set count 5) Unit
   assertEq (get doubled) 10
 }
 
-@test "combine2 derives from both source signals"
-combine2_updates_from_inputs = do Effect {
+@test "record signals accept patch updates"
+patch_updates_record_signal = do Effect {
+  state = signal { count: 2 }
+
+  assertEq (update state (patch { count: _ + 3 })) Unit
+  assertEq (get state) { count: 5 }
+}
+
+@test "combineAll derives from a record of signals"
+combineAll_updates_from_inputs = do Effect {
   firstName = signal "Ada"
   lastName  = signal "Lovelace"
-  fullName  = combine2 firstName lastName (first => last => "{first} {last}")
+  fullName  = combineAll { first: firstName, last: lastName } (vals =>
+    "{vals.first} {vals.last}"
+  )
 
   assertEq (get fullName) "Ada Lovelace"
 
@@ -72,15 +82,17 @@ dispose_stops_notifications = do Effect {
 batch_groups_writes = do Effect {
   first  = signal 1
   second = signal 2
-  sum    = combine2 first second (left => right => left + right)
+  sum    = combineAll { a: first, b: second } (vals => vals.a + vals.b)
 
   assertEq (batch (_ => (set first 3, set second 4))) (Unit, Unit)
   assertEq (get sum) 7
 }
 
-@test "event exposes lifecycle signals"
+@test "do Event exposes lifecycle signals"
 event_exposes_lifecycle_signals = do Effect {
-  saveEvent = event (pure 42)
+  saveEvent = do Event {
+    pure 42
+  }
 
   assertEq (get saveEvent.result) None
   assertEq (get saveEvent.error) None

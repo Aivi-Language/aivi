@@ -1,17 +1,14 @@
-Msg = Save | ProjectNameChanged Text | VolumeChanged Float
+use aivi.ui.gtk4
 
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event => event match
-  | GtkClicked _ _          => Some Save
-  | GtkInputChanged _ _ txt => Some (ProjectNameChanged txt)
-  | GtkValueChanged _ _ val => Some (VolumeChanged val)
-  | _                       => None
+state = signal { projectName: "", volume: 0.0, saved: False }
 
 runLoop : Effect GtkError Unit
 runLoop = do Effect {
   events <- signalStream {}
-  channel.forEach events (event => toMsg event match
-    | None     => pure {}
-    | Some msg => handleMsg msg
+  channel.forEach events (event => event match
+    | GtkClicked _ _          => update state (patch { saved: True })
+    | GtkInputChanged _ _ txt => update state (patch { projectName: txt })
+    | GtkValueChanged _ _ val => update state (patch { volume: val })
+    | _                       => pure Unit
   )
 }

@@ -246,15 +246,15 @@ other : Signal Int
 other = signal 5
 
 countText : Signal Text
-countText = map state (current => current.label)
+countText = derive state (_.label)
 
 total : Signal Int
-total = combine2 state other (current => extra => current.count + extra)
+total = combineAll { s: state, o: other } (vals => vals.s.count + vals.o)
 
 save : EventHandle Text Int
-save = event (do Effect {
+save = do Event {
   pure (get total)
-})
+}
 "#;
     check_ok_with_embedded(source, &["aivi", "aivi.reactive"]);
 }

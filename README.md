@@ -74,31 +74,6 @@ No null checks. No forgotten error branches. The compiler makes the happy path a
 
 This is where AIVI really shines. The `~<gtk>...</gtk>` sigil lets you write GTK4 UI trees inline, with full type checking, signal wiring, and dynamic child lists.
 
-### Declarative UI with the GTK sigil
-
-```ocaml
-module user.notepad
-
-use aivi
-use aivi.ui.gtk4
-
-// Messages your app can receive
-Msg = Save | TitleChanged Text | BodyChanged Text
-
-// UI tree — looks like XML, compiles to typed GtkNode values
-editorNode : GtkNode
-editorNode =
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="8" marginTop="16">
-      <GtkEntry id="titleInput" onInput={ Msg.TitleChanged } />
-      <GtkEntry id="bodyInput" onInput={ Msg.BodyChanged } />
-      <GtkButton label="Save" onClick={ Msg.Save } />
-    </GtkBox>
-  </gtk>
-```
-
-No callback spaghetti. Signal handlers are typed ADT constructors — the compiler rejects anything that isn't a valid `Msg`.
-
 ### Signal-first native apps
 
 The primary public UI story is signal-first: state lives in `Signal` values, GTK props and child structure bind directly to those signals, and callbacks mutate signals or trigger `Event` handles.
@@ -106,9 +81,9 @@ The primary public UI story is signal-first: state lives in `Signal` values, GTK
 ```ocaml
 use aivi.reactive
 
-count = signal 0
-countLabel = map count (value => "Count: { Int.toString value }")
-increment = _ => update count (_ + 1)
+state = signal { count: 0 }
+countLabel = state |> map (_.count) |> map "Count: {_}"
+increment = _ => update state (patch { count: _ + 1 })
 
 view = ~<gtk>
   <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
