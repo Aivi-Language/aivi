@@ -31,6 +31,8 @@ use super::engine::{
 };
 use super::{ColorMode, ReplOptions, SymbolPane};
 
+const MAX_VISIBLE_SUGGESTIONS: usize = 5;
+
 // ─── Colour palette ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy)]
@@ -694,7 +696,7 @@ fn render(frame: &mut Frame, state: &TuiState) {
     let show_pane = snap.symbol_pane.is_some();
 
     // Vertical split: main area / status bar / input area.
-    let suggestion_count = state.suggestions().len() as u16;
+    let suggestion_count = state.suggestions().len().min(MAX_VISIBLE_SUGGESTIONS) as u16;
     let input_height = (count_input_lines(&state.input) as u16).clamp(1, 5) + suggestion_count + 2;
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -817,8 +819,11 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
     let selected_index = state
         .suggestion_index
         .min(suggestions.len().saturating_sub(1));
-    for (idx, suggestion) in suggestions.iter().enumerate() {
-        let style = if idx == selected_index {
+    let (visible_start, visible_end) =
+        visible_suggestion_range(suggestions.len(), selected_index, MAX_VISIBLE_SUGGESTIONS);
+    for (idx, suggestion) in suggestions[visible_start..visible_end].iter().enumerate() {
+        let suggestion_idx = visible_start + idx;
+        let style = if suggestion_idx == selected_index {
             palette.selected_suggestion()
         } else {
             palette.suggestion()
@@ -856,6 +861,23 @@ fn render_input(frame: &mut Frame, area: Rect, state: &TuiState, palette: Palett
             .wrap(Wrap { trim: false }),
         area,
     );
+}
+
+fn visible_suggestion_range(
+    total: usize,
+    selected_index: usize,
+    max_visible: usize,
+) -> (usize, usize) {
+    if total == 0 || max_visible == 0 {
+        return (0, 0);
+    }
+
+    let visible = total.min(max_visible);
+    let selected_index = selected_index.min(total.saturating_sub(1));
+    let start = selected_index
+        .saturating_sub(visible.saturating_sub(1))
+        .min(total - visible);
+    (start, start + visible)
 }
 
 // ─── Transcript entry → styled lines ─────────────────────────────────────────
@@ -1042,6 +1064,55 @@ mod tests {
         state.cursor = state.input.len();
         state.refresh_completions(&engine);
         assert_eq!(state.suggestions()[0].label, "/values");
+    }
+
+    #[test]
+    fn visible_suggestion_range_scrolls_across_long_lists() {
+        assert_eq!(
+            visible_suggestion_range(11, 0, MAX_VISIBLE_SUGGESTIONS),
+            (0, 5)
+        );
+        assert_eq!(
+            visible_suggestion_range(11, 4, MAX_VISIBLE_SUGGESTIONS),
+            (0, 5)
+        );
+        assert_eq!(
+            visible_suggestion_range(11, 5, MAX_VISIBLE_SUGGESTIONS),
+            (1, 6)
+        );
+        assert_eq!(
+            visible_suggestion_range(11, 10, MAX_VISIBLE_SUGGESTIONS),
+            (6, 11)
+        );
+    }
+
+    #[test]
+    fn arrow_navigation_reaches_suggestions_beyond_first_page() {
+        let engine = ReplEngine::new(&ReplOptions {
+            color_mode: ColorMode::Never,
+            plain_mode: false,
+        })
+        .unwrap();
+        let snapshot = engine.snapshot();
+        let palette = Palette::new(ColorMode::Never, true);
+        let mut state = TuiState::new(snapshot, palette);
+        state.input = "/".to_owned();
+        state.cursor = state.input.len();
+        state.refresh_completions(&engine);
+
+        assert!(state.suggestions().len() > MAX_VISIBLE_SUGGESTIONS);
+        for _ in 0..6 {
+            state.suggestion_down();
+        }
+
+        let selected = &state.suggestions()[state.suggestion_index];
+        let visible = visible_suggestion_range(
+            state.suggestions().len(),
+            state.suggestion_index,
+            MAX_VISIBLE_SUGGESTIONS,
+        );
+        assert_eq!(selected.label, "/openapi");
+        assert_eq!(visible, (2, 7));
     }
 
     #[test]

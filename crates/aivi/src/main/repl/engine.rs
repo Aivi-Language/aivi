@@ -990,7 +990,7 @@ Command Reference
         }
 
         let fragment = &input[replace_start..replace_end];
-        let mut items: Vec<CompletionItem> = slash_command_suggestions(fragment)
+        let items: Vec<CompletionItem> = slash_command_suggestions(fragment)
             .into_iter()
             .map(|name| CompletionItem {
                 kind: CompletionKind::Command,
@@ -999,8 +999,6 @@ Command Reference
                 detail: command_summary(name).to_owned(),
             })
             .collect();
-        items.truncate(5);
-
         if items.is_empty() {
             None
         } else {
@@ -1042,20 +1040,18 @@ Command Reference
             leading_ws + COMMAND.len() + rest.find(|c: char| !c.is_whitespace()).unwrap_or(0)
         };
         let filter = rest.trim();
-        let mut items: Vec<CompletionItem> = self
+        let items: Vec<CompletionItem> = self
             .function_value_inventory()
             .into_iter()
             .filter(|item| item.kind == CompletionKind::Function)
             .filter(|item| matches_filter(&item.name, filter))
             .map(|item| CompletionItem {
                 kind: CompletionKind::Function,
-                label: item.name.clone(),
+                label: format_function_completion_label(&item),
                 insert_text: item.name,
                 detail: item.detail,
             })
             .collect();
-        items.truncate(5);
-
         if items.is_empty() {
             None
         } else {
@@ -1079,7 +1075,7 @@ Command Reference
             return None;
         }
 
-        let mut items: Vec<CompletionItem> = if starts_with_upper(fragment) {
+        let items: Vec<CompletionItem> = if starts_with_upper(fragment) {
             self.constructor_inventory()
                 .into_iter()
                 .filter(|item| item.name.starts_with(fragment))
@@ -1094,8 +1090,6 @@ Command Reference
         } else {
             Vec::new()
         };
-        items.truncate(5);
-
         if items.is_empty() {
             None
         } else {
@@ -1112,18 +1106,18 @@ Command Reference
         let mut session_items: Vec<SymbolCompletion> = self
             .session_types
             .iter()
-            .filter_map(|(name, ty)| {
+            .map(|(name, ty)| {
                 let kind = if ty.contains("->") {
                     CompletionKind::Function
                 } else {
                     CompletionKind::Value
                 };
-                Some(SymbolCompletion {
+                SymbolCompletion {
                     kind,
                     name: name.clone(),
                     detail: ty.clone(),
                     module: "repl_session".to_owned(),
-                })
+                }
             })
             .collect();
         session_items.sort_by(|a, b| a.name.cmp(&b.name));
@@ -1574,10 +1568,7 @@ fn completion_token_range(input: &str, cursor: usize) -> (usize, usize) {
     let cursor = cursor.min(input.len());
     let mut start = cursor;
     while start > 0 {
-        let prev = input[..start]
-            .char_indices()
-            .next_back()
-            .map(|(idx, ch)| (idx, ch));
+        let prev = input[..start].char_indices().next_back();
         let Some((idx, ch)) = prev else { break };
         if !is_identifier_completion_char(ch) {
             break;
@@ -1605,6 +1596,10 @@ fn is_identifier_completion_char(ch: char) -> bool {
 
 fn format_function_entry(item: &SymbolCompletion) -> String {
     format!("{} :: {}  ({})", item.name, item.detail, item.module)
+}
+
+fn format_function_completion_label(item: &SymbolCompletion) -> String {
+    format!("{} ({})", item.name, item.module)
 }
 
 fn symbol_completion_item(item: SymbolCompletion) -> CompletionItem {
@@ -2259,13 +2254,27 @@ mod tests {
     }
 
     #[test]
-    fn slash_functions_filter_suggests_matching_function_names() {
+    fn command_completion_keeps_full_result_set() {
         let engine = make_engine();
         let completion = engine
-            .completion_state("/functions an", "/functions an".len())
+            .completion_state("/", 1)
+            .expect("expected completion state for slash command root");
+        assert_eq!(completion.mode, CompletionMode::Command);
+        assert_eq!(completion.items.len(), SLASH_COMMANDS.len());
+    }
+
+    #[test]
+    fn slash_functions_filter_shows_module_name_in_labels() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.text").unwrap();
+        let completion = engine
+            .completion_state("/functions jo", "/functions jo".len())
             .expect("expected completion state for /functions filter");
         assert_eq!(completion.mode, CompletionMode::SlashFilter);
-        assert!(completion.items.iter().any(|item| item.label == "any"));
+        assert!(completion
+            .items
+            .iter()
+            .any(|item| item.label == "join (aivi.text)" && item.insert_text == "join"));
     }
 
     #[test]
