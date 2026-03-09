@@ -396,7 +396,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "map".to_string(),
+                "derive".to_string(),
                 Type::Func(
                     Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
                     Box::new(Type::Func(
@@ -409,21 +409,15 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "combine2".to_string(),
+                "combineAll".to_string(),
                 Type::Func(
-                    Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_a)])),
+                    Box::new(Type::Var(reactive_signal_a)),
                     Box::new(Type::Func(
-                        Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_b)])),
                         Box::new(Type::Func(
-                            Box::new(Type::Func(
-                                Box::new(Type::Var(reactive_signal_a)),
-                                Box::new(Type::Func(
-                                    Box::new(Type::Var(reactive_signal_b)),
-                                    Box::new(Type::Var(reactive_signal_c)),
-                                )),
-                            )),
-                            Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_c)])),
+                            Box::new(Type::Var(reactive_signal_b)),
+                            Box::new(Type::Var(reactive_signal_c)),
                         )),
+                        Box::new(Type::con("Signal").app(vec![Type::Var(reactive_signal_c)])),
                     )),
                 ),
             ),
@@ -451,7 +445,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "makeEvent".to_string(),
+                "event".to_string(),
                 Type::Func(
                     Box::new(Type::con("Effect").app(vec![
                         Type::Var(reactive_event_e),

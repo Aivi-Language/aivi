@@ -400,6 +400,47 @@ fn lower_expr_inner_ctx(
         }
         Expr::Block { kind, items, .. } => {
             let block_kind = lower_block_kind(&kind);
+            // `do Event { ... }` desugars to `reactive.event (do Effect { ... })`.
+            if let BlockKind::Do { ref monad } = kind {
+                if monad.name == "Event" {
+                    let effect_monad = SpannedName {
+                        name: "Effect".to_string(),
+                        span: monad.span.clone(),
+                    };
+                    let effect_kind = BlockKind::Do {
+                        monad: effect_monad,
+                    };
+                    let effect_block_kind = lower_block_kind(&effect_kind);
+                    let effect_block = HirExpr::Block {
+                        id: id_gen.next(),
+                        block_kind: effect_block_kind.clone(),
+                        items: items
+                            .into_iter()
+                            .map(|item| {
+                                lower_block_item_ctx(
+                                    item,
+                                    &effect_kind,
+                                    &effect_block_kind,
+                                    id_gen,
+                                    ctx,
+                                )
+                            })
+                            .collect(),
+                    };
+                    return HirExpr::Call {
+                        id: id_gen.next(),
+                        func: Box::new(HirExpr::FieldAccess {
+                            id: id_gen.next(),
+                            base: Box::new(HirExpr::Var {
+                                id: id_gen.next(),
+                                name: "reactive".to_string(),
+                            }),
+                            field: "event".to_string(),
+                        }),
+                        args: vec![effect_block],
+                    };
+                }
+            }
             // Generic `do M { ... }` blocks (where M ≠ Effect) desugar into
             // nested `chain` / lambda calls so that the runtime resolves
             // `chain`/`of` through the normal Monad instance dispatch.

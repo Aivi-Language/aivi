@@ -3,7 +3,7 @@ module integrationTests.stdlib.aivi.ui.gtk4.tests
 
 use aivi
 use aivi.list as List
-use aivi.reactive (Signal, signal, get, combine2, map as signalMap)
+use aivi.reactive
 use aivi.testing
 use aivi.ui.gtk4
 
@@ -27,27 +27,13 @@ getValueTriple = event => event match
   | GtkValueChanged wid name val => (wid, name, val)
   | _                            => (0, "", 0.0)
 
-TestMsg  = Save | NameChanged Text | ToggledMsg Bool
-TestMsg2 = TitleChanged Text | BodyChanged Text
-
 Row = { id: Text, name: Text }
-
-toTestMsg = event => event match
-  | GtkClicked _ _          => Some Save
-  | GtkInputChanged _ _ txt => Some (NameChanged txt)
-  | GtkToggled _ _ active   => Some (ToggledMsg active)
-  | _                       => None
-
-toTestMsg2 = event => event match
-  | GtkInputChanged _ "titleInput" txt => Some (TitleChanged txt)
-  | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
-  | _                                  => None
 
 signalDrivenView : Signal Text -> Signal Bool -> Signal (List Row) -> GtkNode
 signalDrivenView = title => visible => rows =>
   ~<gtk>
     <GtkBox orientation="vertical" spacing="4">
-      <GtkLabel label={signalMap title (txt => "Title: {txt}")} />
+      <GtkLabel label={derive title (txt => "Title: {txt}")} />
       <show when={visible}>
         <GtkLabel label="Visible" />
       </show>
@@ -79,17 +65,35 @@ signal_focus = do Effect {
 
 @test "GtkSignalEvent pattern matching with wildcard widget id"
 signal_event_pattern_matching = do Effect {
-  assertEq (toTestMsg (GtkClicked 1 "btn")) (Some Save)
-  assertEq (toTestMsg (GtkInputChanged 2 "inp" "hi")) (Some (NameChanged "hi"))
-  assertEq (toTestMsg (GtkToggled 3 "chk" True)) (Some (ToggledMsg True))
-  assertEq (toTestMsg (GtkFocusIn 4 "x")) None
+  clickHandled = (GtkClicked 1 "btn") match
+    | GtkClicked _ _ => True
+    | _              => False
+    assertEq clickHandled True
+    inputText = (GtkInputChanged 2 "inp" "hi") match
+      | GtkInputChanged _ _ txt => txt
+      | _                       => ""
+    assertEq inputText "hi"
+    toggleActive = (GtkToggled 3 "chk" True) match
+      | GtkToggled _ _ active => active
+      | _                     => False
+    assertEq toggleActive True
+    focusHandled = (GtkFocusIn 4 "x") match
+      | GtkFocusIn _ _ => True
+      | _              => False
+    assertEq focusHandled True
 }
 
 @test "GtkSignalEvent match by widget name"
 signal_event_match_by_name = do Effect {
-  assertEq (toTestMsg2 (GtkInputChanged 1 "titleInput" "hi")) (Some (TitleChanged "hi"))
-  assertEq (toTestMsg2 (GtkInputChanged 2 "bodyInput" "lo")) (Some (BodyChanged "lo"))
-  assertEq (toTestMsg2 (GtkInputChanged 3 "other" "x")) None
+  getTitleText = event => event match
+    | GtkInputChanged _ "titleInput" txt => Some txt
+    | _                                  => None
+    getBodyText = event => event match
+      | GtkInputChanged _ "bodyInput" txt => Some txt
+      | _                                 => None
+    assertEq (getTitleText (GtkInputChanged 1 "titleInput" "hi")) (Some "hi")
+    assertEq (getBodyText (GtkInputChanged 2 "bodyInput" "lo")) (Some "lo")
+    assertEq (getTitleText (GtkInputChanged 3 "other" "x")) None
 }
 
 @test "GtkNode constructors"
@@ -119,8 +123,8 @@ signal_first_sigil_shapes = do Effect {
     { id: "two", name: "Second" }
   ]
   combined =
-    combine2 title visible (txt => shown =>
-      if shown then "{txt}!" else txt
+    combineAll { t: title, v: visible } (vals =>
+      if vals.v then "{vals.t}!" else vals.t
     )
   _ = combined
   _ = signalDrivenView title visible rows

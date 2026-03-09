@@ -1,8 +1,11 @@
+save : a -> Unit
+save = _ => Unit
+
 // Shorthand (preferred)
 ~<gtk>
   <GtkBox spacing="24" marginTop="12">
     <GtkLabel label="Hello" />
-    <GtkButton label="Save" onClick={ Msg.Save } />
+    <GtkButton label="Save" onClick={save} />
   </GtkBox>
 </gtk>
 
@@ -10,6 +13,6 @@
 ~<gtk>
   <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
     <object class="GtkLabel" props={{ label: "Hello" }} />
-    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={save} />
   </object>
 </gtk>

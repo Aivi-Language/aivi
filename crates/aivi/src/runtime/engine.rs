@@ -202,6 +202,11 @@ pub(crate) enum ReactiveCellKind {
         dependencies: Vec<usize>,
         compute: Value,
     },
+    DerivedRecord {
+        dependencies: Vec<usize>,
+        field_names: Vec<String>,
+        compute: Value,
+    },
 }
 
 pub(crate) struct ReactiveWatcherEntry {

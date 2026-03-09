@@ -28,7 +28,7 @@ Derived UI state is no longer a separate architecture. If a value should stay re
 | `get s` | Read the current value. Best for callbacks, events, and low-level code. |
 | `set s value` | Replace the current value. |
 | `update s fn` | Transform the current value. May also accept patch-style record updates. |
-| `map s fn` | Derive a new signal from one source signal. |
+| `map fn s` | Derive a new signal from one source signal. |
 | `combine2` | Derive one signal from two source signals. |
 | `watch s fn` / `on s fn` | Observe changes and run a callback or effect. Returns a disposable. |
 | `batch fn` | Group several writes into one propagation batch. |
@@ -39,11 +39,11 @@ The common style is: use signals and combinators in normal UI code, then reach f
 ## Start simple
 
 ```aivi
-count = signal 0
-title = map count (value => "Count {value}")
+state = signal { count: 0 }
+title = state |> map (_.count) |> map "Count {_}"
 
-increment = _ => update count (_ + 1)
-reset = _ => set count 0
+increment = _ => update state (patch { count: _ + 1 })
+reset = _ => set state { count: 0 }
 ```
 
 `title` is already the “computed” form. There is no need to switch into a separate derived-value API just because the data is read-only.
@@ -79,9 +79,9 @@ profile = signal {
   saveCount: 0
 }
 
-update profile <| { name: "AIVI" }
-update profile <| { subscribed: not _ }
-update profile <| { saveCount: _ + 1 }
+update profile (patch { name: "AIVI" })
+update profile (patch { subscribed: not _ })
+update profile (patch { saveCount: _ + 1 })
 ```
 
 When that is not expressive enough, fall back to a normal function:
@@ -115,14 +115,12 @@ Useful rules:
 
 ```aivi
 saveDraft : Event GtkError Text
-saveDraft = do Event {
-  run: do Effect {
-    persistDraft (get draft)
-    pure "Saved"
-  }
-}
+saveDraft = event (do Effect {
+  persistDraft (get draft)
+  pure "Saved"
+})
 
-saveMessage = map saveDraft.result (maybeResult =>
+saveMessage = saveDraft.result |> map (maybeResult =>
   maybeResult match
     | Some text => text
     | None      => ""

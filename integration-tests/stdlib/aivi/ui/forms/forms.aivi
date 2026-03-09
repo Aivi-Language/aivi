@@ -12,21 +12,14 @@ Contact = {
   email: Text
 }
 
-Model = {
+State = {
   submitted: Bool
   name: Field Text
   email: Field Text
 }
 
-Msg =
-  | NameChanged Text
-  | NameBlurred
-  | EmailChanged Text
-  | EmailBlurred
-  | Submit
-
-initialModel : Model
-initialModel = {
+initialState : State
+initialState = {
   submitted: False
   name: field ""
   email: field ""
@@ -38,33 +31,11 @@ nameRule = allOf [required, minLength 2]
 emailRule : Text -> Validation (List Text) Text
 emailRule = allOf [required, email]
 
-toMsg : GtkSignalEvent -> Option Msg
-toMsg = event => event match
-  | GtkInputChanged _ "nameInput" txt  => Some (NameChanged txt)
-  | GtkFocusOut _ "nameInput"          => Some NameBlurred
-  | GtkInputChanged _ "emailInput" txt => Some (EmailChanged txt)
-  | GtkFocusOut _ "emailInput"         => Some EmailBlurred
-  | GtkClicked _ "submitBtn"           => Some Submit
-  | _                                  => None
+nameErrors : State -> List Text
+nameErrors = s => visibleErrors s.submitted nameRule s.name
 
-update : Msg -> Model -> Effect GtkError Model
-update = msg model => msg match
-  | NameChanged txt =>
-      pure (model <| { name: setValue txt model.name })
-  | NameBlurred =>
-      pure (model <| { name: touch model.name })
-  | EmailChanged txt =>
-      pure (model <| { email: setValue txt model.email })
-  | EmailBlurred =>
-      pure (model <| { email: touch model.email })
-  | Submit =>
-      pure (model <| { submitted: True })
-
-nameErrors : Model -> List Text
-nameErrors = model => visibleErrors model.submitted nameRule model.name
-
-emailErrors : Model -> List Text
-emailErrors = model => visibleErrors model.submitted emailRule model.email
+emailErrors : State -> List Text
+emailErrors = s => visibleErrors s.submitted emailRule s.email
 
 MkContact : Text -> Text -> Contact
 MkContact = name email => {
@@ -72,37 +43,37 @@ MkContact = name email => {
   email: email
 }
 
-contactValidation : Model -> Validation (List Text) Contact
-contactValidation = model => ap (ap (Valid MkContact) (validate nameRule model.name)) (validate emailRule model.email)
+contactValidation : State -> Validation (List Text) Contact
+contactValidation = s => ap (ap (Valid MkContact) (validate nameRule s.name)) (validate emailRule s.email)
 
 @test "fields start pristine and hide errors"
 fields_start_pristine = do Effect {
-  assertEq initialModel.name (field "")
-  assertEq initialModel.email (field "")
-  assertEq (nameErrors initialModel) []
-  assertEq (emailErrors initialModel) []
+  assertEq initialState.name (field "")
+  assertEq initialState.email (field "")
+  assertEq (nameErrors initialState) []
+  assertEq (emailErrors initialState) []
 }
 
 @test "input change marks field dirty but not touched"
 input_change_marks_dirty = do Effect {
-  model <- update (NameChanged "A") initialModel
-  assertEq model.name.value "A"
-  assertEq model.name.dirty True
-  assertEq model.name.touched False
-  assertEq (nameErrors model) []
+  s = initialState <| { name: setValue "A" initialState.name }
+  assertEq s.name.value "A"
+  assertEq s.name.dirty True
+  assertEq s.name.touched False
+  assertEq (nameErrors s) []
 }
 
 @test "blur reveals field validation"
 blur_reveals_validation = do Effect {
-  changed <- update (NameChanged "A") initialModel
-  blurred <- update NameBlurred changed
+  changed = initialState <| { name: setValue "A" initialState.name }
+  blurred = changed <| { name: touch changed.name }
   assertEq blurred.name.touched True
   assertEq (nameErrors blurred) ["Must be at least 2 characters"]
 }
 
 @test "submit reveals untouched field errors"
 submit_reveals_errors = do Effect {
-  submitted <- update Submit initialModel
+  submitted = initialState <| { submitted: True }
   assertEq submitted.submitted True
   assertEq (nameErrors submitted) ["This field is required"]
   assertEq (emailErrors submitted) ["This field is required"]
@@ -110,25 +81,31 @@ submit_reveals_errors = do Effect {
 
 @test "valid form produces typed payload"
 valid_form_payload = do Effect {
-  nameModel  <- update (NameChanged "Alice") initialModel
-  emailModel <- update (EmailChanged "alice@example.com") nameModel
-  result = contactValidation emailModel
+  s      = initialState <| { name: setValue "Alice" initialState.name } <| { email: setValue "alice@example.com" initialState.email }
+  result = contactValidation s
   assertEq result (Valid { name: "Alice", email: "alice@example.com" })
 }
 
 @test "form validation accumulates field errors"
 form_validation_accumulates_errors = do Effect {
-  nameModel  <- update (NameChanged "A") initialModel
-  emailModel <- update (EmailChanged "not-an-email") nameModel
-  result = contactValidation emailModel
+  s      = initialState <| { name: setValue "A" initialState.name } <| { email: setValue "not-an-email" initialState.email }
+  result = contactValidation s
   assertEq result (Invalid ["Must be at least 2 characters", "Enter a valid email address"])
 }
 
-@test "toMsg maps GTK input blur and submit events"
-gtk_events_map_to_messages = do Effect {
-  assertEq (toMsg (GtkInputChanged 1 "nameInput" "Ada")) (Some (NameChanged "Ada"))
-  assertEq (toMsg (GtkFocusOut 1 "nameInput")) (Some NameBlurred)
-  assertEq (toMsg (GtkInputChanged 2 "emailInput" "ada@example.com")) (Some (EmailChanged "ada@example.com"))
-  assertEq (toMsg (GtkFocusOut 2 "emailInput")) (Some EmailBlurred)
-  assertEq (toMsg (GtkClicked 3 "submitBtn")) (Some Submit)
+@test "gtk signal callbacks invoke field updates directly"
+gtk_signal_callbacks_update_fields = do Effect {
+  onNameChange  = txt => st => st <| { name: setValue txt st.name }
+  onEmailChange = txt => st => st <| { email: setValue txt st.email }
+  onNameBlur    = st => st <| { name: touch st.name }
+  onEmailBlur   = st => st <| { email: touch st.email }
+  onSubmit      = st => st <| { submitted: True }
+  s0            = onNameChange "Ada" initialState
+  assertEq s0.name.value "Ada"
+  s1 = onEmailChange "ada@example.com" s0
+  assertEq s1.email.value "ada@example.com"
+  s2 = onNameBlur s0
+  assertEq s2.name.touched True
+  s3 = onSubmit initialState
+  assertEq s3.submitted True
 }

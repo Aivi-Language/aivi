@@ -41,20 +41,19 @@ pub(super) fn build_reactive_record() -> Value {
         }),
     );
     fields.insert(
-        "map".to_string(),
-        builtin("reactive.map", 2, |mut args, runtime| {
+        "derive".to_string(),
+        builtin("reactive.derive", 2, |mut args, runtime| {
             let mapper = args.pop().unwrap();
             let signal = args.pop().unwrap();
-            runtime.reactive_map_signal(signal, mapper)
+            runtime.reactive_derive_signal(signal, mapper)
         }),
     );
     fields.insert(
-        "combine2".to_string(),
-        builtin("reactive.combine2", 3, |mut args, runtime| {
+        "combineAll".to_string(),
+        builtin("reactive.combineAll", 2, |mut args, runtime| {
             let combine = args.pop().unwrap();
-            let right = args.pop().unwrap();
-            let left = args.pop().unwrap();
-            runtime.reactive_combine2_signals(left, right, combine)
+            let signals_record = args.pop().unwrap();
+            runtime.reactive_combine_all(signals_record, combine)
         }),
     );
     fields.insert(

@@ -66,14 +66,17 @@ templateNode =
     </template>
   </gtk>
 
+save : a -> Unit
+save = _ => Unit
+
 signalSugarNode : GtkNode
 signalSugarNode =
   ~<gtk>
-    <object class="GtkButton" onClick={ Msg.Save }>
+    <object class="GtkButton" onClick={save}>
       <property name="label">
         Save
       </property>
-      <signal name="clicked" on={ Msg.Save }>
+      <signal name="clicked" on={save}>
       </signal>
     </object>
   </gtk>
@@ -101,7 +104,7 @@ shorthandNode =
 shorthandSignalNode : GtkNode
 shorthandSignalNode =
   ~<gtk>
-    <GtkButton label="Save" onClick={ Msg.Save }>
+    <GtkButton label="Save" onClick={save}>
     </GtkButton>
   </gtk>
 

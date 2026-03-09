@@ -134,6 +134,31 @@ impl TypeChecker {
         Ok(Type::con("Effect").app(vec![err_ty, result_ty]))
     }
 
+    /// Type-check a `do Event { ... }` block.
+    ///
+    /// The body is type-checked as an effect block (same rules as `do Effect`),
+    /// but the overall type is `EventHandle E A` rather than `Effect E A`.
+    /// At the HIR level, `do Event { body }` desugars to `reactive.event(do Effect { body })`.
+    pub(crate) fn infer_event_block(
+        &mut self,
+        items: &[BlockItem],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        let effect_ty = self.infer_effect_block(items, env)?;
+        // effect_ty is Effect E A; extract E and A to produce EventHandle E A
+        match effect_ty {
+            Type::Con(ref name, ref args) if name == "Effect" && args.len() == 2 => {
+                Ok(Type::con("EventHandle").app(vec![args[0].clone(), args[1].clone()]))
+            }
+            _ => {
+                // Fallback: create fresh vars
+                let err_ty = self.fresh_var();
+                let result_ty = self.fresh_var();
+                Ok(Type::con("EventHandle").app(vec![err_ty, result_ty]))
+            }
+        }
+    }
+
     /// Type-check a generic `do M { ... }` block where `M` is not `Effect`.
     ///
     /// The block's type is `M result_ty`. Binds (`x <- expr`) unify `expr` with

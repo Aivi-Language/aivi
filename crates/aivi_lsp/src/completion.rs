@@ -558,7 +558,7 @@ impl Backend {
         ),
         (
             "gtk signal-first app",
-            "use aivi.reactive\n\n${1:count} = signal ${2:0}\n${3:title} = map ${1:count} (value => \"${4:Count }{value}\")\n${5:increment} = _ => update ${1:count} (_ + 1)\n\n${6:view} = ~<gtk>\n  <GtkBox orientation=\"vertical\" spacing=\"12\">\n    <GtkLabel label={${3:title}} />\n    <GtkButton label=\"${7:Increment}\" onClick={${5:increment}} />\n  </GtkBox>\n</gtk>\n\nmain = do Effect {\n  _ <- init Unit\n  appId <- appNew \"${8:com.example.app}\"\n  win <- windowNew appId \"${9:Example}\" ${10:960} ${11:640}\n  root <- buildFromNode ${6:view}\n  _ <- windowSetChild win root\n  _ <- windowPresent win\n  appRun appId\n}",
+            "use aivi.reactive\n\n${1:state} = signal { ${2:count}: ${3:0} }\n${4:title} = derive ${1:state} (_.${2:count})\n${6:increment} = _ => update ${1:state} (patch { ${2:count}: _ + 1 })\n\n${7:view} = ~<gtk>\n  <GtkBox orientation=\"vertical\" spacing=\"12\">\n    <GtkLabel label={${4:title}} />\n    <GtkButton label=\"${8:Increment}\" onClick={${6:increment}} />\n  </GtkBox>\n</gtk>\n\nmain = do Effect {\n  _ <- init Unit\n  appId <- appNew \"${9:com.example.app}\"\n  win <- windowNew appId \"${10:Example}\" ${11:960} ${12:640}\n  root <- buildFromNode ${7:view}\n  _ <- windowSetChild win root\n  _ <- windowPresent win\n  appRun appId\n}",
             "signal-first GTK app snippet",
         ),
         (

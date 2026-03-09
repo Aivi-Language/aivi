@@ -49,17 +49,15 @@ Most GTK apps only need this smaller subset:
 use aivi.reactive
 use aivi.ui.gtk4
 
-count = signal 0
-title = map count (value => "Count {value}")
-increment = _ => update count (_ + 1)
+state = signal { count: 0 }
+title = state |> map (_.count) |> map "Count {_}"
+increment = _ => update state (patch { count: _ + 1 })
 
-main = ~<gtk>
-  <GtkWindow title={title}>
-    <GtkBox orientation="vertical" spacing="8">
-      <GtkLabel label={title} />
-      <GtkButton label="Increment" onClick={increment} />
-    </GtkBox>
-  </GtkWindow>
+view = ~<gtk>
+  <GtkBox orientation="vertical" spacing="8">
+    <GtkLabel label={title} />
+    <GtkButton label="Increment" onClick={increment} />
+  </GtkBox>
 </gtk>
 ```
 
@@ -72,9 +70,9 @@ use aivi
 use aivi.reactive
 use aivi.ui.gtk4
 
-count = signal 0
-title = map count (value => "Count {value}")
-increment = _ => update count (_ + 1)
+state = signal { count: 0 }
+title = state |> map (_.count) |> map "Count {_}"
+increment = _ => update state (patch { count: _ + 1 })
 
 view = ~<gtk>
   <GtkBox orientation="vertical" spacing="12" marginTop="12" marginStart="12">
@@ -101,7 +99,7 @@ There is no required `Model -> Msg -> update` host. Signals are the source of tr
 The core surface is:
 
 - reactive values: `signal`, `get`, `set`, `update`, `map`, `combine2`, `watch`, `on`, `batch`, `peek`
-- effect handles: `do Event { ... }` with `result`, `error`, `done`, and `running`
+- effect handles: `event (do Effect { ... })` with `result`, `error`, `done`, and `running`
 - GTK binding surface: `~<gtk>...</gtk>`, callback attributes, `<show>`, `<each>`, and widget/window helpers
 - low-level escape hatches: `buildFromNode`, `buildWithIds`, `signalStream`, `signalPoll`, `signalEmit`
 
@@ -147,21 +145,17 @@ Tags starting with `Gtk`, `Adw`, or `Gsk` are shorthand for `<object class="..."
 ```aivi
 // Shorthand (preferred)
 ~<gtk>
-  <GtkWindow title={title}>
-    <GtkBox spacing="24" marginTop="12">
-      <GtkLabel label={title} />
-      <GtkButton label="Save" onClick={saveEvent} />
-    </GtkBox>
-  </GtkWindow>
+  <GtkBox spacing="24" marginTop="12">
+    <GtkLabel label={title} />
+    <GtkButton label="Save" onClick={saveEvent} />
+  </GtkBox>
 </gtk>
 
 // Equivalent verbose form
 ~<gtk>
-  <object class="GtkWindow" props={{ title: title }}>
-    <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-      <object class="GtkLabel" props={{ label: title }} />
-      <object class="GtkButton" props={{ label: "Save" }} onClick={saveEvent} />
-    </object>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="GtkLabel" props={{ label: title }} />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={saveEvent} />
   </object>
 </gtk>
 ```
@@ -229,7 +223,7 @@ Callback values may be either runtime functions or `Event` handles. For the comm
 Valid public shapes therefore include:
 
 ```aivi
-<GtkButton onClick={_ => update count (_ + 1)} />
+<GtkButton onClick={_ => update state (patch { count: _ + 1 })} />
 <GtkEntry onInput={txt => set query txt} />
 <GtkSwitch onToggle={active => set enabled active} />
 <GtkButton onClick={saveEvent} />
