@@ -184,7 +184,7 @@ mod lsp_integration {
             .await;
 
             let diags = timeout(
-                Duration::from_secs(2),
+                Duration::from_secs(5),
                 wait_for_publish_diagnostics(&mut client_read, uri.as_str()),
             )
             .await

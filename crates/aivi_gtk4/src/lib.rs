@@ -716,28 +716,42 @@ mod linux_impl {
         }
     }
 
+    #[derive(Clone, Copy)]
+    struct WidgetAttachmentInfo<'a> {
+        id: i64,
+        class_name: &'a str,
+        kind: CreatedWidgetKind,
+        node_id: Option<&'a str>,
+    }
+
+    #[derive(Clone, Copy)]
+    struct WidgetAttachmentTarget<'a> {
+        raw: *mut c_void,
+        info: WidgetAttachmentInfo<'a>,
+    }
+
+    #[derive(Clone, Copy)]
+    struct ChildPlacement<'a> {
+        child_type: Option<&'a str>,
+        overlay_index: usize,
+    }
+
     fn validate_special_child_attachment(
         operation: &str,
-        parent_id: i64,
-        parent_class: &str,
-        parent_kind: CreatedWidgetKind,
-        parent_node_id: Option<&str>,
-        child_id: i64,
-        child_class: &str,
-        child_kind: CreatedWidgetKind,
-        child_node_id: Option<&str>,
+        parent: WidgetAttachmentInfo<'_>,
+        child: WidgetAttachmentInfo<'_>,
     ) -> Result<(), Gtk4Error> {
-        let Some((expected_kind, expected_class, note)) = expected_preferences_child(parent_kind)
+        let Some((expected_kind, expected_class, note)) = expected_preferences_child(parent.kind)
         else {
             return Ok(());
         };
-        if child_kind == expected_kind {
+        if child.kind == expected_kind {
             return Ok(());
         }
         Err(Gtk4Error::new(format!(
             "gtk4.{operation} invalid child attachment: {} expected a child with class `{expected_class}`, but got {}. {note}",
-            widget_debug_label(parent_id, parent_class, parent_node_id),
-            widget_debug_label(child_id, child_class, child_node_id),
+            widget_debug_label(parent.id, parent.class_name, parent.node_id),
+            widget_debug_label(child.id, child.class_name, child.node_id),
         )))
     }
 
@@ -780,14 +794,18 @@ mod linux_impl {
         fn preferences_page_child_mismatch_names_expected_class() {
             let err = validate_special_child_attachment(
                 "buildFromNode",
-                4,
-                "AdwPreferencesPage",
-                CreatedWidgetKind::PreferencesPage,
-                Some("settings-page"),
-                9,
-                "GtkBox",
-                CreatedWidgetKind::Box,
-                Some("account-connection"),
+                WidgetAttachmentInfo {
+                    id: 4,
+                    class_name: "AdwPreferencesPage",
+                    kind: CreatedWidgetKind::PreferencesPage,
+                    node_id: Some("settings-page"),
+                },
+                WidgetAttachmentInfo {
+                    id: 9,
+                    class_name: "GtkBox",
+                    kind: CreatedWidgetKind::Box,
+                    node_id: Some("account-connection"),
+                },
             )
             .expect_err("expected invalid child mismatch");
             assert!(err
@@ -3413,14 +3431,18 @@ mod linux_impl {
             let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
             validate_special_child_attachment(
                 "buildFromNode",
-                id,
-                class_name,
-                kind,
-                node_id.as_deref(),
-                child_id,
-                &child_live.class_name,
-                child_live.kind,
-                child_live.node_id.as_deref(),
+                WidgetAttachmentInfo {
+                    id,
+                    class_name,
+                    kind,
+                    node_id: node_id.as_deref(),
+                },
+                WidgetAttachmentInfo {
+                    id: child_id,
+                    class_name: &child_live.class_name,
+                    kind: child_live.kind,
+                    node_id: child_live.node_id.as_deref(),
+                },
             )?;
 
             // Track for scroll-fade auto-wiring
@@ -3633,77 +3655,58 @@ mod linux_impl {
 
     /// Add a child widget to a parent container (mirrors the build logic).
     fn add_child_to_parent(
-        parent_raw: *mut c_void,
-        parent_id: i64,
-        parent_kind: CreatedWidgetKind,
-        parent_class: &str,
-        parent_node_id: Option<&str>,
-        child_raw: *mut c_void,
-        child_id: i64,
-        child_kind: CreatedWidgetKind,
-        child_class: &str,
-        child_node_id: Option<&str>,
-        child_type: Option<&str>,
-        overlay_index: usize,
+        parent: WidgetAttachmentTarget<'_>,
+        child: WidgetAttachmentTarget<'_>,
+        placement: ChildPlacement<'_>,
     ) -> Result<(), Gtk4Error> {
-        validate_special_child_attachment(
-            "reconcileNode",
-            parent_id,
-            parent_class,
-            parent_kind,
-            parent_node_id,
-            child_id,
-            child_class,
-            child_kind,
-            child_node_id,
-        )?;
-        match parent_kind {
-            CreatedWidgetKind::Box => unsafe { gtk_box_append(parent_raw, child_raw) },
-            CreatedWidgetKind::Button => unsafe { gtk_button_set_child(parent_raw, child_raw) },
-            CreatedWidgetKind::HeaderBar => match child_type {
-                Some("end") => unsafe { gtk_header_bar_pack_end(parent_raw, child_raw) },
-                Some("title") => unsafe { gtk_header_bar_set_title_widget(parent_raw, child_raw) },
-                _ => unsafe { gtk_header_bar_pack_start(parent_raw, child_raw) },
+        validate_special_child_attachment("reconcileNode", parent.info, child.info)?;
+        match parent.info.kind {
+            CreatedWidgetKind::Box => unsafe { gtk_box_append(parent.raw, child.raw) },
+            CreatedWidgetKind::Button => unsafe { gtk_button_set_child(parent.raw, child.raw) },
+            CreatedWidgetKind::HeaderBar => match placement.child_type {
+                Some("end") => unsafe { gtk_header_bar_pack_end(parent.raw, child.raw) },
+                Some("title") => unsafe { gtk_header_bar_set_title_widget(parent.raw, child.raw) },
+                _ => unsafe { gtk_header_bar_pack_start(parent.raw, child.raw) },
             },
             CreatedWidgetKind::ScrolledWindow => {
-                if child_type != Some("overlay") {
-                    unsafe { gtk_scrolled_window_set_child(parent_raw, child_raw) };
+                if placement.child_type != Some("overlay") {
+                    unsafe { gtk_scrolled_window_set_child(parent.raw, child.raw) };
                 }
             }
             CreatedWidgetKind::Overlay => {
-                if child_type == Some("overlay") || overlay_index > 0 {
-                    unsafe { gtk_overlay_add_overlay(parent_raw, child_raw) };
+                if placement.child_type == Some("overlay") || placement.overlay_index > 0 {
+                    unsafe { gtk_overlay_add_overlay(parent.raw, child.raw) };
                 } else {
-                    unsafe { gtk_overlay_set_child(parent_raw, child_raw) };
+                    unsafe { gtk_overlay_set_child(parent.raw, child.raw) };
                 }
             }
-            CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(parent_raw, child_raw) },
-            CreatedWidgetKind::Revealer => unsafe { gtk_revealer_set_child(parent_raw, child_raw) },
+            CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(parent.raw, child.raw) },
+            CreatedWidgetKind::Revealer => unsafe { gtk_revealer_set_child(parent.raw, child.raw) },
             CreatedWidgetKind::Stack => {
-                let page_name = child_type.unwrap_or("page");
+                let page_name = placement.child_type.unwrap_or("page");
                 if let Ok(name_c) = CString::new(page_name) {
-                    unsafe { gtk_stack_add_named(parent_raw, child_raw, name_c.as_ptr()) };
+                    unsafe { gtk_stack_add_named(parent.raw, child.raw, name_c.as_ptr()) };
                 }
             }
             CreatedWidgetKind::SplitView => {
-                let prop_name = match child_type {
+                let prop_name = match placement.child_type {
                     Some("sidebar") => "sidebar",
                     _ => "content",
                 };
                 let prop_c = CString::new(prop_name).unwrap();
-                unsafe { gobject_set_ptr(parent_raw, &prop_c, child_raw) };
+                unsafe { gobject_set_ptr(parent.raw, &prop_c, child.raw) };
             }
             CreatedWidgetKind::PreferencesDialog => {
-                call_adw_fn_pp("adw_preferences_dialog_add", parent_raw, child_raw);
+                call_adw_fn_pp("adw_preferences_dialog_add", parent.raw, child.raw);
             }
             CreatedWidgetKind::PreferencesPage => {
-                call_adw_fn_pp("adw_preferences_page_add", parent_raw, child_raw);
+                call_adw_fn_pp("adw_preferences_page_add", parent.raw, child.raw);
             }
             CreatedWidgetKind::PreferencesGroup => {
-                call_adw_fn_pp("adw_preferences_group_add", parent_raw, child_raw);
+                call_adw_fn_pp("adw_preferences_group_add", parent.raw, child.raw);
             }
             CreatedWidgetKind::ActionRow => {
-                call_adw_fn_pp("adw_action_row_add_suffix", parent_raw, child_raw);
+                call_adw_fn_pp("adw_action_row_add_suffix", parent.raw, child.raw);
             }
             CreatedWidgetKind::Other => {}
         }
@@ -3841,34 +3844,54 @@ mod linux_impl {
                         unsafe { gtk_box_insert_child_after(parent_raw, new_raw, prev_raw) };
                     } else {
                         add_child_to_parent(
-                            parent_raw,
-                            parent_id,
-                            parent_kind,
-                            &parent.class_name,
-                            parent.node_id.as_deref(),
-                            new_raw,
-                            new_id,
-                            new_live.kind,
-                            &new_live.class_name,
-                            new_live.node_id.as_deref(),
-                            new_children[i].child_type.as_deref(),
-                            i,
+                            WidgetAttachmentTarget {
+                                raw: parent_raw,
+                                info: WidgetAttachmentInfo {
+                                    id: parent_id,
+                                    class_name: &parent.class_name,
+                                    kind: parent_kind,
+                                    node_id: parent.node_id.as_deref(),
+                                },
+                            },
+                            WidgetAttachmentTarget {
+                                raw: new_raw,
+                                info: WidgetAttachmentInfo {
+                                    id: new_id,
+                                    class_name: &new_live.class_name,
+                                    kind: new_live.kind,
+                                    node_id: new_live.node_id.as_deref(),
+                                },
+                            },
+                            ChildPlacement {
+                                child_type: new_children[i].child_type.as_deref(),
+                                overlay_index: i,
+                            },
                         )?;
                     }
                 } else {
                     add_child_to_parent(
-                        parent_raw,
-                        parent_id,
-                        parent_kind,
-                        &parent.class_name,
-                        parent.node_id.as_deref(),
-                        new_raw,
-                        new_id,
-                        new_live.kind,
-                        &new_live.class_name,
-                        new_live.node_id.as_deref(),
-                        new_children[i].child_type.as_deref(),
-                        i,
+                        WidgetAttachmentTarget {
+                            raw: parent_raw,
+                            info: WidgetAttachmentInfo {
+                                id: parent_id,
+                                class_name: &parent.class_name,
+                                kind: parent_kind,
+                                node_id: parent.node_id.as_deref(),
+                            },
+                        },
+                        WidgetAttachmentTarget {
+                            raw: new_raw,
+                            info: WidgetAttachmentInfo {
+                                id: new_id,
+                                class_name: &new_live.class_name,
+                                kind: new_live.kind,
+                                node_id: new_live.node_id.as_deref(),
+                            },
+                        },
+                        ChildPlacement {
+                            child_type: new_children[i].child_type.as_deref(),
+                            overlay_index: i,
+                        },
                     )?;
                 }
                 parent.children[i] = LiveChild {
@@ -3902,18 +3925,28 @@ mod linux_impl {
             let new_raw = widget_ptr(state, new_id, "reconcile")?;
             let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
             add_child_to_parent(
-                parent_raw,
-                parent_id,
-                parent_kind,
-                &parent.class_name,
-                parent.node_id.as_deref(),
-                new_raw,
-                new_id,
-                new_live.kind,
-                &new_live.class_name,
-                new_live.node_id.as_deref(),
-                new_spec.child_type.as_deref(),
-                i,
+                WidgetAttachmentTarget {
+                    raw: parent_raw,
+                    info: WidgetAttachmentInfo {
+                        id: parent_id,
+                        class_name: &parent.class_name,
+                        kind: parent_kind,
+                        node_id: parent.node_id.as_deref(),
+                    },
+                },
+                WidgetAttachmentTarget {
+                    raw: new_raw,
+                    info: WidgetAttachmentInfo {
+                        id: new_id,
+                        class_name: &new_live.class_name,
+                        kind: new_live.kind,
+                        node_id: new_live.node_id.as_deref(),
+                    },
+                },
+                ChildPlacement {
+                    child_type: new_spec.child_type.as_deref(),
+                    overlay_index: i,
+                },
             )?;
             parent.children.push(LiveChild {
                 child_type: new_spec.child_type.clone(),

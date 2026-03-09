@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use im::HashMap as PersistentHashMap;
+
 use crate::diagnostics::Span;
 
 use super::TypeChecker;
@@ -72,7 +74,7 @@ pub(super) struct AliasInfo {
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct TypeEnv {
-    values: HashMap<String, Vec<Scheme>>,
+    values: PersistentHashMap<String, Vec<Scheme>>,
 }
 
 impl TypeEnv {
@@ -110,7 +112,7 @@ impl TypeEnv {
     }
 
     #[cfg(test)]
-    pub(super) fn raw_values(&self) -> &HashMap<String, Vec<Scheme>> {
+    pub(super) fn raw_values(&self) -> &PersistentHashMap<String, Vec<Scheme>> {
         &self.values
     }
 
@@ -339,5 +341,57 @@ impl<'a> TypePrinter<'a> {
         };
         self.names.insert(id, name.clone());
         name
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Scheme, Type, TypeEnv};
+
+    #[test]
+    fn cloning_type_env_preserves_original_bindings() {
+        let mut base = TypeEnv::default();
+        base.insert("x".to_string(), Scheme::mono(Type::con("Int")));
+
+        let mut child = base.clone();
+        child.insert("x".to_string(), Scheme::mono(Type::con("Text")));
+        child.insert("y".to_string(), Scheme::mono(Type::con("Bool")));
+
+        assert_eq!(
+            format!("{:?}", base.get("x").expect("base x").ty),
+            format!("{:?}", Type::con("Int"))
+        );
+        assert!(base.get("y").is_none());
+        assert_eq!(
+            format!("{:?}", child.get("x").expect("child x").ty),
+            format!("{:?}", Type::con("Text"))
+        );
+        assert_eq!(
+            format!("{:?}", child.get("y").expect("child y").ty),
+            format!("{:?}", Type::con("Bool"))
+        );
+    }
+
+    #[test]
+    fn cloning_type_env_preserves_overload_sets() {
+        let mut base = TypeEnv::default();
+        base.insert_overloads(
+            "f".to_string(),
+            vec![
+                Scheme::mono(Type::con("Int")),
+                Scheme::mono(Type::con("Text")),
+            ],
+        );
+
+        let mut child = base.clone();
+        child.insert("f".to_string(), Scheme::mono(Type::con("Bool")));
+
+        assert_eq!(base.get_all("f").expect("base overloads").len(), 2);
+        assert_eq!(child.get_all("f").expect("child overload").len(), 1);
+        assert!(base.get("f").is_none());
+        assert_eq!(
+            format!("{:?}", child.get("f").expect("child f").ty),
+            format!("{:?}", Type::con("Bool"))
+        );
     }
 }
