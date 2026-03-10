@@ -1192,7 +1192,7 @@ Signals are first-class reactive values. Create source signals with `signal`, de
 state = signal { count: 0, query: "" }
 title = state |> _.count |> (_ + 1) |> toText
 canSearch = combineAll (state, searchEvent.running) ((st, running) =>
-  st.query != "" and not running
+  st.query != "" && !running
 )
 
 update state (patch { count: _ + 1 })

@@ -57,7 +57,7 @@ Example:
 
 ```aivi
 visibleCount = derive projects length
-saveEnabled = combineAll (dirty, saveEvent.running) ((dirty, running) => dirty and not running)
+saveEnabled = combineAll (dirty, saveEvent.running) ((dirty, running) => dirty && !running)
 ```
 
 ## Batching

@@ -65,7 +65,7 @@ fullName = combineAll (firstName, lastName) ((first, last) =>
   “{first} {last}”
 )
 canSave = combineAll (firstName, lastName, saveBusy) ((first, last, busy) =>
-  first != “” and last != “” and not busy
+  first != “” && last != “” && !busy
 )
 ```
 
@@ -83,7 +83,7 @@ profile = signal {
 }
 
 update profile (patch { name: "AIVI" })
-update profile (patch { subscribed: not _ })
+update profile (patch { subscribed: !_ })
 update profile (patch { saveCount: _ + 1 })
 ```
 
