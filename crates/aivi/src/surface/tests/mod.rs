@@ -79,11 +79,6 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
             crate::surface::BlockItem::Given {
                 cond, fail_expr, ..
             } => expr_contains_ident(cond, target) || expr_contains_ident(fail_expr, target),
-            crate::surface::BlockItem::On {
-                transition,
-                handler,
-                ..
-            } => expr_contains_ident(transition, target) || expr_contains_ident(handler, target),
         }),
         Expr::Raw { .. } => false,
         Expr::Mock {
@@ -190,11 +185,6 @@ fn expr_contains_string(expr: &Expr, target: &str) -> bool {
             crate::surface::BlockItem::Given {
                 cond, fail_expr, ..
             } => expr_contains_string(cond, target) || expr_contains_string(fail_expr, target),
-            crate::surface::BlockItem::On {
-                transition,
-                handler,
-                ..
-            } => expr_contains_string(transition, target) || expr_contains_string(handler, target),
         }),
         Expr::Mock {
             substitutions,

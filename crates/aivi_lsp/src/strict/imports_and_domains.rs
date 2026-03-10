@@ -108,14 +108,6 @@ pub(super) fn strict_missing_import_suggestions(
                             collect_idents(cond, out);
                             collect_idents(fail_expr, out);
                         }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            collect_idents(transition, out);
-                            collect_idents(handler, out);
-                        }
                     }
                 }
             }
@@ -362,14 +354,6 @@ pub(super) fn strict_expected_type_coercions(
                         } => {
                             collect_calls(cond, out);
                             collect_calls(fail_expr, out);
-                        }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            collect_calls(transition, out);
-                            collect_calls(handler, out);
                         }
                     }
                 }

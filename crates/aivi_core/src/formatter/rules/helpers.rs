@@ -6,7 +6,6 @@ enum ContextKind {
     MapSigil,
     SetSigil,
     MatSigil,
-    Machine,
     Other,
 }
 
@@ -27,7 +26,6 @@ struct LineState<'a> {
     bind_align_lhs: Option<usize>,
     arm_align_pat: Option<usize>,
     map_align_key: Option<usize>,
-    machine_align: Option<(usize, usize, usize)>,
     degraded: bool,
 }
 

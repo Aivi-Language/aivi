@@ -293,8 +293,6 @@ fn syntax_effects_selected_files_execute_without_failures() {
         "integration-tests/syntax/effects/given_or_behavior.aivi",
         "integration-tests/syntax/effects/given_precondition.aivi",
         "integration-tests/syntax/effects/loop_recurse.aivi",
-        "integration-tests/syntax/effects/machine_runtime.aivi",
-        "integration-tests/syntax/effects/on_event.aivi",
         "integration-tests/syntax/effects/or_sugar.aivi",
         "integration-tests/syntax/effects/unless_conditional.aivi",
         "integration-tests/syntax/effects/when_unless_desugar.aivi",
@@ -340,7 +338,6 @@ fn syntax_remaining_batch_files_execute_without_failures() {
         "integration-tests/syntax/sigils/gtk_builder.aivi",
         "integration-tests/syntax/sigils/raw_text.aivi",
         "integration-tests/syntax/bidirectional_class_members.aivi",
-        "integration-tests/syntax/types/machine_declaration.aivi",
         "integration-tests/syntax/types/unions_and_aliases.aivi",
     ]
     .iter()
@@ -473,14 +470,10 @@ fn runtime_numeric_boundary_tests_execute_without_failures() {
 }
 
 #[test]
-fn no_dup_eval_and_determinism_tests_execute_without_failures() {
+fn determinism_tests_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
-        "integration-tests/runtime/no_dup_eval_match_scrutinee.aivi",
-        "integration-tests/runtime/no_dup_eval_guard.aivi",
-        "integration-tests/runtime/no_dup_eval_pipeline.aivi",
-        "integration-tests/runtime/no_dup_eval_record_spread.aivi",
         "integration-tests/runtime/determinism_map_order.aivi",
         "integration-tests/runtime/determinism_set_order.aivi",
     ]

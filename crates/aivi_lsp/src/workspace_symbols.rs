@@ -71,9 +71,6 @@ impl Backend {
                         }
                         (d.name.name.as_str(), SymbolKind::NAMESPACE, &d.span)
                     }
-                    ModuleItem::MachineDecl(d) => {
-                        (d.name.name.as_str(), SymbolKind::CLASS, &d.span)
-                    }
                 };
 
                 if Self::symbol_matches(name, &query_lower) {

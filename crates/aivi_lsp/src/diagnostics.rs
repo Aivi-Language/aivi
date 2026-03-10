@@ -437,14 +437,6 @@ impl Backend {
                             Self::collect_source_tooling_expr_diagnostics(cond, out);
                             Self::collect_source_tooling_expr_diagnostics(fail_expr, out);
                         }
-                        BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            Self::collect_source_tooling_expr_diagnostics(transition, out);
-                            Self::collect_source_tooling_expr_diagnostics(handler, out);
-                        }
                     }
                 }
             }
@@ -545,14 +537,6 @@ impl Backend {
                 } => {
                     Self::expr_contains_ident_path(cond, expected)
                         || Self::expr_contains_ident_path(fail_expr, expected)
-                }
-                BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => {
-                    Self::expr_contains_ident_path(transition, expected)
-                        || Self::expr_contains_ident_path(handler, expected)
                 }
             }),
             Expr::Mock {

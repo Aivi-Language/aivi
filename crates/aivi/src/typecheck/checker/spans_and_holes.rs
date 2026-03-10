@@ -243,10 +243,6 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
                             *cond = desugar_holes_inner(cond.clone(), false);
                             *fail_expr = desugar_holes_inner(fail_expr.clone(), false);
                         }
-                        BlockItem::On { transition, handler, .. } => {
-                            *transition = desugar_holes_inner(transition.clone(), false);
-                            *handler = desugar_holes_inner(handler.clone(), false);
-                        }
                     }
                     item
                 })
@@ -334,7 +330,6 @@ fn contains_hole(expr: &Expr) -> bool {
             BlockItem::When { cond, effect, .. }
             | BlockItem::Unless { cond, effect, .. } => contains_hole(cond) || contains_hole(effect),
             BlockItem::Given { cond, fail_expr, .. } => contains_hole(cond) || contains_hole(fail_expr),
-            BlockItem::On { transition, handler, .. } => contains_hole(transition) || contains_hole(handler),
         }),
         Expr::Raw { .. } => false,
         Expr::Mock { .. } => false,
@@ -565,11 +560,6 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                     BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
                         cond: replace_holes_inner(cond, counter, params),
                         fail_expr: replace_holes_inner(fail_expr, counter, params),
-                        span,
-                    },
-                    BlockItem::On { transition, handler, span } => BlockItem::On {
-                        transition: replace_holes_inner(transition, counter, params),
-                        handler: replace_holes_inner(handler, counter, params),
                         span,
                     },
                 })

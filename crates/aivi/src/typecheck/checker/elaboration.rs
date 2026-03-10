@@ -663,20 +663,6 @@ impl TypeChecker {
                                 span,
                             });
                         }
-                        BlockItem::On {
-                            transition,
-                            handler,
-                            span,
-                        } => {
-                            let (transition, _) =
-                                self.elab_expr(transition, None, &mut local_env)?;
-                            let (handler, _) = self.elab_expr(handler, None, &mut local_env)?;
-                            new_items.push(BlockItem::On {
-                                transition,
-                                handler,
-                                span,
-                            });
-                        }
                     }
                 }
                 let out = Expr::Block {

@@ -163,10 +163,6 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                             collect_expr(cond, env, bound, out);
                             collect_expr(fail_expr, env, bound, out);
                         }
-                        BlockItem::On { transition, handler, .. } => {
-                            collect_expr(transition, env, bound, out);
-                            collect_expr(handler, env, bound, out);
-                        }
                     }
                 }
                 bound.truncate(before);
@@ -392,10 +388,6 @@ fn rewrite_implicit_field_vars(
                             *cond = rewrite_implicit_field_vars(cond.clone(), implicit_param, unbound);
                             *fail_expr = rewrite_implicit_field_vars(fail_expr.clone(), implicit_param, unbound);
                         }
-                        BlockItem::On { transition, handler, .. } => {
-                            *transition = rewrite_implicit_field_vars(transition.clone(), implicit_param, unbound);
-                            *handler = rewrite_implicit_field_vars(handler.clone(), implicit_param, unbound);
-                        }
                     }
                     item
                 })
@@ -506,9 +498,6 @@ fn expr_contains_placeholder(expr: &Expr) -> bool {
             BlockItem::Given { cond, fail_expr, .. } => {
                 expr_contains_placeholder(cond) || expr_contains_placeholder(fail_expr)
             }
-            BlockItem::On {
-                transition, handler, ..
-            } => expr_contains_placeholder(transition) || expr_contains_placeholder(handler),
         }),
         Expr::Mock { .. } => false,
     }

@@ -305,26 +305,6 @@ fn check_expr(
                             allow_unknown,
                         );
                     }
-                    BlockItem::On {
-                        transition,
-                        handler,
-                        ..
-                    } => {
-                        check_expr(
-                            transition,
-                            &mut block_scope,
-                            diagnostics,
-                            module,
-                            allow_unknown,
-                        );
-                        check_expr(
-                            handler,
-                            &mut block_scope,
-                            diagnostics,
-                            module,
-                            allow_unknown,
-                        );
-                    }
                 }
             }
         }

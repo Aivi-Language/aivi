@@ -346,14 +346,6 @@ impl Backend {
                 Self::collect_call_hints_in_expr(cond, param_names, hints, range);
                 Self::collect_call_hints_in_expr(fail_expr, param_names, hints, range);
             }
-            BlockItem::On {
-                transition,
-                handler,
-                ..
-            } => {
-                Self::collect_call_hints_in_expr(transition, param_names, hints, range);
-                Self::collect_call_hints_in_expr(handler, param_names, hints, range);
-            }
         }
     }
 

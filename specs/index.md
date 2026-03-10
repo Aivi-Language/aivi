@@ -75,10 +75,6 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
 - [Generators](syntax/generators)
-##### State Machines
-- [Overview](syntax/state_machines)
-- [Machine Syntax](syntax/machines)
-- [Machine Runtime](syntax/machines_runtime)
 #### Modules & External Data
 - [Modules](syntax/modules)
 ##### External Sources

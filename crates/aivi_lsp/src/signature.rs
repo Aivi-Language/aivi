@@ -265,12 +265,6 @@ impl Backend {
                     cond, fail_expr, ..
                 } => Self::find_call_info(cond, position)
                     .or_else(|| Self::find_call_info(fail_expr, position)),
-                BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => Self::find_call_info(transition, position)
-                    .or_else(|| Self::find_call_info(handler, position)),
             }),
             Expr::Mock {
                 substitutions,

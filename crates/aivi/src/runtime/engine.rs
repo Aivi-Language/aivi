@@ -17,24 +17,18 @@ mod constructors;
 pub(crate) mod environment;
 mod http;
 pub(crate) mod json_schema;
-mod machines;
 pub(crate) mod snapshot;
 pub(crate) mod values;
 
 use self::builtins::register_builtins;
 use self::constructors::{core_constructor_ordinals, insert_constructor_ordinal};
-use self::environment::{Env, MachineEdge, RuntimeContext};
-use self::machines::{bind_module_machine_values, make_machine_on_builtin};
+use self::environment::{Env, RuntimeContext};
 use self::values::{
     BuiltinImpl, BuiltinValue, EffectValue, SourceValue, ThunkFunc, ThunkValue, Value,
 };
 
 pub use self::constructors::{TestFailure, TestReport, TestSuccess};
 pub(crate) use self::constructors::collect_surface_constructor_ordinals;
-pub(crate) use self::machines::{
-    make_machine_can_builtin, make_machine_current_state_builtin,
-    make_machine_transition_builtin, register_machines_for_jit,
-};
 
 #[derive(Debug)]
 pub(crate) struct CancelToken {
@@ -319,7 +313,6 @@ pub(crate) fn build_runtime_from_program(program: &HirProgram) -> Result<Runtime
 
     let globals = Env::new(None);
     register_builtins(&globals);
-    globals.set("__machine_on".to_string(), make_machine_on_builtin());
     // Don't create thunks — the JIT will register compiled builtins directly
 
     let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
@@ -353,7 +346,6 @@ pub(crate) fn build_runtime_from_program_with_cancel(
 
     let globals = Env::new(None);
     register_builtins(&globals);
-    globals.set("__machine_on".to_string(), make_machine_on_builtin());
 
     let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
         globals,
@@ -367,7 +359,6 @@ pub(crate) fn build_runtime_from_program_with_cancel(
 pub(crate) fn build_runtime_base() -> Runtime {
     let globals = Env::new(None);
     register_builtins(&globals);
-    globals.set("__machine_on".to_string(), make_machine_on_builtin());
     let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
         globals,
         core_constructor_ordinals(),
@@ -387,7 +378,6 @@ fn build_runtime_from_program_scoped(
 
     let globals = Env::new(None);
     register_builtins(&globals);
-    globals.set("__machine_on".to_string(), make_machine_on_builtin());
 
     // Build a map of surface module metadata for import scoping.
     let mut surface_by_name: HashMap<String, &crate::surface::Module> = HashMap::new();
@@ -508,8 +498,6 @@ fn build_runtime_from_program_scoped(
         }
     }
 
-    let mut machine_specs: Vec<(String, String, HashMap<String, Vec<MachineEdge>>)> = Vec::new();
-
     // Second pass: populate each module env with its local defs and imports.
     for module in &program.modules {
         let module_name = module.name.clone();
@@ -597,14 +585,6 @@ fn build_runtime_from_program_scoped(
             }
         }
 
-        bind_module_machine_values(
-            surface_module,
-            &module_name,
-            &module_env,
-            &globals,
-            &mut machine_specs,
-        );
-
         // Re-apply local defs after imports so that local definitions always
         // shadow imported names (including domain members).  Without this,
         // a wildcard `use` that brings in a domain method with the same name
@@ -648,27 +628,8 @@ fn build_runtime_from_program_scoped(
         globals,
         constructor_ordinals,
     ));
-    for (machine_name, initial_state, transitions) in machine_specs {
-        ctx.register_machine(machine_name, initial_state, transitions);
-    }
     let cancel = CancelToken::root();
     Ok(Runtime::new(ctx, cancel))
-}
-
-fn runtime_builtin(
-    name: &str,
-    arity: usize,
-    func: impl Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
-) -> Value {
-    Value::Builtin(BuiltinValue {
-        imp: Arc::new(BuiltinImpl {
-            name: name.to_string(),
-            arity,
-            func: Arc::new(func),
-        }),
-        args: Vec::new(),
-        tagged_args: Some(Vec::new()),
-    })
 }
 
 pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
@@ -709,6 +670,23 @@ pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
             format!("{context}: failed to parse \"{input}\"")
         }
     }
+}
+
+#[cfg(test)]
+fn runtime_builtin(
+    name: &str,
+    arity: usize,
+    func: impl Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
+) -> Value {
+    Value::Builtin(BuiltinValue {
+        imp: Arc::new(BuiltinImpl {
+            name: name.to_string(),
+            arity,
+            func: Arc::new(func),
+        }),
+        args: Vec::new(),
+        tagged_args: Some(Vec::new()),
+    })
 }
 
 include!("runtime_impl/lifecycle_and_cancel.rs");

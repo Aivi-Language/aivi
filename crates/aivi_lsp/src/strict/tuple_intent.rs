@@ -109,14 +109,6 @@ pub(super) fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnos
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            walk_expr(transition, out);
-                            walk_expr(handler, out);
-                        }
                     }
                 }
             }

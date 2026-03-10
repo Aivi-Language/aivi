@@ -82,7 +82,6 @@ impl Backend {
                 }
                 &d.span
             }
-            ModuleItem::MachineDecl(d) => &d.span,
         };
         let start = span.start.line.saturating_sub(1) as u32;
         let end = span.end.line.saturating_sub(1) as u32;
@@ -170,14 +169,6 @@ impl Backend {
             } => {
                 Self::collect_expr_folds(ranges, cond);
                 Self::collect_expr_folds(ranges, fail_expr);
-            }
-            BlockItem::On {
-                transition,
-                handler,
-                ..
-            } => {
-                Self::collect_expr_folds(ranges, transition);
-                Self::collect_expr_folds(ranges, handler);
             }
         }
     }

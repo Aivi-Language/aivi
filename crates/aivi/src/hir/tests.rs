@@ -1193,24 +1193,6 @@ f = do Option {
         assert!(contains_chain(expr), "expected chain calls in generic do block desugaring");
     }
 
-    // ---- lower_blocks_and_patterns.rs: On (machine transitions) ----
-
-    #[test]
-    fn do_block_on_transition() {
-        let program = parse_and_lower(
-            r#"
-module Test
-
-f = do Effect {
-  on Started => print "started"
-  pure Unit
-}
-"#,
-        );
-        let expr = find_def_expr(&program, "f");
-        assert!(matches!(expr, HirExpr::Block { .. }));
-    }
-
     // ---- lower_blocks_and_patterns.rs: plain block desugaring ----
 
     #[test]

@@ -81,14 +81,6 @@ impl Backend {
                 Self::collect_expr_references(cond, ident, text, uri, locations);
                 Self::collect_expr_references(fail_expr, ident, text, uri, locations);
             }
-            BlockItem::On {
-                transition,
-                handler,
-                ..
-            } => {
-                Self::collect_expr_references(transition, ident, text, uri, locations);
-                Self::collect_expr_references(handler, ident, text, uri, locations);
-            }
         }
     }
 
@@ -277,21 +269,6 @@ impl Backend {
                     for def in instance_decl.defs.iter() {
                         if matches(&def.name.name) {
                             return Some(Self::span_to_range(def.name.span.clone()));
-                        }
-                    }
-                }
-                ModuleItem::MachineDecl(machine_decl) => {
-                    if machine_decl.name.name == ident {
-                        return Some(Self::span_to_range(machine_decl.name.span.clone()));
-                    }
-                    for state in machine_decl.states.iter() {
-                        if state.name.name == ident {
-                            return Some(Self::span_to_range(state.name.span.clone()));
-                        }
-                    }
-                    for transition in machine_decl.transitions.iter() {
-                        if transition.name.name == ident {
-                            return Some(Self::span_to_range(transition.name.span.clone()));
                         }
                     }
                 }
