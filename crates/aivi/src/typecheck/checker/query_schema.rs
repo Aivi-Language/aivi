@@ -315,10 +315,6 @@ impl TypeChecker {
                             Self::expr_mentions_query_surface(cond)
                                 || Self::expr_mentions_query_surface(fail_expr)
                         }
-                        BlockItem::On { transition, handler, .. } => {
-                            Self::expr_mentions_query_surface(transition)
-                                || Self::expr_mentions_query_surface(handler)
-                        }
                     })
             }
             Expr::Binary { left, right, .. } => {
@@ -483,10 +479,6 @@ impl TypeChecker {
                             self.validate_query_row_expr(cond, None, &local_bindings);
                             self.validate_query_row_expr(fail_expr, None, &local_bindings);
                         }
-                        BlockItem::On { transition, handler, .. } => {
-                            self.validate_query_row_expr(transition, None, &local_bindings);
-                            self.validate_query_row_expr(handler, None, &local_bindings);
-                        }
                     }
                 }
                 None
@@ -628,10 +620,6 @@ impl TypeChecker {
                         BlockItem::Given { cond, fail_expr, .. } => {
                             self.validate_query_row_expr(cond, placeholder, bindings);
                             self.validate_query_row_expr(fail_expr, placeholder, bindings);
-                        }
-                        BlockItem::On { transition, handler, .. } => {
-                            self.validate_query_row_expr(transition, placeholder, bindings);
-                            self.validate_query_row_expr(handler, placeholder, bindings);
                         }
                     }
                 }

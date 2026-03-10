@@ -242,32 +242,6 @@ domain Pretty over Int = {
     assert_eq!(dom.items.len(), 2);
 }
 
-#[test]
-fn lower_machine_decl_to_arena() {
-    let src = r#"
-module Example
-
-machine Traffic = {
-  -> Red : init {}
-  Red -> Green : change {}
-  Green -> Red : stop {}
-}
-"#;
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let (_arena, lowered) = lower_modules_to_arena(&modules);
-    let module = &lowered[0];
-    let mach = module
-        .items
-        .iter()
-        .find_map(|item| match item {
-            ArenaModuleItem::MachineDecl(m) if m.name.symbol.as_str() == "Traffic" => Some(m),
-            _ => None,
-        })
-        .expect("Traffic machine");
-    assert!(!mach.transitions.is_empty());
-}
-
 // ─────────────────────────────────────────────────────────
 // Arena lowering: expression variants
 // ─────────────────────────────────────────────────────────
@@ -1411,31 +1385,6 @@ domain Color over Text = {
         item,
         ModuleItem::DomainDecl(d) if d.name.name == "Color"
     )));
-}
-
-#[test]
-fn parses_machine_declaration() {
-    let src = r#"
-module Example
-
-machine Door = {
-  -> Closed : init {}
-  Closed -> Open : open {}
-  Open -> Closed : close {}
-}
-"#;
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let module = modules.first().expect("module");
-    let mach = module
-        .items
-        .iter()
-        .find_map(|item| match item {
-            ModuleItem::MachineDecl(m) if m.name.name == "Door" => Some(m),
-            _ => None,
-        })
-        .expect("Door machine");
-    assert_eq!(mach.transitions.len(), 3);
 }
 
 #[test]
@@ -2974,42 +2923,6 @@ class Mappable (F A) = given (A: Any) {
     assert_eq!(class.constraints.len(), 1);
 }
 
-#[test]
-fn parses_machine_state_with_fields() {
-    // Machine transitions with payload fields in the transition body
-    let src = r#"
-module Example
-
-machine Counter = {
-  -> Counting : init {}
-  Counting -> Counting : increment { amount: Int }
-  Counting -> Done : finish {}
-}
-"#;
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let module = modules.first().expect("module");
-    let mach = module
-        .items
-        .iter()
-        .find_map(|item| match item {
-            ModuleItem::MachineDecl(m) if m.name.name == "Counter" => Some(m),
-            _ => None,
-        })
-        .expect("Counter machine");
-    assert!(!mach.states.is_empty());
-    // State Counting should be inferred
-    assert!(mach.states.iter().any(|s| s.name.name == "Counting"));
-    // Transitions should include increment with payload
-    let increment = mach
-        .transitions
-        .iter()
-        .find(|t| t.name.name == "increment")
-        .expect("increment transition");
-    assert_eq!(increment.payload.len(), 1);
-    assert_eq!(increment.payload[0].0.name, "amount");
-}
-
 // ─────────────────────────────────────────────────────────
 // Arena lowering: decorator with arg, suffixed, lambda, sigil
 // ─────────────────────────────────────────────────────────
@@ -3154,29 +3067,6 @@ fn lower_match_with_guard_to_arena() {
 }
 
 #[test]
-fn lower_block_on_item_to_arena() {
-    let src =
-        "module Example\n\nx = do Effect {\n  on SomeTransition => handleTransition\n  pure 1\n}\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let (arena, lowered) = lower_modules_to_arena(&modules);
-    let def = lowered[0]
-        .items
-        .iter()
-        .find_map(|i| match i {
-            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
-            _ => None,
-        })
-        .expect("x");
-    match arena.expr(def.expr) {
-        ArenaExpr::Block { items, .. } => {
-            assert!(items.iter().any(|i| matches!(i, ArenaBlockItem::On { .. })))
-        }
-        other => panic!("expected Block, got {other:?}"),
-    }
-}
-
-#[test]
 fn lower_block_recurse_item_to_arena() {
     let src = "module Example\n\nx = generate {\n  recurse 1\n}\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -3249,13 +3139,6 @@ fn rejects_given_outside_do() {
 }
 
 #[test]
-fn rejects_on_outside_do() {
-    let src = "module Example\n\nx = generate {\n  on Transition => handler\n  yield 1\n}\n";
-    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diag_codes(&diags).contains(&"E1542".to_string()));
-}
-
-#[test]
 fn rejects_bind_outside_do_or_generate() {
     let src = "module Example\n\nx = {\n  y <- someEffect\n  y\n}\n";
     let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -3302,24 +3185,6 @@ fn parses_given_with_simple_fail() {
         .expect("x");
     assert!(
         matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::Given { .. })))
-    );
-}
-
-#[test]
-fn parses_on_in_do_block() {
-    let src = "module Example\n\nx = do Effect {\n  on Start => handleStart\n  pure 1\n}\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let def = modules[0]
-        .items
-        .iter()
-        .find_map(|i| match i {
-            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
-            _ => None,
-        })
-        .expect("x");
-    assert!(
-        matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::On { .. })))
     );
 }
 
@@ -3493,14 +3358,6 @@ fn parses_export_instance_declaration() {
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
     assert!(modules[0].exports.iter().any(|e| e.name.name == "Show"));
-}
-
-#[test]
-fn parses_export_machine_declaration() {
-    let src = "module Example\n\nexport machine Workflow = {\n  -> Idle : boot {}\n  Idle -> Running : start {}\n}\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    assert!(modules[0].exports.iter().any(|e| e.name.name == "Workflow"));
 }
 
 // ─────────────────────────────────────────────────────────

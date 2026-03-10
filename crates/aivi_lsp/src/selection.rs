@@ -135,11 +135,6 @@ impl Backend {
                     }
                 }
             }
-            ModuleItem::MachineDecl(d) => {
-                if Self::sel_span_contains(&d.span, pos) {
-                    spans.push(d.span.clone());
-                }
-            }
         }
     }
 
@@ -259,18 +254,6 @@ impl Backend {
                     spans.push(span.clone());
                     Self::collect_sel_expr_spans(spans, cond, pos);
                     Self::collect_sel_expr_spans(spans, fail_expr, pos);
-                }
-            }
-            BlockItem::On {
-                transition,
-                handler,
-                span,
-                ..
-            } => {
-                if Self::sel_span_contains(span, pos) {
-                    spans.push(span.clone());
-                    Self::collect_sel_expr_spans(spans, transition, pos);
-                    Self::collect_sel_expr_spans(spans, handler, pos);
                 }
             }
         }

@@ -336,7 +336,6 @@ impl Backend {
             ModuleItem::DomainDecl(domain_decl) => {
                 Some((domain_decl.name.name, CompletionItemKind::MODULE))
             }
-            ModuleItem::MachineDecl(_) => None,
         }
     }
 
@@ -850,7 +849,6 @@ impl Backend {
                 BlockItem::Given {
                     fail_expr, span, ..
                 } => (None, Some(fail_expr), span),
-                BlockItem::On { handler, span, .. } => (None, Some(handler), span),
             };
 
             // Names from bindings that start before cursor are in scope

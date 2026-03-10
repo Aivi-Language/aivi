@@ -156,11 +156,6 @@ pub(crate) fn collect_surface_constructor_ordinals(
                         }
                     }
                 }
-                crate::surface::ModuleItem::MachineDecl(machine_decl) => {
-                    for (ordinal, state) in machine_decl.states.iter().enumerate() {
-                        insert_constructor_ordinal(&mut ordinals, state.name.name.clone(), ordinal);
-                    }
-                }
                 _ => {}
             }
         }

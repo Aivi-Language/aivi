@@ -121,25 +121,6 @@ impl Backend {
                         }
                     }
                 }
-                ModuleItem::MachineDecl(machine_decl) if machine_decl.name.name == ident => {
-                    return Some("machine");
-                }
-                ModuleItem::MachineDecl(machine_decl)
-                    if machine_decl
-                        .states
-                        .iter()
-                        .any(|state| state.name.name == ident) =>
-                {
-                    return Some("machine-state");
-                }
-                ModuleItem::MachineDecl(machine_decl)
-                    if machine_decl
-                        .transitions
-                        .iter()
-                        .any(|transition| transition.name.name == ident) =>
-                {
-                    return Some("machine-transition");
-                }
                 _ => {}
             }
         }
@@ -200,9 +181,6 @@ impl Backend {
                 ModuleItem::DomainDecl(domain_decl) if domain_decl.name.name == ident => {
                     return Some(domain_decl.name.span.start.line);
                 }
-                ModuleItem::MachineDecl(machine_decl) if machine_decl.name.name == ident => {
-                    return Some(machine_decl.name.span.start.line);
-                }
                 ModuleItem::DomainDecl(domain_decl) => {
                     for domain_item in domain_decl.items.iter() {
                         match domain_item {
@@ -218,24 +196,6 @@ impl Backend {
                                 return Some(def.name.span.start.line);
                             }
                             _ => {}
-                        }
-                    }
-                }
-                ModuleItem::MachineDecl(machine_decl) => {
-                    for state in machine_decl.states.iter() {
-                        if state.name.name == ident {
-                            return Some(state.name.span.start.line);
-                        }
-                    }
-                    for transition in machine_decl.transitions.iter() {
-                        if transition.name.name == ident {
-                            return Some(transition.name.span.start.line);
-                        }
-                        if transition.source.name == ident {
-                            return Some(transition.source.span.start.line);
-                        }
-                        if transition.target.name == ident {
-                            return Some(transition.target.span.start.line);
                         }
                     }
                 }
@@ -530,49 +490,6 @@ impl Backend {
                         domain_decl.name.name,
                         Self::type_expr_to_string(&domain_decl.over)
                     ));
-                }
-            }
-            ModuleItem::MachineDecl(machine_decl) => {
-                if machine_decl.name.name == ident {
-                    return Some(format!("`machine {}`", machine_decl.name.name));
-                }
-                for state in machine_decl.states.iter() {
-                    if state.name.name == ident {
-                        return Some(format!(
-                            "state `{}` in machine `{}`",
-                            state.name.name, machine_decl.name.name
-                        ));
-                    }
-                }
-                for transition in machine_decl.transitions.iter() {
-                    if transition.name.name == ident {
-                        let payload = if transition.payload.is_empty() {
-                            "{}".to_string()
-                        } else {
-                            let fields = transition
-                                .payload
-                                .iter()
-                                .map(|(name, ty)| {
-                                    format!("{}: {}", name.name, Self::type_expr_to_string(ty))
-                                })
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            format!("{{{fields}}}")
-                        };
-                        return Some(format!(
-                            "`{} -> {} : {} {}`",
-                            transition.source.name,
-                            transition.target.name,
-                            transition.name.name,
-                            payload
-                        ));
-                    }
-                    if transition.source.name == ident || transition.target.name == ident {
-                        return Some(format!(
-                            "state `{}` in machine `{}`",
-                            ident, machine_decl.name.name
-                        ));
-                    }
                 }
             }
         }

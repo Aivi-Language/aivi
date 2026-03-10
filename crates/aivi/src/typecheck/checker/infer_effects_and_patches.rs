@@ -107,14 +107,6 @@ impl TypeChecker {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
                 }
-                BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => {
-                    let _ = self.infer_expr(transition, &mut local_env)?;
-                    let _ = self.infer_expr(handler, &mut local_env)?;
-                }
                 BlockItem::Expr { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     if idx + 1 == items.len() {
@@ -165,7 +157,7 @@ impl TypeChecker {
     /// `M A` and bind `x : A`. Let-bindings (`x = expr`) are pure. Expression
     /// statements must be `M A` (non-final, value discarded) or `M A` (final, determines result).
     ///
-    /// Effect-specific statements (`when`, `unless`, `given`, `on`, `recurse`)
+        /// Effect-specific statements (`when`, `unless`, `given`, `recurse`)
     /// produce type errors since they are not available in generic monadic blocks.
     fn infer_generic_do_block(
         &mut self,
@@ -250,16 +242,6 @@ impl TypeChecker {
                         span: span.clone(),
                         message: format!(
                             "`given` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
-                        ),
-                        expected: None,
-                        found: None,
-                    });
-                }
-                BlockItem::On { span, .. } => {
-                    return Err(TypeError {
-                        span: span.clone(),
-                        message: format!(
-                            "`on` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
                         ),
                         expected: None,
                         found: None,
@@ -369,14 +351,6 @@ impl TypeChecker {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
                 }
-                BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => {
-                    let _ = self.infer_expr(transition, &mut local_env)?;
-                    let _ = self.infer_expr(handler, &mut local_env)?;
-                }
             }
         }
         Ok(Type::con("Generator").app(vec![yield_ty]))
@@ -430,14 +404,6 @@ impl TypeChecker {
                 BlockItem::Given { cond, fail_expr, .. } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
-                }
-                BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => {
-                    let _ = self.infer_expr(transition, &mut local_env)?;
-                    let _ = self.infer_expr(handler, &mut local_env)?;
                 }
             }
         }

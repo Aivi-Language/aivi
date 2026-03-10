@@ -526,26 +526,6 @@ domain Math where
 }
 
 #[test]
-fn workspace_symbols_machine_decl_has_class_kind() {
-    let text = r#"module test.ws_machine
-machine Counter = {
-       -> Idle : init {}
-  Idle -> Done : finish {}
-}
-"#;
-    let indexed = make_indexed(text, "file:///test.aivi");
-    let modules = vec![indexed];
-    let symbols = Backend::build_workspace_symbols("Counter", &modules);
-    use tower_lsp::lsp_types::SymbolKind;
-    assert!(
-        symbols
-            .iter()
-            .any(|s| s.name == "Counter" && s.kind == SymbolKind::CLASS),
-        "MachineDecl should have CLASS kind"
-    );
-}
-
-#[test]
 fn workspace_symbols_query_is_case_insensitive() {
     let text = r#"@no_prelude
 module test.ws_case

@@ -506,25 +506,6 @@ impl Backend {
                                 return true;
                             }
                         }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            if Self::local_binding_visible_in_expr(
-                                transition,
-                                ident,
-                                position,
-                                &mut scoped,
-                            ) || Self::local_binding_visible_in_expr(
-                                handler,
-                                ident,
-                                position,
-                                &mut scoped,
-                            ) {
-                                return true;
-                            }
-                        }
                     }
                 }
                 false
@@ -667,8 +648,7 @@ impl Backend {
                     | aivi::BlockItem::Expr { span, .. }
                     | aivi::BlockItem::When { span, .. }
                     | aivi::BlockItem::Unless { span, .. }
-                    | aivi::BlockItem::Given { span, .. }
-                    | aivi::BlockItem::On { span, .. } => span,
+                    | aivi::BlockItem::Given { span, .. } => span,
                 };
                 let item_range = Backend::span_to_range(item_span.clone());
                 if !Backend::range_contains_position(&item_range, position)
@@ -1018,12 +998,6 @@ impl Backend {
                     cond, fail_expr, ..
                 } => Self::find_record_field_name_at_position(cond, position)
                     .or_else(|| Self::find_record_field_name_at_position(fail_expr, position)),
-                aivi::BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => Self::find_record_field_name_at_position(transition, position)
-                    .or_else(|| Self::find_record_field_name_at_position(handler, position)),
             }),
         }
     }

@@ -144,18 +144,6 @@ pub(super) fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<D
                                 return true;
                             }
                         }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            if !shadowed
-                                && (expr_uses_name_free(transition, name)
-                                    || expr_uses_name_free(handler, name))
-                            {
-                                return true;
-                            }
-                        }
                     }
                 }
                 false
@@ -294,14 +282,6 @@ pub(super) fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<D
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            walk_expr(transition, out);
-                            walk_expr(handler, out);
-                        }
                     }
                 }
             }
@@ -439,11 +419,6 @@ pub(super) fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnost
                 aivi::BlockItem::Given {
                     cond, fail_expr, ..
                 } => expr_uses_name(cond, name) || expr_uses_name(fail_expr, name),
-                aivi::BlockItem::On {
-                    transition,
-                    handler,
-                    ..
-                } => expr_uses_name(transition, name) || expr_uses_name(handler, name),
             }),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
@@ -540,11 +515,6 @@ pub(super) fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnost
                     aivi::BlockItem::Given {
                         cond, fail_expr, ..
                     } => expr_uses_name(cond, &name) || expr_uses_name(fail_expr, &name),
-                    aivi::BlockItem::On {
-                        transition,
-                        handler,
-                        ..
-                    } => expr_uses_name(transition, &name) || expr_uses_name(handler, &name),
                 });
                 if !used_later && !name.starts_with('_') {
                     push_simple(
@@ -584,14 +554,6 @@ pub(super) fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnost
                     } => {
                         walk_expr(cond, out);
                         walk_expr(fail_expr, out);
-                    }
-                    aivi::BlockItem::On {
-                        transition,
-                        handler,
-                        ..
-                    } => {
-                        walk_expr(transition, out);
-                        walk_expr(handler, out);
                     }
                 }
             }

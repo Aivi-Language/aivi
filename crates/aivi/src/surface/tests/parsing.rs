@@ -54,10 +54,6 @@ export domain Color over Int = {
   brighten : Int -> Int
   brighten = x => x + 1
 }
-
-export machine Workflow = {
-  -> Idle : boot {}
-}
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -73,9 +69,6 @@ export machine Workflow = {
     }));
     assert!(module.exports.iter().any(|item| {
         item.kind == crate::surface::ScopeItemKind::Domain && item.name.name == "Color"
-    }));
-    assert!(module.exports.iter().any(|item| {
-        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "Workflow"
     }));
 }
 

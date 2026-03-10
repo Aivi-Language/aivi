@@ -129,14 +129,6 @@ pub(super) fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diag
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            walk_expr(transition, out);
-                            walk_expr(handler, out);
-                        }
                     }
                 }
             }
@@ -294,14 +286,6 @@ pub(super) fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<
                         } => {
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
-                        }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            walk_expr(transition, out);
-                            walk_expr(handler, out);
                         }
                     }
                 }

@@ -1455,7 +1455,7 @@ Command Reference
                     }
                 }
             }
-            ModuleItem::Def(_) | ModuleItem::InstanceDecl(_) | ModuleItem::MachineDecl(_) => {}
+            ModuleItem::Def(_) | ModuleItem::InstanceDecl(_) => {}
         }
     }
 
@@ -2076,8 +2076,7 @@ fn collect_completion_symbols(
             ModuleItem::Def(_)
             | ModuleItem::TypeAlias(_)
             | ModuleItem::ClassDecl(_)
-            | ModuleItem::InstanceDecl(_)
-            | ModuleItem::MachineDecl(_) => {}
+            | ModuleItem::InstanceDecl(_) => {}
         }
     }
 

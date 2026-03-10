@@ -17,8 +17,8 @@ use crate::runtime::json_schema::cg_type_to_json_schema;
 use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel,
-    collect_surface_constructor_ordinals, format_runtime_error, format_value,
-    register_machines_for_jit, run_main_effect, CancelToken, Runtime, RuntimeError,
+    collect_surface_constructor_ordinals, format_runtime_error, format_value, run_main_effect,
+    CancelToken, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
@@ -520,7 +520,6 @@ pub fn run_cranelift_jit(
         source_schemas,
         &mut runtime,
     )?;
-    register_machines_for_jit(&runtime, surface_modules);
     if let Some(t0) = t0 {
         eprintln!(
             "[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL JIT",
@@ -573,7 +572,6 @@ fn evaluate_binding_jit_internal(
         source_schemas,
         &mut runtime,
     )?;
-    register_machines_for_jit(&runtime, surface_modules);
     runtime.jit_pending_error = None;
 
     let value =
@@ -691,7 +689,6 @@ pub(crate) fn run_cranelift_jit_cancellable(
         source_schemas,
         &mut runtime,
     )?;
-    register_machines_for_jit(&runtime, surface_modules);
     run_main_effect(&mut runtime)
 }
 
@@ -728,7 +725,6 @@ pub fn run_test_suite_jit(
         infer_result.source_schemas,
         &mut runtime,
     )?;
-    register_machines_for_jit(&runtime, surface_modules);
     // Discard any pending errors from the compilation phase so they don't
     // contaminate the first test.
     runtime.jit_pending_error = None;

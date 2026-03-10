@@ -1593,7 +1593,6 @@ topoSmoke = do Effect {
 | Create set                   | `~set[1, 2, 3]`                                                         |
 | Build a sequence             | `generate { x <- src; x -> pred; yield f x }`                           |
 | Infinite sequence            | `generate { loop s = init => { yield s; recurse (next s) } }`           |
-| State machine                | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
 | Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
 | Write a test                 | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }`        |
 | Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                  |
