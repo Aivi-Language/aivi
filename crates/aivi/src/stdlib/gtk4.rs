@@ -8,7 +8,7 @@ export GtkBindingHandle
 export GtkNode, GtkAttr
 export GtkElement, GtkTextNode, GtkBoundText, GtkShowNode, GtkEachNode
 export GtkStaticAttr, GtkBoundAttr, GtkStaticProp, GtkBoundProp, GtkEventProp, GtkIdAttr, GtkRefAttr
-export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal, GtkTick
+export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkWindowClosed, GtkUnknownSignal, GtkTick
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated
 export widgetShow, widgetHide
@@ -109,6 +109,7 @@ GtkSignalEvent =
   | GtkKeyPressed    WidgetId Text Text Text
   | GtkFocusIn       WidgetId Text
   | GtkFocusOut      WidgetId Text
+  | GtkWindowClosed  WidgetId Text
   | GtkUnknownSignal WidgetId Text Text Text Text
   | GtkTick
 

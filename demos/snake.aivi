@@ -5,6 +5,7 @@ use aivi.list
 use aivi.logic
 use aivi.prelude (toText)
 use aivi.reactive
+use aivi.system as system
 use aivi.text (join)
 use aivi.ui.gtk4
 
@@ -15,7 +16,7 @@ Mode      = Running | Paused | GameOver
 Pixel     = (Int, Int)
 gridW     = 30
 gridH     = 20
-tickMs    = 250
+tickMs    = 200
 
 initial = {
   snake: [(5, 10), (4, 10), (3, 10)]
@@ -126,15 +127,9 @@ renderStatusLabel : Mode -> Text
 renderStatusLabel = mode => mode match
   | GameOver => "Game over! Press R or Restart."
   | Paused   => "Paused. Press Space or move to resume."
-  | Running  => "Arrow keys / WASD to steer. Space to pause."
-
-renderPauseLabel : Mode -> Text
-renderPauseLabel = mode => mode match
-  | Paused => "Resume"
-  | _      => "Pause"
+  | Running  => "Arrow keys to steer. Space to pause."
 
 statusLabel = derive modeState renderStatusLabel
-pauseLabel  = derive modeState renderPauseLabel
 board       = combineAll { snakeState, foodState } (vals => boardRows vals.snakeState vals.foodState)
 scoreLabel  = combineAll { scoreState, snakeState } (vals => renderScoreLabel vals.scoreState vals.snakeState)
 
@@ -203,13 +198,6 @@ view = ~<gtk>
     <GtkLabel
       label={statusLabel}
       cssClass="snake-status" />
-    <GtkBox orientation="horizontal" spacing="8">
-      <GtkButton
-        label={pauseLabel}
-        onClick={togglePause}
-        id="pauseBtn" />
-      <GtkButton label="Restart" onClick={restartGame} id="restartBtn" />
-    </GtkBox>
     <GtkBox orientation="vertical" spacing="0" cssClass="snake-board">
       <each items={board} as={row} key={row => row.id}>
         <GtkLabel label={row.text} cssClass="snake-row" />
@@ -229,10 +217,11 @@ initWindow : GtkNode -> Effect GtkError AppId
 initWindow = node => do Effect {
   init Unit
   appId <- appNew "demos.snake"
-  win   <- windowNew appId "Snake" 560 440
+  win   <- windowNew appId "Snake" 360 440
+  root  <- buildFromNode node
   appSetCss appId css
-  root <- buildFromNode node
   windowSetChild win root
+  windowOnClose win "close"
   windowPresent win
   pure appId
 }
@@ -240,7 +229,7 @@ initWindow = node => do Effect {
 ticker = do Effect {
   loop n = 0 => {
     concurrent.sleep tickMs
-    _ <- pure (tickGame Unit)
+    pure (tickGame Unit)
     recurse (n + 1)
   }
 }
@@ -249,11 +238,10 @@ main : Effect GtkError Unit
 main = do Effect {
   appId <- initWindow view
   rx    <- signalStream Unit
-  _     <- concurrent.spawn ticker
+  concurrent.spawn ticker
   concurrent.forEach rx (event => event match
-    | GtkClicked _ "pauseBtn"   => pure (togglePause Unit)
-    | GtkClicked _ "restartBtn" => pure (restartGame Unit)
-    | GtkKeyPressed _ _ _ _     => pure (handleKey event)
-    | _                         => pure Unit
+    | GtkWindowClosed _ _   => system.exit 0
+    | GtkKeyPressed _ _ _ _ => pure (handleKey event)
+    | _                     => pure Unit
   )
 }
