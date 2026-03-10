@@ -26,3 +26,58 @@ assertEq_functional = do Effect {
 assert_eq_functional = do Effect {
   assert_eq (1 + 1) 2
 }
+
+@test "assert ok"
+assertOk_functional = do Effect {
+  value <- assertOk (Ok 2)
+  assertEq value 2
+}
+
+@test "assert ok fails"
+assertOk_fails = do Effect {
+  result <- attempt (assertOk (Err "boom"))
+  result match
+    | Ok _  => assert False
+    | Err e => assertEq e "assertOk failed: expected Ok"
+}
+
+@test "assert err"
+assertErr_functional = do Effect {
+  err <- assertErr (Err "boom")
+  assertEq err "boom"
+}
+
+@test "assert err fails"
+assertErr_fails = do Effect {
+  result <- attempt (assertErr (Ok 2))
+  result match
+    | Ok _  => assert False
+    | Err e => assertEq e "assertErr failed: expected Err"
+}
+
+@test "assert some"
+assertSome_functional = do Effect {
+  value <- assertSome (Some 42)
+  assertEq value 42
+}
+
+@test "assert some fails"
+assertSome_fails = do Effect {
+  result <- attempt (assertSome None)
+  result match
+    | Ok _  => assert False
+    | Err e => assertEq e "assertSome failed: expected Some"
+}
+
+@test "assert none"
+assertNone_functional = do Effect {
+  assertNone None
+}
+
+@test "assert none fails"
+assertNone_fails = do Effect {
+  result <- attempt (assertNone (Some 42))
+  result match
+    | Ok _  => assert False
+    | Err e => assertEq e "assertNone failed: expected None"
+}

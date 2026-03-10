@@ -30,9 +30,15 @@ A test passes when its `Effect` completes without failure. Assertion helpers in 
 | **assert** condition<br><code>Bool -> Effect Text Unit</code> | Fails when `condition` is `False`. |
 | **assertEq** expected actual<br><code>A -> A -> Effect Text Unit</code> | Fails when `expected` and `actual` differ. This is the preferred camelCase name in examples. |
 | **assert_eq** expected actual<br><code>A -> A -> Effect Text Unit</code> | Alias of `assertEq` with the same behaviour. |
+| **assertOk** result<br><code>Result e a -> Effect Text a</code> | Fails unless `result` is `Ok ...`, then returns the unwrapped success value so the test can keep asserting on it. |
+| **assertErr** result<br><code>Result e a -> Effect Text e</code> | Fails unless `result` is `Err ...`, then returns the unwrapped error value for explicit error-path checks. |
+| **assertSome** option<br><code>Option a -> Effect Text a</code> | Fails unless `option` is `Some ...`, then returns the unwrapped value. |
+| **assertNone** option<br><code>Option a -> Effect Text Unit</code> | Fails unless `option` is `None`. |
 | **assertSnapshot** name value<br><code>Text -> A -> Effect Text Unit</code> | Compares the current serialized value against `<project>/__snapshots__/<module.path>/<testName>/<name>.snap`. With `--update-snapshots`, it writes or refreshes that file instead. |
 
 These are the helpers exported by the current v0.1 implementation of `aivi.testing`.
+
+When a test expects a `Result` or `Option`, prefer `assertOk`, `assertErr`, `assertSome`, or `assertNone` over wildcard matches that end in `assert False`. That keeps failure intent explicit and lets the test keep checking the unwrapped value or error.
 
 ### Running tests
 
