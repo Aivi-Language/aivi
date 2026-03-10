@@ -132,8 +132,8 @@ batch_groups_writes = do Effect {
 
 @test "chained signal pipe derives through multiple transforms"
 chained_pipe_derives_through_transforms = do Effect {
-  count     = signal 3
-  result    = count |> (_ * 2) |> (_ + 10)
+  count  = signal 3
+  result = count |> (_ * 2) |> (_ + 10)
 
   assertEq (get result) 16
   assertEq (set count 5) Unit
@@ -154,12 +154,12 @@ derived_from_derived = do Effect {
 
 @test "peek does not create dependency for derived signals"
 peek_no_dependency = do Effect {
-  source   = signal 1
+  source    = signal 1
   unrelated = signal 0
   calls     = signal 0
   _sub      = watch source (_ => {
-    _ = peek unrelated
-    update calls (_ + 1)
+      _ = peek unrelated
+      update calls (_ + 1)
   })
 
   assertEq (set source 2) Unit
@@ -189,9 +189,9 @@ batch_coalesces_watcher_calls = do Effect {
   _sub  = watch count (_ => update calls (_ + 1))
 
   assertEq (batch (_ => {
-    set count 1
-    set count 2
-    set count 3
+        set count 1
+        set count 2
+        set count 3
   })) Unit
   assertEq (get count) 3
   assertEq (get calls) 1
@@ -225,4 +225,16 @@ event_exposes_lifecycle_signals = do Effect {
   assertEq (get saveEvent.error) None
   assertEq (get saveEvent.done) True
   assertEq (get saveEvent.running) False
+}
+
+topCounter : Signal Int
+topCounter = signal 0
+
+@test "top-level signal preserves identity across references"
+top_level_signal_preserves_identity = do Effect {
+  assertEq (peek topCounter) 0
+  _ = set topCounter 42
+  assertEq (peek topCounter) 42
+  _ = update topCounter (_ + 1)
+  assertEq (peek topCounter) 43
 }

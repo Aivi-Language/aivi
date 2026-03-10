@@ -77,6 +77,39 @@ x = 1 + 2
 }
 
 #[test]
+fn lambda_param_use_site_has_span_type() {
+    // `event` is used in the body of the lambda — the use-site span must be
+    // present in span_types so that LSP hover can resolve its type.
+    let result = parse_and_infer(
+        r#"
+module Test
+handleKey : Int -> Int
+handleKey = event => event
+"#,
+    );
+    let non_embedded: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| !d.path.starts_with("<embedded:"))
+        .cloned()
+        .collect();
+    assert!(
+        !has_errors(&non_embedded),
+        "unexpected errors: {non_embedded:?}"
+    );
+    let mod_span_types = result
+        .span_types
+        .get("Test")
+        .expect("span_types for Test module must exist");
+    // There must be at least one span entry for the lambda param use site.
+    // Span types record the type variable ("A") before full unification.
+    assert!(
+        !mod_span_types.is_empty(),
+        "expected span type entries for the lambda param use site; got: {mod_span_types:?}"
+    );
+}
+
+#[test]
 fn infer_value_types_tuple_convenience_form() {
     let (modules, _) = parse_modules(
         Path::new("test.aivi"),

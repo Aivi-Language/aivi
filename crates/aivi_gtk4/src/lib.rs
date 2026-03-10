@@ -109,6 +109,7 @@ mod linux_impl {
         fn gtk_widget_get_height(widget: *mut c_void) -> c_int;
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
         fn gtk_window_new() -> *mut c_void;
+        fn gtk_application_window_new(application: *mut c_void) -> *mut c_void;
         fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
         fn gtk_window_set_modal(window: *mut c_void, modal: c_int);
         fn gtk_window_set_transient_for(window: *mut c_void, parent: *mut c_void);
@@ -418,6 +419,13 @@ mod linux_impl {
             argc: c_int,
             argv: *mut *mut c_char,
         ) -> c_int;
+        fn g_application_register(
+            application: *mut c_void,
+            cancellable: *mut c_void,
+            error: *mut *mut c_void,
+        ) -> c_int;
+        fn g_application_hold(application: *mut c_void);
+        fn g_application_release(application: *mut c_void);
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
         fn g_resources_register(resource: *mut c_void);
     }
@@ -6268,6 +6276,13 @@ mod linux_impl {
                 0,
             );
         }
+        // Register the application so `startup` fires before any windows are
+        // created. Hold the application so `g_application_run` keeps the event
+        // loop alive until we explicitly release or the window closes.
+        unsafe {
+            g_application_register(raw, null_mut(), null_mut());
+            g_application_hold(raw);
+        }
         let id = GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let id = state.alloc_id();
@@ -6288,7 +6303,10 @@ mod linux_impl {
                 .copied()
                 .ok_or_else(|| Gtk4Error::new(format!("gtk4.appRun unknown app id {app_id}")))
         })?;
+        // Release the hold placed in app_new so the event loop can exit
+        // naturally when the last window closes.
         unsafe {
+            g_application_release(app);
             let _ = g_application_run(app, 0, null_mut());
         }
         GTK_STATE.with(|state| shutdown_ui_debug_server(&mut state.borrow_mut()));
@@ -6315,11 +6333,11 @@ mod linux_impl {
         let title_c = c_text(title, "gtk4.windowNew invalid title")?;
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
-            let _ =
+            let app =
                 state.apps.get(&app_id).copied().ok_or_else(|| {
                     Gtk4Error::new(format!("gtk4.windowNew unknown app id {app_id}"))
                 })?;
-            let window = unsafe { gtk_window_new() };
+            let window = unsafe { gtk_application_window_new(app) };
             if window.is_null() {
                 return Err(Gtk4Error::new("gtk4.windowNew failed to create window"));
             }

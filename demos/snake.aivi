@@ -26,12 +26,18 @@ initial = {
   mode: Running
 }
 
+snakeState : Signal (List Pixel)
 snakeState = signal initial.snake
-foodState  = signal initial.food
-dirState   = signal initial.dir
+foodState : Signal Pixel
+foodState = signal initial.food
+dirState : Signal Direction
+dirState = signal initial.dir
+scoreState : Signal Int
 scoreState = signal initial.score
-seedState  = signal initial.seed
-modeState  = signal initial.mode
+seedState : Signal Int
+seedState = signal initial.seed
+modeState : Signal Mode
+modeState = signal initial.mode
 
 move = (x, y) =>
 | Up    => (x, y - 1)
@@ -190,8 +196,7 @@ view = ~<gtk>
     marginTop="12"
     marginStart="12"
     marginEnd="12"
-    marginBottom="12"
-    onKeyPress={handleKey}>
+    marginBottom="12">
     <GtkLabel
       label={scoreLabel}
       cssClass="snake-title" />
@@ -201,8 +206,9 @@ view = ~<gtk>
     <GtkBox orientation="horizontal" spacing="8">
       <GtkButton
         label={pauseLabel}
-        onClick={togglePause} />
-      <GtkButton label="Restart" onClick={restartGame} />
+        onClick={togglePause}
+        id="pauseBtn" />
+      <GtkButton label="Restart" onClick={restartGame} id="restartBtn" />
     </GtkBox>
     <GtkBox orientation="vertical" spacing="0" cssClass="snake-board">
       <each items={board} as={row} key={row => row.id}>
@@ -232,14 +238,15 @@ initWindow = node => do Effect {
 }
 
 main : Effect GtkError Unit
-main = concurrent.scope (_ => do Effect {
-    concurrent.spawn (do Effect {
-        loop _ = Unit => {
-          concurrent.sleep tickMs
-          _ = tickGame Unit
-          recurse Unit
-        }
-    })
-    appId <- initWindow view
-    appRun appId
-})
+main = do Effect {
+  appId <- initWindow view
+  rx    <- signalStream Unit
+  gtkSetInterval tickMs
+  concurrent.forEach rx (event => event match
+    | GtkTick                   => pure (tickGame Unit)
+    | GtkClicked _ "pauseBtn"   => pure (togglePause Unit)
+    | GtkClicked _ "restartBtn" => pure (restartGame Unit)
+    | GtkKeyPressed _ _ _ _     => pure (handleKey event)
+    | _                         => pure Unit
+  )
+}
