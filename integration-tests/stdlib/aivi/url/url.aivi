@@ -3,8 +3,7 @@ module integrationTests.stdlib.aivi.url.tests
 
 use aivi
 use aivi.testing
-use aivi.text
-use aivi.url
+use aivi.url (parse, toString, protocol, host, port, path, query, hash, domain Url)
 
 @test "parse"
 parse_functional = do Effect {
