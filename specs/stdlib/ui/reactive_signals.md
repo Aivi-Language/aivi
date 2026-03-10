@@ -27,9 +27,9 @@ Derived UI state is no longer a separate architecture. If a value should stay re
 | `signal initial` | Create a writable source signal. |
 | `get s` | Read the current value. Best for callbacks, events, and low-level code. |
 | `set s value` | Replace the current value. |
-| `update s fn` / `s <| fn` | Transform the current value with an updater function. |
-| `set s value` / `s <| value` | Replace the current value. Record literals on the right of `s <| ...` stay patch updates, not whole-record replacement. |
-| `derive s fn` / `s |> fn` | Derive a new signal from one source signal. `s |> fn` unwraps the current signal value and re-applies the normal pipe on each update. |
+| `update s fn` / `s <\| fn` | Transform the current value with an updater function. |
+| `set s value` / `s <\| value` | Replace the current value. Record literals on the right of `s <\| ...` stay patch updates, not whole-record replacement. |
+| `derive s fn` / `s \|> fn` | Derive a new signal from one source signal. `s \|> fn` unwraps the current signal value and re-applies the normal pipe on each update. |
 | `combineAll { a: s1, b: s2 } fn` | Derive one signal from a record of source signals. |
 | `watch s fn` / `on s fn` | Observe changes and run a callback or effect. Returns a disposable. |
 | `batch fn` | Group several writes into one propagation batch. |

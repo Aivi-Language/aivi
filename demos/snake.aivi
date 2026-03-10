@@ -1,10 +1,9 @@
 module demos.snake
 
 use aivi.concurrency as concurrent
-use aivi.list
-use aivi.logic
-use aivi.prelude (toText)
+use aivi.prelude
 use aivi.reactive
+use aivi.list (dropLast, length)
 use aivi.system as system
 use aivi.text (join)
 use aivi.ui.gtk4
