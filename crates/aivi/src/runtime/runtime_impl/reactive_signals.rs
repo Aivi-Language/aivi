@@ -6,6 +6,7 @@ impl Default for ReactiveGraphState {
             batch_depth: 0,
             flushing: false,
             deferred_flush: false,
+            flush_thread: None,
             signals: HashMap::new(),
             watchers: HashMap::new(),
             watchers_by_signal: HashMap::new(),
@@ -172,6 +173,20 @@ impl Runtime {
             watcher_id
         };
         Ok((watcher_id, self.reactive_disposable_record(watcher_id)))
+    }
+
+    /// Register a watcher whose callback must run on the current thread (e.g.
+    /// GTK live bindings registered on the main thread). Not tied to the
+    /// current effect scope — the caller owns disposal. Marks the graph so
+    /// background-thread batches defer their flush instead of running
+    /// callbacks in-place.
+    pub(crate) fn reactive_watch_signal_main_thread(
+        &mut self,
+        signal: Value,
+        callback: Value,
+    ) -> Result<(usize, Value), RuntimeError> {
+        self.reactive_graph.lock().flush_thread = Some(std::thread::current().id());
+        self.reactive_watch_signal_unscoped(signal, callback)
     }
 
     pub(crate) fn reactive_batch(&mut self, callback: Value) -> Result<Value, RuntimeError> {
@@ -627,14 +642,14 @@ impl Runtime {
             graph.batch_depth == 0 && !graph.flushing
         };
         if should_flush {
-            // If we're on the GTK main thread, or no GTK app exists at all,
-            // flush watcher callbacks immediately. Otherwise defer so the GTK
-            // main thread picks it up during the next pump/recv cycle.
-            if builtins::gtk4_real::is_gtk_pump_active()
-                || !builtins::gtk4_real::is_gtk_app_initialized()
-            {
-                self.reactive_flush()
-            } else {
+            // If watcher callbacks are pinned to a specific thread (e.g. GTK
+            // main thread) and we are on a *different* thread, defer the flush
+            // so the owning thread picks it up during its next pump/recv cycle.
+            let defer = {
+                let graph = self.reactive_graph.lock();
+                matches!(graph.flush_thread, Some(tid) if tid != std::thread::current().id())
+            };
+            if defer {
                 let has_pending = {
                     let graph = self.reactive_graph.lock();
                     !graph.pending_notifications.is_empty()
@@ -647,6 +662,8 @@ impl Runtime {
                     self.reactive_graph.lock().deferred_flush = true;
                 }
                 Ok(())
+            } else {
+                self.reactive_flush()
             }
         } else {
             Ok(())

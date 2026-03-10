@@ -237,17 +237,19 @@ initWindow = node => do Effect {
   pure appId
 }
 
+ticker = do Effect {
+  loop n = 0 => {
+    concurrent.sleep tickMs
+    _ <- pure (tickGame Unit)
+    recurse (n + 1)
+  }
+}
+
 main : Effect GtkError Unit
 main = do Effect {
   appId <- initWindow view
-  rx <- signalStream Unit
-  _ <- concurrent.spawn (do Effect {
-      loop n = 0 => do Effect {
-        concurrent.sleep tickMs
-        _ <- pure (tickGame Unit)
-        recurse (n + 1)
-      }
-  })
+  rx    <- signalStream Unit
+  _     <- concurrent.spawn ticker
   concurrent.forEach rx (event => event match
     | GtkClicked _ "pauseBtn"   => pure (togglePause Unit)
     | GtkClicked _ "restartBtn" => pure (restartGame Unit)
