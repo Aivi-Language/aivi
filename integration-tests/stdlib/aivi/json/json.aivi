@@ -11,10 +11,18 @@ strict_fields = do Effect {
     ("id", encodeInt 1)
     ("name", encodeText "a")
   ]
-  ok = strictFields ["id", "name"] payload
-  ok match
-    | Ok _  => assert True
-    | Err _ => assert False
+  value <- assertOk (strictFields ["id", "name"] payload)
+  assertEq value payload
+}
+
+@test "strict fields rejects unknown key"
+strict_fields_reject_unknown_key = do Effect {
+  payload = encodeObject [
+    ("id", encodeInt 1)
+    ("extra", encodeBool True)
+  ]
+  err <- assertErr (strictFields ["id"] payload)
+  assertEq err.message "json.strictFields: unknown key"
 }
 
 @test "schema required fields"
@@ -22,15 +30,51 @@ schema_required_fields = do Effect {
   payload = encodeObject [("id", encodeInt 1)]
   schema  = { required: ["id", "name"], strict: True }
   issues  = validateSchema schema payload
-  assertEq (List.length issues) 1
+  assertEq issues [{ path: "$.name", message: "missing required field" }]
+}
+
+@test "validate schema ignores strict flag"
+validate_schema_ignores_strict_flag = do Effect {
+  payload = encodeObject [
+    ("id", encodeInt 1)
+    ("extra", encodeBool True)
+  ]
+  schema = { required: ["id"], strict: True }
+  issues = validateSchema schema payload
+  assertEq issues []
+}
+
+@test "decode field missing"
+decode_field_missing = do Effect {
+  payload = encodeObject [("id", encodeInt 1)]
+  err <- assertErr (decodeField "name" payload)
+  assertEq err.message "missing field: name"
+}
+
+@test "decode list decodes items"
+decode_list_decodes_items = do Effect {
+  payload = encodeArray [encodeInt 1, encodeInt 2, encodeInt 3]
+  values <- assertOk (decodeList decodeInt payload)
+  assertEq values [1, 2, 3]
+}
+
+@test "decode list surfaces item errors"
+decode_list_surfaces_item_errors = do Effect {
+  payload = encodeArray [encodeInt 1, encodeText "oops"]
+  err <- assertErr (decodeList decodeInt payload)
+  assertEq err.message "expected Int"
+}
+
+@test "decode unavailable"
+decode_unavailable = do Effect {
+  err <- assertErr (decode "{\"id\":1}")
+  assertEq err.message "json.decode: native JSON parsing not yet available"
 }
 
 @test "migrate object"
 migrate_object = do Effect {
   payload  = encodeObject [("name", encodeText "old")]
   migrated = migrateObject (entries => [("name", encodeText "new"), ...entries]) payload
-  field    = decodeField "name" migrated
-  field match
-    | Ok value => assertEq value (encodeText "new")
-    | Err _    => assert False
+  field <- assertOk (decodeField "name" migrated)
+  assertEq field (encodeText "new")
 }

@@ -1383,6 +1383,17 @@ snapshotTest =
 
 ### Snapshot assertions
 
+Common extraction helpers from `aivi.testing`:
+
+```aivi
+assertOk   : Result E A -> Effect Text A
+assertErr  : Result E A -> Effect Text E
+assertSome : Option A -> Effect Text A
+assertNone : Option A -> Effect Text Unit
+```
+
+They are useful when a test wants to keep asserting on the unwrapped `Ok`, `Err`, or `Some` payload instead of falling back to `assert False`.
+
 `assertSnapshot` compares a value against a stored `.snap` file:
 
 ```aivi

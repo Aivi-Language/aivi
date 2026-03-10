@@ -3,44 +3,94 @@ module integrationTests.stdlib.aivi.map.tests
 
 use aivi
 use aivi.testing
+use aivi.map
 
 @test "map insert and get"
 map_insertAndGet = do Effect {
-  m = Map.insert "a" 1 Map.empty
-  assert (Map.get "a" m == Some 1)
+  m = insert "a" 1 empty
+  value <- assertSome (get "a" m)
+  assertEq value 1
 }
 
 @test "map get or else"
 map_getOrElse = do Effect {
-  m   = Map.insert "found" 7 Map.empty
-  val = Map.getOrElse "found" 99 m
-  assert (val == 7)
-  missing = Map.getOrElse "missing" 99 m
-  assert (missing == 99)
+  m   = insert "found" 7 empty
+  val = getOrElse "found" 99 m
+  assertEq val 7
+  missing = getOrElse "missing" 99 m
+  assertEq missing 99
 }
 
 @test "map remove"
 map_remove = do Effect {
-  m   = Map.insert "a" 1 Map.empty
-  m2  = Map.remove "a" m
-  val = Map.get "a" m2
-  assert (val == None)
+  m  = insert "a" 1 empty
+  m2 = remove "a" m
+  assertNone (get "a" m2)
 }
 
 @test "map has"
 map_has = do Effect {
-  m      = Map.insert "key" 10 Map.empty
-  exists = Map.has "key" m
+  m      = insert "key" 10 empty
+  exists = has "key" m
   assert exists
-  missing = Map.has "nope" m
+  missing = has "nope" m
   assert (missing == False)
 }
 
 @test "map size"
 map_size = do Effect {
-  m  = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
-  s0 = Map.size Map.empty
-  assert (s0 == 0)
-  s2 = Map.size m
-  assert (s2 == 2)
+  m  = insert "a" 1 (insert "b" 2 empty)
+  s0 = size empty
+  assertEq s0 0
+  s2 = size m
+  assertEq s2 2
+}
+
+@test "from list keeps last value for duplicate key"
+map_fromList_lastValueWins = do Effect {
+  m = fromList [("a", 1), ("a", 2), ("b", 3)]
+  value <- assertSome (get "a" m)
+  assertEq value 2
+  assertEq (size m) 2
+}
+
+@test "union is right biased"
+map_union_rightBiased = do Effect {
+  left   = fromList [("a", 1), ("shared", 2)]
+  right  = fromList [("shared", 5), ("b", 3)]
+  merged = union left right
+  shared <- assertSome (get "shared" merged)
+  assertEq shared 5
+  assertEq (size merged) 3
+}
+
+@test "update missing key is noop"
+map_update_missing_key_is_noop = do Effect {
+  original = insert "a" 1 empty
+  updated  = update "missing" (_ => 99) original
+  value <- assertSome (get "a" updated)
+  assertEq value 1
+  assertEq (size updated) 1
+}
+
+@test "alter inserts and removes"
+map_alter_insertAndRemove = do Effect {
+  inserted = alter "a" (_ => Some 1) empty
+  value <- assertSome (get "a" inserted)
+  assertEq value 1
+  removed = alter "a" (_ => None) inserted
+  assertNone (get "a" removed)
+}
+
+@test "mergeWith combines overlaps"
+map_mergeWith_combines_overlap = do Effect {
+  left   = fromList [("a", 1), ("shared", 2)]
+  right  = fromList [("shared", 3), ("b", 4)]
+  merged = mergeWith (_ leftValue rightValue => leftValue + rightValue) left right
+  shared <- assertSome (get "shared" merged)
+  assertEq shared 5
+  onlyLeft <- assertSome (get "a" merged)
+  assertEq onlyLeft 1
+  onlyRight <- assertSome (get "b" merged)
+  assertEq onlyRight 4
 }

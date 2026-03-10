@@ -4,38 +4,86 @@ module integrationTests.stdlib.aivi.file.tests
 use aivi
 use aivi.testing
 use aivi.file
+use aivi.text
 
-@test "file stats types"
-fileStats_types = do Effect {
-  // Verify FileStats type is well-formed
-  fileStats =
-    {
-      size: 1024
-      created: 1700000000000
-      modified: 1700000000000
-      isFile: True
-      isDirectory: False
+roundtripPath = "target/aivi_stdlib_file_roundtrip.txt"
+statPath      = "target/aivi_stdlib_file_stat.txt"
+lifecyclePath = "target/aivi_stdlib_file_lifecycle.txt"
+missingPath   = "target/aivi_stdlib_file_missing.txt"
+
+cleanupPath = path => do Effect {
+  present <- exists path
+  if present
+    then do Effect {
+      deleteResult <- delete path
+      _            <- assertOk deleteResult
+      pure Unit
     }
-    assertEq fileStats.size 1024
-    assert fileStats.isFile
-    assert (fileStats.isDirectory == False)
+    else pure Unit
 }
 
 @test "exists missing"
 exists_missing = do Effect {
-  res <- exists "/tmp/aivi_nonexistent_file_12345.txt"
+  _   <- cleanupPath missingPath
+  res <- exists missingPath
   assert (res == False)
 }
 
 @test "write text read text roundtrip"
 writeText_readText_roundtrip = do Effect {
-  path = "/tmp/aivi_test_roundtrip.txt"
-  _          <- writeText path "hello aivi"
-  contentRes <- readText path
-  contentRes match
-    | Ok content => assertEq content "hello aivi"
-    | Err _      => assert False
-    _           <- delete path
-    existsAfter <- exists path
-    assertEq existsAfter False
+  _             <- cleanupPath roundtripPath
+  writeResult   <- writeText roundtripPath "hello aivi"
+  _             <- assertOk writeResult
+  contentResult <- readText roundtripPath
+  content       <- assertOk contentResult
+  assertEq content "hello aivi"
+  deleteResult <- delete roundtripPath
+  _            <- assertOk deleteResult
+  existsAfter  <- exists roundtripPath
+  assertEq existsAfter False
+}
+
+@test "stat reports written file"
+stat_reports_written_file = do Effect {
+  _           <- cleanupPath statPath
+  writeResult <- writeText statPath "hello"
+  _           <- assertOk writeResult
+  statsResult <- stat statPath
+  stats       <- assertOk statsResult
+  assertEq stats.size 5
+  assert stats.isFile
+  assertEq stats.isDirectory False
+  assert (stats.modified >= stats.created)
+  _ <- cleanupPath statPath
+}
+
+@test "read text missing returns err"
+readText_missing_returns_err = do Effect {
+  _             <- cleanupPath missingPath
+  contentResult <- readText missingPath
+  err           <- assertErr contentResult
+  assert (text.length err > 0)
+}
+
+@test "delete missing returns err"
+delete_missing_returns_err = do Effect {
+  _            <- cleanupPath missingPath
+  deleteResult <- delete missingPath
+  err          <- assertErr deleteResult
+  assert (text.length err > 0)
+}
+
+@test "exists tracks lifecycle"
+exists_tracks_lifecycle = do Effect {
+  _      <- cleanupPath lifecyclePath
+  before <- exists lifecyclePath
+  assertEq before False
+  writeResult <- writeText lifecyclePath "created"
+  _           <- assertOk writeResult
+  during      <- exists lifecyclePath
+  assertEq during True
+  deleteResult <- delete lifecyclePath
+  _            <- assertOk deleteResult
+  after        <- exists lifecyclePath
+  assertEq after False
 }
