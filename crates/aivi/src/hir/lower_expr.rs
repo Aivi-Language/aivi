@@ -358,33 +358,55 @@ fn lower_expr_inner_ctx(
                 };
             }
             if op == "<|" {
-                if let Expr::Record { fields, .. } = *right.clone() {
-                    return HirExpr::Patch {
-                        id: id_gen.next(),
-                        target: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
-                        fields: fields
-                            .into_iter()
-                            .map(|field| HirRecordField {
-                                spread: field.spread,
-                                path: field
-                                    .path
-                                    .into_iter()
-                                    .map(|segment| match segment {
-                                        crate::surface::PathSegment::Field(name) => {
-                                            HirPathSegment::Field(name.name)
-                                        }
-                                        crate::surface::PathSegment::Index(expr, _) => {
-                                            HirPathSegment::Index(lower_expr_ctx(
-                                                expr, id_gen, ctx, false,
-                                            ))
-                                        }
-                                        crate::surface::PathSegment::All(_) => HirPathSegment::All,
-                                    })
-                                    .collect(),
-                                value: lower_expr_ctx(field.value, id_gen, ctx, false),
-                            })
-                            .collect(),
-                    };
+                match *right {
+                    Expr::Record {
+                        fields,
+                        span: _record_span,
+                    }
+                    | Expr::PatchLit {
+                        fields,
+                        span: _record_span,
+                    } => {
+                        return HirExpr::Patch {
+                            id: id_gen.next(),
+                            target: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
+                            fields: fields
+                                .into_iter()
+                                .map(|field| HirRecordField {
+                                    spread: field.spread,
+                                    path: field
+                                        .path
+                                        .into_iter()
+                                        .map(|segment| match segment {
+                                            crate::surface::PathSegment::Field(name) => {
+                                                HirPathSegment::Field(name.name)
+                                            }
+                                            crate::surface::PathSegment::Index(expr, _) => {
+                                                HirPathSegment::Index(lower_expr_ctx(
+                                                    expr, id_gen, ctx, false,
+                                                ))
+                                            }
+                                            crate::surface::PathSegment::All(_) => {
+                                                HirPathSegment::All
+                                            }
+                                        })
+                                        .collect(),
+                                    value: lower_expr_ctx(field.value, id_gen, ctx, false),
+                                })
+                                .collect(),
+                        };
+                    }
+                    right => {
+                        return HirExpr::Binary {
+                            id: id_gen.next(),
+                            op,
+                            left: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
+                            right: Box::new(lower_expr_ctx(right, id_gen, ctx, false)),
+                            location: ctx.source_path.map(|path| {
+                                format!("{}:{}:{}", path, span.start.line, span.start.column)
+                            }),
+                        };
+                    }
                 }
             }
             let location = ctx

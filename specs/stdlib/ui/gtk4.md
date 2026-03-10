@@ -171,6 +171,7 @@ Attributes on shorthand tags become properties automatically, except for pass-th
 | `ref="btnRef"` | widget reference |
 | `onClick={...}` | event binding |
 | `onInput={...}` | event binding |
+| `onKeyPress={...}` | keyboard event binding |
 
 ### Which syntax to use
 
@@ -207,6 +208,7 @@ Signal sugar works on both shorthand and verbose tags:
 - `onClick={handler}` -> `signal:clicked`
 - `onInput={handler}` -> `signal:changed`
 - `onActivate={handler}` -> `signal:activate`
+- `onKeyPress={handler}` -> `signal:key-pressed`
 - `onToggle={handler}` -> `signal:toggled`
 - `onValueChanged={handler}` -> `signal:value-changed`
 - `onFocusIn={handler}` -> `signal:focus-enter`
@@ -216,6 +218,7 @@ Signal sugar works on both shorthand and verbose tags:
 Callback values may be either runtime functions or `Event` handles. For the common sugar attrs, the function receives the useful GTK payload when one exists:
 
 - `onInput` -> current `Text`
+- `onKeyPress` -> `GtkKeyPressed WidgetId Text Text Text` (pattern match the `key` field in the callback)
 - `onToggle` -> current `Bool`
 - `onValueChanged` -> current `Float`
 - click/focus-style signals -> a unit-like or widget event payload, depending on the underlying signal
@@ -225,6 +228,11 @@ Valid public shapes therefore include:
 ```aivi
 <GtkButton onClick={_ => update state (patch { count: _ + 1 })} />
 <GtkEntry onInput={txt => set query txt} />
+<GtkBox onKeyPress={event =>
+  event match
+    | GtkKeyPressed _ _ key _ => handleKey key
+    | _ => pure Unit
+} />
 <GtkSwitch onToggle={active => set enabled active} />
 <GtkButton onClick={saveEvent} />
 ```
@@ -275,7 +283,7 @@ The runtime directly covers the standard signal-first widget story:
 - layout containers: `GtkBox`, `GtkGrid`, `GtkOverlay`, `GtkScrolledWindow`, `GtkStack`, `GtkRevealer`, `GtkPaned`, `GtkHeaderBar`, `AdwHeaderBar`, `AdwClamp`
 - interactive widgets: `GtkButton`, `GtkCheckButton`, `GtkToggleButton`, `GtkSwitch`, `GtkEntry`, `GtkPasswordEntry`, `GtkSearchEntry`, `GtkTextView`, `GtkScale`, `GtkSpinButton`, `GtkDropDown`, `GtkMenuButton`, `GtkSpinner`, `GtkProgressBar`
 - display widgets: `GtkLabel`, `GtkImage`, `GtkPicture`, `GtkDrawingArea`, `GtkSeparator`, `GtkListBox`
-- event controllers: `GtkGestureClick`
+- event controllers: `GtkGestureClick`, keyboard capture via `onKeyPress={...}`
 
 Additional `Adw*` classes can be created dynamically when their GType is available. Container-specific child-slot rules remain a thin handwritten layer even when widget metadata comes from GIR/GObject reflection.
 
@@ -332,7 +340,7 @@ addPoint = point => batch (_ =>
 
 - `E1612`: invalid `props` shape (must be a record literal the sigil can inspect)
 - `E1613`: unsupported `props` field value in a position that requires static inspection
-- `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onToggle`, `onValueChanged`, `onFocusIn`, `onFocusOut`, and `<signal ... on={...}>` require a function or an `Event` handle with a compatible payload shape)
+- `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onKeyPress`, `onToggle`, `onValueChanged`, `onFocusIn`, `onFocusOut`, and `<signal ... on={...}>` require a function or an `Event` handle with a compatible payload shape)
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node; keyed iteration is the recommended contract)
 - `E1616`: bare `<child>` without a `type` attribute (nest `<object>` elements directly inside the parent instead)
 - `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)

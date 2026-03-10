@@ -557,7 +557,10 @@ fn lower_expr_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pip
         op, left, right, ..
     } = &expr
     {
-        if op == "<|" && matches!(**right, Expr::Record { .. }) && !contains_placeholder(left) {
+        if op == "<|"
+            && matches!(**right, Expr::Record { .. } | Expr::PatchLit { .. })
+            && !contains_placeholder(left)
+        {
             return lower_expr_inner_ctx(expr, id_gen, ctx, in_pipe_left);
         }
     }

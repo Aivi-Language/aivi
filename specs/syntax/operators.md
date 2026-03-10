@@ -11,8 +11,8 @@ Operators in AIVI are small pieces of syntax with fixed precedence and meaning a
 | `=` | binding | top-level, blocks | Defines a value, function clause, or type-level item. |
 | `<-` | binder | `do Effect {}`, `generate {}`, `resource {}` | Runs and binds the next produced value from an effect, generator, or resource context. |
 | `->` | guard | `generate {}` | Filters the current generator element using predicate syntax. |
-| `\|>` | pipe | expressions | Feeds the left value into the expression on the right. |
-| `<\|` | patch | expressions | Applies a patch to a record value. |
+| `\|>` | pipe / signal derive | expressions | Feeds the left value into the expression on the right. When the left side is a `Signal A`, it derives a new signal from the current signal value. |
+| `<\|` | patch / signal write | expressions | Applies a patch to a record value. When the left side is a `Signal A`, it writes the signal with a value, updater, or record patch. |
 | `match` | match | expressions | Starts refutable pattern matching on the expression to its left. |
 | `\|` | arm / union separator | `match` arms, sum-type definitions | Separates branches or constructors. |
 | `=>` | arrow | lambdas, match arms, `loop` | Separates inputs or patterns from the resulting expression. |
@@ -52,12 +52,38 @@ Within one precedence level, infix operators associate left-to-right. Add parent
 
 ### Patch application (`<|`)
 
-`<|` applies a patch literal to the value on its left and returns a new value. It never mutates the original.
+On ordinary data, `<|` applies a patch literal to the value on its left and returns a new value. It never mutates the original.
 
 <<< ../snippets/from_md/syntax/operators/block_02.aivi{aivi}
 
 
+When the left-hand side is a `Signal A`, the same operator becomes signal-write sugar:
+
+- `signal <| value` → `set signal value`
+- `signal <| updater` → `update signal updater`
+- `signal <| { ... }` → update the current record value with the same patch semantics as ordinary `<|`
+
+So all of these are valid:
+
+```aivi
+count <| 10
+profile <| (state => { name: "AIVI", saveCount: state.saveCount + 1 })
+profile <| { saveCount: _ + 1 }
+```
+
 See [Patching Records](patching.md) for reusable `patch { ... }` values, deep selectors, and collection-aware updates.
+
+### Signal derivation via pipe (`|>`)
+
+On ordinary data, `|>` keeps its usual last-argument pipe behavior.
+
+When the left-hand side is a `Signal A`, `signal |> fn` is shorthand for `derive signal (value => value |> fn)`, so the right-hand side still uses the normal pipe rules over the current signal value.
+
+```aivi
+count = signal 1
+countText = count |> (_ + 1) |> toText
+label = count |> (n => "Count {n}")
+```
 
 ## 11.3 Lists: literals, range items, and spread
 
@@ -212,7 +238,7 @@ Uppercase or dotted tags in HTML sigils are treated as component calls with reco
 <<< ../snippets/from_md/syntax/operators/block_05.aivi{aivi}
 
 
-Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`, `onActivate` → `activate`, `onToggle` → `toggled`, `onValueChanged` → `value-changed`, `onFocusIn` → `focus-enter`, `onFocusOut` → `focus-leave`.
+Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`, `onActivate` → `activate`, `onKeyPress` → `key-pressed`, `onToggle` → `toggled`, `onValueChanged` → `value-changed`, `onFocusIn` → `focus-enter`, `onFocusOut` → `focus-leave`.
 
 Signal handlers must be compile-time expressions.
 

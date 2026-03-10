@@ -3,7 +3,7 @@ module integrationTests.syntax.sigils.gtkBuilder
 
 use aivi.ui.gtk4
 
-export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice, shorthandNode, shorthandSignalNode, functionCallSugarNode
+export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice, shorthandNode, shorthandSignalNode, keySignalNode, functionCallSugarNode
 
 node : GtkNode
 node =
@@ -106,6 +106,14 @@ shorthandSignalNode =
   ~<gtk>
     <GtkButton label="Save" onClick={save}>
     </GtkButton>
+  </gtk>
+
+keySignalNode : GtkNode
+keySignalNode =
+  ~<gtk>
+    <GtkBox onKeyPress={save}>
+      <GtkLabel label="Press a key" />
+    </GtkBox>
   </gtk>
 
 navRailNode : Text -> GtkNode

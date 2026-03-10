@@ -260,6 +260,26 @@ save = do Event {
 }
 
 #[test]
+fn typecheck_signal_patch_operator_surface() {
+    let source = r#"
+module test.reactivePatch
+
+use aivi
+use aivi.prelude (toText)
+use aivi.reactive
+
+count = signal 0
+state = signal { count: 0, enabled: False }
+
+countText = count |> (_ + 1) |> toText
+countSet = count <| 5
+countUpdate = count <| (_ + 1)
+stateUpdate = state <| (current => current <| { count: _ + 1, enabled: True })
+"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.prelude", "aivi.reactive"]);
+}
+
+#[test]
 fn typecheck_record_field_mismatch_points_at_value() {
     let source = "module test.user\n\
 User = { name: Text, age: Int }\n\

@@ -99,6 +99,101 @@ fn hir_contains_var(expr: &HirExpr, name: &str) -> bool {
     }
 }
 
+fn hir_contains_reactive_call(expr: &HirExpr, field_name: &str) -> bool {
+    match expr {
+        HirExpr::Call { func, args, .. } => {
+            matches!(
+                func.as_ref(),
+                HirExpr::FieldAccess { base, field, .. }
+                    if field == field_name
+                        && matches!(base.as_ref(), HirExpr::Var { name, .. } if name == "reactive")
+            ) || hir_contains_reactive_call(func, field_name)
+                || args
+                    .iter()
+                    .any(|arg| hir_contains_reactive_call(arg, field_name))
+        }
+        HirExpr::Lambda { body, .. } => hir_contains_reactive_call(body, field_name),
+        HirExpr::App { func, arg, .. } | HirExpr::Pipe { func, arg, .. } => {
+            hir_contains_reactive_call(func, field_name)
+                || hir_contains_reactive_call(arg, field_name)
+        }
+        HirExpr::DebugFn { body, .. } => hir_contains_reactive_call(body, field_name),
+        HirExpr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+            crate::hir::HirTextPart::Text { .. } => false,
+            crate::hir::HirTextPart::Expr { expr } => hir_contains_reactive_call(expr, field_name),
+        }),
+        HirExpr::List { items, .. } => items
+            .iter()
+            .any(|item| hir_contains_reactive_call(&item.expr, field_name)),
+        HirExpr::Tuple { items, .. } => items
+            .iter()
+            .any(|item| hir_contains_reactive_call(item, field_name)),
+        HirExpr::Record { fields, .. } => fields
+            .iter()
+            .any(|field| hir_contains_reactive_call(&field.value, field_name)),
+        HirExpr::Patch { target, fields, .. } => {
+            hir_contains_reactive_call(target, field_name)
+                || fields
+                    .iter()
+                    .any(|field| hir_contains_reactive_call(&field.value, field_name))
+        }
+        HirExpr::FieldAccess { base, .. } => hir_contains_reactive_call(base, field_name),
+        HirExpr::Index { base, index, .. } => {
+            hir_contains_reactive_call(base, field_name)
+                || hir_contains_reactive_call(index, field_name)
+        }
+        HirExpr::Binary { left, right, .. } => {
+            hir_contains_reactive_call(left, field_name)
+                || hir_contains_reactive_call(right, field_name)
+        }
+        HirExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            hir_contains_reactive_call(cond, field_name)
+                || hir_contains_reactive_call(then_branch, field_name)
+                || hir_contains_reactive_call(else_branch, field_name)
+        }
+        HirExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            hir_contains_reactive_call(scrutinee, field_name)
+                || arms.iter().any(|arm| {
+                    hir_contains_reactive_call(&arm.body, field_name)
+                        || arm
+                            .guard
+                            .as_ref()
+                            .is_some_and(|g| hir_contains_reactive_call(g, field_name))
+                })
+        }
+        HirExpr::Block { items, .. } => items.iter().any(|item| match item {
+            crate::hir::HirBlockItem::Bind { expr, .. } => {
+                hir_contains_reactive_call(expr, field_name)
+            }
+            crate::hir::HirBlockItem::Filter { expr } => {
+                hir_contains_reactive_call(expr, field_name)
+            }
+            crate::hir::HirBlockItem::Yield { expr } => {
+                hir_contains_reactive_call(expr, field_name)
+            }
+            crate::hir::HirBlockItem::Recurse { expr } => {
+                hir_contains_reactive_call(expr, field_name)
+            }
+            crate::hir::HirBlockItem::Expr { expr } => hir_contains_reactive_call(expr, field_name),
+        }),
+        HirExpr::Raw { .. }
+        | HirExpr::LitNumber { .. }
+        | HirExpr::LitString { .. }
+        | HirExpr::LitSigil { .. }
+        | HirExpr::LitBool { .. }
+        | HirExpr::LitDateTime { .. }
+        | HirExpr::Var { .. }
+        | HirExpr::Mock { .. } => false,
+    }
+}
+
 fn find_def_expr<'a>(module: &'a crate::surface::Module, def_name: &str) -> &'a Expr {
     module
         .items
@@ -150,6 +245,113 @@ x = needsText { name: "A" }
     assert!(
         hir_contains_var(&x_def.expr, "toText"),
         "expected elaboration to insert a `toText` call"
+    );
+}
+
+#[test]
+fn elaborates_signal_pipe_to_reactive_derive_call() {
+    let source = r#"
+module test.signal_pipe
+
+use aivi
+use aivi.prelude (toText)
+use aivi.reactive
+
+count : Signal Int
+count = signal 1
+countText : Signal Text
+countText = count |> (_ + 1) |> toText
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let diags = without_embedded_errors(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let program = crate::hir::desugar_modules(&all_modules);
+    let module = program
+        .modules
+        .iter()
+        .find(|m| m.name == "test.signal_pipe")
+        .expect("expected test.signal_pipe module");
+    let def = module
+        .defs
+        .iter()
+        .find(|d| d.name == "countText")
+        .expect("expected countText def");
+
+    assert!(
+        hir_contains_reactive_call(&def.expr, "derive"),
+        "expected signal pipe elaboration to call reactive.derive"
+    );
+}
+
+#[test]
+fn elaborates_signal_patch_operator_to_reactive_set_and_update_calls() {
+    let source = r#"
+module test.signal_updates
+
+use aivi
+use aivi.reactive
+
+count : Signal Int
+count = signal 1
+state : Signal { count: Int, enabled: Bool }
+state = signal { count: 0, enabled: False }
+setCount : Unit
+setCount = count <| 5
+patchState : Unit
+patchState = state <| (current => current <| { count: _ + 1, enabled: True })
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let diags = without_embedded_errors(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let program = crate::hir::desugar_modules(&all_modules);
+    let module = program
+        .modules
+        .iter()
+        .find(|m| m.name == "test.signal_updates")
+        .expect("expected test.signal_updates module");
+
+    let set_def = module
+        .defs
+        .iter()
+        .find(|d| d.name == "setCount")
+        .expect("expected setCount def");
+    assert!(
+        hir_contains_reactive_call(&set_def.expr, "set"),
+        "expected scalar signal replacement to elaborate to reactive.set"
+    );
+
+    let patch_def = module
+        .defs
+        .iter()
+        .find(|d| d.name == "patchState")
+        .expect("expected patchState def");
+    assert!(
+        hir_contains_reactive_call(&patch_def.expr, "update"),
+        "expected record signal patch sugar to elaborate to reactive.update"
     );
 }
 
