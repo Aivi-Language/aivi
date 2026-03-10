@@ -323,15 +323,6 @@ fn qualify_block_items(
                 fail_expr: qualify_expr(fail_expr, import_map, &current_scope),
                 span,
             },
-            BlockItem::On {
-                transition,
-                handler,
-                span,
-            } => BlockItem::On {
-                transition: qualify_expr(transition, import_map, &current_scope),
-                handler: qualify_expr(handler, import_map, &current_scope),
-                span,
-            },
         })
         .collect()
 }

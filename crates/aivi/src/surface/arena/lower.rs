@@ -1,10 +1,9 @@
 use crate::intern::{ExprId, PatternId, Symbol, TypeExprId};
 use crate::surface::{
     BlockItem, BlockKind, ClassDecl, ClassMember, Decorator, Def, DomainDecl, DomainItem,
-    ExportItem, Expr, InstanceDecl, ListItem, Literal, MachineDecl, MachineState,
-    MachineTransition, MatchArm, Module, ModuleItem, PathSegment, Pattern, RecordField,
-    RecordPatternField, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig,
-    TypeVarConstraint, UseDecl, UseItem,
+    ExportItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
+    Pattern, RecordField, RecordPatternField, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr,
+    TypeSig, TypeVarConstraint, UseDecl, UseItem,
 };
 
 use super::*;
@@ -43,9 +42,6 @@ impl ArenaBuilder {
                 ),
                 ModuleItem::DomainDecl(domain_decl) => items.push(ArenaModuleItem::DomainDecl(
                     self.lower_domain_decl(domain_decl),
-                )),
-                ModuleItem::MachineDecl(machine_decl) => items.push(ArenaModuleItem::MachineDecl(
-                    self.lower_machine_decl(machine_decl),
                 )),
             }
         }
@@ -234,57 +230,6 @@ impl ArenaBuilder {
                 .map(|item| self.lower_domain_item(item))
                 .collect(),
             span: domain_decl.span.clone(),
-        }
-    }
-
-    fn lower_machine_state(&mut self, state: &MachineState) -> ArenaMachineState {
-        ArenaMachineState {
-            name: SpannedSymbol::from(&state.name),
-            fields: state
-                .fields
-                .iter()
-                .map(|(name, ty)| (SpannedSymbol::from(name), self.lower_type_expr(ty)))
-                .collect(),
-            span: state.span.clone(),
-        }
-    }
-
-    fn lower_machine_transition(
-        &mut self,
-        transition: &MachineTransition,
-    ) -> ArenaMachineTransition {
-        ArenaMachineTransition {
-            source: SpannedSymbol::from(&transition.source),
-            target: SpannedSymbol::from(&transition.target),
-            name: SpannedSymbol::from(&transition.name),
-            payload: transition
-                .payload
-                .iter()
-                .map(|(name, ty)| (SpannedSymbol::from(name), self.lower_type_expr(ty)))
-                .collect(),
-            span: transition.span.clone(),
-        }
-    }
-
-    fn lower_machine_decl(&mut self, machine_decl: &MachineDecl) -> ArenaMachineDecl {
-        ArenaMachineDecl {
-            decorators: machine_decl
-                .decorators
-                .iter()
-                .map(|d| self.lower_decorator(d))
-                .collect(),
-            name: SpannedSymbol::from(&machine_decl.name),
-            states: machine_decl
-                .states
-                .iter()
-                .map(|state| self.lower_machine_state(state))
-                .collect(),
-            transitions: machine_decl
-                .transitions
-                .iter()
-                .map(|transition| self.lower_machine_transition(transition))
-                .collect(),
-            span: machine_decl.span.clone(),
         }
     }
 
@@ -545,15 +490,6 @@ impl ArenaBuilder {
             } => ArenaBlockItem::Given {
                 cond: self.lower_expr(cond),
                 fail_expr: self.lower_expr(fail_expr),
-                span: span.clone(),
-            },
-            BlockItem::On {
-                transition,
-                handler,
-                span,
-            } => ArenaBlockItem::On {
-                transition: self.lower_expr(transition),
-                handler: self.lower_expr(handler),
                 span: span.clone(),
             },
         }

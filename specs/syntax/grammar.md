@@ -35,7 +35,7 @@ The grammar here is about **parsing**. Typing, elaboration, and runtime behavior
 
 ```text
 as class do domain effect else export generate given hiding if in
-instance machine match mock module on opaque or over patch recurse resource snapshot then unless use when with yield loop
+instance match mock module opaque or over patch recurse resource snapshot then unless use when with yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, and `Err` are ordinary constructors, not keywords.)
@@ -78,7 +78,7 @@ FieldSep   := Sep | ","
 
 ## 0.2 Top level
 
-At the top level, a file starts with optional module decorators and then a single module definition. For the practical reader-facing guides, see [Modules](modules.md), [Bindings and Scope](bindings.md), [Domains](domains.md), [Machine Syntax](machines.md), and [Type Classes & HKTs](types/classes_and_hkts.md).
+At the top level, a file starts with optional module decorators and then a single module definition. For the practical reader-facing guides, see [Modules](modules.md), [Bindings and Scope](bindings.md), [Domains](domains.md), and [Type Classes & HKTs](types/classes_and_hkts.md).
 
 ```ebnf
 Program        := { Decorator } ModuleDef
@@ -97,7 +97,6 @@ Definition     := ValueSig
                | DomainDef
                | ClassDef
                | InstanceDef
-               | MachineDef
 
 ValueSig       := lowerIdent ":" Type Sep
 ValueBinding   := Pattern "=" BindingRhs Sep
@@ -129,8 +128,7 @@ ExportableDefinition := ValueSig
                     | DomainDef
                     | ClassDef
                     | InstanceDef
-                    | MachineDef
-ExportStmt     := "export" ExportList Sep
+     ExportStmt     := "export" ExportList Sep
 ExportList     := ExportItem { "," ExportItem }
 ExportItem     := lowerIdent | UpperIdent | ("domain" UpperIdent)
 UseStmt        := "use" ModulePath [ UseSpec ] Sep
@@ -174,9 +172,6 @@ InstanceConstraints := "given" "(" TypeVarConstraint { "," TypeVarConstraint } "
 InstanceItem   := lowerIdent ":" Expr Sep
                | ValueBinding
 
-MachineDef     := "machine" UpperIdent "=" "{" { MachineTransition } "}" Sep
-MachineTransition := [ UpperIdent ] "->" UpperIdent ":" lowerIdent "{" { FieldDecl } "}"
-FieldDecl      := lowerIdent ":" Type
 ```
 
 Notes:
@@ -281,7 +276,6 @@ DoStmt         := BindStmt
                | "when" Expr "<-" Expr Sep
                | "unless" Expr "<-" Expr Sep
                | "given" Expr "or" ( Expr | OrArms ) Sep
-               | "on" PostfixExpr "=>" Expr Sep
                | "recurse" Expr Sep
                | "loop" Pattern "=" Expr "=>" Block Sep
 

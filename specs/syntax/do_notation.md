@@ -41,7 +41,7 @@ Notice that the last line is still a `Result` value, not a plain `Port`. That is
 
 ## `do Effect` first, `do M` when you need the generic form
 
-`do Effect { ... }` is the everyday version. It is built for typed side effects and supports extra effect-specific statements such as `or`, resource acquisition, `when`, `unless`, `given`, `loop` / `recurse`, and `on`.
+`do Effect { ... }` is the everyday version. It is built for typed side effects and supports extra effect-specific statements such as `or`, resource acquisition, `when`, `unless`, `given`, and `loop` / `recurse`.
 
 `do M { ... }` is the smaller, reusable core. It works when a type constructor `M` has the sequencing support needed to chain steps together.
 
@@ -86,7 +86,6 @@ The parser accepts any `UpperIdent` after `do`. The difference is semantic:
 | `when cond <- eff`    | yes         | no               | no                  |
 | `unless cond <- eff`  | yes         | no               | no                  |
 | `given cond or expr`  | yes         | no               | no                  |
-| `on Event => handler` | yes         | no               | no                  |
 | `loop`/`recurse`      | yes         | no               | yes                 |
 | resource `<-`         | yes         | no               | no                  |
 

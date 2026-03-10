@@ -1,3 +1,0 @@
-_ <- if can.lease Unit
-     then lease {}
-     else fail "not in Idle state"

@@ -1,3 +1,0 @@
-_ <- lease {}
-_ <- run { batchId: 42 }
-_ <- done {}

@@ -161,7 +161,7 @@ Multi-clause domain operators are merged into `Value::MultiClause` so clause ord
 The AOT path shares the same frontend and lowering work, then adds packaging steps:
 
 1. emit a relocatable object file through `cranelift-object`
-2. generate `__aivi_main()` to register machine declarations, compiled top-level functions, and compiled lambdas
+2. generate `__aivi_main()` to register compiled top-level functions and compiled lambdas
 3. embed string constants as relocatable data sections
 4. compile and link a thin Rust harness via `cargo build`
 
@@ -181,7 +181,7 @@ Generated Cranelift code calls into the runtime through a large `extern "C"` hel
 | Control | `rt_apply`, `rt_force_thunk`, `rt_run_effect`, `rt_bind_effect`, `rt_wrap_effect`, `rt_check_call_depth` |
 | Generators | `rt_gen_vec_new`, `rt_gen_vec_push`, `rt_gen_vec_extend_generator`, `rt_gen_vec_into_generator` |
 | Sigils | `rt_eval_sigil` |
-| AOT registration | `rt_register_jit_fn`, `rt_register_machines_from_data` |
+| AOT registration | `rt_register_jit_fn` |
 
 All helpers receive `JitRuntimeCtx*` as their first parameter. Errors are recorded in `runtime.jit_pending_error` with first-error-wins semantics so the root cause is preserved.
 

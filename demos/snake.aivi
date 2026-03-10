@@ -1,17 +1,17 @@
 module demos.snake
 
-use aivi
 use aivi.concurrency as concurrent
 use aivi.list
+use aivi.logic
+use aivi.prelude (toText)
 use aivi.reactive
 use aivi.text
 use aivi.ui.gtk4
 
 export main
 
-// ── Types ──────────────────────────────────────────────────────────
-
 Direction = Up | Down | Left | Right
+Mode      = Running | Paused | GameOver
 
 Pixel = (Int, Int)
 
@@ -21,22 +21,8 @@ State = {
   dir: Direction
   score: Int
   seed: Int
+  mode: Mode
 }
-
-StepResult = Advanced State | Crashed State
-
-machine SnakeMode = {
-           -> Running  : boot {}
-  Running  -> Paused   : pause {}
-  Paused   -> Running  : resume {}
-  Running  -> GameOver : lose {}
-  Paused   -> GameOver : lose {}
-  Running  -> Running  : restart {}
-  Paused   -> Running  : restart {}
-  GameOver -> Running  : restart {}
-}
-
-// ── Constants ──────────────────────────────────────────────────────
 
 gridW  = 30
 gridH  = 20
@@ -49,15 +35,11 @@ initialState = {
   dir: Right
   score: 0
   seed: 7
+  mode: Running
 }
 
-snake = signal initialState.snake
-food  = signal initialState.food
-dir   = signal initialState.dir
-score = signal initialState.score
-seed  = signal initialState.seed
-
-// ── Pure helpers ───────────────────────────────────────────────────
+game : Signal State
+game = signal initialState
 
 move : Pixel -> Direction -> Pixel
 move = (x, y) =>
@@ -80,35 +62,47 @@ placeFood : Int -> List Pixel -> (Pixel, Int)
 placeFood = seed snake => {
   s   = (seed * 37 + 13) % (gridW * gridH)
   idx = if s < 0 then 0 - s else s
-  x   = idx % gridW
-  y   = idx / gridW
-  pos = (x, y)
+  pos = (idx % gridW, idx / gridW)
   if contains pos snake then placeFood (s + 1) snake else (pos, s)
 }
 
-step : State -> StepResult
-step = st => {
-  (head, body) = st.snake match
-    | []           => ((0, 0), [])
-    | [h, ...rest] => (h, rest)
+snakeParts : List Pixel -> (Pixel, List Pixel)
+snakeParts = snake => snake match
+  | []              => ((0, 0), [])
+  | [head, ...body] => (head, body)
 
-    newHead  = move head st.dir
-    (nx, ny) = newHead
-    dead     = nx < 0 || nx >= gridW || ny < 0 || ny >= gridH || contains newHead body
+outOfBounds : Pixel -> Bool
+outOfBounds = (x, y) =>
+  x < 0 || x >= gridW || y < 0 || y >= gridH
 
-    if dead then Crashed st
-    else {
-      ate              = newHead == st.food
-      newSnake         = if ate then [newHead, ...st.snake] else [newHead, ...dropLast st.snake]
-      (newFood, newSd) = if ate then placeFood (st.seed + st.score * 7 + nx * 13 + ny) newSnake else (st.food, st.seed)
-      Advanced (st <| {
-          snake: newSnake
-          food: newFood
-          score: if ate then st.score + 1 else st.score
-          seed: newSd
-      })
-    }
+advanceSnake : State -> Pixel -> State
+advanceSnake = st newHead => {
+  (nx, ny)         = newHead
+  ate              = newHead == st.food
+  newSnake         = if ate then [newHead, ...st.snake] else [newHead, ...dropLast st.snake]
+  (newFood, newSd) = if ate then placeFood (st.seed + st.score * 7 + nx * 13 + ny) newSnake else (st.food, st.seed)
+
+  st <| {
+    snake: newSnake
+    food: newFood
+    score: if ate then st.score + 1 else st.score
+    seed: newSd
+  }
 }
+
+tickRunning : State -> State
+tickRunning = st => {
+  (head, body) = snakeParts st.snake
+  newHead      = move head st.dir
+
+  if outOfBounds newHead || contains newHead body then st <| { mode: GameOver }
+  else advanceSnake st newHead
+}
+
+tickState : State -> State
+tickState = st => st.mode match
+  | Running => tickRunning st
+  | _       => st
 
 directionFromKey : Text -> Option Direction
 directionFromKey =
@@ -116,17 +110,7 @@ directionFromKey =
   | "Down"  => Some Down
   | "Left"  => Some Left
   | "Right" => Some Right
-  | "w"     => Some Up
-  | "W"     => Some Up
-  | "s"     => Some Down
-  | "S"     => Some Down
-  | "a"     => Some Left
-  | "A"     => Some Left
-  | "d"     => Some Right
-  | "D"     => Some Right
   | _       => None
-
-// ── Rendering ──────────────────────────────────────────────────────
 
 cellChar : Int -> Int -> List Pixel -> Pixel -> Text
 cellChar = x y snake food =>
@@ -138,43 +122,86 @@ rowText : Int -> List Pixel -> Pixel -> Text
 rowText = y snake food =>
   [0.. gridW - 1] |> map (x => cellChar x y snake food) |> join ""
 
-boardRows : List Pixel -> Pixel -> List { id: Text, text: Text }
-boardRows = snake food =>
-  [0.. gridH - 1] |> map (y => { id: "row-{toText y}", text: rowText y snake food })
+boardRows : State -> List { id: Text, text: Text }
+boardRows = st =>
+  [0.. gridH - 1] |> map (y => { id: "row-{toText y}", text: rowText y st.snake st.food })
 
-// ── View ───────────────────────────────────────────────────────────
+renderScoreLabel : State -> Text
+renderScoreLabel = st =>
+  "Snake · Score {toText st.score} · Length {toText (length st.snake)}"
 
-view = scoreLabel statusLabel pauseLabel board togglePause restartGame handleKey =>
-  ~<gtk>
-    <GtkBox
-      orientation="vertical"
-      spacing="10"
-      marginTop="12"
-      marginStart="12"
-      marginEnd="12"
-      marginBottom="12"
-      onKeyPress={handleKey}>
-      <GtkLabel
-        label={scoreLabel}
-        cssClass="snake-title" />
-      <GtkLabel
-        label={statusLabel}
-        cssClass="snake-status" />
-      <GtkBox orientation="horizontal" spacing="8">
-        <GtkButton
-          label={pauseLabel}
-          onClick={togglePause} />
-        <GtkButton label="Restart" onClick={restartGame} />
-      </GtkBox>
-      <GtkBox orientation="vertical" spacing="0" cssClass="snake-board">
-        <each items={board} as={row} key={row => row.id}>
-          <GtkLabel label={row.text} cssClass="snake-row" />
-        </each>
-      </GtkBox>
+renderStatusLabel : State -> Text
+renderStatusLabel = st => st.mode match
+  | GameOver => "Game over! Press R or Restart."
+  | Paused   => "Paused. Press Space or move to resume."
+  | Running  => "Arrow keys / WASD to steer. Space to pause."
+
+renderPauseLabel : State -> Text
+renderPauseLabel = st => st.mode match
+  | Paused => "Resume"
+  | _      => "Pause"
+
+scoreLabel  = game |> renderScoreLabel
+statusLabel = game |> renderStatusLabel
+pauseLabel  = game |> renderPauseLabel
+board       = game |> boardRows
+restartGame = _ => game <| initialState
+
+togglePause = _ => game <| (st => st.mode match
+  | Running  => st <| { mode: Paused }
+  | Paused   => st <| { mode: Running }
+  | GameOver => st
+)
+
+steer = nextDir => game <| (st => st.mode match
+  | GameOver => st
+  | _        => {
+      safeDir = if nextDir == opposite st.dir then st.dir else nextDir
+      st <| { dir: safeDir, mode: Running }
+    }
+)
+
+handleDirection = maybeDir => maybeDir match
+  | Some nextDir => steer nextDir
+  | _            => Unit
+
+handleKey = event => event match
+  | GtkKeyPressed _ _ key _ =>
+      if key == "space" || key == " " then togglePause Unit
+      else if key == "r" || key == "R" then restartGame Unit
+      else handleDirection (directionFromKey key)
+  | _ => Unit
+
+tickGame = _ => game <| tickState
+
+view = ~<gtk>
+  <GtkBox
+    orientation="vertical"
+    spacing="10"
+    marginTop="12"
+    marginStart="12"
+    marginEnd="12"
+    marginBottom="12"
+    onKeyPress={handleKey}>
+    <GtkLabel
+      label={scoreLabel}
+      cssClass="snake-title" />
+    <GtkLabel
+      label={statusLabel}
+      cssClass="snake-status" />
+    <GtkBox orientation="horizontal" spacing="8">
+      <GtkButton
+        label={pauseLabel}
+        onClick={togglePause} />
+      <GtkButton label="Restart" onClick={restartGame} />
     </GtkBox>
-  </gtk>
-
-// ── CSS ────────────────────────────────────────────────────────────
+    <GtkBox orientation="vertical" spacing="0" cssClass="snake-board">
+      <each items={board} as={row} key={row => row.id}>
+        <GtkLabel label={row.text} cssClass="snake-row" />
+      </each>
+    </GtkBox>
+  </GtkBox>
+</gtk>
 
 css : Text
 css = ~`
@@ -183,131 +210,27 @@ css = ~`
 .snake-board  { margin-top: 6px; }
 .snake-row    { font-family: monospace; font-size: 14px; letter-spacing: 2px; }`
 
-// ── Main ───────────────────────────────────────────────────────────
+initWindow = node => do Effect {
+  init Unit
+  appId <- appNew "demos.snake"
+  win   <- windowNew appId "Snake" 560 440
+  appSetCss appId css
+  root <- buildFromNode node
+  windowSetChild win root
+  windowPresent win
+  pure appId
+}
 
 main : Effect GtkError Unit
 main = concurrent.scope (_ => do Effect {
-    { pause, resume, lose, restart, can } = SnakeMode
-
-    mode       = signal Running
-    scoreLabel = combineAll { score: score, snake: snake } (vals =>
-      "Snake · Score {toText vals.score} · Length {toText (vals.snake |> length)}"
-    )
-    statusLabel = derive mode (phase => {
-        name = constructorName phase
-        if name == "GameOver" then "Game over! Press R or Restart."
-        else if name == "Paused" then "Paused. Press Space or move to resume."
-        else "Arrow keys / WASD to steer. Space to pause."
-    })
-    pauseLabel = derive mode (phase =>
-      if constructorName phase == "Paused" then "Resume" else "Pause"
-    )
-    board = combineAll { snake: snake, food: food } (vals => boardRows vals.snake vals.food)
-
-    currentState = _ => {
-      snake: get snake
-      food: get food
-      dir: get dir
-      score: get score
-      seed: get seed
-    }
-    applyState = st => batch (_ => {
-        _ = set snake st.snake
-        _ = set food st.food
-        _ = set dir st.dir
-        _ = set score st.score
-        set seed st.seed
-    })
-    resetState = _ => applyState initialState
-
-    pauseGame = _ => do Effect {
-      if can.pause Unit then do Effect {
-        _ <- pause {}
-        _ = set mode Paused
-        pure Unit
-      }
-      else pure Unit
-    }
-
-    resumeGame = _ => do Effect {
-      if can.resume Unit then do Effect {
-        _ <- resume {}
-        _ = set mode Running
-        pure Unit
-      }
-      else pure Unit
-    }
-
-    loseGame = _ => do Effect {
-      if can.lose Unit then do Effect {
-        _ <- lose {}
-        _ = set mode GameOver
-        pure Unit
-      }
-      else pure Unit
-    }
-
-    togglePause = _ => do Effect {
-      if can.pause Unit then pauseGame Unit
-      else if can.resume Unit then resumeGame Unit
-      else pure Unit
-    }
-
-    restartGame = _ => do Effect {
-      _ <- restart {}
-      _ = resetState Unit
-      _ = set mode Running
-      pure Unit
-    }
-
-    steer = nextDir => do Effect {
-      if can.pause Unit || can.resume Unit then do Effect {
-        currentDir = get dir
-        _          = set dir (if nextDir == opposite currentDir then currentDir else nextDir)
-        if can.resume Unit then resumeGame Unit else pure Unit
-      }
-      else pure Unit
-    }
-
-    handleKey = event => event match
-      | GtkKeyPressed _ _ key _ => do Effect {
-          if key == "space" || key == " " then togglePause Unit
-          else if key == "r" || key == "R" then restartGame Unit
-          else directionFromKey key match
-            | Some nextDir => steer nextDir
-            | None         => pure Unit
+    concurrent.spawn (do Effect {
+        loop _ = Unit => {
+          concurrent.sleep tickMs
+          _ = tickGame Unit
+          recurse Unit
         }
-      | _ => pure Unit
+    })
 
-        tickGame = _ => do Effect {
-          if can.pause Unit then
-            step (currentState Unit) match
-              | Advanced next => do Effect {
-                  _ = applyState next
-                  pure Unit
-                }
-              | Crashed final => do Effect {
-                  _ = applyState final
-                  loseGame Unit
-                }
-              | _ => pure Unit
-          else pure Unit
-        }
-
-        concurrent.spawn (do Effect {
-          loop _ = Unit => {
-            concurrent.sleep tickMs
-            tickGame Unit
-            recurse Unit
-          }
-        })
-
-        init Unit
-        appId <- appNew "demos.snake"
-        win   <- windowNew appId "Snake" 560 440
-        appSetCss appId css
-        root <- buildFromNode (view scoreLabel statusLabel pauseLabel board togglePause restartGame handleKey)
-        windowSetChild win root
-        windowPresent win
-        appRun appId
+    appId <- initWindow view
+    appRun appId
 })

@@ -38,7 +38,7 @@ apply: always
 | Char                                      | `'a'`                                                                                                                                                                                  |
 | ISO date-time / timestamp carrier         | `2024-05-21T12:00:00Z`                                                                                                                                                                 |
 | Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                                |
-| Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on opaque or over patch recurse resource snapshot then unless use when with yield loop` |
+| Keywords                                  | `as class do domain effect else export generate given hiding if in instance match mock module opaque or over patch recurse resource snapshot then unless use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -505,7 +505,7 @@ result = user <| p
 
 ## 9 Blocks
 
-AIVI has five block forms, each introduced by a keyword and delimited with `{ ... }`: `generate`, `do M`, `resource`, `machine`, and plain `{ ... }` (pure computation). The first four are described below; `resource` is covered in §11.
+AIVI has four block forms, each introduced by a keyword and delimited with `{ ... }`: `generate`, `do M`, `resource`, and plain `{ ... }` (pure computation). The first three are described below; `resource` is covered in §11.
 
 ### `generate { ... }` - Pure sequences
 
@@ -615,20 +615,6 @@ dijkstra = source graph => do Effect {
 - Omitting `recurse` in a branch terminates the loop
 - The loop body `{ ... }` is promoted to the parent effect-block kind, so `<-`, `when`/`unless`, and `recurse` work inside
 
-**Event wiring (`on`):**
-
-Inside `do Effect { ... }`, `on Event => handler` wires event handlers for state machine transitions or UI events:
-
-```aivi
-main = do Effect {
-  on Click => do Effect {
-    count <- getState
-    setState (count + 1)
-  }
-  on KeyPress => handleKey
-}
-```
-
 ### `do M { ... }` - General monadic blocks
 
 `do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. `Option`, `Result`, and `Query` are also supported:
@@ -673,43 +659,10 @@ The same bind (`<-`) and pure-bind (`=`) syntax applies. Statement availability 
 | `or` fallback               | ✓           | —                | —                 |
 | `when`/`unless cond <- eff` | ✓           | —                | —                 |
 | `given cond or expr`        | ✓           | —                | —                 |
-| `on Event => handler`       | ✓           | —                | —                 |
 | `loop`/`recurse`            | ✓           | —                | ✓                 |
 | resource `<-`               | ✓           | —                | —                 |
 
-Effect-specific statements (`or`, `when`, `unless`, `given`, `on`, resource `<-`, `loop`/`recurse`) are **only** available in `do Effect` blocks.
-
-### `machine { ... }` - State machines
-
-`machine` declares a state machine where transitions are first-class and states are inferred.
-
-```aivi
-machine Door = {
-           -> Closed : init   {}
-  Closed   -> Opened : open   {}
-  Opened   -> Closed : close  {}
-  Opened   -> Locked : lock   {}
-  Locked   -> Closed : unlock {}
-}
-```
-
-`-> State : init {}` marks the starting state. Machine values begin in that target state; the init edge is not a normal runtime step you call later. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
-
-Runtime machine values are available by machine name and can be destructured as records:
-
-```aivi
-do Effect {
-  { lease, run, done, currentState, can } = AccountSyncMachine
-  _ <- assertEq (constructorName (currentState Unit)) "Idle"
-  _ <- lease {}
-  _ <- run { batchId: 42 }
-  _ <- done {}
-}
-```
-
-`can.<transition> Unit` reports if the transition is valid from the current state.
-Invalid transition calls fail with `InvalidTransition { machine, from, event, expectedFrom }`.
-`on transition => handler` handlers run after a successful state transition applies.
+Effect-specific statements (`or`, `when`, `unless`, `given`, resource `<-`, `loop`/`recurse`) are **only** available in `do Effect` blocks.
 
 ---
 
@@ -896,9 +849,7 @@ use aivi.chronos.duration (domain Duration)  // import domain
 export add, subtract, pi                 // selective
 export domain Color                      // export domain
 export add = a b => a + b                // inline exported binding
-export machine Flow = {                  // inline exported declaration
-  -> Idle : boot {}
-}
+export Flow = { status: 0 }              // inline exported declaration
 ```
 
 ### Prelude

@@ -70,6 +70,17 @@ struct DiagnosticTarget {
 }
 
 impl Backend {
+    // Incremental didChange ranges are defined against the previous document version, so
+    // same-file open/change/close handlers must observe a consistent per-document order.
+    async fn document_change_lock(&self, uri: &Url) -> Arc<Mutex<()>> {
+        let mut state = self.state.lock().await;
+        state
+            .document_change_locks
+            .entry(uri.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
+
     fn changed_module_names(
         previous: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
         current: &HashMap<String, aivi::ModuleExportSurfaceSummary>,
@@ -727,6 +738,8 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: tower_lsp::lsp_types::DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
+        let change_lock = self.document_change_lock(&uri).await;
+        let _change_guard = change_lock.lock().await;
         let text = params.text_document.text;
         let version = params.text_document.version;
         let uri_display = uri.to_string();
@@ -786,6 +799,8 @@ impl LanguageServer for Backend {
 
     async fn did_change(&self, params: tower_lsp::lsp_types::DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
+        let change_lock = self.document_change_lock(&uri).await;
+        let _change_guard = change_lock.lock().await;
         let version = params.text_document.version;
 
         // Apply incremental edits to the current document text.
@@ -889,6 +904,8 @@ impl LanguageServer for Backend {
 
     async fn did_close(&self, params: tower_lsp::lsp_types::DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
+        let change_lock = self.document_change_lock(&uri).await;
+        let _change_guard = change_lock.lock().await;
         let snapshot = self.begin_diagnostics_snapshot().await;
         let previous_summaries = self.document_module_export_summaries(&uri).await;
         self.remove_document(&uri).await;

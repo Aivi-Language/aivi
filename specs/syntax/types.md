@@ -42,10 +42,3 @@ After that, read Pattern Matching, Patching Records, and Domains as needed for t
 
 That order mirrors how most programs are written: start with simple values, group them into records, model alternatives with ADTs, hide representations where invariants matter, and then learn the more advanced reuse and abstraction tools.
 
-## Related workflows: state machines
-
-State machines introduce generated state constructors and transition APIs, but they are documented in the workflow section rather than here because they model effectful protocols, not ordinary data declarations.
-
-- [State Machines](state_machines.md) — when to use machines and how they fit into application code.
-- [Machine Syntax](machines.md) — declaration syntax and generated helpers.
-- [Machine Runtime](machines_runtime.md) — runtime checks, guards, and handler behaviour.

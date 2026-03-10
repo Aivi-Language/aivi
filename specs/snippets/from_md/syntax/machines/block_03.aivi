@@ -1,4 +1,0 @@
-on run => do Effect {
-  _ <- log.info "run transition fired"
-  pure Unit
-}

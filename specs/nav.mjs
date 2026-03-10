@@ -43,16 +43,7 @@ export const sidebar = [
           { text: 'Effects', link: '/syntax/effects' },
           { text: 'do Notation', link: '/syntax/do_notation' },
           { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Generators', link: '/syntax/generators' },
-          {
-            text: 'State Machines',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/syntax/state_machines' },
-              { text: 'Machine Syntax', link: '/syntax/machines' },
-              { text: 'Machine Runtime', link: '/syntax/machines_runtime' }
-            ]
-          }
+          { text: 'Generators', link: '/syntax/generators' }
         ]
       },
       {
