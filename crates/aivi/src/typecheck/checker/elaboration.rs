@@ -161,7 +161,8 @@ impl TypeChecker {
             Expr::Mock { body, .. } => self.infer_expr(body, env),
         };
         if let Ok(ref ty) = result {
-            self.span_types.push((expr_span(expr), ty.clone()));
+            let resolved = self.apply(ty.clone());
+            self.span_types.push((expr_span(expr), resolved));
         }
         result
     }
@@ -227,8 +228,9 @@ impl TypeChecker {
                         }
                     }
                 }
+                let resolved = self.apply(param_ty_for_span);
                 self.span_types
-                    .push((pattern_span(pattern), param_ty_for_span));
+                    .push((pattern_span(pattern), resolved));
             }
 
             let expected_body = remaining_sig_ty;
@@ -416,8 +418,9 @@ impl TypeChecker {
                             }
                         }
                     }
+                    let resolved = self.apply(param_ty_for_span);
                     self.span_types
-                        .push((pattern_span(pattern), param_ty_for_span));
+                        .push((pattern_span(pattern), resolved));
                     param_tys.push(param_ty);
                 }
 

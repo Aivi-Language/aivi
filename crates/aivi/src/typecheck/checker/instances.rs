@@ -122,7 +122,10 @@ impl TypeChecker {
                             });
                         };
                         let pat_ty = self.infer_pattern(param, &mut local_env)?;
-                        self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                        self.unify_with_span(pat_ty.clone(), *expected_param, pattern_span(param))?;
+                        let resolved = self.apply(pat_ty);
+                        self.span_types
+                            .push((pattern_span(param), resolved));
                         remaining = *expected_rest;
                     }
                     let body_ty = self.infer_expr(&expr, &mut local_env)?;
@@ -147,7 +150,10 @@ impl TypeChecker {
                             });
                         };
                         let pat_ty = self.infer_pattern(param, &mut local_env)?;
-                        self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                        self.unify_with_span(pat_ty.clone(), *expected_param, pattern_span(param))?;
+                        let resolved = self.apply(pat_ty);
+                        self.span_types
+                            .push((pattern_span(param), resolved));
                         remaining = *expected_rest;
                     }
                     let body_ty = self.infer_expr(body, &mut local_env)?;
@@ -359,7 +365,10 @@ impl TypeChecker {
                                     });
                                 };
                                 let pat_ty = self.infer_pattern(param, &mut local_env)?;
-                                self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                                self.unify_with_span(pat_ty.clone(), *expected_param, pattern_span(param))?;
+                                let resolved = self.apply(pat_ty);
+                                self.span_types
+                                    .push((pattern_span(param), resolved));
                                 remaining = *expected_rest;
                             }
                             // Elaborate against the remaining expected return type so the typechecker
@@ -389,7 +398,10 @@ impl TypeChecker {
                             });
                         };
                         let pat_ty = self.infer_pattern(param, &mut local_env)?;
-                        self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                        self.unify_with_span(pat_ty.clone(), *expected_param, pattern_span(param))?;
+                        let resolved = self.apply(pat_ty);
+                        self.span_types
+                            .push((pattern_span(param), resolved));
                         remaining = *expected_rest;
                     }
                     // Elaborate against the remaining expected return type so the typechecker can
