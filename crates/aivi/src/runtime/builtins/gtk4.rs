@@ -641,6 +641,12 @@ fn auto_to_msg_builtin() -> Value {
                 None,
                 None,
             ),
+            Value::Constructor { name, args } if name == "GtkWindowClosed" && args.len() == 2 => (
+                "close-request".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                None,
+            ),
             Value::Constructor { name, args } if name == "GtkTick" && args.is_empty() => {
                 ("tick".to_string(), String::new(), None, None)
             }
