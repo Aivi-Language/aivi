@@ -329,8 +329,47 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
             effectful: true,
         },
         McpTool {
+            name: "aivi.gtk.focus".to_string(),
+            description: "Move keyboard focus onto a specific widget in an attached GTK session.".to_string(),
+            module: "gtk".to_string(),
+            binding: "focus".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.moveFocus".to_string(),
+            description: "Move focus within the current GTK focus chain, including Tab/Shift-Tab style traversal.".to_string(),
+            module: "gtk".to_string(),
+            binding: "moveFocus".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "direction"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string", "description": "Optional widget or window anchor used to choose the focus container." },
+                    "id": { "type": "integer", "description": "Optional widget or window anchor used to choose the focus container." },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["next", "previous", "up", "down", "left", "right", "tab", "shift-tab"],
+                        "description": "Focus navigation direction. `next`/`tab` moves forward; `previous`/`shift-tab` moves backward."
+                    }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
             name: "aivi.gtk.select".to_string(),
-            description: "Select a value on a widget in an attached GTK session (for example a stack page or toggle state).".to_string(),
+            description: "Select or set a value on a widget in an attached GTK session (for example a stack page, toggle state, dropdown item, or range value).".to_string(),
             module: "gtk".to_string(),
             binding: "select".to_string(),
             input_schema: serde_json::json!({
@@ -347,8 +386,33 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
             effectful: true,
         },
         McpTool {
+            name: "aivi.gtk.scroll".to_string(),
+            description: "Scroll a GTK scrolled window in an attached session.".to_string(),
+            module: "gtk".to_string(),
+            binding: "scroll".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "direction"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["up", "down", "left", "right"]
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Optional scroll delta in GTK adjustment units. Defaults to 40."
+                    }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
             name: "aivi.gtk.keyPress".to_string(),
-            description: "Inject a key press into an attached GTK session, defaulting to the sole window when no explicit target is provided.".to_string(),
+            description: "Inject a key press into an attached GTK session, defaulting to the current focused widget or the sole window when possible.".to_string(),
             module: "gtk".to_string(),
             binding: "keyPress".to_string(),
             input_schema: serde_json::json!({

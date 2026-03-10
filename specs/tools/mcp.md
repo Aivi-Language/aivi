@@ -87,8 +87,8 @@ These tools inspect the live reconciled widget tree kept by the GTK runtime. Ins
 - parent/root relationships
 - rendered props captured from the live node
 - current dimensions (`width`, `height`)
-- runtime state when available, such as text, active/toggled state, and the visible child name for stacks
-- supported interaction capabilities (`click`, `type`, `select`, `keyPress`)
+- runtime state when available, such as focusability/focus, text cursor and selection state, active/toggled state, dropdown selections/options, range values, scroll positions, and the visible child name for stacks
+- supported interaction capabilities (`click`, `type`, `focus`, `moveFocus`, `select`, `scroll`, `keyPress`)
 
 ### `listWidgets`
 
@@ -115,7 +115,10 @@ The GTK driver layer currently exposes:
 
 - `aivi_gtk_click`
 - `aivi_gtk_type`
+- `aivi_gtk_focus`
+- `aivi_gtk_moveFocus`
 - `aivi_gtk_select`
+- `aivi_gtk_scroll`
 - `aivi_gtk_keyPress`
 
 These operate on widgets previously discovered via `listWidgets`, `inspectWidget`, or `dumpTree`. All of them require a `sessionId`; widget selection then happens by `name` or numeric `id`.
@@ -138,14 +141,41 @@ Dispatches clickable bindings such as `clicked` or `activate` for the target wid
 
 Sets text on a text-input widget, emits compatible text-change bindings such as `changed` or `notify::text`, and returns the refreshed widget snapshot.
 
+### `focus`
+
+Moves keyboard focus onto a specific widget and returns the refreshed widget snapshot plus the session's current focus summary.
+
+Use this before keyboard-driven interaction when you need a deterministic target rather than relying on whichever widget already happens to be focused.
+
+### `moveFocus`
+
+Moves focus inside the current GTK focus chain.
+
+- `direction: "next"` or `"tab"` behaves like pressing <kbd>Tab</kbd>
+- `direction: "previous"` or `"shift-tab"` behaves like pressing <kbd>Shift</kbd>+<kbd>Tab</kbd>
+- directional values such as `"up"` and `"left"` are also supported
+
+The tool may omit `name` and `id`; in that case the runtime uses the currently focused window when possible, otherwise it falls back to the sole window/root if the session is unambiguous.
+
 ### `select`
 
 Applies a selectable value to widgets that expose selection-like state, currently:
 
 - stack widgets via `visible-child-name`
 - toggle widgets such as `GtkCheckButton` and `AdwSwitchRow` via `active`
+- dropdown/choice widgets such as `GtkDropDown` and `GtkComboBoxText` via either the numeric index or the visible option label
+- range widgets such as `GtkScale`, `GtkRange`, and `GtkSpinButton` via a numeric value
 
 The tool returns the refreshed widget snapshot after the selection is applied.
+
+### `scroll`
+
+Adjusts a `GtkScrolledWindow` along one axis.
+
+- `direction` is one of `up`, `down`, `left`, or `right`
+- `amount` is optional and defaults to a small forward step
+
+The returned widget snapshot includes the updated adjustment values so clients can tell whether more scrolling is possible.
 
 ### `keyPress`
 
@@ -153,7 +183,7 @@ Injects a `key-pressed` signal into the target widget or window and returns a re
 
 - `key` is required and maps to the `key` field seen by `GtkKeyPressed`
 - `detail` is optional and defaults to `"mcp"`
-- omitting `name` and `id` is only valid when the session has exactly one window
+- omitting `name` and `id` first targets the currently focused widget when one exists, otherwise it is only valid when the session has exactly one window
 
 This is intended for keyboard-driven GTK apps, such as demos that listen for `GtkKeyPressed` on their window.
 
@@ -201,6 +231,8 @@ There are no silent no-op fallbacks for unsupported widget actions.
 
 6. Call `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_select`, or `aivi_gtk_keyPress`, then re-read the widget or tree snapshot to observe the updated state.
 
+7. For keyboard navigation, call `aivi_gtk_focus` once on a known focusable widget, then use `aivi_gtk_moveFocus` with `direction: "tab"` / `"shift-tab"` or issue `aivi_gtk_keyPress` calls that should go to the focused widget.
+
 If the app is already running, use `aivi_gtk_discover` to find candidate sockets, then `aivi_gtk_attach` once you have the matching `socketPath` and `token`.
 
 ## Quick verification
@@ -211,3 +243,7 @@ A minimal manual smoke test should confirm all of the following:
 - `tools/list` advertises underscore-safe names such as `aivi_parse` and, with `--ui`, `aivi_gtk_launch`
 - `aivi_gtk_launch` on `demos/snake.aivi` returns a `sessionId`
 - `aivi_gtk_hello` and `aivi_gtk_listWidgets` succeed when called with that `sessionId`
+- `aivi_gtk_focus` updates the reported focus summary for a focusable widget
+- `aivi_gtk_moveFocus` can advance focus without guessing widget ids
+- `aivi_gtk_select` can operate dropdown/range widgets when present
+- `aivi_gtk_scroll` updates a scrolled window's adjustment state
