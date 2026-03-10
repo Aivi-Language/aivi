@@ -79,12 +79,12 @@ signal_patch_operator_applies_record_patch = do Effect {
   assertEq (get state) { count: 5, enabled: True }
 }
 
-@test "combineAll derives from a record of signals"
+@test "combineAll derives from a tuple of signals"
 combineAll_updates_from_inputs = do Effect {
   firstName = signal "Ada"
   lastName  = signal "Lovelace"
-  fullName  = combineAll { first: firstName, last: lastName } (vals =>
-    "{vals.first} {vals.last}"
+  fullName  = combineAll (firstName, lastName) ((first, last) =>
+    "{first} {last}"
   )
 
   assertEq (get fullName) "Ada Lovelace"
@@ -124,7 +124,7 @@ dispose_stops_notifications = do Effect {
 batch_groups_writes = do Effect {
   first  = signal 1
   second = signal 2
-  sum    = combineAll { a: first, b: second } (vals => vals.a + vals.b)
+  sum    = combineAll (first, second) ((a, b) => a + b)
 
   assertEq (batch (_ => (set first 3, set second 4))) (Unit, Unit)
   assertEq (get sum) 7
@@ -186,8 +186,8 @@ record_patch_propagates_through_derived_graph = do Effect {
   state        = signal { count: 1, enabled: False }
   count        = state |> .count
   enabled      = state |> .enabled
-  visibleCount = combineAll { count: count, enabled: enabled } (vals => vals.enabled match
-    | True  => vals.count
+  visibleCount = combineAll (count, enabled) ((count, enabled) => enabled match
+    | True  => count
     | False => 0
   )
 
@@ -205,7 +205,7 @@ batch_propagates_latest_values_through_derived_graph = do Effect {
   count = signal 1
   next  = derive count (_ + 1)
   bonus = signal 10
-  total = combineAll { next: next, bonus: bonus } (vals => vals.next + vals.bonus)
+  total = combineAll (next, bonus) ((next, bonus) => next + bonus)
 
   assertEq (peek total) 12
 

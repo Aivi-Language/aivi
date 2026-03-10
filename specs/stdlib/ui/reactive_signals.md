@@ -30,7 +30,7 @@ Derived UI state is no longer a separate architecture. If a value should stay re
 | `update s fn` / `s <\| fn` | Transform the current value with an updater function. |
 | `set s value` / `s <\| value` | Replace the current value. Record literals on the right of `s <\| ...` stay patch updates, not whole-record replacement. |
 | `derive s fn` / `s \|> fn` | Derive a new signal from one source signal. `s \|> fn` unwraps the current signal value and re-applies the normal pipe on each update. |
-| `combineAll { a: s1, b: s2 } fn` | Derive one signal from a record of source signals. |
+| `combineAll (s1, s2) ((a, b) => ...)` | Derive one signal from a tuple of source signals. |
 | `watch s fn` / `on s fn` | Observe changes and run a callback or effect. Returns a disposable. |
 | `batch fn` | Group several writes into one propagation batch. |
 | `peek s` | Read without recording a dependency. |
@@ -54,22 +54,22 @@ resetCounter = _ => counter <| 0
 
 ## Multi-signal composition
 
-AIVI needs multi-signal combinators because real UI state rarely depends on just one source. `combineAll` takes a record of signals and a function that receives a record of their current values:
+AIVI needs multi-signal combinators because real UI state rarely depends on just one source. `combineAll` takes a tuple of signals and a function that receives a tuple of their current values:
 
 ```aivi
 firstName = signal “Ada”
 lastName = signal “Lovelace”
 saveBusy = saveProfile.running
 
-fullName = combineAll { first: firstName, last: lastName } (vals =>
-  “{vals.first} {vals.last}”
+fullName = combineAll (firstName, lastName) ((first, last) =>
+  “{first} {last}”
 )
-canSave = combineAll { first: firstName, last: lastName, busy: saveBusy } (vals =>
-  vals.first != “” and vals.last != “” and not vals.busy
+canSave = combineAll (firstName, lastName, saveBusy) ((first, last, busy) =>
+  first != “” and last != “” and not busy
 )
 ```
 
-Use `combineAll` when one derived value depends on multiple live sources. The record-based API scales to any number of inputs without needing `combine2`/`combine3`/etc.
+Use `combineAll` when one derived value depends on multiple live sources. The tuple-based API scales to any number of inputs without needing `combine2`/`combine3`/etc.
 
 ## Record-valued signals and patch updates
 

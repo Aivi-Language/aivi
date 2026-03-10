@@ -205,9 +205,8 @@ pub(crate) enum ReactiveCellKind {
         dependencies: Vec<usize>,
         compute: Value,
     },
-    DerivedRecord {
+    DerivedTuple {
         dependencies: Vec<usize>,
-        field_names: Vec<String>,
         compute: Value,
     },
 }

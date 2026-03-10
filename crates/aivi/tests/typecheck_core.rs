@@ -249,7 +249,7 @@ countText : Signal Text
 countText = derive state (_.label)
 
 total : Signal Int
-total = combineAll { s: state, o: other } (vals => vals.s.count + vals.o)
+total = combineAll (state, other) ((s, o) => s.count + o)
 
 save : EventHandle Text Int
 save = do Event {

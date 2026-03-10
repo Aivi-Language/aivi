@@ -51,14 +51,13 @@ AIVI does not split “computed state” into a separate subsystem. If a value i
 That means:
 
 - `derive` is the normal one-input computed form,
-- `combineAll` is the record-based multi-input computed form,
-- if a convenience `computed` helper exists, it is only sugar for producing another `Signal`.
+- `combineAll` is the tuple-based multi-input computed form,
 
 Example:
 
 ```aivi
 visibleCount = derive projects length
-saveEnabled = combineAll { dirty: dirty, running: saveEvent.running } (vals => vals.dirty and not vals.running)
+saveEnabled = combineAll (dirty, saveEvent.running) ((dirty, running) => dirty and not running)
 ```
 
 ## Batching
@@ -137,10 +136,10 @@ refreshData = do Event {
   fetchRows
 }
 
-rows = combineAll { cached: cachedRows, fresh: refreshData.result } (vals =>
-  vals.fresh match
+rows = combineAll (cachedRows, refreshData.result) ((cached, fresh) =>
+  fresh match
     | Some rows => rows
-    | None      => vals.cached
+    | None      => cached
 )
 ```
 

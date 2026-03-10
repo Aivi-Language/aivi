@@ -129,8 +129,8 @@ renderStatusLabel = mode => mode match
   | Running  => "Arrow keys to steer. Space to pause."
 
 statusLabel = derive modeState renderStatusLabel
-board       = combineAll { snakeState, foodState } (vals => boardRows vals.snakeState vals.foodState)
-scoreLabel  = combineAll { scoreState, snakeState } (vals => renderScoreLabel vals.scoreState vals.snakeState)
+board       = combineAll (snakeState, foodState) ((snake, food) => boardRows snake food)
+scoreLabel  = combineAll (scoreState, snakeState) ((score, snake) => renderScoreLabel score snake)
 
 togglePause = _ => modeState <| (mode => mode match
   | Running  => Paused

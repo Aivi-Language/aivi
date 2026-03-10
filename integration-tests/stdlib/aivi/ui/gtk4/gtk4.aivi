@@ -123,8 +123,8 @@ signal_first_sigil_shapes = do Effect {
     { id: "two", name: "Second" }
   ]
   combined =
-    combineAll { t: title, v: visible } (vals =>
-      if vals.v then "{vals.t}!" else vals.t
+    combineAll (title, visible) ((title, visible) =>
+      if visible then "{title}!" else title
     )
   _ = combined
   _ = signalDrivenView title visible rows
