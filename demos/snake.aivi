@@ -46,15 +46,15 @@ opposite =
   | Left  => Right
   | Right => Left
 
-contains : Pixel -> List Pixel -> Bool
-contains = pos xs => any (_ == pos) xs
+containsPixel : Pixel -> List Pixel -> Bool
+containsPixel = pos xs => any (_ == pos) xs
 
 placeFood : Int -> List Pixel -> (Pixel, Int)
 placeFood = seed snake => {
   s   = (seed * 37 + 13) % (gridW * gridH)
   idx = if s < 0 then 0 - s else s
   pos = (idx % gridW, idx / gridW)
-  if contains pos snake then placeFood (s + 1) snake else (pos, s)
+  if containsPixel pos snake then placeFood (s + 1) snake else (pos, s)
 }
 
 snakeParts : List Pixel -> (Pixel, List Pixel)
@@ -127,14 +127,11 @@ renderPauseLabel = mode => mode match
   | Paused => "Resume"
   | _      => "Pause"
 
-scoreLabel = combineAll { score: scoreState, snake: snakeState } (vals =>
-  renderScoreLabel vals.score vals.snake
-)
 statusLabel = derive modeState renderStatusLabel
 pauseLabel  = derive modeState renderPauseLabel
-board       = combineAll { snake: snakeState, food: foodState } (vals =>
-  boardRows vals.snake vals.food
-)
+board       = combineAll { snakeState, foodState } (vals => boardRows vals.snakeState vals.foodState)
+scoreLabel  = combineAll { scoreState, snakeState } (vals => renderScoreLabel vals.scoreState vals.snakeState)
+
 togglePause = _ => modeState <| (mode => mode match
   | Running  => Paused
   | Paused   => Running
@@ -148,18 +145,17 @@ steer = nextDir => {
   if currentMode == GameOver then Unit
   else {
     safeDir = if nextDir == opposite currentDir then currentDir else nextDir
-
-    batch _ => {
-      if currentDir != safeDir then dirState <| safeDir else Unit
-      if currentMode != Running then modeState <| Running else Unit
-    }
+    if currentDir != safeDir then dirState <| safeDir else Unit
+    if currentMode != Running then modeState <| Running else Unit
   }
+
 }
 
 handleDirection = maybeDir => maybeDir match
   | Some nextDir => steer nextDir
   | _            => Unit
 
+handleKey : GtkSignalEvent -> Unit
 handleKey = event => event match
   | GtkKeyPressed _ _ key _ =>
       if key == "space" || key == " " then togglePause Unit
@@ -238,7 +234,7 @@ main = concurrent.scope (_ => do Effect {
     concurrent.spawn (do Effect {
         loop _ = Unit => {
           concurrent.sleep tickMs
-          tickGame Unit
+          _ = tickGame Unit
           recurse Unit
         }
     })
