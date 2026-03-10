@@ -74,6 +74,7 @@ crates/aivi_lsp  →  vscode/ (bundled binary)
 - **If Rust code and specs disagree**: the code is wrong. Fix the code to match the spec.
 - **If it is genuinely unclear which is correct** (e.g., the spec is ambiguous, the divergence is intentional, or the feature predates the spec): **stop and ask for clarification before proceeding.** Do not silently pick a side.
 - If the spec has a gap (describes a feature incompletely), document the gap with a `<!-- TODO: spec gap -->` comment and ask before filling it with assumptions.
+- if something should work according to specs, but isn't you MUST fix the underlaying problem, not work around it.
 
 ### 2.2 No Dead Code After Feature Changes
 

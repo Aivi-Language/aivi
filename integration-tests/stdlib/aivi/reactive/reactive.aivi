@@ -130,6 +130,83 @@ batch_groups_writes = do Effect {
   assertEq (get sum) 7
 }
 
+@test "chained signal pipe derives through multiple transforms"
+chained_pipe_derives_through_transforms = do Effect {
+  count     = signal 3
+  result    = count |> (_ * 2) |> (_ + 10)
+
+  assertEq (get result) 16
+  assertEq (set count 5) Unit
+  assertEq (get result) 20
+}
+
+@test "derived signal from another derived signal"
+derived_from_derived = do Effect {
+  base    = signal 2
+  doubled = derive base (_ * 2)
+  quad    = derive doubled (_ * 2)
+
+  assertEq (get quad) 8
+  assertEq (set base 3) Unit
+  assertEq (get doubled) 6
+  assertEq (get quad) 12
+}
+
+@test "peek does not create dependency for derived signals"
+peek_no_dependency = do Effect {
+  source   = signal 1
+  unrelated = signal 0
+  calls     = signal 0
+  _sub      = watch source (_ => {
+    _ = peek unrelated
+    update calls (_ + 1)
+  })
+
+  assertEq (set source 2) Unit
+  assertEq (get calls) 1
+
+  assertEq (set unrelated 99) Unit
+  assertEq (get calls) 1
+}
+
+@test "multiple watchers on the same signal"
+multiple_watchers_same_signal = do Effect {
+  source = signal 0
+  seen1  = signal 0
+  seen2  = signal 0
+  _sub1  = watch source (v => set seen1 v)
+  _sub2  = watch source (v => set seen2 v)
+
+  assertEq (set source 7) Unit
+  assertEq (get seen1) 7
+  assertEq (get seen2) 7
+}
+
+@test "batch coalesces multiple watcher notifications into one"
+batch_coalesces_watcher_calls = do Effect {
+  count = signal 0
+  calls = signal 0
+  _sub  = watch count (_ => update calls (_ + 1))
+
+  assertEq (batch (_ => {
+    set count 1
+    set count 2
+    set count 3
+  })) Unit
+  assertEq (get count) 3
+  assertEq (get calls) 1
+}
+
+@test "signal pipe with record field access"
+signal_pipe_record_field = do Effect {
+  state = signal { name: "Ada", score: 10 }
+  name  = state |> .name
+
+  assertEq (get name) "Ada"
+  assertEq (state <| { name: "Grace" }) Unit
+  assertEq (get name) "Grace"
+}
+
 @test "do Event exposes lifecycle signals"
 event_exposes_lifecycle_signals = do Effect {
   saveEvent = do Event {
