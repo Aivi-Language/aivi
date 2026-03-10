@@ -12,24 +12,12 @@ export main
 
 Direction = Up | Down | Left | Right
 Mode      = Running | Paused | GameOver
+Pixel     = (Int, Int)
+gridW     = 30
+gridH     = 20
+tickMs    = 250
 
-Pixel = (Int, Int)
-
-State = {
-  snake: List Pixel
-  food: Pixel
-  dir: Direction
-  score: Int
-  seed: Int
-  mode: Mode
-}
-
-gridW  = 30
-gridH  = 20
-tickMs = 250
-
-initialState : State
-initialState = {
+initial = {
   snake: [(5, 10), (4, 10), (3, 10)]
   food: (20, 10)
   dir: Right
@@ -38,10 +26,13 @@ initialState = {
   mode: Running
 }
 
-game : Signal State
-game = signal initialState
+snakeState = signal initial.snake
+foodState  = signal initial.food
+dirState   = signal initial.dir
+scoreState = signal initial.score
+seedState  = signal initial.seed
+modeState  = signal initial.mode
 
-move : Pixel -> Direction -> Pixel
 move = (x, y) =>
 | Up    => (x, y - 1)
 | Down  => (x, y + 1)
@@ -75,34 +66,29 @@ outOfBounds : Pixel -> Bool
 outOfBounds = (x, y) =>
   x < 0 || x >= gridW || y < 0 || y >= gridH
 
-advanceSnake : State -> Pixel -> State
-advanceSnake = st newHead => {
+advanceSnake : List Pixel -> Pixel -> Int -> Int -> Pixel -> Unit
+advanceSnake = snake food score seed newHead => {
   (nx, ny)         = newHead
-  ate              = newHead == st.food
-  newSnake         = if ate then [newHead, ...st.snake] else [newHead, ...dropLast st.snake]
-  (newFood, newSd) = if ate then placeFood (st.seed + st.score * 7 + nx * 13 + ny) newSnake else (st.food, st.seed)
+  ate              = newHead == food
+  newSnake         = if ate then [newHead, ...snake] else [newHead, ...dropLast snake]
+  (newFood, newSd) = if ate then placeFood (seed + score * 7 + nx * 13 + ny) newSnake else (food, seed)
 
-  st <| {
-    snake: newSnake
-    food: newFood
-    score: if ate then st.score + 1 else st.score
-    seed: newSd
-  }
+  batch (_ => {
+      snakeState <| newSnake
+      _ = if ate then foodState <| newFood else Unit
+      _ = if ate then scoreState <| (_ + 1) else Unit
+      if ate then seedState <| newSd else Unit
+  })
 }
 
-tickRunning : State -> State
-tickRunning = st => {
-  (head, body) = snakeParts st.snake
-  newHead      = move head st.dir
-
-  if outOfBounds newHead || contains newHead body then st <| { mode: GameOver }
-  else advanceSnake st newHead
-}
-
-tickState : State -> State
-tickState = st => st.mode match
-  | Running => tickRunning st
-  | _       => st
+restartGame = _ => batch (_ => {
+    snakeState <| initial.snake
+    foodState <| initial.food
+    dirState <| initial.dir
+    scoreState <| initial.score
+    seedState <| initial.seed
+    modeState <| initial.mode
+})
 
 directionFromKey : Text -> Option Direction
 directionFromKey =
@@ -122,44 +108,53 @@ rowText : Int -> List Pixel -> Pixel -> Text
 rowText = y snake food =>
   [0.. gridW - 1] |> map (x => cellChar x y snake food) |> join ""
 
-boardRows : State -> List { id: Text, text: Text }
-boardRows = st =>
-  [0.. gridH - 1] |> map (y => { id: "row-{toText y}", text: rowText y st.snake st.food })
+boardRows : List Pixel -> Pixel -> List { id: Text, text: Text }
+boardRows = snake food =>
+  [0.. gridH - 1] |> map (y => { id: "row-{toText y}", text: rowText y snake food })
 
-renderScoreLabel : State -> Text
-renderScoreLabel = st =>
-  "Snake · Score {toText st.score} · Length {toText (length st.snake)}"
+renderScoreLabel : Int -> List Pixel -> Text
+renderScoreLabel = score snake =>
+  "Snake · Score {toText score} · Length {toText (length snake)}"
 
-renderStatusLabel : State -> Text
-renderStatusLabel = st => st.mode match
+renderStatusLabel : Mode -> Text
+renderStatusLabel = mode => mode match
   | GameOver => "Game over! Press R or Restart."
   | Paused   => "Paused. Press Space or move to resume."
   | Running  => "Arrow keys / WASD to steer. Space to pause."
 
-renderPauseLabel : State -> Text
-renderPauseLabel = st => st.mode match
+renderPauseLabel : Mode -> Text
+renderPauseLabel = mode => mode match
   | Paused => "Resume"
   | _      => "Pause"
 
-scoreLabel  = game |> renderScoreLabel
-statusLabel = game |> renderStatusLabel
-pauseLabel  = game |> renderPauseLabel
-board       = game |> boardRows
-restartGame = _ => game <| initialState
-
-togglePause = _ => game <| (st => st.mode match
-  | Running  => st <| { mode: Paused }
-  | Paused   => st <| { mode: Running }
-  | GameOver => st
+scoreLabel = combineAll { score: scoreState, snake: snakeState } (vals =>
+  renderScoreLabel vals.score vals.snake
+)
+statusLabel = derive modeState renderStatusLabel
+pauseLabel  = derive modeState renderPauseLabel
+board       = combineAll { snake: snakeState, food: foodState } (vals =>
+  boardRows vals.snake vals.food
+)
+togglePause = _ => modeState <| (mode => mode match
+  | Running  => Paused
+  | Paused   => Running
+  | GameOver => GameOver
 )
 
-steer = nextDir => game <| (st => st.mode match
-  | GameOver => st
-  | _        => {
-      safeDir = if nextDir == opposite st.dir then st.dir else nextDir
-      st <| { dir: safeDir, mode: Running }
+steer = nextDir => {
+  currentMode = peek modeState
+  currentDir  = peek dirState
+
+  if currentMode == GameOver then Unit
+  else {
+    safeDir = if nextDir == opposite currentDir then currentDir else nextDir
+
+    batch _ => {
+      if currentDir != safeDir then dirState <| safeDir else Unit
+      if currentMode != Running then modeState <| Running else Unit
     }
-)
+  }
+}
 
 handleDirection = maybeDir => maybeDir match
   | Some nextDir => steer nextDir
@@ -172,7 +167,24 @@ handleKey = event => event match
       else handleDirection (directionFromKey key)
   | _ => Unit
 
-tickGame = _ => game <| tickState
+tickGame = _ => {
+  currentMode = peek modeState
+
+  if currentMode != Running then Unit
+  else {
+    snake = peek snakeState
+    dir   = peek dirState
+    food  = peek foodState
+    score = peek scoreState
+    seed  = peek seedState
+
+    (head, body) = snakeParts snake
+    newHead      = move head dir
+
+    if outOfBounds newHead || contains newHead body then modeState <| GameOver
+    else advanceSnake snake food score seed newHead
+  }
+}
 
 view = ~<gtk>
   <GtkBox
@@ -226,7 +238,7 @@ main = concurrent.scope (_ => do Effect {
     concurrent.spawn (do Effect {
         loop _ = Unit => {
           concurrent.sleep tickMs
-          _ = tickGame Unit
+          tickGame Unit
           recurse Unit
         }
     })
