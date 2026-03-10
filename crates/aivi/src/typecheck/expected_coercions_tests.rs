@@ -356,6 +356,39 @@ patchState = state <| (current => current <| { count: _ + 1, enabled: True })
 }
 
 #[test]
+fn elaboration_rejects_cyclic_signal_dependencies() {
+    let source = r#"
+module test.signal_cycle
+
+use aivi
+use aivi.reactive
+
+x = derive y (_ + 1)
+y = derive x (_ * 2)
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let diags = without_embedded_errors(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
+    assert!(
+        diags.iter().any(|diag| {
+            diag.diagnostic.code == "E3001"
+                && diag.diagnostic.message.contains("cyclic signal dependency")
+        }),
+        "expected E3001 cyclic signal diagnostic, got: {diags:?}"
+    );
+}
+
+#[test]
 fn resolver_accepts_signal_shorthand_with_local_replacement_values() {
     let source = r#"
 module test.signal_local_replacements

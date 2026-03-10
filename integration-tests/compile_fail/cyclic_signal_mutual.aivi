@@ -1,0 +1,9 @@
+// EXPECT-ERROR: E3001
+@no_prelude
+module integrationTests.compileFail.cyclicSignalMutual
+
+use aivi
+use aivi.reactive
+
+x = derive y (_ + 1)
+y = derive x (_ * 2)

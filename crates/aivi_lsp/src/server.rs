@@ -906,17 +906,19 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let change_lock = self.document_change_lock(&uri).await;
         let _change_guard = change_lock.lock().await;
-        let snapshot = self.begin_diagnostics_snapshot().await;
         let previous_summaries = self.document_module_export_summaries(&uri).await;
+        let dependency_workspace = self.workspace_modules_for_diagnostics(&uri).await;
+        let snapshot = self.begin_diagnostics_snapshot().await;
         self.remove_document(&uri).await;
         self.client
             .publish_diagnostics(uri.clone(), Vec::new(), None)
             .await;
-        let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-        let current_summaries = Self::module_export_summaries_from_workspace(&uri, &workspace);
+        let diagnostics_workspace = self.workspace_modules_for_diagnostics(&uri).await;
+        let current_summaries =
+            Self::module_export_summaries_from_workspace(&uri, &diagnostics_workspace);
         let changed_modules = Self::changed_module_names(&previous_summaries, &current_summaries);
         let dependent_targets = self
-            .open_dependents_for_recheck(&uri, &changed_modules, &workspace)
+            .open_dependents_for_recheck(&uri, &changed_modules, &dependency_workspace)
             .await;
         let (include_specs_snippets, strict_level, strict, checkpoint) =
             self.diagnostics_context().await;
@@ -941,7 +943,7 @@ impl LanguageServer for Backend {
                 dependent_targets.len(),
                 changed_module_names.join(",")
             ),
-            workspace,
+            diagnostics_workspace,
             None,
             dependent_targets,
             include_specs_snippets,

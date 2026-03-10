@@ -176,6 +176,10 @@ pub(crate) struct ReactiveGraphState {
     pub(crate) next_watcher_id: usize,
     pub(crate) batch_depth: usize,
     pub(crate) flushing: bool,
+    /// Set when a background thread finishes a batch with pending notifications
+    /// but cannot run watcher callbacks (GTK not active on that thread).
+    /// The GTK main thread checks this flag and flushes on the next pump.
+    pub(crate) deferred_flush: bool,
     pub(crate) signals: HashMap<usize, ReactiveCellEntry>,
     pub(crate) watchers: HashMap<usize, ReactiveWatcherEntry>,
     pub(crate) watchers_by_signal: HashMap<usize, HashSet<usize>>,
