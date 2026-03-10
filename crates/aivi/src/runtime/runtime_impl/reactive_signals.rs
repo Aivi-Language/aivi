@@ -86,36 +86,28 @@ impl Runtime {
 
     pub(crate) fn reactive_combine_all(
         &mut self,
-        signals_record: Value,
+        signals_tuple: Value,
         combine: Value,
     ) -> Result<Value, RuntimeError> {
-        let signals_record = self.force_value(signals_record)?;
-        let Value::Record(fields) = signals_record else {
+        let signals_tuple = self.force_value(signals_tuple)?;
+        let Value::Tuple(items) = signals_tuple else {
             return Err(RuntimeError::InvalidArgument {
                 context: "reactive.combineAll".to_string(),
-                reason: "expected a record of signals".to_string(),
+                reason: "expected a tuple of signals".to_string(),
             });
         };
-        let mut sorted_fields: Vec<(String, Value)> = fields
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        sorted_fields.sort_by(|a, b| a.0.cmp(&b.0));
-
-        let mut signal_ids = Vec::with_capacity(sorted_fields.len());
-        let mut field_names = Vec::with_capacity(sorted_fields.len());
-        for (name, value) in &sorted_fields {
+        let mut signal_ids = Vec::with_capacity(items.len());
+        for (index, value) in items.iter().enumerate() {
             let id = self.reactive_signal_id_from_value(
                 value.clone(),
-                &format!("reactive.combineAll field '{name}'"),
+                &format!("reactive.combineAll element {index}"),
             )?;
             signal_ids.push(id);
-            field_names.push(name.clone());
         }
 
-        // Create a derived signal that reconstructs the record with resolved values,
+        // Create a derived signal that reconstructs the tuple with resolved values,
         // then applies the combine function.
-        self.reactive_create_derived_signal_with_record(signal_ids, field_names, combine)
+        self.reactive_create_derived_signal_with_tuple(signal_ids, combine)
     }
 
     pub(crate) fn reactive_watch_signal(
@@ -336,10 +328,9 @@ impl Runtime {
         Ok(self.reactive_signal_value(signal_id))
     }
 
-    fn reactive_create_derived_signal_with_record(
+    fn reactive_create_derived_signal_with_tuple(
         &mut self,
         dependencies: Vec<usize>,
-        field_names: Vec<String>,
         compute: Value,
     ) -> Result<Value, RuntimeError> {
         {
@@ -359,9 +350,8 @@ impl Runtime {
             graph.signals.insert(
                 signal_id,
                 ReactiveCellEntry {
-                    kind: ReactiveCellKind::DerivedRecord {
+                    kind: ReactiveCellKind::DerivedTuple {
                         dependencies: dependencies.clone(),
-                        field_names,
                         compute,
                     },
                     value: Value::Unit,
@@ -516,13 +506,11 @@ impl Runtime {
                     dependencies: dependencies.clone(),
                     compute: compute.clone(),
                 },
-                ReactiveCellKind::DerivedRecord {
+                ReactiveCellKind::DerivedTuple {
                     dependencies,
-                    field_names,
                     compute,
-                } => ReactiveCellKind::DerivedRecord {
+                } => ReactiveCellKind::DerivedTuple {
                     dependencies: dependencies.clone(),
-                    field_names: field_names.clone(),
                     compute: compute.clone(),
                 },
             };
@@ -585,27 +573,25 @@ impl Runtime {
                 }
                 Ok(())
             }
-            ReactiveCellKind::DerivedRecord {
+            ReactiveCellKind::DerivedTuple {
                 dependencies,
-                field_names,
                 compute,
             } => {
                 stack.push(signal_id);
-                let mut record_fields = HashMap::new();
-                for (i, dependency) in dependencies.iter().enumerate() {
-                    self.reactive_ensure_signal_fresh(*dependency, stack)?;
+                let mut items = Vec::with_capacity(dependencies.len());
+                for dependency in dependencies {
+                    self.reactive_ensure_signal_fresh(dependency, stack)?;
                     let dep_value = self
                         .reactive_graph
                         .lock()
                         .signals
-                        .get(dependency)
+                        .get(&dependency)
                         .expect("dependency exists")
                         .value
                         .clone();
-                    record_fields.insert(field_names[i].clone(), dep_value);
+                    items.push(dep_value);
                 }
-                let record = Value::Record(Arc::new(record_fields));
-                let value = self.apply(compute, record)?;
+                let value = self.apply(compute, Value::Tuple(items))?;
                 stack.pop();
 
                 let mut changed = false;
@@ -863,23 +849,23 @@ mod tests {
             .reactive_create_signal(Value::Int(2))
             .unwrap_or_else(|err| panic!("second signal: {}", format_runtime_error(err)));
 
-        let combine = runtime_builtin("test.combine_record", 1, |mut args, _| {
-            let record = args.remove(0);
-            let Value::Record(fields) = record else {
-                panic!("expected record");
+        let combine = runtime_builtin("test.combine_tuple", 1, |mut args, _| {
+            let tuple = args.remove(0);
+            let Value::Tuple(items) = tuple else {
+                panic!("expected tuple");
             };
-            let left = expect_int(fields.get("first").unwrap().clone());
-            let right = expect_int(fields.get("second").unwrap().clone());
+            let [left, right] = items.as_slice() else {
+                panic!("expected 2 tuple items");
+            };
+            let left = expect_int(left.clone());
+            let right = expect_int(right.clone());
             Ok(Value::Int(left + right))
         });
 
-        let mut signals_fields = HashMap::new();
-        signals_fields.insert("first".to_string(), first.clone());
-        signals_fields.insert("second".to_string(), second.clone());
-        let signals_record = Value::Record(Arc::new(signals_fields));
+        let signals_tuple = Value::Tuple(vec![first.clone(), second.clone()]);
 
         let sum = runtime
-            .reactive_combine_all(signals_record, combine)
+            .reactive_combine_all(signals_tuple, combine)
             .unwrap_or_else(|err| panic!("sum signal: {}", format_runtime_error(err)));
 
         let notifications = Arc::new(std::sync::atomic::AtomicUsize::new(0));

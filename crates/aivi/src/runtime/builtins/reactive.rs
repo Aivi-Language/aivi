@@ -52,8 +52,8 @@ pub(super) fn build_reactive_record() -> Value {
         "combineAll".to_string(),
         builtin("reactive.combineAll", 2, |mut args, runtime| {
             let combine = args.pop().unwrap();
-            let signals_record = args.pop().unwrap();
-            runtime.reactive_combine_all(signals_record, combine)
+            let signals_tuple = args.pop().unwrap();
+            runtime.reactive_combine_all(signals_tuple, combine)
         }),
     );
     fields.insert(

@@ -1191,8 +1191,8 @@ Signals are first-class reactive values. Create source signals with `signal`, de
 ```aivi
 state = signal { count: 0, query: "" }
 title = state |> _.count |> (_ + 1) |> toText
-canSearch = combineAll { st: state, running: searchEvent.running } (vals =>
-  vals.st.query != "" and not vals.running
+canSearch = combineAll (state, searchEvent.running) ((st, running) =>
+  st.query != "" and not running
 )
 
 update state (patch { count: _ + 1 })
