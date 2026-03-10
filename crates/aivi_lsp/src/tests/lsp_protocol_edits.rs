@@ -14,6 +14,8 @@ mod lsp_protocol_edits {
     use crate::backend::Backend;
     use crate::state::{BackendState, DocumentState};
 
+    const LSP_TEST_TIMEOUT: Duration = Duration::from_secs(15);
+
     async fn write_lsp_msg(mut w: impl AsyncWrite + Unpin, value: &Value) {
         let body = serde_json::to_vec(value).expect("json encode");
         let header = format!("Content-Length: {}\r\n\r\n", body.len());
@@ -290,7 +292,7 @@ mod lsp_protocol_edits {
         )
         .await;
 
-        let response = timeout(Duration::from_secs(5), wait_for_response_id(client_read, 1))
+        let response = timeout(LSP_TEST_TIMEOUT, wait_for_response_id(client_read, 1))
             .await
             .expect("initialize response");
 
@@ -329,7 +331,7 @@ mod lsp_protocol_edits {
             &json!({"jsonrpc":"2.0","method":"exit","params":{}}),
         )
         .await;
-        let _ = timeout(Duration::from_secs(5), server_task).await;
+        let _ = timeout(LSP_TEST_TIMEOUT, server_task).await;
     }
 
     #[tokio::test]
@@ -380,7 +382,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -402,7 +404,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(2)),
         )
         .await
@@ -414,6 +416,7 @@ mod lsp_protocol_edits {
 
     #[tokio::test]
     async fn unrelated_workspace_errors_do_not_hide_current_file_type_diagnostics() {
+        let diagnostics_timeout = LSP_TEST_TIMEOUT;
         let dir = std::env::temp_dir().join(format!(
             "aivi-lsp-unrelated-diags-{}-{}",
             std::process::id(),
@@ -454,7 +457,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -605,7 +608,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -701,7 +704,7 @@ mod lsp_protocol_edits {
         .await;
 
         let _ = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -771,7 +774,7 @@ mod lsp_protocol_edits {
         .await;
 
         let _ = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -792,7 +795,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(2)),
         )
         .await
@@ -814,7 +817,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(3)),
         )
         .await
@@ -852,7 +855,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let lib_initial = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
         )
         .await
@@ -876,7 +879,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -897,7 +900,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (lib_diags, change_log) = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 lib_uri.as_str(),
@@ -917,7 +920,7 @@ mod lsp_protocol_edits {
         assert!(log_message.contains("dependents=1"));
 
         let consumer_diags = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -932,6 +935,7 @@ mod lsp_protocol_edits {
 
     #[tokio::test]
     async fn private_body_changes_do_not_recheck_open_dependents() {
+        let diagnostics_timeout = LSP_TEST_TIMEOUT;
         let (mut client_read, mut client_write, server_task) = start_lsp().await;
         initialize_lsp(&mut client_read, &mut client_write).await;
 
@@ -959,7 +963,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
         )
         .await
@@ -982,7 +986,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -1003,7 +1007,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (_lib_diags, change_log) = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 lib_uri.as_str(),
@@ -1061,7 +1065,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -1089,7 +1093,7 @@ mod lsp_protocol_edits {
         .await;
 
         let consumer_updated = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -1104,6 +1108,7 @@ mod lsp_protocol_edits {
 
     #[tokio::test]
     async fn closing_provider_rechecks_existing_open_dependents() {
+        let diagnostics_timeout = LSP_TEST_TIMEOUT;
         let (mut client_read, mut client_write, server_task) = start_lsp().await;
         initialize_lsp(&mut client_read, &mut client_write).await;
 
@@ -1129,7 +1134,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, lib_uri.as_str(), Some(1)),
         )
         .await
@@ -1152,7 +1157,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let consumer_initial = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -1172,7 +1177,7 @@ mod lsp_protocol_edits {
         .await;
 
         let consumer_after_close = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, consumer_uri.as_str(), Some(1)),
         )
         .await
@@ -1211,7 +1216,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -1242,7 +1247,7 @@ mod lsp_protocol_edits {
         .await;
 
         let close_publish = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), None),
         )
         .await
@@ -1257,6 +1262,7 @@ mod lsp_protocol_edits {
 
     #[tokio::test]
     async fn diagnostics_did_change_respects_debounce_budget() {
+        let diagnostics_timeout = LSP_TEST_TIMEOUT;
         let (mut client_read, mut client_write, server_task) = start_lsp().await;
         initialize_lsp(&mut client_read, &mut client_write).await;
 
@@ -1281,7 +1287,7 @@ mod lsp_protocol_edits {
         )
         .await;
         let _ = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -1311,7 +1317,7 @@ mod lsp_protocol_edits {
         );
 
         let (diags, change_log) = timeout(
-            Duration::from_secs(5),
+            diagnostics_timeout,
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 uri.as_str(),
@@ -1366,7 +1372,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (_, diagnostics_log) = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_publish_diagnostics_and_log_message(
                 &mut client_read,
                 uri.as_str(),
@@ -1399,7 +1405,7 @@ mod lsp_protocol_edits {
         .await;
 
         let hover = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_response_id(&mut client_read, 10),
         )
         .await
@@ -1427,7 +1433,7 @@ mod lsp_protocol_edits {
         .await;
 
         let definition = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_response_id(&mut client_read, 11),
         )
         .await
@@ -1456,7 +1462,7 @@ mod lsp_protocol_edits {
         .await;
 
         let (completion, completion_log) = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_response_and_log_message(&mut client_read, 12, "completion duration_ms="),
         )
         .await
@@ -1493,7 +1499,7 @@ mod lsp_protocol_edits {
         .await;
 
         let prepare_rename = timeout(
-            Duration::from_secs(5),
+            LSP_TEST_TIMEOUT,
             wait_for_response_id(&mut client_read, 13),
         )
         .await

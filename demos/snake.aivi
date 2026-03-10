@@ -149,7 +149,6 @@ steer = nextDir => {
     if currentDir != safeDir then dirState <| safeDir else Unit
     if currentMode != Running then modeState <| Running else Unit
   }
-
 }
 
 handleDirection = maybeDir => maybeDir match
@@ -164,6 +163,7 @@ handleKey = event => event match
       else handleDirection (directionFromKey key)
   | _ => Unit
 
+tickGame : A -> Unit
 tickGame = _ => {
   currentMode = peek modeState
 

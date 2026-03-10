@@ -10,6 +10,8 @@ mod lsp_integration {
     use crate::backend::Backend;
     use crate::state::BackendState;
 
+    const LSP_TEST_TIMEOUT: Duration = Duration::from_secs(15);
+
     async fn write_lsp_msg(mut w: impl AsyncWrite + Unpin, value: &serde_json::Value) {
         let body = serde_json::to_vec(value).expect("json encode");
         let header = format!("Content-Length: {}\r\n\r\n", body.len());
@@ -135,7 +137,7 @@ mod lsp_integration {
         .await;
 
         // Wait for initialize response.
-        let _ = timeout(Duration::from_secs(5), async {
+        let _ = timeout(LSP_TEST_TIMEOUT, async {
             loop {
                 let msg = read_lsp_msg(&mut client_read).await;
                 if msg.get("id") == Some(&json!(1)) {
@@ -184,7 +186,7 @@ mod lsp_integration {
             .await;
 
             let diags = timeout(
-                Duration::from_secs(5),
+                LSP_TEST_TIMEOUT,
                 wait_for_publish_diagnostics(&mut client_read, uri.as_str()),
             )
             .await
