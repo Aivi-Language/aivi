@@ -386,6 +386,38 @@ x = ~<gtk><object class="GtkButton" onClick={ Msg.Save } /></gtk>
 }
 
 #[test]
+fn gtk_sigil_onkeypress_lowers_to_signal_attr() {
+    let src = r#"
+module Example
+
+handleKey = event => event
+x = ~<gtk><object class="GtkBox" onKeyPress={ handleKey } /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEventAttr")
+            && expr_contains_string(&def.expr, "key-pressed")
+            && expr_contains_ident(&def.expr, "handleKey"),
+        "expected onKeyPress sugar to lower into gtkEventAttr with key-pressed handler"
+    );
+}
+
+#[test]
 fn gtk_sigil_signal_on_accepts_runtime_handler_value() {
     let src = r#"
 module Example

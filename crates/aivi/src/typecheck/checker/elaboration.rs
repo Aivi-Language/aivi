@@ -509,6 +509,14 @@ impl TypeChecker {
                 };
                 self.check_or_coerce(out, expected, env)
             }
+            Expr::Binary {
+                op,
+                left,
+                right,
+                span,
+            } if op == "|>" || op == "<|" => {
+                self.elab_binary_expr(op, *left, *right, span, expected, env)
+            }
             Expr::Block { kind, items, span } => {
                 // For generic do-monad blocks (do Result, do Option, etc.), skip
                 // item-by-item elaboration and defer to infer_generic_do_block
@@ -679,6 +687,143 @@ impl TypeChecker {
                 self.check_or_coerce(out, expected, env)
             }
             other => self.check_or_coerce(other, expected, env),
+        }
+    }
+
+    fn elab_binary_expr(
+        &mut self,
+        op: String,
+        left: Expr,
+        right: Expr,
+        span: Span,
+        expected: Option<Type>,
+        env: &mut TypeEnv,
+    ) -> Result<(Expr, Type), TypeError> {
+        let left_ty = self.infer_expr(&left, env)?;
+        if let Some(signal_item_ty) = self.extract_signal_item_type(left_ty) {
+            match op.as_str() {
+                "|>" => return self.elab_signal_pipe(left, right, span, signal_item_ty, expected, env),
+                "<|" => return self.elab_signal_write(left, right, span, signal_item_ty, expected, env),
+                _ => {}
+            }
+        }
+
+        let out = Expr::Binary {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+            span,
+        };
+        self.check_or_coerce(out, expected, env)
+    }
+
+    fn elab_signal_pipe(
+        &mut self,
+        left: Expr,
+        right: Expr,
+        span: Span,
+        signal_item_ty: Type,
+        expected: Option<Type>,
+        env: &mut TypeEnv,
+    ) -> Result<(Expr, Type), TypeError> {
+        let signal_ty = Type::con("Signal").app(vec![signal_item_ty.clone()]);
+        let (left, _left_ty) = self.elab_expr(left, Some(signal_ty), env)?;
+
+        let param = SpannedName {
+            name: "__signalValue".to_string(),
+            span: span.clone(),
+        };
+        let piped_body = Expr::Binary {
+            op: "|>".to_string(),
+            left: Box::new(Expr::Ident(param.clone())),
+            right: Box::new(right),
+            span: span.clone(),
+        };
+        let mut body_env = env.clone();
+        body_env.insert(param.name.clone(), Scheme::mono(signal_item_ty));
+        let (body, _body_ty) = self.elab_expr(piped_body, None, &mut body_env)?;
+        let lambda = Expr::Lambda {
+            params: vec![Pattern::Ident(param)],
+            body: Box::new(body),
+            span: span.clone(),
+        };
+
+        let call = self.reactive_call_expr("derive", vec![left, lambda], &span);
+        self.check_or_coerce(call, expected, env)
+    }
+
+    fn elab_signal_write(
+        &mut self,
+        left: Expr,
+        right: Expr,
+        span: Span,
+        signal_item_ty: Type,
+        expected: Option<Type>,
+        env: &mut TypeEnv,
+    ) -> Result<(Expr, Type), TypeError> {
+        let signal_ty = Type::con("Signal").app(vec![signal_item_ty.clone()]);
+        let (left, _left_ty) = self.elab_expr(left, Some(signal_ty), env)?;
+
+        let call = match right {
+            Expr::Record { .. } | Expr::PatchLit { .. } => {
+                let param = SpannedName {
+                    name: "__signalState".to_string(),
+                    span: span.clone(),
+                };
+                let patch_body = Expr::Binary {
+                    op: "<|".to_string(),
+                    left: Box::new(Expr::Ident(param.clone())),
+                    right: Box::new(right),
+                    span: span.clone(),
+                };
+                let mut body_env = env.clone();
+                body_env.insert(param.name.clone(), Scheme::mono(signal_item_ty.clone()));
+                let (body, _body_ty) =
+                    self.elab_expr(patch_body, Some(signal_item_ty.clone()), &mut body_env)?;
+                let lambda = Expr::Lambda {
+                    params: vec![Pattern::Ident(param)],
+                    body: Box::new(body),
+                    span: span.clone(),
+                };
+                self.reactive_call_expr("update", vec![left, lambda], &span)
+            }
+            right => match self.infer_signal_write_kind(&right, &signal_item_ty, env)? {
+                SignalWriteKind::Set => {
+                    let (right, _right_ty) =
+                        self.elab_expr(right, Some(signal_item_ty.clone()), env)?;
+                    self.reactive_call_expr("set", vec![left, right], &span)
+                }
+                SignalWriteKind::Update => {
+                    let updater_ty = Type::Func(
+                        Box::new(signal_item_ty.clone()),
+                        Box::new(signal_item_ty),
+                    );
+                    let (right, _right_ty) = self.elab_expr(right, Some(updater_ty), env)?;
+                    self.reactive_call_expr("update", vec![left, right], &span)
+                }
+            },
+        };
+
+        self.check_or_coerce(call, expected, env)
+    }
+
+    fn reactive_call_expr(&self, field: &str, args: Vec<Expr>, span: &Span) -> Expr {
+        let reactive = Expr::Ident(SpannedName {
+            name: "reactive".to_string(),
+            span: span.clone(),
+        });
+        let func = Expr::FieldAccess {
+            base: Box::new(reactive),
+            field: SpannedName {
+                name: field.to_string(),
+                span: span.clone(),
+            },
+            span: span.clone(),
+        };
+        Expr::Call {
+            func: Box::new(func),
+            args,
+            span: span.clone(),
         }
     }
 

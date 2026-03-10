@@ -125,6 +125,8 @@ xs |> map inc |> filter (_ > 0)
 
 Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
 
+When the left-hand side is a `Signal A`, `signal |> f` is sugar for `derive signal (value => value |> f)`, so the result is another `Signal` and placeholder lambdas still work inside the mapped step.
+
 ### Multi-clause functions
 
 A unary function can be written as multiple match arms directly:
@@ -463,11 +465,15 @@ Inside predicates:
 
 ## 8 Patching (Structural Updates)
 
-`<|` applies a declarative, type-checked patch to a record.
+`<|` applies a declarative, type-checked patch to a record. When the left-hand side is a `Signal A`, it also becomes signal-write sugar: plain values call `set`, functions call `update`, and record literals keep patch semantics against the current signal value.
 
 ```aivi
 user2 = user <| { name: "Sam" }
 user3 = user <| { profile.avatar: "new.png" }
+count <| 10
+profile <| (state => { name: "AIVI", saveCount: state.saveCount + 1 })
+profile <| (state => state <| { saveCount: _ + 1 })
+profile <| { saveCount: _ + 1 }
 ```
 
 ### Path addressing
@@ -1204,16 +1210,17 @@ GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gs
 ```aivi
 // Shorthand (preferred)
 state = signal { count: 0 }
-title = state |> map (_.count) |> map "Count {_}"
+title = state |> (s => "Count {s.count}")
 saveCounter = event (do Effect {
   current = get state
   persistCount current.count
 })
+inc = _ => state <| { count: _ + 1 }
 
 view = ~<gtk>
   <GtkBox spacing="24" marginTop="12">
     <GtkLabel label={title} />
-    <GtkButton label="Increment" onClick={_ => update state (patch { count: _ + 1 })} />
+    <GtkButton label="Increment" onClick={inc} />
     <GtkButton label="Save" onClick={saveCounter} />
   </GtkBox>
 </gtk>
@@ -1222,23 +1229,25 @@ view = ~<gtk>
 view = ~<gtk>
   <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
     <object class="GtkLabel" props={{ label: title }} />
-    <object class="GtkButton" props={{ label: "Increment" }} onClick={_ => update state (patch { count: _ + 1 })} />
+    <object class="GtkButton" props={{ label: "Increment" }} onClick={inc} />
     <object class="GtkButton" props={{ label: "Save" }} onClick={saveCounter} />
   </object>
 </gtk>
 ```
 
-Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `derive` or `combineAll`, and mutate them with `set` or `update`:
+Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `derive`, `signal |> ...`, or `combineAll`, and mutate them with `set`, `update`, or `signal <| ...`:
 
 ```aivi
 state = signal { count: 0, query: "" }
-title = derive state (s => "Count {s.count}")
+title = state |> _.count |> (_ + 1) |> toText
 canSearch = combineAll { st: state, running: searchEvent.running } (vals =>
   vals.st.query != "" and not vals.running
 )
 
 update state (patch { count: _ + 1 })
 update state (patch { query: "gtk" })
+tick <| (_ + 1)
+tick <| 0
 ```
 
 Event attrs accept either runtime functions or event-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles are created with `do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`.
@@ -1247,12 +1256,13 @@ GTK sigils also support signal sugar in v0.1:
 
 ```aivi
 ~<gtk>
-  <GtkButton onClick={_ => update state (patch { count: _ + 1 })} />
-  <GtkEntry onInput={txt => set query txt} />
-  <GtkEntry onActivate={submitSearch} />
-  <GtkCheckButton onToggle={active => set enabled active} />
-  <GtkScale onValueChanged={value => set volume value} />
-  <GtkEntry onFocusIn={_ => set focused True} onFocusOut={_ => set focused False} />
+  <GtkButton onClick={...} />
+  <GtkEntry onInput={...} />
+  <GtkEntry onActivate={...} />
+  <GtkBox onKeyPress={...} />
+  <GtkCheckButton onToggle={...} />
+  <GtkScale onValueChanged={...} />
+  <GtkEntry onFocusIn={...} />
   <GtkButton>
     <signal name="clicked" on={saveEvent} />
   </GtkButton>

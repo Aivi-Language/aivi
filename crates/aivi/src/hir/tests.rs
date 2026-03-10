@@ -246,6 +246,43 @@ mod lower_tests {
         crate::hir::desugar_modules(&modules)
     }
 
+    fn parse_elaborate_and_lower(src: &str) -> crate::hir::HirProgram {
+        let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), src);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error
+                    && !d.path.starts_with("<embedded:")
+            })
+            .collect();
+        assert!(errors.is_empty(), "parse errors: {errors:?}");
+
+        let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+        all_modules.append(&mut modules);
+
+        let diags = crate::resolver::check_modules(&all_modules);
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| {
+                d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error
+                    && !d.path.starts_with("<embedded:")
+            })
+            .collect();
+        assert!(errors.is_empty(), "resolver errors: {errors:?}");
+
+        let diags = crate::typecheck::elaborate_expected_coercions(&mut all_modules);
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| {
+                d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error
+                    && !d.path.starts_with("<embedded:")
+            })
+            .collect();
+        assert!(errors.is_empty(), "elaboration errors: {errors:?}");
+
+        crate::hir::desugar_modules(&all_modules)
+    }
+
     fn find_def_expr<'a>(program: &'a crate::hir::HirProgram, def_name: &str) -> &'a HirExpr {
         for module in &program.modules {
             for def in &module.defs {
@@ -989,6 +1026,35 @@ updated = { x: 1, y: 2 } <| { x: 10 }
         );
         let expr = find_def_expr(&program, "updated");
         assert!(matches!(expr, HirExpr::Patch { .. }));
+    }
+
+    #[test]
+    fn lower_signal_update_operator_to_reactive_update_call() {
+        let program = parse_elaborate_and_lower(
+            r#"
+module Test
+use aivi
+use aivi.reactive
+
+tick : Signal Int -> Unit
+tick = counter => counter <| (_ + 1)
+"#,
+        );
+        let expr = find_def_expr(&program, "tick");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        match body {
+            HirExpr::Call { func, args, .. } => {
+                assert!(matches!(
+                    func.as_ref(),
+                    HirExpr::FieldAccess { base, field, .. }
+                        if matches!(base.as_ref(), HirExpr::Var { name, .. } if name == "reactive")
+                            && field == "update"
+                ));
+                assert_eq!(args.len(), 2);
+            }
+            other => panic!("expected reactive update call, got {other:?}"),
+        }
     }
 
     #[test]

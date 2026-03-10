@@ -552,6 +552,33 @@ view = ~<gtk><GtkButton onC /></gtk>
 }
 
 #[test]
+fn gtk_arch_completion_signal_sugar_documents_onkeypress() {
+    let text = r#"@no_prelude
+module examples.gtk_signal_keypress_docs
+view = ~<gtk><GtkBox onK /></gtk>
+"#;
+    let uri = sample_uri();
+    let position = position_after(text, "onK");
+    let gtk_index =
+        GtkIndex::from_json(crate::gtk_index::GTK_INDEX_JSON).expect("embedded gtk index");
+    let items = Backend::build_completion_items(text, &uri, position, &HashMap::new(), &gtk_index);
+
+    let on_key_press = items
+        .iter()
+        .find(|item| item.label == "onKeyPress")
+        .expect("onKeyPress completion");
+    let docs = on_key_press
+        .documentation
+        .as_ref()
+        .expect("onKeyPress docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("GtkKeyPressed"));
+    assert!(markup.value.contains("keyboard-driven widgets"));
+}
+
+#[test]
 fn gtk_arch_hover_documents_signal_constructor() {
     let text = r#"@no_prelude
 module examples.gtk_hover_signal

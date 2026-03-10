@@ -1228,6 +1228,7 @@ impl Backend {
                         ("onClick", "clicked"),
                         ("onInput", "changed"),
                         ("onActivate", "activate"),
+                        ("onKeyPress", "key-pressed"),
                         ("onToggle", "toggled"),
                         ("onValueChanged", "value-changed"),
                         ("onFocusIn", "focus-enter"),
@@ -1238,7 +1239,8 @@ impl Backend {
                         if !prefix.is_empty() && !sugar.starts_with(prefix.as_str()) {
                             continue;
                         }
-                        let has_signal = widget.signals.iter().any(|s| s.name == *signal_name);
+                        let has_signal = *signal_name == "key-pressed"
+                            || widget.signals.iter().any(|s| s.name == *signal_name);
                         if has_signal {
                             items.push(CompletionItem {
                                 label: sugar.to_string(),
@@ -1279,6 +1281,7 @@ impl Backend {
             "onClick" => "`GtkClicked WidgetId Text`",
             "onInput" => "`GtkInputChanged WidgetId Text Text`",
             "onActivate" => "`GtkActivated WidgetId Text`",
+            "onKeyPress" => "`GtkKeyPressed WidgetId Text Text Text`",
             "onToggle" => "`GtkToggled WidgetId Text Bool`",
             "onValueChanged" => "`GtkValueChanged WidgetId Text Float`",
             "onFocusIn" => "`GtkFocusIn WidgetId Text`",
@@ -1289,6 +1292,9 @@ impl Backend {
 
         let guidance = match sugar {
             "onInput" => "Bind this to a function such as `txt => set query txt`, or to an `Event` handle when input should trigger effectful work.",
+            "onKeyPress" => {
+                "Use this for keyboard-driven widgets. Pattern match `GtkKeyPressed _ _ key _` in the callback to steer or trigger shortcuts."
+            }
             "onFocusOut" => {
                 "Use this to mark blur/touch state directly from a callback or lower-level signal handler."
             }

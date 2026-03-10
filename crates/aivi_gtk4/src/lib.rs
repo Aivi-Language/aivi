@@ -523,7 +523,7 @@ mod linux_impl {
         binding_id: Option<String>,
         props: HashMap<String, String>,
         signals: Vec<SignalBindingState>,
-        signal_handler_ids: Vec<c_ulong>,
+        signal_handlers: Vec<SignalHandlerConnection>,
         children: Vec<LiveChild>,
     }
 
@@ -531,6 +531,12 @@ mod linux_impl {
     struct LiveChild {
         child_type: Option<String>,
         node: LiveNode,
+    }
+
+    #[derive(Clone, Debug)]
+    struct SignalHandlerConnection {
+        instance: usize,
+        handler_id: c_ulong,
     }
 
     #[derive(Default)]
@@ -616,6 +622,7 @@ mod linux_impl {
     #[allow(dead_code)]
     enum SignalPayloadKind {
         None,
+        KeyPressed,
         EditableText,
         ToggleActive,
         FloatValue,
@@ -877,6 +884,9 @@ mod linux_impl {
     fn known_signals_for_class(class_name: &str) -> &'static [&'static str] {
         match class_name {
             "GtkButton" => &["clicked"],
+            "GtkBox" | "GtkGrid" | "GtkOverlay" | "GtkScrolledWindow" | "GtkStack" => {
+                &["key-pressed"]
+            }
             "GtkEntry" | "GtkPasswordEntry" => &["changed", "activate"],
             "AdwEntryRow" | "AdwPasswordEntryRow" => &["changed"],
             "GtkCheckButton" | "AdwSwitchRow" => &["toggled"],
@@ -1013,7 +1023,7 @@ mod linux_impl {
             assert!(err.message.contains("bound to `Save`"));
             assert!(err
                 .message
-                .contains("Known supported signals for this class: none."));
+                .contains("Known supported signals for this class: key-pressed."));
         }
 
         #[test]
@@ -2701,6 +2711,47 @@ mod linux_impl {
         0
     }
 
+    unsafe extern "C" fn gtk_key_pressed_callback(
+        _controller: *mut c_void,
+        keyval: c_uint,
+        keycode: c_uint,
+        _state: c_uint,
+        data: *mut c_void,
+    ) -> c_int {
+        if data.is_null() {
+            return 0;
+        }
+        let binding = unsafe { &*(data as *const SignalCallbackData) };
+        let key_name = unsafe { gdk_keyval_name(keyval) };
+        let key_name = if key_name.is_null() {
+            keyval.to_string()
+        } else {
+            unsafe { CStr::from_ptr(key_name) }
+                .to_string_lossy()
+                .into_owned()
+        };
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let event = SignalEventState {
+                widget_id: binding.widget_id,
+                signal: binding.signal_name.clone(),
+                handler: binding.handler.clone(),
+                payload: format!("{key_name}\n{keycode}"),
+            };
+            let widget_name = state
+                .widget_id_to_name
+                .get(&binding.widget_id)
+                .cloned()
+                .unwrap_or_default();
+            let typed_event = make_signal_event(event.clone(), widget_name);
+            state
+                .signal_senders
+                .retain(|s| s.send(typed_event.clone()).is_ok());
+            state.signal_events.push_back(event);
+        });
+        0
+    }
+
     unsafe extern "C" fn gtk_signal_callback(instance: *mut c_void, data: *mut c_void) {
         if data.is_null() {
             return;
@@ -2708,6 +2759,7 @@ mod linux_impl {
         let binding = unsafe { &*(data as *const SignalCallbackData) };
         let payload = match binding.payload_kind {
             SignalPayloadKind::None => String::new(),
+            SignalPayloadKind::KeyPressed => String::new(),
             SignalPayloadKind::EditableText => {
                 let text_ptr = unsafe { gtk_editable_get_text(instance) };
                 if text_ptr.is_null() {
@@ -3034,6 +3086,7 @@ mod linux_impl {
 
     fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
         match (class_name, signal_name) {
+            (_, "key-pressed") => Some(SignalPayloadKind::KeyPressed),
             ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
             ("GtkEntry", "changed")
             | ("GtkEntry", "activate")
@@ -3070,7 +3123,40 @@ mod linux_impl {
         node_id: Option<&str>,
         operation: &str,
         binding: &SignalBindingState,
-    ) -> Result<c_ulong, Gtk4Error> {
+    ) -> Result<SignalHandlerConnection, Gtk4Error> {
+        if binding.signal == "key-pressed" {
+            let controller = unsafe { gtk_event_controller_key_new() };
+            if controller.is_null() {
+                return Err(Gtk4Error::new(format!(
+                    "{operation} failed to create key controller for {}",
+                    widget_debug_label(widget_id, class_name, node_id)
+                )));
+            }
+            let signal_c = c_text(&binding.signal, "gtk4.buildFromNode invalid signal name")?;
+            let callback_data = Box::new(SignalCallbackData {
+                widget_id,
+                signal_name: binding.signal.clone(),
+                handler: binding.handler.clone(),
+                payload_kind: SignalPayloadKind::KeyPressed,
+            });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+            let handler_id = unsafe {
+                gtk_widget_set_focusable(widget, 1);
+                gtk_widget_add_controller(widget, controller);
+                g_signal_connect_data(
+                    controller,
+                    signal_c.as_ptr(),
+                    gtk_key_pressed_callback as *const c_void,
+                    callback_ptr,
+                    null_mut(),
+                    0,
+                )
+            };
+            return Ok(SignalHandlerConnection {
+                instance: controller as usize,
+                handler_id,
+            });
+        }
         let Some(payload_kind) = signal_payload_kind_for(class_name, &binding.signal) else {
             return Err(invalid_signal_error(
                 operation, widget_id, class_name, node_id, binding,
@@ -3100,7 +3186,10 @@ mod linux_impl {
                 0,
             )
         };
-        Ok(handler_id)
+        Ok(SignalHandlerConnection {
+            instance: widget as usize,
+            handler_id,
+        })
     }
 
     /// Starts the D-Bus server (MailfoxDesktopObject).
@@ -4318,7 +4407,7 @@ mod linux_impl {
                 binding_id: None,
                 props: HashMap::new(),
                 signals: Vec::new(),
-                signal_handler_ids: Vec::new(),
+                signal_handlers: Vec::new(),
                 children: Vec::new(),
             };
             return Ok((wid, live));
@@ -5232,7 +5321,7 @@ mod linux_impl {
         }
 
         apply_widget_properties(raw, class_name, &props, state)?;
-        let mut signal_handler_ids = Vec::new();
+        let mut signal_handlers = Vec::new();
         for binding in &signal_bindings {
             let hid = connect_widget_signal(
                 raw,
@@ -5242,7 +5331,7 @@ mod linux_impl {
                 "buildFromNode",
                 binding,
             )?;
-            signal_handler_ids.push(hid);
+            signal_handlers.push(hid);
         }
 
         let mut child_objects = collect_child_objects(children);
@@ -5469,7 +5558,7 @@ mod linux_impl {
             binding_id,
             props,
             signals: signal_bindings,
-            signal_handler_ids,
+            signal_handlers,
             children: live_children,
         };
         Ok((id, live))
@@ -5714,9 +5803,14 @@ mod linux_impl {
         // re-entrant GTK_STATE borrows: property changes (e.g. setting text)
         // can fire signals synchronously, which would try to borrow_mut the
         // already-borrowed state.
-        for &hid in &live.signal_handler_ids {
-            if hid != 0 {
-                unsafe { g_signal_handler_disconnect(raw, hid) };
+        for connection in &live.signal_handlers {
+            if connection.handler_id != 0 {
+                unsafe {
+                    g_signal_handler_disconnect(
+                        connection.instance as *mut c_void,
+                        connection.handler_id,
+                    )
+                };
             }
         }
 
@@ -5725,7 +5819,7 @@ mod linux_impl {
         live.props = new_props;
 
         // Reconnect signals
-        let mut new_handler_ids = Vec::new();
+        let mut new_handlers = Vec::new();
         for binding in &new_signals {
             let hid = connect_widget_signal(
                 raw,
@@ -5735,10 +5829,10 @@ mod linux_impl {
                 "reconcileNode",
                 binding,
             )?;
-            new_handler_ids.push(hid);
+            new_handlers.push(hid);
         }
         live.signals = new_signals;
-        live.signal_handler_ids = new_handler_ids;
+        live.signal_handlers = new_handlers;
 
         // Update node_id if it changed
         let new_node_id = node_attr(attrs, "id").map(str::to_string);

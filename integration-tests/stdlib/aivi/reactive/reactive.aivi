@@ -19,6 +19,32 @@ signal_set_update = do Effect {
   assertEq (get count) 7
 }
 
+@test "signal patch operator updates scalar signals"
+signal_patch_operator_updates_scalar = do Effect {
+  count = signal 1
+
+  assertEq (count <| (_ + 3)) Unit
+  assertEq (get count) 4
+}
+
+@test "signal pipe derives a new signal from the current value"
+signal_pipe_derives_from_source = do Effect {
+  count   = signal 2
+  doubled = count |> (_ * 2)
+
+  assertEq (get doubled) 4
+  assertEq (set count 5) Unit
+  assertEq (get doubled) 10
+}
+
+@test "signal patch operator accepts replacement values"
+signal_patch_operator_sets_scalar = do Effect {
+  count = signal 1
+
+  assertEq (count <| 9) Unit
+  assertEq (get count) 9
+}
+
 @test "derive creates a derived signal from one source"
 derive_updates_from_source = do Effect {
   count   = signal 2
@@ -35,6 +61,22 @@ patch_updates_record_signal = do Effect {
 
   assertEq (update state (patch { count: _ + 3 })) Unit
   assertEq (get state) { count: 5 }
+}
+
+@test "record signals accept signal updater operator sugar"
+signal_patch_operator_updates_record_signal = do Effect {
+  state = signal { count: 2, enabled: False }
+
+  assertEq (state <| (current => current <| { count: _ + 3, enabled: True })) Unit
+  assertEq (get state) { count: 5, enabled: True }
+}
+
+@test "record signals accept direct patch operator sugar"
+signal_patch_operator_applies_record_patch = do Effect {
+  state = signal { count: 2, enabled: False }
+
+  assertEq (state <| { count: _ + 3, enabled: True }) Unit
+  assertEq (get state) { count: 5, enabled: True }
 }
 
 @test "combineAll derives from a record of signals"

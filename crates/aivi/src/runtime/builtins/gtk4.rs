@@ -623,6 +623,12 @@ fn auto_to_msg_builtin() -> Value {
                     _ => None,
                 },
             ),
+            Value::Constructor { name, args } if name == "GtkKeyPressed" && args.len() == 4 => (
+                "key-pressed".to_string(),
+                decode_text(&args[1]).unwrap_or_default(),
+                None,
+                decode_text(&args[2]).map(Value::Text),
+            ),
             Value::Constructor { name, args } if name == "GtkFocusIn" && args.len() == 2 => (
                 "focus-enter".to_string(),
                 decode_text(&args[1]).unwrap_or_default(),

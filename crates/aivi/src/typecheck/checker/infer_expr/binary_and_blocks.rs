@@ -1,4 +1,91 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SignalWriteKind {
+    Set,
+    Update,
+}
+
 impl TypeChecker {
+    fn extract_signal_item_type(&mut self, ty: Type) -> Option<Type> {
+        let applied = self.apply(ty);
+        let resolved = self.expand_alias(applied);
+        match resolved {
+            Type::Con(name, args) if name == "Signal" && args.len() == 1 => Some(args[0].clone()),
+            Type::App(base, args) => match &*base {
+                Type::Con(name, existing) if name == "Signal" && existing.len() + args.len() == 1 => {
+                    args.last().cloned().or_else(|| existing.last().cloned())
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn infer_signal_pipe_result(
+        &mut self,
+        left: &Expr,
+        right: &Expr,
+        signal_item_ty: Type,
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        let param = SpannedName {
+            name: "__signalValue".to_string(),
+            span: expr_span(left),
+        };
+        let piped_body = Expr::Binary {
+            op: "|>".to_string(),
+            left: Box::new(Expr::Ident(param.clone())),
+            right: Box::new(right.clone()),
+            span: expr_span(right),
+        };
+        let mut body_env = env.clone();
+        body_env.insert(param.name.clone(), Scheme::mono(signal_item_ty));
+        let result_ty = self.infer_expr(&piped_body, &mut body_env)?;
+        Ok(Type::con("Signal").app(vec![result_ty]))
+    }
+
+    fn infer_signal_write_kind(
+        &mut self,
+        right: &Expr,
+        signal_item_ty: &Type,
+        env: &mut TypeEnv,
+    ) -> Result<SignalWriteKind, TypeError> {
+        if matches!(right, Expr::Record { .. }) {
+            return Ok(SignalWriteKind::Update);
+        }
+
+        let right_ty = self.infer_expr(right, env)?;
+        let checkpoint = self.subst.clone();
+        let updater_ty = Type::Func(
+            Box::new(signal_item_ty.clone()),
+            Box::new(signal_item_ty.clone()),
+        );
+        if self
+            .unify_with_span(right_ty.clone(), updater_ty, expr_span(right))
+            .is_ok()
+        {
+            return Ok(SignalWriteKind::Update);
+        }
+
+        self.subst = checkpoint.clone();
+        if self
+            .unify_with_span(right_ty, signal_item_ty.clone(), expr_span(right))
+            .is_ok()
+        {
+            return Ok(SignalWriteKind::Set);
+        }
+
+        self.subst = checkpoint;
+        let item_text = self.type_to_string(signal_item_ty);
+        Err(TypeError {
+            span: expr_span(right),
+            message: format!(
+                "signal update expects a replacement value of type {item_text}, an updater function {item_text} -> {item_text}, or a record patch"
+            ),
+            expected: None,
+            found: None,
+        })
+    }
+
     fn infer_binary(
         &mut self,
         op: &str,
@@ -11,6 +98,10 @@ impl TypeChecker {
             eprintln!("[PIPE_DEBUG] infer_binary op={}", op);
         }
         if op == "|>" {
+            let arg_ty = self.infer_expr(left, env)?;
+            if let Some(signal_item_ty) = self.extract_signal_item_type(arg_ty.clone()) {
+                return self.infer_signal_pipe_result(left, right, signal_item_ty, env);
+            }
             // Special case: if the RHS is a partially-applied class method call, collect all
             // arguments including the piped LHS value so instance dispatch sees the full picture.
             // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
@@ -28,7 +119,6 @@ impl TypeChecker {
                     }
                 }
             }
-            let arg_ty = self.infer_expr(left, env)?;
             let func_ty = self.infer_expr(right, env)?;
             self.validate_query_pipe_transformer(right, &arg_ty, env)?;
             let result_ty = self.fresh_var();
@@ -41,7 +131,18 @@ impl TypeChecker {
         }
         if op == "<|" {
             let target_ty = self.infer_expr(left, env)?;
-            let resolved = self.apply(target_ty.clone());
+            if let Some(signal_item_ty) = self.extract_signal_item_type(target_ty.clone()) {
+                if let Expr::Record { fields, .. } = right {
+                    self.infer_patch(signal_item_ty, fields, env)?;
+                    return Ok(Type::con("Unit"));
+                }
+                match self.infer_signal_write_kind(right, &signal_item_ty, env)? {
+                    SignalWriteKind::Set | SignalWriteKind::Update => {}
+                }
+                return Ok(Type::con("Unit"));
+            }
+            let applied_target_ty = self.apply(target_ty.clone());
+            let resolved = self.expand_alias(applied_target_ty);
             if let Some(type_name) = self.opaque_con_name(&resolved) {
                 if let Some(defining_module) = self.is_opaque_from_here(&type_name).cloned() {
                     return Err(TypeError {
