@@ -525,19 +525,21 @@ mod bridge {
         if !ctx.mark_gtk_runtime_dispatcher_started() {
             return;
         }
+        // Create the signal stream on the current thread (the GTK main thread)
+        // so the sender is registered in the correct thread-local GTK_STATE.
+        let receiver = match aivi_gtk4::signal_stream() {
+            Ok(receiver) => receiver,
+            Err(err) => {
+                eprintln!(
+                    "AIVI GTK runtime handler dispatcher failed to attach: {}",
+                    err.message
+                );
+                return;
+            }
+        };
         let _ = std::thread::Builder::new()
             .name("aivi-gtk-runtime-handlers".to_string())
             .spawn(move || {
-                let receiver = match aivi_gtk4::signal_stream() {
-                    Ok(receiver) => receiver,
-                    Err(err) => {
-                        eprintln!(
-                            "AIVI GTK runtime handler dispatcher failed to attach: {}",
-                            err.message
-                        );
-                        return;
-                    }
-                };
                 while let Ok(event) = receiver.recv() {
                     let Some(handler) = ctx.resolve_gtk_runtime_handler(&event.handler) else {
                         continue;

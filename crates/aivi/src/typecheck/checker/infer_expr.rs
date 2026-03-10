@@ -1,7 +1,9 @@
 impl TypeChecker {
     fn infer_ident(&mut self, name: &SpannedName, env: &mut TypeEnv) -> Result<Type, TypeError> {
         if let Some(scheme) = env.get(&name.name) {
-            Ok(self.instantiate(scheme))
+            let ty = self.instantiate(scheme);
+            self.span_types.push((name.span.clone(), ty.clone()));
+            Ok(ty)
         } else if env
             .get_all(&name.name)
             .is_some_and(|items| items.len() > 1)

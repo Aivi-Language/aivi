@@ -23,6 +23,29 @@ pub extern "C" fn rt_set_global(
     runtime.ctx.globals.set(name.to_string(), value);
 }
 
+/// Returns `true` when the value is an arity-0 JIT builtin that should be
+/// evaluated once and then cached in the global environment.
+fn is_jit_arity0(val: &Value) -> bool {
+    matches!(val, Value::Builtin(b)
+        if b.imp.arity == 0 && b.args.is_empty() && b.imp.name.starts_with("__jit|"))
+}
+
+/// Force a value and, when it was a lazy arity-0 JIT builtin, cache the
+/// result back into the global environment under `name` so that subsequent
+/// lookups return the same identity (critical for `Signal`, `Resource`, etc.).
+fn force_and_cache(
+    runtime: &mut Runtime,
+    name: &str,
+    val: Value,
+) -> Result<Value, RuntimeError> {
+    let needs_cache = is_jit_arity0(&val);
+    let forced = runtime.force_value(val)?;
+    if needs_cache {
+        runtime.ctx.globals.set(name.to_string(), forced.clone());
+    }
+    Ok(forced)
+}
+
 /// Look up a global definition by name, forcing thunks.
 ///
 /// # Safety
@@ -45,7 +68,7 @@ pub extern "C" fn rt_get_global(
             if let Some(dot_pos) = name.rfind('.') {
                 let bare = &name[dot_pos + 1..];
                 if let Some(v) = runtime.ctx.globals.get(bare) {
-                    return match runtime.force_value(v.clone()) {
+                    return match force_and_cache(runtime, bare, v) {
                         Ok(forced) => abi::box_value(forced),
                         Err(e) => {
                             unsafe { set_pending_error(ctx, e) };
@@ -63,7 +86,7 @@ pub extern "C" fn rt_get_global(
             return abi::box_value(Value::Unit);
         }
     };
-    match runtime.force_value(val.clone()) {
+    match force_and_cache(runtime, name, val) {
         Ok(forced) => abi::box_value(forced),
         Err(e) => {
             unsafe { set_pending_error(ctx, e) };

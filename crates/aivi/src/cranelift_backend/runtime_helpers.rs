@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::runtime::values::Value;
-use crate::runtime::RuntimeError;
+use crate::runtime::{Runtime, RuntimeError};
 
 use super::abi::{self, JitRuntimeCtx};
 
