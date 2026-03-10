@@ -195,24 +195,6 @@ fn lower_block_item_ctx(
                 is_monadic: true,
             }
         }
-        // `on transition => handler` — register transition handlers at runtime.
-        BlockItem::On {
-            transition,
-            handler,
-            ..
-        } => HirBlockItem::Expr {
-            expr: HirExpr::Call {
-                id: id_gen.next(),
-                func: Box::new(HirExpr::Var {
-                    id: id_gen.next(),
-                    name: "__machine_on".to_string(),
-                }),
-                args: vec![
-                    lower_expr_ctx(transition, id_gen, ctx, false),
-                    lower_expr_ctx(handler, id_gen, ctx, false),
-                ],
-            },
-        },
     }
 }
 
@@ -355,9 +337,6 @@ fn contains_placeholder(expr: &Expr) -> bool {
             }
             BlockItem::Given { cond, fail_expr, .. } => {
                 contains_placeholder(cond) || contains_placeholder(fail_expr)
-            }
-            BlockItem::On { transition, handler, .. } => {
-                contains_placeholder(transition) || contains_placeholder(handler)
             }
         }),
         Expr::Raw { .. } => false,
@@ -598,11 +577,6 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                     BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
                         cond: desugar_placeholder_lambdas(cond),
                         fail_expr: desugar_placeholder_lambdas(fail_expr),
-                        span,
-                    },
-                    BlockItem::On { transition, handler, span } => BlockItem::On {
-                        transition: desugar_placeholder_lambdas(transition),
-                        handler: desugar_placeholder_lambdas(handler),
                         span,
                     },
                 })
@@ -898,11 +872,6 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                     BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
                         cond: replace_holes_inner(cond, counter, params),
                         fail_expr: replace_holes_inner(fail_expr, counter, params),
-                        span,
-                    },
-                    BlockItem::On { transition, handler, span } => BlockItem::On {
-                        transition: replace_holes_inner(transition, counter, params),
-                        handler: replace_holes_inner(handler, counter, params),
                         span,
                     },
                 })

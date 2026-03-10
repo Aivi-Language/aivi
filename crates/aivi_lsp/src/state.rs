@@ -24,6 +24,7 @@ pub(super) struct DiskIndex {
 
 pub(super) struct BackendState {
     pub(super) documents: HashMap<Url, DocumentState>,
+    pub(super) document_change_locks: HashMap<Url, Arc<tokio::sync::Mutex<()>>>,
     pub(super) workspace_root: Option<PathBuf>,
     pub(super) workspace_folders: Vec<PathBuf>,
     pub(super) open_modules_by_uri: HashMap<Url, Vec<String>>,
@@ -52,6 +53,7 @@ impl Default for BackendState {
         let gtk_index = GtkIndex::from_json(GTK_INDEX_JSON).unwrap_or_default();
         Self {
             documents: HashMap::new(),
+            document_change_locks: HashMap::new(),
             workspace_root: None,
             workspace_folders: Vec::new(),
             open_modules_by_uri: HashMap::new(),

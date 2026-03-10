@@ -238,29 +238,6 @@ impl Parser {
                 items.push(BlockItem::Given { cond, fail_expr, span });
                 continue;
             }
-            // `on Transition => effect` — transition event wiring (Change 7)
-            if self.match_keyword("on") {
-                let on_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
-                    self.emit_diag(
-                        "E1542",
-                        "`on` is only allowed inside `do Effect { ... }` blocks",
-                        on_kw.clone(),
-                    );
-                }
-                let transition = self.parse_postfix().unwrap_or(Expr::Raw {
-                    text: String::new(),
-                    span: on_kw.clone(),
-                });
-                self.expect_symbol("=>", "expected '=>' after `on` transition");
-                let handler = self.parse_expr().unwrap_or(Expr::Raw {
-                    text: String::new(),
-                    span: on_kw.clone(),
-                });
-                let span = merge_span(on_kw, expr_span(&handler));
-                items.push(BlockItem::On { transition, handler, span });
-                continue;
-            }
             let checkpoint = self.pos;
             let diag_checkpoint = self.diagnostics.len();
             if let Some(pattern) = self.parse_pattern() {
@@ -777,15 +754,6 @@ fn replace_recurse_in_block_item(item: BlockItem, fn_name: &SpannedName) -> Bloc
         } => BlockItem::Given {
             cond: replace_recurse_in_expr(cond, fn_name),
             fail_expr: replace_recurse_in_expr(fail_expr, fn_name),
-            span,
-        },
-        BlockItem::On {
-            transition,
-            handler,
-            span,
-        } => BlockItem::On {
-            transition: replace_recurse_in_expr(transition, fn_name),
-            handler: replace_recurse_in_expr(handler, fn_name),
             span,
         },
     }

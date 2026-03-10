@@ -270,13 +270,6 @@ impl Parser {
                 }
                 continue;
             }
-            if self.match_keyword("machine") {
-                if let Some(machine) = self.parse_machine_decl(decorators) {
-                    items.push(ModuleItem::MachineDecl(machine));
-                }
-                continue;
-            }
-
             if self.match_keyword("opaque") {
                 if let Some(item) = self.parse_type_decl_or_alias_opaque(decorators) {
                     items.push(item);
@@ -371,9 +364,6 @@ impl Parser {
                 // Not a domain declaration — let parse_export_list handle `domain Name` syntax.
                 None
             }
-        } else if self.match_keyword("machine") {
-            self.parse_machine_decl(decorators.clone())
-                .map(ModuleItem::MachineDecl)
         } else if self.match_keyword("opaque") {
             self.parse_type_decl_or_alias_opaque(decorators.clone())
         } else if self.peek_keyword("type")
@@ -436,10 +426,6 @@ impl Parser {
                 kind: crate::surface::ScopeItemKind::Domain,
                 name: domain_decl.name.clone(),
             },
-            ModuleItem::MachineDecl(machine_decl) => crate::surface::ExportItem {
-                kind: crate::surface::ScopeItemKind::Value,
-                name: machine_decl.name.clone(),
-            },
         };
         Some((item, export_item))
     }
@@ -452,7 +438,7 @@ impl Parser {
             TokenKind::Ident => {
                 if matches!(
                     first.text.as_str(),
-                    "module" | "export" | "use" | "class" | "instance" | "domain" | "machine"
+                    "module" | "export" | "use" | "class" | "instance" | "domain"
                 ) {
                     return false;
                 }
@@ -555,7 +541,7 @@ impl Parser {
         if tok.kind == TokenKind::Ident {
             match tok.text.as_str() {
                 // Keywords that unambiguously start module items.
-                "module" | "export" | "use" | "class" | "instance" | "machine" => {
+                "module" | "export" | "use" | "class" | "instance" => {
                     return true;
                 }
                 // `domain Name` is a valid export-list entry, but

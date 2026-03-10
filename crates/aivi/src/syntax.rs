@@ -5,14 +5,13 @@ pub const KEYWORDS_CONTROL: &[&str] = &[
 
 pub const KEYWORDS_OTHER: &[&str] = &[
     "module", "export", "use", "as", "hiding", "domain", "class", "instance", "over", "patch",
-    "with", "machine", "on", "snapshot", "opaque",
+    "with", "snapshot", "opaque",
 ];
 
 pub const KEYWORDS_ALL: &[&str] = &[
     "do", "effect", "generate", "resource", "if", "then", "else", "when", "unless", "yield",
     "loop", "recurse", "or", "match", "given", "mock", "in", "module", "export", "use", "as",
-    "hiding", "domain", "class", "instance", "over", "patch", "with", "machine", "on", "snapshot",
-    "opaque",
+    "hiding", "domain", "class", "instance", "over", "patch", "with", "snapshot", "opaque",
 ];
 
 pub const BOOLEAN_LITERALS: &[&str] = &["True", "False"];

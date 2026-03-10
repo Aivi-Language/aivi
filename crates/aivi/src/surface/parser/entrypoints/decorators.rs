@@ -357,7 +357,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 | ModuleItem::TypeDecl(_)
                 | ModuleItem::TypeAlias(_)
                 | ModuleItem::ClassDecl(_)
-                | ModuleItem::MachineDecl(_) => {}
+                => {}
             }
         }
         // Insert synthesised type items before existing items so they're
@@ -715,7 +715,7 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 | ModuleItem::TypeDecl(_)
                 | ModuleItem::TypeAlias(_)
                 | ModuleItem::ClassDecl(_)
-                | ModuleItem::MachineDecl(_) => {}
+                => {}
             }
         }
     }

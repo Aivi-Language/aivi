@@ -7,6 +7,4 @@ export domain Status over Int = {
   next = x => x + 1
 }
 
-export machine Workflow = {
-  -> Idle : boot {}
-}
+export Flow = { status: 0 }

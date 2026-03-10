@@ -418,15 +418,6 @@ fn expand_module_aliases(modules: &mut [Module]) {
                             fail_expr: rewrite_expr(fail_expr, aliases),
                             span,
                         },
-                        BlockItem::On {
-                            transition,
-                            handler,
-                            span,
-                        } => BlockItem::On {
-                            transition: rewrite_expr(transition, aliases),
-                            handler: rewrite_expr(handler, aliases),
-                            span,
-                        },
                     })
                     .collect(),
                 span,
@@ -522,7 +513,6 @@ fn expand_module_aliases(modules: &mut [Module]) {
                         .map(|super_expr| rewrite_type_expr(super_expr, &aliases))
                         .collect();
                 }
-                ModuleItem::MachineDecl(_) => {}
             }
         }
     }

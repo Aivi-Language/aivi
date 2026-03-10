@@ -313,14 +313,6 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                             collect_expr(cond, out);
                             collect_expr(fail_expr, out);
                         }
-                        BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            collect_expr(transition, out);
-                            collect_expr(handler, out);
-                        }
                     }
                 }
             }
@@ -712,15 +704,6 @@ fn collect_value_defs(item: &ModuleItem, scope: &mut HashMap<String, Option<Stri
             }
         }
         ModuleItem::TypeSig(_) => {}
-        ModuleItem::MachineDecl(machine_decl) => {
-            scope.insert(machine_decl.name.name.clone(), None);
-            for state in &machine_decl.states {
-                scope.insert(state.name.name.clone(), None);
-            }
-            for transition in &machine_decl.transitions {
-                scope.insert(transition.name.name.clone(), None);
-            }
-        }
     }
 }
 

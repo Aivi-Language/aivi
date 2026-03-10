@@ -1,9 +1,0 @@
-sync = do Effect {
-  { lease, run, done, currentState } = AccountSyncMachine
-
-  _ <- lease {}
-  _ <- run { batchId: 42 }
-  _ <- done {}
-
-  pure (currentState Unit)
-}

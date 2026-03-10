@@ -14,7 +14,6 @@ AIVI reuses `=` for many definitions, especially value-level bindings and severa
 - domains
 - classes
 - instances
-- machines
 
 Modules are introduced with `module ...`, not `=`.
 

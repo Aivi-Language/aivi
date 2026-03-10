@@ -151,9 +151,9 @@ Pattern matching turns complicated conditional logic into a set of named cases, 
 
 <<< ../snippets/from_md/syntax/pattern_matching/expressive_pattern_orchestration.aivi{aivi}
 
-### Concise State Machines
+### Concise State Transitions
 
-<<< ../snippets/from_md/syntax/pattern_matching/concise_state_machines.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/concise_state_transitions.aivi{aivi}
 
 ### Expressive Logic Branches
 

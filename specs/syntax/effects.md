@@ -76,7 +76,7 @@ See [External Sources](external_sources.md) for the full source model.
 
 ## 9.2 `do Effect` blocks
 
-A `do Effect { ... }` block is the everyday way to write effectful code. This section starts with the basic block rules, then covers fallback and branching, and finally shows advanced patterns such as loops and transition hooks.
+A `do Effect { ... }` block is the everyday way to write effectful code. This section starts with the basic block rules, then covers fallback and branching, and finally shows advanced patterns such as loops and structured control flow.
 
 <<< ../snippets/from_md/syntax/effects/do_effect_blocks.aivi{aivi}
 
@@ -256,36 +256,3 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 
 <<< ../snippets/from_md/syntax/effects/given.aivi{aivi}
 
-## 9.8 Transition event wiring (`on`)
-
-`on Transition => handler` registers a handler for a machine state transition event inside a `do Effect { ... }` block.
-
-### Syntax
-
-```text
-on PostfixExpr => Expr
-```
-
-- **`PostfixExpr`** evaluates to a machine transition function value
-- **`Expr`** is the handler effect to run when the transition fires
-
-### Ordering
-
-For machine transitions, runtime order is:
-
-1. transition guard check
-2. machine state update
-3. registered `on` handlers for that transition
-
-If a handler fails, the transition remains applied. See [Machine Runtime Semantics](machines_runtime.md) for the full runtime model.
-
-### Example (minimal)
-
-<<< ../snippets/from_md/syntax/effects/block_03.aivi{aivi}
-
-
-### Example: persistent todo list
-
-<<< ../snippets/from_md/syntax/effects/example_persistent_todo_list.aivi{aivi}
-
-`on` is allowed only inside `do Effect { ... }` blocks. Using it in a generic `do M { ... }` block is a type error.

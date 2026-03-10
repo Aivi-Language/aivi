@@ -26,7 +26,6 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "foldGen",
     "constructorName",
     "constructorOrdinal",
-    "__machine_on",
     "pure",
     "fail",
     "attempt",

@@ -281,11 +281,6 @@ impl Parser {
                                 fail_expr: rewrite_literal_template(fail_expr, needle, param),
                                 span,
                             },
-                            BlockItem::On { transition, handler, span } => BlockItem::On {
-                                transition: rewrite_literal_template(transition, needle, param),
-                                handler: rewrite_literal_template(handler, needle, param),
-                                span,
-                            },
                         })
                         .collect(),
                     span,

@@ -5,11 +5,14 @@ mod lsp_protocol_edits {
     use serde_json::{json, Value};
     use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
     use tokio::time::{timeout, Duration};
-    use tower_lsp::lsp_types::{DiagnosticSeverity, Url};
-    use tower_lsp::{LspService, Server};
+    use tower_lsp::lsp_types::{
+        DiagnosticSeverity, DidChangeTextDocumentParams, Position, Range,
+        TextDocumentContentChangeEvent, Url, VersionedTextDocumentIdentifier,
+    };
+    use tower_lsp::{LanguageServer, LspService, Server};
 
     use crate::backend::Backend;
-    use crate::state::BackendState;
+    use crate::state::{BackendState, DocumentState};
 
     async fn write_lsp_msg(mut w: impl AsyncWrite + Unpin, value: &Value) {
         let body = serde_json::to_vec(value).expect("json encode");
@@ -407,6 +410,95 @@ mod lsp_protocol_edits {
         assert!(!has_error(&diags));
 
         shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
+    async fn concurrent_incremental_changes_share_latest_document_text() {
+        let state = Arc::new(tokio::sync::Mutex::new(BackendState::default()));
+        let client_slot = Arc::new(std::sync::Mutex::new(None));
+        let client_slot_for_service = Arc::clone(&client_slot);
+        let state_for_service = Arc::clone(&state);
+        let (_service, _socket) = LspService::new(move |client| {
+            *client_slot_for_service.lock().expect("client slot lock") = Some(client.clone());
+            Backend {
+                client,
+                state: Arc::clone(&state_for_service),
+            }
+        });
+        let client = client_slot
+            .lock()
+            .expect("client slot lock")
+            .clone()
+            .expect("captured client");
+        let backend = Arc::new(Backend { client, state: Arc::clone(&state) });
+
+        let uri = Url::parse("file:///lsp/concurrent_incremental.aivi").expect("uri");
+        let initial = "module lsp.demo\n\nvalue = stmode\n";
+        {
+            let mut locked = state.lock().await;
+            locked.documents.insert(
+                uri.clone(),
+                DocumentState {
+                    text: initial.to_string(),
+                    version: 1,
+                },
+            );
+        }
+
+        let (line, col) = position_for(initial, "stmode");
+        let add_dot = DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 2,
+            },
+            content_changes: vec![TextDocumentContentChangeEvent {
+                range: Some(Range::new(
+                    Position::new(line, col + 2),
+                    Position::new(line, col + 2),
+                )),
+                range_length: None,
+                text: ".".to_string(),
+            }],
+        };
+        let add_underscore = DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier { uri: uri.clone(), version: 3 },
+            content_changes: vec![TextDocumentContentChangeEvent {
+                range: Some(Range::new(
+                    Position::new(line, col + 3),
+                    Position::new(line, col + 3),
+                )),
+                range_length: None,
+                text: "_".to_string(),
+            }],
+        };
+
+        let backend_for_dot = Arc::clone(&backend);
+        let dot_task = tokio::spawn(async move {
+            LanguageServer::did_change(&*backend_for_dot, add_dot).await;
+        });
+        tokio::task::yield_now().await;
+        let backend_for_underscore = Arc::clone(&backend);
+        let underscore_task = tokio::spawn(async move {
+            LanguageServer::did_change(&*backend_for_underscore, add_underscore).await;
+        });
+
+        dot_task.await.expect("dot change task");
+        underscore_task.await.expect("underscore change task");
+
+        let text = {
+            let locked = state.lock().await;
+            locked
+                .documents
+                .get(&uri)
+                .expect("updated document")
+                .text
+                .clone()
+        };
+        assert_eq!(
+            text,
+            "module lsp.demo\n\nvalue = st._mode\n",
+            "incremental changes should apply to the latest in-memory document text"
+        );
     }
 
     #[tokio::test]

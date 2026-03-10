@@ -219,11 +219,6 @@ pub enum ArenaBlockItem {
         fail_expr: ExprId,
         span: Span,
     },
-    On {
-        transition: ExprId,
-        handler: ExprId,
-        span: Span,
-    },
 }
 
 #[derive(Debug, Clone)]
@@ -440,31 +435,6 @@ pub enum ArenaDomainItem {
 }
 
 #[derive(Debug, Clone)]
-pub struct ArenaMachineDecl {
-    pub decorators: Vec<ArenaDecorator>,
-    pub name: SpannedSymbol,
-    pub states: Vec<ArenaMachineState>,
-    pub transitions: Vec<ArenaMachineTransition>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct ArenaMachineState {
-    pub name: SpannedSymbol,
-    pub fields: Vec<(SpannedSymbol, TypeExprId)>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct ArenaMachineTransition {
-    pub source: SpannedSymbol,
-    pub target: SpannedSymbol,
-    pub name: SpannedSymbol,
-    pub payload: Vec<(SpannedSymbol, TypeExprId)>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
 pub enum ArenaModuleItem {
     Def(ArenaDef),
     TypeSig(ArenaTypeSig),
@@ -473,7 +443,6 @@ pub enum ArenaModuleItem {
     ClassDecl(ArenaClassDecl),
     InstanceDecl(ArenaInstanceDecl),
     DomainDecl(ArenaDomainDecl),
-    MachineDecl(ArenaMachineDecl),
 }
 
 #[derive(Debug, Clone)]
