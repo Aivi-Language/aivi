@@ -15,6 +15,29 @@ use crate::state::IndexedModule;
 use crate::strict::{build_strict_diagnostics, StrictConfig};
 
 impl Backend {
+    fn diagnostic_module_map(
+        file_modules: &[aivi::Module],
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> HashMap<String, aivi::Module> {
+        let mut module_map = HashMap::new();
+        // Include embedded stdlib so imports/prelude/classes resolve for user code, but keep
+        // embedded modules authoritative for `aivi.*` names.
+        for module in embedded_stdlib_modules() {
+            module_map.insert(module.name.name.clone(), module);
+        }
+        for indexed in workspace_modules.values() {
+            let module_name = indexed.module.name.name.clone();
+            if module_name.starts_with("aivi.") && module_map.contains_key(&module_name) {
+                continue;
+            }
+            module_map.insert(module_name, indexed.module.clone());
+        }
+        for module in file_modules {
+            module_map.insert(module.name.name.clone(), module.clone());
+        }
+        module_map
+    }
+
     fn collect_transitive_modules_for_diagnostics(
         file_modules: &[aivi::Module],
         module_map: &HashMap<String, aivi::Module>,
@@ -54,6 +77,36 @@ impl Backend {
             }
         }
         false
+    }
+
+    fn collect_transitive_target_paths_for_diagnostics(
+        path: &Path,
+        file_modules: &[aivi::Module],
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Vec<PathBuf> {
+        let module_map = Self::diagnostic_module_map(file_modules, workspace_modules);
+        let relevant_module_names = Self::collect_transitive_modules_for_diagnostics(
+            file_modules,
+            &module_map,
+        )
+        .into_iter()
+        .map(|module| module.name.name)
+        .collect::<HashSet<_>>();
+
+        let mut target_paths: Vec<PathBuf> = workspace_modules
+            .iter()
+            .filter(|(module_name, _)| relevant_module_names.contains(*module_name))
+            .filter_map(|(_, indexed)| indexed.uri.to_file_path().ok())
+            .filter(|module_path| {
+                module_path.extension().and_then(|ext| ext.to_str()) == Some("aivi")
+            })
+            .collect();
+        if !target_paths.contains(&path.to_path_buf()) {
+            target_paths.push(path.to_path_buf());
+        }
+        target_paths.sort();
+        target_paths.dedup();
+        target_paths
     }
 
     #[cfg(test)]
@@ -126,23 +179,9 @@ impl Backend {
             .map(|file_diag| Self::file_diag_to_lsp(uri, file_diag))
             .collect();
 
-        // Build a module set for resolver + typechecker: workspace modules + this file's modules.
-        let mut module_map = HashMap::new();
-        // Include embedded stdlib so imports/prelude/classes resolve for user code, but keep
-        // diagnostics scoped to the current file (below) to avoid surfacing stdlib churn.
-        for module in embedded_stdlib_modules() {
-            module_map.insert(module.name.name.clone(), module);
-        }
-        for indexed in workspace_modules.values() {
-            let module_name = indexed.module.name.name.clone();
-            if module_name.starts_with("aivi.") && module_map.contains_key(&module_name) {
-                continue;
-            }
-            module_map.insert(module_name, indexed.module.clone());
-        }
-        for module in file_modules.iter() {
-            module_map.insert(module.name.name.clone(), module.clone());
-        }
+        // Build a module set for resolver + typechecker limited to the current file's transitive
+        // dependency slice so unrelated workspace errors do not suppress local diagnostics.
+        let module_map = Self::diagnostic_module_map(&file_modules, workspace_modules);
         let modules = Self::collect_transitive_modules_for_diagnostics(&file_modules, &module_map);
 
         let semantic_diags = std::panic::catch_unwind(|| {
@@ -194,18 +233,8 @@ impl Backend {
             return Vec::new();
         }
 
-        let mut target_paths: Vec<PathBuf> = workspace_modules
-            .values()
-            .filter_map(|indexed| indexed.uri.to_file_path().ok())
-            .filter(|module_path| {
-                module_path.extension().and_then(|ext| ext.to_str()) == Some("aivi")
-            })
-            .collect();
-        if !target_paths.contains(&path) {
-            target_paths.push(path.clone());
-        }
-        target_paths.sort();
-        target_paths.dedup();
+        let target_paths =
+            Self::collect_transitive_target_paths_for_diagnostics(&path, &file_modules, workspace_modules);
         let assembly = match session.lock() {
             Ok(mut session) => {
                 match session
@@ -1027,20 +1056,7 @@ impl Backend {
 
         // Build a module map limited to transitively reachable modules (mirrors the diagnostics
         // path) so type inference is scoped rather than running over the whole workspace.
-        let mut module_map: HashMap<String, aivi::Module> = HashMap::new();
-        for stdlib_mod in embedded_stdlib_modules() {
-            module_map.insert(stdlib_mod.name.name.clone(), stdlib_mod);
-        }
-        for indexed in workspace_modules.values() {
-            let name = indexed.module.name.name.clone();
-            if name.starts_with("aivi.") && module_map.contains_key(&name) {
-                continue;
-            }
-            module_map.insert(name, indexed.module.clone());
-        }
-        for m in file_modules.iter() {
-            module_map.insert(m.name.name.clone(), m.clone());
-        }
+        let module_map = Self::diagnostic_module_map(file_modules, workspace_modules);
         // Use transitive collection so inference runs only over needed modules.
         let modules_for_infer =
             Self::collect_transitive_modules_for_diagnostics(file_modules, &module_map);

@@ -34,7 +34,7 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
         check_uses(module, &module_map, &mut diagnostics);
         check_defs(module, &module_map, &mut diagnostics);
         check_unused_imports_and_bindings(module, &mut diagnostics);
-        check_import_conflicts(module, &mut diagnostics);
+        check_import_conflicts(module, &module_map, &mut diagnostics);
         check_multi_clause_sigs(module, &mut diagnostics);
     }
 
@@ -783,7 +783,13 @@ fn check_def(
 ///   or selectively imported when a wildcard import of the same module already covers it.
 /// - **W2103**: a selective import name clashes with a top-level binding defined in this
 ///   module itself — the local definition shadows the imported one.
-fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
+/// - **W2104**: a wildcard import shadows a name already in scope from an earlier
+///   wildcard import of a *different* module.
+fn check_import_conflicts(
+    module: &Module,
+    module_map: &HashMap<String, &Module>,
+    diagnostics: &mut Vec<FileDiagnostic>,
+) {
     if module.path.starts_with("<embedded:") {
         return;
     }
@@ -809,7 +815,69 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
         }
     }
 
-    // Second pass: check each selective import for conflicts.
+    // ── Wildcard-vs-wildcard shadowing (W2104) ──
+    // Walk wildcard imports in order; for each exported name that was already
+    // brought into scope by an earlier wildcard import from a *different* module,
+    // emit a warning on the later import.
+    {
+        // name → (source module, use_decl index)
+        let mut wildcard_seen: HashMap<String, (&str, usize)> = HashMap::new();
+        for (idx, use_decl) in module.uses.iter().enumerate() {
+            if use_decl.alias.is_some() || !use_decl.items.is_empty() {
+                continue;
+            }
+            let source = use_decl.module.name.as_str();
+            let Some(target) = module_map.get(source) else {
+                continue;
+            };
+            let exports: Vec<String> = if target.exports.is_empty() {
+                target
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        ModuleItem::Def(def) => Some(def.name.name.clone()),
+                        _ => None,
+                    })
+                    .collect()
+            } else {
+                target
+                    .exports
+                    .iter()
+                    .filter(|e| e.kind == ScopeItemKind::Value)
+                    .map(|e| e.name.name.clone())
+                    .collect()
+            };
+            for name in &exports {
+                if local_defs.contains(name.as_str()) {
+                    continue;
+                }
+                if let Some(&(prev_source, _prev_idx)) = wildcard_seen.get(name.as_str()) {
+                    if prev_source != source {
+                        diagnostics.push(file_diag(
+                            module,
+                            Diagnostic {
+                                code: "W2104".to_string(),
+                                severity: DiagnosticSeverity::Warning,
+                                message: format!(
+                                    "import of '{name}' from '{source}' shadows the same name from '{prev_source}'"
+                                ),
+                                span: use_decl.span.clone(),
+                                labels: Vec::new(),
+                                hints: vec![format!(
+                                    "use a selective import to choose which '{name}' you want, e.g. `use {source} ({name})`"
+                                )],
+                                suggestion: None,
+                            },
+                        ));
+                    }
+                } else {
+                    wildcard_seen.insert(name.clone(), (source, idx));
+                }
+            }
+        }
+    }
+
+    // ── Selective import checks (E2005, W2102, W2103) ──
     // Maps unqualified imported name → source module name (first occurrence wins).
     let mut seen: HashMap<&str, &str> = HashMap::new();
 

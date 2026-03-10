@@ -126,6 +126,7 @@ pub(super) fn build_channel_record() -> Value {
                         runtime.check_cancelled()?;
                         if gtk_active {
                             super::gtk4_real::pump_gtk_events();
+                            runtime.reactive_flush_deferred()?;
                         }
                         let recv_guard = receiver
                             .inner

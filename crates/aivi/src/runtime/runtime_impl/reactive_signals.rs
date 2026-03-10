@@ -5,6 +5,7 @@ impl Default for ReactiveGraphState {
             next_watcher_id: 1,
             batch_depth: 0,
             flushing: false,
+            deferred_flush: false,
             signals: HashMap::new(),
             watchers: HashMap::new(),
             watchers_by_signal: HashMap::new(),
@@ -614,7 +615,21 @@ impl Runtime {
             graph.batch_depth == 0 && !graph.flushing
         };
         if should_flush {
-            self.reactive_flush()
+            // If GTK is active on this thread, flush watcher callbacks now.
+            // Otherwise, defer the flush so the GTK main thread picks it up
+            // during the next pump_gtk_events / channel.recv cycle.
+            if builtins::gtk4_real::is_gtk_pump_active() {
+                self.reactive_flush()
+            } else {
+                let has_pending = {
+                    let graph = self.reactive_graph.lock();
+                    !graph.pending_notifications.is_empty()
+                };
+                if has_pending {
+                    self.reactive_graph.lock().deferred_flush = true;
+                }
+                Ok(())
+            }
         } else {
             Ok(())
         }
@@ -725,6 +740,22 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    /// Called by the GTK main thread to flush watcher callbacks that were
+    /// deferred by background threads updating signals.
+    pub(crate) fn reactive_flush_deferred(&mut self) -> Result<(), RuntimeError> {
+        let needs = {
+            let mut graph = self.reactive_graph.lock();
+            let needs = graph.deferred_flush;
+            graph.deferred_flush = false;
+            needs
+        };
+        if needs {
+            self.reactive_flush()
+        } else {
+            Ok(())
+        }
     }
 
     pub(crate) fn reactive_dispose_watcher(&mut self, watcher_id: usize) {

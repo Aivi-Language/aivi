@@ -1,0 +1,8 @@
+// EXPECT-ERROR: E3001
+@no_prelude
+module integrationTests.compileFail.cyclicSignalSelf
+
+use aivi
+use aivi.reactive
+
+x = derive x (_ + 1)

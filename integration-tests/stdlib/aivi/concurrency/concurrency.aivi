@@ -5,6 +5,7 @@ use aivi
 use aivi.prelude
 use aivi.testing
 use aivi.concurrency
+use aivi.reactive
 
 @test "channel roundtrip"
 channel_roundtrip = do Effect {
@@ -163,6 +164,69 @@ spawn_cancel = do Effect {
   _    <- task.cancel
   b    <- task.isCancelled
   assertEq b True
+}
+
+@test "spawned ticker updates a signal every 100ms"
+spawned_ticker_updates_signal = do Effect {
+  ticks = signal 0
+  (tx, rx) <- make 0
+  _watcher = watch ticks (value => send tx value)
+
+  task <- spawn (do Effect {
+      loop remaining = 3 => {
+        if remaining == 0 then pure Unit
+        else do Effect {
+          sleep 100
+          _ = update ticks (_ + 1)
+          recurse (remaining - 1)
+        }
+      }
+  })
+  first  <- timeoutWith 250 "missing first tick" (recv rx)
+  second <- timeoutWith 250 "missing second tick" (recv rx)
+  third  <- timeoutWith 250 "missing third tick" (recv rx)
+  _      <- task.join
+
+  first match
+    | Ok value => assertEq value 1
+    | Err _    => assert False
+    second match
+      | Ok value => assertEq value 2
+      | Err _    => assert False
+    third match
+      | Ok value => assertEq value 3
+      | Err _    => assert False
+
+    assertEq (get ticks) 3
+    close tx
+}
+
+@test "two spawned threads can collect delayed computations"
+spawn_collects_delayed_computations = do Effect {
+  (tx, rx) <- make 0
+
+  worker = value => delay => do Effect {
+    sleep delay
+    send tx value
+    pure value
+  }
+
+  slowTask <- spawn (worker 2 140)
+  fastTask <- spawn (worker 1 40)
+  first    <- timeoutWith 200 "missing fast worker result" (recv rx)
+  second   <- timeoutWith 300 "missing slow worker result" (recv rx)
+  slow     <- slowTask.join
+  fast     <- fastTask.join
+
+  first match
+    | Ok value => assertEq value 1
+    | Err _    => assert False
+    second match
+      | Ok value => assertEq value 2
+      | Err _    => assert False
+
+    assertEq (slow + fast) 3
+    close tx
 }
 
 @test "retry succeeds after transient failures"
