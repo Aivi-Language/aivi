@@ -131,6 +131,28 @@ signal_first_sigil_shapes = do Effect {
   assertEq (get title) "Hello"
 }
 
+@test "keyed each mounts from gtk sigil"
+keyed_each_mounts = do Effect {
+  _   <- init Unit
+  app <- appNew "integration-tests.keyed-each"
+  win <- windowNew app "KeyedEach" 320 120
+  rows = signal [
+    { id: "one", name: "First" }
+    { id: "two", name: "Second" }
+  ]
+  view =
+    ~<gtk>
+      <GtkBox orientation="vertical" spacing="4">
+        <each items={rows} as={row} key={row => row.id}>
+          <GtkLabel label={row.name} />
+        </each>
+      </GtkBox>
+    </gtk>
+    root <- buildFromNode view
+    _    <- windowSetChild win root
+    assertEq True True
+}
+
 @test "manual mount helpers remain available"
 manual_mount_helpers_available = do Effect {
   _ = init

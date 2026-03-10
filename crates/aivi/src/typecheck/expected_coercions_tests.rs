@@ -356,6 +356,43 @@ patchState = state <| (current => current <| { count: _ + 1, enabled: True })
 }
 
 #[test]
+fn resolver_accepts_signal_shorthand_with_local_replacement_values() {
+    let source = r#"
+module test.signal_local_replacements
+
+use aivi
+use aivi.reactive
+
+main = do Effect {
+  snakeState = signal [1]
+  nextSnake = [1, 2]
+  dirState = signal "right"
+  nextDir = "left"
+  count = signal 0
+  bump = _ + 1
+
+  _ = snakeState <| nextSnake
+  _ = dirState <| nextDir
+  _ = dirState <| "up"
+  _ = count <| bump
+  pure Unit
+}
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(
+        diags.is_empty(),
+        "expected signal shorthand replacements to typecheck during resolver/check phase, got: {diags:?}"
+    );
+}
+
+#[test]
 fn inserts_to_text_for_int_when_text_expected() {
     let source = r#"
 module test.no_coerce

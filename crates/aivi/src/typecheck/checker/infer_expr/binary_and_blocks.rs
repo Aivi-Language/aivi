@@ -55,23 +55,24 @@ impl TypeChecker {
 
         let right_ty = self.infer_expr(right, env)?;
         let checkpoint = self.subst.clone();
+
+        if self
+            .unify_with_span(right_ty.clone(), signal_item_ty.clone(), expr_span(right))
+            .is_ok()
+        {
+            return Ok(SignalWriteKind::Set);
+        }
+
+        self.subst = checkpoint.clone();
         let updater_ty = Type::Func(
             Box::new(signal_item_ty.clone()),
             Box::new(signal_item_ty.clone()),
         );
         if self
-            .unify_with_span(right_ty.clone(), updater_ty, expr_span(right))
+            .unify_with_span(right_ty, updater_ty, expr_span(right))
             .is_ok()
         {
             return Ok(SignalWriteKind::Update);
-        }
-
-        self.subst = checkpoint.clone();
-        if self
-            .unify_with_span(right_ty, signal_item_ty.clone(), expr_span(right))
-            .is_ok()
-        {
-            return Ok(SignalWriteKind::Set);
         }
 
         self.subst = checkpoint;

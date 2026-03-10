@@ -206,6 +206,7 @@ impl TypeChecker {
 
             for pattern in &def.params {
                 let param_ty = self.infer_pattern(pattern, &mut local_env)?;
+                let param_ty_for_span = param_ty.clone();
                 if let Some(sig_ty) = remaining_sig_ty.take() {
                     let applied = self.apply(sig_ty);
                     match self.expand_alias(applied) {
@@ -226,6 +227,8 @@ impl TypeChecker {
                         }
                     }
                 }
+                self.span_types
+                    .push((pattern_span(pattern), param_ty_for_span));
             }
 
             let expected_body = remaining_sig_ty;
@@ -386,6 +389,7 @@ impl TypeChecker {
                 let mut param_tys = Vec::new();
                 for pattern in &params {
                     let param_ty = self.infer_pattern(pattern, &mut lambda_env)?;
+                    let param_ty_for_span = param_ty.clone();
                     if let Some(exp_ty) = remaining_expected.take() {
                         let applied = self.apply(exp_ty);
                         match self.expand_alias(applied) {
@@ -412,6 +416,8 @@ impl TypeChecker {
                             }
                         }
                     }
+                    self.span_types
+                        .push((pattern_span(pattern), param_ty_for_span));
                     param_tys.push(param_ty);
                 }
 

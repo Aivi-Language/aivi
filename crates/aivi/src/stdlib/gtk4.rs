@@ -129,11 +129,13 @@ gtkEach = items => template =>
   GtkEachNode (gtk4.captureBinding items) (gtk4.captureBinding template) None
 
 gtkEachKeyed : a -> (b -> key) -> (b -> GtkNode) -> GtkNode
-gtkEachKeyed = items => keyFn => template =>
-  GtkEachNode
-    (gtk4.captureBinding items)
-    (gtk4.captureBinding template)
-    (Some (gtk4.captureBinding keyFn))
+gtkEachKeyed = items => keyFn => template => {
+  base = gtkEach items template
+  base match
+    | GtkEachNode itemsHandle templateHandle _ =>
+        GtkEachNode itemsHandle templateHandle (Some (gtk4.captureBinding keyFn))
+    | _ => base
+}
 
 gtkStaticAttr : Text -> a -> GtkAttr
 gtkStaticAttr = name => value => GtkStaticAttr name (gtk4.serializeAttr value)
