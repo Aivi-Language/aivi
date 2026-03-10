@@ -413,6 +413,68 @@ mod lsp_protocol_edits {
     }
 
     #[tokio::test]
+    async fn unrelated_workspace_errors_do_not_hide_current_file_type_diagnostics() {
+        let dir = std::env::temp_dir().join(format!(
+            "aivi-lsp-unrelated-diags-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let main_path = dir.join("main.aivi");
+        let broken_path = dir.join("broken.aivi");
+        let main_text = "module lsp.current\n\nvalue : Int\nvalue = \"oops\"\n";
+        let broken_text = "module lsp.unrelated\n\nbroken = missingName\n";
+        std::fs::write(&main_path, main_text).expect("write current file");
+        std::fs::write(&broken_path, broken_text).expect("write unrelated file");
+
+        let uri = Url::from_file_path(&main_path).expect("file uri");
+        let root_uri = Url::from_file_path(&dir).expect("root uri");
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp_with_root(&mut client_read, &mut client_write, root_uri).await;
+
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": main_text
+                    }
+                }
+            }),
+        )
+        .await;
+
+        let diags = timeout(
+            Duration::from_secs(5),
+            wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
+        )
+        .await
+        .expect("publishDiagnostics");
+        assert!(
+            diags.iter().any(|diag| {
+                diag.get("severity").and_then(Value::as_u64) == Some(1)
+                    && diag
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .is_some_and(|message| message.contains("type mismatch"))
+            }),
+            "expected current file type mismatch despite unrelated workspace errors, got: {diags:?}"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn concurrent_incremental_changes_share_latest_document_text() {
         let state = Arc::new(tokio::sync::Mutex::new(BackendState::default()));
         let client_slot = Arc::new(std::sync::Mutex::new(None));

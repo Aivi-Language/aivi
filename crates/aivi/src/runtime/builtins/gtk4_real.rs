@@ -14,6 +14,8 @@ mod bridge {
         format_runtime_error, CancelToken, EffectValue, Runtime, RuntimeError, Value,
     };
 
+    static GTK_APP_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
     fn effect<F>(f: F) -> Value
     where
         F: Fn(&mut crate::runtime::Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
@@ -383,7 +385,7 @@ mod bridge {
                 apply_live_property(widget_id, &class_name, &property, &value)?;
                 Ok(Value::Unit)
             });
-            let (watcher_id, _) = runtime.reactive_watch_signal_with_id(binding.signal, callback)?;
+            let (watcher_id, _) = runtime.reactive_watch_signal_unscoped(binding.signal, callback)?;
             runtime.ctx.push_gtk_binding_watcher(widget_id, watcher_id);
         }
         Ok(())
@@ -463,7 +465,7 @@ mod bridge {
                 Ok(Value::Unit)
             });
             for signal in binding.signals {
-                let (watcher_id, _) = runtime.reactive_watch_signal_with_id(signal, callback.clone())?;
+                let (watcher_id, _) = runtime.reactive_watch_signal_unscoped(signal, callback.clone())?;
                 runtime.ctx.push_gtk_binding_watcher(widget_id, watcher_id);
             }
         }
@@ -857,7 +859,11 @@ mod bridge {
         // ── appNew ──
         fields.insert("appNew".to_string(), builtin("gtk4.appNew", 1, |mut args, _| {
             let id = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("gtk4.appNew expects Text")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
+            Ok(effect(move |_| {
+                let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?;
+                GTK_APP_INITIALIZED.store(true, std::sync::atomic::Ordering::Release);
+                Ok(Value::Int(r))
+            }))
         }));
 
         // ── appRun ──
@@ -2179,12 +2185,23 @@ pub(super) fn pump_gtk_events() {}
 
 /// Returns true when a GTK application is active and events need pumping.
 #[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
-pub(super) fn is_gtk_pump_active() -> bool {
+pub(crate) fn is_gtk_pump_active() -> bool {
     aivi_gtk4::is_pump_active()
 }
 
 #[cfg(not(all(feature = "gtk4-libadwaita", target_os = "linux")))]
-pub(super) fn is_gtk_pump_active() -> bool {
+pub(crate) fn is_gtk_pump_active() -> bool {
+    false
+}
+
+/// Returns true after any GTK application has been created (on any thread).
+#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+pub(crate) fn is_gtk_app_initialized() -> bool {
+    bridge::GTK_APP_INITIALIZED.load(std::sync::atomic::Ordering::Acquire)
+}
+
+#[cfg(not(all(feature = "gtk4-libadwaita", target_os = "linux")))]
+pub(crate) fn is_gtk_app_initialized() -> bool {
     false
 }
 
