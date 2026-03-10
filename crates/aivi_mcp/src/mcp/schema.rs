@@ -30,7 +30,10 @@ const MCP_TOOL_GTK_INSPECT_WIDGET: &str = "aivi.gtk.inspectWidget";
 const MCP_TOOL_GTK_DUMP_TREE: &str = "aivi.gtk.dumpTree";
 const MCP_TOOL_GTK_CLICK: &str = "aivi.gtk.click";
 const MCP_TOOL_GTK_TYPE: &str = "aivi.gtk.type";
+const MCP_TOOL_GTK_FOCUS: &str = "aivi.gtk.focus";
+const MCP_TOOL_GTK_MOVE_FOCUS: &str = "aivi.gtk.moveFocus";
 const MCP_TOOL_GTK_SELECT: &str = "aivi.gtk.select";
+const MCP_TOOL_GTK_SCROLL: &str = "aivi.gtk.scroll";
 const MCP_TOOL_GTK_KEY_PRESS: &str = "aivi.gtk.keyPress";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,7 +248,10 @@ fn execute_tool(name: &str, arguments: &serde_json::Value) -> Result<serde_json:
         MCP_TOOL_GTK_DUMP_TREE => execute_gtk_dump_tree_tool(arguments),
         MCP_TOOL_GTK_CLICK => execute_gtk_click_tool(arguments),
         MCP_TOOL_GTK_TYPE => execute_gtk_type_tool(arguments),
+        MCP_TOOL_GTK_FOCUS => execute_gtk_focus_tool(arguments),
+        MCP_TOOL_GTK_MOVE_FOCUS => execute_gtk_move_focus_tool(arguments),
         MCP_TOOL_GTK_SELECT => execute_gtk_select_tool(arguments),
+        MCP_TOOL_GTK_SCROLL => execute_gtk_scroll_tool(arguments),
         MCP_TOOL_GTK_KEY_PRESS => execute_gtk_key_press_tool(arguments),
         _ => Err(AiviError::InvalidCommand(format!("unknown tool {name}"))),
     }
@@ -758,6 +764,55 @@ fn execute_gtk_type_tool(arguments: &serde_json::Value) -> Result<serde_json::Va
     }))
 }
 
+fn execute_gtk_focus_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let params = gtk_widget_params(args)?;
+    let result = gtk_ui_call(&session, "focus", params)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_FOCUS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_move_focus_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "direction"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let direction = get_required_string(args, "direction")?;
+
+    let mut params = serde_json::Map::new();
+    if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
+        params.insert(
+            "name".to_string(),
+            serde_json::Value::String(name.to_string()),
+        );
+    }
+    if let Some(id) = args.get("id").and_then(|v| v.as_i64()) {
+        params.insert("id".to_string(), serde_json::Value::Number(id.into()));
+    }
+    params.insert(
+        "direction".to_string(),
+        serde_json::Value::String(direction.to_string()),
+    );
+
+    let result = gtk_ui_call(&session, "moveFocus", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_MOVE_FOCUS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
 fn execute_gtk_select_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["sessionId", "name", "id", "value"])?;
     let session_id = get_required_string(args, "sessionId")?;
@@ -777,6 +832,38 @@ fn execute_gtk_select_tool(arguments: &serde_json::Value) -> Result<serde_json::
     Ok(serde_json::json!({
         "ok": true,
         "tool": MCP_TOOL_GTK_SELECT,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_scroll_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(
+        arguments,
+        &["sessionId", "name", "id", "direction", "amount"],
+    )?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let direction = get_required_string(args, "direction")?;
+    let amount = get_optional_f64(args, "amount")?;
+
+    let mut params = match gtk_widget_params(args)? {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    params.insert(
+        "direction".to_string(),
+        serde_json::Value::String(direction.to_string()),
+    );
+    if let Some(amount) = amount {
+        params.insert("amount".to_string(), serde_json::json!(amount));
+    }
+
+    let result = gtk_ui_call(&session, "scroll", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_SCROLL,
         "sessionId": session_id,
         "pid": session.pid,
         "result": result,
@@ -865,6 +952,19 @@ fn get_optional_bool(
         Some(value) => value
             .as_bool()
             .ok_or_else(|| AiviError::InvalidCommand(format!("argument {key} must be a boolean"))),
+    }
+}
+
+fn get_optional_f64(
+    args: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<Option<f64>, AiviError> {
+    match args.get(key) {
+        None => Ok(None),
+        Some(value) => value
+            .as_f64()
+            .map(Some)
+            .ok_or_else(|| AiviError::InvalidCommand(format!("argument {key} must be a number"))),
     }
 }
 
@@ -1310,6 +1410,9 @@ mod tests {
         assert!(tool_names.contains(&"aivi_parse"));
         assert!(tool_names.contains(&"aivi_fmt_write"));
         assert!(tool_names.contains(&"aivi_gtk_launch"));
+        assert!(tool_names.contains(&"aivi_gtk_focus"));
+        assert!(tool_names.contains(&"aivi_gtk_moveFocus"));
+        assert!(tool_names.contains(&"aivi_gtk_scroll"));
         assert!(tool_names.contains(&"aivi_gtk_keyPress"));
         assert!(!tool_names.iter().any(|name| name.contains('.')));
     }
@@ -1327,7 +1430,10 @@ mod tests {
         assert!(tool_names.contains(&MCP_TOOL_GTK_DUMP_TREE));
         assert!(tool_names.contains(&MCP_TOOL_GTK_CLICK));
         assert!(tool_names.contains(&MCP_TOOL_GTK_TYPE));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_FOCUS));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_MOVE_FOCUS));
         assert!(tool_names.contains(&MCP_TOOL_GTK_SELECT));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_SCROLL));
         assert!(tool_names.contains(&MCP_TOOL_GTK_KEY_PRESS));
     }
 }

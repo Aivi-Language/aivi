@@ -16,7 +16,7 @@ Mode      = Running | Paused | GameOver
 Pixel     = (Int, Int)
 gridW     = 30
 gridH     = 20
-tickMs    = 200
+tickMs    = 100
 
 initial = {
   snake: [(5, 10), (4, 10), (3, 10)]

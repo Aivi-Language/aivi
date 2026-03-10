@@ -1031,7 +1031,7 @@ Compatibility forms like `file.json "./users.json"` and `env.decode "AIVI_APP"` 
 
 - Schema-first record declarations power hover/diagnostics for `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
 - `aivi lsp` checks whole **workspace snapshots** incrementally: open documents shadow disk, cached checkpoints reuse only when their fingerprints match, and dependents recheck when export surfaces or exported schema summaries change.
-- AIVI comes with own MCP server 'aivi mcp serve --ui --allow-effects' you can use that to debug GTK interfaces and read docs.
+- AIVI comes with own MCP server `aivi mcp serve --ui --allow-effects`; you can use it to inspect GTK interfaces, move focus with `aivi_gtk_focus` / `aivi_gtk_moveFocus`, scroll widgets, drive dropdowns/ranges, and read bundled docs.
 
 ### Email Module (`aivi.email`)
 
