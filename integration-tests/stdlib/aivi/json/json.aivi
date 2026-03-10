@@ -67,7 +67,7 @@ decode_list_surfaces_item_errors = do Effect {
 
 @test "decode unavailable"
 decode_unavailable = do Effect {
-  err <- assertErr (decode "{\"id\":1}")
+  err <- assertErr (decode "[]")
   assertEq err.message "json.decode: native JSON parsing not yet available"
 }
 

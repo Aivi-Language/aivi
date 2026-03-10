@@ -29,13 +29,13 @@ assert_eq_functional = do Effect {
 
 @test "assert ok"
 assertOk_functional = do Effect {
-  value <- assertOk (Ok 2)
+  value <- assertOk (if True then Ok 2 else Err "boom")
   assertEq value 2
 }
 
 @test "assert ok fails"
 assertOk_fails = do Effect {
-  result <- attempt (assertOk (Err "boom"))
+  result <- attempt (assertOk (if False then Ok 2 else Err "boom"))
   result match
     | Ok _  => assert False
     | Err e => assertEq e "assertOk failed: expected Ok"
@@ -43,13 +43,13 @@ assertOk_fails = do Effect {
 
 @test "assert err"
 assertErr_functional = do Effect {
-  err <- assertErr (Err "boom")
+  err <- assertErr (if True then Err "boom" else Ok 2)
   assertEq err "boom"
 }
 
 @test "assert err fails"
 assertErr_fails = do Effect {
-  result <- attempt (assertErr (Ok 2))
+  result <- attempt (assertErr (if False then Err "boom" else Ok 2))
   result match
     | Ok _  => assert False
     | Err e => assertEq e "assertErr failed: expected Err"
@@ -57,13 +57,13 @@ assertErr_fails = do Effect {
 
 @test "assert some"
 assertSome_functional = do Effect {
-  value <- assertSome (Some 42)
+  value <- assertSome (if True then Some 42 else None)
   assertEq value 42
 }
 
 @test "assert some fails"
 assertSome_fails = do Effect {
-  result <- attempt (assertSome None)
+  result <- attempt (assertSome (if False then Some 42 else None))
   result match
     | Ok _  => assert False
     | Err e => assertEq e "assertSome failed: expected Some"
@@ -71,12 +71,12 @@ assertSome_fails = do Effect {
 
 @test "assert none"
 assertNone_functional = do Effect {
-  assertNone None
+  assertNone (if True then None else Some 42)
 }
 
 @test "assert none fails"
 assertNone_fails = do Effect {
-  result <- attempt (assertNone (Some 42))
+  result <- attempt (assertNone (if False then None else Some 42))
   result match
     | Ok _  => assert False
     | Err e => assertEq e "assertNone failed: expected None"

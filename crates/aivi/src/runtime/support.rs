@@ -1,4 +1,86 @@
+fn is_url_option_int(value: &Value) -> bool {
+    matches!(
+        value,
+        Value::Constructor { name, args } if (name == "None" && args.is_empty())
+            || (name == "Some" && args.len() == 1 && matches!(args[0], Value::Int(_)))
+    )
+}
+
+fn is_url_option_text(value: &Value) -> bool {
+    matches!(
+        value,
+        Value::Constructor { name, args } if (name == "None" && args.is_empty())
+            || (name == "Some" && args.len() == 1 && matches!(args[0], Value::Text(_)))
+    )
+}
+
+fn is_url_like_record(fields: &HashMap<String, Value>) -> bool {
+    matches!(fields.get("protocol"), Some(Value::Text(_)))
+        && matches!(fields.get("host"), Some(Value::Text(_)))
+        && matches!(fields.get("path"), Some(Value::Text(_)))
+        && matches!(fields.get("query"), Some(Value::List(_)))
+        && fields.get("port").is_some_and(is_url_option_int)
+        && fields.get("hash").is_some_and(is_url_option_text)
+}
+
+fn try_url_query_binary(op: &str, left: &Value, right: &Value) -> Option<Value> {
+    match (op, left, right) {
+        ("+", Value::Record(fields), Value::Tuple(items)) if items.len() == 2 => {
+            if !is_url_like_record(fields) {
+                return None;
+            }
+            let (key, value) = match (&items[0], &items[1]) {
+                (Value::Text(key), Value::Text(value)) => (key.clone(), value.clone()),
+                _ => return None,
+            };
+            let query_items = match fields.get("query") {
+                Some(Value::List(items)) => items,
+                _ => return None,
+            };
+            let mut new_query = query_items.iter().cloned().collect::<Vec<_>>();
+            new_query.push(Value::Tuple(vec![Value::Text(key), Value::Text(value)]));
+
+            let mut new_fields = fields.as_ref().clone();
+            new_fields.insert("query".to_string(), Value::List(Arc::new(new_query)));
+            Some(Value::Record(Arc::new(new_fields)))
+        }
+        ("-", Value::Record(fields), Value::Text(key)) => {
+            if !is_url_like_record(fields) {
+                return None;
+            }
+            let query_items = match fields.get("query") {
+                Some(Value::List(items)) => items,
+                _ => return None,
+            };
+            let mut filtered = Vec::new();
+            for item in query_items.iter() {
+                let Value::Tuple(parts) = item else {
+                    return None;
+                };
+                if parts.len() != 2 {
+                    return None;
+                }
+                let (Value::Text(existing_key), Value::Text(_)) = (&parts[0], &parts[1]) else {
+                    return None;
+                };
+                if existing_key != key {
+                    filtered.push(item.clone());
+                }
+            }
+
+            let mut new_fields = fields.as_ref().clone();
+            new_fields.insert("query".to_string(), Value::List(Arc::new(filtered)));
+            Some(Value::Record(Arc::new(new_fields)))
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Option<Value> {
+    if let Some(result) = try_url_query_binary(op, left, right) {
+        return Some(result);
+    }
+
     match (op, left, right) {
         ("..", Value::Int(start), Value::Int(end)) => {
             if start > end {
