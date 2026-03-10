@@ -49,10 +49,6 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
 - [Generators](syntax/generators.md)
-##### State Machines
-- [Overview](syntax/state_machines.md)
-- [Machine Syntax](syntax/machines.md)
-- [Machine Runtime](syntax/machines_runtime.md)
 #### Modules & External Data
 - [Modules](syntax/modules.md)
 ##### External Sources
