@@ -107,6 +107,7 @@ impl RuntimeContext {
                 next_watcher_id: 1,
                 batch_depth: 0,
                 flushing: false,
+                deferred_flush: false,
                 signals: HashMap::new(),
                 watchers: HashMap::new(),
                 watchers_by_signal: HashMap::new(),

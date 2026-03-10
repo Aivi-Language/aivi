@@ -85,13 +85,11 @@ impl Backend {
         workspace_modules: &HashMap<String, IndexedModule>,
     ) -> Vec<PathBuf> {
         let module_map = Self::diagnostic_module_map(file_modules, workspace_modules);
-        let relevant_module_names = Self::collect_transitive_modules_for_diagnostics(
-            file_modules,
-            &module_map,
-        )
-        .into_iter()
-        .map(|module| module.name.name)
-        .collect::<HashSet<_>>();
+        let relevant_module_names =
+            Self::collect_transitive_modules_for_diagnostics(file_modules, &module_map)
+                .into_iter()
+                .map(|module| module.name.name)
+                .collect::<HashSet<_>>();
 
         let mut target_paths: Vec<PathBuf> = workspace_modules
             .iter()
@@ -233,8 +231,16 @@ impl Backend {
             return Vec::new();
         }
 
-        let target_paths =
-            Self::collect_transitive_target_paths_for_diagnostics(&path, &file_modules, workspace_modules);
+        let file_modules = workspace_modules
+            .values()
+            .filter(|indexed| indexed.uri == *uri)
+            .map(|indexed| indexed.module.clone())
+            .collect::<Vec<_>>();
+        let target_paths = Self::collect_transitive_target_paths_for_diagnostics(
+            &path,
+            &file_modules,
+            workspace_modules,
+        );
         let assembly = match session.lock() {
             Ok(mut session) => {
                 match session

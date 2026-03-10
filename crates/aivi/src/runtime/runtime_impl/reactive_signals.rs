@@ -131,6 +131,24 @@ impl Runtime {
         signal: Value,
         callback: Value,
     ) -> Result<(usize, Value), RuntimeError> {
+        let (watcher_id, disposable) = self.reactive_watch_signal_unscoped(signal, callback)?;
+        self.resource_cleanups.push(ResourceCleanupEntry::Cleanup {
+            cleanup: Arc::new(move |runtime| {
+                runtime.reactive_dispose_watcher(watcher_id);
+                Ok(Value::Unit)
+            }),
+        });
+        Ok((watcher_id, disposable))
+    }
+
+    /// Register a watcher without tying its lifetime to the current effect
+    /// scope. The caller is responsible for disposing the watcher (e.g. via
+    /// `push_gtk_binding_watcher` which cleans up when the widget is removed).
+    pub(crate) fn reactive_watch_signal_unscoped(
+        &mut self,
+        signal: Value,
+        callback: Value,
+    ) -> Result<(usize, Value), RuntimeError> {
         let signal_id = self.reactive_signal_id_from_value(signal, "reactive.watch")?;
         let revision = self.reactive_current_revision(signal_id)?;
         let watcher_id = {
@@ -153,12 +171,6 @@ impl Runtime {
                 .insert(watcher_id);
             watcher_id
         };
-        self.resource_cleanups.push(ResourceCleanupEntry::Cleanup {
-            cleanup: Arc::new(move |runtime| {
-                runtime.reactive_dispose_watcher(watcher_id);
-                Ok(Value::Unit)
-            }),
-        });
         Ok((watcher_id, self.reactive_disposable_record(watcher_id)))
     }
 
@@ -615,17 +627,23 @@ impl Runtime {
             graph.batch_depth == 0 && !graph.flushing
         };
         if should_flush {
-            // If GTK is active on this thread, flush watcher callbacks now.
-            // Otherwise, defer the flush so the GTK main thread picks it up
-            // during the next pump_gtk_events / channel.recv cycle.
-            if builtins::gtk4_real::is_gtk_pump_active() {
+            // If we're on the GTK main thread, or no GTK app exists at all,
+            // flush watcher callbacks immediately. Otherwise defer so the GTK
+            // main thread picks it up during the next pump/recv cycle.
+            if builtins::gtk4_real::is_gtk_pump_active()
+                || !builtins::gtk4_real::is_gtk_app_initialized()
+            {
                 self.reactive_flush()
             } else {
                 let has_pending = {
                     let graph = self.reactive_graph.lock();
                     !graph.pending_notifications.is_empty()
                 };
-                if has_pending {
+                let has_dirty = {
+                    let graph = self.reactive_graph.lock();
+                    graph.signals.values().any(|e| e.dirty)
+                };
+                if has_pending || has_dirty {
                     self.reactive_graph.lock().deferred_flush = true;
                 }
                 Ok(())

@@ -180,6 +180,10 @@ pub(crate) struct ReactiveGraphState {
     /// but cannot run watcher callbacks (GTK not active on that thread).
     /// The GTK main thread checks this flag and flushes on the next pump.
     pub(crate) deferred_flush: bool,
+    /// True once any watcher has been registered that requires flushing on the
+    /// main thread (e.g. GTK live-binding watchers). When false, all flushes
+    /// happen immediately regardless of which thread triggers them.
+    pub(crate) main_thread_flush: bool,
     pub(crate) signals: HashMap<usize, ReactiveCellEntry>,
     pub(crate) watchers: HashMap<usize, ReactiveWatcherEntry>,
     pub(crate) watchers_by_signal: HashMap<usize, HashSet<usize>>,

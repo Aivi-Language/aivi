@@ -6,7 +6,6 @@ use aivi.logic
 use aivi.prelude (toText)
 use aivi.reactive
 use aivi.text (join)
-use aivi.console (println)
 use aivi.ui.gtk4
 
 export main
@@ -241,21 +240,14 @@ initWindow = node => do Effect {
 main : Effect GtkError Unit
 main = do Effect {
   appId <- initWindow view
-  println "window ready"
   rx <- signalStream Unit
-  println "signal stream ready"
   _ <- concurrent.spawn (do Effect {
-      println "spawn started"
       loop n = 0 => do Effect {
-        println "before sleep {toText n}"
         concurrent.sleep tickMs
-        println "after sleep {toText n}"
         _ <- pure (tickGame Unit)
-        println "after tick {toText n}"
         recurse (n + 1)
       }
   })
-  println "spawn launched"
   concurrent.forEach rx (event => event match
     | GtkClicked _ "pauseBtn"   => pure (togglePause Unit)
     | GtkClicked _ "restartBtn" => pure (restartGame Unit)
