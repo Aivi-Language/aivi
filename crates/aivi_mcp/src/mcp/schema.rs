@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::Stdio;
 #[cfg(unix)]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MCP_TOOL_PARSE: &str = "aivi.parse";
 const MCP_TOOL_CHECK: &str = "aivi.check";
@@ -473,6 +473,14 @@ struct GtkUiSession {
     last_reload_ready: Option<bool>,
 }
 
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GtkSocketWaitState {
+    Ready,
+    Exited,
+    TimedOut,
+}
+
 static GTK_UI_SESSIONS: OnceLock<Mutex<HashMap<String, GtkUiSession>>> = OnceLock::new();
 static GTK_UI_DEBUG_CACHE: OnceLock<Mutex<GtkUiDebugCache>> = OnceLock::new();
 
@@ -579,6 +587,34 @@ fn gtk_ui_call(
     method: &str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, AiviError> {
+    if session.launch_target.is_some() && !gtk_socket_exists(&session.socket_path) {
+        match gtk_wait_for_socket_state(session, Duration::from_secs(90)) {
+            GtkSocketWaitState::Ready => {}
+            GtkSocketWaitState::Exited => {
+                let detail = session
+                    .pid
+                    .map(|pid| {
+                        format!(
+                            "gtk process {pid} exited before debug socket {} became ready",
+                            session.socket_path
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        format!(
+                            "gtk debug socket {} never became ready because the app exited",
+                            session.socket_path
+                        )
+                    });
+                return Err(AiviError::InvalidCommand(detail));
+            }
+            GtkSocketWaitState::TimedOut => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "gtk debug socket {} is not ready yet; the launched app may still be starting",
+                    session.socket_path
+                )));
+            }
+        }
+    }
     let mut stream = UnixStream::connect(&session.socket_path)?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
@@ -808,6 +844,44 @@ fn gtk_launch_working_dir(target: &str) -> Option<PathBuf> {
     }
 
     None
+}
+
+#[cfg(unix)]
+fn gtk_socket_exists(socket_path: &str) -> bool {
+    std::fs::metadata(socket_path)
+        .map(|meta| meta.file_type().is_socket())
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
+fn gtk_pid_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    let proc_path = format!("/proc/{pid}");
+    if Path::new(&proc_path).exists() {
+        return true;
+    }
+    !cfg!(target_os = "linux")
+}
+
+#[cfg(unix)]
+fn gtk_wait_for_socket_state(session: &GtkUiSession, timeout: Duration) -> GtkSocketWaitState {
+    let started = Instant::now();
+    loop {
+        if gtk_socket_exists(&session.socket_path) {
+            return GtkSocketWaitState::Ready;
+        }
+        if let Some(pid) = session.pid {
+            if !gtk_pid_is_running(pid) {
+                return GtkSocketWaitState::Exited;
+            }
+        }
+        if started.elapsed() >= timeout {
+            return GtkSocketWaitState::TimedOut;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn execute_gtk_launch_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
@@ -2085,29 +2159,32 @@ fn gtk_launch_managed_session(
         let _ = child.wait();
     });
 
-    let mut ready = false;
-    for _ in 0..60 {
-        if std::fs::metadata(&socket_path).is_ok() {
-            ready = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    let mut session = GtkUiSession {
+        socket_path,
+        token,
+        pid: Some(pid),
+        launch_target: Some(target.to_string()),
+        release,
+        reload_mode: "restart".to_string(),
+        reload_count: 0,
+        last_reload_at_ms: None,
+        last_reload_ready: None,
+    };
 
-    Ok((
-        GtkUiSession {
-            socket_path,
-            token,
-            pid: Some(pid),
-            launch_target: Some(target.to_string()),
-            release,
-            reload_mode: "restart".to_string(),
-            reload_count: 0,
-            last_reload_at_ms: None,
-            last_reload_ready: Some(ready),
-        },
-        ready,
-    ))
+    let ready = match gtk_wait_for_socket_state(&session, Duration::from_secs(15)) {
+        GtkSocketWaitState::Ready => true,
+        GtkSocketWaitState::TimedOut => false,
+        GtkSocketWaitState::Exited => {
+            let detail = format!(
+                "gtk process {pid} exited before debug socket {} became ready",
+                session.socket_path
+            );
+            return Err(AiviError::InvalidCommand(detail));
+        }
+    };
+    session.last_reload_ready = Some(ready);
+
+    Ok((session, ready))
 }
 
 fn get_optional_u64(
@@ -2517,6 +2594,64 @@ mod tests {
         assert_eq!(
             gtk_launch_working_dir(project_root.to_str().expect("utf8 path")),
             Some(project_root)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gtk_wait_for_socket_state_detects_delayed_socket() {
+        use std::os::unix::net::UnixListener;
+        use std::thread;
+
+        let dir = tempdir().expect("create tempdir");
+        let socket_path = dir.path().join("ui-debug.sock");
+        let session = GtkUiSession {
+            socket_path: socket_path.display().to_string(),
+            token: "token".to_string(),
+            pid: Some(std::process::id()),
+            launch_target: Some("dummy".to_string()),
+            release: false,
+            reload_mode: "restart".to_string(),
+            reload_count: 0,
+            last_reload_at_ms: None,
+            last_reload_ready: None,
+        };
+
+        let socket_path_for_thread = socket_path.clone();
+        let handle = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(120));
+            let _listener =
+                UnixListener::bind(&socket_path_for_thread).expect("bind delayed socket");
+            thread::sleep(Duration::from_millis(120));
+        });
+
+        assert_eq!(
+            gtk_wait_for_socket_state(&session, Duration::from_secs(2)),
+            GtkSocketWaitState::Ready
+        );
+        handle.join().expect("join socket thread");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gtk_wait_for_socket_state_reports_exited_process() {
+        let dir = tempdir().expect("create tempdir");
+        let socket_path = dir.path().join("missing.sock");
+        let session = GtkUiSession {
+            socket_path: socket_path.display().to_string(),
+            token: "token".to_string(),
+            pid: Some(0),
+            launch_target: Some("dummy".to_string()),
+            release: false,
+            reload_mode: "restart".to_string(),
+            reload_count: 0,
+            last_reload_at_ms: None,
+            last_reload_ready: None,
+        };
+
+        assert_eq!(
+            gtk_wait_for_socket_state(&session, Duration::from_millis(50)),
+            GtkSocketWaitState::Exited
         );
     }
 
