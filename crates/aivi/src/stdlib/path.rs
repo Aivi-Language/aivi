@@ -40,7 +40,10 @@ normalizeSegments : Bool -> List Text -> List Text
 normalizeSegments = absolute segments => reverse (normalizeAcc absolute [] segments)
 
 normalize : Path -> Path
-normalize = p => { ...p, segments: normalizeSegments p.absolute p.segments }
+normalize = p => {
+  absolute: p.absolute
+  segments: normalizeSegments p.absolute p.segments
+}
 
 parse : Text -> Path
 parse = raw => {

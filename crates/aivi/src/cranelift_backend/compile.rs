@@ -436,12 +436,10 @@ fn jit_compile_into_runtime(
     //    skipped: they cannot dispatch on arguments, so users must qualify
     //    (List.empty, Map.empty).
     //
-    //  • Everything else — keep the historical direct alias unless we know the
-    //    name is a safe overload family that relies on runtime clause fallback.
-    //    Today that is the stdlib `getOrElse*` family; broader duplicate-name
-    //    merging is unsafe because unrelated same-arity helpers like `dot`
-    //    don't fail with a clean non-exhaustive match.
-    let safe_bare_multiclause_names: HashSet<&str> = HashSet::from(["getOrElse", "getOrElseLazy"]);
+    //  • Everything else — last-writer-wins (plain insert), which is the
+    //    historical default. Imported bare names should be qualified earlier by
+    //    `resolve_import_names`, so this aliasing only serves truly bare global
+    //    lookups.
     let mut seen_qualified: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut hkt_bare_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     for pd in &pending {
@@ -462,7 +460,7 @@ fn jit_compile_into_runtime(
             } else if hkt_bare_names.contains(&pd.name) {
                 // Bare name owned by HKT bundle — don't pollute it.
                 continue;
-            } else if is_operator || safe_bare_multiclause_names.contains(pd.name.as_str()) {
+            } else if is_operator {
                 insert_or_merge(&mut compiled_globals, pd.name.clone(), value);
             } else {
                 compiled_globals.insert(pd.name.clone(), value);

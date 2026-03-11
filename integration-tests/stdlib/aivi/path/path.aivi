@@ -51,3 +51,9 @@ toString_roundtrip = do Effect {
   s = toString p
   assert (text.length s > 0)
 }
+
+@test "normalize collapses parent segments"
+normalize_parent_segments = do Effect {
+  p = { absolute: False, segments: ["a", "..", "b"] }
+  assertEq (toString (normalize p)) "b"
+}

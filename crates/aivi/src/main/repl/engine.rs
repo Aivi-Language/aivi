@@ -11,8 +11,8 @@ use std::path::Path;
 use aivi::{
     check_modules, check_types, desugar_modules, embedded_stdlib_modules,
     evaluate_binding_jit_detailed, file_diagnostics_have_errors, infer_value_types_full,
-    parse_modules, render_diagnostics, AiviError, ClassDecl, DomainDecl, DomainItem,
-    FileDiagnostic, Module, ModuleItem, TypeAlias, TypeDecl, TypeExpr, TypeSig,
+    parse_modules, render_diagnostics, resolve_import_names, AiviError, ClassDecl, DomainDecl,
+    DomainItem, FileDiagnostic, Module, ModuleItem, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
 use super::doc_index::{DocIndex, QuickInfoEntry, DOC_INDEX_JSON};
@@ -604,6 +604,7 @@ Command Reference
                 let (mut parsed_modules, mut all_diags) = parse_modules(path, &content);
                 let mut modules = embedded_stdlib_modules();
                 modules.append(&mut parsed_modules);
+                resolve_import_names(&mut modules);
                 all_diags.extend(check_modules(&modules));
                 all_diags.extend(check_types(&modules));
                 let file_diags: Vec<_> = all_diags
@@ -669,6 +670,7 @@ Command Reference
                 let (mut session_modules, mut parse_diags) = parse_modules(path, &module_source);
                 let mut all_modules = embedded_stdlib_modules();
                 all_modules.append(&mut session_modules);
+                resolve_import_names(&mut all_modules);
 
                 let resolver_diags = check_modules(&all_modules);
                 parse_diags.extend(
@@ -741,6 +743,7 @@ Command Reference
         let stdlib = embedded_stdlib_modules();
         let mut all_modules: Vec<Module> = stdlib.clone();
         all_modules.append(&mut session_modules);
+        resolve_import_names(&mut all_modules);
 
         // Filter diagnostics to only those from the session module.
         let resolver_diags = check_modules(&all_modules);
@@ -997,6 +1000,7 @@ Command Reference
 
         let mut all_modules = embedded_stdlib_modules();
         all_modules.append(&mut session_modules);
+        resolve_import_names(&mut all_modules);
         let resolver_diags = check_modules(&all_modules);
         if file_diagnostics_have_errors(&resolver_diags) {
             return Vec::new();
@@ -2774,12 +2778,71 @@ mod tests {
     }
 
     #[test]
+    fn expression_submit_resolves_option_to_result() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.option").unwrap();
+        let snap = engine.submit("Some 5 |> toResult \"err\"").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult)
+                && entry.text == "Ok 5 :: Result Text Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
+    fn expression_submit_resolves_option_to_list() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.option").unwrap();
+        let snap = engine.submit("Some 5 |> toList").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "[5] :: List Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
     fn expression_submit_resolves_overloaded_get_or_else_for_validation() {
         let mut engine = make_engine();
         engine.submit("/use aivi.validation").unwrap();
         let snap = engine.submit("Valid 5 |> getOrElse 0").unwrap();
         assert!(snap.transcript.iter().any(|entry| {
             matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "5 :: Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
+    fn expression_submit_resolves_path_normalize() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.path").unwrap();
+        let snap = engine
+            .submit(
+                "{ absolute: False, segments: [\"a\", \"..\", \"b\"] } |> normalize |> toString",
+            )
+            .unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "b :: Text"
         }));
         assert!(
             !snap
