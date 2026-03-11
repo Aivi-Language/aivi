@@ -1,7 +1,6 @@
 @no_prelude
 module integrationTests.complex.dijkstraEffectful
 
-use aivi
 use aivi.testing
 use aivi.graph (fromWeightedEdges, edgesFrom, Edge)
 use aivi.collections
