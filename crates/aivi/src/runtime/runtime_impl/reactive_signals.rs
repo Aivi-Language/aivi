@@ -1,8 +1,17 @@
+fn unix_timestamp_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
+
 impl Default for ReactiveGraphState {
     fn default() -> Self {
         Self {
             next_signal_id: 1,
             next_watcher_id: 1,
+            next_change_seq: 1,
             batch_depth: 0,
             flushing: false,
             deferred_flush: false,
@@ -18,16 +27,22 @@ impl Default for ReactiveGraphState {
 impl Runtime {
     pub(crate) fn reactive_create_signal(&mut self, initial: Value) -> Result<Value, RuntimeError> {
         let signal_id = self.reactive_alloc_signal_id();
-        self.reactive_graph.lock().signals.insert(
+        let mut graph = self.reactive_graph.lock();
+        let change_seq = graph.next_change_seq;
+        graph.next_change_seq = graph.next_change_seq.saturating_add(1);
+        graph.signals.insert(
             signal_id,
             ReactiveCellEntry {
                 kind: ReactiveCellKind::Source,
                 value: initial,
                 revision: 1,
+                last_change_seq: change_seq,
+                last_change_timestamp_ms: unix_timestamp_ms(),
                 dirty: false,
                 dependents: HashSet::new(),
             },
         );
+        drop(graph);
         Ok(self.reactive_signal_value(signal_id))
     }
 
@@ -315,6 +330,8 @@ impl Runtime {
                     },
                     value: Value::Unit,
                     revision: 0,
+                    last_change_seq: 0,
+                    last_change_timestamp_ms: 0,
                     dirty: true,
                     dependents: HashSet::new(),
                 },
@@ -356,6 +373,8 @@ impl Runtime {
                     },
                     value: Value::Unit,
                     revision: 0,
+                    last_change_seq: 0,
+                    last_change_timestamp_ms: 0,
                     dirty: true,
                     dependents: HashSet::new(),
                 },
@@ -438,12 +457,16 @@ impl Runtime {
 
         {
             let mut graph = self.reactive_graph.lock();
+            let change_seq = graph.next_change_seq;
+            graph.next_change_seq = graph.next_change_seq.saturating_add(1);
             let entry = graph
                 .signals
                 .get_mut(&signal_id)
                 .expect("source signal exists");
             entry.value = next_value;
             entry.revision = entry.revision.saturating_add(1).max(1);
+            entry.last_change_seq = change_seq;
+            entry.last_change_timestamp_ms = unix_timestamp_ms();
             entry.dirty = false;
         }
         self.reactive_graph
@@ -557,13 +580,20 @@ impl Runtime {
                 let mut changed = false;
                 {
                     let mut graph = self.reactive_graph.lock();
+                    let change_seq = graph.next_change_seq;
+                    let timestamp_ms = unix_timestamp_ms();
                     let entry = graph.signals.get_mut(&signal_id).expect("derived signal exists");
                     if !reactive_values_match(&entry.value, &value) {
                         entry.value = value;
                         entry.revision = entry.revision.saturating_add(1).max(1);
+                        entry.last_change_seq = change_seq;
+                        entry.last_change_timestamp_ms = timestamp_ms;
                         changed = true;
                     }
                     entry.dirty = false;
+                    if changed {
+                        graph.next_change_seq = graph.next_change_seq.saturating_add(1);
+                    }
                 }
                 if changed {
                     self.reactive_graph
@@ -597,13 +627,20 @@ impl Runtime {
                 let mut changed = false;
                 {
                     let mut graph = self.reactive_graph.lock();
+                    let change_seq = graph.next_change_seq;
+                    let timestamp_ms = unix_timestamp_ms();
                     let entry = graph.signals.get_mut(&signal_id).expect("derived signal exists");
                     if !reactive_values_match(&entry.value, &value) {
                         entry.value = value;
                         entry.revision = entry.revision.saturating_add(1).max(1);
+                        entry.last_change_seq = change_seq;
+                        entry.last_change_timestamp_ms = timestamp_ms;
                         changed = true;
                     }
                     entry.dirty = false;
+                    if changed {
+                        graph.next_change_seq = graph.next_change_seq.saturating_add(1);
+                    }
                 }
                 if changed {
                     self.reactive_graph

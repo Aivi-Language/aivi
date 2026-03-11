@@ -33,6 +33,24 @@ const MCP_TOOL_GTK_LIST_WIDGETS: &str = "aivi.gtk.listWidgets";
 const MCP_TOOL_GTK_LIST_SIGNALS: &str = "aivi.gtk.listSignals";
 const MCP_TOOL_GTK_INSPECT_WIDGET: &str = "aivi.gtk.inspectWidget";
 const MCP_TOOL_GTK_INSPECT_SIGNAL: &str = "aivi.gtk.inspectSignal";
+const MCP_TOOL_GTK_CAPTURE: &str = "aivi.gtk.capture";
+const MCP_TOOL_GTK_INSPECT_AT: &str = "aivi.gtk.inspectAt";
+const MCP_TOOL_GTK_POLL_EVENTS: &str = "aivi.gtk.pollEvents";
+const MCP_TOOL_GTK_POLL_MUTATIONS: &str = "aivi.gtk.pollMutations";
+const MCP_TOOL_GTK_LIST_ACTION_BINDINGS: &str = "aivi.gtk.listActionBindings";
+const MCP_TOOL_GTK_EXPLAIN_WIDGET: &str = "aivi.gtk.explainWidget";
+const MCP_TOOL_GTK_EXPLAIN_SIGNAL: &str = "aivi.gtk.explainSignal";
+const MCP_TOOL_GTK_LAYOUT_SNAPSHOT: &str = "aivi.gtk.layoutSnapshot";
+const MCP_TOOL_GTK_SHOW_OVERLAY: &str = "aivi.gtk.showOverlay";
+const MCP_TOOL_GTK_STYLE_INFO: &str = "aivi.gtk.styleInfo";
+const MCP_TOOL_GTK_ANALYZE_LAYOUT: &str = "aivi.gtk.analyzeLayout";
+const MCP_TOOL_GTK_DIFF_CAPTURE: &str = "aivi.gtk.diffCapture";
+const MCP_TOOL_GTK_DIFF_TREE: &str = "aivi.gtk.diffTree";
+const MCP_TOOL_GTK_WAIT_FOR: &str = "aivi.gtk.waitFor";
+const MCP_TOOL_GTK_RELOAD_NOW: &str = "aivi.gtk.reloadNow";
+const MCP_TOOL_GTK_RELOAD_STATUS: &str = "aivi.gtk.reloadStatus";
+const MCP_TOOL_GTK_SET_RELOAD_MODE: &str = "aivi.gtk.setReloadMode";
+const MCP_TOOL_GTK_DEV_SESSION_INFO: &str = "aivi.gtk.devSessionInfo";
 const MCP_TOOL_GTK_DUMP_TREE: &str = "aivi.gtk.dumpTree";
 const MCP_TOOL_GTK_CLICK: &str = "aivi.gtk.click";
 const MCP_TOOL_GTK_TYPE: &str = "aivi.gtk.type";
@@ -253,6 +271,24 @@ fn execute_tool(name: &str, arguments: &serde_json::Value) -> Result<serde_json:
         MCP_TOOL_GTK_LIST_SIGNALS => execute_gtk_list_signals_tool(arguments),
         MCP_TOOL_GTK_INSPECT_WIDGET => execute_gtk_inspect_widget_tool(arguments),
         MCP_TOOL_GTK_INSPECT_SIGNAL => execute_gtk_inspect_signal_tool(arguments),
+        MCP_TOOL_GTK_CAPTURE => execute_gtk_capture_tool(arguments),
+        MCP_TOOL_GTK_INSPECT_AT => execute_gtk_inspect_at_tool(arguments),
+        MCP_TOOL_GTK_POLL_EVENTS => execute_gtk_poll_events_tool(arguments),
+        MCP_TOOL_GTK_POLL_MUTATIONS => execute_gtk_poll_mutations_tool(arguments),
+        MCP_TOOL_GTK_LIST_ACTION_BINDINGS => execute_gtk_list_action_bindings_tool(arguments),
+        MCP_TOOL_GTK_EXPLAIN_WIDGET => execute_gtk_explain_widget_tool(arguments),
+        MCP_TOOL_GTK_EXPLAIN_SIGNAL => execute_gtk_explain_signal_tool(arguments),
+        MCP_TOOL_GTK_LAYOUT_SNAPSHOT => execute_gtk_layout_snapshot_tool(arguments),
+        MCP_TOOL_GTK_SHOW_OVERLAY => execute_gtk_show_overlay_tool(arguments),
+        MCP_TOOL_GTK_STYLE_INFO => execute_gtk_style_info_tool(arguments),
+        MCP_TOOL_GTK_ANALYZE_LAYOUT => execute_gtk_analyze_layout_tool(arguments),
+        MCP_TOOL_GTK_DIFF_CAPTURE => execute_gtk_diff_capture_tool(arguments),
+        MCP_TOOL_GTK_DIFF_TREE => execute_gtk_diff_tree_tool(arguments),
+        MCP_TOOL_GTK_WAIT_FOR => execute_gtk_wait_for_tool(arguments),
+        MCP_TOOL_GTK_RELOAD_NOW => execute_gtk_reload_now_tool(arguments),
+        MCP_TOOL_GTK_RELOAD_STATUS => execute_gtk_reload_status_tool(arguments),
+        MCP_TOOL_GTK_SET_RELOAD_MODE => execute_gtk_set_reload_mode_tool(arguments),
+        MCP_TOOL_GTK_DEV_SESSION_INFO => execute_gtk_dev_session_info_tool(arguments),
         MCP_TOOL_GTK_DUMP_TREE => execute_gtk_dump_tree_tool(arguments),
         MCP_TOOL_GTK_CLICK => execute_gtk_click_tool(arguments),
         MCP_TOOL_GTK_TYPE => execute_gtk_type_tool(arguments),
@@ -429,12 +465,86 @@ struct GtkUiSession {
     socket_path: String,
     token: String,
     pid: Option<u32>,
+    launch_target: Option<String>,
+    release: bool,
+    reload_mode: String,
+    reload_count: u64,
+    last_reload_at_ms: Option<u64>,
+    last_reload_ready: Option<bool>,
 }
 
 static GTK_UI_SESSIONS: OnceLock<Mutex<HashMap<String, GtkUiSession>>> = OnceLock::new();
+static GTK_UI_DEBUG_CACHE: OnceLock<Mutex<GtkUiDebugCache>> = OnceLock::new();
 
 fn gtk_ui_sessions() -> &'static Mutex<HashMap<String, GtkUiSession>> {
     GTK_UI_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[derive(Default)]
+struct GtkUiDebugCache {
+    capture_snapshots: HashMap<(String, String), serde_json::Value>,
+    layout_snapshots: HashMap<(String, String), serde_json::Value>,
+}
+
+fn gtk_ui_debug_cache() -> &'static Mutex<GtkUiDebugCache> {
+    GTK_UI_DEBUG_CACHE.get_or_init(|| Mutex::new(GtkUiDebugCache::default()))
+}
+
+fn gtk_store_capture_snapshot(
+    session_id: &str,
+    label: &str,
+    snapshot: serde_json::Value,
+) -> Result<(), AiviError> {
+    gtk_ui_debug_cache()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk debug cache lock poisoned".to_string()))?
+        .capture_snapshots
+        .insert((session_id.to_string(), label.to_string()), snapshot);
+    Ok(())
+}
+
+fn gtk_store_layout_snapshot(
+    session_id: &str,
+    label: &str,
+    snapshot: serde_json::Value,
+) -> Result<(), AiviError> {
+    gtk_ui_debug_cache()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk debug cache lock poisoned".to_string()))?
+        .layout_snapshots
+        .insert((session_id.to_string(), label.to_string()), snapshot);
+    Ok(())
+}
+
+fn gtk_load_capture_snapshot(
+    session_id: &str,
+    label: &str,
+) -> Result<serde_json::Value, AiviError> {
+    gtk_ui_debug_cache()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk debug cache lock poisoned".to_string()))?
+        .capture_snapshots
+        .get(&(session_id.to_string(), label.to_string()))
+        .cloned()
+        .ok_or_else(|| {
+            AiviError::InvalidCommand(format!(
+                "unknown gtk capture snapshot '{label}' for session {session_id}"
+            ))
+        })
+}
+
+fn gtk_load_layout_snapshot(session_id: &str, label: &str) -> Result<serde_json::Value, AiviError> {
+    gtk_ui_debug_cache()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk debug cache lock poisoned".to_string()))?
+        .layout_snapshots
+        .get(&(session_id.to_string(), label.to_string()))
+        .cloned()
+        .ok_or_else(|| {
+            AiviError::InvalidCommand(format!(
+                "unknown gtk layout snapshot '{label}' for session {session_id}"
+            ))
+        })
 }
 
 fn gtk_get_session(session_id: &str) -> Result<GtkUiSession, AiviError> {
@@ -445,6 +555,22 @@ fn gtk_get_session(session_id: &str) -> Result<GtkUiSession, AiviError> {
         .get(session_id)
         .cloned()
         .ok_or_else(|| AiviError::InvalidCommand(format!("unknown gtk session {session_id}")))
+}
+
+fn gtk_set_session(session_id: &str, session: GtkUiSession) -> Result<(), AiviError> {
+    gtk_ui_sessions()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk sessions lock poisoned".to_string()))?
+        .insert(session_id.to_string(), session);
+    Ok(())
+}
+
+fn unix_timestamp_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
 }
 
 #[cfg(unix)]
@@ -520,6 +646,40 @@ fn gtk_widget_params(
     Ok(serde_json::Value::Object(params))
 }
 
+fn gtk_target_params(
+    args: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut params = serde_json::Map::new();
+    if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
+        params.insert(
+            "name".to_string(),
+            serde_json::Value::String(name.to_string()),
+        );
+    }
+    if let Some(id) = args.get("id").and_then(|v| v.as_i64()) {
+        params.insert("id".to_string(), serde_json::Value::Number(id.into()));
+    }
+    if let Some(root_id) = args.get("rootId").and_then(|v| v.as_i64()) {
+        params.insert(
+            "rootId".to_string(),
+            serde_json::Value::Number(root_id.into()),
+        );
+    }
+    params
+}
+
+fn json_i64(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|v| i64::try_from(v).ok()))
+}
+
+fn json_u64(value: &serde_json::Value) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_i64().and_then(|v| (v >= 0).then_some(v as u64)))
+}
+
 fn execute_gtk_discover_tool(
     arguments: &serde_json::Value,
 ) -> Result<serde_json::Value, AiviError> {
@@ -573,6 +733,12 @@ fn execute_gtk_attach_tool(arguments: &serde_json::Value) -> Result<serde_json::
         socket_path: socket_path.to_string(),
         token: token.to_string(),
         pid: None,
+        launch_target: None,
+        release: false,
+        reload_mode: "manual".to_string(),
+        reload_count: 0,
+        last_reload_at_ms: None,
+        last_reload_ready: None,
     };
     gtk_ui_sessions()
         .lock()
@@ -651,52 +817,12 @@ fn execute_gtk_launch_tool(arguments: &serde_json::Value) -> Result<serde_json::
 
     #[cfg(unix)]
     {
-        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-        let token = uuid::Uuid::new_v4().to_string();
-        let socket_path = format!("{}/aivi-ui-mcp-{}.sock", runtime_dir, uuid::Uuid::new_v4());
-
-        let exe = resolve_gtk_launch_executable()?;
-        let mut cmd = std::process::Command::new(exe);
-        cmd.arg("run");
-        if release {
-            cmd.arg("--release");
-        }
-        cmd.arg(target);
-        if let Some(working_dir) = gtk_launch_working_dir(target) {
-            cmd.current_dir(working_dir);
-        }
-        cmd.env("AIVI_UI_DEBUG", "1");
-        cmd.env("AIVI_UI_DEBUG_SOCKET", &socket_path);
-        cmd.env("AIVI_UI_DEBUG_TOKEN", &token);
-        cmd.stdin(Stdio::null());
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::inherit());
-
-        let mut child = cmd.spawn()?;
-        let pid = child.id();
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
-
-        let mut ready = false;
-        for _ in 0..60 {
-            if std::fs::metadata(&socket_path).is_ok() {
-                ready = true;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-
+        let (session, ready) = gtk_launch_managed_session(target, release)?;
+        let pid = session.pid.expect("managed gtk launch stores pid");
+        let socket_path = session.socket_path.clone();
+        let token = session.token.clone();
         let session_id = uuid::Uuid::new_v4().to_string();
-        let session = GtkUiSession {
-            socket_path: socket_path.clone(),
-            token: token.clone(),
-            pid: Some(pid),
-        };
-        gtk_ui_sessions()
-            .lock()
-            .map_err(|_| AiviError::InvalidCommand("gtk sessions lock poisoned".to_string()))?
-            .insert(session_id.clone(), session);
+        gtk_set_session(&session_id, session)?;
 
         Ok(serde_json::json!({
             "ok": true,
@@ -803,6 +929,269 @@ fn execute_gtk_inspect_signal_tool(
     Ok(serde_json::json!({
         "ok": true,
         "tool": MCP_TOOL_GTK_INSPECT_SIGNAL,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_capture_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(
+        arguments,
+        &[
+            "sessionId",
+            "name",
+            "id",
+            "rootId",
+            "highlightName",
+            "highlightId",
+            "scale",
+            "label",
+        ],
+    )?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let mut params = gtk_target_params(args);
+    if let Some(highlight_name) = args.get("highlightName").and_then(|v| v.as_str()) {
+        params.insert(
+            "highlightName".to_string(),
+            serde_json::Value::String(highlight_name.to_string()),
+        );
+    }
+    if let Some(highlight_id) = args.get("highlightId").and_then(|v| v.as_i64()) {
+        params.insert(
+            "highlightId".to_string(),
+            serde_json::Value::Number(highlight_id.into()),
+        );
+    }
+    if let Some(scale) = get_optional_f64(args, "scale")? {
+        params.insert("scale".to_string(), serde_json::json!(scale));
+    }
+    let label = args.get("label").and_then(|v| v.as_str());
+    if let Some(label) = label {
+        params.insert(
+            "label".to_string(),
+            serde_json::Value::String(label.to_string()),
+        );
+    }
+    let result = gtk_ui_call(&session, "capture", serde_json::Value::Object(params))?;
+    if let Some(label) = label {
+        gtk_store_capture_snapshot(session_id, label, result.clone())?;
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_CAPTURE,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_inspect_at_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "rootId", "x", "y"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let x = get_required_f64(args, "x")?;
+    let y = get_required_f64(args, "y")?;
+    let mut params = gtk_target_params(args);
+    params.insert("x".to_string(), serde_json::json!(x));
+    params.insert("y".to_string(), serde_json::json!(y));
+    let result = gtk_ui_call(&session, "inspectAt", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_INSPECT_AT,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_poll_events_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "afterSeq", "limit"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let mut params = serde_json::Map::new();
+    if let Some(after_seq) = get_optional_u64(args, "afterSeq")? {
+        params.insert("afterSeq".to_string(), serde_json::json!(after_seq));
+    }
+    if let Some(limit) = get_optional_u64(args, "limit")? {
+        params.insert("limit".to_string(), serde_json::json!(limit));
+    }
+    let result = gtk_ui_call(&session, "pollEvents", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_POLL_EVENTS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_poll_mutations_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "afterSeq", "limit"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let mut params = serde_json::Map::new();
+    if let Some(after_seq) = get_optional_u64(args, "afterSeq")? {
+        params.insert("afterSeq".to_string(), serde_json::json!(after_seq));
+    }
+    if let Some(limit) = get_optional_u64(args, "limit")? {
+        params.insert("limit".to_string(), serde_json::json!(limit));
+    }
+    let result = gtk_ui_call(&session, "pollMutations", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_POLL_MUTATIONS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_list_action_bindings_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let result = gtk_ui_call(
+        &session,
+        "listActionBindings",
+        serde_json::Value::Object(gtk_target_params(args)),
+    )?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_LIST_ACTION_BINDINGS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_explain_widget_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let params = gtk_widget_params(args)?;
+    let result = gtk_ui_call(&session, "explainWidget", params)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_EXPLAIN_WIDGET,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_explain_signal_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "signalId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let signal_id = get_required_i64(args, "signalId")?;
+    let session = gtk_get_session(session_id)?;
+    let result = gtk_ui_call(
+        &session,
+        "explainSignal",
+        serde_json::json!({ "signalId": signal_id }),
+    )?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_EXPLAIN_SIGNAL,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_layout_snapshot_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "rootId", "label"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let mut params = gtk_target_params(args);
+    let label = args.get("label").and_then(|v| v.as_str());
+    if let Some(label) = label {
+        params.insert(
+            "label".to_string(),
+            serde_json::Value::String(label.to_string()),
+        );
+    }
+    let result = gtk_ui_call(
+        &session,
+        "layoutSnapshot",
+        serde_json::Value::Object(params),
+    )?;
+    if let Some(label) = label {
+        gtk_store_layout_snapshot(session_id, label, result.clone())?;
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_LAYOUT_SNAPSHOT,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_show_overlay_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(
+        arguments,
+        &[
+            "sessionId",
+            "enabled",
+            "bounds",
+            "margins",
+            "spacing",
+            "focus",
+            "clipping",
+        ],
+    )?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let mut params = serde_json::Map::new();
+    for key in [
+        "enabled", "bounds", "margins", "spacing", "focus", "clipping",
+    ] {
+        if let Some(value) = args.get(key) {
+            let flag = value.as_bool().ok_or_else(|| {
+                AiviError::InvalidCommand(format!("argument {key} must be a boolean"))
+            })?;
+            params.insert(key.to_string(), serde_json::Value::Bool(flag));
+        }
+    }
+    let result = gtk_ui_call(&session, "showOverlay", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_SHOW_OVERLAY,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_style_info_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let params = gtk_widget_params(args)?;
+    let result = gtk_ui_call(&session, "styleInfo", params)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_STYLE_INFO,
         "sessionId": session_id,
         "pid": session.pid,
         "result": result,
@@ -1019,6 +1408,565 @@ fn execute_gtk_key_press_tool(
     }))
 }
 
+fn flatten_layout_tree<'a>(
+    node: &'a serde_json::Value,
+    out: &mut HashMap<i64, &'a serde_json::Value>,
+) {
+    let Some(id) = node.get("id").and_then(json_i64) else {
+        return;
+    };
+    out.insert(id, node);
+    if let Some(children) = node.get("children").and_then(|v| v.as_array()) {
+        for child in children {
+            flatten_layout_tree(child, out);
+        }
+    }
+}
+
+fn layout_rect(node: &serde_json::Value) -> Option<(f64, f64, f64, f64)> {
+    let bounds = node.get("bounds")?;
+    Some((
+        bounds.get("x")?.as_f64()?,
+        bounds.get("y")?.as_f64()?,
+        bounds.get("width")?.as_f64()?,
+        bounds.get("height")?.as_f64()?,
+    ))
+}
+
+fn append_layout_findings(node: &serde_json::Value, findings: &mut Vec<serde_json::Value>) {
+    let widget_id = node.get("id").and_then(json_i64);
+    let widget_name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let class_name = node.get("className").and_then(|v| v.as_str()).unwrap_or("");
+    if let Some((_, _, width, height)) = layout_rect(node) {
+        if width <= 1.0 || height <= 1.0 {
+            findings.push(serde_json::json!({
+                "severity": "warning",
+                "category": "collapsed-size",
+                "widgetId": widget_id,
+                "widgetName": widget_name,
+                "className": class_name,
+                "message": format!("widget renders at {width:.1}x{height:.1}, which is likely unintentionally collapsed"),
+            }));
+        }
+    }
+    if node
+        .get("overflowParentBounds")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        findings.push(serde_json::json!({
+            "severity": "warning",
+            "category": "overflow",
+            "widgetId": widget_id,
+            "widgetName": widget_name,
+            "className": class_name,
+            "message": "widget extends beyond its parent bounds and may be clipped",
+        }));
+    }
+    if let Some(state) = node.get("state") {
+        if state.get("visible").and_then(|v| v.as_bool()) == Some(false) {
+            findings.push(serde_json::json!({
+                "severity": "info",
+                "category": "hidden",
+                "widgetId": widget_id,
+                "widgetName": widget_name,
+                "className": class_name,
+                "message": "widget is present in the tree but currently not visible",
+            }));
+        }
+        if state.get("focusable").and_then(|v| v.as_bool()) == Some(true)
+            && state.get("sensitive").and_then(|v| v.as_bool()) == Some(false)
+        {
+            findings.push(serde_json::json!({
+                "severity": "info",
+                "category": "insensitive-focusable",
+                "widgetId": widget_id,
+                "widgetName": widget_name,
+                "className": class_name,
+                "message": "widget is focusable but currently insensitive",
+            }));
+        }
+    }
+    if let Some(children) = node.get("children").and_then(|v| v.as_array()) {
+        if children.len() > 1 {
+            let margin_signatures = children
+                .iter()
+                .map(|child| {
+                    child
+                        .get("margins")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null)
+                })
+                .collect::<Vec<_>>();
+            if let Some(first) = margin_signatures.first() {
+                if margin_signatures.iter().any(|item| item != first) {
+                    findings.push(serde_json::json!({
+                        "severity": "info",
+                        "category": "inconsistent-margins",
+                        "widgetId": widget_id,
+                        "widgetName": widget_name,
+                        "className": class_name,
+                        "message": "siblings under this container use inconsistent margins",
+                    }));
+                }
+            }
+        }
+        for child in children {
+            append_layout_findings(child, findings);
+        }
+    }
+}
+
+fn execute_gtk_analyze_layout_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "rootId", "label"])?;
+    let layout = execute_gtk_layout_snapshot_tool(arguments)?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let tree = layout
+        .get("result")
+        .and_then(|result| result.get("tree"))
+        .ok_or_else(|| AiviError::InvalidCommand("layout snapshot missing tree".to_string()))?;
+    let mut findings = Vec::new();
+    append_layout_findings(tree, &mut findings);
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_ANALYZE_LAYOUT,
+        "sessionId": session_id,
+        "result": layout.get("result").cloned().unwrap_or_default(),
+        "summary": {
+            "findings": findings.len(),
+            "warnings": findings.iter().filter(|f| f.get("severity").and_then(|v| v.as_str()) == Some("warning")).count(),
+            "infos": findings.iter().filter(|f| f.get("severity").and_then(|v| v.as_str()) == Some("info")).count(),
+        },
+        "findings": findings,
+    }))
+}
+
+fn execute_gtk_diff_tree_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "beforeLabel", "afterLabel"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let before_label = get_required_string(args, "beforeLabel")?;
+    let after_label = get_required_string(args, "afterLabel")?;
+    let before = gtk_load_layout_snapshot(session_id, before_label)?;
+    let after = gtk_load_layout_snapshot(session_id, after_label)?;
+    let before_tree = before.get("tree").ok_or_else(|| {
+        AiviError::InvalidCommand(format!("layout snapshot '{before_label}' missing tree"))
+    })?;
+    let after_tree = after.get("tree").ok_or_else(|| {
+        AiviError::InvalidCommand(format!("layout snapshot '{after_label}' missing tree"))
+    })?;
+    let mut before_nodes = HashMap::new();
+    let mut after_nodes = HashMap::new();
+    flatten_layout_tree(before_tree, &mut before_nodes);
+    flatten_layout_tree(after_tree, &mut after_nodes);
+    let mut added = Vec::new();
+    let mut removed = Vec::new();
+    let mut changed = Vec::new();
+    for (id, node) in &after_nodes {
+        if !before_nodes.contains_key(id) {
+            added.push(serde_json::json!({
+                "id": id,
+                "name": node.get("name"),
+                "className": node.get("className"),
+            }));
+        }
+    }
+    for (id, node) in &before_nodes {
+        if !after_nodes.contains_key(id) {
+            removed.push(serde_json::json!({
+                "id": id,
+                "name": node.get("name"),
+                "className": node.get("className"),
+            }));
+        }
+    }
+    for (id, before_node) in &before_nodes {
+        let Some(after_node) = after_nodes.get(id) else {
+            continue;
+        };
+        let before_bounds = layout_rect(before_node);
+        let after_bounds = layout_rect(after_node);
+        let before_visible = before_node
+            .get("state")
+            .and_then(|v| v.get("visible"))
+            .and_then(|v| v.as_bool());
+        let after_visible = after_node
+            .get("state")
+            .and_then(|v| v.get("visible"))
+            .and_then(|v| v.as_bool());
+        if before_bounds != after_bounds || before_visible != after_visible {
+            changed.push(serde_json::json!({
+                "id": id,
+                "name": after_node.get("name"),
+                "className": after_node.get("className"),
+                "beforeBounds": before_node.get("bounds"),
+                "afterBounds": after_node.get("bounds"),
+                "beforeVisible": before_visible,
+                "afterVisible": after_visible,
+            }));
+        }
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_DIFF_TREE,
+        "sessionId": session_id,
+        "beforeLabel": before_label,
+        "afterLabel": after_label,
+        "summary": {
+            "beforeNodes": before_nodes.len(),
+            "afterNodes": after_nodes.len(),
+            "added": added.len(),
+            "removed": removed.len(),
+            "changed": changed.len(),
+        },
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+    }))
+}
+
+fn execute_gtk_diff_capture_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "beforeLabel", "afterLabel"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let before_label = get_required_string(args, "beforeLabel")?;
+    let after_label = get_required_string(args, "afterLabel")?;
+    let before = gtk_load_capture_snapshot(session_id, before_label)?;
+    let after = gtk_load_capture_snapshot(session_id, after_label)?;
+    let before_png = before
+        .get("pngBase64")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let after_png = after
+        .get("pngBase64")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let before_dims = (
+        before.get("width").and_then(|v| v.as_u64()).unwrap_or(0),
+        before.get("height").and_then(|v| v.as_u64()).unwrap_or(0),
+    );
+    let after_dims = (
+        after.get("width").and_then(|v| v.as_u64()).unwrap_or(0),
+        after.get("height").and_then(|v| v.as_u64()).unwrap_or(0),
+    );
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_DIFF_CAPTURE,
+        "sessionId": session_id,
+        "beforeLabel": before_label,
+        "afterLabel": after_label,
+        "summary": {
+            "changed": before_png != after_png,
+            "beforeDimensions": { "width": before_dims.0, "height": before_dims.1 },
+            "afterDimensions": { "width": after_dims.0, "height": after_dims.1 },
+            "dimensionsChanged": before_dims != after_dims,
+        }
+    }))
+}
+
+fn widget_matches_wait_condition(
+    widget: &serde_json::Value,
+    condition: &str,
+    property: Option<&str>,
+    expected: Option<&serde_json::Value>,
+) -> bool {
+    match condition {
+        "widgetExists" => true,
+        "widgetVisible" => {
+            widget
+                .get("state")
+                .and_then(|v| v.get("visible"))
+                .and_then(|v| v.as_bool())
+                == Some(true)
+        }
+        "widgetFocused" => {
+            widget
+                .get("state")
+                .and_then(|v| v.get("focused"))
+                .and_then(|v| v.as_bool())
+                == Some(true)
+        }
+        "propEquals" => {
+            property.and_then(|prop| {
+                widget
+                    .get("props")
+                    .and_then(|props| props.get(prop))
+                    .or_else(|| widget.get("state").and_then(|state| state.get(prop)))
+            }) == expected
+        }
+        _ => false,
+    }
+}
+
+fn execute_gtk_wait_for_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(
+        arguments,
+        &[
+            "sessionId",
+            "name",
+            "id",
+            "condition",
+            "property",
+            "value",
+            "signalId",
+            "revision",
+            "seq",
+            "timeoutMs",
+            "intervalMs",
+            "stableForMs",
+        ],
+    )?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let condition = get_required_string(args, "condition")?;
+    let timeout_ms = get_optional_u64(args, "timeoutMs")?.unwrap_or(2_000);
+    let interval_ms = get_optional_u64(args, "intervalMs")?.unwrap_or(50);
+    let stable_for_ms = get_optional_u64(args, "stableForMs")?.unwrap_or(250);
+    let started = std::time::Instant::now();
+    let mut iterations = 0u64;
+    let mut stable_since: Option<std::time::Instant> = None;
+    let mut last_tree_seq: Option<u64> = None;
+
+    loop {
+        iterations = iterations.saturating_add(1);
+        let (met, result_payload) = match condition {
+            "widgetExists" | "widgetVisible" | "widgetFocused" | "propEquals" => {
+                let params = gtk_widget_params(args)?;
+                match gtk_ui_call(&session, "inspectWidget", params) {
+                    Ok(result) => {
+                        let widget = result.get("widget").cloned().unwrap_or_default();
+                        let expected = args.get("value");
+                        let property = args.get("property").and_then(|v| v.as_str());
+                        (
+                            widget_matches_wait_condition(&widget, condition, property, expected),
+                            result,
+                        )
+                    }
+                    Err(_) => (false, serde_json::Value::Null),
+                }
+            }
+            "signalRevisionAtLeast" => {
+                let signal_id = get_required_i64(args, "signalId")?;
+                let revision = get_required_u64(args, "revision")?;
+                let result = gtk_ui_call(
+                    &session,
+                    "inspectSignal",
+                    serde_json::json!({ "signalId": signal_id }),
+                )?;
+                let current = result
+                    .get("signal")
+                    .and_then(|signal| signal.get("revision"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                (current >= revision, result)
+            }
+            "signalLastChangeSeqAtLeast" => {
+                let signal_id = get_required_i64(args, "signalId")?;
+                let seq = get_required_u64(args, "seq")?;
+                let result = gtk_ui_call(
+                    &session,
+                    "explainSignal",
+                    serde_json::json!({ "signalId": signal_id }),
+                )?;
+                let current = result
+                    .get("signal")
+                    .and_then(|signal| signal.get("lastChangeSeq"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                (current >= seq, result)
+            }
+            "treeStable" => {
+                let result =
+                    gtk_ui_call(&session, "pollMutations", serde_json::json!({ "limit": 1 }))?;
+                let latest_seq = result
+                    .get("latestSeq")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let stable = last_tree_seq == Some(latest_seq);
+                last_tree_seq = Some(latest_seq);
+                if stable {
+                    let stable_since_ref = stable_since.get_or_insert_with(std::time::Instant::now);
+                    (
+                        stable_since_ref.elapsed()
+                            >= std::time::Duration::from_millis(stable_for_ms),
+                        result,
+                    )
+                } else {
+                    stable_since = None;
+                    (false, result)
+                }
+            }
+            other => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unsupported gtk waitFor condition {other}"
+                )));
+            }
+        };
+        if met {
+            return Ok(serde_json::json!({
+                "ok": true,
+                "tool": MCP_TOOL_GTK_WAIT_FOR,
+                "sessionId": session_id,
+                "condition": condition,
+                "iterations": iterations,
+                "elapsedMs": started.elapsed().as_millis(),
+                "result": result_payload,
+            }));
+        }
+        if started.elapsed() >= std::time::Duration::from_millis(timeout_ms) {
+            return Ok(serde_json::json!({
+                "ok": false,
+                "tool": MCP_TOOL_GTK_WAIT_FOR,
+                "sessionId": session_id,
+                "condition": condition,
+                "iterations": iterations,
+                "elapsedMs": started.elapsed().as_millis(),
+                "result": result_payload,
+                "error": {
+                    "code": "timeout",
+                    "message": format!("gtk waitFor timed out waiting for {condition}"),
+                }
+            }));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+    }
+}
+
+#[cfg(unix)]
+fn terminate_pid(pid: u32) -> Result<(), AiviError> {
+    let status = std::process::Command::new("kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(AiviError::InvalidCommand(format!(
+            "failed to terminate process {pid}"
+        )))
+    }
+}
+
+#[cfg(not(unix))]
+fn terminate_pid(_pid: u32) -> Result<(), AiviError> {
+    Err(AiviError::InvalidCommand(
+        "gtk reload tools require a unix platform".to_string(),
+    ))
+}
+
+fn gtk_session_info_json(session_id: &str, session: &GtkUiSession) -> serde_json::Value {
+    serde_json::json!({
+        "sessionId": session_id,
+        "socketPath": session.socket_path,
+        "token": session.token,
+        "pid": session.pid,
+        "managed": session.launch_target.is_some(),
+        "launchTarget": session.launch_target,
+        "release": session.release,
+        "reloadMode": session.reload_mode,
+        "reloadCount": session.reload_count,
+        "lastReloadAtMs": session.last_reload_at_ms,
+        "lastReloadReady": session.last_reload_ready,
+    })
+}
+
+fn execute_gtk_dev_session_info_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_DEV_SESSION_INFO,
+        "session": gtk_session_info_json(session_id, &session),
+    }))
+}
+
+fn execute_gtk_reload_status_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_RELOAD_STATUS,
+        "session": gtk_session_info_json(session_id, &session),
+    }))
+}
+
+fn execute_gtk_set_reload_mode_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "mode"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let mode = get_required_string(args, "mode")?;
+    if !matches!(mode, "manual" | "restart") {
+        return Err(AiviError::InvalidCommand(
+            "reload mode must be one of: manual, restart".to_string(),
+        ));
+    }
+    let mut session = gtk_get_session(session_id)?;
+    session.reload_mode = mode.to_string();
+    gtk_set_session(session_id, session.clone())?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_SET_RELOAD_MODE,
+        "session": gtk_session_info_json(session_id, &session),
+    }))
+}
+
+fn execute_gtk_reload_now_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let target = session.launch_target.clone().ok_or_else(|| {
+        AiviError::InvalidCommand(
+            "reloadNow requires a managed session created by aivi.gtk.launch".to_string(),
+        )
+    })?;
+    if let Some(pid) = session.pid {
+        let _ = terminate_pid(pid);
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    #[cfg(unix)]
+    {
+        let reload_count = session.reload_count.saturating_add(1);
+        let reload_mode = session.reload_mode.clone();
+        let (mut reloaded, ready) = gtk_launch_managed_session(&target, session.release)?;
+        reloaded.reload_mode = reload_mode;
+        reloaded.reload_count = reload_count;
+        reloaded.last_reload_at_ms = Some(unix_timestamp_ms());
+        reloaded.last_reload_ready = Some(ready);
+        let old_pid = session.pid;
+        gtk_set_session(session_id, reloaded.clone())?;
+        Ok(serde_json::json!({
+            "ok": true,
+            "tool": MCP_TOOL_GTK_RELOAD_NOW,
+            "oldPid": old_pid,
+            "newPid": reloaded.pid,
+            "ready": ready,
+            "session": gtk_session_info_json(session_id, &reloaded),
+        }))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = target;
+        Err(AiviError::InvalidCommand(
+            "gtk reload tools require a unix platform".to_string(),
+        ))
+    }
+}
+
 fn parse_tool_args<'a>(
     arguments: &'a serde_json::Value,
     allowed_keys: &[&str],
@@ -1075,6 +2023,102 @@ fn get_optional_f64(
             .as_f64()
             .map(Some)
             .ok_or_else(|| AiviError::InvalidCommand(format!("argument {key} must be a number"))),
+    }
+}
+
+fn get_required_f64(
+    args: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<f64, AiviError> {
+    args.get(key)
+        .and_then(|value| value.as_f64())
+        .ok_or_else(|| AiviError::InvalidCommand(format!("argument {key} must be a number")))
+}
+
+fn get_required_i64(
+    args: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<i64, AiviError> {
+    args.get(key)
+        .and_then(json_i64)
+        .ok_or_else(|| AiviError::InvalidCommand(format!("argument {key} must be an integer")))
+}
+
+fn get_required_u64(
+    args: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<u64, AiviError> {
+    args.get(key).and_then(json_u64).ok_or_else(|| {
+        AiviError::InvalidCommand(format!("argument {key} must be a non-negative integer"))
+    })
+}
+
+#[cfg(unix)]
+fn gtk_launch_managed_session(
+    target: &str,
+    release: bool,
+) -> Result<(GtkUiSession, bool), AiviError> {
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
+    let token = uuid::Uuid::new_v4().to_string();
+    let socket_path = format!("{}/aivi-ui-mcp-{}.sock", runtime_dir, uuid::Uuid::new_v4());
+
+    let exe = resolve_gtk_launch_executable()?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("run");
+    if release {
+        cmd.arg("--release");
+    }
+    cmd.arg(target);
+    if let Some(working_dir) = gtk_launch_working_dir(target) {
+        cmd.current_dir(working_dir);
+    }
+    cmd.env("AIVI_UI_DEBUG", "1");
+    cmd.env("AIVI_UI_DEBUG_SOCKET", &socket_path);
+    cmd.env("AIVI_UI_DEBUG_TOKEN", &token);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::inherit());
+
+    let mut child = cmd.spawn()?;
+    let pid = child.id();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+
+    let mut ready = false;
+    for _ in 0..60 {
+        if std::fs::metadata(&socket_path).is_ok() {
+            ready = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    Ok((
+        GtkUiSession {
+            socket_path,
+            token,
+            pid: Some(pid),
+            launch_target: Some(target.to_string()),
+            release,
+            reload_mode: "restart".to_string(),
+            reload_count: 0,
+            last_reload_at_ms: None,
+            last_reload_ready: Some(ready),
+        },
+        ready,
+    ))
+}
+
+fn get_optional_u64(
+    args: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Result<Option<u64>, AiviError> {
+    match args.get(key) {
+        None => Ok(None),
+        Some(value) => json_u64(value).map(Some).ok_or_else(|| {
+            AiviError::InvalidCommand(format!("argument {key} must be a non-negative integer"))
+        }),
     }
 }
 

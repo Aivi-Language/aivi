@@ -183,6 +183,8 @@ dependencies = [
 name = "aivi_gtk4"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "image",
  "serde_json",
  "tokio",
  "zbus",

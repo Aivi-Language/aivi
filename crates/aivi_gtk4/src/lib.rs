@@ -76,8 +76,10 @@ mod linux_impl {
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
     use std::sync::{mpsc, Arc, Mutex, OnceLock};
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+    use base64::Engine;
+    use image::{ImageBuffer, ImageEncoder, Rgba};
     use serde_json::{json, Map, Value};
 
     use super::{BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, SignalEvent};
@@ -100,6 +102,27 @@ mod linux_impl {
         pub alpha: f32,
     }
 
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct GraphenePoint {
+        pub x: f32,
+        pub y: f32,
+    }
+
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct GrapheneSize {
+        pub width: f32,
+        pub height: f32,
+    }
+
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct GrapheneRect {
+        pub origin: GraphenePoint,
+        pub size: GrapheneSize,
+    }
+
     #[link(name = "gtk-4")]
     unsafe extern "C" {
         fn gtk_init();
@@ -114,6 +137,12 @@ mod linux_impl {
         fn gtk_native_get_surface(native: *mut c_void) -> *mut c_void;
         fn gtk_widget_get_width(widget: *mut c_void) -> c_int;
         fn gtk_widget_get_height(widget: *mut c_void) -> c_int;
+        fn gtk_widget_compute_bounds(
+            widget: *mut c_void,
+            target: *mut c_void,
+            out_bounds: *mut GrapheneRect,
+        ) -> c_int;
+        fn gtk_widget_paintable_new(widget: *mut c_void) -> *mut c_void;
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
         fn gtk_window_new() -> *mut c_void;
         fn gtk_application_window_new(application: *mut c_void) -> *mut c_void;
@@ -257,6 +286,10 @@ mod linux_impl {
         fn gdk_keyval_name(keyval: c_uint) -> *const c_char;
         fn gtk_widget_set_focusable(widget: *mut c_void, focusable: c_int);
 
+        fn gdk_paintable_get_current_image(paintable: *mut c_void) -> *mut c_void;
+        fn gdk_texture_get_width(texture: *mut c_void) -> c_int;
+        fn gdk_texture_get_height(texture: *mut c_void) -> c_int;
+        fn gdk_texture_download(texture: *mut c_void, data: *mut u8, stride: usize);
         fn gtk_icon_theme_get_for_display(display: *mut c_void) -> *mut c_void;
         fn gtk_icon_theme_add_search_path(icon_theme: *mut c_void, path: *const c_char);
         fn gtk_button_set_child(button: *mut c_void, child: *mut c_void);
@@ -615,6 +648,49 @@ mod linux_impl {
         handler_id: c_ulong,
     }
 
+    const UI_DEBUG_LOG_LIMIT: usize = 4096;
+
+    #[derive(Clone, Debug)]
+    struct UiDebugOverlayState {
+        enabled: bool,
+        bounds: bool,
+        margins: bool,
+        spacing: bool,
+        focus: bool,
+        clipping: bool,
+    }
+
+    impl Default for UiDebugOverlayState {
+        fn default() -> Self {
+            Self {
+                enabled: false,
+                bounds: true,
+                margins: true,
+                spacing: true,
+                focus: true,
+                clipping: true,
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct UiDebugCaptureSnapshot {
+        label: String,
+        target_id: i64,
+        width: u32,
+        height: u32,
+        png_base64: String,
+        rgba: Vec<u8>,
+        created_at_ms: u64,
+    }
+
+    #[derive(Clone, Debug)]
+    struct UiDebugJsonSnapshot {
+        label: String,
+        payload: Value,
+        created_at_ms: u64,
+    }
+
     #[derive(Default)]
     struct RealGtkState {
         next_id: i64,
@@ -641,10 +717,20 @@ mod linux_impl {
         resources_registered: bool,
         /// Root widget id → LiveNode tree for reconciliation.
         live_trees: HashMap<i64, LiveNode>,
+        ui_debug_tick: u64,
+        next_event_seq: u64,
+        next_mutation_seq: u64,
+        signal_event_log: VecDeque<Value>,
+        mutation_log: VecDeque<Value>,
+        overlay: UiDebugOverlayState,
+        capture_snapshots: HashMap<String, UiDebugCaptureSnapshot>,
+        tree_snapshots: HashMap<String, UiDebugJsonSnapshot>,
+        layout_snapshots: HashMap<String, UiDebugJsonSnapshot>,
         ui_debug: Option<UiDebugServer>,
         main_loop_tick_registered: bool,
     }
 
+    #[derive(Clone, Debug)]
     enum SignalAction {
         SetBool {
             widget_id: i64,
@@ -726,6 +812,79 @@ mod linux_impl {
             self.next_id += 1;
             self.next_id
         }
+
+        fn current_tick(&self) -> u64 {
+            self.ui_debug_tick
+        }
+
+        fn next_event_seq(&mut self) -> u64 {
+            self.next_event_seq = self.next_event_seq.saturating_add(1);
+            self.next_event_seq
+        }
+
+        fn next_mutation_seq(&mut self) -> u64 {
+            self.next_mutation_seq = self.next_mutation_seq.saturating_add(1);
+            self.next_mutation_seq
+        }
+
+        fn push_log(queue: &mut VecDeque<Value>, entry: Value) {
+            queue.push_back(entry);
+            while queue.len() > UI_DEBUG_LOG_LIMIT {
+                queue.pop_front();
+            }
+        }
+
+        fn record_mutation(&mut self, mut entry: Map<String, Value>) {
+            entry.insert("seq".to_string(), json!(self.next_mutation_seq()));
+            entry.insert("tick".to_string(), json!(self.current_tick()));
+            entry.insert("timestampMs".to_string(), json!(unix_timestamp_ms()));
+            Self::push_log(&mut self.mutation_log, Value::Object(entry));
+        }
+
+        fn store_capture_snapshot(
+            &mut self,
+            label: &str,
+            target_id: i64,
+            width: u32,
+            height: u32,
+            png_base64: String,
+            rgba: Vec<u8>,
+        ) {
+            self.capture_snapshots.insert(
+                label.to_string(),
+                UiDebugCaptureSnapshot {
+                    label: label.to_string(),
+                    target_id,
+                    width,
+                    height,
+                    png_base64,
+                    rgba,
+                    created_at_ms: unix_timestamp_ms(),
+                },
+            );
+        }
+
+        fn store_json_snapshot(
+            store: &mut HashMap<String, UiDebugJsonSnapshot>,
+            label: &str,
+            payload: Value,
+        ) {
+            store.insert(
+                label.to_string(),
+                UiDebugJsonSnapshot {
+                    label: label.to_string(),
+                    payload,
+                    created_at_ms: unix_timestamp_ms(),
+                },
+            );
+        }
+    }
+
+    fn unix_timestamp_ms() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|dur| dur.as_millis() as u64)
+            .unwrap_or(0)
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1717,6 +1876,142 @@ mod linux_impl {
         }
     }
 
+    fn split_css_classes(raw: Option<&String>) -> Vec<String> {
+        let mut classes = string_prop_lines(raw)
+            .into_iter()
+            .flat_map(|item| {
+                item.split_whitespace()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>();
+        classes.sort();
+        classes.dedup();
+        classes
+    }
+
+    fn widget_bounds_relative_to(
+        state: &RealGtkState,
+        widget_id: i64,
+        target_id: i64,
+    ) -> Option<GrapheneRect> {
+        let widget = widget_ptr(state, widget_id, "uiDebugBounds").ok()?;
+        if widget_id == target_id {
+            return Some(GrapheneRect {
+                origin: GraphenePoint { x: 0.0, y: 0.0 },
+                size: GrapheneSize {
+                    width: unsafe { gtk_widget_get_width(widget) }.max(0) as f32,
+                    height: unsafe { gtk_widget_get_height(widget) }.max(0) as f32,
+                },
+            });
+        }
+        let target = widget_ptr(state, target_id, "uiDebugBounds").ok()?;
+        let mut bounds = GrapheneRect::default();
+        let ok =
+            unsafe { gtk_widget_compute_bounds(widget, target, &mut bounds as *mut GrapheneRect) };
+        (ok != 0).then_some(bounds)
+    }
+
+    fn rect_to_json(rect: GrapheneRect) -> Value {
+        let x = rect.origin.x as f64;
+        let y = rect.origin.y as f64;
+        let width = rect.size.width.max(0.0) as f64;
+        let height = rect.size.height.max(0.0) as f64;
+        json!({
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "right": x + width,
+            "bottom": y + height,
+        })
+    }
+
+    fn rect_contains_point(rect: GrapheneRect, x: f64, y: f64) -> bool {
+        let left = rect.origin.x as f64;
+        let top = rect.origin.y as f64;
+        let right = left + rect.size.width as f64;
+        let bottom = top + rect.size.height as f64;
+        x >= left && y >= top && x <= right && y <= bottom
+    }
+
+    fn widget_margin_json(live: &LiveNode) -> Value {
+        json!({
+            "start": live.props.get("margin-start").and_then(|value| parse_i32_text(value)).unwrap_or_default(),
+            "end": live.props.get("margin-end").and_then(|value| parse_i32_text(value)).unwrap_or_default(),
+            "top": live.props.get("margin-top").and_then(|value| parse_i32_text(value)).unwrap_or_default(),
+            "bottom": live.props.get("margin-bottom").and_then(|value| parse_i32_text(value)).unwrap_or_default(),
+        })
+    }
+
+    fn widget_style_info_json(state: &RealGtkState, live: &LiveNode) -> Value {
+        let requested_classes = split_css_classes(live.props.get("css-class"));
+        let widget = widget_ptr(state, live.widget_id, "uiDebugStyle").ok();
+        let active_classes = widget
+            .map(|widget| {
+                requested_classes
+                    .iter()
+                    .filter(|class_name| {
+                        CString::new(class_name.as_str())
+                            .ok()
+                            .map(|css_class| unsafe {
+                                gtk_widget_has_css_class(widget, css_class.as_ptr()) != 0
+                            })
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        json!({
+            "requestedCssClasses": requested_classes,
+            "activeCssClasses": active_classes,
+            "iconName": live.props.get("icon-name"),
+            "tooltip": live.props.get("tooltip-text"),
+            "opacity": live.props.get("opacity"),
+            "wrap": live.props.get("wrap"),
+            "ellipsize": live.props.get("ellipsize"),
+            "margins": widget_margin_json(live),
+        })
+    }
+
+    fn layout_entry_json(
+        state: &RealGtkState,
+        root_id: i64,
+        target_id: i64,
+        parent_bounds: Option<GrapheneRect>,
+        live: &LiveNode,
+    ) -> Value {
+        let bounds =
+            widget_bounds_relative_to(state, live.widget_id, target_id).unwrap_or_default();
+        let overflow = parent_bounds.map(|parent| {
+            (bounds.origin.x < parent.origin.x)
+                || (bounds.origin.y < parent.origin.y)
+                || (bounds.origin.x + bounds.size.width > parent.origin.x + parent.size.width)
+                || (bounds.origin.y + bounds.size.height > parent.origin.y + parent.size.height)
+        });
+        let children = live
+            .children
+            .iter()
+            .map(|child| layout_entry_json(state, root_id, target_id, Some(bounds), &child.node))
+            .collect::<Vec<_>>();
+        json!({
+            "id": live.widget_id,
+            "name": live.node_id,
+            "className": live.class_name,
+            "kind": created_widget_kind_name(live.kind),
+            "rootId": root_id,
+            "bounds": rect_to_json(bounds),
+            "dimensions": widget_dimensions_json(state, live.widget_id),
+            "margins": widget_margin_json(live),
+            "state": widget_runtime_state_json(state, live),
+            "style": widget_style_info_json(state, live),
+            "overflowParentBounds": overflow,
+            "children": children,
+        })
+    }
+
     fn widget_capabilities_json(state: &RealGtkState, live: &LiveNode) -> Value {
         let click = live
             .signals
@@ -2087,6 +2382,24 @@ mod linux_impl {
             .get(&widget_id)
             .cloned()
             .unwrap_or_default();
+        let root_id = find_widget_context(state, widget_id).map(|(root_id, _, _, _)| root_id);
+        let event_seq = state.next_event_seq();
+        let event_tick = state.current_tick();
+        let timestamp_ms = unix_timestamp_ms();
+        RealGtkState::push_log(
+            &mut state.signal_event_log,
+            json!({
+                "seq": event_seq,
+                "tick": event_tick,
+                "timestampMs": timestamp_ms,
+                "widgetId": widget_id,
+                "widgetName": widget_name,
+                "rootId": root_id,
+                "signal": signal,
+                "handler": handler,
+                "payload": payload,
+            }),
+        );
         let typed_event = make_signal_event(event.clone(), widget_name);
         state
             .signal_senders
@@ -2096,11 +2409,99 @@ mod linux_impl {
     }
 
     fn update_live_prop(state: &mut RealGtkState, widget_id: i64, key: &str, value: String) {
-        for live in state.live_trees.values_mut() {
+        let widget_name = state.widget_id_to_name.get(&widget_id).cloned();
+        let mut mutation = None;
+        for (&root_id, live) in state.live_trees.iter_mut() {
             if let Some(node) = find_live_node_mut(live, widget_id) {
-                node.props.insert(key.to_string(), value);
-                return;
+                let old_value = node.props.insert(key.to_string(), value.clone());
+                if old_value.as_deref() != Some(value.as_str()) {
+                    mutation = Some(serde_json::Map::from_iter([
+                        (
+                            "kind".to_string(),
+                            Value::String("prop-changed".to_string()),
+                        ),
+                        ("widgetId".to_string(), json!(widget_id)),
+                        ("widgetName".to_string(), json!(widget_name)),
+                        ("rootId".to_string(), json!(root_id)),
+                        ("property".to_string(), Value::String(key.to_string())),
+                        ("oldValue".to_string(), json!(old_value)),
+                        ("newValue".to_string(), Value::String(value)),
+                    ]));
+                }
+                break;
             }
+        }
+        if let Some(mutation) = mutation {
+            state.record_mutation(mutation);
+        }
+    }
+
+    fn ui_debug_limit_param(params: &Map<String, Value>, default: usize) -> usize {
+        params
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map(|value| value.min(512) as usize)
+            .unwrap_or(default)
+    }
+
+    fn ui_debug_after_seq_param(params: &Map<String, Value>) -> u64 {
+        params.get("afterSeq").and_then(Value::as_u64).unwrap_or(0)
+    }
+
+    fn signal_action_json(action: &SignalAction) -> Value {
+        match action {
+            SignalAction::SetBool {
+                widget_id,
+                property,
+                value,
+            } => json!({
+                "kind": "setBool",
+                "widgetId": widget_id,
+                "property": property,
+                "value": value,
+            }),
+            SignalAction::CssClass {
+                widget_id,
+                class_name,
+                add,
+            } => json!({
+                "kind": "cssClass",
+                "widgetId": widget_id,
+                "className": class_name,
+                "add": add,
+            }),
+            SignalAction::ToggleBool {
+                widget_id,
+                property,
+            } => json!({
+                "kind": "toggleBool",
+                "widgetId": widget_id,
+                "property": property,
+            }),
+            SignalAction::ToggleCssClass {
+                widget_id,
+                class_name,
+            } => json!({
+                "kind": "toggleCssClass",
+                "widgetId": widget_id,
+                "className": class_name,
+            }),
+            SignalAction::PresentDialog {
+                dialog_id,
+                parent_id,
+            } => json!({
+                "kind": "presentDialog",
+                "dialogId": dialog_id,
+                "parentId": parent_id,
+            }),
+            SignalAction::SetStackPage {
+                stack_id,
+                page_name,
+            } => json!({
+                "kind": "setStackPage",
+                "stackId": stack_id,
+                "pageName": page_name,
+            }),
         }
     }
 
@@ -2175,6 +2576,561 @@ mod linux_impl {
         }))
     }
 
+    fn resolve_snapshot_target<'a>(
+        state: &'a RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<(i64, i64, &'a LiveNode), Gtk4Error> {
+        if let Some(root_id) = params.get("rootId").and_then(Value::as_i64) {
+            let live = state
+                .live_trees
+                .get(&root_id)
+                .ok_or_else(|| Gtk4Error::new(format!("gtk ui debug unknown root id {root_id}")))?;
+            return Ok((root_id, root_id, live));
+        }
+        if params.get("name").is_some() || params.get("id").is_some() {
+            let widget_id = resolve_widget_id(state, params)?;
+            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+            return Ok((root_id, widget_id, live));
+        }
+        let root_ids = ui_debug_all_root_ids(state);
+        if root_ids.len() == 1 {
+            let root_id = root_ids[0];
+            let live = state
+                .live_trees
+                .get(&root_id)
+                .ok_or_else(|| Gtk4Error::new(format!("gtk ui debug unknown root id {root_id}")))?;
+            return Ok((root_id, root_id, live));
+        }
+        Err(Gtk4Error::new(
+            "gtk ui debug expected one of: rootId, name, or id when multiple roots exist",
+        ))
+    }
+
+    fn widget_action_bindings_json(state: &RealGtkState, live: &LiveNode) -> Value {
+        Value::Array(
+            live.signals
+                .iter()
+                .map(|binding| {
+                    let actions = state
+                        .signal_action_bindings
+                        .get(&binding.handler)
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|action| signal_action_json(&action))
+                        .collect::<Vec<_>>();
+                    json!({
+                        "signal": binding.signal,
+                        "handler": binding.handler,
+                        "actions": actions,
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    fn widget_ancestry_json(state: &RealGtkState, widget_id: i64) -> Value {
+        let mut current_id = Some(widget_id);
+        let mut ancestry = Vec::new();
+        while let Some(id) = current_id {
+            let Some((root_id, parent_id, child_type, live)) = find_widget_context(state, id)
+            else {
+                break;
+            };
+            ancestry.push(json!({
+                "id": live.widget_id,
+                "name": live.node_id,
+                "className": live.class_name,
+                "kind": created_widget_kind_name(live.kind),
+                "rootId": root_id,
+                "parentId": parent_id,
+                "childType": child_type,
+            }));
+            current_id = parent_id;
+        }
+        ancestry.reverse();
+        Value::Array(ancestry)
+    }
+
+    fn find_widget_at_point<'a>(
+        state: &'a RealGtkState,
+        target_id: i64,
+        root_id: i64,
+        live: &'a LiveNode,
+        x: f64,
+        y: f64,
+    ) -> Option<&'a LiveNode> {
+        let bounds = widget_bounds_relative_to(state, live.widget_id, target_id)?;
+        if !rect_contains_point(bounds, x, y) {
+            return None;
+        }
+        for child in live.children.iter().rev() {
+            if let Some(found) = find_widget_at_point(state, target_id, root_id, &child.node, x, y)
+            {
+                return Some(found);
+            }
+        }
+        let _ = root_id;
+        Some(live)
+    }
+
+    fn ui_debug_style_info_result(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_widget_id(state, params)?;
+        let (root_id, parent_id, child_type, live) = find_widget_context(state, widget_id)
+            .ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+            "style": widget_style_info_json(state, live),
+        }))
+    }
+
+    fn ui_debug_layout_snapshot_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let (root_id, target_id, live) = resolve_snapshot_target(state, params)?;
+        let snapshot = json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootId": root_id,
+            "targetId": target_id,
+            "focus": focus_summary_json(state),
+            "tree": layout_entry_json(state, root_id, target_id, None, live),
+        });
+        if let Some(label) = params.get("label").and_then(Value::as_str) {
+            RealGtkState::store_json_snapshot(&mut state.layout_snapshots, label, snapshot.clone());
+        }
+        Ok(snapshot)
+    }
+
+    fn ui_debug_explain_widget_result(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let widget_id = resolve_widget_id(state, params)?;
+        let (root_id, parent_id, child_type, live) = find_widget_context(state, widget_id)
+            .ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+            "ancestry": widget_ancestry_json(state, widget_id),
+            "style": widget_style_info_json(state, live),
+            "layout": layout_entry_json(state, root_id, widget_id, None, live),
+            "actionBindings": widget_action_bindings_json(state, live),
+        }))
+    }
+
+    fn ui_debug_inspect_at_result(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let x = params
+            .get("x")
+            .and_then(Value::as_f64)
+            .ok_or_else(|| Gtk4Error::new("gtk ui debug inspectAt requires x"))?;
+        let y = params
+            .get("y")
+            .and_then(Value::as_f64)
+            .ok_or_else(|| Gtk4Error::new("gtk ui debug inspectAt requires y"))?;
+        let (root_id, target_id, live) = resolve_snapshot_target(state, params)?;
+        let hit = find_widget_at_point(state, target_id, root_id, live, x, y).ok_or_else(|| {
+            Gtk4Error::new(format!(
+                "gtk ui debug found no widget at point ({x}, {y}) in target {target_id}"
+            ))
+        })?;
+        let (_, parent_id, child_type, _) =
+            find_widget_context(state, hit.widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {} disappeared during inspectAt",
+                    hit.widget_id
+                ))
+            })?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootId": root_id,
+            "targetId": target_id,
+            "x": x,
+            "y": y,
+            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), hit),
+            "ancestry": widget_ancestry_json(state, hit.widget_id),
+        }))
+    }
+
+    fn ui_debug_show_overlay_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let enabled = params
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        state.overlay.enabled = enabled;
+        if let Some(value) = params.get("bounds").and_then(Value::as_bool) {
+            state.overlay.bounds = value;
+        }
+        if let Some(value) = params.get("margins").and_then(Value::as_bool) {
+            state.overlay.margins = value;
+        }
+        if let Some(value) = params.get("spacing").and_then(Value::as_bool) {
+            state.overlay.spacing = value;
+        }
+        if let Some(value) = params.get("focus").and_then(Value::as_bool) {
+            state.overlay.focus = value;
+        }
+        if let Some(value) = params.get("clipping").and_then(Value::as_bool) {
+            state.overlay.clipping = value;
+        }
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "overlay": {
+                "enabled": state.overlay.enabled,
+                "bounds": state.overlay.bounds,
+                "margins": state.overlay.margins,
+                "spacing": state.overlay.spacing,
+                "focus": state.overlay.focus,
+                "clipping": state.overlay.clipping,
+            }
+        }))
+    }
+
+    fn rect_json_number(bounds: &Value, key: &str) -> Option<i32> {
+        bounds.get(key)?.as_f64().map(|value| value.round() as i32)
+    }
+
+    fn set_pixel(image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>, x: i32, y: i32, color: [u8; 4]) {
+        if x < 0 || y < 0 {
+            return;
+        }
+        let (width, height) = image.dimensions();
+        if x as u32 >= width || y as u32 >= height {
+            return;
+        }
+        image.put_pixel(x as u32, y as u32, Rgba(color));
+    }
+
+    fn draw_rect_outline(
+        image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        color: [u8; 4],
+        thickness: i32,
+    ) {
+        if width <= 0 || height <= 0 {
+            return;
+        }
+        let right = x + width - 1;
+        let bottom = y + height - 1;
+        for offset in 0..thickness.max(1) {
+            for px in x..=right {
+                set_pixel(image, px, y + offset, color);
+                set_pixel(image, px, bottom - offset, color);
+            }
+            for py in y..=bottom {
+                set_pixel(image, x + offset, py, color);
+                set_pixel(image, right - offset, py, color);
+            }
+        }
+    }
+
+    fn fill_rect_alpha(
+        image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        color: [u8; 4],
+    ) {
+        if width <= 0 || height <= 0 {
+            return;
+        }
+        for py in y..(y + height) {
+            for px in x..(x + width) {
+                if px < 0 || py < 0 {
+                    continue;
+                }
+                let (img_w, img_h) = image.dimensions();
+                if px as u32 >= img_w || py as u32 >= img_h {
+                    continue;
+                }
+                let mut base = *image.get_pixel(px as u32, py as u32);
+                let alpha = color[3] as f32 / 255.0;
+                for channel in 0..3 {
+                    base[channel] = ((base[channel] as f32 * (1.0 - alpha))
+                        + (color[channel] as f32 * alpha))
+                        .round() as u8;
+                }
+                image.put_pixel(px as u32, py as u32, base);
+            }
+        }
+    }
+
+    fn draw_spacing_guides(image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>, children: &[Value]) {
+        let rects = children
+            .iter()
+            .filter_map(|child| child.get("bounds"))
+            .filter_map(|bounds| {
+                Some((
+                    rect_json_number(bounds, "x")?,
+                    rect_json_number(bounds, "y")?,
+                    rect_json_number(bounds, "width")?,
+                    rect_json_number(bounds, "height")?,
+                ))
+            })
+            .collect::<Vec<_>>();
+        if rects.len() < 2 {
+            return;
+        }
+        let horizontal_span = rects
+            .iter()
+            .map(|(x, _, width, _)| x + width)
+            .max()
+            .unwrap_or(0)
+            - rects.iter().map(|(x, _, _, _)| *x).min().unwrap_or(0);
+        let vertical_span = rects
+            .iter()
+            .map(|(_, y, _, height)| y + height)
+            .max()
+            .unwrap_or(0)
+            - rects.iter().map(|(_, y, _, _)| *y).min().unwrap_or(0);
+        let horizontal = horizontal_span >= vertical_span;
+        let mut rects = rects;
+        if horizontal {
+            rects.sort_by_key(|(x, _, _, _)| *x);
+            for pair in rects.windows(2) {
+                let left = pair[0];
+                let right = pair[1];
+                let gap_start = left.0 + left.2;
+                let gap_end = right.0;
+                if gap_end - gap_start > 2 {
+                    let y = (left.1 + right.1 + left.3.min(right.3) / 2) / 2;
+                    for x in gap_start..gap_end {
+                        set_pixel(image, x, y, [0, 200, 255, 255]);
+                    }
+                }
+            }
+        } else {
+            rects.sort_by_key(|(_, y, _, _)| *y);
+            for pair in rects.windows(2) {
+                let top = pair[0];
+                let bottom = pair[1];
+                let gap_start = top.1 + top.3;
+                let gap_end = bottom.1;
+                if gap_end - gap_start > 2 {
+                    let x = (top.0 + bottom.0 + top.2.min(bottom.2) / 2) / 2;
+                    for y in gap_start..gap_end {
+                        set_pixel(image, x, y, [0, 200, 255, 255]);
+                    }
+                }
+            }
+        }
+    }
+
+    fn draw_layout_overlay_recursive(
+        image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+        node: &Value,
+        overlay: &UiDebugOverlayState,
+        focused_widget_id: Option<i64>,
+    ) {
+        let bounds = node.get("bounds").cloned().unwrap_or(Value::Null);
+        let x = rect_json_number(&bounds, "x").unwrap_or(0);
+        let y = rect_json_number(&bounds, "y").unwrap_or(0);
+        let width = rect_json_number(&bounds, "width").unwrap_or(0);
+        let height = rect_json_number(&bounds, "height").unwrap_or(0);
+        let widget_id = node.get("id").and_then(Value::as_i64);
+        if overlay.bounds {
+            draw_rect_outline(image, x, y, width, height, [0, 255, 128, 255], 1);
+        }
+        if overlay.margins {
+            let margins = node.get("margins").cloned().unwrap_or(Value::Null);
+            let start = margins.get("start").and_then(Value::as_i64).unwrap_or(0) as i32;
+            let end = margins.get("end").and_then(Value::as_i64).unwrap_or(0) as i32;
+            let top = margins.get("top").and_then(Value::as_i64).unwrap_or(0) as i32;
+            let bottom = margins.get("bottom").and_then(Value::as_i64).unwrap_or(0) as i32;
+            if start != 0 || end != 0 || top != 0 || bottom != 0 {
+                draw_rect_outline(
+                    image,
+                    x - start,
+                    y - top,
+                    width + start + end,
+                    height + top + bottom,
+                    [64, 160, 255, 255],
+                    1,
+                );
+            }
+        }
+        if overlay.focus && widget_id == focused_widget_id {
+            draw_rect_outline(image, x, y, width, height, [255, 220, 0, 255], 3);
+        }
+        if overlay.clipping
+            && node
+                .get("overflowParentBounds")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        {
+            fill_rect_alpha(image, x, y, width, height, [255, 0, 0, 72]);
+        }
+        let children = node
+            .get("children")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if overlay.spacing {
+            draw_spacing_guides(image, &children);
+        }
+        for child in children {
+            draw_layout_overlay_recursive(image, &child, overlay, focused_widget_id);
+        }
+    }
+
+    fn encode_png_base64(width: u32, height: u32, rgba: &[u8]) -> Result<String, Gtk4Error> {
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(rgba, width, height, image::ColorType::Rgba8.into())
+            .map_err(|err| Gtk4Error::new(format!("gtk ui debug png encode failed: {err}")))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(png))
+    }
+
+    fn scale_rgba_nearest(width: u32, height: u32, rgba: &[u8], scale: f64) -> (u32, u32, Vec<u8>) {
+        if scale <= 1.0 {
+            return (width, height, rgba.to_vec());
+        }
+        let next_width = ((width as f64) * scale).round().max(1.0) as u32;
+        let next_height = ((height as f64) * scale).round().max(1.0) as u32;
+        let mut out = vec![0; (next_width * next_height * 4) as usize];
+        for y in 0..next_height {
+            let src_y = ((y as f64) / scale).floor().min((height - 1) as f64) as u32;
+            for x in 0..next_width {
+                let src_x = ((x as f64) / scale).floor().min((width - 1) as f64) as u32;
+                let src_index = ((src_y * width + src_x) * 4) as usize;
+                let dst_index = ((y * next_width + x) * 4) as usize;
+                out[dst_index..dst_index + 4].copy_from_slice(&rgba[src_index..src_index + 4]);
+            }
+        }
+        (next_width, next_height, out)
+    }
+
+    fn capture_widget_rgba(
+        state: &RealGtkState,
+        target_id: i64,
+    ) -> Result<(u32, u32, Vec<u8>), Gtk4Error> {
+        let widget = widget_ptr(state, target_id, "uiDebugCapture")?;
+        let paintable = unsafe { gtk_widget_paintable_new(widget) };
+        if paintable.is_null() {
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug failed to create paintable for widget {target_id}"
+            )));
+        }
+        let image = unsafe { gdk_paintable_get_current_image(paintable) };
+        if image.is_null() {
+            unsafe { g_object_unref(paintable) };
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug failed to snapshot widget {target_id}"
+            )));
+        }
+        let width = unsafe { gdk_texture_get_width(image) }.max(0) as u32;
+        let height = unsafe { gdk_texture_get_height(image) }.max(0) as u32;
+        if width == 0 || height == 0 {
+            unsafe {
+                g_object_unref(image);
+                g_object_unref(paintable);
+            }
+            return Err(Gtk4Error::new(format!(
+                "gtk ui debug widget {target_id} has zero-sized capture"
+            )));
+        }
+        let stride = (width * 4) as usize;
+        let mut rgba = vec![0; stride * height as usize];
+        unsafe {
+            gdk_texture_download(image, rgba.as_mut_ptr(), stride);
+            g_object_unref(image);
+            g_object_unref(paintable);
+        }
+        Ok((width, height, rgba))
+    }
+
+    fn ui_debug_capture_result(
+        state: &mut RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        let (root_id, target_id, live) = resolve_snapshot_target(state, params)?;
+        let (width, height, mut rgba) = capture_widget_rgba(state, target_id)?;
+        if state.overlay.enabled
+            || params.get("highlightId").is_some()
+            || params.get("highlightName").is_some()
+        {
+            let focus_id = current_focus_info(state).and_then(|(_, _, widget_id)| widget_id);
+            let layout = layout_entry_json(state, root_id, target_id, None, live);
+            let mut image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, rgba)
+                .ok_or_else(|| Gtk4Error::new("gtk ui debug failed to map screenshot buffer"))?;
+            if state.overlay.enabled {
+                draw_layout_overlay_recursive(&mut image, &layout, &state.overlay, focus_id);
+            }
+            let highlight_id = params
+                .get("highlightId")
+                .and_then(Value::as_i64)
+                .or_else(|| {
+                    params
+                        .get("highlightName")
+                        .and_then(Value::as_str)
+                        .and_then(|name| state.named_widgets.get(name).copied())
+                });
+            if let Some(highlight_id) = highlight_id {
+                if let Some(bounds) = widget_bounds_relative_to(state, highlight_id, target_id) {
+                    draw_rect_outline(
+                        &mut image,
+                        bounds.origin.x.round() as i32,
+                        bounds.origin.y.round() as i32,
+                        bounds.size.width.round() as i32,
+                        bounds.size.height.round() as i32,
+                        [255, 0, 255, 255],
+                        3,
+                    );
+                }
+            }
+            rgba = image.into_raw();
+        }
+        let scale = params.get("scale").and_then(Value::as_f64).unwrap_or(1.0);
+        let (width, height, rgba) = scale_rgba_nearest(width, height, &rgba, scale);
+        let png_base64 = encode_png_base64(width, height, &rgba)?;
+        if let Some(label) = params.get("label").and_then(Value::as_str) {
+            state.store_capture_snapshot(
+                label,
+                target_id,
+                width,
+                height,
+                png_base64.clone(),
+                rgba.clone(),
+            );
+        }
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "rootId": root_id,
+            "targetId": target_id,
+            "width": width,
+            "height": height,
+            "scale": scale,
+            "mimeType": "image/png",
+            "pngBase64": png_base64,
+        }))
+    }
+
     fn ui_debug_hello_result(state: &RealGtkState) -> Value {
         let root_ids = ui_debug_all_root_ids(state);
         let window_ids = ui_debug_all_window_ids(state);
@@ -2188,6 +3144,56 @@ mod linux_impl {
             "actions": ["click", "type", "select", "focus", "moveFocus", "scroll", "keyPress"],
             "focus": focus_summary_json(state),
             "inspectors": ["listWidgets", "inspectWidget", "dumpTree", "listSignals", "inspectSignal"]
+        })
+    }
+
+    fn ui_debug_poll_events_result(state: &RealGtkState, params: &Map<String, Value>) -> Value {
+        let after_seq = ui_debug_after_seq_param(params);
+        let limit = ui_debug_limit_param(params, 100);
+        let events = state
+            .signal_event_log
+            .iter()
+            .filter(|entry| entry.get("seq").and_then(Value::as_u64).unwrap_or(0) > after_seq)
+            .take(limit)
+            .cloned()
+            .collect::<Vec<_>>();
+        let latest_seq = state
+            .signal_event_log
+            .back()
+            .and_then(|entry| entry.get("seq"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "afterSeq": after_seq,
+            "latestSeq": latest_seq,
+            "returned": events.len(),
+            "events": events,
+        })
+    }
+
+    fn ui_debug_poll_mutations_result(state: &RealGtkState, params: &Map<String, Value>) -> Value {
+        let after_seq = ui_debug_after_seq_param(params);
+        let limit = ui_debug_limit_param(params, 100);
+        let mutations = state
+            .mutation_log
+            .iter()
+            .filter(|entry| entry.get("seq").and_then(Value::as_u64).unwrap_or(0) > after_seq)
+            .take(limit)
+            .cloned()
+            .collect::<Vec<_>>();
+        let latest_seq = state
+            .mutation_log
+            .back()
+            .and_then(|entry| entry.get("seq"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "afterSeq": after_seq,
+            "latestSeq": latest_seq,
+            "returned": mutations.len(),
+            "mutations": mutations,
         })
     }
 
@@ -2207,6 +3213,67 @@ mod linux_impl {
             "widgetCount": widgets.len(),
             "widgets": widgets
         })
+    }
+
+    fn ui_debug_list_action_bindings_result(
+        state: &RealGtkState,
+        params: &Map<String, Value>,
+    ) -> Result<Value, Gtk4Error> {
+        if params.get("name").is_some() || params.get("id").is_some() {
+            let widget_id = resolve_widget_id(state, params)?;
+            let (_, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk ui debug widget {widget_id} is not part of the live tree"
+                ))
+            })?;
+            let bindings = live
+                .signals
+                .iter()
+                .map(|binding| {
+                    let actions = state
+                        .signal_action_bindings
+                        .get(&binding.handler)
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|action| signal_action_json(&action))
+                        .collect::<Vec<_>>();
+                    json!({
+                        "widgetId": widget_id,
+                        "widgetName": live.node_id,
+                        "signal": binding.signal,
+                        "handler": binding.handler,
+                        "actions": actions,
+                    })
+                })
+                .collect::<Vec<_>>();
+            return Ok(json!({
+                "protocol": "aivi.gtk.debug.v1",
+                "widgetId": widget_id,
+                "bindings": bindings,
+            }));
+        }
+
+        let mut handlers = state
+            .signal_action_bindings
+            .iter()
+            .map(|(handler, actions)| {
+                json!({
+                    "handler": handler,
+                    "actions": actions.iter().map(signal_action_json).collect::<Vec<_>>(),
+                })
+            })
+            .collect::<Vec<_>>();
+        handlers.sort_by(|a, b| {
+            a.get("handler")
+                .and_then(Value::as_str)
+                .cmp(&b.get("handler").and_then(Value::as_str))
+        });
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "handlerCount": handlers.len(),
+            "handlers": handlers,
+        }))
     }
 
     fn ui_debug_dump_tree_result(
@@ -2867,7 +3934,16 @@ mod linux_impl {
 
         let result = match method {
             "hello" => Ok(ui_debug_hello_result(state)),
+            "capture" => ui_debug_capture_result(state, params),
+            "pollEvents" => Ok(ui_debug_poll_events_result(state, params)),
+            "pollMutations" => Ok(ui_debug_poll_mutations_result(state, params)),
             "listNamedWidgets" => Ok(ui_debug_list_widgets_result(state)),
+            "listActionBindings" => ui_debug_list_action_bindings_result(state, params),
+            "inspectAt" => ui_debug_inspect_at_result(state, params),
+            "layoutSnapshot" => ui_debug_layout_snapshot_result(state, params),
+            "styleInfo" => ui_debug_style_info_result(state, params),
+            "explainWidget" => ui_debug_explain_widget_result(state, params),
+            "showOverlay" => ui_debug_show_overlay_result(state, params),
             "dumpLiveTree" => ui_debug_dump_tree_result(state, params),
             "inspectWidget" => ui_debug_inspect_widget_result(state, params),
             "click" => ui_debug_click_result(state, params),
@@ -2958,6 +4034,7 @@ mod linux_impl {
         }
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
+            state.ui_debug_tick = state.ui_debug_tick.saturating_add(1);
             if let Err(err) = process_ui_debug_requests(&mut state) {
                 eprintln!("AIVI GTK UI debug server error: {}", err);
             }
@@ -8251,6 +9328,17 @@ mod linux_impl {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
             state.live_trees.insert(id, live);
+            state.record_mutation(serde_json::Map::from_iter([
+                ("kind".to_string(), Value::String("root-built".to_string())),
+                ("rootId".to_string(), json!(id)),
+                ("widgetId".to_string(), json!(id)),
+                (
+                    "widgetName".to_string(),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                ),
+            ]));
             Ok(id)
         })
     }
@@ -8268,6 +9356,17 @@ mod linux_impl {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
             state.live_trees.insert(id, live);
+            state.record_mutation(serde_json::Map::from_iter([
+                ("kind".to_string(), Value::String("root-built".to_string())),
+                ("rootId".to_string(), json!(id)),
+                ("widgetId".to_string(), json!(id)),
+                (
+                    "widgetName".to_string(),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                ),
+            ]));
             Ok(BuildResult {
                 root_id: id,
                 named_widgets: id_map,
@@ -8290,6 +9389,17 @@ mod linux_impl {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
             state.live_trees.insert(id, live);
+            state.record_mutation(serde_json::Map::from_iter([
+                ("kind".to_string(), Value::String("root-built".to_string())),
+                ("rootId".to_string(), json!(id)),
+                ("widgetId".to_string(), json!(id)),
+                (
+                    "widgetName".to_string(),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                ),
+            ]));
             Ok(BuildWithBindingsResult {
                 root_id: id,
                 named_widgets: id_map,
@@ -8346,6 +9456,20 @@ mod linux_impl {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
             state.live_trees.insert(root_id, live_root);
+            let widget_name = state.widget_id_to_name.get(&widget_id).cloned();
+            state.record_mutation(serde_json::Map::from_iter([
+                (
+                    "kind".to_string(),
+                    Value::String("tree-reconciled".to_string()),
+                ),
+                ("rootId".to_string(), json!(root_id)),
+                ("widgetId".to_string(), json!(widget_id)),
+                ("widgetName".to_string(), json!(widget_name)),
+                (
+                    "addedNames".to_string(),
+                    json!(id_map.keys().cloned().collect::<Vec<_>>()),
+                ),
+            ]));
             Ok(binding_map)
         })
     }
@@ -8381,6 +9505,26 @@ mod linux_impl {
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
+            state.record_mutation(serde_json::Map::from_iter([
+                (
+                    "kind".to_string(),
+                    Value::String(
+                        if final_id == root_id {
+                            "root-reconciled"
+                        } else {
+                            "root-replaced"
+                        }
+                        .to_string(),
+                    ),
+                ),
+                ("rootId".to_string(), json!(final_id)),
+                ("widgetId".to_string(), json!(final_id)),
+                ("previousRootId".to_string(), json!(root_id)),
+                (
+                    "addedNames".to_string(),
+                    json!(id_map.keys().cloned().collect::<Vec<_>>()),
+                ),
+            ]));
             Ok(final_id)
         })
     }

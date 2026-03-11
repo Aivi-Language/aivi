@@ -174,6 +174,7 @@ pub(crate) struct ReactiveHostState {
 pub(crate) struct ReactiveGraphState {
     pub(crate) next_signal_id: usize,
     pub(crate) next_watcher_id: usize,
+    pub(crate) next_change_seq: u64,
     pub(crate) batch_depth: usize,
     pub(crate) flushing: bool,
     /// Set when a background thread finishes a batch with pending notifications
@@ -195,6 +196,8 @@ pub(crate) struct ReactiveCellEntry {
     pub(crate) kind: ReactiveCellKind,
     pub(crate) value: Value,
     pub(crate) revision: u64,
+    pub(crate) last_change_seq: u64,
+    pub(crate) last_change_timestamp_ms: u64,
     pub(crate) dirty: bool,
     pub(crate) dependents: HashSet<usize>,
 }
