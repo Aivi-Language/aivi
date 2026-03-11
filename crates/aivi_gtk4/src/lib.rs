@@ -62,6 +62,7 @@ pub struct BuildWithBindingsResult {
 
 pub type UiDebugRequestHandler =
     dyn Fn(&str, &JsonMap<String, JsonValue>) -> Option<Result<JsonValue, Gtk4Error>> + Send + Sync;
+pub type MainLoopTickHandler = dyn Fn() -> Result<(), Gtk4Error> + Send + Sync;
 
 #[cfg(target_os = "linux")]
 #[allow(dead_code)]
@@ -527,10 +528,22 @@ mod linux_impl {
         UI_DEBUG_REQUEST_HANDLER.get_or_init(|| Mutex::new(None))
     }
 
+    static MAIN_LOOP_TICK_HANDLER: OnceLock<Mutex<Option<Arc<super::MainLoopTickHandler>>>> =
+        OnceLock::new();
+    fn main_loop_tick_handler() -> &'static Mutex<Option<Arc<super::MainLoopTickHandler>>> {
+        MAIN_LOOP_TICK_HANDLER.get_or_init(|| Mutex::new(None))
+    }
+
     pub(super) fn set_ui_debug_request_handler(handler: Option<Arc<super::UiDebugRequestHandler>>) {
         *ui_debug_request_handler()
             .lock()
             .expect("ui debug request handler lock poisoned") = handler;
+    }
+
+    pub(super) fn set_main_loop_tick_handler(handler: Option<Arc<super::MainLoopTickHandler>>) {
+        *main_loop_tick_handler()
+            .lock()
+            .expect("main loop tick handler lock poisoned") = handler;
     }
 
     fn call_ui_debug_request_handler(
@@ -542,6 +555,17 @@ mod linux_impl {
             .expect("ui debug request handler lock poisoned")
             .clone()?;
         handler(method, params)
+    }
+
+    fn call_main_loop_tick_handler() -> Result<(), Gtk4Error> {
+        let handler = main_loop_tick_handler()
+            .lock()
+            .expect("main loop tick handler lock poisoned")
+            .clone();
+        match handler {
+            Some(handler) => handler(),
+            None => Ok(()),
+        }
     }
 
     static EMAIL_SUGGESTIONS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
@@ -618,7 +642,7 @@ mod linux_impl {
         /// Root widget id → LiveNode tree for reconciliation.
         live_trees: HashMap<i64, LiveNode>,
         ui_debug: Option<UiDebugServer>,
-        ui_debug_tick_registered: bool,
+        main_loop_tick_registered: bool,
     }
 
     enum SignalAction {
@@ -2928,7 +2952,10 @@ mod linux_impl {
         Ok(())
     }
 
-    unsafe extern "C" fn ui_debug_tick_cb(_data: *mut c_void) -> c_int {
+    unsafe extern "C" fn main_loop_tick_cb(_data: *mut c_void) -> c_int {
+        if let Err(err) = call_main_loop_tick_handler() {
+            eprintln!("AIVI GTK main-loop tick error: {}", err);
+        }
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             if let Err(err) = process_ui_debug_requests(&mut state) {
@@ -2936,6 +2963,13 @@ mod linux_impl {
             }
         });
         1
+    }
+
+    fn ensure_main_loop_tick_registered(state: &mut RealGtkState) {
+        if !state.main_loop_tick_registered {
+            unsafe { g_timeout_add(16, main_loop_tick_cb, null_mut()) };
+            state.main_loop_tick_registered = true;
+        }
     }
 
     fn maybe_start_ui_debug_server(state: &mut RealGtkState) -> Result<(), Gtk4Error> {
@@ -2983,10 +3017,7 @@ mod linux_impl {
             token,
             listener,
         });
-        if !state.ui_debug_tick_registered {
-            unsafe { g_timeout_add(16, ui_debug_tick_cb, null_mut()) };
-            state.ui_debug_tick_registered = true;
-        }
+        ensure_main_loop_tick_registered(state);
         Ok(())
     }
 
@@ -6876,6 +6907,7 @@ mod linux_impl {
                 maybe_register_gresource_bundle()?;
                 state.resources_registered = true;
             }
+            ensure_main_loop_tick_registered(&mut state);
             Ok(())
         })
     }
@@ -6913,6 +6945,7 @@ mod linux_impl {
             let mut state = state.borrow_mut();
             let id = state.alloc_id();
             state.apps.insert(id, raw);
+            ensure_main_loop_tick_registered(&mut state);
             maybe_start_ui_debug_server(&mut state)?;
             Ok(id)
         })?;
@@ -8577,6 +8610,17 @@ pub fn set_ui_debug_request_handler(handler: Option<Arc<UiDebugRequestHandler>>)
     #[cfg(target_os = "linux")]
     {
         linux_impl::set_ui_debug_request_handler(handler);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = handler;
+    }
+}
+
+pub fn set_main_loop_tick_handler(handler: Option<Arc<MainLoopTickHandler>>) {
+    #[cfg(target_os = "linux")]
+    {
+        linux_impl::set_main_loop_tick_handler(handler);
     }
     #[cfg(not(target_os = "linux"))]
     {
