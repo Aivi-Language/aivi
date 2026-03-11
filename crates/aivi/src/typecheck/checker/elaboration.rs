@@ -523,7 +523,7 @@ impl TypeChecker {
                 left,
                 right,
                 span,
-            } if op == "|>" || op == "<|" => {
+            } if op == "->>" || op == "<<-" => {
                 self.elab_binary_expr(op, *left, *right, span, expected, env)
             }
             Expr::Block { kind, items, span } => {
@@ -694,11 +694,16 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
+        let right = if op == "->>" {
+            self.normalize_pipe_transformer(&right)
+        } else {
+            right
+        };
         let left_ty = self.infer_expr(&left, env)?;
         if let Some(signal_item_ty) = self.extract_signal_item_type(left_ty) {
             match op.as_str() {
-                "|>" => return self.elab_signal_pipe(left, right, span, signal_item_ty, expected, env),
-                "<|" => return self.elab_signal_write(left, right, span, signal_item_ty, expected, env),
+                "->>" => return self.elab_signal_pipe(left, right, span, signal_item_ty, expected, env),
+                "<<-" => return self.elab_signal_write(left, right, span, signal_item_ty, expected, env),
                 _ => {}
             }
         }

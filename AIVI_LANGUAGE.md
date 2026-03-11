@@ -125,7 +125,7 @@ xs |> map inc |> filter (_ > 0)
 
 Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
 
-When the left-hand side is a `Signal A`, `signal |> f` is sugar for `derive signal (value => value |> f)`, so the result is another `Signal` and placeholder lambdas still work inside the mapped step.
+Use `->>` (signal derive) when the left-hand side is a `Signal A`: `signal ->> f` is sugar for `derive signal (value => value |> f)`, so the result is another `Signal` and placeholder lambdas still work inside the mapped step.
 
 ### Multi-clause functions
 
@@ -465,15 +465,20 @@ Inside predicates:
 
 ## 8 Patching (Structural Updates)
 
-`<|` applies a declarative, type-checked patch to a record. When the left-hand side is a `Signal A`, it also becomes signal-write sugar: plain values call `set`, functions call `update`, and record literals keep patch semantics against the current signal value.
+`<|` applies a declarative, type-checked patch to a record.
 
 ```aivi
 user2 = user <| { name: "Sam" }
 user3 = user <| { profile.avatar: "new.png" }
-count <| 10
-profile <| (state => { name: "AIVI", saveCount: state.saveCount + 1 })
-profile <| (state => state <| { saveCount: _ + 1 })
-profile <| { saveCount: _ + 1 }
+```
+
+Use `<<-` (signal write) when the left-hand side is a `Signal A`: plain values call `set`, functions call `update`, and record literals keep patch semantics against the current signal value.
+
+```aivi
+count <<- 10
+profile <<- (state => { name: "AIVI", saveCount: state.saveCount + 1 })
+profile <<- (state => state <| { saveCount: _ + 1 })
+profile <<- { saveCount: _ + 1 }
 ```
 
 ### Path addressing
@@ -1230,6 +1235,7 @@ Signals are first-class reactive values. Create source signals with `signal`, de
 ```aivi
 state = signal { count: 0, query: "" }
 title = state |> _.count |> (_ + 1) |> toText
+nextCount = state |> { count } => count + 1
 canSearch = combineAll (state, searchEvent.running) ((st, running) =>
   st.query != "" && !running
 )

@@ -9,10 +9,11 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::Path;
 
 use aivi::{
-    check_modules, check_types, desugar_modules, embedded_stdlib_modules,
-    evaluate_binding_jit_detailed, file_diagnostics_have_errors, infer_value_types_full,
-    parse_modules, render_diagnostics, resolve_import_names, AiviError, ClassDecl, DomainDecl,
-    DomainItem, FileDiagnostic, Module, ModuleItem, TypeAlias, TypeDecl, TypeExpr, TypeSig,
+    check_modules, check_types, desugar_modules, elaborate_expected_coercions,
+    embedded_stdlib_modules, evaluate_binding_jit_detailed, file_diagnostics_have_errors,
+    infer_value_types_full, parse_modules, render_diagnostics, resolve_import_names, AiviError,
+    ClassDecl, DomainDecl, DomainItem, FileDiagnostic, Module, ModuleItem, TypeAlias, TypeDecl,
+    TypeExpr, TypeSig,
 };
 
 use super::doc_index::{DocIndex, QuickInfoEntry, DOC_INDEX_JSON};
@@ -601,19 +602,13 @@ Command Reference
                 self.push_error(format!("Could not read `{path_str}`: {e}"));
             }
             Ok(content) => {
-                let (mut parsed_modules, mut all_diags) = parse_modules(path, &content);
-                let mut modules = embedded_stdlib_modules();
-                modules.append(&mut parsed_modules);
-                resolve_import_names(&mut modules);
-                all_diags.extend(check_modules(&modules));
-                all_diags.extend(check_types(&modules));
-                let file_diags: Vec<_> = all_diags
-                    .into_iter()
-                    .filter(|d| d.path == path_str)
-                    .collect();
-                if file_diagnostics_have_errors(&file_diags) {
-                    self.push_diagnostics_as_error(path_str, &file_diags);
-                    return;
+                let display_path = path.display().to_string();
+                match compile_repl_modules(path, &content) {
+                    Ok(_) => {}
+                    Err(file_diags) => {
+                        self.push_diagnostics_as_error(&display_path, &file_diags);
+                        return;
+                    }
                 }
                 self.definitions.push(content.clone());
                 self.session_types = self.current_session_types().into_iter().collect();
@@ -667,37 +662,29 @@ Command Reference
                 // Validate by running the snippet through the normal compile pipeline.
                 let module_source = self.synthesize_module(&snippet, InputKind::Definition);
                 let path = Path::new("<repl_session>");
-                let (mut session_modules, mut parse_diags) = parse_modules(path, &module_source);
-                let mut all_modules = embedded_stdlib_modules();
-                all_modules.append(&mut session_modules);
-                resolve_import_names(&mut all_modules);
+                let all_modules = match compile_repl_modules(path, &module_source) {
+                    Ok(modules) => modules,
+                    Err(diags) => {
+                        self.push_diagnostics_as_error("<repl_session>", &diags);
+                        return;
+                    }
+                };
 
-                let resolver_diags = check_modules(&all_modules);
-                parse_diags.extend(
-                    resolver_diags
-                        .into_iter()
-                        .filter(|d| d.path == "<repl_session>"),
-                );
-
-                if file_diagnostics_have_errors(&parse_diags) {
-                    self.push_diagnostics_as_error("<repl_session>", &parse_diags);
-                    return;
-                }
-
-                let type_diags: Vec<FileDiagnostic> = check_types(&all_modules)
+                let infer = infer_value_types_full(&all_modules);
+                let infer_diags: Vec<FileDiagnostic> = infer
+                    .diagnostics
                     .into_iter()
                     .filter(|d| d.path == "<repl_session>")
                     .collect();
 
-                if file_diagnostics_have_errors(&type_diags) {
-                    self.push_diagnostics_as_error("<repl_session>", &type_diags);
+                if file_diagnostics_have_errors(&infer_diags) {
+                    self.push_diagnostics_as_error("<repl_session>", &infer_diags);
                     return;
                 }
 
                 // Inject the @static snippet and register the binding in the symbol inventory.
                 // Use the inferred type from this compilation (mirrors what eval_input does for
                 // definitions), with "?" as a fallback if type inference can't resolve it.
-                let infer = infer_value_types_full(&all_modules);
                 let binding_type = infer
                     .type_strings
                     .get("repl_session")
@@ -737,36 +724,13 @@ Command Reference
         // Build a synthetic module source containing all session context.
         let source = self.synthesize_module(input, classification);
         let path = Path::new("<repl_session>");
-        let (mut session_modules, mut parse_diags) = parse_modules(path, &source);
-
-        // Prepend stdlib for type-checking.
-        let stdlib = embedded_stdlib_modules();
-        let mut all_modules: Vec<Module> = stdlib.clone();
-        all_modules.append(&mut session_modules);
-        resolve_import_names(&mut all_modules);
-
-        // Filter diagnostics to only those from the session module.
-        let resolver_diags = check_modules(&all_modules);
-        parse_diags.extend(
-            resolver_diags
-                .into_iter()
-                .filter(|d| d.path == "<repl_session>"),
-        );
-
-        if file_diagnostics_have_errors(&parse_diags) {
-            self.push_diagnostics_as_error("<repl_session>", &parse_diags);
-            return;
-        }
-
-        let type_diags: Vec<FileDiagnostic> = check_types(&all_modules)
-            .into_iter()
-            .filter(|d| d.path == "<repl_session>")
-            .collect();
-
-        if file_diagnostics_have_errors(&type_diags) {
-            self.push_diagnostics_as_error("<repl_session>", &type_diags);
-            return;
-        }
+        let all_modules = match compile_repl_modules(path, &source) {
+            Ok(modules) => modules,
+            Err(diags) => {
+                self.push_diagnostics_as_error("<repl_session>", &diags);
+                return;
+            }
+        };
 
         let infer = infer_value_types_full(&all_modules);
         let infer_diags: Vec<FileDiagnostic> = infer
@@ -819,6 +783,11 @@ Command Reference
                 }
             }
             InputKind::Expression => {
+                eprintln!("DEBUG session_types={session_types:?}");
+                eprintln!(
+                    "DEBUG session_cg_types={:?}",
+                    infer.cg_types.get("repl_session")
+                );
                 let result_type = session_types
                     .get("_replResult")
                     .cloned()
@@ -857,7 +826,24 @@ Command Reference
         for imp in &self.imports {
             lines.push(format!("use {imp}"));
         }
+        let existing_sig_names: HashSet<String> = self
+            .definitions
+            .iter()
+            .flat_map(|def| extract_type_sig_names(def))
+            .collect();
+        let mut inferred_sigs: Vec<_> = self
+            .session_types
+            .iter()
+            .filter(|(name, _)| !existing_sig_names.contains(*name))
+            .collect();
+        inferred_sigs.sort_by(|a, b| a.0.cmp(b.0));
         lines.push(String::new());
+        for (name, type_str) in inferred_sigs {
+            lines.push(format!("{name} : {type_str}"));
+        }
+        if !self.session_types.is_empty() {
+            lines.push(String::new());
+        }
         for def in &self.definitions {
             lines.push(def.clone());
             lines.push(String::new());
@@ -981,34 +967,11 @@ Command Reference
             return Vec::new();
         }
 
-        let mut lines = vec!["module repl_session".to_owned(), String::new()];
-        lines.push("use aivi.prelude".to_owned());
-        for imp in &self.imports {
-            lines.push(format!("use {imp}"));
-        }
-        lines.push(String::new());
-        for def in &self.definitions {
-            lines.push(def.clone());
-            lines.push(String::new());
-        }
-        let source = lines.join("\n");
+        let source = self.synthesize_module("", InputKind::Definition);
         let path = Path::new("<repl_session>");
-        let (mut session_modules, parse_diags) = parse_modules(path, &source);
-        if file_diagnostics_have_errors(&parse_diags) {
+        let Ok(all_modules) = compile_repl_modules(path, &source) else {
             return Vec::new();
-        }
-
-        let mut all_modules = embedded_stdlib_modules();
-        all_modules.append(&mut session_modules);
-        resolve_import_names(&mut all_modules);
-        let resolver_diags = check_modules(&all_modules);
-        if file_diagnostics_have_errors(&resolver_diags) {
-            return Vec::new();
-        }
-        let type_diags = check_types(&all_modules);
-        if file_diagnostics_have_errors(&type_diags) {
-            return Vec::new();
-        }
+        };
 
         let infer = infer_value_types_full(&all_modules);
         if file_diagnostics_have_errors(&infer.diagnostics) {
@@ -1040,24 +1003,9 @@ Command Reference
             return Vec::new();
         }
 
-        let mut lines = vec!["module repl_session".to_owned(), String::new()];
-        lines.push("use aivi.prelude".to_owned());
-        for imp in &self.imports {
-            lines.push(format!("use {imp}"));
-        }
-        lines.push(String::new());
-        for def in &self.definitions {
-            lines.push(def.clone());
-            lines.push(String::new());
-        }
-        let source = lines.join("\n");
+        let source = self.synthesize_module("", InputKind::Definition);
         let path = Path::new("<repl_session>");
-        let (session_modules, parse_diags) = parse_modules(path, &source);
-        if file_diagnostics_have_errors(&parse_diags) {
-            Vec::new()
-        } else {
-            session_modules
-        }
+        compile_repl_modules(path, &source).unwrap_or_default()
     }
 
     fn command_completion_state(&self, input: &str, cursor: usize) -> Option<CompletionState> {
@@ -1537,6 +1485,41 @@ Command Reference
     }
 }
 
+fn compile_repl_modules(path: &Path, source: &str) -> Result<Vec<Module>, Vec<FileDiagnostic>> {
+    let path_text = path.display().to_string();
+    let (mut session_modules, mut parse_diags) = parse_modules(path, source);
+    let mut all_modules = embedded_stdlib_modules();
+    all_modules.append(&mut session_modules);
+    resolve_import_names(&mut all_modules);
+
+    parse_diags.extend(
+        check_modules(&all_modules)
+            .into_iter()
+            .filter(|d| d.path == path_text),
+    );
+    if file_diagnostics_have_errors(&parse_diags) {
+        return Err(parse_diags);
+    }
+
+    let elab_diags: Vec<FileDiagnostic> = elaborate_expected_coercions(&mut all_modules)
+        .into_iter()
+        .filter(|d| d.path == path_text)
+        .collect();
+    if file_diagnostics_have_errors(&elab_diags) {
+        return Err(elab_diags);
+    }
+
+    let type_diags: Vec<FileDiagnostic> = check_types(&all_modules)
+        .into_iter()
+        .filter(|d| d.path == path_text)
+        .collect();
+    if file_diagnostics_have_errors(&type_diags) {
+        return Err(type_diags);
+    }
+
+    Ok(all_modules)
+}
+
 // ── Input classification ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1618,6 +1601,27 @@ fn extract_defined_names(input: &str) -> Vec<String> {
             let candidate = lhs.split_whitespace().next().unwrap_or("");
             if is_valid_identifier(candidate) && !names.contains(&candidate.to_owned()) {
                 names.push(candidate.to_owned());
+            }
+        }
+    }
+    names
+}
+
+fn extract_type_sig_names(input: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in input.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+        if let Some(colon_pos) = trimmed.find(':') {
+            let before = trimmed[..colon_pos].trim();
+            let after = trimmed.get(colon_pos + 1..).unwrap_or("");
+            if !after.starts_with(':')
+                && is_valid_identifier(before)
+                && !names.contains(&before.to_owned())
+            {
+                names.push(before.to_owned());
             }
         }
     }
@@ -2862,6 +2866,34 @@ mod tests {
         assert!(snap.transcript.iter().any(|entry| {
             matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "42 :: Int"
         }));
+    }
+
+    #[test]
+    fn expression_submit_peeks_derived_signal_from_session_definition() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.reactive").unwrap();
+        engine.submit("x = signal 1").unwrap();
+        engine.submit("y = x |> _ + 1").unwrap();
+        let snap = engine.submit("peek y").unwrap();
+        let last = snap.transcript.last().expect("value result");
+        assert_eq!(last.kind, TranscriptKind::ValueResult);
+        assert_eq!(last.text, "2 :: Int");
+    }
+
+    #[test]
+    fn expression_submit_signal_write_sugar_returns_unit_type() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.reactive").unwrap();
+        engine.submit("x = signal 1").unwrap();
+        let snap = engine.submit("x <<- 2").unwrap();
+        let last = snap.transcript.last().expect("value result");
+        assert_eq!(last.kind, TranscriptKind::ValueResult);
+        assert_eq!(last.text, "Unit :: Unit");
+
+        let peek = engine.submit("peek x").unwrap();
+        let last = peek.transcript.last().expect("peek result");
+        assert_eq!(last.kind, TranscriptKind::ValueResult);
+        assert_eq!(last.text, "2 :: Int");
     }
 
     #[test]

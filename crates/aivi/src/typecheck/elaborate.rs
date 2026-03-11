@@ -159,6 +159,7 @@ fn elaborate_modules(
             checker,
             module,
             &state.module_exports,
+            &state.module_alias_exports,
             &state.module_domain_exports,
             &state.module_class_exports,
             &state.module_instance_exports,

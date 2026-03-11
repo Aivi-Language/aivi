@@ -201,6 +201,14 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
             right,
             span,
         } => {
+            if op == "|>" {
+                return Expr::Binary {
+                    op,
+                    left: Box::new(desugar_holes_inner(*left, false)),
+                    right,
+                    span,
+                };
+            }
             let capture_predicate_binary = matches!(
                 op.as_str(),
                 "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
@@ -319,7 +327,9 @@ fn contains_hole(expr: &Expr) -> bool {
             else_branch,
             ..
         } => contains_hole(cond) || contains_hole(then_branch) || contains_hole(else_branch),
-        Expr::Binary { left, right, .. } => contains_hole(left) || contains_hole(right),
+        Expr::Binary { op, left, right, .. } => {
+            contains_hole(left) || (op != "|>" && contains_hole(right))
+        }
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_hole(expr),
             BlockItem::Let { expr, .. } => contains_hole(expr),

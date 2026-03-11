@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::surface::{
     lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem, PathSegment,
+    Pattern,
 };
 
 use super::diag_codes;
@@ -947,4 +948,83 @@ x = Bar
     let item1 = &use_decl.items[1];
     assert_eq!(item1.name.name, "baz");
     assert!(item1.alias.is_none(), "baz should have no alias");
+}
+
+#[test]
+fn parses_unparenthesized_lambda_on_pipe_rhs() {
+    let src = r#"
+module Example
+
+f = { count: 1 } |> { count } => count + 1
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "f" => Some(def),
+            _ => None,
+        })
+        .expect("f def");
+
+    let Expr::Binary { op, right, .. } = &def.expr else {
+        panic!("expected pipe expression");
+    };
+    assert_eq!(op, "|>");
+
+    let Expr::Lambda { params, body, .. } = &**right else {
+        panic!("expected lambda on pipe rhs, got: {right:?}");
+    };
+    assert_eq!(params.len(), 1);
+    assert!(
+        matches!(&params[0], Pattern::Record { .. }),
+        "expected record-pattern lambda param"
+    );
+    assert!(
+        matches!(&**body, Expr::Binary { op, .. } if op == "+"),
+        "expected lambda body to remain the addition expression"
+    );
+}
+
+#[test]
+fn parses_placeholder_projection_addition_as_pipe_rhs_expression() {
+    let src = r#"
+module Example
+
+f = state |> _.count + 1
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "f" => Some(def),
+            _ => None,
+        })
+        .expect("f def");
+
+    let Expr::Binary { op, right, .. } = &def.expr else {
+        panic!("expected pipe expression");
+    };
+    assert_eq!(op, "|>");
+    assert!(
+        matches!(&**right, Expr::Binary { op, .. } if op == "+"),
+        "expected `_.count + 1` to stay grouped on the pipe rhs, got: {right:?}"
+    );
 }

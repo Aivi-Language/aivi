@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::surface::{DomainItem, Module, ModuleItem};
 
 use super::checker::TypeChecker;
+use super::ordering::ordered_modules;
 use super::types::{AliasInfo, Kind};
+use super::TypeAliasSurface;
 
 pub(super) fn collect_global_type_info(
     checker: &mut TypeChecker,
@@ -36,13 +38,7 @@ pub(super) fn collect_global_type_info(
                         opaque_types.insert(type_decl.name.name.clone(), module.name.name.clone());
                     }
                 }
-                ModuleItem::TypeAlias(alias) => {
-                    type_constructors
-                        .insert(alias.name.name.clone(), kind_for_params(alias.params.len()));
-                    if alias.opaque {
-                        opaque_types.insert(alias.name.name.clone(), module.name.name.clone());
-                    }
-                }
+                ModuleItem::TypeAlias(_) => {}
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
                         if let DomainItem::TypeAlias(type_decl) = domain_item {
@@ -58,19 +54,60 @@ pub(super) fn collect_global_type_info(
         }
     }
 
-    // Compute alias bodies using a context that recognizes all known type constructors, so
-    // imported type aliases don't degrade into fresh type variables.
-    let prev_constructors = checker.type_constructors.clone();
-    checker.type_constructors = type_constructors.clone();
     let mut aliases = HashMap::new();
-    for module in modules {
+    let mut module_alias_exports: HashMap<String, HashMap<String, TypeAliasSurface>> =
+        HashMap::new();
+    for module in ordered_modules(modules) {
+        checker.reset_module_context(module);
+        checker.register_module_types(module);
+        checker.register_imported_type_aliases(module, &module_alias_exports);
+
         for item in &module.items {
             if let ModuleItem::TypeAlias(alias) = item {
-                aliases.insert(alias.name.name.clone(), checker.alias_info(alias));
+                let Some(internal_name) = checker.resolve_type_alias_binding(&alias.name.name)
+                else {
+                    continue;
+                };
+                let Some(kind) = checker.type_kind(internal_name).cloned() else {
+                    continue;
+                };
+                let Some(alias_info) = checker.alias_info_for_name(internal_name).cloned() else {
+                    continue;
+                };
+                type_constructors.insert(internal_name.to_string(), kind);
+                aliases.insert(internal_name.to_string(), alias_info);
+                if alias.opaque {
+                    opaque_types.insert(internal_name.to_string(), module.name.name.clone());
+                }
             }
         }
+
+        let mut export_surfaces = HashMap::new();
+        for export in &module.exports {
+            if export.kind == crate::surface::ScopeItemKind::Domain {
+                continue;
+            }
+            let Some(internal_name) = checker.resolve_type_alias_binding(&export.name.name) else {
+                continue;
+            };
+            let Some(kind) = checker.type_kind(internal_name).cloned() else {
+                continue;
+            };
+            let Some(alias) = checker.alias_info_for_name(internal_name).cloned() else {
+                continue;
+            };
+            export_surfaces.insert(
+                export.name.name.clone(),
+                TypeAliasSurface {
+                    internal_name: internal_name.to_string(),
+                    kind,
+                    alias,
+                    opaque_origin: checker.opaque_origin_for_name(internal_name).cloned(),
+                },
+            );
+        }
+        module_alias_exports.insert(module.name.name.clone(), export_surfaces);
     }
-    checker.type_constructors = prev_constructors;
 
     (type_constructors, aliases, opaque_types)
 }

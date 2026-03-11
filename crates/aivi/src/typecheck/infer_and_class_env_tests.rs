@@ -110,6 +110,71 @@ handleKey = event => event
 }
 
 #[test]
+fn imported_type_alias_can_be_renamed_without_poisoning_builtin_unit() {
+    let result = parse_and_infer(
+        r#"
+module Units
+
+export Unit, defineUnit
+
+Unit = { name: Text, factor: Float }
+
+defineUnit : Text -> Float -> Unit
+defineUnit = name factor => { name: name, factor: factor }
+
+module Test
+
+use Units (Unit as MeasureUnit, defineUnit)
+
+measure : MeasureUnit
+measure = defineUnit "m" 1.0
+
+noop : Unit
+noop = Unit
+"#,
+    );
+    assert!(
+        !has_errors(&result.diagnostics),
+        "unexpected errors: {:?}",
+        result.diagnostics
+    );
+    let types = result.type_strings.get("Test").expect("Test module types");
+    assert_eq!(
+        types.get("measure").map(String::as_str),
+        Some("MeasureUnit")
+    );
+    assert_eq!(types.get("noop").map(String::as_str), Some("Unit"));
+}
+
+#[test]
+fn reactive_set_keeps_builtin_unit_with_colliding_imported_alias() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+use aivi.reactive (Signal, signal, set)
+use aivi.units (Unit as MeasureUnit, defineUnit)
+
+count : Signal Int
+count = signal 1
+
+meter : MeasureUnit
+meter = defineUnit "m" 1.0
+
+writeCount = set count 2
+"#,
+    );
+    assert!(
+        !has_errors(&result.diagnostics),
+        "unexpected errors: {:?}",
+        result.diagnostics
+    );
+    let types = result.type_strings.get("Test").expect("Test module types");
+    assert_eq!(types.get("meter").map(String::as_str), Some("MeasureUnit"));
+    assert_eq!(types.get("writeCount").map(String::as_str), Some("Unit"));
+}
+
+#[test]
 fn infer_value_types_tuple_convenience_form() {
     let (modules, _) = parse_modules(
         Path::new("test.aivi"),

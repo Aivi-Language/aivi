@@ -260,7 +260,7 @@ use aivi.reactive
 count : Signal Int
 count = signal 1
 countText : Signal Text
-countText = count |> (_ + 1) |> toText
+countText = count ->> (_ + 1) ->> toText
 "#;
 
     let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
@@ -308,9 +308,9 @@ count = signal 1
 state : Signal { count: Int, enabled: Bool }
 state = signal { count: 0, enabled: False }
 setCount : Unit
-setCount = count <| 5
+setCount = count <<- 5
 patchState : Unit
-patchState = state <| (current => current <| { count: _ + 1, enabled: True })
+patchState = state <<- (current => current <| { count: _ + 1, enabled: True })
 "#;
 
     let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);

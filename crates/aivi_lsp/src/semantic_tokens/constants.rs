@@ -79,7 +79,7 @@ impl Backend {
     }
 
     fn is_pipe_symbol(symbol: &str) -> bool {
-        matches!(symbol, "|>" | "<|" | "|")
+        matches!(symbol, "|>" | "<|" | "->>" | "<<-" | "|")
     }
 
     fn is_bracket_symbol(symbol: &str) -> bool {
@@ -125,6 +125,8 @@ impl Backend {
                 | "=>"
                 | "|>"
                 | "<|"
+                | "->>"
+                | "<<-"
                 | "|"
                 | "::"
                 | ":="

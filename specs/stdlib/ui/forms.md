@@ -50,7 +50,7 @@ Validators stay plain pure functions. The built-in helpers mostly validate `Text
 In a signal-first app, the usual pattern is to derive the visible errors as another signal:
 
 ```aivi
-nameErrors = form |> map (state =>
+nameErrors = form ->> map (state =>
   visibleErrors state.submitted nameRule state.name
 )
 ```

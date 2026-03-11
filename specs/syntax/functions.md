@@ -94,6 +94,13 @@ is equivalent to:
 
 In the example above, `filter active` uses predicate lifting and `map.name` uses accessor sugar. See [Predicates](predicates.md) and [Operators and Context](operators.md) for those shorthand forms.
 
+Pipe right-hand sides also count as unary-function positions, so hole-based mappers and direct lambda syntax both work there without extra wrapping:
+
+```aivi
+state |> _.count + 1
+state |> { count } => count + 1
+```
+
 A good rule of thumb: put the value you are “working on” on the left, and keep helper functions on the right.
 
 Pipelines also pair well with `match`, which lets you keep a left-to-right reading order even when branching.

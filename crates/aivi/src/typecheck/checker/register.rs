@@ -1,4 +1,15 @@
 impl TypeChecker {
+    fn qualified_type_alias_name(&self, module_name: &str, alias_name: &str) -> String {
+        format!("{module_name}.{alias_name}")
+    }
+
+    fn bind_type_alias_name(&mut self, local_name: String, internal_name: String) {
+        self.type_alias_bindings
+            .insert(local_name.clone(), internal_name.clone());
+        self.type_alias_display_names
+            .insert(internal_name, local_name);
+    }
+
     pub(super) fn register_module_types(&mut self, module: &Module) {
         for item in &module.items {
             match item {
@@ -21,12 +32,14 @@ impl TypeChecker {
                     for _ in &alias.params {
                         kind = Kind::Arrow(Box::new(Kind::Star), Box::new(kind));
                     }
-                    self.type_constructors.insert(alias.name.name.clone(), kind);
+                    let internal_name =
+                        self.qualified_type_alias_name(&module.name.name, &alias.name.name);
+                    self.type_constructors.insert(internal_name.clone(), kind);
+                    self.bind_type_alias_name(alias.name.name.clone(), internal_name.clone());
                     let alias_info = self.alias_info(alias);
-                    self.aliases.insert(alias.name.name.clone(), alias_info);
+                    self.aliases.insert(internal_name.clone(), alias_info);
                     if alias.opaque {
-                        self.opaque_types
-                            .insert(alias.name.name.clone(), module.name.name.clone());
+                        self.opaque_types.insert(internal_name, module.name.name.clone());
                     }
                 }
                 ModuleItem::DomainDecl(domain) => {
@@ -48,6 +61,7 @@ impl TypeChecker {
 
     pub(super) fn register_builtin_aliases(&mut self) {
         let a = self.fresh_var_id();
+        self.bind_type_alias_name("Patch".to_string(), "Patch".to_string());
         self.aliases.insert(
             "Patch".to_string(),
             AliasInfo {
@@ -59,6 +73,7 @@ impl TypeChecker {
         // v0.1: Source errors are currently just `Text` messages.
         // The `K` parameter exists for spec alignment and future evolution.
         let k = self.fresh_var_id();
+        self.bind_type_alias_name("SourceError".to_string(), "SourceError".to_string());
         self.aliases.insert(
             "SourceError".to_string(),
             AliasInfo {
@@ -66,6 +81,69 @@ impl TypeChecker {
                 body: Type::con("Text"),
             },
         );
+    }
+
+    pub(super) fn register_imported_type_aliases(
+        &mut self,
+        module: &Module,
+        module_alias_exports: &HashMap<String, HashMap<String, super::TypeAliasSurface>>,
+    ) {
+        for use_decl in &module.uses {
+            let Some(exports) = module_alias_exports.get(&use_decl.module.name) else {
+                continue;
+            };
+            for surface in exports.values() {
+                self.type_constructors
+                    .insert(surface.internal_name.clone(), surface.kind.clone());
+                self.aliases
+                    .insert(surface.internal_name.clone(), surface.alias.clone());
+                if let Some(origin) = &surface.opaque_origin {
+                    self.opaque_types
+                        .insert(surface.internal_name.clone(), origin.clone());
+                }
+            }
+        }
+
+        let available_names: HashMap<String, HashSet<String>> = module_alias_exports
+            .iter()
+            .map(|(module_name, exports)| (module_name.clone(), exports.keys().cloned().collect()))
+            .collect();
+        let mut local_defs: HashSet<String> = self
+            .type_constructors
+            .keys()
+            .filter(|name| !name.contains('.'))
+            .cloned()
+            .collect();
+        local_defs.extend(self.type_alias_bindings.keys().cloned());
+        let import_pairs = crate::surface::compute_import_pairs(&module.uses, &available_names, &local_defs);
+
+        for (bare, qualified) in &import_pairs {
+            let Some((module_name, original)) = qualified.rsplit_once('.') else {
+                continue;
+            };
+            let Some(exports) = module_alias_exports.get(module_name) else {
+                continue;
+            };
+            let Some(surface) = exports.get(original) else {
+                continue;
+            };
+            self.bind_type_alias_name(bare.clone(), surface.internal_name.clone());
+        }
+
+        for use_decl in &module.uses {
+            if use_decl.alias.is_none() {
+                continue;
+            }
+            let Some(exports) = module_alias_exports.get(&use_decl.module.name) else {
+                continue;
+            };
+            for (name, surface) in exports {
+                if local_defs.contains(name) {
+                    continue;
+                }
+                self.bind_type_alias_name(name.clone(), surface.internal_name.clone());
+            }
+        }
     }
 
     pub(super) fn collect_type_expr_diags(&mut self, module: &Module) -> Vec<FileDiagnostic> {

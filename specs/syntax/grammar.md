@@ -218,7 +218,11 @@ OrFallback     := "or" ( Expr | OrArms )
 OrArms         := Sep? "|" OrArm { Sep "|" OrArm }
 OrArm          := Pattern [ "when" Expr ] "=>" Expr
 
-PipeExpr       := CoalesceExpr { "|>" CoalesceExpr }
+PipeExpr       := CoalesceExpr { ("|>" | "->>") PipeArg }
+PipeArg        := LambdaArgs "=>" Expr
+               | CoalesceExpr
+(* `|>` is the regular pipe. `->>` is the signal-derive pipe; the LHS must be
+   a Signal A and the result is another Signal. Both share precedence 2. *)
 
 CoalesceExpr   := OrExpr { "??" OrExpr }
 OrExpr         := AndExpr { "||" AndExpr }
@@ -232,7 +236,12 @@ MulExpr        := UnaryExpr { ("*" | "×" | "/" | "%") UnaryExpr }
 UnaryExpr      := ("!" | "-") UnaryExpr
                | PatchExpr
 
-PatchExpr      := AppExpr { "<|" PatchLit }
+PatchExpr      := AppExpr { ("<|" | "<<-") PatchLit }
+(* `<|` is record-patch. `<<-` is the signal-write operator; the LHS must be a
+   Signal A. Both share precedence 10. Signal-write semantics:
+     signal <<- value   → set signal value
+     signal <<- fn      → update signal fn
+     signal <<- { ... } → update signal (patch { ... }) *)
 
 AppExpr        := PostfixExpr { PostfixExpr }
 PostfixExpr    := Atom { "." lowerIdent }

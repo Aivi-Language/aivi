@@ -258,6 +258,8 @@ fn wants_space_between(
                     | "<-"
                     | "|>"
                     | "<|"
+                    | "->>"
+                    | "<<-"
                     | "?"
                     | "|"
             )
@@ -278,6 +280,8 @@ fn wants_space_between(
         || prev_text == "->"
         || prev_text == "|>"
         || prev_text == "<|"
+        || prev_text == "->>"
+        || prev_text == "<<-"
     {
         return true;
     }
@@ -287,6 +291,8 @@ fn wants_space_between(
         || curr_text == "->"
         || curr_text == "|>"
         || curr_text == "<|"
+        || curr_text == "->>"
+        || curr_text == "<<-"
     {
         return true;
     }

@@ -1,7 +1,7 @@
 fn binary_prec(op: &str) -> u8 {
     // Precedence (low → high), matching specs/syntax/grammar.md:
     //  1  ..        range (only valid in list literals)
-    //  2  |>        pipe
+    //  2  |>  ->>   pipe / signal-derive pipe
     //  3  ??        coalesce
     //  4  ||        logical or
     //  5  &&        logical and
@@ -9,13 +9,13 @@ fn binary_prec(op: &str) -> u8 {
     //  7  < <= > >= comparison
     //  8  + - ++    additive / concatenation
     //  9  * × / %   multiplicative
-    // 10  <|        patch application
+    // 10  <|  <<-   patch application / signal-write
     //
     // Bitwise operators (^, <<, >>, |, ~) are not part of the language.
     // Use the `aivi.bits` stdlib module instead.
     match op {
         ".." => 1,
-        "|>" => 2,
+        "|>" | "->>" => 2,
         "??" => 3,
         "||" => 4,
         "&&" => 5,
@@ -23,7 +23,7 @@ fn binary_prec(op: &str) -> u8 {
         "<" | "<=" | ">" | ">=" => 7,
         "++" | "+" | "-" => 8,
         "*" | "×" | "/" | "%" => 9,
-        "<|" => 10,
+        "<|" | "<<-" => 10,
         _ => 0,
     }
 }

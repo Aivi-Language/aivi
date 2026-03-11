@@ -263,14 +263,19 @@ impl TypeContext {
 pub(super) struct TypePrinter<'a> {
     names: HashMap<TypeVarId, String>,
     original_names: Option<&'a HashMap<TypeVarId, String>>,
+    display_names: Option<&'a HashMap<String, String>>,
     next_id: u8,
 }
 
 impl<'a> TypePrinter<'a> {
-    pub(super) fn new(original_names: Option<&'a HashMap<TypeVarId, String>>) -> Self {
+    pub(super) fn new(
+        original_names: Option<&'a HashMap<TypeVarId, String>>,
+        display_names: Option<&'a HashMap<String, String>>,
+    ) -> Self {
         Self {
             names: HashMap::new(),
             original_names,
+            display_names,
             next_id: 0,
         }
     }
@@ -279,11 +284,16 @@ impl<'a> TypePrinter<'a> {
         match ty {
             Type::Var(id) => self.name_for(*id),
             Type::Con(name, args) => {
+                let display = self
+                    .display_names
+                    .and_then(|names| names.get(name))
+                    .cloned()
+                    .unwrap_or_else(|| name.clone());
                 if args.is_empty() {
-                    name.clone()
+                    display
                 } else {
                     let args_str = args.iter().map(|arg| self.print(arg)).collect::<Vec<_>>();
-                    format!("{} {}", name, args_str.join(" "))
+                    format!("{} {}", display, args_str.join(" "))
                 }
             }
             Type::App(base, args) => {
