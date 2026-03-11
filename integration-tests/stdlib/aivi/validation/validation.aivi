@@ -55,6 +55,12 @@ test_getOrElse_invalid = do Effect {
   assertEq result 0
 }
 
+@test "getOrElse is pipe-friendly"
+test_getOrElse_pipe = do Effect {
+  result = Valid 42 |> getOrElse 0
+  assertEq result 42
+}
+
 // -- Fold --
 
 @test "fold applies onValid for Valid"

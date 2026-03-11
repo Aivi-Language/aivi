@@ -2700,6 +2700,98 @@ mod tests {
     }
 
     #[test]
+    fn expression_submit_resolves_overloaded_get_or_else_for_option() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.option").unwrap();
+        let snap = engine.submit("Some 5 |> getOrElse 0").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "5 :: Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
+    fn expression_submit_resolves_overloaded_get_or_else_lazy_for_option() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.option").unwrap();
+        let snap = engine.submit("Some 5 |> getOrElseLazy (_ => 0)").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "5 :: Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
+    fn expression_submit_resolves_overloaded_get_or_else_for_result() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.result").unwrap();
+        let snap = engine.submit("Err \"boom\" |> getOrElse 0").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "0 :: Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
+    fn expression_submit_resolves_overloaded_get_or_else_lazy_for_result() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.result").unwrap();
+        let snap = engine
+            .submit("Err \"boom\" |> getOrElseLazy (_ => 0)")
+            .unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "0 :: Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
+    fn expression_submit_resolves_overloaded_get_or_else_for_validation() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.validation").unwrap();
+        let snap = engine.submit("Valid 5 |> getOrElse 0").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "5 :: Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
     fn expression_submit_can_use_prior_definitions() {
         let mut engine = make_engine();
         engine.submit("x = 41").unwrap();
