@@ -467,6 +467,9 @@ fn lower_expr_inner_ctx(
             // nested `chain` / lambda calls so that the runtime resolves
             // `chain`/`of` through the normal Monad instance dispatch.
             if let BlockKind::Do { ref monad } = kind {
+                if monad.name == "Applicative" {
+                    return desugar_applicative_do_block(items, &kind, id_gen, ctx);
+                }
                 if monad.name != "Effect" {
                     return desugar_generic_do_block(items, &kind, &block_kind, id_gen, ctx);
                 }
@@ -710,6 +713,106 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                 };
             }
         }
+    }
+    acc
+}
+
+fn desugar_applicative_do_block(
+    items: Vec<BlockItem>,
+    _surface_kind: &BlockKind,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    if items.is_empty() {
+        return HirExpr::Call {
+            id: id_gen.next(),
+            func: Box::new(HirExpr::Var {
+                id: id_gen.next(),
+                name: "of".to_string(),
+            }),
+            args: vec![HirExpr::Var {
+                id: id_gen.next(),
+                name: "Unit".to_string(),
+            }],
+        };
+    }
+
+    let Some(BlockItem::Expr {
+        expr: final_expr,
+        ..
+    }) = items.last()
+    else {
+        return HirExpr::Var {
+            id: id_gen.next(),
+            name: "Unit".to_string(),
+        };
+    };
+
+    let mut body = lower_expr_ctx(final_expr.clone(), id_gen, ctx, false);
+    let mut applicative_inputs_rev: Vec<HirExpr> = Vec::new();
+
+    for item in items[..items.len() - 1].iter().rev() {
+        match item {
+            BlockItem::Bind {
+                pattern,
+                expr,
+                ..
+            } => {
+                let param = format!("__do_applicative{}", id_gen.next());
+                body = make_pattern_lambda(pattern.clone(), body, &param, id_gen);
+                applicative_inputs_rev.push(lower_expr_ctx(expr.clone(), id_gen, ctx, false));
+            }
+            BlockItem::Let {
+                pattern,
+                expr,
+                ..
+            } => {
+                let rhs = lower_expr_ctx(expr.clone(), id_gen, ctx, false);
+                let param = format!("__do_applicative_let{}", id_gen.next());
+                body = HirExpr::App {
+                    id: id_gen.next(),
+                    func: Box::new(make_pattern_lambda(pattern.clone(), body, &param, id_gen)),
+                    arg: Box::new(rhs),
+                };
+            }
+            _ => {
+                return HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                };
+            }
+        }
+    }
+
+    if applicative_inputs_rev.is_empty() {
+        return HirExpr::Call {
+            id: id_gen.next(),
+            func: Box::new(HirExpr::Var {
+                id: id_gen.next(),
+                name: "of".to_string(),
+            }),
+            args: vec![body],
+        };
+    }
+
+    applicative_inputs_rev.reverse();
+    let mut acc = HirExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(HirExpr::Var {
+            id: id_gen.next(),
+            name: "map".to_string(),
+        }),
+        args: vec![body, applicative_inputs_rev[0].clone()],
+    };
+    for expr in applicative_inputs_rev.into_iter().skip(1) {
+        acc = HirExpr::Call {
+            id: id_gen.next(),
+            func: Box::new(HirExpr::Var {
+                id: id_gen.next(),
+                name: "ap".to_string(),
+            }),
+            args: vec![acc, expr],
+        };
     }
     acc
 }

@@ -1,13 +1,12 @@
-// Apply instance definition requires E to be a Semigroup to concat errors
-instance Apply (Validation E A) = given (E: Semigroup) {
-  ap = f v => (f, v) match
+// The built-in accumulating instance works with Validation (List E)
+instance Apply (Validation (List E) A) = {
+  ap: f v => (f, v) match
     | (Valid func, Valid a)    => Valid (func a)
-    | (Invalid e1, Invalid e2) => Invalid (concat e1 e2)
+    | (Invalid e1, Invalid e2) => Invalid (e1 ++ e2)
     | (Invalid e, _)           => Invalid e
     | (_, Invalid e)           => Invalid e
 }
 
-// Applicative instance
-instance Applicative (Validation E A) = given (E: Semigroup) {
-  of = a => Valid a
+instance Applicative (Validation (List E) A) = {
+  of: a => Valid a
 }

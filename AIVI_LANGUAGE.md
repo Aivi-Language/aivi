@@ -664,6 +664,23 @@ The same bind (`<-`) and pure-bind (`=`) syntax applies. Statement availability 
 
 Effect-specific statements (`or`, `when`, `unless`, `given`, resource `<-`, `loop`/`recurse`) are **only** available in `do Effect` blocks.
 
+### `do Applicative { ... }` - Independent applicative blocks
+
+Use `do Applicative { ... }` when each `<-` input is independent and you want the compiler to combine them with `map` / `ap` instead of sequencing them with `chain`.
+
+```aivi
+contactValidation = model => do Applicative {
+  name <- validate (allOf [required, minLength 2]) model.name
+  email <- validate (allOf [required, email]) model.email
+  MkContact name email
+}
+```
+
+- Each `<-` right-hand side must be independent of earlier applicative-bound names.
+- `=` still introduces a pure local.
+- Non-final bare expression statements are not allowed.
+- The final line is a plain result value; the compiler lifts it for you.
+
 ---
 
 ## 10 Effects

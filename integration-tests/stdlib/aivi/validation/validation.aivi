@@ -190,18 +190,30 @@ MkPerson = name age => { name: name, age: age }
 
 @test "form validation: all valid"
 test_form_valid = do Effect {
-  result = ap (ap (Valid MkPerson) (validateName "Alice")) (validateAge 30)
+  result = do Applicative {
+    name <- validateName "Alice"
+    age  <- validateAge 30
+    MkPerson name age
+  }
   assertEq result (Valid { name: "Alice", age: 30 })
 }
 
 @test "form validation: accumulates errors"
 test_form_errors = do Effect {
-  result = ap (ap (Valid MkPerson) (validateName "")) (validateAge (-1))
+  result = do Applicative {
+    name <- validateName ""
+    age  <- validateAge (-1)
+    MkPerson name age
+  }
   assertEq result (Invalid ["Name is required", "Age must be non-negative"])
 }
 
 @test "form validation: single error"
 test_form_single_error = do Effect {
-  result = ap (ap (Valid MkPerson) (validateName "Alice")) (validateAge 200)
+  result = do Applicative {
+    name <- validateName "Alice"
+    age  <- validateAge 200
+    MkPerson name age
+  }
   assertEq result (Invalid ["Age must be at most 150"])
 }

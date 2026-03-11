@@ -126,7 +126,9 @@ fn stdlib_modules_execute_without_failures() {
 }
 
 fn stdlib_modules_execute_without_failures_inner() {
-    let root = test_support::workspace_root().join("integration-tests/stdlib/aivi");
+    let workspace_root = test_support::workspace_root();
+    std::env::set_current_dir(&workspace_root).expect("set cwd");
+    let root = workspace_root.join("integration-tests/stdlib/aivi");
     let mut all_files = Vec::new();
     walk_aivi_files(&root, &mut all_files);
     all_files.sort();

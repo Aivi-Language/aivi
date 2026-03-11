@@ -44,7 +44,11 @@ MkContact = name email => {
 }
 
 contactValidation : State -> Validation (List Text) Contact
-contactValidation = s => ap (ap (Valid MkContact) (validate nameRule s.name)) (validate emailRule s.email)
+contactValidation = s => do Applicative {
+  name  <- validate nameRule s.name
+  email <- validate emailRule s.email
+  MkContact name email
+}
 
 @test "fields start pristine and hide errors"
 fields_start_pristine = do Effect {

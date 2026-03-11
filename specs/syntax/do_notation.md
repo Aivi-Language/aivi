@@ -56,7 +56,8 @@ Generic `do M { ... }` reuses the same readable block layout as `do Effect { ...
 1. **`do Effect { ... }` is the everyday form.** Use it for I/O, resources, cancellation, and the other effect-only statements described in [Effects](effects.md).
 2. **`generate { ... }` stays separate.** Generators describe pure sequences with `yield`, so they use their own rules.
 3. **Generic `do M { ... }` uses the common subset.** It supports `<-` for bind, `=` for pure local names, expression sequencing, and a final expression.
-4. **Constructor support provides the behavior.** Ordinary `do M` blocks lower through `chain` and `of`, so they rely on the constructor's `Chain` and `Applicative` support. `do Query { ... }` is the notable built-in exception: it lowers through query helpers described in [Database](../stdlib/system/database.md).
+4. **`do Applicative { ... }` is the independent variant.** It combines inputs side by side through `map` / `ap` instead of sequencing through `chain`.
+5. **Constructor support provides the behavior.** Ordinary `do M` blocks lower through `chain` and `of`, so they rely on the constructor's `Chain` and `Applicative` support. `do Applicative { ... }` lowers through `map` / `ap` / `of`. `do Query { ... }` is the notable built-in exception: it lowers through query helpers described in [Database](../stdlib/system/database.md).
 
 ## Syntax
 
@@ -71,23 +72,25 @@ DoBlock := "do" UpperIdent "{" { DoStmt } "}"
 The parser accepts any `UpperIdent` after `do`. The difference is semantic:
 
 - `do Effect { ... }` gets the effect-specific rules
+- `do Applicative { ... }` uses the applicative rules for independent `<-` bindings
 - every other `do M { ... }` uses the generic block rules; most lower through `chain` / `of`, while `do Query { ... }` uses query-specific helpers
 
 ### Statement subset by block kind
 
-| Statement             | `do Effect` | `do M` (generic) | `generate`          |
-|:--------------------- |:-----------:|:----------------:|:-------------------:|
-| `x <- expr`           | yes         | yes              | yes (from sequence) |
-| `x = expr`            | yes         | yes              | yes                 |
-| `expr` (sequencing)   | yes         | yes              | no                  |
-| `yield expr`          | no          | no               | yes                 |
-| `x -> pred` (guard)   | no          | no               | yes                 |
-| `or` fallback         | yes         | no               | no                  |
-| `when cond <- eff`    | yes         | no               | no                  |
-| `unless cond <- eff`  | yes         | no               | no                  |
-| `given cond or expr`  | yes         | no               | no                  |
-| `loop`/`recurse`      | yes         | no               | yes                 |
-| resource `<-`         | yes         | no               | no                  |
+| Statement             | `do Effect` | `do M` (generic) | `do Applicative` | `generate`          |
+|:--------------------- |:-----------:|:----------------:|:----------------:|:-------------------:|
+| `x <- expr`           | yes         | yes              | yes              | yes (from sequence) |
+| `x = expr`            | yes         | yes              | yes              | yes                 |
+| `expr` (sequencing)   | yes         | yes              | no               | no                  |
+| final `expr` result   | yes         | yes              | yes              | no                  |
+| `yield expr`          | no          | no               | no               | yes                 |
+| `x -> pred` (guard)   | no          | no               | no               | yes                 |
+| `or` fallback         | yes         | no               | no               | no                  |
+| `when cond <- eff`    | yes         | no               | no               | no                  |
+| `unless cond <- eff`  | yes         | no               | no               | no                  |
+| `given cond or expr`  | yes         | no               | no               | no                  |
+| `loop`/`recurse`      | yes         | no               | no               | yes                 |
+| resource `<-`         | yes         | no               | no               | no                  |
 
 Those missing features are effect-specific because they depend on error handling, cancellation, or cleanup semantics that generic `do M` does not assume.
 
@@ -157,6 +160,32 @@ desugars to `of Unit`, using `of : A -> M A` from `Applicative M`.
 
 Special case: `do Query { ... }` uses `queryChain` and `queryOf` instead. See [Database](../stdlib/system/database.md).
 
+### `do Applicative { ... }`
+
+`do Applicative { ... }` is for independent inputs that should be combined side by side instead of fed into one another.
+
+```aivi
+profile = do Applicative {
+  name <- validateName raw.name
+  email <- validateEmail raw.email
+  MkProfile name email
+}
+```
+
+This block desugars through `map` / `ap` / `of`:
+
+```text
+ap (map (λname. λemail. MkProfile name email) (validateName raw.name))
+   (validateEmail raw.email)
+```
+
+Rules:
+
+- each `<-` right-hand side must be independent of earlier applicative-bound names
+- `=` lets are still plain pure locals and may help assemble the final result
+- non-final bare expression statements are rejected
+- the final expression is a plain value; the compiler lifts it with `map` / `ap` / `of`
+
 ### `do Effect { ... }` as a specialization
 
 `do Effect { ... }` follows the same broad idea, but it has extra rules for effect-specific statements. In practice:
@@ -173,14 +202,19 @@ Most generic `do M` blocks rely on the target constructor's sequencing operation
 
 - `Chain M` provides `chain` for `<-` binds and expression sequencing
 - `Applicative M` provides `of` for empty blocks and value injection
+- `do Applicative` relies on `Functor` / `Apply` / `Applicative` support for the target constructor
 - `do Query` uses `queryChain` and `queryOf`; see [Database](../stdlib/system/database.md)
 - for `M ≠ Effect`, effect-only statements such as `or`, `when`, `unless`, `given`, `on`, resource binds, and `loop` / `recurse` are rejected
+
+For `do Applicative`, the compiler also rejects any `<-` whose right-hand side refers to an earlier applicative-bound name, because that would require monadic sequencing rather than applicative combination.
 
 If the required sequencing operations are unavailable, compilation fails during name or instance resolution for the target constructor.
 
 ## Runtime behavior
 
 Most `do M { ... }` blocks lower to nested `chain` calls plus lambdas, with `of Unit` for the empty-block case. `do Query { ... }` uses the query-specific `queryChain` / `queryOf` pair instead.
+
+`do Applicative { ... }` lowers to `map` / `ap` calls plus lambdas, with `of Unit` for the empty-block case.
 
 `do Effect { ... }` keeps the additional runtime behavior described in [Effects](effects.md).
 
@@ -191,12 +225,14 @@ Most `do M { ... }` blocks lower to nested `chain` calls plus lambdas, with `of 
 | `Option A`   | Stop early when any step returns `None`. |
 | `Result E A` | Chain computations that may fail, without using `Effect`. |
 | `List A`     | Describe non-deterministic combinations such as cartesian products. |
+| `Validation (List E) A` | Accumulate independent validation errors while building one typed value. |
 | `Query A`    | Build typed database reads in a step-by-step style; see [Database](../stdlib/system/database.md). |
 
 ## When to use which block form
 
 - Use `do Effect { ... }` for I/O, resource management, cancellation-aware work, and the effect-only statements from [Effects](effects.md).
 - Use `do M { ... }` when you want the same readable sequencing for `Option`, `Result`, `List`, `Query`, or another type constructor with the required sequencing support.
+- Use `do Applicative { ... }` when each input is independent and you want to combine them without introducing sequencing.
 - Use `generate { ... }` when you are building a pure sequence of yielded values.
 
 ## References
