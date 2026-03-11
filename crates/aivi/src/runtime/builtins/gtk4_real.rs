@@ -126,6 +126,7 @@ mod bridge {
     }
 
     fn ui_debug_signal_summary_json(
+        ctx: &RuntimeContext,
         signal_id: usize,
         graph: &parking_lot::MutexGuard<'_, crate::runtime::ReactiveGraphState>,
         include_watchers: bool,
@@ -149,11 +150,20 @@ mod bridge {
                 .iter()
                 .filter_map(|watcher_id| {
                     graph.watchers.get(watcher_id).map(|watcher| {
+                        let mut widget_ids = ctx.gtk_binding_widgets_for_watcher(*watcher_id);
+                        widget_ids.sort_unstable();
+                        let watcher_kind = if widget_ids.is_empty() {
+                            "runtime"
+                        } else {
+                            "gtkBinding"
+                        };
                         json!({
                             "id": watcher_id,
                             "signalId": watcher.signal_id,
                             "active": watcher.active,
                             "lastRevision": watcher.last_revision,
+                            "boundWidgetIds": widget_ids,
+                            "kind": watcher_kind,
                             "callback": ui_debug_value_json(&watcher.callback),
                         })
                     })
@@ -163,14 +173,24 @@ mod bridge {
             Vec::new()
         };
 
+        let mut downstream_widget_ids = watcher_ids
+            .iter()
+            .flat_map(|watcher_id| ctx.gtk_binding_widgets_for_watcher(*watcher_id))
+            .collect::<Vec<_>>();
+        downstream_widget_ids.sort_unstable();
+        downstream_widget_ids.dedup();
+
         Ok(json!({
             "id": signal_id,
             "kind": ui_debug_signal_kind_name(&signal.kind),
             "value": ui_debug_value_json(&signal.value),
             "revision": signal.revision,
+            "lastChangeSeq": signal.last_change_seq,
+            "lastChangeTimestampMs": signal.last_change_timestamp_ms,
             "dirty": signal.dirty,
             "dependencies": dependencies,
             "dependents": dependents,
+            "downstreamWidgetIds": downstream_widget_ids,
             "watcherCount": watcher_ids.len(),
             "watcherIds": watcher_ids,
             "watchers": if include_watchers { JsonValue::Array(watchers) } else { JsonValue::Null },
@@ -186,7 +206,7 @@ mod bridge {
         signal_ids.sort_unstable();
         let mut signals = Vec::with_capacity(signal_ids.len());
         for signal_id in signal_ids {
-            signals.push(ui_debug_signal_summary_json(signal_id, &graph, false)?);
+            signals.push(ui_debug_signal_summary_json(ctx, signal_id, &graph, false)?);
         }
         Ok(json!({
             "protocol": "aivi.gtk.debug.v1",
@@ -221,10 +241,33 @@ mod bridge {
     ) -> Result<JsonValue, aivi_gtk4::Gtk4Error> {
         let signal_id = ui_debug_signal_id_param(params)?;
         let graph = ctx.reactive_graph.lock();
-        let signal = ui_debug_signal_summary_json(signal_id, &graph, true)?;
+        let signal = ui_debug_signal_summary_json(ctx, signal_id, &graph, true)?;
         Ok(json!({
             "protocol": "aivi.gtk.debug.v1",
             "signal": signal,
+            "signalCount": graph.signals.len(),
+            "watcherCount": graph.watchers.len(),
+            "batch": ui_debug_batch_state_json(&graph),
+        }))
+    }
+
+    pub(super) fn ui_debug_explain_signal_json(
+        ctx: &RuntimeContext,
+        params: &JsonMap<String, JsonValue>,
+    ) -> Result<JsonValue, aivi_gtk4::Gtk4Error> {
+        let signal_id = ui_debug_signal_id_param(params)?;
+        let graph = ctx.reactive_graph.lock();
+        let signal = ui_debug_signal_summary_json(ctx, signal_id, &graph, true)?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "signal": signal,
+            "explanation": {
+                "summary": format!("signal {signal_id} has revision {}, {} watcher(s), and {} downstream GTK widget(s)",
+                    signal.get("revision").and_then(JsonValue::as_u64).unwrap_or(0),
+                    signal.get("watcherCount").and_then(JsonValue::as_u64).unwrap_or(0),
+                    signal.get("downstreamWidgetIds").and_then(JsonValue::as_array).map(|items| items.len()).unwrap_or(0),
+                ),
+            },
             "signalCount": graph.signals.len(),
             "watcherCount": graph.watchers.len(),
             "batch": ui_debug_batch_state_json(&graph),
@@ -236,6 +279,7 @@ mod bridge {
             match method {
                 "listSignals" => Some(ui_debug_list_signals_json(ctx.as_ref())),
                 "inspectSignal" => Some(ui_debug_inspect_signal_json(ctx.as_ref(), params)),
+                "explainSignal" => Some(ui_debug_explain_signal_json(ctx.as_ref(), params)),
                 _ => None,
             }
         });

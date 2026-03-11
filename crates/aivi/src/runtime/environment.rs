@@ -105,6 +105,7 @@ impl RuntimeContext {
             reactive_graph: Arc::new(Mutex::new(ReactiveGraphState {
                 next_signal_id: 1,
                 next_watcher_id: 1,
+                next_change_seq: 1,
                 batch_depth: 0,
                 flushing: false,
                 deferred_flush: false,
@@ -173,6 +174,14 @@ impl RuntimeContext {
             .entry(widget_id)
             .or_default()
             .push(watcher_id);
+    }
+
+    pub(crate) fn gtk_binding_widgets_for_watcher(&self, watcher_id: usize) -> Vec<i64> {
+        self.gtk_binding_scopes
+            .lock()
+            .iter()
+            .filter_map(|(widget_id, watcher_ids)| watcher_ids.contains(&watcher_id).then_some(*widget_id))
+            .collect()
     }
 
     pub(crate) fn take_gtk_binding_watchers(&self, widget_id: i64) -> Vec<usize> {

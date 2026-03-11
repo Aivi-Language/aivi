@@ -308,6 +308,340 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
             effectful: false,
         },
         McpTool {
+            name: "aivi.gtk.capture".to_string(),
+            description: "Capture a PNG snapshot of a GTK window, root, or widget in an attached session.".to_string(),
+            module: "gtk".to_string(),
+            binding: "capture".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "rootId": { "type": "integer" },
+                    "highlightName": { "type": "string" },
+                    "highlightId": { "type": "integer" },
+                    "scale": { "type": "number" },
+                    "label": { "type": "string", "description": "Optional snapshot label to store for later diffing." }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.inspectAt".to_string(),
+            description: "Hit-test the GTK tree at a coordinate and return the widget under that point plus its ancestry.".to_string(),
+            module: "gtk".to_string(),
+            binding: "inspectAt".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "x", "y"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "rootId": { "type": "integer" },
+                    "x": { "type": "number" },
+                    "y": { "type": "number" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.pollEvents".to_string(),
+            description: "Poll emitted GTK signal events since a given sequence number.".to_string(),
+            module: "gtk".to_string(),
+            binding: "pollEvents".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "afterSeq": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.pollMutations".to_string(),
+            description: "Poll GTK widget/property mutations since a given sequence number.".to_string(),
+            module: "gtk".to_string(),
+            binding: "pollMutations".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "afterSeq": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.listActionBindings".to_string(),
+            description: "List signal-to-action bindings, globally or for one specific widget.".to_string(),
+            module: "gtk".to_string(),
+            binding: "listActionBindings".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.explainWidget".to_string(),
+            description: "Explain one widget in UI terms, including ancestry, layout, style, and action bindings.".to_string(),
+            module: "gtk".to_string(),
+            binding: "explainWidget".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.explainSignal".to_string(),
+            description: "Explain one reactive signal, including last change metadata and downstream GTK widgets.".to_string(),
+            module: "gtk".to_string(),
+            binding: "explainSignal".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "signalId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "signalId": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.layoutSnapshot".to_string(),
+            description: "Capture a layout-oriented geometry snapshot of a GTK root or widget tree.".to_string(),
+            module: "gtk".to_string(),
+            binding: "layoutSnapshot".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "rootId": { "type": "integer" },
+                    "label": { "type": "string", "description": "Optional snapshot label to store for later diffing." }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.showOverlay".to_string(),
+            description: "Toggle a GTK debug overlay for bounds, margins, spacing, focus, and clipping.".to_string(),
+            module: "gtk".to_string(),
+            binding: "showOverlay".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "enabled": { "type": "boolean" },
+                    "bounds": { "type": "boolean" },
+                    "margins": { "type": "boolean" },
+                    "spacing": { "type": "boolean" },
+                    "focus": { "type": "boolean" },
+                    "clipping": { "type": "boolean" }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.styleInfo".to_string(),
+            description: "Inspect GTK style information such as CSS classes and resolved runtime style hints.".to_string(),
+            module: "gtk".to_string(),
+            binding: "styleInfo".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.analyzeLayout".to_string(),
+            description: "Analyze a GTK layout snapshot and report likely UI issues such as overflow, collapse, or inconsistent margins.".to_string(),
+            module: "gtk".to_string(),
+            binding: "analyzeLayout".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "rootId": { "type": "integer" },
+                    "label": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.diffCapture".to_string(),
+            description: "Compare two previously labeled GTK capture snapshots.".to_string(),
+            module: "gtk".to_string(),
+            binding: "diffCapture".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "beforeLabel", "afterLabel"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "beforeLabel": { "type": "string" },
+                    "afterLabel": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.diffTree".to_string(),
+            description: "Compare two previously labeled GTK layout snapshots.".to_string(),
+            module: "gtk".to_string(),
+            binding: "diffTree".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "beforeLabel", "afterLabel"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "beforeLabel": { "type": "string" },
+                    "afterLabel": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.waitFor".to_string(),
+            description: "Wait for a GTK widget or signal condition to become true.".to_string(),
+            module: "gtk".to_string(),
+            binding: "waitFor".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "condition"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "id": { "type": "integer" },
+                    "signalId": { "type": "integer" },
+                    "condition": {
+                        "type": "string",
+                        "enum": [
+                            "widgetExists",
+                            "widgetVisible",
+                            "widgetFocused",
+                            "propEquals",
+                            "signalRevisionAtLeast",
+                            "signalLastChangeSeqAtLeast",
+                            "treeStable"
+                        ]
+                    },
+                    "property": { "type": "string" },
+                    "value": {},
+                    "revision": { "type": "integer" },
+                    "seq": { "type": "integer" },
+                    "timeoutMs": { "type": "integer" },
+                    "intervalMs": { "type": "integer" },
+                    "stableForMs": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.reloadNow".to_string(),
+            description: "Restart a managed GTK dev session launched through aivi.gtk.launch and auto-reattach the same session id.".to_string(),
+            module: "gtk".to_string(),
+            binding: "reloadNow".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.reloadStatus".to_string(),
+            description: "Report managed-session reload metadata such as mode, launch target, and reload count.".to_string(),
+            module: "gtk".to_string(),
+            binding: "reloadStatus".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.setReloadMode".to_string(),
+            description: "Set the reload mode for a managed GTK session. Current modes are manual and restart.".to_string(),
+            module: "gtk".to_string(),
+            binding: "setReloadMode".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "mode"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "mode": { "type": "string", "enum": ["manual", "restart"] }
+                }
+            }),
+            effectful: true,
+        },
+        McpTool {
+            name: "aivi.gtk.devSessionInfo".to_string(),
+            description: "Return managed-session metadata for a GTK launch/attach session.".to_string(),
+            module: "gtk".to_string(),
+            binding: "devSessionInfo".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
             name: "aivi.gtk.dumpTree".to_string(),
             description: "Dump the live widget tree of an attached GTK session, including props and dimensions.".to_string(),
             module: "gtk".to_string(),
