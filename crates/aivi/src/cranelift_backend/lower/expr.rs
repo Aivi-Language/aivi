@@ -311,7 +311,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         expr: &RustIrExpr,
     ) -> TypedValue {
-        let key = expr as *const RustIrExpr as usize;
+        let RustIrExpr::Lambda { id, .. } = expr else {
+            unreachable!("lower_lambda_expr called with non-lambda expr");
+        };
+        let key = *id as usize;
         if let Some(cl) = self.compiled_lambdas.get(&key) {
             // Look up the pre-compiled function from globals
             let mut result = self.lower_global(builder, cl.global_name);

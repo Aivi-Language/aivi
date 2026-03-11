@@ -34,16 +34,17 @@ fn compile_definition_body<M: Module>(
     let mut pending_lambdas: Vec<CompiledLambdaInfo> = Vec::new();
 
     for (lambda_expr, captured_vars) in &lambdas {
-        let RustIrExpr::Lambda { param, body, .. } = lambda_expr else {
+        let RustIrExpr::Lambda { id, param, body } = lambda_expr else {
             continue;
         };
 
         let total_arity = captured_vars.len() + 1; // captures + the actual param
-        if total_arity > 15 {
+        if total_arity > MAX_JIT_ARITY {
             eprintln!(
-                "aivi: lambda skipped: too many captures ({} captures + 1 param = {} > 15)",
+                "aivi: lambda skipped: too many captures ({} captures + 1 param = {} > {})",
                 captured_vars.len(),
-                total_arity
+                total_arity,
+                MAX_JIT_ARITY
             );
             continue;
         }
@@ -55,7 +56,7 @@ fn compile_definition_body<M: Module>(
         let global_name_static: &'static str = Box::leak(global_name.clone().into_boxed_str());
 
         // Store in compiled_lambdas so nested lambdas can reference it
-        let key = *lambda_expr as *const RustIrExpr as usize;
+        let key = *id as usize;
         compiled_lambdas.insert(
             key,
             CompiledLambda {
