@@ -111,7 +111,8 @@ handleKey = event => event
 
 #[test]
 fn imported_type_alias_can_be_renamed_without_poisoning_builtin_unit() {
-    let result = parse_and_infer(
+    let (mut units_modules, units_diags) = parse_modules(
+        Path::new("Units.aivi"),
         r#"
 module Units
 
@@ -121,7 +122,15 @@ Unit = { name: Text, factor: Float }
 
 defineUnit : Text -> Float -> Unit
 defineUnit = name factor => { name: name, factor: factor }
-
+"#,
+    );
+    assert!(
+        !has_errors(&units_diags),
+        "unexpected parse errors in Units: {units_diags:?}"
+    );
+    let (mut test_modules, test_diags) = parse_modules(
+        Path::new("Test.aivi"),
+        r#"
 module Test
 
 use Units (Unit as MeasureUnit, defineUnit)
@@ -133,6 +142,12 @@ noop : Unit
 noop = Unit
 "#,
     );
+    assert!(
+        !has_errors(&test_diags),
+        "unexpected parse errors in Test: {test_diags:?}"
+    );
+    units_modules.append(&mut test_modules);
+    let result = infer_value_types_full(&units_modules);
     assert!(
         !has_errors(&result.diagnostics),
         "unexpected errors: {:?}",
@@ -148,7 +163,19 @@ noop = Unit
 
 #[test]
 fn reactive_set_keeps_builtin_unit_with_colliding_imported_alias() {
-    let result = parse_and_infer(
+    let mut modules = Vec::new();
+    for name in &["aivi", "aivi.reactive", "aivi.units"] {
+        let src = crate::stdlib::embedded_stdlib_source(name)
+            .unwrap_or_else(|| panic!("missing embedded {name}"));
+        let (mut m, diags) = parse_modules(Path::new(&format!("<embedded:{name}>")), src);
+        assert!(
+            !has_errors(&diags),
+            "parse errors in embedded {name}: {diags:?}"
+        );
+        modules.append(&mut m);
+    }
+    let (mut user, user_diags) = parse_modules(
+        Path::new("test.aivi"),
         r#"
 module Test
 
@@ -164,6 +191,12 @@ meter = defineUnit "m" 1.0
 writeCount = set count 2
 "#,
     );
+    assert!(
+        !has_errors(&user_diags),
+        "unexpected parse errors: {user_diags:?}"
+    );
+    modules.append(&mut user);
+    let result = infer_value_types_full(&modules);
     assert!(
         !has_errors(&result.diagnostics),
         "unexpected errors: {:?}",

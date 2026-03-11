@@ -2873,7 +2873,7 @@ mod tests {
         let mut engine = make_engine();
         engine.submit("/use aivi.reactive").unwrap();
         engine.submit("x = signal 1").unwrap();
-        engine.submit("y = x |> _ + 1").unwrap();
+        engine.submit("y = x ->> _ + 1").unwrap();
         let snap = engine.submit("peek y").unwrap();
         let last = snap.transcript.last().expect("value result");
         assert_eq!(last.kind, TranscriptKind::ValueResult);
