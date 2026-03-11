@@ -1,5 +1,7 @@
 # REPL
 
+<img width="2878" height="1551" alt="image" src="https://github.com/user-attachments/assets/7e1860f3-8f42-46e0-8f4a-daebeedd68a4" />
+
 The AIVI REPL (`aivi repl`) is the fastest way to try expressions, inspect inferred types, load files into a temporary session, and explore the standard library without scaffolding a full project first.
 
 If you mainly want the command-line reference, see [CLI](cli.md#repl). This page focuses on the workflow and interactive behavior.
