@@ -101,6 +101,14 @@ impl TypeEnv {
         self.values.insert(name, schemes);
     }
 
+    pub(super) fn map_schemes(&mut self, mut f: impl FnMut(&Scheme) -> Scheme) {
+        let mut mapped = PersistentHashMap::new();
+        for (name, schemes) in self.values.iter() {
+            mapped.insert(name.clone(), schemes.iter().map(&mut f).collect());
+        }
+        self.values = mapped;
+    }
+
     pub(super) fn free_vars(&self, checker: &mut TypeChecker) -> HashSet<TypeVarId> {
         let mut vars = HashSet::new();
         for schemes in self.values.values() {

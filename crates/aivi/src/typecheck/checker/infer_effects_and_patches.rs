@@ -582,17 +582,18 @@ impl TypeChecker {
         // Verify the monad type constructor exists (it must be a known type).
         // For now, we accept Option and Result as known monadic types.
         // In the future this will resolve a Monad instance via class resolution.
-        let monad_con = monad_name.to_string();
+        let monad_con = self.resolved_type_name(monad_name).to_string();
+        let is_result_monad = self.type_name_matches(&monad_con, "Result");
 
         let mut local_env = env.clone();
-        let mut result_ty = Type::con("Unit");
+        let mut result_ty = self.named_type("Unit");
 
         for (idx, item) in items.iter().enumerate() {
             match item {
                 BlockItem::Bind { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let value_ty = self.fresh_var();
-                    let expected = if monad_con == "Result" {
+                    let expected = if is_result_monad {
                         // Result E A — partially applied, error type is inferred
                         let err_var = self.fresh_var();
                         Type::con(&monad_con).app(vec![err_var, value_ty.clone()])
@@ -620,7 +621,7 @@ impl TypeChecker {
                     if idx + 1 == items.len() {
                         // Final expression: must be M A, determines the block's result type
                         result_ty = self.fresh_var();
-                        let expected = if monad_con == "Result" {
+                        let expected = if is_result_monad {
                             let err_var = self.fresh_var();
                             Type::con(&monad_con).app(vec![err_var, result_ty.clone()])
                         } else {
@@ -631,7 +632,7 @@ impl TypeChecker {
                         // Non-final expression: desugars to `chain (λ_. body) expr`, so
                         // expr must be `M A` for any A (the value is discarded, like `_ <- expr`).
                         let discarded = self.fresh_var();
-                        let expected = if monad_con == "Result" {
+                        let expected = if is_result_monad {
                             let err_var = self.fresh_var();
                             Type::con(&monad_con).app(vec![err_var, discarded])
                         } else {
@@ -697,7 +698,7 @@ impl TypeChecker {
         self.solve_deferred_constraints()?;
 
         // Build the block's return type: M result_ty
-        let block_ty = if monad_con == "Result" {
+        let block_ty = if is_result_monad {
             let err_var = self.fresh_var();
             Type::con(&monad_con).app(vec![err_var, result_ty])
         } else {

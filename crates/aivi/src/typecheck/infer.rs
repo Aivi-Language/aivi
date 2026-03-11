@@ -173,8 +173,9 @@ fn infer_value_types_incremental_impl(
         timed!(t_reg_types, checker.register_module_types(module));
         timed!(
             t_reg_types,
-            checker.register_imported_type_aliases(module, &state.module_alias_exports)
+            checker.register_imported_type_names(module, &state.module_type_exports)
         );
+        checker.rewrite_env_type_names(&mut env);
         timed!(
             t_type_expr_diags,
             diagnostics.extend(checker.collect_type_expr_diags(module))

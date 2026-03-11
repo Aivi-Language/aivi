@@ -2,7 +2,7 @@ impl TypeChecker {
     fn type_from_expr(&mut self, ty: &TypeExpr, ctx: &mut TypeContext) -> Type {
         match ty {
             TypeExpr::Name(name) => {
-                if let Some(internal_name) = self.type_alias_bindings.get(&name.name) {
+                if let Some(internal_name) = self.type_name_bindings.get(&name.name) {
                     Type::con(internal_name)
                 } else if ctx.type_constructors.contains_key(&name.name) {
                     Type::con(&name.name)
@@ -582,8 +582,7 @@ impl TypeChecker {
 
     pub(super) fn type_to_string(&mut self, ty: &Type) -> String {
         let ty_applied = self.apply(ty.clone());
-        let mut printer =
-            TypePrinter::new(Some(&self.var_names), Some(&self.type_alias_display_names));
+        let mut printer = TypePrinter::new(Some(&self.var_names), Some(&self.type_display_names));
         printer.print(&ty_applied)
     }
 

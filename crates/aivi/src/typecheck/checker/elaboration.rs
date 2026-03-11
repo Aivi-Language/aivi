@@ -726,7 +726,7 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
-        let signal_ty = Type::con("Signal").app(vec![signal_item_ty.clone()]);
+        let signal_ty = self.named_type("Signal").app(vec![signal_item_ty.clone()]);
         let (left, _left_ty) = self.elab_expr(left, Some(signal_ty), env)?;
 
         let param = SpannedName {
@@ -761,7 +761,7 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
-        let signal_ty = Type::con("Signal").app(vec![signal_item_ty.clone()]);
+        let signal_ty = self.named_type("Signal").app(vec![signal_item_ty.clone()]);
         let (left, _left_ty) = self.elab_expr(left, Some(signal_ty), env)?;
 
         let call = match right {
