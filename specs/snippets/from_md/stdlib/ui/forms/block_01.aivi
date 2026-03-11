@@ -13,8 +13,8 @@ toContact : {
   name: Field Text
   email: Field Text
 } -> Validation (List Text) Contact
-toContact = model =>
-  // Validate each field, then assemble a typed Contact value.
-  ap
-    (ap (Valid MkContact) (validate (allOf [required, minLength 2]) model.name))
-    (validate (allOf [required, email]) model.email)
+toContact = model => do Applicative {
+  name  <- validate (allOf [required, minLength 2]) model.name
+  email <- validate (allOf [required, email]) model.email
+  MkContact name email
+}

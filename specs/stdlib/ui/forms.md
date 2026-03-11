@@ -13,6 +13,8 @@ This module fits directly into signal-first GTK apps. Keep `Field A` values insi
 
 <<< ../../snippets/from_md/stdlib/ui/forms/block_01.aivi{aivi}
 
+The exported `toContact`-style helper pattern now reads best with `do Applicative { ... }`: validate each field independently, then finish the block with the plain domain value you want to build.
+
 ## `Field A`
 
 `Field A` is the recommended shape for one editable input.
