@@ -1037,7 +1037,7 @@ use aivi
 use aivi.reactive
 
 tick : Signal Int -> Unit
-tick = counter => counter <| (_ + 1)
+tick = counter => counter <<- (_ + 1)
 "#,
         );
         let expr = find_def_expr(&program, "tick");
