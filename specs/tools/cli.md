@@ -414,7 +414,7 @@ aivi mcp serve [<path|dir/...>] [--allow-effects] [--ui]
 - `aivi_fmt`
 - `aivi_fmt_write` (requires `--allow-effects`)
 
-With `--ui`, it also exposes non-effectful GTK tools such as discovery, widget inspection, and tree inspection, plus effectful tools such as `aivi_gtk_launch`, `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_focus`, `aivi_gtk_moveFocus`, `aivi_gtk_select`, `aivi_gtk_scroll`, and `aivi_gtk_keyPress`.
+With `--ui`, it also exposes non-effectful GTK tools such as discovery, widget inspection, tree inspection, and signal inspection (`aivi_gtk_listSignals`, `aivi_gtk_inspectSignal`), plus effectful tools such as `aivi_gtk_launch`, `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_focus`, `aivi_gtk_moveFocus`, `aivi_gtk_select`, `aivi_gtk_scroll`, and `aivi_gtk_keyPress`.
 
 The optional `<path|dir/...>` argument is accepted for compatibility and is currently ignored by the server; if omitted it defaults to `./...`, and individual tool calls still pass their own explicit `target` argument.
 

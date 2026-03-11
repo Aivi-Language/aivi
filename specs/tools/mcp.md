@@ -76,7 +76,9 @@ Use either `aivi_gtk_launch` or `aivi_gtk_attach` first. Both return a `sessionI
 The first GTK inspection layer is read-only:
 
 - `aivi_gtk_listWidgets`
+- `aivi_gtk_listSignals`
 - `aivi_gtk_inspectWidget`
+- `aivi_gtk_inspectSignal`
 - `aivi_gtk_dumpTree`
 
 These tools inspect the live reconciled widget tree kept by the GTK runtime. Inspection payloads include:
@@ -108,6 +110,38 @@ This is the preferred tool for targeted inspection because clients do not need t
 Returns the live widget tree, either for every root or for one `rootId`.
 
 Each node includes its own props, dimensions, runtime state, bound signals, and children.
+
+### `listSignals`
+
+Returns a flat snapshot of the live reactive signal graph for the current GTK session.
+
+Each signal summary includes:
+
+- numeric signal id
+- signal kind (`source`, `derived`, or `derivedTuple`)
+- current value summary with:
+  - stable type name
+  - human-readable display text
+  - JSON snapshot when the value is serializable
+- current `revision` and `dirty` state
+- direct dependency ids and dependent ids
+- watcher count and watcher ids
+
+The payload also reports the current batch/flush state and pending notification ids so clients can tell whether updates are coalescing or waiting to flush.
+
+### `inspectSignal`
+
+Returns one signal by numeric `signalId`, including the same summary fields as `listSignals` plus per-watcher details.
+
+Watcher entries include:
+
+- watcher id
+- owning signal id
+- active/inactive state
+- last observed revision
+- callback summary (type + display text, without exposing closure internals)
+
+Derived signals also include a safe summary of their compute function so you can confirm that the runtime attached the expected mapper.
 
 ## GTK interaction tools
 
@@ -229,9 +263,19 @@ There are no silent no-op fallbacks for unsupported widget actions.
    { "sessionId": "<sessionId>", "name": "<widget-name>" }
    ```
 
-6. Call `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_select`, or `aivi_gtk_keyPress`, then re-read the widget or tree snapshot to observe the updated state.
+6. Inspect the reactive layer when you need to confirm that the UI state machine moved:
 
-7. For keyboard navigation, call `aivi_gtk_focus` once on a known focusable widget, then use `aivi_gtk_moveFocus` with `direction: "tab"` / `"shift-tab"` or issue `aivi_gtk_keyPress` calls that should go to the focused widget.
+   ```json
+   { "sessionId": "<sessionId>" }
+   ```
+
+   ```json
+   { "sessionId": "<sessionId>", "signalId": 1 }
+   ```
+
+7. Call `aivi_gtk_click`, `aivi_gtk_type`, `aivi_gtk_select`, or `aivi_gtk_keyPress`, then re-read the widget or tree snapshot to observe the updated state.
+
+8. For keyboard navigation, call `aivi_gtk_focus` once on a known focusable widget, then use `aivi_gtk_moveFocus` with `direction: "tab"` / `"shift-tab"` or issue `aivi_gtk_keyPress` calls that should go to the focused widget.
 
 If the app is already running, use `aivi_gtk_discover` to find candidate sockets, then `aivi_gtk_attach` once you have the matching `socketPath` and `token`.
 
@@ -243,6 +287,7 @@ A minimal manual smoke test should confirm all of the following:
 - `tools/list` advertises underscore-safe names such as `aivi_parse` and, with `--ui`, `aivi_gtk_launch`
 - `aivi_gtk_launch` on `demos/snake.aivi` returns a `sessionId`
 - `aivi_gtk_hello` and `aivi_gtk_listWidgets` succeed when called with that `sessionId`
+- `aivi_gtk_listSignals` and `aivi_gtk_inspectSignal` succeed when the app uses reactive signals
 - `aivi_gtk_focus` updates the reported focus summary for a focusable widget
 - `aivi_gtk_moveFocus` can advance focus without guessing widget ids
 - `aivi_gtk_select` can operate dropdown/range widgets when present

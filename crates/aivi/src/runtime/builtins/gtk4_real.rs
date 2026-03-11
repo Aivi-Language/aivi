@@ -6,12 +6,15 @@ mod bridge {
     use std::sync::atomic::AtomicBool;
     use std::sync::{mpsc, Arc, Mutex};
 
+    use serde_json::{json, Map as JsonMap, Value as JsonValue};
+
     use super::super::gtk4::{resolve_gtk_node, resolve_reactive_attr_value, ResolvedGtkAttr, ResolvedGtkNode};
     use super::super::util::builtin;
     use crate::runtime::environment::RuntimeContext;
     use crate::runtime::values::{ChannelInner, ChannelRecv};
     use crate::runtime::{
-        format_runtime_error, CancelToken, EffectValue, Runtime, RuntimeError, Value,
+        format_runtime_error, format_value, CancelToken, EffectValue, ReactiveCellKind, Runtime,
+        RuntimeError, Value,
     };
 
     fn effect<F>(f: F) -> Value
@@ -27,6 +30,216 @@ mod bridge {
 
     fn gtk4_err_to_runtime(e: aivi_gtk4::Gtk4Error) -> RuntimeError {
         RuntimeError::Error(Value::Text(e.message))
+    }
+
+    fn ui_debug_value_type_name(value: &Value) -> &'static str {
+        match value {
+            Value::Unit => "Unit",
+            Value::Bool(_) => "Bool",
+            Value::Int(_) => "Int",
+            Value::Float(_) => "Float",
+            Value::Text(_) => "Text",
+            Value::DateTime(_) => "DateTime",
+            Value::Bytes(_) => "Bytes",
+            Value::Regex(_) => "Regex",
+            Value::BigInt(_) => "BigInt",
+            Value::Rational(_) => "Rational",
+            Value::Decimal(_) => "Decimal",
+            Value::Map(_) => "Map",
+            Value::Set(_) => "Set",
+            Value::Queue(_) => "Queue",
+            Value::Deque(_) => "Deque",
+            Value::Heap(_) => "Heap",
+            Value::List(_) => "List",
+            Value::Tuple(_) => "Tuple",
+            Value::Record(_) => "Record",
+            Value::Constructor { .. } => "Constructor",
+            Value::Builtin(_) | Value::MultiClause(_) => "Function",
+            Value::Effect(_) => "Effect",
+            Value::Source(_) => "Source",
+            Value::Resource(_) => "Resource",
+            Value::Thunk(_) => "Thunk",
+            Value::Signal(_) => "Signal",
+            Value::ChannelSend(_) => "ChannelSend",
+            Value::ChannelRecv(_) => "ChannelRecv",
+            Value::FileHandle(_) => "FileHandle",
+            Value::Listener(_) => "Listener",
+            Value::Connection(_) => "Connection",
+            Value::Stream(_) => "Stream",
+            Value::HttpServer(_) => "HttpServer",
+            Value::WebSocket(_) => "WebSocket",
+            Value::ImapSession(_) => "ImapSession",
+            Value::DbConnection(_) => "DbConnection",
+        }
+    }
+
+    fn ui_debug_value_json(value: &Value) -> JsonValue {
+        let snapshot = crate::runtime::snapshot::value_to_snapshot_json(value).ok();
+        json!({
+            "type": ui_debug_value_type_name(value),
+            "display": format_value(value),
+            "snapshot": snapshot,
+            "opaque": snapshot.is_none(),
+        })
+    }
+
+    fn ui_debug_signal_kind_name(kind: &ReactiveCellKind) -> &'static str {
+        match kind {
+            ReactiveCellKind::Source => "source",
+            ReactiveCellKind::Derived { .. } => "derived",
+            ReactiveCellKind::DerivedTuple { .. } => "derivedTuple",
+        }
+    }
+
+    fn ui_debug_signal_dependencies(kind: &ReactiveCellKind) -> Vec<usize> {
+        match kind {
+            ReactiveCellKind::Source => Vec::new(),
+            ReactiveCellKind::Derived { dependencies, .. }
+            | ReactiveCellKind::DerivedTuple { dependencies, .. } => dependencies.clone(),
+        }
+    }
+
+    fn ui_debug_signal_compute_json(kind: &ReactiveCellKind) -> Option<JsonValue> {
+        match kind {
+            ReactiveCellKind::Source => None,
+            ReactiveCellKind::Derived { compute, .. }
+            | ReactiveCellKind::DerivedTuple { compute, .. } => Some(ui_debug_value_json(compute)),
+        }
+    }
+
+    fn ui_debug_batch_state_json(
+        graph: &parking_lot::MutexGuard<'_, crate::runtime::ReactiveGraphState>,
+    ) -> JsonValue {
+        let mut pending = graph
+            .pending_notifications
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        pending.sort_unstable();
+        json!({
+            "depth": graph.batch_depth,
+            "flushing": graph.flushing,
+            "deferredFlush": graph.deferred_flush,
+            "flushThreadBound": graph.flush_thread.is_some(),
+            "pendingNotificationIds": pending,
+        })
+    }
+
+    fn ui_debug_signal_summary_json(
+        signal_id: usize,
+        graph: &parking_lot::MutexGuard<'_, crate::runtime::ReactiveGraphState>,
+        include_watchers: bool,
+    ) -> Result<JsonValue, aivi_gtk4::Gtk4Error> {
+        let signal = graph.signals.get(&signal_id).ok_or_else(|| {
+            aivi_gtk4::Gtk4Error::new(format!("gtk ui debug unknown signal id {signal_id}"))
+        })?;
+        let mut dependencies = ui_debug_signal_dependencies(&signal.kind);
+        dependencies.sort_unstable();
+        let mut dependents = signal.dependents.iter().copied().collect::<Vec<_>>();
+        dependents.sort_unstable();
+        let mut watcher_ids = graph
+            .watchers_by_signal
+            .get(&signal_id)
+            .map(|ids| ids.iter().copied().collect::<Vec<_>>())
+            .unwrap_or_default();
+        watcher_ids.sort_unstable();
+
+        let watchers = if include_watchers {
+            watcher_ids
+                .iter()
+                .filter_map(|watcher_id| {
+                    graph.watchers.get(watcher_id).map(|watcher| {
+                        json!({
+                            "id": watcher_id,
+                            "signalId": watcher.signal_id,
+                            "active": watcher.active,
+                            "lastRevision": watcher.last_revision,
+                            "callback": ui_debug_value_json(&watcher.callback),
+                        })
+                    })
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+
+        Ok(json!({
+            "id": signal_id,
+            "kind": ui_debug_signal_kind_name(&signal.kind),
+            "value": ui_debug_value_json(&signal.value),
+            "revision": signal.revision,
+            "dirty": signal.dirty,
+            "dependencies": dependencies,
+            "dependents": dependents,
+            "watcherCount": watcher_ids.len(),
+            "watcherIds": watcher_ids,
+            "watchers": if include_watchers { JsonValue::Array(watchers) } else { JsonValue::Null },
+            "compute": ui_debug_signal_compute_json(&signal.kind),
+        }))
+    }
+
+    pub(super) fn ui_debug_list_signals_json(
+        ctx: &RuntimeContext,
+    ) -> Result<JsonValue, aivi_gtk4::Gtk4Error> {
+        let graph = ctx.reactive_graph.lock();
+        let mut signal_ids = graph.signals.keys().copied().collect::<Vec<_>>();
+        signal_ids.sort_unstable();
+        let mut signals = Vec::with_capacity(signal_ids.len());
+        for signal_id in signal_ids {
+            signals.push(ui_debug_signal_summary_json(signal_id, &graph, false)?);
+        }
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "signalCount": graph.signals.len(),
+            "watcherCount": graph.watchers.len(),
+            "batch": ui_debug_batch_state_json(&graph),
+            "signals": signals,
+        }))
+    }
+
+    fn ui_debug_signal_id_param(params: &JsonMap<String, JsonValue>) -> Result<usize, aivi_gtk4::Gtk4Error> {
+        let signal_id = params
+            .get("signalId")
+            .and_then(JsonValue::as_u64)
+            .or_else(|| {
+                params
+                    .get("signalId")
+                    .and_then(JsonValue::as_i64)
+                    .and_then(|value| (value >= 0).then_some(value as u64))
+            })
+            .ok_or_else(|| {
+                aivi_gtk4::Gtk4Error::new("gtk ui debug inspectSignal requires signalId (integer)")
+            })?;
+        usize::try_from(signal_id).map_err(|_| {
+            aivi_gtk4::Gtk4Error::new(format!("gtk ui debug signal id {signal_id} is too large"))
+        })
+    }
+
+    pub(super) fn ui_debug_inspect_signal_json(
+        ctx: &RuntimeContext,
+        params: &JsonMap<String, JsonValue>,
+    ) -> Result<JsonValue, aivi_gtk4::Gtk4Error> {
+        let signal_id = ui_debug_signal_id_param(params)?;
+        let graph = ctx.reactive_graph.lock();
+        let signal = ui_debug_signal_summary_json(signal_id, &graph, true)?;
+        Ok(json!({
+            "protocol": "aivi.gtk.debug.v1",
+            "signal": signal,
+            "signalCount": graph.signals.len(),
+            "watcherCount": graph.watchers.len(),
+            "batch": ui_debug_batch_state_json(&graph),
+        }))
+    }
+
+    fn install_ui_debug_request_handler(ctx: Arc<RuntimeContext>) {
+        let handler: Arc<aivi_gtk4::UiDebugRequestHandler> = Arc::new(move |method, params| {
+            match method {
+                "listSignals" => Some(ui_debug_list_signals_json(ctx.as_ref())),
+                "inspectSignal" => Some(ui_debug_inspect_signal_json(ctx.as_ref(), params)),
+                _ => None,
+            }
+        });
+        aivi_gtk4::set_ui_debug_request_handler(Some(handler));
     }
 
     fn serialize_signal_value(val: &Value) -> String {
@@ -852,13 +1065,21 @@ mod bridge {
         // ── init ──
         fields.insert("init".to_string(), builtin("gtk4.init", 1, |mut args, _| {
             match args.remove(0) { Value::Unit => {} _ => return Err(invalid("gtk4.init expects Unit")) }
-            Ok(effect(move |_| { aivi_gtk4::init().map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
+            Ok(effect(move |runtime| {
+                install_ui_debug_request_handler(runtime.ctx.clone());
+                aivi_gtk4::init().map_err(gtk4_err_to_runtime)?;
+                Ok(Value::Unit)
+            }))
         }));
 
         // ── appNew ──
         fields.insert("appNew".to_string(), builtin("gtk4.appNew", 1, |mut args, _| {
             let id = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("gtk4.appNew expects Text")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
+            Ok(effect(move |runtime| {
+                install_ui_debug_request_handler(runtime.ctx.clone());
+                let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?;
+                Ok(Value::Int(r))
+            }))
         }));
 
         // ── appRun ──
@@ -1433,8 +1654,13 @@ mod tests {
     use std::sync::Arc;
     use std::sync::Once;
 
+    use serde_json::json;
+
     use super::super::gtk4::{ResolvedGtkAttr, ResolvedGtkNode};
-    use super::bridge::{execute_runtime_handler, make_signal_event_value, materialize_with_bindings};
+    use super::bridge::{
+        execute_runtime_handler, make_signal_event_value, materialize_with_bindings,
+        ui_debug_inspect_signal_json, ui_debug_list_signals_json,
+    };
     use crate::runtime::builtins::builtin;
     use crate::runtime::constructors::core_constructor_ordinals;
     use crate::runtime::environment::{Env, RuntimeContext};
@@ -1469,6 +1695,56 @@ mod tests {
             Ok(value) => value,
             Err(err) => panic!("{context}: {}", format_runtime_error(err)),
         }
+    }
+
+    #[test]
+    fn ui_debug_signal_snapshot_reports_dependencies_and_watchers() {
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let count = ok_or_panic(runtime.reactive_create_signal(Value::Int(1)), "create signal");
+        let mapper = builtin("test.signalMapper", 1, |mut args, _| {
+            let value = match args.remove(0) {
+                Value::Int(value) => value,
+                other => panic!("expected Int, got {:?}", other),
+            };
+            Ok(Value::Int(value + 1))
+        });
+        let derived = ok_or_panic(
+            runtime.reactive_derive_signal(count.clone(), mapper),
+            "derive signal",
+        );
+        let callback = builtin("test.signalWatcher", 1, |_args, _| Ok(Value::Unit));
+        ok_or_panic(
+            runtime.reactive_watch_signal(derived.clone(), callback),
+            "watch signal",
+        );
+
+        let list = ui_debug_list_signals_json(ctx.as_ref()).expect("list signals");
+        let signals = list["signals"].as_array().expect("signals array");
+        assert_eq!(signals.len(), 2);
+        assert_eq!(list["watcherCount"].as_u64(), Some(1));
+
+        let derived_id = match derived {
+            Value::Signal(signal) => signal.id,
+            other => panic!("expected derived signal, got {:?}", other),
+        };
+        let detail = ui_debug_inspect_signal_json(ctx.as_ref(), &json!({ "signalId": derived_id }).as_object().cloned().expect("params"))
+            .expect("inspect signal");
+        let signal = &detail["signal"];
+        assert_eq!(signal["id"].as_u64(), Some(derived_id as u64));
+        assert_eq!(
+            signal["dependencies"].as_array().map(|items| items.len()),
+            Some(1)
+        );
+        assert_eq!(signal["watcherCount"].as_u64(), Some(1));
+        assert_eq!(
+            signal["compute"]["display"].as_str(),
+            Some("<builtin:test.signalMapper>")
+        );
+        assert_eq!(
+            signal["watchers"].as_array().map(|items| items.len()),
+            Some(1)
+        );
     }
 
     #[test]

@@ -3,6 +3,9 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
+
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
 // ── Public Types ──────────────────────────────────────────────────────────────
 
@@ -57,6 +60,9 @@ pub struct BuildWithBindingsResult {
     pub binding_widgets: HashMap<String, i64>,
 }
 
+pub type UiDebugRequestHandler =
+    dyn Fn(&str, &JsonMap<String, JsonValue>) -> Option<Result<JsonValue, Gtk4Error>> + Send + Sync;
+
 #[cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod linux_impl {
@@ -68,7 +74,7 @@ mod linux_impl {
     use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
-    use std::sync::{mpsc, Mutex, OnceLock};
+    use std::sync::{mpsc, Arc, Mutex, OnceLock};
     use std::time::Duration;
 
     use serde_json::{json, Map, Value};
@@ -513,6 +519,29 @@ mod linux_impl {
     static PENDING_PERSONAL_EMAILS: OnceLock<Mutex<VecDeque<PersonalEmailNotif>>> = OnceLock::new();
     fn pending_personal_emails() -> &'static Mutex<VecDeque<PersonalEmailNotif>> {
         PENDING_PERSONAL_EMAILS.get_or_init(|| Mutex::new(VecDeque::new()))
+    }
+
+    static UI_DEBUG_REQUEST_HANDLER: OnceLock<Mutex<Option<Arc<super::UiDebugRequestHandler>>>> =
+        OnceLock::new();
+    fn ui_debug_request_handler() -> &'static Mutex<Option<Arc<super::UiDebugRequestHandler>>> {
+        UI_DEBUG_REQUEST_HANDLER.get_or_init(|| Mutex::new(None))
+    }
+
+    pub(super) fn set_ui_debug_request_handler(handler: Option<Arc<super::UiDebugRequestHandler>>) {
+        *ui_debug_request_handler()
+            .lock()
+            .expect("ui debug request handler lock poisoned") = handler;
+    }
+
+    fn call_ui_debug_request_handler(
+        method: &str,
+        params: &Map<String, Value>,
+    ) -> Option<Result<Value, Gtk4Error>> {
+        let handler = ui_debug_request_handler()
+            .lock()
+            .expect("ui debug request handler lock poisoned")
+            .clone()?;
+        handler(method, params)
     }
 
     static EMAIL_SUGGESTIONS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
@@ -2134,7 +2163,7 @@ mod linux_impl {
             "namedWidgetCount": state.named_widgets.len(),
             "actions": ["click", "type", "select", "focus", "moveFocus", "scroll", "keyPress"],
             "focus": focus_summary_json(state),
-            "inspectors": ["listWidgets", "inspectWidget", "dumpTree"]
+            "inspectors": ["listWidgets", "inspectWidget", "dumpTree", "listSignals", "inspectSignal"]
         })
     }
 
@@ -2824,9 +2853,11 @@ mod linux_impl {
             "select" => ui_debug_select_result(state, params),
             "scroll" => ui_debug_scroll_result(state, params),
             "keyPress" => ui_debug_key_press_result(state, params),
-            _ => Err(Gtk4Error::new(format!(
-                "gtk ui debug unknown method {method}"
-            ))),
+            _ => call_ui_debug_request_handler(method, params).unwrap_or_else(|| {
+                Err(Gtk4Error::new(format!(
+                    "gtk ui debug unknown method {method}"
+                )))
+            }),
         };
 
         match result {
@@ -8541,6 +8572,17 @@ delegate!(widget_exists(id: i64) -> Result<bool, Gtk4Error>);
 delegate!(binding_widget_ids(id: i64) -> Result<Vec<i64>, Gtk4Error>);
 delegate!(widget_child_ids(id: i64) -> Result<Vec<i64>, Gtk4Error>);
 delegate!(set_interval(ms: u32) -> Result<(), Gtk4Error>);
+
+pub fn set_ui_debug_request_handler(handler: Option<Arc<UiDebugRequestHandler>>) {
+    #[cfg(target_os = "linux")]
+    {
+        linux_impl::set_ui_debug_request_handler(handler);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = handler;
+    }
+}
 
 pub fn reconcile_node(root_id: i64, node: &GtkNode) -> Result<i64, Gtk4Error> {
     #[cfg(target_os = "linux")]

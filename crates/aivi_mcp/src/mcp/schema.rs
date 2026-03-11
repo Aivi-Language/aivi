@@ -6,11 +6,15 @@ use crate::mcp::manifest::{read_bundled_spec, specs_uri, McpManifest, McpPolicy}
 use aivi_driver::AiviError;
 
 #[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
 use std::io::BufReader;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::Stdio;
 #[cfg(unix)]
@@ -26,7 +30,9 @@ const MCP_TOOL_GTK_ATTACH: &str = "aivi.gtk.attach";
 const MCP_TOOL_GTK_LAUNCH: &str = "aivi.gtk.launch";
 const MCP_TOOL_GTK_HELLO: &str = "aivi.gtk.hello";
 const MCP_TOOL_GTK_LIST_WIDGETS: &str = "aivi.gtk.listWidgets";
+const MCP_TOOL_GTK_LIST_SIGNALS: &str = "aivi.gtk.listSignals";
 const MCP_TOOL_GTK_INSPECT_WIDGET: &str = "aivi.gtk.inspectWidget";
+const MCP_TOOL_GTK_INSPECT_SIGNAL: &str = "aivi.gtk.inspectSignal";
 const MCP_TOOL_GTK_DUMP_TREE: &str = "aivi.gtk.dumpTree";
 const MCP_TOOL_GTK_CLICK: &str = "aivi.gtk.click";
 const MCP_TOOL_GTK_TYPE: &str = "aivi.gtk.type";
@@ -244,7 +250,9 @@ fn execute_tool(name: &str, arguments: &serde_json::Value) -> Result<serde_json:
         MCP_TOOL_GTK_LAUNCH => execute_gtk_launch_tool(arguments),
         MCP_TOOL_GTK_HELLO => execute_gtk_hello_tool(arguments),
         MCP_TOOL_GTK_LIST_WIDGETS => execute_gtk_list_widgets_tool(arguments),
+        MCP_TOOL_GTK_LIST_SIGNALS => execute_gtk_list_signals_tool(arguments),
         MCP_TOOL_GTK_INSPECT_WIDGET => execute_gtk_inspect_widget_tool(arguments),
+        MCP_TOOL_GTK_INSPECT_SIGNAL => execute_gtk_inspect_signal_tool(arguments),
         MCP_TOOL_GTK_DUMP_TREE => execute_gtk_dump_tree_tool(arguments),
         MCP_TOOL_GTK_CLICK => execute_gtk_click_tool(arguments),
         MCP_TOOL_GTK_TYPE => execute_gtk_type_tool(arguments),
@@ -579,6 +587,63 @@ fn execute_gtk_attach_tool(arguments: &serde_json::Value) -> Result<serde_json::
     }))
 }
 
+#[cfg(unix)]
+fn find_executable_in_path_dirs<'a>(
+    executable_name: &OsStr,
+    dirs: impl Iterator<Item = &'a Path>,
+) -> Option<PathBuf> {
+    dirs.map(|dir| dir.join(executable_name))
+        .find(|candidate| candidate.is_file())
+}
+
+#[cfg(unix)]
+fn resolve_gtk_launch_executable() -> Result<PathBuf, AiviError> {
+    let current = std::env::current_exe()?;
+    if current.is_file() {
+        return Ok(current);
+    }
+
+    let executable_name = current.file_name().unwrap_or_else(|| OsStr::new("aivi"));
+    let path_dirs = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    if let Some(found) =
+        find_executable_in_path_dirs(executable_name, path_dirs.iter().map(PathBuf::as_path))
+    {
+        return Ok(found);
+    }
+
+    Err(AiviError::InvalidCommand(format!(
+        "unable to locate runnable aivi executable; current executable {} is unavailable",
+        current.display()
+    )))
+}
+
+#[cfg(unix)]
+fn gtk_launch_working_dir(target: &str) -> Option<PathBuf> {
+    let target_path = Path::new(target);
+    let resolved = if target_path.is_absolute() {
+        target_path.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(target_path)
+    };
+
+    let anchor = if resolved.is_dir() {
+        resolved
+    } else {
+        resolved.parent()?.to_path_buf()
+    };
+
+    for ancestor in anchor.ancestors() {
+        if ancestor.join("aivi.toml").is_file() {
+            return Some(ancestor.to_path_buf());
+        }
+    }
+
+    None
+}
+
 fn execute_gtk_launch_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["target", "release"])?;
     let target = get_required_string(args, "target")?;
@@ -590,13 +655,16 @@ fn execute_gtk_launch_tool(arguments: &serde_json::Value) -> Result<serde_json::
         let token = uuid::Uuid::new_v4().to_string();
         let socket_path = format!("{}/aivi-ui-mcp-{}.sock", runtime_dir, uuid::Uuid::new_v4());
 
-        let exe = std::env::current_exe()?;
+        let exe = resolve_gtk_launch_executable()?;
         let mut cmd = std::process::Command::new(exe);
         cmd.arg("run");
         if release {
             cmd.arg("--release");
         }
         cmd.arg(target);
+        if let Some(working_dir) = gtk_launch_working_dir(target) {
+            cmd.current_dir(working_dir);
+        }
         cmd.env("AIVI_UI_DEBUG", "1");
         cmd.env("AIVI_UI_DEBUG_SOCKET", &socket_path);
         cmd.env("AIVI_UI_DEBUG_TOKEN", &token);
@@ -681,6 +749,23 @@ fn execute_gtk_list_widgets_tool(
     }))
 }
 
+fn execute_gtk_list_signals_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let result = gtk_ui_call(&session, "listSignals", serde_json::json!({}))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_LIST_SIGNALS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
 fn execute_gtk_inspect_widget_tool(
     arguments: &serde_json::Value,
 ) -> Result<serde_json::Value, AiviError> {
@@ -693,6 +778,31 @@ fn execute_gtk_inspect_widget_tool(
     Ok(serde_json::json!({
         "ok": true,
         "tool": MCP_TOOL_GTK_INSPECT_WIDGET,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_inspect_signal_tool(
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "signalId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let signal_id = args
+        .get("signalId")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| AiviError::InvalidCommand("signalId must be an integer".to_string()))?;
+    let session = gtk_get_session(session_id)?;
+
+    let result = gtk_ui_call(
+        &session,
+        "inspectSignal",
+        serde_json::json!({ "signalId": signal_id }),
+    )?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_INSPECT_SIGNAL,
         "sessionId": session_id,
         "pid": session.pid,
         "result": result,
@@ -1147,6 +1257,7 @@ pub fn serve_mcp_stdio_with_policy(
 mod tests {
     use super::*;
     use crate::mcp::manifest::{bundled_specs_manifest, bundled_specs_manifest_with_ui};
+    use std::ffi::OsStr;
     use tempfile::tempdir;
 
     #[test]
@@ -1330,6 +1441,42 @@ mod tests {
     }
 
     #[test]
+    fn find_executable_in_path_dirs_returns_matching_candidate() {
+        let dir = tempdir().expect("create tempdir");
+        let exe = dir.path().join("aivi");
+        std::fs::write(&exe, "#!/bin/sh\n").expect("write fake exe");
+
+        let found = find_executable_in_path_dirs(OsStr::new("aivi"), [dir.path()].into_iter())
+            .expect("find executable");
+
+        assert_eq!(found, exe);
+    }
+
+    #[test]
+    fn gtk_launch_working_dir_uses_nearest_aivi_project_root() {
+        let dir = tempdir().expect("create tempdir");
+        let project_root = dir.path().join("mailfox");
+        let source_dir = project_root.join("src").join("mailfox");
+        let source_file = source_dir.join("main.aivi");
+        std::fs::create_dir_all(&source_dir).expect("create source dir");
+        std::fs::write(
+            project_root.join("aivi.toml"),
+            "[project]\nkind = \"bin\"\nentry = \"src/main.aivi\"\nlanguage_version = \"0.1\"\n",
+        )
+        .expect("write aivi.toml");
+        std::fs::write(&source_file, "module mailfox.main\n").expect("write source");
+
+        assert_eq!(
+            gtk_launch_working_dir(source_file.to_str().expect("utf8 path")),
+            Some(project_root.clone())
+        );
+        assert_eq!(
+            gtk_launch_working_dir(project_root.to_str().expect("utf8 path")),
+            Some(project_root)
+        );
+    }
+
+    #[test]
     fn test_is_mangled_tool_name() {
         assert!(is_mangled_tool_name("aivi.gtk.launch", "aivi.gtk.launch"));
         assert!(is_mangled_tool_name(
@@ -1410,6 +1557,8 @@ mod tests {
         assert!(tool_names.contains(&"aivi_parse"));
         assert!(tool_names.contains(&"aivi_fmt_write"));
         assert!(tool_names.contains(&"aivi_gtk_launch"));
+        assert!(tool_names.contains(&"aivi_gtk_listSignals"));
+        assert!(tool_names.contains(&"aivi_gtk_inspectSignal"));
         assert!(tool_names.contains(&"aivi_gtk_focus"));
         assert!(tool_names.contains(&"aivi_gtk_moveFocus"));
         assert!(tool_names.contains(&"aivi_gtk_scroll"));
@@ -1426,7 +1575,9 @@ mod tests {
             .map(|tool| tool.name.as_str())
             .collect::<Vec<_>>();
         assert!(tool_names.contains(&MCP_TOOL_GTK_LIST_WIDGETS));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_LIST_SIGNALS));
         assert!(tool_names.contains(&MCP_TOOL_GTK_INSPECT_WIDGET));
+        assert!(tool_names.contains(&MCP_TOOL_GTK_INSPECT_SIGNAL));
         assert!(tool_names.contains(&MCP_TOOL_GTK_DUMP_TREE));
         assert!(tool_names.contains(&MCP_TOOL_GTK_CLICK));
         assert!(tool_names.contains(&MCP_TOOL_GTK_TYPE));
