@@ -260,6 +260,21 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
             effectful: false,
         },
         McpTool {
+            name: "aivi.gtk.listSignals".to_string(),
+            description: "List reactive signals in an attached GTK session with revisions, dependencies, and watcher counts.".to_string(),
+            module: "gtk".to_string(),
+            binding: "listSignals".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId"],
+                "properties": {
+                    "sessionId": { "type": "string" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
             name: "aivi.gtk.inspectWidget".to_string(),
             description: "Inspect one widget in an attached GTK session, including props, dimensions, and children.".to_string(),
             module: "gtk".to_string(),
@@ -272,6 +287,22 @@ pub fn bundled_specs_manifest_with_ui() -> McpManifest {
                     "sessionId": { "type": "string" },
                     "name": { "type": "string" },
                     "id": { "type": "integer" }
+                }
+            }),
+            effectful: false,
+        },
+        McpTool {
+            name: "aivi.gtk.inspectSignal".to_string(),
+            description: "Inspect one reactive signal in an attached GTK session, including value summary, watchers, and dependencies.".to_string(),
+            module: "gtk".to_string(),
+            binding: "inspectSignal".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sessionId", "signalId"],
+                "properties": {
+                    "sessionId": { "type": "string" },
+                    "signalId": { "type": "integer" }
                 }
             }),
             effectful: false,
