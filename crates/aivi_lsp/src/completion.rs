@@ -1262,6 +1262,13 @@ impl Backend {
             }
         }
 
+        items.push(CompletionItem {
+            label: "~<gtk></gtk>".to_string(),
+            kind: Some(CompletionItemKind::SNIPPET),
+            sort_text: Some("5".to_string()),
+            ..CompletionItem::default()
+        });
+
         items
     }
 
