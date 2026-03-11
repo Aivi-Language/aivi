@@ -169,6 +169,7 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Test Decorator & Mocking](syntax/decorators/test)
 #### Developer Tools
 - [CLI](tools/cli)
+- [REPL](tools/repl)
 - [MCP Server](tools/mcp)
 - [Package Manager](tools/package_manager)
 - [LSP Server](tools/lsp_server)

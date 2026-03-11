@@ -143,6 +143,7 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Test Decorator & Mocking](syntax/decorators/test.md)
 #### Developer Tools
 - [CLI](tools/cli.md)
+- [REPL](tools/repl.md)
 - [MCP Server](tools/mcp.md)
 - [Package Manager](tools/package_manager.md)
 - [LSP Server](tools/lsp_server.md)

@@ -340,43 +340,7 @@ aivi repl [--color] [--no-color] [--plain]
 
 With no flags the REPL opens a full-screen TUI. The prelude is pre-loaded and all stdlib symbols are immediately in scope. Successful expression inputs are compiled and evaluated, so the transcript shows `value :: Type` instead of only a type summary. Top-level effect expressions also autorun by default, which means inputs like `print "hi"` or `println "hi"` execute immediately and replay their console output into the REPL transcript; use `/autorun off` if you want top-level effects to remain inert values.
 
-**Keyboard shortcuts (TUI mode)**
-
-| Key | Action |
-| --- | --- |
-| Enter | Submit the current input |
-| Shift+Enter | Insert newline (multi-line input) |
-| ↑ / ↓ | Navigate history or inline suggestions |
-| Ctrl+L | Clear transcript |
-| Ctrl+C | Cancel current input |
-| Ctrl+D | Exit (on empty input) |
-| Tab | Accept the highlighted suggestion, or toggle the symbol pane when no suggestion is shown |
-| Esc | Close symbol pane |
-
-**Slash commands**
-
-| Command | Description |
-| --- | --- |
-| `/help` | Print command reference |
-| `/explain <name>` | Show quick info, the best available signature, and the module where that symbol lives |
-| `/use <module.path>` | Add an import to the session (e.g. `/use aivi.text`); unknown modules error immediately |
-| `/types [filter]` | List types in scope (stdlib + session); optional substring filter |
-| `/values [filter]` | List session-defined values with their inferred types |
-| `/functions [filter]` | List functions in scope with their module names (prelude, manual `/use` imports, and session bindings) |
-| `/autorun [on\|off]` | Toggle whether top-level effect expressions execute automatically; default is `on` |
-| `/modules` | Show loaded modules in the session |
-| `/clear` | Clear the transcript while keeping all session state |
-| `/reset` | Clear the transcript and reset all session state |
-| `/history [n]` | Show the last `n` inputs (default: 20) |
-| `/load <path>` | Load a `.aivi` file into the session |
-| `/openapi file <path> [as <name>]` | Inject an OpenAPI spec file as a `@static` module |
-| `/openapi url <url> [as <name>]` | Inject an OpenAPI spec from a URL as a `@static` module |
-
-The `/openapi` commands inject typed API bindings into the session under the given module name (or a name derived from the spec's `info.title`). They use the same `@static` OpenAPI mechanism as the language's compile-time external source support.
-
-`/explain` accepts a function, value, type, or module name and prints the indexed quick-info text together with the best available signature and module name. When the same name exists in multiple modules, use a qualified form such as `/explain aivi.text.isAlnum`.
-
-When the input starts with `/`, the TUI shows matching slash commands inline and filters them as you type. `/functions <filter>` also suggests matching function names for the filter slot, and ordinary identifier input shows typed suggestions for constructors (uppercase) plus values/functions (lowercase) that are currently in scope. The suggestion popup shows five rows at a time, but `↑` / `↓` scroll through the full result set. Use `Tab` to accept the highlighted item; `Enter` always runs the current input buffer.
+See [REPL](repl.md) for the interactive workflow, TUI shortcuts, slash-command reference, and guidance on when to use the REPL instead of `run`, `check`, or `test`.
 
 ### Services
 
