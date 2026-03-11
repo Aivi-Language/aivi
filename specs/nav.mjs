@@ -225,6 +225,7 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'CLI', link: '/tools/cli' },
+          { text: 'REPL', link: '/tools/repl' },
           { text: 'MCP Server', link: '/tools/mcp' },
           { text: 'Package Manager', link: '/tools/package_manager' },
           { text: 'LSP Server', link: '/tools/lsp_server' },
