@@ -11,8 +11,10 @@ Operators in AIVI are small pieces of syntax with fixed precedence and meaning a
 | `=` | binding | top-level, blocks | Defines a value, function clause, or type-level item. |
 | `<-` | binder | `do Effect {}`, `generate {}`, `resource {}` | Runs and binds the next produced value from an effect, generator, or resource context. |
 | `->` | guard | `generate {}` | Filters the current generator element using predicate syntax. |
-| `\|>` | pipe / signal derive | expressions | Feeds the left value into the expression on the right. When the left side is a `Signal A`, it derives a new signal from the current signal value. |
-| `<\|` | patch / signal write | expressions | Applies a patch to a record value. When the left side is a `Signal A`, it writes the signal with a value, updater, or record patch. |
+| `\|>` | pipe | expressions | Feeds the left value into the expression on the right. |
+| `->>` | signal derive | expressions | Derives a new signal from a source signal by applying a transform to the current value. The left side must be a `Signal A`. |
+| `<\|` | patch | expressions | Applies a patch to a record value. |
+| `<<-` | signal write | expressions | Writes a signal with a value, updater function, or record patch. The left side must be a `Signal A`. |
 | `match` | match | expressions | Starts refutable pattern matching on the expression to its left. |
 | `\|` | arm / union separator | `match` arms, sum-type definitions | Separates branches or constructors. |
 | `=>` | arrow | lambdas, match arms, `loop` | Separates inputs or patterns from the resulting expression. |
@@ -30,7 +32,7 @@ For the full syntax grammar, see the [grammar reference](grammar.md).
 
 The parser reads infix operators from lowest to highest precedence in this order:
 
-1. `|>` (forward pipe)
+1. `|>` (forward pipe) / `->>`  (signal derive) — same precedence
 2. `??` (coalesce)
 3. `||` (logical or)
 4. `&&` (logical and)
@@ -38,7 +40,7 @@ The parser reads infix operators from lowest to highest precedence in this order
 6. `<`, `<=`, `>`, `>=` (comparison)
 7. `+`, `-`, `++` (addition / subtraction / concatenation)
 8. `*`, `×`, `/`, `%` (multiplication family)
-9. `<|` (patch)
+9. `<|` (patch) / `<<-` (signal write) — same precedence
 
 Unary prefix operators: `!` for logical negation and `-` for numeric negation.
 Within one precedence level, infix operators associate left-to-right. Add parentheses when you want a different grouping.
@@ -57,32 +59,30 @@ On ordinary data, `<|` applies a patch literal to the value on its left and retu
 <<< ../snippets/from_md/syntax/operators/block_02.aivi{aivi}
 
 
-When the left-hand side is a `Signal A`, the same operator becomes signal-write sugar:
-
-- `signal <| value` → `set signal value`
-- `signal <| updater` → `update signal updater`
-- `signal <| { ... }` → update the current record value with the same patch semantics as ordinary `<|`
-
-So all of these are valid:
-
-```aivi
-count <| 10
-profile <| (state => { name: "AIVI", saveCount: state.saveCount + 1 })
-profile <| { saveCount: _ + 1 }
-```
-
 See [Patching Records](patching.md) for reusable `patch { ... }` values, deep selectors, and collection-aware updates.
 
-### Signal derivation via pipe (`|>`)
+### Signal write (`<<-`)
 
-On ordinary data, `|>` keeps its usual last-argument pipe behavior.
+`<<-` writes to a signal. The left side must be a `Signal A`. The semantics depend on the right-hand side:
 
-When the left-hand side is a `Signal A`, `signal |> fn` is shorthand for `derive signal (value => value |> fn)`, so the right-hand side still uses the normal pipe rules over the current signal value.
+- `signal <<- value` → `set signal value`
+- `signal <<- updater` → `update signal updater`
+- `signal <<- { ... }` → update the current record value with the same patch semantics as `<|`
+
+```aivi
+count <<- 10
+profile <<- (state => { name: "AIVI", saveCount: state.saveCount + 1 })
+profile <<- { saveCount: _ + 1 }
+```
+
+### Signal derivation (`->>`)
+
+`signal ->> fn` is shorthand for `derive signal (value => value |> fn)`, so the right-hand side still uses the normal pipe rules over the current signal value. The left side must be a `Signal A`.
 
 ```aivi
 count = signal 1
-countText = count |> (_ + 1) |> toText
-label = count |> (n => "Count {n}")
+countText = count ->> (_ + 1) ->> toText
+label = count ->> (n => "Count {n}")
 ```
 
 ## 11.3 Lists: literals, range items, and spread

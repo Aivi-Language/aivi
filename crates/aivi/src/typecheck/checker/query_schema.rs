@@ -143,6 +143,22 @@ impl TypeChecker {
         result
     }
 
+    fn normalize_pipe_transformer(&self, expr: &Expr) -> Expr {
+        match expr {
+            Expr::Lambda { .. } | Expr::FieldSection { .. } | Expr::Ident(_) => expr.clone(),
+            Expr::Call { func, args, span } => Expr::Call {
+                func: Box::new(self.normalize_pipe_transformer(func)),
+                args: args
+                    .iter()
+                    .map(|arg| self.normalize_pipe_transformer(arg))
+                    .collect(),
+                span: span.clone(),
+            },
+            _ if expr_contains_placeholder(expr) => self.rewrite_placeholder_lambda(expr, "__pipe"),
+            _ => expr.clone(),
+        }
+    }
+
     fn rewrite_placeholder_lambda(&self, expr: &Expr, param_name: &str) -> Expr {
         fn rewrite(expr: Expr, param: &SpannedName) -> Expr {
             match expr {

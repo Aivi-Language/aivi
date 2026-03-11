@@ -18,7 +18,11 @@ pub const BOOLEAN_LITERALS: &[&str] = &["True", "False"];
 
 pub const CONSTRUCTORS_COMMON: &[&str] = &["None", "Some", "Ok", "Err"];
 
-pub const SYMBOLS_3: &[([char; 3], &str)] = &[(['.', '.', '.'], "...")];
+pub const SYMBOLS_3: &[([char; 3], &str)] = &[
+    (['.', '.', '.'], "..."),
+    (['<', '<', '-'], "<<-"),
+    (['-', '>', '>'], "->>"),
+];
 
 pub const SYMBOLS_2: &[([char; 2], &str)] = &[
     (['=', '>'], "=>"),

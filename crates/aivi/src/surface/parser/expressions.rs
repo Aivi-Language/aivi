@@ -258,6 +258,29 @@ impl Parser {
         self.parse_match_or_binary()
     }
 
+    fn parse_pipe_rhs(&mut self, min_prec: u8) -> Option<Expr> {
+        let checkpoint = self.pos;
+        let diag_checkpoint = self.diagnostics.len();
+        let mut params = Vec::new();
+        while let Some(pattern) = self.parse_pattern() {
+            params.push(pattern);
+        }
+        let saw_pattern_diags = self.diagnostics.len() != diag_checkpoint;
+        if !params.is_empty() && !saw_pattern_diags && self.consume_symbol("=>") {
+            let body = self.parse_expr()?;
+            let span = merge_span(pattern_span(&params[0]), expr_span(&body));
+            return Some(Expr::Lambda {
+                params,
+                body: Box::new(body),
+                span,
+            });
+        }
+
+        self.pos = checkpoint;
+        self.diagnostics.truncate(diag_checkpoint);
+        self.parse_binary(min_prec)
+    }
+
     fn parse_match_or_binary(&mut self) -> Option<Expr> {
         let expr = self.parse_binary(0)?;
         if self.match_keyword("match") {
@@ -356,7 +379,11 @@ impl Parser {
                 break;
             }
             self.pos += 1;
-            let right = self.parse_binary(prec + 1)?;
+            let right = if op == "|>" || op == "->>" {
+                self.parse_pipe_rhs(prec + 1)?
+            } else {
+                self.parse_binary(prec + 1)?
+            };
             let span = merge_span(expr_span(&left), expr_span(&right));
             left = Expr::Binary {
                 op,

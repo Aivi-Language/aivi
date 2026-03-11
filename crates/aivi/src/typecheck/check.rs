@@ -67,6 +67,7 @@ pub fn check_types_stdlib_checkpoint(stdlib_modules: &[Module]) -> CheckTypesChe
             &mut checker,
             module,
             &state.module_exports,
+            &state.module_alias_exports,
             &state.module_domain_exports,
             &state.module_class_exports,
             &state.module_instance_exports,
@@ -122,6 +123,7 @@ pub fn check_types_with_checkpoint_incremental(
             &mut checker,
             module,
             &state.module_exports,
+            &state.module_alias_exports,
             &state.module_domain_exports,
             &state.module_class_exports,
             &state.module_instance_exports,
@@ -342,6 +344,8 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
+    let mut module_alias_exports: HashMap<String, HashMap<String, super::TypeAliasSurface>> =
+        HashMap::new();
     let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
@@ -359,6 +363,7 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
             &mut checker,
             module,
             &module_exports,
+            &module_alias_exports,
             &module_domain_exports,
             &module_class_exports,
             &module_instance_exports,
@@ -375,6 +380,7 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
 
         let interface = module_interface_from_setup(module, &checker, &setup);
         module_exports.insert(module.name.name.clone(), interface.exports.clone());
+        module_alias_exports.insert(module.name.name.clone(), interface.alias_exports.clone());
         module_domain_exports.insert(module.name.name.clone(), interface.domain_exports.clone());
         module_class_exports.insert(module.name.name.clone(), interface.class_exports.clone());
         module_instance_exports

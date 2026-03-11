@@ -27,9 +27,9 @@ Derived UI state is no longer a separate architecture. If a value should stay re
 | `signal initial` | Create a writable source signal. |
 | `get s` | Read the current value. Best for callbacks, events, and low-level code. |
 | `set s value` | Replace the current value. |
-| `update s fn` / `s <\| fn` | Transform the current value with an updater function. |
-| `set s value` / `s <\| value` | Replace the current value. Record literals on the right of `s <\| ...` stay patch updates, not whole-record replacement. |
-| `derive s fn` / `s \|> fn` | Derive a new signal from one source signal. `s \|> fn` unwraps the current signal value and re-applies the normal pipe on each update. |
+| `update s fn` / `s <<- fn` | Transform the current value with an updater function. |
+| `set s value` / `s <<- value` | Replace the current value. Record literals on the right of `s <<- ...` stay patch updates, not whole-record replacement. |
+| `derive s fn` / `s ->> fn` | Derive a new signal from one source signal. `s ->> fn` unwraps the current signal value and re-applies the normal pipe on each update. |
 | `combineAll (s1, s2) ((a, b) => ...)` | Derive one signal from a tuple of source signals. |
 | `watch s fn` / `on s fn` | Observe changes and run a callback or effect. Returns a disposable. |
 | `batch fn` | Group several writes into one propagation batch. |
@@ -41,13 +41,13 @@ The common style is: use signals and combinators in normal UI code, then reach f
 
 ```aivi
 state = signal { count: 0 }
-title = state |> (s => "Count {s.count}")
+title = state ->> (s => "Count {s.count}")
 
-increment = _ => state <| { count: _ + 1 }
-resetCount = _ => state <| { count: 0 }
+increment = _ => state <<- { count: _ + 1 }
+resetCount = _ => state <<- { count: 0 }
 
 counter = signal 0
-resetCounter = _ => counter <| 0
+resetCounter = _ => counter <<- 0
 ```
 
 `title` is already the “computed” form. There is no need to switch into a separate derived-value API just because the data is read-only.
@@ -87,12 +87,12 @@ update profile (patch { subscribed: !_ })
 update profile (patch { saveCount: _ + 1 })
 ```
 
-`signal <| value` is shorthand for `set signal value` when the right-hand side is a plain replacement value. If the right-hand side is a function, `signal <| updater` is shorthand for `update signal updater`. If the right-hand side is a record literal, it keeps the normal patch meaning and updates the current record value in place.
+`signal <<- value` is shorthand for `set signal value` when the right-hand side is a plain replacement value. If the right-hand side is a function, `signal <<- updater` is shorthand for `update signal updater`. If the right-hand side is a record literal, it keeps the normal patch meaning and updates the current record value in place.
 
 When that is not expressive enough, fall back to a normal function:
 
 ```aivi
-profile <| (state =>
+profile <<- (state =>
   {
     name: normalize state.name
     saveCount: state.saveCount + 1
@@ -102,12 +102,14 @@ profile <| (state =>
 
 ## Derived signals via pipe sugar
 
-Signal pipes keep the ordinary pipe semantics inside the mapper. That means `s |> fn` is shorthand for `derive s (value => value |> fn)`:
+Signal pipes keep the ordinary pipe semantics inside the mapper. That means `s ->> fn` is shorthand for `derive s (value => value |> fn)`:
 
 ```aivi
 count = signal 1
-countText = count |> (_ + 1) |> toText
-display = count |> (n => "Count {n}")
+countText = count ->> (_ + 1) ->> toText
+display = count ->> (n => "Count {n}")
+nextCount = signal { count: 1 } ->> _.count + 1
+nextCountViaPattern = signal { count: 1 } ->> { count } => count + 1
 ```
 
 ## Watching and side effects

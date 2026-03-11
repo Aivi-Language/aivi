@@ -272,8 +272,11 @@ count = signal 0
 state = signal { count: 0, enabled: False }
 
 countText = count |> (_ + 1) |> toText
+stateCount = state |> _.count + 1
+stateCountViaPattern = state |> { count } => count + 1
 countSet = count <| 5
 countUpdate = count <| (_ + 1)
+statePatch = state <| { count: _ + 1, enabled: True }
 stateUpdate = state <| (current => current <| { count: _ + 1, enabled: True })
 "#;
     check_ok_with_embedded(source, &["aivi", "aivi.prelude", "aivi.reactive"]);
@@ -450,6 +453,24 @@ use aivi.color (Rgb)
 red : Rgb
 red = { a: 234, g: 0, b: 0 }"#;
     check_ok_with_embedded(source, &["aivi", "aivi.color"]);
+}
+
+#[test]
+fn typecheck_imported_unit_alias_can_be_renamed_without_clobbering_builtin_unit() {
+    let source = r#"
+@no_prelude
+module test.unit_alias_rename
+export meter, noop
+
+use aivi
+use aivi.units (Unit as MeasureUnit, defineUnit)
+
+meter : MeasureUnit
+meter = defineUnit "m" 1.0
+
+noop : Unit
+noop = Unit"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.units"]);
 }
 
 #[test]

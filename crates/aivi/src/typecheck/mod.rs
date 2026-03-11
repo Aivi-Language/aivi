@@ -48,7 +48,7 @@ use class_env::{
     collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
     expand_classes, synthesize_auto_forward_instances, ClassDeclInfo, InstanceDeclInfo,
 };
-use types::{Scheme, TypeEnv};
+use types::{AliasInfo, Kind, Scheme, TypeEnv};
 
 /// Result of per-module registration: the local type environment and collected type signatures.
 struct ModuleSetup {
@@ -59,14 +59,24 @@ struct ModuleSetup {
 #[derive(Clone, Default)]
 pub struct ModuleInterface {
     exports: HashMap<String, Vec<Scheme>>,
+    alias_exports: HashMap<String, TypeAliasSurface>,
     domain_exports: HashMap<String, Vec<String>>,
     class_exports: HashMap<String, ClassDeclInfo>,
     instance_exports: Vec<InstanceDeclInfo>,
 }
 
+#[derive(Clone)]
+struct TypeAliasSurface {
+    internal_name: String,
+    kind: Kind,
+    alias: AliasInfo,
+    opaque_origin: Option<String>,
+}
+
 #[derive(Clone, Default)]
 struct ModuleInterfaceMaps {
     module_exports: HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_alias_exports: HashMap<String, HashMap<String, TypeAliasSurface>>,
     module_domain_exports: HashMap<String, HashMap<String, Vec<String>>>,
     module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>>,
     module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>>,
@@ -76,6 +86,8 @@ impl ModuleInterfaceMaps {
     fn apply_module_interface(&mut self, module_name: &str, interface: &ModuleInterface) {
         self.module_exports
             .insert(module_name.to_string(), interface.exports.clone());
+        self.module_alias_exports
+            .insert(module_name.to_string(), interface.alias_exports.clone());
         self.module_domain_exports
             .insert(module_name.to_string(), interface.domain_exports.clone());
         self.module_class_exports
@@ -86,6 +98,7 @@ impl ModuleInterfaceMaps {
 
     fn remove_module(&mut self, module_name: &str) {
         self.module_exports.remove(module_name);
+        self.module_alias_exports.remove(module_name);
         self.module_domain_exports.remove(module_name);
         self.module_class_exports.remove(module_name);
         self.module_instance_exports.remove(module_name);
@@ -99,6 +112,7 @@ fn setup_module(
     checker: &mut TypeChecker,
     module: &Module,
     module_exports: &HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_alias_exports: &HashMap<String, HashMap<String, TypeAliasSurface>>,
     module_domain_exports: &HashMap<String, HashMap<String, Vec<String>>>,
     module_class_exports: &HashMap<String, HashMap<String, ClassDeclInfo>>,
     module_instance_exports: &HashMap<String, Vec<InstanceDeclInfo>>,
@@ -107,6 +121,7 @@ fn setup_module(
     checker.reset_module_context(module);
     let mut env = checker.builtins.clone();
     checker.register_module_types(module);
+    checker.register_imported_type_aliases(module, module_alias_exports);
     diagnostics.extend(checker.collect_type_expr_diags(module));
     let sigs = checker.collect_type_sigs(module);
     checker.register_module_constructors(module, &mut env);
@@ -157,6 +172,31 @@ fn build_module_interface(
         }
     }
 
+    let mut alias_exports = HashMap::new();
+    for export in &module.exports {
+        if export.kind == crate::surface::ScopeItemKind::Domain {
+            continue;
+        }
+        let Some(internal_name) = checker.resolve_type_alias_binding(&export.name.name) else {
+            continue;
+        };
+        let Some(kind) = checker.type_kind(internal_name).cloned() else {
+            continue;
+        };
+        let Some(alias) = checker.alias_info_for_name(internal_name).cloned() else {
+            continue;
+        };
+        alias_exports.insert(
+            export.name.name.clone(),
+            TypeAliasSurface {
+                internal_name: internal_name.to_string(),
+                kind,
+                alias,
+                opaque_origin: checker.opaque_origin_for_name(internal_name).cloned(),
+            },
+        );
+    }
+
     let mut domain_exports = HashMap::new();
     for export in &module.exports {
         if export.kind != crate::surface::ScopeItemKind::Domain {
@@ -190,6 +230,7 @@ fn build_module_interface(
 
     ModuleInterface {
         exports,
+        alias_exports,
         domain_exports,
         class_exports,
         instance_exports,

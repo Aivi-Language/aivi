@@ -23,25 +23,39 @@ signal_set_update = do Effect {
 signal_patch_operator_updates_scalar = do Effect {
   count = signal 1
 
-  assertEq (count <| (_ + 3)) Unit
+  assertEq (count <<- (_ + 3)) Unit
   assertEq (get count) 4
 }
 
 @test "signal pipe derives a new signal from the current value"
 signal_pipe_derives_from_source = do Effect {
   count   = signal 2
-  doubled = count |> (_ * 2)
+  doubled = count ->> (_ * 2)
 
   assertEq (get doubled) 4
   assertEq (set count 5) Unit
   assertEq (get doubled) 10
 }
 
+@test "signal pipe accepts placeholder and pattern lambda sugar"
+signal_pipe_accepts_placeholder_and_pattern_lambda_sugar = do Effect {
+  state          = signal { count: 1 }
+  viaPlaceholder = state ->> _.count + 1
+  viaPattern     = state ->> { count } => count + 1
+
+  assertEq (get viaPlaceholder) 2
+  assertEq (get viaPattern) 2
+
+  assertEq (state <<- { count: _ + 2 }) Unit
+  assertEq (get viaPlaceholder) 4
+  assertEq (get viaPattern) 4
+}
+
 @test "signal patch operator accepts replacement values"
 signal_patch_operator_sets_scalar = do Effect {
   count = signal 1
 
-  assertEq (count <| 9) Unit
+  assertEq (count <<- 9) Unit
   assertEq (get count) 9
 }
 
@@ -67,7 +81,7 @@ patch_updates_record_signal = do Effect {
 signal_patch_operator_updates_record_signal = do Effect {
   state = signal { count: 2, enabled: False }
 
-  assertEq (state <| (current => current <| { count: _ + 3, enabled: True })) Unit
+  assertEq (state <<- (current => current <| { count: _ + 3, enabled: True })) Unit
   assertEq (get state) { count: 5, enabled: True }
 }
 
@@ -75,7 +89,7 @@ signal_patch_operator_updates_record_signal = do Effect {
 signal_patch_operator_applies_record_patch = do Effect {
   state = signal { count: 2, enabled: False }
 
-  assertEq (state <| { count: _ + 3, enabled: True }) Unit
+  assertEq (state <<- { count: _ + 3, enabled: True }) Unit
   assertEq (get state) { count: 5, enabled: True }
 }
 
@@ -133,7 +147,7 @@ batch_groups_writes = do Effect {
 @test "chained signal pipe derives through multiple transforms"
 chained_pipe_derives_through_transforms = do Effect {
   count  = signal 3
-  result = count |> (_ * 2) |> (_ + 10)
+  result = count ->> (_ * 2) ->> (_ + 10)
 
   assertEq (get result) 16
   assertEq (set count 5) Unit
@@ -184,8 +198,8 @@ peek_inside_mapper_does_not_subscribe = do Effect {
 @test "record patch propagates through derived combineAll graph"
 record_patch_propagates_through_derived_graph = do Effect {
   state        = signal { count: 1, enabled: False }
-  count        = state |> .count
-  enabled      = state |> .enabled
+  count        = state ->> .count
+  enabled      = state ->> .enabled
   visibleCount = combineAll (count, enabled) ((count, enabled) => enabled match
     | True  => count
     | False => 0
@@ -194,7 +208,7 @@ record_patch_propagates_through_derived_graph = do Effect {
   assertEq (peek count) 1
   assertEq (peek visibleCount) 0
 
-  assertEq (state <| { count: _ + 2, enabled: True }) Unit
+  assertEq (state <<- { count: _ + 2, enabled: True }) Unit
   assertEq (peek count) 3
   assertEq (peek enabled) True
   assertEq (peek visibleCount) 3
@@ -265,10 +279,10 @@ batch_coalesces_watcher_calls = do Effect {
 @test "signal pipe with record field access"
 signal_pipe_record_field = do Effect {
   state = signal { name: "Ada", score: 10 }
-  name  = state |> .name
+  name  = state ->> .name
 
   assertEq (get name) "Ada"
-  assertEq (state <| { name: "Grace" }) Unit
+  assertEq (state <<- { name: "Grace" }) Unit
   assertEq (get name) "Grace"
 }
 

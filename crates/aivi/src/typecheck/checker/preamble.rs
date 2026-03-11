@@ -20,6 +20,8 @@ pub(super) struct TypeChecker {
     pub(super) var_names: HashMap<TypeVarId, String>,
     pub(super) type_constructors: HashMap<String, Kind>,
     aliases: HashMap<String, AliasInfo>,
+    type_alias_bindings: HashMap<String, String>,
+    type_alias_display_names: HashMap<String, String>,
     pub(super) builtin_types: HashMap<String, Kind>,
     pub(super) builtins: TypeEnv,
     global_type_constructors: HashMap<String, Kind>,
@@ -69,6 +71,8 @@ impl TypeChecker {
             var_names: HashMap::new(),
             type_constructors: HashMap::new(),
             aliases: HashMap::new(),
+            type_alias_bindings: HashMap::new(),
+            type_alias_display_names: HashMap::new(),
             builtin_types: HashMap::new(),
             builtins: TypeEnv::default(),
             global_type_constructors: HashMap::new(),
@@ -116,6 +120,8 @@ impl TypeChecker {
         self.var_names.clear();
         self.type_constructors = self.builtin_type_constructors();
         self.aliases.clear();
+        self.type_alias_bindings.clear();
+        self.type_alias_display_names.clear();
         self.register_builtin_aliases();
         self.type_constructors
             .extend(self.global_type_constructors.clone());
@@ -234,6 +240,22 @@ impl TypeChecker {
                 (span, rendered)
             })
             .collect()
+    }
+
+    pub(super) fn resolve_type_alias_binding(&self, name: &str) -> Option<&str> {
+        self.type_alias_bindings.get(name).map(|s| s.as_str())
+    }
+
+    pub(super) fn type_kind(&self, name: &str) -> Option<&Kind> {
+        self.type_constructors.get(name)
+    }
+
+    pub(super) fn alias_info_for_name(&self, name: &str) -> Option<&AliasInfo> {
+        self.aliases.get(name)
+    }
+
+    pub(super) fn opaque_origin_for_name(&self, name: &str) -> Option<&String> {
+        self.opaque_types.get(name)
     }
 
     pub(super) fn scheme_to_string(&mut self, scheme: &Scheme) -> String {

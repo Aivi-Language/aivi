@@ -100,13 +100,11 @@ impl TypeChecker {
         }
         if op == "|>" {
             let arg_ty = self.infer_expr(left, env)?;
-            if let Some(signal_item_ty) = self.extract_signal_item_type(arg_ty.clone()) {
-                return self.infer_signal_pipe_result(left, right, signal_item_ty, env);
-            }
+            let right = self.normalize_pipe_transformer(right);
             // Special case: if the RHS is a partially-applied class method call, collect all
             // arguments including the piped LHS value so instance dispatch sees the full picture.
             // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
-            if let Expr::Call { func, args: partial_args, .. } = right {
+            if let Expr::Call { func, args: partial_args, .. } = &right {
                 if let Expr::Ident(name) = func.as_ref() {
                     if debug_pipe {
                         eprintln!("[PIPE_DEBUG] |> right=Call({}) in_env={} in_methods={}", name.name, env.get(&name.name).is_some(), self.method_to_classes.contains_key(&name.name));
@@ -114,34 +112,40 @@ impl TypeChecker {
                     if env.get(&name.name).is_none()
                         && self.method_to_classes.contains_key(&name.name)
                     {
-                        let mut all_args: Vec<Expr> = partial_args.to_vec();
+                        let mut all_args: Vec<Expr> = partial_args.clone();
                         all_args.push(left.clone());
                         return self.infer_method_call(name, &all_args, None, env);
                     }
                 }
             }
-            let func_ty = self.infer_expr(right, env)?;
-            self.validate_query_pipe_transformer(right, &arg_ty, env)?;
+            let func_ty = self.infer_expr(&right, env)?;
+            self.validate_query_pipe_transformer(&right, &arg_ty, env)?;
             let result_ty = self.fresh_var();
             self.unify_with_span(
                 func_ty,
                 Type::Func(Box::new(arg_ty), Box::new(result_ty.clone())),
-                expr_span(right),
+                expr_span(&right),
             )?;
             return Ok(result_ty);
         }
+        if op == "->>" {
+            let arg_ty = self.infer_expr(left, env)?;
+            let right = self.normalize_pipe_transformer(right);
+            if let Some(signal_item_ty) = self.extract_signal_item_type(arg_ty.clone()) {
+                return self.infer_signal_pipe_result(left, &right, signal_item_ty, env);
+            }
+            return Err(TypeError {
+                span: expr_span(left),
+                message: format!(
+                    "the `->>` operator requires a `Signal` on the left-hand side, but found `{}`",
+                    self.type_to_string(&arg_ty)
+                ),
+                expected: None,
+                found: None,
+            });
+        }
         if op == "<|" {
             let target_ty = self.infer_expr(left, env)?;
-            if let Some(signal_item_ty) = self.extract_signal_item_type(target_ty.clone()) {
-                if let Expr::Record { fields, .. } = right {
-                    self.infer_patch(signal_item_ty, fields, env)?;
-                    return Ok(Type::con("Unit"));
-                }
-                match self.infer_signal_write_kind(right, &signal_item_ty, env)? {
-                    SignalWriteKind::Set | SignalWriteKind::Update => {}
-                }
-                return Ok(Type::con("Unit"));
-            }
             let applied_target_ty = self.apply(target_ty.clone());
             let resolved = self.expand_alias(applied_target_ty);
             if let Some(type_name) = self.opaque_con_name(&resolved) {
@@ -160,6 +164,28 @@ impl TypeChecker {
             if let Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } = right {
                 return self.infer_patch(target_ty, fields, env);
             }
+        }
+        if op == "<<-" {
+            let target_ty = self.infer_expr(left, env)?;
+            if let Some(signal_item_ty) = self.extract_signal_item_type(target_ty.clone()) {
+                if let Expr::Record { fields, .. } = right {
+                    self.infer_patch(signal_item_ty, fields, env)?;
+                    return Ok(Type::con("Unit"));
+                }
+                match self.infer_signal_write_kind(right, &signal_item_ty, env)? {
+                    SignalWriteKind::Set | SignalWriteKind::Update => {}
+                }
+                return Ok(Type::con("Unit"));
+            }
+            return Err(TypeError {
+                span: expr_span(left),
+                message: format!(
+                    "the `<<-` operator requires a `Signal` on the left-hand side, but found `{}`",
+                    self.type_to_string(&target_ty)
+                ),
+                expected: None,
+                found: None,
+            });
         }
 
         let _subst_before_operands = self.subst.clone();

@@ -80,20 +80,20 @@ advanceSnake = snake food score seed newHead => {
   (newFood, newSd) = if ate then placeFood (seed + score * 7 + nx * 13 + ny) newSnake else (food, seed)
 
   batch (_ => {
-      snakeState <| newSnake
-      _ = if ate then foodState <| newFood else Unit
-      _ = if ate then scoreState <| (_ + 1) else Unit
-      if ate then seedState <| newSd else Unit
+      snakeState <<- newSnake
+      _ = if ate then foodState <<- newFood else Unit
+      _ = if ate then scoreState <<- (_ + 1) else Unit
+      if ate then seedState <<- newSd else Unit
   })
 }
 
 restartGame = _ => batch (_ => {
-    snakeState <| initial.snake
-    foodState <| initial.food
-    dirState <| initial.dir
-    scoreState <| initial.score
-    seedState <| initial.seed
-    modeState <| initial.mode
+    snakeState <<- initial.snake
+    foodState <<- initial.food
+    dirState <<- initial.dir
+    scoreState <<- initial.score
+    seedState <<- initial.seed
+    modeState <<- initial.mode
 })
 
 directionFromKey : Text -> Option Direction
@@ -132,7 +132,7 @@ statusLabel = derive modeState renderStatusLabel
 board       = combineAll (snakeState, foodState) ((snake, food) => boardRows snake food)
 scoreLabel  = combineAll (scoreState, snakeState) ((score, snake) => renderScoreLabel score snake)
 
-togglePause = _ => modeState <| (mode => mode match
+togglePause = _ => modeState <<- (mode => mode match
   | Running  => Paused
   | Paused   => Running
   | GameOver => GameOver
@@ -145,8 +145,8 @@ steer = nextDir => {
   if currentMode == GameOver then Unit
   else {
     safeDir = if nextDir == opposite currentDir then currentDir else nextDir
-    if currentDir != safeDir then dirState <| safeDir else Unit
-    if currentMode != Running then modeState <| Running else Unit
+    if currentDir != safeDir then dirState <<- safeDir else Unit
+    if currentMode != Running then modeState <<- Running else Unit
   }
 }
 
@@ -177,7 +177,7 @@ tickGame = _ => {
     (head, body) = snakeParts snake
     newHead      = move head dir
 
-    if outOfBounds newHead || containsPixel newHead body then modeState <| GameOver
+    if outOfBounds newHead || containsPixel newHead body then modeState <<- GameOver
     else advanceSnake snake food score seed newHead
   }
 }
