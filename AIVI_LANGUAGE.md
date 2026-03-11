@@ -505,7 +505,7 @@ result = user <| p
 
 ## 9 Blocks
 
-AIVI has four block forms, each introduced by a keyword and delimited with `{ ... }`: `generate`, `do M`, `resource`, and plain `{ ... }` (pure computation). The first three are described below; `resource` is covered in §11.
+AIVI's core block families are `generate`, `do ...`, `resource`, and plain `{ ... }` (pure computation). The `do` family includes `do Effect`, generic `do M`, `do Applicative`, and the event-handle sugar `do Event`. The most common forms are summarized below; `resource` is covered in §11.
 
 ### `generate { ... }` - Pure sequences
 
@@ -680,6 +680,28 @@ contactValidation = model => do Applicative {
 - `=` still introduces a pure local.
 - Non-final bare expression statements are not allowed.
 - The final line is a plain result value; the compiler lifts it for you.
+
+### `do Event { ... }` - Event handles with reactive lifecycle
+
+`do Event { ... }` is the signal-first convenience form for event handles. It is equivalent to `event (do Effect { ... })`, but it reads better in UI code and makes the event-handle intent explicit.
+
+```aivi
+saveDraft = do Event {
+  persistDraft (get draft)
+  pure "Saved"
+}
+
+saveMessage = saveDraft.result |> (maybeText =>
+  maybeText match
+    | Some text => text
+    | None      => ""
+)
+```
+
+- Inside the body, the same statement rules as `do Effect { ... }` apply.
+- The resulting event handle exposes reactive lifecycle fields: `result`, `error`, `done`, and `running`.
+- GTK callback attrs can accept either ordinary runtime functions or an `Event` handle directly.
+- The lower-level equivalent remains `event (do Effect { ... })`.
 
 ---
 
@@ -1016,7 +1038,7 @@ Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`htt
 
 ### Source pipeline helpers
 
-Phase 3 adds pure source-pipeline combinators around the declaration:
+The broader source-composition model adds pure source-pipeline combinators around the declaration. Today, the verified runtime subset is `source.transform` and `source.validate`:
 
 ```aivi
 nonEmpty : List A -> Validation (List DecodeError) (List A)
@@ -1040,7 +1062,7 @@ validatedUsers =
 - `source.transform` is for pure normalization after decode.
 - `source.validate` is for semantic rejection that should surface as `DecodeError`.
 - `source.decodeErrors : SourceError K -> List DecodeError` extracts structured schema/validation mismatches (`IOError` becomes `[]`).
-- The wider Phase 3 composition model adds canonical retry/timeout/cache/provenance stages around `load`; see `specs/syntax/external_sources/composition.md` for the stage order and policy semantics.
+- The broader composition model also specifies canonical retry/timeout/cache/provenance stages around `load`; see `specs/syntax/external_sources/composition.md` for the stage order and policy semantics.
 
 Compatibility forms like `file.json "./users.json"` and `env.decode "AIVI_APP"` still work, but the record forms above are the preferred public surface because tooling can describe the schema contract before `load`.
 
@@ -1179,10 +1201,10 @@ GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gs
 // Shorthand (preferred)
 state = signal { count: 0 }
 title = state |> (s => "Count {s.count}")
-saveCounter = event (do Effect {
+saveCounter = do Event {
   current = get state
   persistCount current.count
-})
+}
 inc = _ => state <| { count: _ + 1 }
 
 view = ~<gtk>
@@ -1218,7 +1240,7 @@ tick <| (_ + 1)
 tick <| 0
 ```
 
-Event attrs accept either runtime functions or event-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles are created with `do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`.
+Event attrs accept either runtime functions or event-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles are commonly created with `do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`. The lower-level equivalent is `event (do Effect { ... })`.
 
 GTK sigils also support signal sugar in v0.1:
 
@@ -1255,13 +1277,15 @@ GtkSignalEvent =
 For custom integrations and library code, consume raw events via `signalStream` (preferred) or `signalPoll`:
 
 ```aivi
+use aivi.concurrency
+
 events <- signalStream {}
 concurrency.forEach events (event =>
   event match
     | GtkClicked _ _          => handleSave
     | GtkInputChanged _ _ txt => handleInput txt
     | GtkToggled _ _ active   => handleToggle active
-    | _                       => yield {}
+    | _                       => pure Unit
 )
 ```
 
@@ -1312,9 +1336,9 @@ Function-call tags do not use component record lowering, cannot mix positional a
 
 Compile-time metadata only. No user-defined decorators.
 
-| Decorator                                      | Purpose                                   |
-|:---------------------------------------------- |:----------------------------------------- |
-| `@test "desc"`                                 | Mark as test case (mandatory description) |
+| Decorator                                      | Purpose                                                |
+|:---------------------------------------------- |:------------------------------------------------------ |
+| `@test "desc"` / `@test`                       | Mark a top-level test, or tag a module as test metadata |
 | `@static`                                      | Embed at compile time                     |
 | `@native "mod.fn"`                             | Bind typed def to runtime/native path     |
 | `@native "crate::path::fn"`                    | Bridge to Rust crate function (AOT only)  |
@@ -1323,6 +1347,8 @@ Compile-time metadata only. No user-defined decorators.
 | `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
 `@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`, `type.jsonSchema TypeName`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable. `type.jsonSchema` produces an embedded OpenAI-compatible JSON Schema value; render it with `toText` when a downstream API expects JSON text.
+
+At definition level, `@test` requires a description string. At module level, bare `@test` is metadata only and does not itself create a runnable test.
 
 Unknown decorators are compile errors.
 `@native` is only valid on top-level definitions and requires an explicit type signature. No dummy body is needed — the compiler auto-generates the def from the type signature. Runtime natives use `.` paths (`"mod.fn"`); crate natives use `::` paths (`"crate::fn"`) and require `aivi build`.
@@ -1604,7 +1630,7 @@ topoSmoke = do Effect {
 | Check Result state           | `isOk res`, `isErr res`                                                 |
 | Transform Option             | `opt \|> map f \|> filter pred \|> chain g`                             |
 | Transform Result             | `res \|> map f \|> mapErr g \|> chain h`                                |
-| Accumulate errors            | `ap (ap (Valid f) v1) v2` (Validation applicative)                      |
+| Accumulate errors            | `do Applicative { x <- v1; y <- v2; f x y }`                           |
 | GTK form field state         | `use aivi.ui.forms; field ""`, `setValue txt field`, `touch field`      |
 | Check Validation state       | `isValid v`, `isInvalid v`                                              |
 | Validation to Result         | `v \|> toResult`                                                        |
@@ -1622,7 +1648,7 @@ topoSmoke = do Effect {
 | Build a sequence             | `generate { x <- src; x -> pred; yield f x }`                           |
 | Infinite sequence            | `generate { loop s = init => { yield s; recurse (next s) } }`           |
 | Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
-| Write a test                 | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }`        |
+| Write a test                 | `@test "adds correctly"`<br>`myTest = do Effect { assertEq (f 1) 2 }`   |
 | Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                  |
 | Bitwise AND                  | `use aivi.bits; and a b`                                                |
 | Shift bits right             | `use aivi.bits; b \|> shiftRight 8`                                     |
@@ -1645,24 +1671,30 @@ aivi repl --no-color # disable ANSI colour
 
 - Type any AIVI expression or definition and press Enter to evaluate.
 - Successful expressions show their runtime value together with the inferred type, for example `4 :: Int`.
-- Use Shift+Enter for multi-line input; Ctrl+D (on empty input) to exit.
+- Top-level effect expressions autorun by default, so inputs like `print "hi"` execute immediately; use `/autorun off` to keep them inert values.
+- Use Shift+Enter for multi-line input; Ctrl+C cancels the current input; Ctrl+D (on empty input) exits.
 - Ctrl+L clears the transcript. When you start with `/`, the TUI suggests matching slash commands; use `↑` / `↓` to move, `Tab` to accept, or let Tab toggle the symbol pane when no suggestion is shown.
 
 **Key slash commands**
 
 | Command | What it does |
 | --- | --- |
-| `/help` | Print all commands |
-| `/use aivi.text` | Add a module import for this session |
-| `/types`, `/values`, `/functions`, `/modules` | Browse symbols in scope |
-| `/history [n]` | Show the last n inputs |
-| `/load path/to/file.aivi` | Load a file into the session |
+| `/help` | Print command reference |
+| `/explain <name>` | Show quick info, the best available signature, and the module where that symbol lives |
+| `/use <module.path>` | Add a module import for this session |
+| `/types [filter]` | List types in scope |
+| `/values [filter]` | List session-defined values with their inferred types |
+| `/functions [filter]` | List functions in scope with their module names |
+| `/autorun [on\|off]` | Toggle whether top-level effect expressions execute automatically |
+| `/modules` | Show loaded modules in the session |
+| `/history [n]` | Show the last `n` inputs |
+| `/load <path>` | Load a file into the session |
 | `/clear` | Clear transcript (keep definitions) |
 | `/reset` | Clear transcript and all session state |
-| `/openapi file spec.yaml [as petstore]` | Inject OpenAPI spec file as a typed module |
-| `/openapi url https://... [as petstore]` | Inject OpenAPI spec from URL as a typed module |
+| `/openapi file <path> [as <name>]` | Inject an OpenAPI spec file as a typed module |
+| `/openapi url <url> [as <name>]` | Inject an OpenAPI spec from URL as a typed module |
 
-The `/openapi` commands inject `@static`-style bindings (typed per the OpenAPI schema) so you can call the API's operations immediately. The module name defaults to a slug of the spec's `info.title`; pass `as <name>` to override it.
+The `/openapi` commands inject `@static`-style bindings (typed per the OpenAPI schema) so you can call the API's operations immediately. The module name defaults to a slug of the spec's `info.title`; pass `as <name>` to override it. `/explain` accepts a function, value, type, or module name and prints the indexed quick-info text together with the best available signature and module name.
 
 ---
 

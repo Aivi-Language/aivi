@@ -242,6 +242,21 @@ mod bridge {
         aivi_gtk4::set_ui_debug_request_handler(Some(handler));
     }
 
+    fn install_main_loop_tick_handler(ctx: Arc<RuntimeContext>) {
+        let handler: Arc<aivi_gtk4::MainLoopTickHandler> = Arc::new(move || {
+            let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+            runtime
+                .reactive_flush_deferred()
+                .map_err(|err| aivi_gtk4::Gtk4Error::new(format_runtime_error(err)))
+        });
+        aivi_gtk4::set_main_loop_tick_handler(Some(handler));
+    }
+
+    fn install_gtk_runtime_hooks(ctx: Arc<RuntimeContext>) {
+        install_ui_debug_request_handler(ctx.clone());
+        install_main_loop_tick_handler(ctx);
+    }
+
     fn serialize_signal_value(val: &Value) -> String {
         match val {
             Value::Text(t) => t.clone(),
@@ -459,6 +474,15 @@ mod bridge {
                 }
             }
             "sensitive" => {
+                let flag = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
+                    context: format!("gtk4 live binding {class_name}.{property}"),
+                    expected: "Bool".to_string(),
+                    got: value.to_string(),
+                })?;
+                aivi_gtk4::widget_set_bool_property(widget_id, property, flag)
+                    .map_err(gtk4_err_to_runtime)
+            }
+            "collapsed" | "show-sidebar" if class_name == "AdwOverlaySplitView" => {
                 let flag = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
                     context: format!("gtk4 live binding {class_name}.{property}"),
                     expected: "Bool".to_string(),
@@ -1066,7 +1090,7 @@ mod bridge {
         fields.insert("init".to_string(), builtin("gtk4.init", 1, |mut args, _| {
             match args.remove(0) { Value::Unit => {} _ => return Err(invalid("gtk4.init expects Unit")) }
             Ok(effect(move |runtime| {
-                install_ui_debug_request_handler(runtime.ctx.clone());
+                install_gtk_runtime_hooks(runtime.ctx.clone());
                 aivi_gtk4::init().map_err(gtk4_err_to_runtime)?;
                 Ok(Value::Unit)
             }))
@@ -1076,7 +1100,7 @@ mod bridge {
         fields.insert("appNew".to_string(), builtin("gtk4.appNew", 1, |mut args, _| {
             let id = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("gtk4.appNew expects Text")) };
             Ok(effect(move |runtime| {
-                install_ui_debug_request_handler(runtime.ctx.clone());
+                install_gtk_runtime_hooks(runtime.ctx.clone());
                 let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?;
                 Ok(Value::Int(r))
             }))
@@ -1792,6 +1816,82 @@ mod tests {
     }
 
     #[test]
+    fn runtime_handler_callback_flushes_live_binding_updates_on_main_thread_tick() {
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let text = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text("before".to_string())),
+            "create source text",
+        );
+        let derived = ok_or_panic(
+            runtime.reactive_derive_signal(
+                text.clone(),
+                builtin("test.deriveEntryText", 1, |mut args, _| Ok(args.remove(0))),
+            ),
+            "derive entry text",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkEntry".to_string(),
+                },
+                ResolvedGtkAttr::Id("entry".to_string()),
+                ResolvedGtkAttr::BoundProp {
+                    name: "text".to_string(),
+                    value: derived,
+                },
+            ],
+            children: Vec::new(),
+        };
+
+        let result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build entry");
+        let entry_id = *result
+            .named_widgets
+            .get("entry")
+            .expect("entry widget should be named");
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read initial entry text: {}", err.message)),
+            "before"
+        );
+
+        let text_for_handler = text.clone();
+        let handler = builtin("test.gtkRuntimeHandlerDeferred", 1, move |mut args, runtime| {
+            let _event = args.remove(0);
+            runtime.reactive_set_signal(text_for_handler.clone(), Value::Text("after".to_string()))
+        });
+        let handler_ctx = ctx.clone();
+        std::thread::spawn(move || {
+            ok_or_panic(
+                execute_runtime_handler(handler_ctx, handler, clicked_event()),
+                "run deferred handler",
+            );
+        })
+        .join()
+        .expect("runtime handler thread should not panic");
+
+        match ok_or_panic(runtime.reactive_get_signal(text), "read updated source text") {
+            Value::Text(value) => assert_eq!(value, "after"),
+            other => panic!("expected updated Text, got {other:?}"),
+        }
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read stale entry text: {}", err.message)),
+            "before"
+        );
+
+        ok_or_panic(runtime.reactive_flush_deferred(), "flush deferred bindings");
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read flushed entry text: {}", err.message)),
+            "after"
+        );
+    }
+
+    #[test]
     fn runtime_event_handle_runs_shared_effect() {
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
@@ -1968,6 +2068,54 @@ mod tests {
         assert!(
             aivi_gtk4::widget_get_bool_property(entry_id, "visible")
                 .unwrap_or_else(|err| panic!("read visible: {}", err.message))
+        );
+    }
+
+    #[test]
+    fn live_split_view_show_sidebar_updates_from_signal_write() {
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        let show_sidebar = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create split view signal",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwOverlaySplitView".to_string(),
+                },
+                ResolvedGtkAttr::Id("split-view".to_string()),
+                ResolvedGtkAttr::BoundProp {
+                    name: "show-sidebar".to_string(),
+                    value: show_sidebar.clone(),
+                },
+            ],
+            children: Vec::new(),
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build split view",
+        );
+        let split_view_id = *result
+            .named_widgets
+            .get("split-view")
+            .expect("split view widget should be named");
+        assert!(
+            !aivi_gtk4::widget_get_bool_property(split_view_id, "show-sidebar")
+                .unwrap_or_else(|err| panic!("read initial show-sidebar: {}", err.message))
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(show_sidebar, Value::Bool(true)),
+            "set show-sidebar",
+        );
+        assert!(
+            aivi_gtk4::widget_get_bool_property(split_view_id, "show-sidebar")
+                .unwrap_or_else(|err| panic!("read updated show-sidebar: {}", err.message))
         );
     }
 
