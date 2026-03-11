@@ -655,7 +655,7 @@ impl TypeChecker {
 
         let is_vnode = matches!(
             expected_applied,
-            Type::Con(ref name, ref args) if name == "VNode" && args.len() == 1
+            Type::Con(ref name, ref args) if self.type_name_matches(name, "VNode") && args.len() == 1
         );
         if is_vnode {
             // Coerce into a `VNode` via `TextNode`, either directly from `Text`

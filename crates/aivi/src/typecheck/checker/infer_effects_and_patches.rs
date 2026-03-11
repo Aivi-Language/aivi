@@ -552,14 +552,16 @@ impl TypeChecker {
         let effect_ty = self.infer_effect_block(items, env)?;
         // effect_ty is Effect E A; extract E and A to produce EventHandle E A
         match effect_ty {
-            Type::Con(ref name, ref args) if name == "Effect" && args.len() == 2 => {
-                Ok(Type::con("EventHandle").app(vec![args[0].clone(), args[1].clone()]))
+            Type::Con(ref name, ref args) if self.type_name_matches(name, "Effect") && args.len() == 2 => {
+                Ok(self
+                    .named_type("EventHandle")
+                    .app(vec![args[0].clone(), args[1].clone()]))
             }
             _ => {
                 // Fallback: create fresh vars
                 let err_ty = self.fresh_var();
                 let result_ty = self.fresh_var();
-                Ok(Type::con("EventHandle").app(vec![err_ty, result_ty]))
+                Ok(self.named_type("EventHandle").app(vec![err_ty, result_ty]))
             }
         }
     }
