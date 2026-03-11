@@ -27,37 +27,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn hover_on_operator_works() {
-        let text = r#"@no_prelude
-module repro
-
-add = x y => x + y
-"#;
-        let uri = sample_uri();
-        // Hover on '+'
-        let position = position_for(text, "+ y");
-
-        // This is expected to FAIL currently because '+' is not extracted as an identifier
-        let doc_index = DocIndex::default();
-        let hover = Backend::build_hover(text, &uri, position, &doc_index);
-
-        if let Some(hover) = hover {
-            let HoverContents::Markup(_markup) = hover.contents else {
-                panic!("expected markup hover");
-            };
-            // If it succeeds (after fix), it should show something about '+'
-            // For now, if it returns None, that confirms the bug.
-            // But wait, '+' might not have a type signature in this snippet if it's not defined or imported.
-            // Let's use a defined operator.
-        } else {
-            // Test passes if it fails to find hover (currently confirming the bug)
-            // But we want a fail-fail test to become pass-pass.
-            panic!("Hover failed to find anything for '+' operator");
-        }
-    }
-
-    #[test]
     fn hover_on_defined_operator_works() {
         let text = r#"@no_prelude
 module repro

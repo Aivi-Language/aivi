@@ -624,26 +624,3 @@ view = state =>
         assert_eq!(out1, out2, "formatting should be idempotent");
     }
 }
-
-#[cfg(test)]
-mod bench {
-    use super::*;
-    #[test]
-    #[ignore = "benchmark: requires /tmp/mailfox_main.aivi"]
-    fn bench_format_large_file() {
-        let content = std::fs::read_to_string("/tmp/mailfox_main.aivi")
-            .expect("/tmp/mailfox_main.aivi must exist for this benchmark");
-        let start = std::time::Instant::now();
-        let n = 200u32;
-        for _ in 0..n {
-            let _ = format_text(&content);
-        }
-        let elapsed = start.elapsed();
-        eprintln!(
-            "bench: {} iters in {:?} = {:?}/iter",
-            n,
-            elapsed,
-            elapsed / n
-        );
-    }
-}
