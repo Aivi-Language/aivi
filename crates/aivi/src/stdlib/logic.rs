@@ -291,6 +291,26 @@ instance Alternative (Result E A) = {
     | Err _ => fallback
 }
 
+// Validation
+
+instance Functor (Validation E A) = {
+  map: f value => value match
+    | Valid a   => Valid (f a)
+    | Invalid e => Invalid e
+}
+
+instance Apply (Validation (List E) A) = {
+  ap: vf va => (vf, va) match
+    | (Valid f, Valid a)        => Valid (f a)
+    | (Invalid e1, Invalid e2)  => Invalid (e1 ++ e2)
+    | (Invalid e, _)            => Invalid e
+    | (_, Invalid e)            => Invalid e
+}
+
+instance Applicative (Validation (List E) A) = {
+  of: Valid
+}
+
 // Map
 
 instance Functor (Map K V) = {

@@ -223,6 +223,161 @@ pub(crate) fn register_builtins(env: &Env) {
     );
 
     env.set(
+        "ap".to_string(),
+        builtin("ap", 2, |mut args, runtime| {
+            let value_container = args.pop().unwrap();
+            let func_container = args.pop().unwrap();
+            match (func_container, value_container) {
+                (
+                    Value::List(funcs),
+                    Value::List(values),
+                ) => {
+                    let mut out = Vec::new();
+                    for func in funcs.iter() {
+                        for value in values.iter().cloned() {
+                            out.push(runtime.apply(func.clone(), value)?);
+                        }
+                    }
+                    Ok(Value::List(Arc::new(out)))
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if f_name == "Some"
+                    && f_args.len() == 1
+                    && x_name == "Some"
+                    && x_args.len() == 1 =>
+                {
+                    let applied = runtime.apply(f_args[0].clone(), x_args[0].clone())?;
+                    Ok(Value::Constructor {
+                        name: "Some".to_string(),
+                        args: vec![applied],
+                    })
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if f_name == "None"
+                    && f_args.is_empty()
+                    && (x_name == "None" || x_name == "Some") =>
+                {
+                    Ok(Value::Constructor {
+                        name: "None".to_string(),
+                        args: Vec::new(),
+                    })
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if x_name == "None"
+                    && x_args.is_empty()
+                    && (f_name == "None" || f_name == "Some") =>
+                {
+                    Ok(Value::Constructor {
+                        name: "None".to_string(),
+                        args: Vec::new(),
+                    })
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if f_name == "Ok"
+                    && f_args.len() == 1
+                    && x_name == "Ok"
+                    && x_args.len() == 1 =>
+                {
+                    let applied = runtime.apply(f_args[0].clone(), x_args[0].clone())?;
+                    Ok(Value::Constructor {
+                        name: "Ok".to_string(),
+                        args: vec![applied],
+                    })
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: _, args: _ },
+                ) if f_name == "Err" && f_args.len() == 1 => {
+                    Ok(Value::Constructor {
+                        name: "Err".to_string(),
+                        args: f_args,
+                    })
+                }
+                (
+                    Value::Constructor { name: _, args: _ },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if x_name == "Err" && x_args.len() == 1 => {
+                    Ok(Value::Constructor {
+                        name: "Err".to_string(),
+                        args: x_args,
+                    })
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if f_name == "Valid"
+                    && f_args.len() == 1
+                    && x_name == "Valid"
+                    && x_args.len() == 1 =>
+                {
+                    let applied = runtime.apply(f_args[0].clone(), x_args[0].clone())?;
+                    Ok(Value::Constructor {
+                        name: "Valid".to_string(),
+                        args: vec![applied],
+                    })
+                }
+                (
+                    Value::Constructor { name: f_name, args: mut f_args },
+                    Value::Constructor { name: x_name, args: mut x_args },
+                ) if f_name == "Invalid"
+                    && f_args.len() == 1
+                    && x_name == "Invalid"
+                    && x_args.len() == 1 =>
+                {
+                    let left = f_args.pop().unwrap();
+                    let right = x_args.pop().unwrap();
+                    match (left, right) {
+                        (Value::List(left_items), Value::List(right_items)) => {
+                            let mut merged = (*left_items).clone();
+                            merged.extend(right_items.iter().cloned());
+                            Ok(Value::Constructor {
+                                name: "Invalid".to_string(),
+                                args: vec![Value::List(Arc::new(merged))],
+                            })
+                        }
+                        (left, right) => Err(RuntimeError::Message(format!(
+                            "ap on Validation expects list errors when both sides are Invalid, got {} and {}",
+                            format_value(&left),
+                            format_value(&right)
+                        ))),
+                    }
+                }
+                (
+                    Value::Constructor { name: f_name, args: f_args },
+                    Value::Constructor { name: _, args: _ },
+                ) if f_name == "Invalid" && f_args.len() == 1 => {
+                    Ok(Value::Constructor {
+                        name: "Invalid".to_string(),
+                        args: f_args,
+                    })
+                }
+                (
+                    Value::Constructor { name: _, args: _ },
+                    Value::Constructor { name: x_name, args: x_args },
+                ) if x_name == "Invalid" && x_args.len() == 1 => {
+                    Ok(Value::Constructor {
+                        name: "Invalid".to_string(),
+                        args: x_args,
+                    })
+                }
+                (func_container, value_container) => Err(RuntimeError::Message(format!(
+                    "ap expects List/Option/Result/Validation, got {} and {}",
+                    format_value(&func_container),
+                    format_value(&value_container)
+                ))),
+            }
+        }),
+    );
+
+    env.set(
         "assertEq".to_string(),
         builtin("assertEq", 2, |mut args, _| {
             let right = args.pop().unwrap();

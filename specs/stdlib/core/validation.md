@@ -53,20 +53,22 @@ ok |> map (_ + 1)
 ```
 :::
 
-## 2. Combining validations with `ap`
+## 2. Combining validations with `do Applicative`
 
-In everyday AIVI code, the main combination helper is `ap` (the `Applicative` combination operator from [`aivi.logic`](logic.md)):
+In everyday AIVI code, the nicest way to combine independent checks is `do Applicative { ... }`:
 
 <<< ../../snippets/from_md/stdlib/core/validation/block_01.aivi{aivi}
 
 
 That signature is why the most common shape is `Validation (List E) A`: each failed check contributes a list of errors, and `ap` appends the lists when more than one check fails.
-If you want the typeclass background, this is the practical `Validation` version of [`Applicative`](logic.md#applicative) combination, and the list of errors is the [`Semigroup`](logic.md#semigroup) that makes accumulation possible.
+Inside `do Applicative`, every `<-` binding is independent. The compiler rewrites the block into the same `map`/`ap` composition you would otherwise write by hand. The final line is a plain result expression, not an already-wrapped `Validation`.
 
 <<< ../../snippets/from_md/stdlib/core/validation/block_02.aivi{aivi}
 
 
 Here, `result` is `Invalid ["Name is required", "Age must be non-negative"]`.
+
+If you prefer the fully explicit form, `do Applicative` is just sugar for the corresponding `map`/`ap` chain. The library still exports `ap`, and that is what the compiler ultimately uses.
 
 ## 3. Creating validations
 

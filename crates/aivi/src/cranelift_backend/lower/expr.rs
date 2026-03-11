@@ -2,6 +2,31 @@ impl<'a, M: Module> LowerCtx<'a, M> {
 // Expression lowering methods for `LowerCtx`.
 // Included inside `impl<'a, M: Module> LowerCtx<'a, M>` via `include!()`.
 
+    fn is_hkt_bundle_name(name: &str) -> bool {
+        let bare = name.rsplit('.').next().unwrap_or(name);
+        matches!(
+            bare,
+            "map"
+                | "ap"
+                | "of"
+                | "chain"
+                | "reduce"
+                | "traverse"
+                | "filter"
+                | "alt"
+                | "bimap"
+                | "promap"
+                | "compose"
+                | "id"
+                | "equals"
+                | "lte"
+                | "concat"
+                | "empty"
+                | "invert"
+                | "zero"
+        )
+    }
+
     /// Lower a `RustIrExpr` to a typed Cranelift value.
     pub(crate) fn lower_expr(
         &mut self,
@@ -340,7 +365,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             };
             let maybe_info = self.jit_funcs.get(resolved.as_str()).cloned();
             if let Some(info) = maybe_info {
-                if info.arity == 1 {
+                if info.arity == 1 && !Self::is_hkt_bundle_name(resolved.as_str()) {
                     // Try specialization routing
                     let maybe_specs = self.spec_map.get(resolved.as_str()).cloned();
                     if let Some(spec_names) = maybe_specs {
@@ -391,7 +416,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             };
             let maybe_info = self.jit_funcs.get(resolved.as_str()).cloned();
             if let Some(info) = maybe_info {
-                if info.arity == args.len() {
+                if info.arity == args.len() && !Self::is_hkt_bundle_name(resolved.as_str()) {
                     // Try specialization routing: lower args first to get types,
                     // then check for a matching specialization.
                     let maybe_specs = self.spec_map.get(resolved.as_str()).cloned();

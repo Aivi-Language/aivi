@@ -1,0 +1,37 @@
+@no_prelude
+module integrationTests.syntax.effects.doApplicativeBlock
+
+use aivi
+use aivi.prelude
+use aivi.testing
+
+@test "do applicative option combines independent inputs"
+doApplicativeOptionWorks = do Effect {
+  result = do Applicative {
+    left  <- Some 10
+    right <- Some 20
+    left + right
+  }
+  assertEq result (Some 30)
+}
+
+@test "do applicative supports pure lets between binds"
+doApplicativeLetsWork = do Effect {
+  result = do Applicative {
+    first <- Some 10
+    doubled = first * 2
+    second <- Some 3
+    doubled + second
+  }
+  assertEq result (Some 23)
+}
+
+@test "do applicative list is cartesian"
+doApplicativeListWorks = do Effect {
+  result = do Applicative {
+    x <- [1, 2]
+    y <- [10, 20]
+    x + y
+  }
+  assertEq result [11, 21, 12, 22]
+}

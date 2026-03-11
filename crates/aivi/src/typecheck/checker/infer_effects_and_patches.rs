@@ -1,4 +1,415 @@
 impl TypeChecker {
+    fn collect_applicative_pattern_binders(pattern: &Pattern, out: &mut Vec<String>) {
+        match pattern {
+            Pattern::Wildcard(_) | Pattern::Literal(_) => {}
+            Pattern::Ident(name) | Pattern::SubjectIdent(name) => out.push(name.name.clone()),
+            Pattern::At { name, pattern, .. } => {
+                out.push(name.name.clone());
+                Self::collect_applicative_pattern_binders(pattern, out);
+            }
+            Pattern::Constructor { args, .. } | Pattern::Tuple { items: args, .. } => {
+                for arg in args {
+                    Self::collect_applicative_pattern_binders(arg, out);
+                }
+            }
+            Pattern::List { items, rest, .. } => {
+                for item in items {
+                    Self::collect_applicative_pattern_binders(item, out);
+                }
+                if let Some(rest) = rest.as_deref() {
+                    Self::collect_applicative_pattern_binders(rest, out);
+                }
+            }
+            Pattern::Record { fields, .. } => {
+                for field in fields {
+                    Self::collect_applicative_pattern_binders(&field.pattern, out);
+                }
+            }
+        }
+    }
+
+    fn collect_applicative_references(
+        expr: &Expr,
+        interesting: &HashSet<String>,
+        bound: &mut Vec<String>,
+        out: &mut HashSet<String>,
+    ) {
+        match expr {
+            Expr::Ident(name) => {
+                if interesting.contains(&name.name)
+                    && !bound.iter().rev().any(|bound_name| bound_name == &name.name)
+                {
+                    out.insert(name.name.clone());
+                }
+            }
+            Expr::Suffixed { base, .. } => {
+                Self::collect_applicative_references(base, interesting, bound, out);
+            }
+            Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {}
+            Expr::UnaryNeg { expr, .. } => {
+                Self::collect_applicative_references(expr, interesting, bound, out);
+            }
+            Expr::TextInterpolate { parts, .. } => {
+                for part in parts {
+                    if let TextPart::Expr { expr, .. } = part {
+                        Self::collect_applicative_references(expr, interesting, bound, out);
+                    }
+                }
+            }
+            Expr::List { items, .. } => {
+                for item in items {
+                    Self::collect_applicative_references(&item.expr, interesting, bound, out);
+                }
+            }
+            Expr::Tuple { items, .. } => {
+                for item in items {
+                    Self::collect_applicative_references(item, interesting, bound, out);
+                }
+            }
+            Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
+                for field in fields {
+                    for segment in &field.path {
+                        if let PathSegment::Index(expr, _) = segment {
+                            Self::collect_applicative_references(expr, interesting, bound, out);
+                        }
+                    }
+                    Self::collect_applicative_references(&field.value, interesting, bound, out);
+                }
+            }
+            Expr::FieldAccess { base, .. } => {
+                Self::collect_applicative_references(base, interesting, bound, out);
+            }
+            Expr::Index { base, index, .. } => {
+                Self::collect_applicative_references(base, interesting, bound, out);
+                Self::collect_applicative_references(index, interesting, bound, out);
+            }
+            Expr::Call { func, args, .. } => {
+                Self::collect_applicative_references(func, interesting, bound, out);
+                for arg in args {
+                    Self::collect_applicative_references(arg, interesting, bound, out);
+                }
+            }
+            Expr::Lambda { params, body, .. } => {
+                let before = bound.len();
+                for param in params {
+                    Self::collect_applicative_pattern_binders(param, bound);
+                }
+                Self::collect_applicative_references(body, interesting, bound, out);
+                bound.truncate(before);
+            }
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                if let Some(scrutinee) = scrutinee.as_deref() {
+                    Self::collect_applicative_references(scrutinee, interesting, bound, out);
+                }
+                for arm in arms {
+                    let before = bound.len();
+                    Self::collect_applicative_pattern_binders(&arm.pattern, bound);
+                    if let Some(guard) = arm.guard.as_ref() {
+                        Self::collect_applicative_references(guard, interesting, bound, out);
+                    }
+                    Self::collect_applicative_references(&arm.body, interesting, bound, out);
+                    bound.truncate(before);
+                }
+            }
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::collect_applicative_references(cond, interesting, bound, out);
+                Self::collect_applicative_references(then_branch, interesting, bound, out);
+                Self::collect_applicative_references(else_branch, interesting, bound, out);
+            }
+            Expr::Binary { left, right, .. } => {
+                Self::collect_applicative_references(left, interesting, bound, out);
+                Self::collect_applicative_references(right, interesting, bound, out);
+            }
+            Expr::Block { items, .. } => {
+                let before = bound.len();
+                for item in items {
+                    match item {
+                        BlockItem::Bind { pattern, expr, .. }
+                        | BlockItem::Let { pattern, expr, .. } => {
+                            Self::collect_applicative_references(expr, interesting, bound, out);
+                            Self::collect_applicative_pattern_binders(pattern, bound);
+                        }
+                        BlockItem::Filter { expr, .. }
+                        | BlockItem::Yield { expr, .. }
+                        | BlockItem::Recurse { expr, .. }
+                        | BlockItem::Expr { expr, .. } => {
+                            Self::collect_applicative_references(expr, interesting, bound, out);
+                        }
+                        BlockItem::When { cond, effect, .. }
+                        | BlockItem::Unless { cond, effect, .. } => {
+                            Self::collect_applicative_references(cond, interesting, bound, out);
+                            Self::collect_applicative_references(effect, interesting, bound, out);
+                        }
+                        BlockItem::Given { cond, fail_expr, .. } => {
+                            Self::collect_applicative_references(cond, interesting, bound, out);
+                            Self::collect_applicative_references(
+                                fail_expr,
+                                interesting,
+                                bound,
+                                out,
+                            );
+                        }
+                    }
+                }
+                bound.truncate(before);
+            }
+            Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(value) = &sub.value {
+                        Self::collect_applicative_references(value, interesting, bound, out);
+                    }
+                }
+                Self::collect_applicative_references(body, interesting, bound, out);
+            }
+        }
+    }
+
+    fn applicative_references(expr: &Expr, interesting: &HashSet<String>) -> HashSet<String> {
+        let mut out = HashSet::new();
+        let mut bound = Vec::new();
+        Self::collect_applicative_references(expr, interesting, &mut bound, &mut out);
+        out
+    }
+
+    fn make_applicative_lambda(pattern: Pattern, body: Expr, span: Span) -> Expr {
+        Expr::Lambda {
+            params: vec![pattern],
+            body: Box::new(body),
+            span,
+        }
+    }
+
+    fn make_applicative_call(func_name: &str, args: Vec<Expr>, span: Span) -> Expr {
+        Expr::Call {
+            func: Box::new(Expr::Ident(SpannedName {
+                name: func_name.to_string(),
+                span: span.clone(),
+            })),
+            args,
+            span,
+        }
+    }
+
+    fn desugar_applicative_do_expr(
+        &self,
+        items: &[BlockItem],
+        block_span: &Span,
+    ) -> Result<Expr, TypeError> {
+        if items.is_empty() {
+            return Ok(Self::make_applicative_call(
+                "of",
+                vec![Expr::Ident(SpannedName {
+                    name: "Unit".to_string(),
+                    span: block_span.clone(),
+                })],
+                block_span.clone(),
+            ));
+        }
+
+        let Some(BlockItem::Expr {
+            expr: final_expr,
+            span: final_span,
+        }) = items.last()
+        else {
+            return Err(TypeError {
+                span: block_span.clone(),
+                message: "`do Applicative { ... }` requires a final pure result expression".to_string(),
+                expected: None,
+                found: None,
+            });
+        };
+
+        let mut body = final_expr.clone();
+        let mut applicative_inputs_rev = Vec::new();
+
+        for item in items[..items.len() - 1].iter().rev() {
+            match item {
+                BlockItem::Bind {
+                    pattern,
+                    expr,
+                    span,
+                } => {
+                    body = Self::make_applicative_lambda(pattern.clone(), body, span.clone());
+                    applicative_inputs_rev.push((expr.clone(), span.clone()));
+                }
+                BlockItem::Let {
+                    pattern,
+                    expr,
+                    span,
+                } => {
+                    let lambda =
+                        Self::make_applicative_lambda(pattern.clone(), body, span.clone());
+                    body = Expr::Call {
+                        func: Box::new(lambda),
+                        args: vec![expr.clone()],
+                        span: span.clone(),
+                    };
+                }
+                BlockItem::Expr { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "non-final expression statements are not allowed in `do Applicative { ... }`; keep a single final result expression".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::When { span, .. } | BlockItem::Unless { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`when`/`unless` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Given { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`given` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Recurse { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`recurse` is only available in `do Effect { ... }` or `generate { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Filter { span, .. } | BlockItem::Yield { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`do Applicative { ... }` only supports `<-`, `=`, and a final result expression".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+            }
+        }
+
+        if applicative_inputs_rev.is_empty() {
+            return Ok(Self::make_applicative_call(
+                "of",
+                vec![body],
+                final_span.clone(),
+            ));
+        }
+
+        let mut applicative_inputs = applicative_inputs_rev;
+        applicative_inputs.reverse();
+
+        let mut acc = Self::make_applicative_call(
+            "map",
+            vec![body, applicative_inputs[0].0.clone()],
+            applicative_inputs[0].1.clone(),
+        );
+        for (expr, span) in applicative_inputs.into_iter().skip(1) {
+            acc = Self::make_applicative_call("ap", vec![acc, expr], span);
+        }
+        Ok(acc)
+    }
+
+    fn infer_applicative_do_block(
+        &mut self,
+        applicative_span: &Span,
+        items: &[BlockItem],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        let mut prior_applicative_names = HashSet::new();
+        let mut tainted_let_names = HashSet::new();
+
+        for item in items {
+            match item {
+                BlockItem::Bind { pattern, expr, .. } => {
+                    let mut forbidden = prior_applicative_names.clone();
+                    forbidden.extend(tainted_let_names.iter().cloned());
+                    let refs = Self::applicative_references(expr, &forbidden);
+                    if !refs.is_empty() {
+                        let mut names: Vec<String> = refs.into_iter().collect();
+                        names.sort();
+                        return Err(TypeError {
+                            span: expr_span(expr),
+                            message: format!(
+                                "applicative bindings must be independent; this `<-` expression depends on earlier applicative names: {}",
+                                names.join(", ")
+                            ),
+                            expected: None,
+                            found: None,
+                        });
+                    }
+
+                    let mut binders = Vec::new();
+                    Self::collect_applicative_pattern_binders(pattern, &mut binders);
+                    for binder in binders {
+                        prior_applicative_names.remove(&binder);
+                        tainted_let_names.remove(&binder);
+                        prior_applicative_names.insert(binder);
+                    }
+                }
+                BlockItem::Let { pattern, expr, .. } => {
+                    let mut forbidden = prior_applicative_names.clone();
+                    forbidden.extend(tainted_let_names.iter().cloned());
+                    let refs = Self::applicative_references(expr, &forbidden);
+                    let mut binders = Vec::new();
+                    Self::collect_applicative_pattern_binders(pattern, &mut binders);
+                    for binder in &binders {
+                        prior_applicative_names.remove(binder);
+                        tainted_let_names.remove(binder);
+                    }
+                    if !refs.is_empty() {
+                        for binder in binders {
+                            tainted_let_names.insert(binder);
+                        }
+                    }
+                }
+                BlockItem::Expr { .. } => {}
+                BlockItem::When { span, .. } | BlockItem::Unless { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`when`/`unless` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Given { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`given` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Recurse { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`recurse` is only available in `do Effect { ... }` or `generate { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Filter { span, .. } | BlockItem::Yield { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: "`do Applicative { ... }` only supports `<-`, `=`, and a final result expression".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+            }
+        }
+
+        let desugared = self.desugar_applicative_do_expr(items, applicative_span)?;
+        self.infer_expr(&desugared, env)
+    }
+
     fn require_effect_value(
         &mut self,
         expr_ty: Type,

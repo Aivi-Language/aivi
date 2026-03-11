@@ -637,6 +637,9 @@ impl TypeChecker {
             BlockKind::Do { monad } if monad.name == "Event" => {
                 self.infer_event_block(items, env)
             }
+            BlockKind::Do { monad } if monad.name == "Applicative" => {
+                self.infer_applicative_do_block(&monad.span, items, env)
+            }
             BlockKind::Do { monad } => self.infer_generic_do_block(&monad.name, &monad.span, items, env),
             BlockKind::Generate => self.infer_generate_block(items, env),
             BlockKind::Resource => self.infer_resource_block(items, env),

@@ -61,8 +61,20 @@ A good rule of thumb is:
 
 1. keep editable draft state in a signal,
 2. show field errors through derived signals,
-3. build the final domain value with `Validation`,
+3. build the final domain value with `Validation` and `do Applicative`,
 4. run submission IO through an `Event` handle.
+
+For example, a typed submit payload usually reads best as:
+
+```aivi
+contactValidation = s => do Applicative {
+  name <- validate nameRule s.name
+  email <- validate emailRule s.email
+  MkContact name email
+}
+```
+
+Each `<-` line validates one field independently, so both field errors can accumulate in the final `Validation (List Text) Contact`.
 
 ## Async submit pattern
 
