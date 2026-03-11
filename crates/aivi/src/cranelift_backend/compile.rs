@@ -36,6 +36,7 @@ use super::lower::{
 
 /// Pointer type used throughout.
 const PTR: cranelift_codegen::ir::Type = types::I64;
+const MAX_JIT_ARITY: usize = 32;
 
 /// JIT-compile all definitions in a program and register them into the runtime.
 ///
@@ -170,14 +171,15 @@ fn jit_compile_into_runtime(
             let (params, body) = peel_params(&def.expr);
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
-            if params.len() > 15 {
+            if params.len() > MAX_JIT_ARITY {
                 if is_stdlib_module {
                     continue;
                 }
                 return Err(AiviError::Runtime(format!(
-                    "cranelift compile {}: unsupported arity {} (max 15)",
+                    "cranelift compile {}: unsupported arity {} (max {})",
                     qualified,
-                    params.len()
+                    params.len(),
+                    MAX_JIT_ARITY
                 )));
             }
             if !expr_supported(body) {

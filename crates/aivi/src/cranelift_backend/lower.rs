@@ -80,8 +80,7 @@ pub(crate) struct LowerCtx<'a, M: Module> {
     ctx_param: Value,
     /// Declared runtime helper function references in this module.
     helpers: &'a HelperRefs,
-    /// Pre-compiled inner lambda functions, keyed by `*const RustIrExpr`
-    /// pointer identity.
+    /// Pre-compiled inner lambda functions, keyed by stable Rust IR expr id.
     pub(crate) compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
     /// Registry of JIT-compiled functions available for direct calls.
     /// Maps qualified name → (FuncRef, param count, param types, return type).

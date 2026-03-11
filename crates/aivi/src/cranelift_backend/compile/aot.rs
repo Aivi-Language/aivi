@@ -72,14 +72,15 @@ pub fn compile_to_object(
             let (params, body) = peel_params(&def.expr);
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
-            if params.len() > 15 {
+            if params.len() > MAX_JIT_ARITY {
                 if is_stdlib_module {
                     continue;
                 }
                 return Err(AiviError::Runtime(format!(
-                    "cranelift aot compile {}: unsupported arity {} (max 15)",
+                    "cranelift aot compile {}: unsupported arity {} (max {})",
                     qualified,
-                    params.len()
+                    params.len(),
+                    MAX_JIT_ARITY
                 )));
             }
             if !expr_supported(body) {
