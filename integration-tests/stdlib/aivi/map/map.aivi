@@ -21,6 +21,13 @@ map_getOrElse = do Effect {
   assertEq missing 99
 }
 
+@test "map get or else is pipe-friendly"
+map_getOrElse_pipe = do Effect {
+  m = insert "found" 7 empty
+  assertEq (m |> getOrElse "found" 99) 7
+  assertEq (m |> getOrElse "missing" 99) 99
+}
+
 @test "map remove"
 map_remove = do Effect {
   m  = insert "a" 1 empty
