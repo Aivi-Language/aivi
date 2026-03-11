@@ -112,13 +112,25 @@ impl TypeChecker {
             .iter()
             .map(|(module_name, exports)| (module_name.clone(), exports.keys().cloned().collect()))
             .collect();
-        let mut local_defs: HashSet<String> = self
-            .type_constructors
-            .keys()
-            .filter(|name| !name.contains('.'))
-            .cloned()
-            .collect();
-        local_defs.extend(self.type_name_bindings.keys().cloned());
+        let mut local_defs: HashSet<String> = HashSet::new();
+        for item in &module.items {
+            match item {
+                ModuleItem::TypeDecl(type_decl) => {
+                    local_defs.insert(type_decl.name.name.clone());
+                }
+                ModuleItem::TypeAlias(alias) => {
+                    local_defs.insert(alias.name.name.clone());
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    for domain_item in &domain.items {
+                        if let DomainItem::TypeAlias(type_decl) = domain_item {
+                            local_defs.insert(type_decl.name.name.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
         let import_pairs =
             crate::surface::compute_import_pairs(&module.uses, &available_names, &local_defs);
 
