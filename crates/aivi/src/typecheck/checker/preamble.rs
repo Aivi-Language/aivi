@@ -20,8 +20,8 @@ pub(super) struct TypeChecker {
     pub(super) var_names: HashMap<TypeVarId, String>,
     pub(super) type_constructors: HashMap<String, Kind>,
     aliases: HashMap<String, AliasInfo>,
-    type_alias_bindings: HashMap<String, String>,
-    type_alias_display_names: HashMap<String, String>,
+    type_name_bindings: HashMap<String, String>,
+    type_display_names: HashMap<String, String>,
     pub(super) builtin_types: HashMap<String, Kind>,
     pub(super) builtins: TypeEnv,
     global_type_constructors: HashMap<String, Kind>,
@@ -71,8 +71,8 @@ impl TypeChecker {
             var_names: HashMap::new(),
             type_constructors: HashMap::new(),
             aliases: HashMap::new(),
-            type_alias_bindings: HashMap::new(),
-            type_alias_display_names: HashMap::new(),
+            type_name_bindings: HashMap::new(),
+            type_display_names: HashMap::new(),
             builtin_types: HashMap::new(),
             builtins: TypeEnv::default(),
             global_type_constructors: HashMap::new(),
@@ -120,8 +120,12 @@ impl TypeChecker {
         self.var_names.clear();
         self.type_constructors = self.builtin_type_constructors();
         self.aliases.clear();
-        self.type_alias_bindings.clear();
-        self.type_alias_display_names.clear();
+        self.type_name_bindings.clear();
+        self.type_display_names.clear();
+        for name in self.builtin_types.keys() {
+            self.type_name_bindings.insert(name.clone(), name.clone());
+            self.type_display_names.insert(name.clone(), name.clone());
+        }
         self.register_builtin_aliases();
         self.type_constructors
             .extend(self.global_type_constructors.clone());
@@ -242,12 +246,71 @@ impl TypeChecker {
             .collect()
     }
 
-    pub(super) fn resolve_type_alias_binding(&self, name: &str) -> Option<&str> {
-        self.type_alias_bindings.get(name).map(|s| s.as_str())
+    pub(super) fn resolve_type_binding(&self, name: &str) -> Option<&str> {
+        self.type_name_bindings.get(name).map(|s| s.as_str())
     }
 
     pub(super) fn type_kind(&self, name: &str) -> Option<&Kind> {
         self.type_constructors.get(name)
+    }
+
+    pub(super) fn resolved_type_name<'a>(&'a self, type_name: &'a str) -> &'a str {
+        self.resolve_type_binding(type_name).unwrap_or(type_name)
+    }
+
+    pub(super) fn type_name_matches(&self, actual: &str, expected_source_name: &str) -> bool {
+        actual == expected_source_name
+            || self
+                .resolve_type_binding(expected_source_name)
+                .is_some_and(|resolved| actual == resolved)
+            || self
+                .type_display_names
+                .get(actual)
+                .is_some_and(|display| display == expected_source_name)
+    }
+
+    pub(super) fn named_type(&self, type_name: &str) -> Type {
+        Type::con(self.resolved_type_name(type_name))
+    }
+
+    fn rewrite_type_names(&self, ty: &Type) -> Type {
+        match ty {
+            Type::Var(var) => Type::Var(*var),
+            Type::Con(name, args) => {
+                let rewritten_args = args.iter().map(|arg| self.rewrite_type_names(arg)).collect();
+                let resolved = if name.contains('.') {
+                    name.as_str()
+                } else {
+                    self.resolved_type_name(name)
+                };
+                Type::Con(resolved.to_string(), rewritten_args)
+            }
+            Type::App(base, args) => Type::App(
+                Box::new(self.rewrite_type_names(base)),
+                args.iter().map(|arg| self.rewrite_type_names(arg)).collect(),
+            ),
+            Type::Func(arg, ret) => Type::Func(
+                Box::new(self.rewrite_type_names(arg)),
+                Box::new(self.rewrite_type_names(ret)),
+            ),
+            Type::Tuple(items) => {
+                Type::Tuple(items.iter().map(|item| self.rewrite_type_names(item)).collect())
+            }
+            Type::Record { fields } => Type::Record {
+                fields: fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.rewrite_type_names(ty)))
+                    .collect(),
+            },
+        }
+    }
+
+    pub(super) fn rewrite_env_type_names(&self, env: &mut TypeEnv) {
+        env.map_schemes(|scheme| Scheme {
+            vars: scheme.vars.clone(),
+            ty: self.rewrite_type_names(&scheme.ty),
+            origin: scheme.origin.clone(),
+        });
     }
 
     pub(super) fn alias_info_for_name(&self, name: &str) -> Option<&AliasInfo> {

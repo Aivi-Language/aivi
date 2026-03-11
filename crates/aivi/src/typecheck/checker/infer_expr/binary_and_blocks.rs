@@ -9,9 +9,13 @@ impl TypeChecker {
         let applied = self.apply(ty);
         let resolved = self.expand_alias(applied);
         match resolved {
-            Type::Con(name, args) if name == "Signal" && args.len() == 1 => Some(args[0].clone()),
+            Type::Con(name, args) if self.type_name_matches(&name, "Signal") && args.len() == 1 => {
+                Some(args[0].clone())
+            }
             Type::App(base, args) => match &*base {
-                Type::Con(name, existing) if name == "Signal" && existing.len() + args.len() == 1 => {
+                Type::Con(name, existing)
+                    if self.type_name_matches(name, "Signal") && existing.len() + args.len() == 1 =>
+                {
                     args.last().cloned().or_else(|| existing.last().cloned())
                 }
                 _ => None,
@@ -40,7 +44,7 @@ impl TypeChecker {
         let mut body_env = env.clone();
         body_env.insert(param.name.clone(), Scheme::mono(signal_item_ty));
         let result_ty = self.infer_expr(&piped_body, &mut body_env)?;
-        Ok(Type::con("Signal").app(vec![result_ty]))
+        Ok(self.named_type("Signal").app(vec![result_ty]))
     }
 
     fn infer_signal_write_kind(

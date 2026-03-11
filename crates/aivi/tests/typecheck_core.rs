@@ -50,6 +50,25 @@ fn check_ok_with_embedded(source: &str, embedded: &[&str]) {
     );
 }
 
+fn check_ok_files(files: &[(&str, &str)]) {
+    let mut modules = Vec::new();
+    for (path, source) in files {
+        let (mut file_modules, diagnostics) = parse_modules(Path::new(path), source);
+        assert!(
+            !file_diagnostics_have_errors(&diagnostics),
+            "parse errors in {path}: {diagnostics:?}"
+        );
+        modules.append(&mut file_modules);
+    }
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        !file_diagnostics_have_errors(&module_diags),
+        "unexpected errors: {module_diags:?}"
+    );
+}
+
 fn check_err(source: &str) {
     let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
     assert!(
@@ -471,6 +490,31 @@ meter = defineUnit "m" 1.0
 noop : Unit
 noop = Unit"#;
     check_ok_with_embedded(source, &["aivi", "aivi.units"]);
+}
+
+#[test]
+fn typecheck_imported_unit_type_can_be_renamed_without_clobbering_builtin_unit() {
+    let measure = r#"
+module test.measure
+export Unit, meter
+
+Unit = Meter
+     | Foot
+
+meter : Unit
+meter = Meter"#;
+    let user = r#"
+module test.unit_type_rename
+export meter2, noop
+
+use test.measure (Unit as MeasureUnit, meter)
+
+meter2 : MeasureUnit
+meter2 = meter
+
+noop : Unit
+noop = Unit"#;
+    check_ok_files(&[("measure.aivi", measure), ("user.aivi", user)]);
 }
 
 #[test]

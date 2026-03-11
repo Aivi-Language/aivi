@@ -945,7 +945,7 @@ impl TypeChecker {
             Type::Con(ref name, _) if name == "Option" => {
                 Some(vec!["None".to_string(), "Some".to_string()])
             }
-            Type::Con(ref name, _) if name == "Result" => {
+            Type::Con(ref name, _) if self.type_name_matches(name, "Result") => {
                 Some(vec!["Ok".to_string(), "Err".to_string()])
             }
             Type::Con(ref name, _) => self.adt_constructors.get(name).cloned(),

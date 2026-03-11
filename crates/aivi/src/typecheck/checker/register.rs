@@ -1,13 +1,12 @@
 impl TypeChecker {
-    fn qualified_type_alias_name(&self, module_name: &str, alias_name: &str) -> String {
-        format!("{module_name}.{alias_name}")
+    fn qualified_type_name(&self, module_name: &str, type_name: &str) -> String {
+        format!("{module_name}.{type_name}")
     }
 
-    fn bind_type_alias_name(&mut self, local_name: String, internal_name: String) {
-        self.type_alias_bindings
+    fn bind_type_name(&mut self, local_name: String, internal_name: String) {
+        self.type_name_bindings
             .insert(local_name.clone(), internal_name.clone());
-        self.type_alias_display_names
-            .insert(internal_name, local_name);
+        self.type_display_names.insert(internal_name, local_name);
     }
 
     pub(super) fn register_module_types(&mut self, module: &Module) {
@@ -18,13 +17,12 @@ impl TypeChecker {
                     for _ in &type_decl.params {
                         kind = Kind::Arrow(Box::new(Kind::Star), Box::new(kind));
                     }
-                    self.type_constructors
-                        .insert(type_decl.name.name.clone(), kind);
+                    let internal_name =
+                        self.qualified_type_name(&module.name.name, &type_decl.name.name);
+                    self.type_constructors.insert(internal_name.clone(), kind);
+                    self.bind_type_name(type_decl.name.name.clone(), internal_name.clone());
                     if type_decl.opaque {
-                        self.opaque_types.insert(
-                            type_decl.name.name.clone(),
-                            module.name.name.clone(),
-                        );
+                        self.opaque_types.insert(internal_name, module.name.name.clone());
                     }
                 }
                 ModuleItem::TypeAlias(alias) => {
@@ -32,10 +30,9 @@ impl TypeChecker {
                     for _ in &alias.params {
                         kind = Kind::Arrow(Box::new(Kind::Star), Box::new(kind));
                     }
-                    let internal_name =
-                        self.qualified_type_alias_name(&module.name.name, &alias.name.name);
+                    let internal_name = self.qualified_type_name(&module.name.name, &alias.name.name);
                     self.type_constructors.insert(internal_name.clone(), kind);
-                    self.bind_type_alias_name(alias.name.name.clone(), internal_name.clone());
+                    self.bind_type_name(alias.name.name.clone(), internal_name.clone());
                     let alias_info = self.alias_info(alias);
                     self.aliases.insert(internal_name.clone(), alias_info);
                     if alias.opaque {
@@ -49,8 +46,13 @@ impl TypeChecker {
                             for _ in &type_decl.params {
                                 kind = Kind::Arrow(Box::new(Kind::Star), Box::new(kind));
                             }
-                            self.type_constructors
-                                .insert(type_decl.name.name.clone(), kind);
+                            let internal_name =
+                                self.qualified_type_name(&module.name.name, &type_decl.name.name);
+                            self.type_constructors.insert(internal_name.clone(), kind);
+                            self.bind_type_name(type_decl.name.name.clone(), internal_name.clone());
+                            if type_decl.opaque {
+                                self.opaque_types.insert(internal_name, module.name.name.clone());
+                            }
                         }
                     }
                 }
@@ -61,7 +63,7 @@ impl TypeChecker {
 
     pub(super) fn register_builtin_aliases(&mut self) {
         let a = self.fresh_var_id();
-        self.bind_type_alias_name("Patch".to_string(), "Patch".to_string());
+        self.bind_type_name("Patch".to_string(), "Patch".to_string());
         self.aliases.insert(
             "Patch".to_string(),
             AliasInfo {
@@ -73,7 +75,7 @@ impl TypeChecker {
         // v0.1: Source errors are currently just `Text` messages.
         // The `K` parameter exists for spec alignment and future evolution.
         let k = self.fresh_var_id();
-        self.bind_type_alias_name("SourceError".to_string(), "SourceError".to_string());
+        self.bind_type_name("SourceError".to_string(), "SourceError".to_string());
         self.aliases.insert(
             "SourceError".to_string(),
             AliasInfo {
@@ -83,20 +85,22 @@ impl TypeChecker {
         );
     }
 
-    pub(super) fn register_imported_type_aliases(
+    pub(super) fn register_imported_type_names(
         &mut self,
         module: &Module,
-        module_alias_exports: &HashMap<String, HashMap<String, super::TypeAliasSurface>>,
+        module_type_exports: &HashMap<String, HashMap<String, super::TypeSurface>>,
     ) {
         for use_decl in &module.uses {
-            let Some(exports) = module_alias_exports.get(&use_decl.module.name) else {
+            let Some(exports) = module_type_exports.get(&use_decl.module.name) else {
                 continue;
             };
             for surface in exports.values() {
                 self.type_constructors
                     .insert(surface.internal_name.clone(), surface.kind.clone());
-                self.aliases
-                    .insert(surface.internal_name.clone(), surface.alias.clone());
+                if let Some(alias) = &surface.alias {
+                    self.aliases
+                        .insert(surface.internal_name.clone(), alias.clone());
+                }
                 if let Some(origin) = &surface.opaque_origin {
                     self.opaque_types
                         .insert(surface.internal_name.clone(), origin.clone());
@@ -104,7 +108,7 @@ impl TypeChecker {
             }
         }
 
-        let available_names: HashMap<String, HashSet<String>> = module_alias_exports
+        let available_names: HashMap<String, HashSet<String>> = module_type_exports
             .iter()
             .map(|(module_name, exports)| (module_name.clone(), exports.keys().cloned().collect()))
             .collect();
@@ -114,34 +118,35 @@ impl TypeChecker {
             .filter(|name| !name.contains('.'))
             .cloned()
             .collect();
-        local_defs.extend(self.type_alias_bindings.keys().cloned());
-        let import_pairs = crate::surface::compute_import_pairs(&module.uses, &available_names, &local_defs);
+        local_defs.extend(self.type_name_bindings.keys().cloned());
+        let import_pairs =
+            crate::surface::compute_import_pairs(&module.uses, &available_names, &local_defs);
 
         for (bare, qualified) in &import_pairs {
             let Some((module_name, original)) = qualified.rsplit_once('.') else {
                 continue;
             };
-            let Some(exports) = module_alias_exports.get(module_name) else {
+            let Some(exports) = module_type_exports.get(module_name) else {
                 continue;
             };
             let Some(surface) = exports.get(original) else {
                 continue;
             };
-            self.bind_type_alias_name(bare.clone(), surface.internal_name.clone());
+            self.bind_type_name(bare.clone(), surface.internal_name.clone());
         }
 
         for use_decl in &module.uses {
             if use_decl.alias.is_none() {
                 continue;
             }
-            let Some(exports) = module_alias_exports.get(&use_decl.module.name) else {
+            let Some(exports) = module_type_exports.get(&use_decl.module.name) else {
                 continue;
             };
             for (name, surface) in exports {
                 if local_defs.contains(name) {
                     continue;
                 }
-                self.bind_type_alias_name(name.clone(), surface.internal_name.clone());
+                self.bind_type_name(name.clone(), surface.internal_name.clone());
             }
         }
     }
@@ -230,9 +235,15 @@ impl TypeChecker {
         for item in &module.items {
             match item {
                 ModuleItem::TypeDecl(type_decl) => {
+                    let Some(internal_name) = self
+                        .resolve_type_binding(&type_decl.name.name)
+                        .map(str::to_string)
+                    else {
+                        continue;
+                    };
                     if !type_decl.constructors.is_empty() {
                         self.adt_constructors.insert(
-                            type_decl.name.name.clone(),
+                            internal_name.clone(),
                             type_decl
                                 .constructors
                                 .iter()
@@ -241,9 +252,7 @@ impl TypeChecker {
                         );
                     }
                     // Skip registering constructors for opaque ADTs outside their module.
-                    if type_decl.opaque
-                        && self.is_opaque_from_here(&type_decl.name.name).is_some()
-                    {
+                    if type_decl.opaque && self.is_opaque_from_here(&internal_name).is_some() {
                         continue;
                     }
                     self.register_adt_constructors(type_decl, env);
@@ -251,15 +260,25 @@ impl TypeChecker {
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
                         if let DomainItem::TypeAlias(type_decl) = domain_item {
+                            let Some(internal_name) =
+                                self.resolve_type_binding(&type_decl.name.name)
+                                    .map(str::to_string)
+                            else {
+                                continue;
+                            };
                             if !type_decl.constructors.is_empty() {
                                 self.adt_constructors.insert(
-                                    type_decl.name.name.clone(),
+                                    internal_name.clone(),
                                     type_decl
                                         .constructors
                                         .iter()
                                         .map(|ctor| ctor.name.name.clone())
                                         .collect(),
                                 );
+                            }
+                            if type_decl.opaque && self.is_opaque_from_here(&internal_name).is_some()
+                            {
+                                continue;
                             }
                             self.register_adt_constructors(type_decl, env);
                         }
@@ -282,8 +301,11 @@ impl TypeChecker {
             ctx.type_vars.insert(param.name.clone(), var);
             params.push(var);
         }
+        let result_name = self
+            .resolve_type_binding(&type_decl.name.name)
+            .unwrap_or(&type_decl.name.name);
         let result_type =
-            Type::con(&type_decl.name.name).app(params.iter().map(|var| Type::Var(*var)).collect());
+            Type::con(result_name).app(params.iter().map(|var| Type::Var(*var)).collect());
 
         for ctor in &type_decl.constructors {
             let mut ctor_type = result_type.clone();
