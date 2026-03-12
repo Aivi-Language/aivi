@@ -160,7 +160,7 @@ mod bridge {
                         json!({
                             "id": watcher_id,
                             "signalId": watcher.signal_id,
-                            "active": watcher.active,
+                            "active": true,
                             "lastRevision": watcher.last_revision,
                             "boundWidgetIds": widget_ids,
                             "kind": watcher_kind,
@@ -723,11 +723,19 @@ mod bridge {
         widget_ids.sort_unstable();
         widget_ids.dedup();
         ensure_runtime_handler_dispatcher(runtime.ctx.clone());
+        // Share the token with the handler so it can unregister itself after
+        // firing (dialog close handlers are one-shot).
+        let token_holder: Arc<std::sync::OnceLock<String>> = Arc::new(std::sync::OnceLock::new());
+        let token_for_handler = token_holder.clone();
         let handler = builtin("gtk4.dialogRootCleanup", 1, move |_args, runtime| {
             cleanup_binding_widgets(runtime, &widget_ids)?;
+            if let Some(token) = token_for_handler.get() {
+                runtime.ctx.unregister_gtk_runtime_handler(token);
+            }
             Ok(Value::Unit)
         });
         let token = runtime.ctx.register_gtk_runtime_handler(handler);
+        let _ = token_holder.set(token.clone());
         aivi_gtk4::signal_bind_cleanup_root(&token, root_id).map_err(gtk4_err_to_runtime)?;
         aivi_gtk4::dialog_root_on_closed(root_id, &token).map_err(gtk4_err_to_runtime)?;
         Ok(())
@@ -782,6 +790,11 @@ mod bridge {
                     &mut prop_bindings,
                     &mut structural_bindings,
                 )?;
+                // NOTE: This disposes ALL watchers for widget_id, including the
+                // currently executing structural watcher. This is safe because
+                // the callback value was already cloned out of the graph before
+                // execution, and reactive_flush handles missing watchers gracefully.
+                // The new watchers installed below replace the disposed ones.
                 cleanup_binding_scope(runtime, widget_id)?;
                 let binding_widgets =
                     aivi_gtk4::reconcile_widget(widget_id, &materialized).map_err(gtk4_err_to_runtime)?;

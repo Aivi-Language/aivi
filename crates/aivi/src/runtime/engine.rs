@@ -217,7 +217,6 @@ pub(crate) enum ReactiveCellKind {
 pub(crate) struct ReactiveWatcherEntry {
     pub(crate) signal_id: usize,
     pub(crate) callback: Value,
-    pub(crate) active: bool,
     pub(crate) last_revision: u64,
 }
 

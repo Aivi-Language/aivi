@@ -1130,6 +1130,9 @@ mod linux_impl {
     }
 
     fn known_signals_for_class(class_name: &str) -> &'static [&'static str] {
+        if class_name.starts_with("Adw") && class_name.ends_with("Dialog") {
+            return &["notify::open"];
+        }
         match class_name {
             "GtkButton" => &["clicked"],
             "GtkBox" | "GtkGrid" | "GtkOverlay" | "GtkScrolledWindow" | "GtkStack" => {
@@ -1589,6 +1592,18 @@ mod linux_impl {
                 Some(SignalPayloadKind::NotifyBool)
             );
             assert_eq!(known_signals_for_class("GtkSwitch"), &["notify::active"]);
+        }
+
+        #[test]
+        fn adw_preferences_dialog_has_notify_open_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("AdwPreferencesDialog", "notify::open"),
+                Some(SignalPayloadKind::NotifyBool)
+            );
+            assert_eq!(
+                known_signals_for_class("AdwPreferencesDialog"),
+                &["notify::open"]
+            );
         }
 
         #[test]
@@ -4999,6 +5014,12 @@ mod linux_impl {
             && signal_name == "closed"
         {
             return Some(SignalPayloadKind::None);
+        }
+        if class_name.starts_with("Adw")
+            && class_name.ends_with("Dialog")
+            && signal_name == "notify::open"
+        {
+            return Some(SignalPayloadKind::NotifyBool);
         }
         match (class_name, signal_name) {
             (_, "key-pressed") => Some(SignalPayloadKind::KeyPressed),

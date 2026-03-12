@@ -204,6 +204,10 @@ impl RuntimeContext {
         self.gtk_runtime_handler_store.lock().handlers.get(token).cloned()
     }
 
+    pub(crate) fn unregister_gtk_runtime_handler(&self, token: &str) {
+        self.gtk_runtime_handler_store.lock().handlers.remove(token);
+    }
+
     pub(crate) fn mark_gtk_runtime_dispatcher_started(&self) -> bool {
         let mut store = self.gtk_runtime_handler_store.lock();
         if store.dispatcher_started {

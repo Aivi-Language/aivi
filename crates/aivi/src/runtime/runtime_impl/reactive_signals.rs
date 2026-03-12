@@ -168,7 +168,6 @@ impl Runtime {
                 ReactiveWatcherEntry {
                     signal_id,
                     callback,
-                    active: true,
                     last_revision: revision,
                 },
             );
@@ -192,7 +191,12 @@ impl Runtime {
         signal: Value,
         callback: Value,
     ) -> Result<(usize, Value), RuntimeError> {
-        self.reactive_graph.lock().flush_thread = Some(std::thread::current().id());
+        {
+            let mut graph = self.reactive_graph.lock();
+            if graph.flush_thread.is_none() {
+                graph.flush_thread = Some(std::thread::current().id());
+            }
+        }
         self.reactive_watch_signal_unscoped(signal, callback)
     }
 
@@ -694,6 +698,11 @@ impl Runtime {
     }
 
     fn reactive_flush(&mut self) -> Result<(), RuntimeError> {
+        /// Maximum number of flush iterations before we assume a reactive cycle
+        /// and bail out. Watcher callbacks can set signals, creating new pending
+        /// notifications. Without a cap this could loop forever.
+        const MAX_FLUSH_ITERATIONS: usize = 100;
+
         {
             let mut graph = self.reactive_graph.lock();
             if graph.flushing {
@@ -702,7 +711,7 @@ impl Runtime {
             graph.flushing = true;
         }
         let result = (|| {
-            loop {
+            for iteration in 0..MAX_FLUSH_ITERATIONS {
                 let dirty_ids = {
                     let graph = self.reactive_graph.lock();
                     graph
@@ -721,6 +730,16 @@ impl Runtime {
                 };
                 if changed.is_empty() {
                     break;
+                }
+
+                if iteration == MAX_FLUSH_ITERATIONS - 1 {
+                    return Err(RuntimeError::InvalidArgument {
+                        context: "reactive.flush".to_string(),
+                        reason: format!(
+                            "reactive flush did not converge after {MAX_FLUSH_ITERATIONS} iterations — \
+                             probable cycle in watcher callbacks"
+                        ),
+                    });
                 }
 
                 let mut watcher_ids = HashSet::new();
@@ -744,7 +763,6 @@ impl Runtime {
                                 .map(|entry| entry.revision)
                                 .unwrap_or(0);
                             (
-                                watcher.active,
                                 watcher.signal_id,
                                 watcher.callback.clone(),
                                 watcher.last_revision,
@@ -752,12 +770,11 @@ impl Runtime {
                             )
                         })
                     };
-                    let Some(snapshot) = snapshot else {
+                    let Some((signal_id, callback, last_revision, revision)) = snapshot else {
                         continue;
                     };
 
-                    let (active, signal_id, callback, last_revision, revision) = snapshot;
-                    if !active || revision == last_revision {
+                    if revision == last_revision {
                         continue;
                     }
 
@@ -828,6 +845,13 @@ impl Runtime {
             }
         }
     }
+
+    // NOTE: Signal disposal (reactive_dispose_signal) is not yet implemented.
+    // Signals currently live for the lifetime of the reactive graph. To properly
+    // dispose signals, we'd need to track which signals are associated with
+    // which widget scopes — similar to how watchers are tracked via
+    // gtk_binding_scopes. This would prevent signal accumulation in long-running
+    // apps that create per-dialog or per-page signals.
 }
 
 fn reactive_none() -> Value {
