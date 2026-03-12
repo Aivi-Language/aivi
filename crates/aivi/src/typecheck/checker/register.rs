@@ -61,6 +61,21 @@ impl TypeChecker {
         }
     }
 
+    /// Re-build alias bodies for all TypeAlias items in the module using the current
+    /// `type_name_bindings` (which are only fully populated after `register_imported_type_names`).
+    /// Must be called after `register_imported_type_names` so that imported type names
+    /// (e.g. `Field` from `aivi.ui.forms`) are resolved to their qualified internal names.
+    pub(super) fn rebuild_module_alias_bodies(&mut self, module: &Module) {
+        for item in &module.items {
+            if let ModuleItem::TypeAlias(alias) = item {
+                let internal_name =
+                    self.qualified_type_name(&module.name.name, &alias.name.name);
+                let alias_info = self.alias_info(alias);
+                self.aliases.insert(internal_name, alias_info);
+            }
+        }
+    }
+
     pub(super) fn register_builtin_aliases(&mut self) {
         let a = self.fresh_var_id();
         self.bind_type_name("Patch".to_string(), "Patch".to_string());
@@ -69,6 +84,21 @@ impl TypeChecker {
             AliasInfo {
                 params: vec![a],
                 body: Type::Func(Box::new(Type::Var(a)), Box::new(Type::Var(a))),
+            },
+        );
+
+        // Unit ≅ {} — the empty record and the unit type are interchangeable.
+        // `{}` as an expression parses as an empty plain-block (inferred Unit), while
+        // `{}` as a type annotation produces Type::Record { fields: {} }.  Adding this
+        // alias lets unification see through the distinction so callers can write
+        // `render m {}` where the function expects `{}` (empty record).
+        self.aliases.insert(
+            "Unit".to_string(),
+            AliasInfo {
+                params: vec![],
+                body: Type::Record {
+                    fields: std::collections::BTreeMap::new(),
+                },
             },
         );
 

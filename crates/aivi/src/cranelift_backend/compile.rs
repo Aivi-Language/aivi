@@ -18,7 +18,7 @@ use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel,
     collect_surface_constructor_ordinals, format_runtime_error, format_value, run_main_effect,
-    CancelToken, Runtime, RuntimeError,
+    CancelToken, ReactiveCellKind, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
@@ -51,6 +51,7 @@ fn jit_compile_into_runtime(
     monomorph_plan: HashMap<String, Vec<CgType>>,
     source_schemas: HashMap<String, Vec<CgType>>,
     runtime: &mut Runtime,
+    rebound_names: &HashSet<String>,
 ) -> Result<cranelift_jit::JITModule, AiviError> {
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     macro_rules! timed {
@@ -470,6 +471,26 @@ fn jit_compile_into_runtime(
 
     // Install compiled globals into the runtime.
     for (name, value) in compiled_globals {
+        if !rebound_names.is_empty() {
+            if let Some(existing) = runtime.ctx.globals.get(&name) {
+                let is_rebound = rebound_names.contains(&name)
+                    || name
+                        .rsplit('.')
+                        .next()
+                        .is_some_and(|short| rebound_names.contains(short));
+                let incoming_is_jit_arity0 = matches!(value, Value::Builtin(ref builtin)
+                    if builtin.imp.arity == 0
+                        && builtin.args.is_empty()
+                        && builtin.imp.name.starts_with("__jit|"));
+                let existing_is_jit_arity0 = matches!(existing, Value::Builtin(ref builtin)
+                    if builtin.imp.arity == 0
+                        && builtin.args.is_empty()
+                        && builtin.imp.name.starts_with("__jit|"));
+                if !is_rebound && incoming_is_jit_arity0 && !existing_is_jit_arity0 {
+                    continue;
+                }
+            }
+        }
         // Short (unqualified) names cannot shadow builtins, but qualified names
         // (e.g. `aivi.database.load`) coexist — they are looked up explicitly
         // when import resolution has rewritten a bare name to its qualified form.
@@ -523,6 +544,7 @@ pub fn run_cranelift_jit(
         monomorph_plan,
         source_schemas,
         &mut runtime,
+        &HashSet::new(),
     )?;
     if let Some(t0) = t0 {
         eprintln!(
@@ -543,6 +565,206 @@ pub struct EvaluatedBinding {
     pub stderr_text: String,
 }
 
+pub struct ReplJitSession {
+    source_signal_values: HashMap<String, Value>,
+}
+
+impl Default for ReplJitSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReplJitSession {
+    pub fn new() -> Self {
+        Self {
+            source_signal_values: HashMap::new(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.source_signal_values.clear();
+    }
+
+    pub fn forget_bindings(&mut self, binding_names: &[String]) {
+        for name in binding_names {
+            self.source_signal_values.remove(name);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate_binding_detailed(
+        &mut self,
+        program: HirProgram,
+        cg_types: HashMap<String, HashMap<String, CgType>>,
+        monomorph_plan: HashMap<String, Vec<CgType>>,
+        source_schemas: HashMap<String, Vec<CgType>>,
+        surface_modules: &[crate::surface::Module],
+        binding_name: &str,
+        autorun_effects: bool,
+        capture_binding_names: &[String],
+    ) -> Result<EvaluatedBinding, AiviError> {
+        let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
+        if !crate_natives.is_empty() {
+            let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
+            return Err(AiviError::Codegen(format!(
+                "E1527: crate-native binding(s) {} require `aivi build` (AOT). \
+                 They cannot run in JIT mode (`aivi run`).",
+                names.join(", ")
+            )));
+        }
+
+        let module_names: Vec<String> = program
+            .modules
+            .iter()
+            .map(|module| module.name.clone())
+            .collect();
+        let mut runtime = build_runtime_from_program(&program)?;
+        {
+            let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
+            if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
+                ctx.merge_constructor_ordinals(surface_ordinals);
+            }
+        }
+        let _module = jit_compile_into_runtime(
+            program,
+            cg_types,
+            monomorph_plan,
+            source_schemas,
+            &mut runtime,
+            &HashSet::new(),
+        )?;
+        restore_repl_source_signals(&mut runtime, &module_names, &self.source_signal_values)
+            .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+        runtime.jit_pending_error = None;
+
+        let value = runtime.ctx.globals.get(binding_name).ok_or_else(|| {
+            AiviError::Runtime(format!("missing evaluated binding `{binding_name}`"))
+        })?;
+        let value = runtime
+            .force_value(value)
+            .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+        if let Some(err) = runtime.jit_pending_error.take() {
+            return Err(AiviError::Runtime(format_runtime_error(err)));
+        }
+
+        let was_effect = matches!(value, Value::Effect(_));
+        if autorun_effects && was_effect {
+            runtime.ctx.begin_console_capture();
+            let result = runtime
+                .run_effect_value(value)
+                .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+            let capture = runtime.ctx.take_console_capture();
+            if let Some(err) = runtime.jit_pending_error.take() {
+                return Err(AiviError::Runtime(format_runtime_error(err)));
+            }
+            let binding = EvaluatedBinding {
+                value_text: format_value(&result),
+                was_effect: true,
+                effect_ran: true,
+                stdout_text: capture.stdout,
+                stderr_text: capture.stderr,
+            };
+            self.source_signal_values =
+                capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
+                    .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+            Ok(binding)
+        } else {
+            let binding = EvaluatedBinding {
+                value_text: format_value(&value),
+                was_effect,
+                effect_ran: false,
+                stdout_text: String::new(),
+                stderr_text: String::new(),
+            };
+            self.source_signal_values =
+                capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
+                    .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+            Ok(binding)
+        }
+    }
+}
+
+fn repl_binding_candidates(module_names: &[String], binding_name: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    for module_name in module_names {
+        let qualified = format!("{module_name}.{binding_name}");
+        if !candidates.contains(&qualified) {
+            candidates.push(qualified);
+        }
+    }
+    candidates.push(binding_name.to_string());
+    candidates
+}
+
+fn force_repl_binding(
+    runtime: &mut Runtime,
+    candidates: &[String],
+) -> Result<Option<Value>, RuntimeError> {
+    let Some(value) = candidates
+        .iter()
+        .find_map(|candidate| runtime.ctx.globals.get(candidate))
+    else {
+        return Ok(None);
+    };
+    let forced = runtime.force_value(value)?;
+    for candidate in candidates {
+        if runtime.ctx.globals.get(candidate).is_some() {
+            runtime.ctx.globals.set(candidate.clone(), forced.clone());
+        }
+    }
+    Ok(Some(forced))
+}
+
+fn is_source_signal(runtime: &Runtime, value: &Value) -> bool {
+    let Value::Signal(signal) = value else {
+        return false;
+    };
+    let graph = runtime.reactive_graph.lock();
+    matches!(
+        graph.signals.get(&signal.id).map(|entry| &entry.kind),
+        Some(ReactiveCellKind::Source)
+    )
+}
+
+fn restore_repl_source_signals(
+    runtime: &mut Runtime,
+    module_names: &[String],
+    stored_values: &HashMap<String, Value>,
+) -> Result<(), RuntimeError> {
+    for (binding_name, stored_value) in stored_values {
+        let candidates = repl_binding_candidates(module_names, binding_name);
+        let Some(signal) = force_repl_binding(runtime, &candidates)? else {
+            continue;
+        };
+        if !is_source_signal(runtime, &signal) {
+            continue;
+        }
+        runtime.reactive_set_signal(signal, stored_value.clone())?;
+    }
+    Ok(())
+}
+
+fn capture_repl_source_signals(
+    runtime: &mut Runtime,
+    module_names: &[String],
+    binding_names: &[String],
+) -> Result<HashMap<String, Value>, RuntimeError> {
+    let mut captured = HashMap::new();
+    for binding_name in binding_names {
+        let candidates = repl_binding_candidates(module_names, binding_name);
+        let Some(signal) = force_repl_binding(runtime, &candidates)? else {
+            continue;
+        };
+        if !is_source_signal(runtime, &signal) {
+            continue;
+        }
+        let value = runtime.reactive_peek_signal(signal)?;
+        captured.insert(binding_name.clone(), value);
+    }
+    Ok(captured)
+}
+
 fn evaluate_binding_jit_internal(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
@@ -552,69 +774,17 @@ fn evaluate_binding_jit_internal(
     binding_name: &str,
     autorun_effects: bool,
 ) -> Result<EvaluatedBinding, AiviError> {
-    let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
-    if !crate_natives.is_empty() {
-        let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
-        return Err(AiviError::Codegen(format!(
-            "E1527: crate-native binding(s) {} require `aivi build` (AOT). \
-             They cannot run in JIT mode (`aivi run`).",
-            names.join(", ")
-        )));
-    }
-
-    let mut runtime = build_runtime_from_program(&program)?;
-    {
-        let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
-        if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
-            ctx.merge_constructor_ordinals(surface_ordinals);
-        }
-    }
-    let _module = jit_compile_into_runtime(
+    let mut session = ReplJitSession::new();
+    session.evaluate_binding_detailed(
         program,
         cg_types,
         monomorph_plan,
         source_schemas,
-        &mut runtime,
-    )?;
-    runtime.jit_pending_error = None;
-
-    let value =
-        runtime.ctx.globals.get(binding_name).ok_or_else(|| {
-            AiviError::Runtime(format!("missing evaluated binding `{binding_name}`"))
-        })?;
-    let value = runtime
-        .force_value(value)
-        .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-    if let Some(err) = runtime.jit_pending_error.take() {
-        return Err(AiviError::Runtime(format_runtime_error(err)));
-    }
-
-    let was_effect = matches!(value, Value::Effect(_));
-    if autorun_effects && was_effect {
-        runtime.ctx.begin_console_capture();
-        let result = runtime
-            .run_effect_value(value)
-            .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-        let capture = runtime.ctx.take_console_capture();
-        if let Some(err) = runtime.jit_pending_error.take() {
-            return Err(AiviError::Runtime(format_runtime_error(err)));
-        }
-        Ok(EvaluatedBinding {
-            value_text: format_value(&result),
-            was_effect: true,
-            effect_ran: true,
-            stdout_text: capture.stdout,
-            stderr_text: capture.stderr,
-        })
-    } else {
-        Ok(EvaluatedBinding {
-            value_text: format_value(&value),
-            was_effect,
-            effect_ran: false,
-            stdout_text: String::new(),
-            stderr_text: String::new(),
-        })
-    }
+        surface_modules,
+        binding_name,
+        autorun_effects,
+        &[],
+    )
 }
 
 /// JIT-compile a program and return the formatted runtime value of one binding.
@@ -692,6 +862,7 @@ pub(crate) fn run_cranelift_jit_cancellable(
         monomorph_plan,
         source_schemas,
         &mut runtime,
+        &HashSet::new(),
     )?;
     run_main_effect(&mut runtime)
 }
@@ -728,6 +899,7 @@ pub fn run_test_suite_jit(
         infer_result.monomorph_plan,
         infer_result.source_schemas,
         &mut runtime,
+        &HashSet::new(),
     )?;
     // Discard any pending errors from the compilation phase so they don't
     // contaminate the first test.

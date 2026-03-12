@@ -14,6 +14,7 @@ pub use compile::run_cranelift_jit;
 pub(crate) use compile::run_cranelift_jit_cancellable;
 pub use compile::run_test_suite_jit;
 pub use compile::EvaluatedBinding;
+pub use compile::ReplJitSession;
 
 pub fn init_aot_runtime(program: crate::hir::HirProgram) -> usize {
     let ptr = Box::into_raw(Box::new(program));
