@@ -1,5 +1,6 @@
 mod bits;
 mod calendar;
+mod chronos_format;
 mod collections;
 mod color;
 mod concurrency;

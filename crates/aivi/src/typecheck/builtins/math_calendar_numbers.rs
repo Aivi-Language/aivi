@@ -438,6 +438,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     )),
                 ),
             ),
+            (
+                "format".to_string(),
+                Type::Func(
+                    Box::new(date_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Text")),
+                        Box::new(Type::con("Text")),
+                    )),
+                ),
+            ),
         ]
         .into_iter()
         .collect(),
@@ -489,6 +499,54 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .collect(),
     };
     env.insert("instant".to_string(), Scheme::mono(instant_record));
+
+    let span_ty = Type::con("Span");
+    let time_zone_ty = Type::con("TimeZone");
+    let zoned_date_time_ty = Type::con("ZonedDateTime");
+    let timezone_record = Type::Record {
+        fields: vec![
+            (
+                "getOffset".to_string(),
+                Type::Func(
+                    Box::new(time_zone_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(date_time_ty.clone()),
+                        Box::new(span_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "toInstant".to_string(),
+                Type::Func(
+                    Box::new(zoned_date_time_ty.clone()),
+                    Box::new(date_time_ty.clone()),
+                ),
+            ),
+            (
+                "atZone".to_string(),
+                Type::Func(
+                    Box::new(zoned_date_time_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(time_zone_ty.clone()),
+                        Box::new(zoned_date_time_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "format".to_string(),
+                Type::Func(
+                    Box::new(zoned_date_time_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Text")),
+                        Box::new(Type::con("Text")),
+                    )),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert("timezone".to_string(), Scheme::mono(timezone_record));
 
     let rgb_ty = Type::con("Rgb");
     let hsl_ty = Type::con("Hsl");

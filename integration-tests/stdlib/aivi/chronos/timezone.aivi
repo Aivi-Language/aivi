@@ -3,7 +3,7 @@ module integrationTests.stdlib.aivi.chronos.timezone.tests
 
 use aivi
 use aivi.testing
-use aivi.chronos.timezone (getOffset, toInstant, atZone)
+use aivi.chronos.timezone (getOffset, toInstant, atZone, format)
 
 @test "timezone functional"
 timezone_functional = do Effect {
@@ -19,6 +19,8 @@ timezone_functional = do Effect {
   // Check fields
   assertEq zdt.zone.id "Europe/Paris"
   assertEq zdt.dateTime 2024-05-21T12:00:00Z
+  assertEq (toText zdt) "2024-05-21T12:00:00+02:00[Europe/Paris]"
+  assertEq (zdt |> format "dd.MM.yyyy HH:mm XXX VV") "21.05.2024 12:00 +02:00 Europe/Paris"
 
   // Check offset (CEST is +2 hours = 7200000ms)
   assertEq zdt.offset.millis 7200000

@@ -6,7 +6,7 @@ module aivi.calendar
 export Date, DateTime, EndOfMonth
 export isLeapYear, daysInMonth, endOfMonth
 export addDays, addMonths, addYears, negateDelta
-export now
+export now, format
 export domain Calendar
 
 use aivi
@@ -42,6 +42,9 @@ negateDelta = delta => delta match
 now : Effect DateTime
 now = clock.now Unit
 
+format : Text -> Date -> Text
+format = pattern value => calendar.format value pattern
+
 domain Calendar over Date = {
   Delta = Day Int | Month Int | Year Int | End EndOfMonth
 
@@ -53,6 +56,8 @@ domain Calendar over Date = {
 
   (-) : Date -> Delta -> Date
   (-) = date delta => date + (negateDelta delta)
+
+  format = format
 
   1d = Day 1
   1m = Month 1
