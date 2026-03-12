@@ -376,15 +376,26 @@ fn run() -> Result<(), AiviError> {
                     };
                     maybe_enable_debug_trace(opts.debug_trace);
                     let mut spinner = Spinner::new("assembling frontend".to_string());
-                    let mut session = aivi::WorkspaceSession::new();
-                    let result = aivi::desugar_target_with_cg_types_and_surface_in_session(
-                        &mut session,
-                        &opts.input,
-                    );
+                    let result = daemon::compile_target_in_fresh_session(&opts.input, &[], use_color);
                     spinner.stop();
-                    let (program, cg_types, monomorph_plan, surface_modules) = result?;
-                    let object_bytes =
-                        aivi::compile_to_object(program, cg_types, monomorph_plan, &surface_modules)?;
+                    let (artifacts, summary) = match result {
+                        Ok(result) => result,
+                        Err(daemon::PrepareCompileFailure::Diagnostics { rendered, summary }) => {
+                            daemon::print_compile_summary(&summary);
+                            if !rendered.is_empty() {
+                                eprint!("{rendered}");
+                            }
+                            return Err(AiviError::Diagnostics);
+                        }
+                        Err(daemon::PrepareCompileFailure::Error(err)) => return Err(err),
+                    };
+                    daemon::print_compile_summary(&summary);
+                    let object_bytes = aivi::compile_to_object(
+                        artifacts.program,
+                        artifacts.cg_types,
+                        artifacts.monomorph_plan,
+                        &[],
+                    )?;
                     let out_dir = opts
                         .output
                         .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));
@@ -416,22 +427,41 @@ fn run() -> Result<(), AiviError> {
                             .parent()
                             .unwrap_or(Path::new("."))
                             .to_path_buf();
-                        return watch::run_watch(&opts.input, &watch_dir);
+                        return watch::run_watch(&opts.input, &[], &watch_dir);
                     }
                     let mut spinner = Spinner::new("assembling frontend".to_string());
-                    let mut session = aivi::WorkspaceSession::new();
-                    let result = aivi::desugar_target_with_cg_types_and_surface_in_session(
-                        &mut session,
-                        &opts.input,
-                    );
+                    let result = daemon::compile_target_in_fresh_session(&opts.input, &[], use_color);
                     spinner.stop();
-                    let (program, cg_types, monomorph_plan, surface_modules) = result?;
-                    aivi::run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
+                    let (artifacts, summary) = match result {
+                        Ok(result) => result,
+                        Err(daemon::PrepareCompileFailure::Diagnostics { rendered, summary }) => {
+                            daemon::print_compile_summary(&summary);
+                            if !rendered.is_empty() {
+                                eprint!("{rendered}");
+                            }
+                            return Err(AiviError::Diagnostics);
+                        }
+                        Err(daemon::PrepareCompileFailure::Error(err)) => return Err(err),
+                    };
+                    daemon::print_compile_summary(&summary);
+                    aivi::run_cranelift_jit_prepared(
+                        artifacts.program,
+                        artifacts.cg_types,
+                        artifacts.monomorph_plan,
+                        artifacts.source_schemas,
+                        artifacts.constructor_ordinals,
+                        artifacts
+                            .crate_natives
+                            .iter()
+                            .map(|binding| binding.aivi_name.clone())
+                            .collect(),
+                    )
                 }
             }
             _ => Ok(()),
         },
         "repl" => repl::cmd_repl(&rest),
+        "daemon" => daemon::cmd_daemon(&rest),
         "mcp" => cmd_mcp(&rest),
         "i18n" => cmd_i18n(&rest),
         _ => {
@@ -502,7 +532,7 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi {} (language {})\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  version\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [--watch|-w] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--watch|-w]\n  repl [--color] [--no-color] [--plain]\n  mcp serve <path|dir/...> [--allow-effects] [--ui]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help\n  -V, --version",
+        "aivi {} (language {})\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  version\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [--watch|-w] [-- <cargo args...>]\n  clean [--all]\n  daemon <start|status|stop>\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--watch|-w]\n  repl [--color] [--no-color] [--plain]\n  mcp serve <path|dir/...> [--allow-effects] [--ui]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help\n  -V, --version",
         env!("CARGO_PKG_VERSION"),
         AIVI_LANGUAGE_VERSION
     );

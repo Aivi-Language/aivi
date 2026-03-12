@@ -518,25 +518,42 @@ pub fn run_cranelift_jit(
     source_schemas: HashMap<String, Vec<CgType>>,
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
-    // E1527: crate-native bindings require AOT build
     let crate_natives = crate::pm::native_bridge::collect_crate_natives(surface_modules);
-    if !crate_natives.is_empty() {
-        let names: Vec<String> = crate_natives.iter().map(|b| b.aivi_name.clone()).collect();
+    let crate_native_names = crate_natives
+        .iter()
+        .map(|binding| binding.aivi_name.clone())
+        .collect::<Vec<_>>();
+    run_cranelift_jit_prepared(
+        program,
+        cg_types,
+        monomorph_plan,
+        source_schemas,
+        collect_surface_constructor_ordinals(surface_modules),
+        crate_native_names,
+    )
+}
+
+pub fn run_cranelift_jit_prepared(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+    source_schemas: HashMap<String, Vec<CgType>>,
+    constructor_ordinals: HashMap<String, Option<usize>>,
+    crate_native_names: Vec<String>,
+) -> Result<(), AiviError> {
+    if !crate_native_names.is_empty() {
         return Err(AiviError::Codegen(format!(
             "E1527: crate-native binding(s) {} require `aivi build` (AOT). \
              They cannot run in JIT mode (`aivi run`).",
-            names.join(", ")
+            crate_native_names.join(", ")
         )));
     }
 
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     let t0 = if trace { Some(Instant::now()) } else { None };
     let mut runtime = build_runtime_from_program(&program)?;
-    {
-        let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
-        if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
-            ctx.merge_constructor_ordinals(surface_ordinals);
-        }
+    if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
+        ctx.merge_constructor_ordinals(constructor_ordinals);
     }
     let _module = jit_compile_into_runtime(
         program,

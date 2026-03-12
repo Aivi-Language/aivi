@@ -786,11 +786,6 @@ Command Reference
                 }
             }
             InputKind::Expression => {
-                eprintln!("DEBUG session_types={session_types:?}");
-                eprintln!(
-                    "DEBUG session_cg_types={:?}",
-                    infer.cg_types.get("repl_session")
-                );
                 let result_type = session_types
                     .get("_replResult")
                     .cloned()
@@ -2380,6 +2375,16 @@ pub(crate) fn format_opaque_placeholder(type_str: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::io::{Read, Seek, SeekFrom, Write};
+    #[cfg(unix)]
+    use std::os::fd::AsRawFd;
+    #[cfg(unix)]
+    use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+    #[cfg(unix)]
+    use std::sync::{Mutex, OnceLock};
+    #[cfg(unix)]
+    use tempfile::tempfile;
 
     fn make_engine() -> ReplEngine {
         let opts = ReplOptions {
@@ -2387,6 +2392,84 @@ mod tests {
             plain_mode: false,
         };
         ReplEngine::new(&opts).expect("engine creation failed")
+    }
+
+    #[cfg(unix)]
+    fn capture_stderr<T>(f: impl FnOnce() -> T) -> (T, String) {
+        static STDERR_CAPTURE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let _capture_guard = STDERR_CAPTURE_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("stderr capture mutex poisoned");
+
+        struct StderrCapture {
+            target_fd: libc::c_int,
+            saved_fd: libc::c_int,
+            capture: std::fs::File,
+        }
+
+        impl StderrCapture {
+            fn start() -> Self {
+                let target_fd = std::io::stderr().as_raw_fd();
+                let saved_fd = unsafe { libc::dup(target_fd) };
+                assert!(saved_fd >= 0, "failed to dup stderr fd");
+
+                let capture = tempfile().expect("create capture file");
+                assert!(
+                    unsafe { libc::dup2(capture.as_raw_fd(), target_fd) } >= 0,
+                    "failed to redirect stderr"
+                );
+
+                Self {
+                    target_fd,
+                    saved_fd,
+                    capture,
+                }
+            }
+
+            fn finish(mut self) -> String {
+                self.restore();
+                self.capture
+                    .seek(SeekFrom::Start(0))
+                    .expect("rewind capture file");
+                let mut output = String::new();
+                self.capture
+                    .read_to_string(&mut output)
+                    .expect("read capture file");
+                output
+            }
+
+            fn restore(&mut self) {
+                if self.saved_fd < 0 {
+                    return;
+                }
+
+                std::io::stderr().flush().expect("flush stderr");
+                assert!(
+                    unsafe { libc::dup2(self.saved_fd, self.target_fd) } >= 0,
+                    "failed to restore stderr"
+                );
+                unsafe {
+                    libc::close(self.saved_fd);
+                }
+                self.saved_fd = -1;
+            }
+        }
+
+        impl Drop for StderrCapture {
+            fn drop(&mut self) {
+                self.restore();
+            }
+        }
+
+        let capture = StderrCapture::start();
+        let result = catch_unwind(AssertUnwindSafe(f));
+        let output = capture.finish();
+
+        match result {
+            Ok(result) => (result, output),
+            Err(panic) => resume_unwind(panic),
+        }
     }
 
     // ── Input classification ────────────────────────────────────────────────
@@ -2918,6 +3001,21 @@ mod tests {
         let last = peek.transcript.last().expect("peek result");
         assert_eq!(last.kind, TranscriptKind::ValueResult);
         assert_eq!(last.text, "18 :: Int");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn expression_submit_does_not_leak_debug_output_to_stderr() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.reactive").unwrap();
+        engine.submit("x = signal \"a\"").unwrap();
+        engine.submit("y = x ->> \"... {_}\"").unwrap();
+
+        let (_, stderr) = capture_stderr(|| engine.submit("peek y").unwrap());
+        assert!(
+            stderr.trim().is_empty(),
+            "expected empty stderr during expression submit, got {stderr:?}"
+        );
     }
 
     #[test]

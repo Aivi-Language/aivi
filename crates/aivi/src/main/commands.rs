@@ -374,16 +374,30 @@ fn cmd_project_build_cranelift(
     release: bool,
 ) -> Result<(), AiviError> {
     let source_target = resolve_project_source_target(root, &cfg.project.entry);
+    let entry_module = resolve_project_entry_module_name(root, &cfg.project.entry)?;
     let mut spinner = Spinner::new("assembling frontend".to_string());
-    let mut session = aivi::WorkspaceSession::new();
-    let result =
-        aivi::desugar_target_with_cg_types_and_surface_in_session(&mut session, &source_target);
+    let result = daemon::compile_project_with_optional_daemon(
+        root,
+        &source_target,
+        std::slice::from_ref(&entry_module),
+        io::stderr().is_terminal(),
+    );
     spinner.stop();
-    let (program, cg_types, monomorph_plan, surface_modules) = result?;
+    let (artifacts, summary) = match result {
+        Ok(result) => result,
+        Err(daemon::PrepareCompileFailure::Diagnostics { rendered, summary }) => {
+            daemon::print_compile_summary(&summary);
+            if !rendered.is_empty() {
+                eprint!("{rendered}");
+            }
+            return Err(AiviError::Diagnostics);
+        }
+        Err(daemon::PrepareCompileFailure::Error(err)) => return Err(err),
+    };
+    daemon::print_compile_summary(&summary);
 
     // 1a. Collect crate-native bindings and validate dependencies
-    let crate_natives =
-        aivi::native_bridge::collect_crate_natives(&surface_modules);
+    let crate_natives = artifacts.crate_natives.clone();
     if !crate_natives.is_empty() {
         let cargo_toml_path = root.join("Cargo.toml");
         if let Err(errors) =
@@ -400,7 +414,12 @@ fn cmd_project_build_cranelift(
 
     // 1b. Compile to object file
     eprintln!("  Compiling AIVI → Cranelift AOT...");
-    let object_bytes = aivi::compile_to_object(program, cg_types, monomorph_plan, &surface_modules)?;
+    let object_bytes = aivi::compile_to_object(
+        artifacts.program,
+        artifacts.cg_types,
+        artifacts.monomorph_plan,
+        &[],
+    )?;
 
     // 2. Write the object file
     let gen_dir = root.join(&cfg.build.gen_dir);
@@ -511,18 +530,44 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
         ));
     }
     let source_target = resolve_project_source_target(&root, &cfg.project.entry);
+    let entry_module = resolve_project_entry_module_name(&root, &cfg.project.entry)?;
     if proj_args.watch {
         let watch_dir = resolve_project_source_root(&root, &cfg.project.entry);
-        return watch::run_watch(&source_target, &watch_dir);
+        return watch::run_watch(&source_target, std::slice::from_ref(&entry_module), &watch_dir);
     }
     aivi::run_pre_run_scripts(&cfg.scripts)?;
     let mut spinner = Spinner::new("assembling frontend".to_string());
-    let mut session = aivi::WorkspaceSession::new();
-    let result =
-        aivi::desugar_target_with_cg_types_and_surface_in_session(&mut session, &source_target);
+    let result = daemon::compile_project_with_optional_daemon(
+        &root,
+        &source_target,
+        std::slice::from_ref(&entry_module),
+        io::stderr().is_terminal(),
+    );
     spinner.stop();
-    let (program, cg_types, monomorph_plan, surface_modules) = result?;
-    aivi::run_cranelift_jit(program, cg_types, monomorph_plan, std::collections::HashMap::new(), &surface_modules)
+    let (artifacts, summary) = match result {
+        Ok(result) => result,
+        Err(daemon::PrepareCompileFailure::Diagnostics { rendered, summary }) => {
+            daemon::print_compile_summary(&summary);
+            if !rendered.is_empty() {
+                eprint!("{rendered}");
+            }
+            return Err(AiviError::Diagnostics);
+        }
+        Err(daemon::PrepareCompileFailure::Error(err)) => return Err(err),
+    };
+    daemon::print_compile_summary(&summary);
+    aivi::run_cranelift_jit_prepared(
+        artifacts.program,
+        artifacts.cg_types,
+        artifacts.monomorph_plan,
+        artifacts.source_schemas,
+        artifacts.constructor_ordinals,
+        artifacts
+            .crate_natives
+            .iter()
+            .map(|binding| binding.aivi_name.clone())
+            .collect(),
+    )
 }
 
 struct ProjectArgs {
@@ -612,6 +657,21 @@ fn resolve_project_entry(project_root: &Path, entry: &str) -> PathBuf {
 fn resolve_project_source_root(project_root: &Path, entry: &str) -> PathBuf {
     let entry_path = resolve_project_entry(project_root, entry);
     entry_path.parent().unwrap_or(project_root).to_path_buf()
+}
+
+fn resolve_project_entry_module_name(project_root: &Path, entry: &str) -> Result<String, AiviError> {
+    let entry_path = resolve_project_entry(project_root, entry);
+    let source = std::fs::read_to_string(&entry_path)?;
+    let (modules, _diagnostics) = aivi::parse_modules(entry_path.as_path(), &source);
+    modules
+        .first()
+        .map(|module| module.name.name.clone())
+        .ok_or_else(|| {
+            AiviError::Config(format!(
+                "project entry {} does not declare a module",
+                entry_path.display()
+            ))
+        })
 }
 
 fn recursive_target_arg(path: &Path) -> String {

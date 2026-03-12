@@ -12,6 +12,7 @@ pub use compile::evaluate_binding_jit;
 pub use compile::evaluate_binding_jit_detailed;
 pub use compile::run_cranelift_jit;
 pub(crate) use compile::run_cranelift_jit_cancellable;
+pub use compile::run_cranelift_jit_prepared;
 pub use compile::run_test_suite_jit;
 pub use compile::EvaluatedBinding;
 pub use compile::ReplJitSession;
