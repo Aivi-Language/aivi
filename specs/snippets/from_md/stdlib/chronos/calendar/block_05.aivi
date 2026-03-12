@@ -5,3 +5,4 @@ issuedOn          = ~d(2024-01-31)
 trialEnds         = addDays issuedOn 14
 renewsOn          = addMonths issuedOn 1
 statementClosesOn = issuedOn + eom
+renewsLabel       = renewsOn |> format "dd.MM.yyyy"
