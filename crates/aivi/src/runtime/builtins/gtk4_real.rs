@@ -1243,6 +1243,10 @@ mod bridge {
             let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.windowNew expects Int")) };
             Ok(effect(move |_| { let r = aivi_gtk4::window_new(app_id, &title, width, height).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
         }));
+        fields.insert("displayHeight".to_string(), builtin("gtk4.displayHeight", 1, |mut args, _| {
+            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("gtk4.displayHeight expects Unit")) }
+            Ok(effect(move |_| { let r = aivi_gtk4::display_height().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
+        }));
 
         macro_rules! bridge_unit_ii {
             ($name:expr, $fn:path) => {

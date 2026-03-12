@@ -10,7 +10,7 @@ export GtkElement, GtkTextNode, GtkBoundText, GtkShowNode, GtkEachNode
 export GtkStaticAttr, GtkBoundAttr, GtkStaticProp, GtkBoundProp, GtkEventProp, GtkIdAttr, GtkRefAttr
 export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkWindowClosed, GtkUnknownSignal, GtkTick
 export init, appNew, appRun
-export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated
+export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated, displayHeight
 export widgetShow, widgetHide
 export widgetSetSizeRequest, widgetSetHexpand, widgetSetVexpand
 export widgetSetHalign, widgetSetValign
@@ -225,6 +225,9 @@ windowSetHideOnClose = gtk4.windowSetHideOnClose
 
 windowSetDecorated : WindowId -> Bool -> Effect GtkError Unit
 windowSetDecorated = gtk4.windowSetDecorated
+
+displayHeight : Unit -> Effect GtkError Int
+displayHeight = gtk4.displayHeight
 
 appRun : AppId -> Effect GtkError Unit
 appRun = gtk4.appRun
