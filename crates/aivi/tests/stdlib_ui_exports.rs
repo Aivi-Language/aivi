@@ -86,6 +86,7 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "signalPoll",
         "signalStream",
         "signalEmit",
+        "signalBindDialogPresent",
         "gtkSetInterval",
     ] {
         assert!(
