@@ -105,6 +105,9 @@ impl TypeChecker {
         if op == "|>" {
             let arg_ty = self.infer_expr(left, env)?;
             let right = self.normalize_pipe_transformer(right);
+            if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
+                eprintln!("[PIPE_INNER] |> right after normalize: disc={:?}", std::mem::discriminant(&right));
+            }
             // Special case: if the RHS is a partially-applied class method call, collect all
             // arguments including the piped LHS value so instance dispatch sees the full picture.
             // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
@@ -135,6 +138,9 @@ impl TypeChecker {
         if op == "->>" {
             let arg_ty = self.infer_expr(left, env)?;
             let right = self.normalize_pipe_transformer(right);
+            if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
+                eprintln!("[SIG_PIPE] right after normalize: disc={:?}", std::mem::discriminant(&right));
+            }
             if let Some(signal_item_ty) = self.extract_signal_item_type(arg_ty.clone()) {
                 return self.infer_signal_pipe_result(left, &right, signal_item_ty, env);
             }

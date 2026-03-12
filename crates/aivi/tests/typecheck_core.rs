@@ -291,7 +291,7 @@ count = signal 0
 state = signal { count: 0, enabled: False }
 
 countText = count ->> (_ + 1) ->> toText
-stateCount = state ->> _.count + 1
+stateCount = state ->> (s => s.count + 1)
 stateCountViaPattern = state ->> { count } => count + 1
 countSet = count <<- 5
 countUpdate = count <<- (_ + 1)

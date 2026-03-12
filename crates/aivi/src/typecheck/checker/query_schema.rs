@@ -144,6 +144,15 @@ impl TypeChecker {
     }
 
     fn normalize_pipe_transformer(&self, expr: &Expr) -> Expr {
+        if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
+            if let Expr::Binary { op, left, right, .. } = expr {
+                let has_ph = expr_contains_placeholder(expr);
+                eprintln!("[NORM_BINARY] op={} left_disc={:?} right_disc={:?} has_placeholder={}", op, std::mem::discriminant(left.as_ref()), std::mem::discriminant(right.as_ref()), has_ph);
+                if let Expr::Ident(n) = left.as_ref() {
+                    eprintln!("[NORM_BINARY] left Ident name={:?} len={}", n.name, n.name.len());
+                }
+            }
+        }
         match expr {
             Expr::Lambda { .. } | Expr::FieldSection { .. } | Expr::Ident(_) => expr.clone(),
             Expr::Call { func, args, span } => Expr::Call {
@@ -275,6 +284,11 @@ impl TypeChecker {
                     op,
                     left: Box::new(rewrite(*left, param)),
                     right: Box::new(rewrite(*right, param)),
+                    span,
+                },
+                Expr::FieldSection { field, span } => Expr::FieldAccess {
+                    base: Box::new(Expr::Ident(param.clone())),
+                    field,
                     span,
                 },
                 other => other,

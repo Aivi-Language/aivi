@@ -201,7 +201,11 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
             right,
             span,
         } => {
-            if op == "|>" {
+            if op == "|>" || op == "->>" {
+                // For pipe operators, the right-hand side is a transformer expression
+                // handled by normalize_pipe_transformer, which recognises `_` placeholders.
+                // Pre-desugaring holes here would replace `_` with `__hole_N` before
+                // normalize_pipe_transformer can see them, breaking placeholder rewriting.
                 return Expr::Binary {
                     op,
                     left: Box::new(desugar_holes_inner(*left, false)),
@@ -328,7 +332,7 @@ fn contains_hole(expr: &Expr) -> bool {
             ..
         } => contains_hole(cond) || contains_hole(then_branch) || contains_hole(else_branch),
         Expr::Binary { op, left, right, .. } => {
-            contains_hole(left) || (op != "|>" && contains_hole(right))
+            contains_hole(left) || (op != "|>" && op != "->>" && contains_hole(right))
         }
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_hole(expr),
@@ -513,9 +517,15 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             right,
             span,
         } => Expr::Binary {
-            op,
+            op: op.clone(),
             left: Box::new(replace_holes_inner(*left, counter, params)),
-            right: Box::new(replace_holes_inner(*right, counter, params)),
+            // For pipe operators whose RHS is a transformer expression (->> and |>),
+            // do not replace holes in the right side — normalize_pipe_transformer handles them.
+            right: if op == "|>" || op == "->>" {
+                right
+            } else {
+                Box::new(replace_holes_inner(*right, counter, params))
+            },
             span,
         },
         Expr::Block { kind, items, span } => Expr::Block {
