@@ -53,20 +53,20 @@ impl TypeChecker {
             },
             Literal::String { .. } => Type::con("Text"),
             Literal::Sigil { tag, .. } => match tag.as_str() {
-                "r" => Type::con("aivi.regex.Regex"),
+                "r" => Type::con("Regex"),
                 "u" | "url" => Type::con("aivi.url.Url"),
                 "p" | "path" => Type::con("aivi.path.Path"),
-                "d" => Type::con("aivi.calendar.Date"),
-                "t" | "dt" => Type::con("aivi.calendar.DateTime"),
-                "tz" => Type::con("aivi.chronos.timezone.TimeZone"),
-                "zdt" => Type::con("aivi.chronos.timezone.ZonedDateTime"),
+                "d" => Type::con("Date"),
+                "t" | "dt" => Type::con("DateTime"),
+                "tz" => Type::con("TimeZone"),
+                "zdt" => Type::con("ZonedDateTime"),
                 "k" => Type::con("aivi.i18n.Key"),
                 "m" => Type::con("aivi.i18n.Message"),
                 "raw" => Type::con("Text"),
                 _ => Type::con("Text"),
             },
             Literal::Bool { .. } => Type::con("Bool"),
-            Literal::DateTime { .. } => Type::con("aivi.calendar.DateTime"),
+            Literal::DateTime { .. } => Type::con("DateTime"),
         }
     }
 

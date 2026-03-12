@@ -141,6 +141,17 @@ impl TypeChecker {
                 }
                 Ok(())
             }
+            // Unit ≅ {} — empty record and builtin Unit are interchangeable.
+            (Type::Con(name, args), Type::Record { fields })
+                if name == "Unit" && args.is_empty() && fields.is_empty() =>
+            {
+                Ok(())
+            }
+            (Type::Record { fields }, Type::Con(name, args))
+                if name == "Unit" && args.is_empty() && fields.is_empty() =>
+            {
+                Ok(())
+            }
             (f, e) => Err(TypeError {
                 span,
                 message: "type mismatch".to_string(),
