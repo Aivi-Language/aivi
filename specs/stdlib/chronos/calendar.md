@@ -50,6 +50,10 @@ These examples show the kinds of calendar questions the domain is built to answe
 <<< ../../snippets/from_md/stdlib/chronos/calendar/block_03.aivi{aivi}
 
 
+`toText` renders `Date` values in stable ISO form (`yyyy-MM-dd`).
+When you need a user-facing layout, call `format` explicitly, for example `date |> format "dd.MM.yyyy"`.
+In the current v0.1 implementation, `format` supports the numeric date-field tokens `y`, `M`, and `d`.
+
 These helpers are all pure. The only effectful entry point in this module is `now`.
 
 ## Domain definition
@@ -73,6 +77,7 @@ In other words, the domain gives you four calendar deltas today: days, months, y
 | **addDays** date n<br><code>Date -> Int -> Date</code> | Move forward or backward by calendar days with normalization. |
 | **addMonths** date n<br><code>Date -> Int -> Date</code> | Move by whole months while handling month length differences and day clamping. |
 | **addYears** date n<br><code>Date -> Int -> Date</code> | Move by whole years while preserving calendar intent as closely as possible. |
+| **format** pattern date<br><code>Text -> Date -> Text</code> | Render a `Date` into text with numeric `y`, `M`, and `d` tokens such as `dd.MM.yyyy`. |
 | **negateDelta** delta<br><code>Delta -> Delta</code> | Reverse a calendar delta so you can undo or mirror an adjustment. |
 | **now**<br><code>Effect DateTime</code> | Read the current wall-clock `DateTime`. This is effectful and depends on the active `clock.now` handler. |
 

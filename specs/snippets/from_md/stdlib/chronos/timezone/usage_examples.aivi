@@ -3,5 +3,6 @@ use aivi.chronos.timezone
 
 original = ~zdt(2024-01-01T10:00:00[Europe/London])
 travel   = original |> ZonedDateTime.atZone ~tz(America/New_York)
+label    = travel |> format "dd.MM.yyyy HH:mm XXX VV"
 
 // travel is ~zdt(2024-01-01T05:00:00[America/New_York])

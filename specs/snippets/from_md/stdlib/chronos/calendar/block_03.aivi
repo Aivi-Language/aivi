@@ -11,3 +11,5 @@ isLeap         = isLeapYear today
 daysThisMonth  = daysInMonth today
 monthEnd       = endOfMonth today
 sameAsTomorrow = today + 1d
+isoText        = toText today
+billingLabel   = today |> format "dd.MM.yyyy"

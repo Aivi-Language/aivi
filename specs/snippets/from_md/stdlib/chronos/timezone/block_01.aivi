@@ -1,6 +1,7 @@
-use aivi.chronos.timezone (getOffset, toInstant, atZone)
+use aivi.chronos.timezone (getOffset, toInstant, atZone, format)
 
 parisMeeting = ~zdt(2024-05-21T12:00:00[Europe/Paris])
 runAt        = toInstant parisMeeting
 tokyoView    = atZone parisMeeting ~tz(Asia/Tokyo)
 parisOffset  = getOffset ~tz(Europe/Paris) runAt
+parisLabel   = parisMeeting |> format "dd.MM.yyyy HH:mm XXX VV"
