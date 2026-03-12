@@ -740,7 +740,11 @@ fn render_transcript(
     let effective = state.scroll_offset.min(max_scroll);
     let start = (total as usize).saturating_sub(visible as usize + effective);
 
-    let visible_items: Vec<ListItem> = all_lines.into_iter().skip(start).collect();
+    let visible_items: Vec<ListItem> = all_lines
+        .into_iter()
+        .skip(start)
+        .take(visible as usize)
+        .collect();
 
     let block = Block::default()
         .title(" AIVI REPL ")
@@ -1007,6 +1011,13 @@ fn completion_badge_style(kind: CompletionKind, palette: Palette) -> Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::{backend::TestBackend, buffer::Buffer};
+
+    fn buffer_row(buffer: &Buffer, y: u16) -> String {
+        (0..buffer.area.width)
+            .map(|x| buffer.cell((x, y)).expect("buffer row cell").symbol())
+            .collect()
+    }
 
     #[test]
     fn palette_never_gives_plain_borders() {
@@ -1208,5 +1219,30 @@ mod tests {
                 "    no indexed docs available for this symbol yet.".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn transcript_render_does_not_pollute_status_row() {
+        let transcript = (0..12)
+            .map(|idx| TranscriptEntry {
+                kind: TranscriptKind::CommandOutput,
+                text: format!("overflow line {idx}"),
+            })
+            .collect();
+        let snapshot = ReplSnapshot {
+            transcript,
+            symbol_pane: None,
+            symbols: Vec::new(),
+            turn: 5,
+        };
+        let state = TuiState::new(snapshot, Palette::new(ColorMode::Never, true));
+        let mut terminal = Terminal::new(TestBackend::new(90, 10)).unwrap();
+
+        terminal.draw(|frame| render(frame, &state)).unwrap();
+
+        let status_row = buffer_row(terminal.backend().buffer(), 6);
+        let status_text =
+            "  session:5  module:repl_session  [Tab: symbols]  [Ctrl+D: exit]  [Ctrl+L: clear]";
+        assert_eq!(status_row, format!("{status_text:<90}"));
     }
 }
