@@ -31,7 +31,7 @@ export TrayIconId, trayIconNew, trayIconSetTooltip, trayIconSetVisible, trayIcon
 export dragSourceNew, dragSourceSetText
 export dropTargetNew, dropTargetLastText
 export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
-export dialogNew, dialogSetTitle, dialogSetChild, dialogPresent, dialogClose, adwDialogPresent
+export dialogNew, dialogSetTitle, dialogSetChild, dialogPresent, dialogClose, adwDialogPresent, signalBindDialogPresent
 export fileDialogNew, fileDialogSelectFile
 export listStoreNew, listStoreAppendText, listStoreItems
 export listViewNew, listViewSetModel
@@ -413,6 +413,9 @@ dialogClose = gtk4.dialogClose
 
 adwDialogPresent : WidgetId -> WindowId -> Effect GtkError Unit
 adwDialogPresent = gtk4.adwDialogPresent
+
+signalBindDialogPresent : Text -> WidgetId -> WindowId -> Effect GtkError Unit
+signalBindDialogPresent = gtk4.signalBindDialogPresent
 
 fileDialogNew : Unit -> Effect GtkError FileDialogId
 fileDialogNew = gtk4.fileDialogNew

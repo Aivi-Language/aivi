@@ -505,6 +505,14 @@ mod bridge {
             return Ok(());
         }
         match property {
+            "open" if class_name.starts_with("Adw") && class_name.ends_with("Dialog") => {
+                let open = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
+                    context: format!("gtk4 live binding {class_name}.{property}"),
+                    expected: "Bool".to_string(),
+                    got: value.to_string(),
+                })?;
+                aivi_gtk4::dialog_set_open(widget_id, open).map_err(gtk4_err_to_runtime)
+            }
             "visible" => {
                 let visible = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
                     context: format!("gtk4 live binding {class_name}.{property}"),
@@ -687,6 +695,44 @@ mod bridge {
         Ok(())
     }
 
+    fn cleanup_binding_widgets(
+        runtime: &mut crate::runtime::Runtime,
+        widget_ids: &[i64],
+    ) -> Result<(), RuntimeError> {
+        for &widget_id in widget_ids {
+            for watcher_id in runtime.ctx.take_gtk_binding_watchers(widget_id) {
+                runtime.reactive_dispose_watcher(watcher_id);
+            }
+        }
+        Ok(())
+    }
+
+    fn register_dialog_root_cleanup(
+        runtime: &mut crate::runtime::Runtime,
+        root_id: i64,
+        root_class_name: &str,
+        binding_widgets: &HashMap<String, i64>,
+    ) -> Result<(), RuntimeError> {
+        if !(root_class_name.starts_with("Adw") && root_class_name.ends_with("Dialog")) {
+            return Ok(());
+        }
+        if aivi_gtk4::dialog_root_is_persistent(root_id).map_err(gtk4_err_to_runtime)? {
+            return Ok(());
+        }
+        let mut widget_ids = binding_widgets.values().copied().collect::<Vec<_>>();
+        widget_ids.sort_unstable();
+        widget_ids.dedup();
+        ensure_runtime_handler_dispatcher(runtime.ctx.clone());
+        let handler = builtin("gtk4.dialogRootCleanup", 1, move |_args, runtime| {
+            cleanup_binding_widgets(runtime, &widget_ids)?;
+            Ok(Value::Unit)
+        });
+        let token = runtime.ctx.register_gtk_runtime_handler(handler);
+        aivi_gtk4::signal_bind_cleanup_root(&token, root_id).map_err(gtk4_err_to_runtime)?;
+        aivi_gtk4::dialog_root_on_closed(root_id, &token).map_err(gtk4_err_to_runtime)?;
+        Ok(())
+    }
+
     fn structural_binding_signals(
         children: &[ResolvedGtkNode],
         runtime: &mut crate::runtime::Runtime,
@@ -768,6 +814,15 @@ mod bridge {
         let result = aivi_gtk4::build_with_bindings(&node).map_err(gtk4_err_to_runtime)?;
         install_live_bindings(runtime, &result.binding_widgets, bindings)?;
         install_structural_bindings(runtime, &result.binding_widgets, structural_bindings)?;
+        register_dialog_root_cleanup(
+            runtime,
+            result.root_id,
+            &result.root_class_name,
+            &result.binding_widgets,
+        )?;
+        if result.root_class_name.starts_with("Adw") && result.root_class_name.ends_with("Dialog") {
+            aivi_gtk4::dialog_sync_open_state(result.root_id).map_err(gtk4_err_to_runtime)?;
+        }
         Ok(result)
     }
 
@@ -1720,7 +1775,8 @@ mod bridge {
 mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
-    use std::sync::Once;
+    use std::sync::{Mutex, Once};
+    use std::time::Duration;
 
     use serde_json::json;
 
@@ -1756,6 +1812,13 @@ mod tests {
         INIT.call_once(|| {
             aivi_gtk4::init().unwrap_or_else(|err| panic!("init gtk: {}", err.message));
         });
+    }
+
+    fn gtk_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static GTK_TEST_MUTEX: Mutex<()> = Mutex::new(());
+        GTK_TEST_MUTEX
+            .lock()
+            .expect("GTK test mutex should not be poisoned")
     }
 
     fn ok_or_panic<T>(result: Result<T, crate::runtime::RuntimeError>, context: &str) -> T {
@@ -1861,6 +1924,7 @@ mod tests {
 
     #[test]
     fn runtime_handler_callback_flushes_live_binding_updates_on_main_thread_tick() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
@@ -1963,6 +2027,7 @@ mod tests {
 
     #[test]
     fn live_bound_entry_text_updates_from_signal_write() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2010,6 +2075,7 @@ mod tests {
 
     #[test]
     fn live_property_child_text_updates_from_signal_write() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2063,6 +2129,7 @@ mod tests {
 
     #[test]
     fn live_show_binding_toggles_widget_visibility() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2117,6 +2184,7 @@ mod tests {
 
     #[test]
     fn live_split_view_show_sidebar_updates_from_signal_write() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2165,6 +2233,7 @@ mod tests {
 
     #[test]
     fn live_each_binding_reconciles_container_children() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2248,6 +2317,7 @@ mod tests {
 
     #[test]
     fn live_each_binding_reinstalls_nested_prop_bindings_after_reconcile() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2357,6 +2427,7 @@ mod tests {
 
     #[test]
     fn live_show_binding_reconciles_non_element_children() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2444,6 +2515,7 @@ mod tests {
 
     #[test]
     fn live_each_binding_preserves_keyed_widget_identity_on_reorder() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
@@ -2535,6 +2607,7 @@ mod tests {
 
     #[test]
     fn live_each_binding_cleans_removed_widget_watchers() {
+        let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
@@ -2632,6 +2705,283 @@ mod tests {
         assert_eq!(
             aivi_gtk4::entry_text(kept_entry_id)
                 .unwrap_or_else(|err| panic!("read cleanup-entry-1: {}", err.message)),
+            "after"
+        );
+    }
+
+    #[test]
+    fn dialog_close_cleans_up_root_binding_watchers() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let shared_text = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text("dialog".to_string())),
+            "create dialog text signal",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesDialog".to_string(),
+                },
+                ResolvedGtkAttr::Id("cleanup-dialog".to_string()),
+                ResolvedGtkAttr::StaticAttr {
+                    name: "title".to_string(),
+                    value: "Cleanup".to_string(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ResolvedGtkAttr::StaticAttr {
+                        name: "class".to_string(),
+                        value: "AdwPreferencesPage".to_string(),
+                    },
+                    ResolvedGtkAttr::StaticAttr {
+                        name: "title".to_string(),
+                        value: "General".to_string(),
+                    },
+                ],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "class".to_string(),
+                            value: "AdwPreferencesGroup".to_string(),
+                        },
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "title".to_string(),
+                            value: "State".to_string(),
+                        },
+                    ],
+                    children: vec![ResolvedGtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ResolvedGtkAttr::StaticAttr {
+                                name: "class".to_string(),
+                                value: "GtkEntry".to_string(),
+                            },
+                            ResolvedGtkAttr::Id("cleanup-dialog-entry".to_string()),
+                            ResolvedGtkAttr::BoundProp {
+                                name: "text".to_string(),
+                                value: shared_text.clone(),
+                            },
+                        ],
+                        children: Vec::new(),
+                    }],
+                }],
+            }],
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build cleanup dialog",
+        );
+        let entry_id = *result
+            .named_widgets
+            .get("cleanup-dialog-entry")
+            .expect("cleanup dialog entry should be named");
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list dialog signals")["watcherCount"]
+                .as_u64(),
+            Some(1)
+        );
+
+        let app = aivi_gtk4::app_new("com.aivi.dialog.cleanup.test")
+            .unwrap_or_else(|err| panic!("create app: {}", err.message));
+        let win = aivi_gtk4::window_new(app, "Host", 480, 320)
+            .unwrap_or_else(|err| panic!("create host window: {}", err.message));
+        aivi_gtk4::window_present(win)
+            .unwrap_or_else(|err| panic!("present host window: {}", err.message));
+        aivi_gtk4::adw_dialog_present(result.root_id, win)
+            .unwrap_or_else(|err| panic!("present cleanup dialog: {}", err.message));
+        super::pump_gtk_events();
+
+        aivi_gtk4::adw_dialog_close(result.root_id)
+            .unwrap_or_else(|err| panic!("close cleanup dialog: {}", err.message));
+        for _ in 0..50 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+            if ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list signals after dialog close")["watcherCount"]
+                .as_u64()
+                == Some(0)
+            {
+                break;
+            }
+        }
+
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("final dialog signals")["watcherCount"]
+                .as_u64(),
+            Some(0)
+        );
+        assert!(
+            ctx.take_gtk_binding_watchers(entry_id).is_empty(),
+            "dialog entry watchers should be disposed on close"
+        );
+        assert!(
+            !aivi_gtk4::widget_exists(result.root_id)
+                .unwrap_or_else(|err| panic!("check cleanup dialog root: {}", err.message))
+        );
+        assert!(
+            !aivi_gtk4::widget_exists(entry_id)
+                .unwrap_or_else(|err| panic!("check cleanup dialog entry: {}", err.message))
+        );
+    }
+
+    #[test]
+    fn dialog_open_binding_reopens_without_cleanup() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let dialog_open = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create dialog open signal",
+        );
+        let shared_text = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text("dialog".to_string())),
+            "create dialog text signal",
+        );
+
+        let app = aivi_gtk4::app_new("com.aivi.dialog.open.binding.test")
+            .unwrap_or_else(|err| panic!("create app: {}", err.message));
+        let win = aivi_gtk4::window_new(app, "Host", 480, 320)
+            .unwrap_or_else(|err| panic!("create host window: {}", err.message));
+        aivi_gtk4::window_present(win)
+            .unwrap_or_else(|err| panic!("present host window: {}", err.message));
+
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesDialog".to_string(),
+                },
+                ResolvedGtkAttr::Id("persistent-dialog".to_string()),
+                ResolvedGtkAttr::StaticProp {
+                    name: "present-for".to_string(),
+                    value: win.to_string(),
+                },
+                ResolvedGtkAttr::BoundProp {
+                    name: "open".to_string(),
+                    value: dialog_open.clone(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesPage".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![ResolvedGtkAttr::StaticAttr {
+                        name: "class".to_string(),
+                        value: "AdwPreferencesGroup".to_string(),
+                    }],
+                    children: vec![ResolvedGtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ResolvedGtkAttr::StaticAttr {
+                                name: "class".to_string(),
+                                value: "GtkEntry".to_string(),
+                            },
+                            ResolvedGtkAttr::Id("persistent-dialog-entry".to_string()),
+                            ResolvedGtkAttr::BoundProp {
+                                name: "text".to_string(),
+                                value: shared_text.clone(),
+                            },
+                        ],
+                        children: Vec::new(),
+                    }],
+                }],
+            }],
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build persistent dialog",
+        );
+        let entry_id = *result
+            .named_widgets
+            .get("persistent-dialog-entry")
+            .expect("persistent dialog entry should be named");
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list persistent dialog signals")["watcherCount"]
+                .as_u64(),
+            Some(2)
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(dialog_open.clone(), Value::Bool(true)),
+            "open persistent dialog",
+        );
+        for _ in 0..60 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        ok_or_panic(
+            runtime.reactive_set_signal(dialog_open.clone(), Value::Bool(false)),
+            "close persistent dialog via open binding",
+        );
+        for _ in 0..60 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list persistent dialog signals after close")["watcherCount"]
+                .as_u64(),
+            Some(2)
+        );
+        assert!(
+            aivi_gtk4::widget_exists(result.root_id)
+                .unwrap_or_else(|err| panic!("check persistent dialog root: {}", err.message))
+        );
+        assert!(
+            aivi_gtk4::widget_exists(entry_id)
+                .unwrap_or_else(|err| panic!("check persistent dialog entry: {}", err.message))
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(dialog_open.clone(), Value::Bool(true)),
+            "reopen persistent dialog",
+        );
+        for _ in 0..20 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        ok_or_panic(
+            runtime.reactive_set_signal(dialog_open, Value::Bool(false)),
+            "close reopened persistent dialog",
+        );
+        for _ in 0..20 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list persistent dialog signals after reopen")["watcherCount"]
+                .as_u64(),
+            Some(2)
+        );
+        ok_or_panic(
+            runtime.reactive_set_signal(shared_text, Value::Text("after".to_string())),
+            "update persistent dialog text",
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read persistent dialog entry: {}", err.message)),
             "after"
         );
     }

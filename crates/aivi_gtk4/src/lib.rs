@@ -56,6 +56,7 @@ pub struct BuildResult {
 
 pub struct BuildWithBindingsResult {
     pub root_id: i64,
+    pub root_class_name: String,
     pub named_widgets: HashMap<String, i64>,
     pub binding_widgets: HashMap<String, i64>,
 }
@@ -68,7 +69,7 @@ pub type MainLoopTickHandler = dyn Fn() -> Result<(), Gtk4Error> + Send + Sync;
 #[allow(dead_code)]
 mod linux_impl {
     use std::cell::RefCell;
-    use std::collections::{HashMap, VecDeque};
+    use std::collections::{HashMap, HashSet, VecDeque};
     use std::ffi::{CStr, CString};
     use std::fs;
     use std::io::{BufRead, BufReader, Write};
@@ -697,6 +698,8 @@ mod linux_impl {
         apps: HashMap<i64, *mut c_void>,
         windows: HashMap<i64, *mut c_void>,
         widgets: HashMap<i64, *mut c_void>,
+        retained_widgets: HashMap<i64, *mut c_void>,
+        presented_dialogs: HashSet<i64>,
         boxes: HashMap<i64, *mut c_void>,
         buttons: HashMap<i64, *mut c_void>,
         labels: HashMap<i64, *mut c_void>,
@@ -753,6 +756,9 @@ mod linux_impl {
         PresentDialog {
             dialog_id: i64,
             parent_id: i64,
+        },
+        CleanupRoot {
+            root_id: i64,
         },
         SetStackPage {
             stack_id: i64,
@@ -2535,6 +2541,10 @@ mod linux_impl {
                 "dialogId": dialog_id,
                 "parentId": parent_id,
             }),
+            SignalAction::CleanupRoot { root_id } => json!({
+                "kind": "cleanupRoot",
+                "rootId": root_id,
+            }),
             SignalAction::SetStackPage {
                 stack_id,
                 page_name,
@@ -4177,6 +4187,10 @@ mod linux_impl {
         text.trim().parse::<i32>().ok()
     }
 
+    fn parse_i64_text(text: &str) -> Option<i64> {
+        text.trim().parse::<i64>().ok()
+    }
+
     fn parse_usize_text(text: &str) -> Option<usize> {
         text.trim().parse::<usize>().ok()
     }
@@ -4191,6 +4205,12 @@ mod linux_impl {
             "false" | "0" | "no" | "off" => Some(false),
             _ => None,
         }
+    }
+
+    fn should_retain_widget(class_name: &str, props: &HashMap<String, String>) -> bool {
+        class_name.starts_with("Adw")
+            && class_name.ends_with("Dialog")
+            && props.contains_key("open")
     }
 
     fn parse_orientation_text(text: &str) -> c_int {
@@ -4345,6 +4365,58 @@ mod linux_impl {
             let _ = unsafe { dlclose(handle) };
             break;
         }
+    }
+
+    fn call_adw_fn_p(fn_name: &str, arg0: *mut c_void) {
+        const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else {
+                continue;
+            };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
+            if handle.is_null() {
+                continue;
+            }
+            let Ok(sym) = CString::new(fn_name) else {
+                break;
+            };
+            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
+            if !ptr.is_null() {
+                let f: unsafe extern "C" fn(*mut c_void) = unsafe { std::mem::transmute(ptr) };
+                unsafe { f(arg0) };
+            }
+            let _ = unsafe { dlclose(handle) };
+            break;
+        }
+    }
+
+    fn call_adw_fn_p_bool(fn_name: &str, arg0: *mut c_void) -> bool {
+        const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else {
+                continue;
+            };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
+            if handle.is_null() {
+                continue;
+            }
+            let Ok(sym) = CString::new(fn_name) else {
+                break;
+            };
+            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
+            if !ptr.is_null() {
+                let f: unsafe extern "C" fn(*mut c_void) -> c_int =
+                    unsafe { std::mem::transmute(ptr) };
+                let closed = unsafe { f(arg0) } != 0;
+                let _ = unsafe { dlclose(handle) };
+                return closed;
+            }
+            let _ = unsafe { dlclose(handle) };
+            break;
+        }
+        false
     }
 
     /// Call a no-argument libadwaita function that returns a `*mut c_void` (e.g., singletons).
@@ -4664,6 +4736,9 @@ mod linux_impl {
                 dialog: *mut c_void,
                 parent: *mut c_void,
             },
+            CleanupRoot {
+                root_id: i64,
+            },
             SetStackPage {
                 stack: *mut c_void,
                 page: CString,
@@ -4762,6 +4837,9 @@ mod linux_impl {
                                 mutations.push(DeferredMutation::PresentDialog { dialog, parent });
                             }
                         }
+                        SignalAction::CleanupRoot { root_id } => {
+                            mutations.push(DeferredMutation::CleanupRoot { root_id: *root_id });
+                        }
                         SignalAction::SetStackPage {
                             stack_id,
                             page_name,
@@ -4812,6 +4890,23 @@ mod linux_impl {
                 },
                 DeferredMutation::PresentDialog { dialog, parent } => {
                     call_adw_fn_pp("adw_dialog_present", dialog, parent);
+                }
+                DeferredMutation::CleanupRoot { root_id } => {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let widget_name = state.widget_id_to_name.get(&root_id).cloned();
+                        if cleanup_root_state(&mut state, root_id) {
+                            state.record_mutation(serde_json::Map::from_iter([
+                                (
+                                    "kind".to_string(),
+                                    Value::String("root-cleaned".to_string()),
+                                ),
+                                ("rootId".to_string(), json!(root_id)),
+                                ("widgetId".to_string(), json!(root_id)),
+                                ("widgetName".to_string(), json!(widget_name)),
+                            ]));
+                        }
+                    });
                 }
                 DeferredMutation::SetStackPage { stack, page } => unsafe {
                     gtk_stack_set_visible_child_name(stack, page.as_ptr());
@@ -4876,6 +4971,9 @@ mod linux_impl {
             .unwrap_or_default();
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
+            if binding.signal_name == "closed" {
+                state.presented_dialogs.remove(&binding.widget_id);
+            }
             let event = SignalEventState {
                 widget_id: binding.widget_id,
                 signal: binding.signal_name.clone(),
@@ -4896,6 +4994,12 @@ mod linux_impl {
     }
 
     fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
+        if class_name.starts_with("Adw")
+            && class_name.ends_with("Dialog")
+            && signal_name == "closed"
+        {
+            return Some(SignalPayloadKind::None);
+        }
         match (class_name, signal_name) {
             (_, "key-pressed") => Some(SignalPayloadKind::KeyPressed),
             ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
@@ -7089,6 +7193,10 @@ mod linux_impl {
         if let Some(binding_id) = binding_id.as_deref() {
             binding_map.insert(binding_id.to_string(), id);
         }
+        if should_retain_widget(class_name, &props) {
+            unsafe { g_object_ref_sink(raw) };
+            state.retained_widgets.insert(id, raw);
+        }
         state.widgets.insert(id, raw);
         match class_name {
             "GtkBox" | "AdwClamp" => {
@@ -7426,6 +7534,10 @@ mod linux_impl {
     fn cleanup_widget_state(state: &mut RealGtkState, live: &LiveNode) {
         let id = live.widget_id;
         state.widgets.remove(&id);
+        if let Some(raw) = state.retained_widgets.remove(&id) {
+            unsafe { g_object_unref(raw) };
+        }
+        state.presented_dialogs.remove(&id);
         state.labels.remove(&id);
         state.entries.remove(&id);
         state.images.remove(&id);
@@ -7440,6 +7552,14 @@ mod linux_impl {
         for child in &live.children {
             cleanup_widget_state(state, &child.node);
         }
+    }
+
+    fn cleanup_root_state(state: &mut RealGtkState, root_id: i64) -> bool {
+        let Some(root_live) = state.live_trees.get(&root_id).cloned() else {
+            return false;
+        };
+        cleanup_widget_state(state, &root_live);
+        true
     }
 
     /// Remove a child widget from its parent container and clean up state.
@@ -9105,33 +9225,208 @@ mod linux_impl {
     }
 
     pub(super) fn dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
+        let (dialog, parent) = GTK_STATE.with(|state| {
             let state = state.borrow();
             let dialog = widget_ptr(&state, dialog_id, "dialogPresent")?;
             let parent = widget_ptr(&state, parent_id, "dialogPresent")?;
+            Ok((dialog, parent))
+        })?;
+        unsafe {
+            gtk_window_set_transient_for(dialog, parent);
+            gtk_window_present(dialog);
+        }
+        Ok(())
+    }
+
+    pub(super) fn dialog_close(id: i64) -> Result<(), Gtk4Error> {
+        let dialog = GTK_STATE.with(|state| {
+            let state = state.borrow();
+            widget_ptr(&state, id, "dialogClose")
+        })?;
+        unsafe { gtk_window_close(dialog) };
+        Ok(())
+    }
+
+    pub(super) fn adw_dialog_force_close(id: i64) -> Result<(), Gtk4Error> {
+        let dialog = GTK_STATE.with(|state| {
+            let state = state.borrow();
+            widget_ptr(&state, id, "adwDialogForceClose")
+        })?;
+        call_adw_fn_p("adw_dialog_force_close", dialog);
+        Ok(())
+    }
+
+    pub(super) fn adw_dialog_close(id: i64) -> Result<(), Gtk4Error> {
+        let dialog = GTK_STATE.with(|state| {
+            let state = state.borrow();
+            widget_ptr(&state, id, "adwDialogClose")
+        })?;
+        if !call_adw_fn_p_bool("adw_dialog_close", dialog) {
+            return Err(Gtk4Error::new(format!(
+                "gtk4.adwDialogClose dialog id {id} refused to close"
+            )));
+        }
+        Ok(())
+    }
+
+    fn dialog_root<'a>(
+        state: &'a RealGtkState,
+        root_id: i64,
+        fn_name: &str,
+    ) -> Result<&'a LiveNode, Gtk4Error> {
+        let root = state.live_trees.get(&root_id).ok_or_else(|| {
+            Gtk4Error::new(format!(
+                "gtk4.{fn_name} missing live tree for root id {root_id}"
+            ))
+        })?;
+        if !(root.class_name.starts_with("Adw") && root.class_name.ends_with("Dialog")) {
+            return Err(Gtk4Error::new(format!(
+                "gtk4.{fn_name} root id {root_id} is not an Adw dialog"
+            )));
+        }
+        Ok(root)
+    }
+
+    fn dialog_parent_id(root: &LiveNode, root_id: i64, fn_name: &str) -> Result<i64, Gtk4Error> {
+        root.props
+            .get("present-for")
+            .or_else(|| root.props.get("transient-for"))
+            .and_then(|value| parse_i64_text(value))
+            .ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk4.{fn_name} dialog root id {root_id} requires present-for=<WindowId>"
+                ))
+            })
+    }
+
+    pub(super) fn dialog_root_is_persistent(root_id: i64) -> Result<bool, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            Ok(dialog_root(&state, root_id, "dialogRootIsPersistent")?
+                .props
+                .contains_key("open"))
+        })
+    }
+
+    pub(super) fn dialog_set_open(root_id: i64, open: bool) -> Result<(), Gtk4Error> {
+        if open {
+            let (dialog, parent) = GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let root = dialog_root(&state, root_id, "dialogSetOpen")?;
+                if state.presented_dialogs.contains(&root_id) {
+                    return Ok((std::ptr::null_mut(), std::ptr::null_mut()));
+                }
+                let dialog = widget_ptr(&state, root_id, "dialogSetOpen")?;
+                let parent_id = dialog_parent_id(root, root_id, "dialogSetOpen")?;
+                let parent = widget_ptr(&state, parent_id, "dialogSetOpen")?;
+                Ok((dialog, parent))
+            })?;
+            if dialog.is_null() {
+                return Ok(());
+            }
+            call_adw_fn_pp("adw_dialog_present", dialog, parent);
+            GTK_STATE.with(|state| {
+                state.borrow_mut().presented_dialogs.insert(root_id);
+            });
+            Ok(())
+        } else {
+            let dialog = GTK_STATE.with(|state| {
+                let state = state.borrow();
+                dialog_root(&state, root_id, "dialogSetOpen")?;
+                if !state.presented_dialogs.contains(&root_id) {
+                    return Ok(std::ptr::null_mut());
+                }
+                widget_ptr(&state, root_id, "dialogSetOpen")
+            })?;
+            if dialog.is_null() {
+                return Ok(());
+            }
+            let _ = call_adw_fn_p_bool("adw_dialog_close", dialog);
+            GTK_STATE.with(|state| {
+                state.borrow_mut().presented_dialogs.remove(&root_id);
+            });
+            Ok(())
+        }
+    }
+
+    pub(super) fn dialog_sync_open_state(root_id: i64) -> Result<(), Gtk4Error> {
+        let open = GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let root = dialog_root(&state, root_id, "dialogSyncOpenState")?;
+            Ok(root
+                .props
+                .get("open")
+                .and_then(|value| parse_bool_text(value)))
+        })?;
+        match open {
+            Some(true) => dialog_set_open(root_id, true),
+            _ => Ok(()),
+        }
+    }
+
+    pub(super) fn adw_dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error> {
+        let (dialog, parent) = GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let dialog = widget_ptr(&state, dialog_id, "adwDialogPresent")?;
+            let parent = widget_ptr(&state, parent_id, "adwDialogPresent")?;
+            Ok((dialog, parent))
+        })?;
+        call_adw_fn_pp("adw_dialog_present", dialog, parent);
+        Ok(())
+    }
+
+    pub(super) fn dialog_root_on_closed(root_id: i64, handler: &str) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let root = state.live_trees.get(&root_id).ok_or_else(|| {
+                Gtk4Error::new(format!(
+                    "gtk4.dialogRootOnClosed missing live tree for root id {root_id}"
+                ))
+            })?;
+            if !(root.class_name.starts_with("Adw") && root.class_name.ends_with("Dialog")) {
+                return Err(Gtk4Error::new(format!(
+                    "gtk4.dialogRootOnClosed root id {root_id} is not an Adw dialog"
+                )));
+            }
+            let widget = widget_ptr(&state, root_id, "dialogRootOnClosed")?;
+            let signal_c = CString::new("closed")
+                .map_err(|_| Gtk4Error::new("gtk4.dialogRootOnClosed invalid signal name"))?;
+            let callback_data = Box::new(SignalCallbackData {
+                widget_id: root_id,
+                signal_name: "closed".to_string(),
+                handler: handler.to_string(),
+                payload_kind: SignalPayloadKind::None,
+            });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
             unsafe {
-                gtk_window_set_transient_for(dialog, parent);
-                gtk_window_present(dialog);
+                g_signal_connect_data(
+                    widget,
+                    signal_c.as_ptr(),
+                    gtk_signal_callback as *const c_void,
+                    callback_ptr,
+                    null_mut(),
+                    0,
+                );
             }
             Ok(())
         })
     }
 
-    pub(super) fn dialog_close(id: i64) -> Result<(), Gtk4Error> {
+    pub(super) fn cleanup_root(root_id: i64) -> Result<(), Gtk4Error> {
         GTK_STATE.with(|state| {
-            let state = state.borrow();
-            let d = widget_ptr(&state, id, "dialogClose")?;
-            unsafe { gtk_window_close(d) };
-            Ok(())
-        })
-    }
-
-    pub(super) fn adw_dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let state = state.borrow();
-            let dialog = widget_ptr(&state, dialog_id, "adwDialogPresent")?;
-            let parent = widget_ptr(&state, parent_id, "adwDialogPresent")?;
-            call_adw_fn_pp("adw_dialog_present", dialog, parent);
+            let mut state = state.borrow_mut();
+            let widget_name = state.widget_id_to_name.get(&root_id).cloned();
+            if cleanup_root_state(&mut state, root_id) {
+                state.record_mutation(serde_json::Map::from_iter([
+                    (
+                        "kind".to_string(),
+                        Value::String("root-cleaned".to_string()),
+                    ),
+                    ("rootId".to_string(), json!(root_id)),
+                    ("widgetId".to_string(), json!(root_id)),
+                    ("widgetName".to_string(), json!(widget_name)),
+                ]));
+            }
             Ok(())
         })
     }
@@ -9345,6 +9640,15 @@ mod linux_impl {
         )
     }
 
+    pub(super) fn signal_bind_cleanup_root(handler: &str, root_id: i64) -> Result<(), Gtk4Error> {
+        push_signal_action(
+            handler,
+            SignalAction::CleanupRoot { root_id },
+            &[root_id],
+            "signalBindCleanupRoot",
+        )
+    }
+
     pub(super) fn signal_bind_stack_page(
         handler: &str,
         stack_id: i64,
@@ -9430,6 +9734,7 @@ mod linux_impl {
             let root = first_object_in_interface(node)?;
             let (id, live) =
                 build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
+            let root_class_name = live.class_name.clone();
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
@@ -9448,6 +9753,7 @@ mod linux_impl {
             ]));
             Ok(BuildWithBindingsResult {
                 root_id: id,
+                root_class_name,
                 named_widgets: id_map,
                 binding_widgets: binding_map,
             })
@@ -9763,7 +10069,12 @@ delegate!(dialog_set_title(id: i64, title: &str) -> Result<(), Gtk4Error>);
 delegate!(dialog_set_child(id: i64, child_id: i64) -> Result<(), Gtk4Error>);
 delegate!(dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error>);
 delegate!(dialog_close(id: i64) -> Result<(), Gtk4Error>);
+delegate!(adw_dialog_close(id: i64) -> Result<(), Gtk4Error>);
+delegate!(adw_dialog_force_close(id: i64) -> Result<(), Gtk4Error>);
 delegate!(adw_dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error>);
+delegate!(dialog_root_is_persistent(root_id: i64) -> Result<bool, Gtk4Error>);
+delegate!(dialog_set_open(root_id: i64, open: bool) -> Result<(), Gtk4Error>);
+delegate!(dialog_sync_open_state(root_id: i64) -> Result<(), Gtk4Error>);
 delegate!(file_dialog_new() -> Result<i64, Gtk4Error>);
 delegate!(file_dialog_select_file(id: i64) -> Result<String, Gtk4Error>);
 delegate!(list_store_new() -> Result<i64, Gtk4Error>);
@@ -9785,10 +10096,13 @@ delegate!(signal_bind_css_class(handler: &str, widget_id: i64, class: &str, add:
 delegate!(signal_bind_toggle_bool_property(handler: &str, widget_id: i64, prop: &str) -> Result<(), Gtk4Error>);
 delegate!(signal_toggle_css_class(handler: &str, widget_id: i64, class: &str) -> Result<(), Gtk4Error>);
 delegate!(signal_bind_dialog_present(handler: &str, dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error>);
+delegate!(signal_bind_cleanup_root(handler: &str, root_id: i64) -> Result<(), Gtk4Error>);
 delegate!(signal_bind_stack_page(handler: &str, stack_id: i64, page_name: &str) -> Result<(), Gtk4Error>);
 delegate!(build_from_node(node: &GtkNode) -> Result<i64, Gtk4Error>);
 delegate!(build_with_ids(node: &GtkNode) -> Result<BuildResult, Gtk4Error>);
 delegate!(build_with_bindings(node: &GtkNode) -> Result<BuildWithBindingsResult, Gtk4Error>);
+delegate!(dialog_root_on_closed(root_id: i64, handler: &str) -> Result<(), Gtk4Error>);
+delegate!(cleanup_root(root_id: i64) -> Result<(), Gtk4Error>);
 delegate!(reconcile_widget(widget_id: i64, node: &GtkNode) -> Result<HashMap<String, i64>, Gtk4Error>);
 delegate!(widget_child_count(id: i64) -> Result<i64, Gtk4Error>);
 delegate!(widget_exists(id: i64) -> Result<bool, Gtk4Error>);
