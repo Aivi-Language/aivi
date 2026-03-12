@@ -175,7 +175,6 @@ fn infer_value_types_incremental_impl(
             t_reg_types,
             checker.register_imported_type_names(module, &state.module_type_exports)
         );
-        checker.rewrite_env_type_names(&mut env);
         timed!(
             t_type_expr_diags,
             diagnostics.extend(checker.collect_type_expr_diags(module))
@@ -223,6 +222,10 @@ fn infer_value_types_incremental_impl(
             t_reg_defs,
             checker.register_module_defs(module, &sigs, &mut env)
         );
+        // Rewrite after all imports and defs are registered so that values imported
+        // from other modules (which may use unqualified type names) also get their
+        // type names resolved to the current module's qualified internal names.
+        checker.rewrite_env_type_names(&mut env);
         let mut module_monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
 
         if !(skip_stdlib_body_check && is_embedded) {

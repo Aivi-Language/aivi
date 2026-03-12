@@ -438,7 +438,8 @@ fn expr_contains_placeholder(expr: &Expr) -> bool {
         Expr::Ident(name) => name.name == "_",
         Expr::UnaryNeg { expr, .. } => expr_contains_placeholder(expr),
         Expr::Suffixed { base, .. } => expr_contains_placeholder(base),
-        Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => false,
+        Expr::Literal(_) | Expr::Raw { .. } => false,
+        Expr::FieldSection { .. } => true,
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
             TextPart::Expr { expr, .. } => expr_contains_placeholder(expr),

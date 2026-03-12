@@ -108,6 +108,7 @@ impl ModuleInterfaceMaps {
 /// Runs the full per-module registration sequence shared by all type-checking passes:
 /// reset → register types → collect type-expr diagnostics → collect signatures →
 /// register constructors → register imports → build class env → register defs.
+#[allow(clippy::too_many_arguments)]
 fn setup_module(
     checker: &mut TypeChecker,
     module: &Module,
@@ -122,7 +123,6 @@ fn setup_module(
     let mut env = checker.builtins.clone();
     checker.register_module_types(module);
     checker.register_imported_type_names(module, module_type_exports);
-    checker.rewrite_env_type_names(&mut env);
     diagnostics.extend(checker.collect_type_expr_diags(module));
     let sigs = checker.collect_type_sigs(module);
     checker.register_module_constructors(module, &mut env);
@@ -143,6 +143,7 @@ fn setup_module(
     instances.extend(synthesize_auto_forward_instances(module, &instances));
     checker.set_class_env(classes, instances);
     checker.register_module_defs(module, &sigs, &mut env);
+    checker.rewrite_env_type_names(&mut env);
 
     ModuleSetup { env, sigs }
 }

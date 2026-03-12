@@ -306,10 +306,9 @@ impl TypeChecker {
     }
 
     pub(super) fn rewrite_env_type_names(&self, env: &mut TypeEnv) {
-        env.map_schemes(|scheme| Scheme {
-            vars: scheme.vars.clone(),
-            ty: self.rewrite_type_names(&scheme.ty),
-            origin: scheme.origin.clone(),
+        env.map_schemes(|scheme| {
+            let new_ty = self.rewrite_type_names(&scheme.ty);
+            Scheme { vars: scheme.vars.clone(), ty: new_ty, origin: scheme.origin.clone() }
         });
     }
 
