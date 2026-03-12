@@ -1236,6 +1236,16 @@ mod linux_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::sync::{Mutex, OnceLock};
+        use std::time::Duration;
+
+        fn gtk_state_test_guard() -> std::sync::MutexGuard<'static, ()> {
+            static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+            GUARD
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("gtk state test guard lock poisoned")
+        }
 
         #[test]
         fn adw_switch_row_reports_toggle_signal_support() {
@@ -1300,6 +1310,37 @@ mod linux_impl {
             assert!(err.message.contains("abstract base class"));
             assert!(err.message.contains("AdwTimedAnimation"));
             assert!(err.message.contains("AdwSpringAnimation"));
+        }
+
+        #[test]
+        fn main_loop_tick_flushes_pending_tray_actions_to_signal_stream() {
+            let _guard = gtk_state_test_guard();
+            pending_tray_actions()
+                .lock()
+                .expect("pending tray actions lock poisoned")
+                .clear();
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                state.signal_senders.clear();
+                state.signal_events.clear();
+            });
+
+            let receiver = signal_stream().expect("signal stream");
+            pending_tray_actions()
+                .lock()
+                .expect("pending tray actions lock poisoned")
+                .push_back("quit".to_string());
+
+            unsafe {
+                main_loop_tick_cb(std::ptr::null_mut());
+            }
+
+            let event = receiver
+                .recv_timeout(Duration::from_millis(100))
+                .expect("tray action should reach signal stream");
+            assert_eq!(event.signal, "mailfox.tray.action");
+            assert_eq!(event.handler, "quit");
+            assert_eq!(event.payload, "");
         }
 
         #[test]
@@ -4028,6 +4069,33 @@ mod linux_impl {
         Ok(())
     }
 
+    fn flush_pending_tray_actions() {
+        let actions: Vec<String> = pending_tray_actions()
+            .lock()
+            .map(|mut q| q.drain(..).collect())
+            .unwrap_or_default();
+        for raw_action in actions {
+            let (action_name, coords) = raw_action
+                .split_once(':')
+                .map(|(a, rest)| (a.to_string(), rest.to_string()))
+                .unwrap_or_else(|| (raw_action.clone(), String::new()));
+            let event = SignalEventState {
+                widget_id: 0,
+                signal: "mailfox.tray.action".to_string(),
+                handler: action_name,
+                payload: coords,
+            };
+            let typed_event = make_signal_event(event.clone(), String::new());
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                state
+                    .signal_senders
+                    .retain(|s| s.send(typed_event.clone()).is_ok());
+                state.signal_events.push_back(event);
+            });
+        }
+    }
+
     unsafe extern "C" fn main_loop_tick_cb(_data: *mut c_void) -> c_int {
         if let Err(err) = call_main_loop_tick_handler() {
             eprintln!("AIVI GTK main-loop tick error: {}", err);
@@ -4039,6 +4107,7 @@ mod linux_impl {
                 eprintln!("AIVI GTK UI debug server error: {}", err);
             }
         });
+        flush_pending_tray_actions();
         1
     }
 
@@ -7945,30 +8014,7 @@ mod linux_impl {
                         eprintln!("AIVI GTK UI debug server error: {}", err);
                     }
                 });
-                let actions: Vec<String> = pending_tray_actions()
-                    .lock()
-                    .map(|mut q| q.drain(..).collect())
-                    .unwrap_or_default();
-                for raw_action in actions {
-                    let (action_name, coords) = raw_action
-                        .split_once(':')
-                        .map(|(a, rest)| (a.to_string(), rest.to_string()))
-                        .unwrap_or_else(|| (raw_action.clone(), String::new()));
-                    let event = SignalEventState {
-                        widget_id: 0,
-                        signal: "mailfox.tray.action".to_string(),
-                        handler: action_name,
-                        payload: coords,
-                    };
-                    let typed_event = make_signal_event(event.clone(), String::new());
-                    GTK_STATE.with(|state| {
-                        let mut state = state.borrow_mut();
-                        state
-                            .signal_senders
-                            .retain(|s| s.send(typed_event.clone()).is_ok());
-                        state.signal_events.push_back(event);
-                    });
-                }
+                flush_pending_tray_actions();
             }
         });
     }

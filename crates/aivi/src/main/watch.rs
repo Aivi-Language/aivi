@@ -11,7 +11,11 @@ use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 
 /// Run an AIVI program in watch mode: compile + execute, then re-run on file
 /// changes. Compile errors are printed but do not exit the loop.
-pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError> {
+pub(crate) fn run_watch(
+    target: &str,
+    root_modules: &[String],
+    watch_dir: &Path,
+) -> Result<(), AiviError> {
     let (tx, rx) = mpsc::channel();
 
     let mut debouncer = new_debouncer(Duration::from_millis(300), tx)
@@ -36,15 +40,17 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
         let since = SystemTime::now();
         let cancel = CancelHandle::new();
         let target_owned = target.to_string();
+        let root_modules_owned = root_modules.to_vec();
         let cancel_for_thread = cancel.clone();
 
         let mut worker_session = std::mem::take(&mut session);
         let runner = thread::spawn(move || -> (WorkspaceSession, Result<(), AiviError>) {
             let result = (|| {
                 let (program, cg_types, monomorph_plan, surface_modules) =
-                    aivi::desugar_target_with_cg_types_and_surface_in_session(
+                    aivi::desugar_target_with_cg_types_and_surface_in_session_with_roots(
                         &mut worker_session,
                         &target_owned,
+                        &root_modules_owned,
                     )?;
                 aivi::run_cranelift_jit_with_handle(
                     program,

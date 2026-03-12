@@ -1,3 +1,5 @@
+#[path = "main/daemon.rs"]
+mod daemon;
 #[path = "main/repl/mod.rs"]
 mod repl;
 #[path = "main/watch.rs"]

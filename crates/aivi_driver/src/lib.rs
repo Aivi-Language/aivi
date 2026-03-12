@@ -267,6 +267,21 @@ pub fn desugar_target_with_cg_types_and_surface_in_session(
     typed_codegen_from_assembly(assembly, trace, t_total)
 }
 
+/// Like [`desugar_target_with_cg_types_and_surface_in_session`] but restricts
+/// frontend assembly to modules reachable from the provided root modules.
+pub fn desugar_target_with_cg_types_and_surface_in_session_with_roots(
+    session: &mut WorkspaceSession,
+    target: &str,
+    root_modules: &[String],
+) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
+    let trace = trace_timing();
+    let t_total = if trace { Some(Instant::now()) } else { None };
+    let assembly = timing_step!(trace, "frontend assembly", {
+        session.assemble_target_with_roots(target, root_modules, FrontendAssemblyMode::InferFast)?
+    });
+    typed_codegen_from_assembly(assembly, trace, t_total)
+}
+
 fn typed_codegen_from_assembly(
     assembly: FrontendAssembly,
     trace: bool,

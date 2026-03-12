@@ -9,7 +9,7 @@ use crate::surface::{Decorator, Expr, Literal, Module, ModuleItem, TypeExpr};
 use std::collections::HashMap;
 
 /// A single crate-native binding extracted from the surface AST.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CrateNativeBinding {
     /// The AIVI function name (e.g., `parseXml`)
     pub aivi_name: String,
@@ -26,7 +26,7 @@ pub struct CrateNativeBinding {
 }
 
 /// Simplified representation of an AIVI type for bridge generation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum AiviType {
     Text,
     Int,

@@ -135,7 +135,8 @@ use cranelift_backend::run_cranelift_jit_cancellable;
 pub use cranelift_backend::{
     compile_to_object, destroy_aot_runtime, evaluate_binding_jit, evaluate_binding_jit_detailed,
     init_aot_runtime, init_aot_runtime_base, register_crate_natives_on_ctx, run_cranelift_jit,
-    run_test_suite_jit, CrateNativeRegistrar, CrateNativeValue, EvaluatedBinding, ReplJitSession,
+    run_cranelift_jit_prepared, run_test_suite_jit, CrateNativeRegistrar, CrateNativeValue,
+    EvaluatedBinding, ReplJitSession,
 };
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
@@ -220,7 +221,8 @@ pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 pub use aivi_driver::{
     assemble_target, desugar_target, desugar_target_lenient, desugar_target_typed,
     desugar_target_with_cg_types, desugar_target_with_cg_types_and_surface,
-    desugar_target_with_cg_types_and_surface_in_session, format_target, kernel_target,
+    desugar_target_with_cg_types_and_surface_in_session,
+    desugar_target_with_cg_types_and_surface_in_session_with_roots, format_target, kernel_target,
     load_module_diagnostics, load_modules, load_modules_from_paths, parse_file, parse_target,
     resolve_target, AiviError, AssemblyStats, FrontendAssembly, FrontendAssemblyMode, Pipeline,
     WorkspaceSession,

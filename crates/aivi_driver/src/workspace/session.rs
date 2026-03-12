@@ -153,7 +153,17 @@ impl WorkspaceSession {
         mode: FrontendAssemblyMode,
     ) -> Result<FrontendAssembly, AiviError> {
         let paths = expand_target(target)?;
-        self.assemble_paths(&paths, mode)
+        self.assemble_paths_with_roots(&paths, &[], mode)
+    }
+
+    pub fn assemble_target_with_roots(
+        &mut self,
+        target: &str,
+        root_modules: &[String],
+        mode: FrontendAssemblyMode,
+    ) -> Result<FrontendAssembly, AiviError> {
+        let paths = expand_target(target)?;
+        self.assemble_paths_with_roots(&paths, root_modules, mode)
     }
 
     pub fn assemble_paths(
@@ -161,11 +171,18 @@ impl WorkspaceSession {
         paths: &[PathBuf],
         mode: FrontendAssemblyMode,
     ) -> Result<FrontendAssembly, AiviError> {
+        self.assemble_paths_with_roots(paths, &[], mode)
+    }
+
+    pub fn assemble_paths_with_roots(
+        &mut self,
+        paths: &[PathBuf],
+        root_modules: &[String],
+        mode: FrontendAssemblyMode,
+    ) -> Result<FrontendAssembly, AiviError> {
         let mut stats = AssemblyStats::default();
         let mut normalized_paths = paths.to_vec();
         normalized_paths.sort();
-        let active_paths: BTreeSet<PathBuf> = normalized_paths.iter().cloned().collect();
-        let target_changed = self.last_active_paths != active_paths;
         let previous_active_names = self.active_module_names(&self.last_active_paths);
         let previous_graph_reverse = self.reverse_dependencies_for(&previous_active_names);
         let previous_global_fingerprint =
@@ -183,7 +200,10 @@ impl WorkspaceSession {
         let stdlib_invalidated = self.ensure_stdlib()?;
 
         let mut previous_file_names = HashMap::new();
-        for path in self.last_active_paths.union(&active_paths) {
+        for path in &normalized_paths {
+            previous_file_names.insert(path.clone(), self.file_module_names(path));
+        }
+        for path in &self.last_active_paths {
             previous_file_names.insert(path.clone(), self.file_module_names(path));
         }
 
@@ -200,12 +220,36 @@ impl WorkspaceSession {
         resolve_import_names(&mut all_modules);
         let stdlib_count = self.stdlib_modules().len();
         let resolved_user_modules = all_modules[stdlib_count..].to_vec();
-        let (current_unique_modules, current_module_order) = unique_modules(resolved_user_modules);
+        let (all_unique_modules, all_module_order) = unique_modules(resolved_user_modules);
+        let reachable_names = reachable_module_names(&all_unique_modules, root_modules);
+        let current_module_order = all_module_order
+            .into_iter()
+            .filter(|name| reachable_names.contains(name))
+            .collect::<Vec<_>>();
+        let current_unique_modules = current_module_order
+            .iter()
+            .filter_map(|name| {
+                all_unique_modules
+                    .get(name)
+                    .cloned()
+                    .map(|module| (name.clone(), module))
+            })
+            .collect::<HashMap<_, _>>();
+        let active_paths: BTreeSet<PathBuf> = current_unique_modules
+            .values()
+            .map(|module| PathBuf::from(&module.path))
+            .collect();
+        let target_changed = self.last_active_paths != active_paths;
         let current_graph = ModuleGraph::from_modules(&current_unique_modules);
         let current_names = current_module_order.iter().cloned().collect::<HashSet<_>>();
         let current_global_fingerprint =
             workspace_global_type_fingerprint_from_modules(current_unique_modules.values());
         let global_type_changed = previous_global_fingerprint != current_global_fingerprint;
+        let active_path_strings = active_paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<HashSet<_>>();
+        let parse_diagnostics = filter_file_diagnostics(&parse_diagnostics, &active_path_strings);
 
         let mut changed_module_names = HashSet::new();
         if target_changed {
@@ -281,7 +325,12 @@ impl WorkspaceSession {
             }
         }
 
-        let resolver_diagnostics = check_modules(&all_modules);
+        let resolver_modules = assembled_all_modules(
+            &self.stdlib_modules(),
+            &current_unique_modules,
+            &current_module_order,
+        );
+        let resolver_diagnostics = check_modules(&resolver_modules);
         self.last_active_paths = active_paths;
         self.force_invalidate_all = false;
 
@@ -292,7 +341,7 @@ impl WorkspaceSession {
             return Ok(FrontendAssembly {
                 mode,
                 paths: normalized_paths,
-                modules: all_modules,
+                modules: resolver_modules,
                 parse_diagnostics,
                 resolver_diagnostics,
                 typecheck_diagnostics: Vec::new(),
@@ -631,8 +680,7 @@ impl WorkspaceSession {
     }
 
     fn workspace_global_type_fingerprint(&self, module_names: &HashSet<String>) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let mut items = module_names
+        let items = module_names
             .iter()
             .filter_map(|name| {
                 self.modules.get(name).and_then(|entry| {
@@ -642,14 +690,7 @@ impl WorkspaceSession {
                 })
             })
             .collect::<Vec<_>>();
-        if items.is_empty() {
-            return 0;
-        }
-        items.sort_by(|a, b| a.0.cmp(&b.0));
-        for item in items {
-            item.hash(&mut hasher);
-        }
-        hasher.finish()
+        hash_sorted_global_type_items(items)
     }
 
     fn stdlib_modules(&self) -> Vec<Module> {
@@ -933,6 +974,52 @@ fn module_imports(module: &Module) -> Vec<String> {
     imports
 }
 
+fn reachable_module_names(
+    modules: &HashMap<String, Module>,
+    root_modules: &[String],
+) -> HashSet<String> {
+    if root_modules.is_empty() {
+        return modules.keys().cloned().collect();
+    }
+
+    let mut reachable = HashSet::new();
+    let mut stack = root_modules
+        .iter()
+        .filter(|name| modules.contains_key(*name))
+        .cloned()
+        .collect::<Vec<_>>();
+    if stack.is_empty() {
+        return modules.keys().cloned().collect();
+    }
+
+    while let Some(module_name) = stack.pop() {
+        if !reachable.insert(module_name.clone()) {
+            continue;
+        }
+        let Some(module) = modules.get(&module_name) else {
+            continue;
+        };
+        for dependency in module_imports(module) {
+            if modules.contains_key(&dependency) && !reachable.contains(&dependency) {
+                stack.push(dependency);
+            }
+        }
+    }
+
+    reachable
+}
+
+fn filter_file_diagnostics(
+    diagnostics: &[FileDiagnostic],
+    allowed_paths: &HashSet<String>,
+) -> Vec<FileDiagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diag| allowed_paths.contains(&diag.path))
+        .cloned()
+        .collect()
+}
+
 fn module_global_type_fingerprint(module: &Module) -> Option<u64> {
     let mut items = Vec::new();
     for item in &module.items {
@@ -966,12 +1053,16 @@ fn module_global_type_fingerprint(module: &Module) -> Option<u64> {
 fn workspace_global_type_fingerprint_from_modules<'a>(
     modules: impl Iterator<Item = &'a Module>,
 ) -> u64 {
-    let mut items = modules
+    let items = modules
         .filter_map(|module| {
             module_global_type_fingerprint(module)
                 .map(|fingerprint| (module.name.name.clone(), fingerprint))
         })
         .collect::<Vec<_>>();
+    hash_sorted_global_type_items(items)
+}
+
+fn hash_sorted_global_type_items(mut items: Vec<(String, u64)>) -> u64 {
     if items.is_empty() {
         return 0;
     }
@@ -1153,6 +1244,106 @@ value = helper
             .expect("second assembly");
         assert_eq!(second.stats.reinferred_modules, vec!["testIncremental.a"]);
         assert_eq!(second.stats.reused_modules, vec!["testIncremental.b"]);
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn workspace_global_type_fingerprints_match_for_typed_modules() {
+        let (mut modules, _diagnostics) = parse_modules(
+            Path::new("typed_globals.aivi"),
+            r#"
+module testTypes.types
+
+type Maybe a = None | Some a
+"#,
+        );
+        assert_eq!(modules.len(), 1);
+        resolve_import_names(&mut modules);
+        let (unique, _) = unique_modules(modules.clone());
+
+        let from_modules = workspace_global_type_fingerprint_from_modules(unique.values());
+
+        let mut session = WorkspaceSession::new();
+        session
+            .last_active_paths
+            .insert(PathBuf::from("typed_globals.aivi"));
+        session.files.insert(
+            PathBuf::from("typed_globals.aivi"),
+            FileCacheEntry {
+                fingerprint: 0,
+                parsed_modules: modules.clone(),
+                parse_diagnostics: Vec::new(),
+            },
+        );
+        for module in modules {
+            session
+                .modules
+                .insert(module.name.name.clone(), ModuleCacheEntry::new(module));
+        }
+
+        let active_names = session.active_module_names(&session.last_active_paths);
+        let from_session = session.workspace_global_type_fingerprint(&active_names);
+        assert_eq!(from_session, from_modules);
+    }
+
+    #[test]
+    fn assemble_paths_with_roots_prunes_unreachable_modules() {
+        let temp = std::env::temp_dir().join(format!("aivi-driver-roots-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).expect("create temp dir");
+
+        let main_path = temp.join("main.aivi");
+        let helper_path = temp.join("helper.aivi");
+        let unused_path = temp.join("unused.aivi");
+        fs::write(
+            &main_path,
+            r#"
+module testRoots.main
+
+use testRoots.helper (value)
+
+main = value
+"#,
+        )
+        .expect("write main");
+        fs::write(
+            &helper_path,
+            r#"
+module testRoots.helper
+
+value = 1
+"#,
+        )
+        .expect("write helper");
+        fs::write(
+            &unused_path,
+            r#"
+module testRoots.unused
+
+broken =
+"#,
+        )
+        .expect("write unused");
+
+        let mut session = WorkspaceSession::new();
+        let assembly = session
+            .assemble_paths_with_roots(
+                &[main_path.clone(), helper_path.clone(), unused_path.clone()],
+                &["testRoots.main".to_string()],
+                FrontendAssemblyMode::InferFast,
+            )
+            .expect("assembly");
+
+        let module_names = assembly
+            .modules
+            .iter()
+            .map(|module| module.name.name.as_str())
+            .collect::<Vec<_>>();
+        assert!(module_names.contains(&"testRoots.main"));
+        assert!(module_names.contains(&"testRoots.helper"));
+        assert!(!module_names.contains(&"testRoots.unused"));
+        assert!(assembly.parse_diagnostics.is_empty());
 
         let _ = fs::remove_dir_all(&temp);
     }
