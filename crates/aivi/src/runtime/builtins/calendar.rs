@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use chrono::{Datelike, Duration as ChronoDuration, NaiveDate};
 
+use super::chronos_format::{date_from_value, format_date_pattern};
 use super::util::{builtin, expect_int};
 use crate::runtime::{RuntimeError, Value};
 
@@ -69,46 +70,18 @@ pub(super) fn build_calendar_record() -> Value {
             Ok(date_to_value(next))
         }),
     );
+    fields.insert(
+        "format".to_string(),
+        builtin("calendar.format", 2, |mut args, _| {
+            let pattern = super::util::expect_text(args.pop().unwrap(), "calendar.format")?;
+            let date = date_from_value(args.pop().unwrap(), "calendar.format")?;
+            let text = format_date_pattern(date, &pattern, "calendar.format")?;
+            Ok(Value::Text(text))
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
-fn date_from_value(value: Value, ctx: &str) -> Result<NaiveDate, RuntimeError> {
-    let Value::Record(fields) = value else {
-        return Err(RuntimeError::TypeError {
-            context: ctx.to_string(),
-            expected: "Date".to_string(),
-            got: "other".to_string(),
-        });
-    };
-    let year = fields
-        .get("year")
-        .cloned()
-        .ok_or_else(|| RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'year' on Date".to_string(),
-        })?;
-    let month = fields
-        .get("month")
-        .cloned()
-        .ok_or_else(|| RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'month' on Date".to_string(),
-        })?;
-    let day = fields
-        .get("day")
-        .cloned()
-        .ok_or_else(|| RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'day' on Date".to_string(),
-        })?;
-    let year = expect_int(year, ctx)? as i32;
-    let month = expect_int(month, ctx)? as u32;
-    let day = expect_int(day, ctx)? as u32;
-    NaiveDate::from_ymd_opt(year, month, day)
-        .ok_or_else(|| RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "invalid Date (year/month/day combination)".to_string(),
-        })
-}
+
 fn date_to_value(date: NaiveDate) -> Value {
     let mut map = HashMap::new();
     map.insert("year".to_string(), Value::Int(date.year() as i64));

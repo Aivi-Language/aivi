@@ -4,6 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.chronos.timezone
 export domain TimeZone, domain ZonedDateTime
+export format
 
 use aivi
 use aivi.chronos.calendar (DateTime)
@@ -27,6 +28,9 @@ toInstant = zdt => timezone.toInstant zdt
 atZone : ZonedDateTime -> TimeZone -> ZonedDateTime
 atZone = zdt zone => timezone.atZone zdt zone
 
+format : Text -> ZonedDateTime -> Text
+format = pattern zdt => timezone.format zdt pattern
+
 domain TimeZone over TimeZone = {
   getOffset = getOffset
 }
@@ -34,4 +38,5 @@ domain TimeZone over TimeZone = {
 domain ZonedDateTime over ZonedDateTime = {
   toInstant = toInstant
   atZone = atZone
+  format = format
 }"#;

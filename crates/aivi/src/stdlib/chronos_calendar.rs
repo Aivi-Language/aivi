@@ -6,9 +6,9 @@ module aivi.chronos.calendar
 export Date, DateTime, EndOfMonth
 export isLeapYear, daysInMonth, endOfMonth
 export addDays, addMonths, addYears, negateDelta
-export now
+export now, format
 export Calendar
 
-use aivi.calendar (Date, DateTime, EndOfMonth, isLeapYear, daysInMonth, endOfMonth, addDays, addMonths, addYears, negateDelta, now)
+use aivi.calendar (Date, DateTime, EndOfMonth, isLeapYear, daysInMonth, endOfMonth, addDays, addMonths, addYears, negateDelta, now, format)
 use aivi.calendar (domain Calendar)
 "#;

@@ -389,7 +389,9 @@ pub(super) fn build_text_record() -> Value {
         "toText".to_string(),
         builtin("text.toText", 1, |mut args, _| {
             let value = args.pop().unwrap();
-            Ok(Value::Text(format_value(&value)))
+            let text =
+                super::chronos_format::maybe_iso_text(&value).unwrap_or_else(|| format_value(&value));
+            Ok(Value::Text(text))
         }),
     );
     fields.insert(

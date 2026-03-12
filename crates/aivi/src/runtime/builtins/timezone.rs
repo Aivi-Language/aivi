@@ -4,6 +4,9 @@ use std::sync::Arc;
 use chrono::{offset::Offset as ChronoOffset, TimeZone as ChronoTimeZone};
 use chrono_tz::Tz;
 
+use super::chronos_format::{
+    format_zoned_date_time_pattern, parse_local_datetime_value, zoned_date_time_from_value,
+};
 use super::util::{builtin, expect_record, expect_text};
 use crate::runtime::{RuntimeError, Value};
 
@@ -110,6 +113,15 @@ pub(super) fn build_timezone_record() -> Value {
             Ok(Value::Record(Arc::new(result)))
         }),
     );
+    fields.insert(
+        "format".to_string(),
+        builtin("timezone.format", 2, |mut args, _| {
+            let pattern = expect_text(args.pop().unwrap(), "timezone.format")?;
+            let zdt = zoned_date_time_from_value(args.pop().unwrap(), "timezone.format")?;
+            let text = format_zoned_date_time_pattern(&zdt, &pattern, "timezone.format")?;
+            Ok(Value::Text(text))
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
 
@@ -125,19 +137,7 @@ fn parse_datetime_value(
     val: &Value,
     ctx: &str,
 ) -> Result<chrono::NaiveDateTime, RuntimeError> {
-    match val {
-        Value::DateTime(s) => {
-            // DateTime strings are stored as "YYYY-MM-DDTHH:MM:SSZ"
-            let trimmed = s.trim_end_matches('Z');
-            chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S").map_err(|e| {
-                RuntimeError::Message(format!("{ctx}: invalid DateTime string '{s}': {e}"))
-            })
-        }
-        _ => Err(RuntimeError::Message(format!(
-            "{ctx}: expected DateTime, got {:?}",
-            val
-        ))),
-    }
+    parse_local_datetime_value(val, ctx)
 }
 
 fn datetime_to_value<Tz: chrono::TimeZone>(dt: chrono::DateTime<Tz>) -> Value
