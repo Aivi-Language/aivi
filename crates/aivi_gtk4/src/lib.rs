@@ -8298,6 +8298,33 @@ mod linux_impl {
         })
     }
 
+    pub(super) fn display_height() -> Result<i64, Gtk4Error> {
+        let display = unsafe { gdk_display_get_default() };
+        if display.is_null() {
+            return Err(Gtk4Error::new("gtk4.displayHeight missing default display"));
+        }
+        let monitors = unsafe { gdk_display_get_monitors(display) };
+        if monitors.is_null() {
+            return Err(Gtk4Error::new("gtk4.displayHeight missing monitor list"));
+        }
+        let count = unsafe { g_list_model_get_n_items(monitors) };
+        if count == 0 {
+            return Err(Gtk4Error::new("gtk4.displayHeight found no monitors"));
+        }
+        let monitor = unsafe { g_list_model_get_item(monitors, 0) };
+        if monitor.is_null() {
+            return Err(Gtk4Error::new(
+                "gtk4.displayHeight could not read monitor geometry",
+            ));
+        }
+        let mut geometry = GdkRectangle::default();
+        unsafe {
+            gdk_monitor_get_geometry(monitor, &mut geometry as *mut GdkRectangle);
+            g_object_unref(monitor);
+        }
+        Ok(i64::from(geometry.height))
+    }
+
     pub(super) fn window_set_title(win_id: i64, title: &str) -> Result<(), Gtk4Error> {
         let title_c = c_text(title, "gtk4.windowSetTitle invalid title")?;
         GTK_STATE.with(|state| {
@@ -9999,6 +10026,7 @@ delegate!(app_new(id: &str) -> Result<i64, Gtk4Error>);
 delegate!(app_run(app_id: i64) -> Result<(), Gtk4Error>);
 delegate!(app_set_css(app_id: i64, css: &str) -> Result<(), Gtk4Error>);
 delegate!(window_new(app_id: i64, title: &str, width: i32, height: i32) -> Result<i64, Gtk4Error>);
+delegate!(display_height() -> Result<i64, Gtk4Error>);
 delegate!(window_set_title(win_id: i64, title: &str) -> Result<(), Gtk4Error>);
 delegate!(window_set_titlebar(win_id: i64, titlebar_id: i64) -> Result<(), Gtk4Error>);
 delegate!(window_set_child(win_id: i64, child_id: i64) -> Result<(), Gtk4Error>);

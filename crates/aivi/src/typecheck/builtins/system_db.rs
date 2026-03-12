@@ -572,6 +572,13 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "displayHeight".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
                 "windowSetTitle".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),
