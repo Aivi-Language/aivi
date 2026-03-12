@@ -426,21 +426,29 @@ impl TypeChecker {
                     .map(|arg| self.expand_alias_with_visiting(arg, visiting))
                     .collect::<Vec<_>>();
 
-                let Some(alias) = self.aliases.get(&name).cloned() else {
-                    return Type::Con(name, args);
+                // Resolve bare type names (e.g. "Key", "Generator") to their fully-qualified
+                // internal names (e.g. "aivi.i18n.Key", "aivi.generator.Generator") so that
+                // alias expansion and opaque checks work correctly regardless of whether the
+                // type was constructed with a bare or qualified name.
+                let qualified = self.type_name_bindings.get(&name).cloned().unwrap_or_else(|| name.clone());
+
+                let Some(alias) = self.aliases.get(&qualified).cloned() else {
+                    // Even if no alias exists, normalise to the qualified name so that two
+                    // references to the same type always share the same name during unification.
+                    return Type::Con(qualified, args);
                 };
 
                 // Don't expand opaque aliases outside their defining module.
-                if self.is_opaque_from_here(&name).is_some() {
-                    return Type::Con(name, args);
+                if self.is_opaque_from_here(&qualified).is_some() {
+                    return Type::Con(qualified, args);
                 }
 
-                if visiting.contains(&name) {
+                if visiting.contains(&qualified) {
                     // Recursive reference; stop expanding and treat as nominal.
-                    return Type::Con(name, args);
+                    return Type::Con(qualified, args);
                 }
 
-                visiting.insert(name.clone());
+                visiting.insert(qualified.clone());
 
                 let mut mapping = HashMap::new();
                 for (param, arg) in alias.params.iter().zip(args.iter()) {
@@ -465,7 +473,7 @@ impl TypeChecker {
                 let body = Self::substitute(&alias.body, &mapping);
                 let expanded = self.expand_alias_with_visiting(body, visiting);
 
-                visiting.remove(&name);
+                visiting.remove(&qualified);
                 expanded
             }
             Type::App(base, args) => Type::App(

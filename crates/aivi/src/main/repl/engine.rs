@@ -10,10 +10,9 @@ use std::path::Path;
 
 use aivi::{
     check_modules, check_types, desugar_modules, elaborate_expected_coercions,
-    embedded_stdlib_modules, evaluate_binding_jit_detailed, file_diagnostics_have_errors,
-    infer_value_types_full, parse_modules, render_diagnostics, resolve_import_names, AiviError,
-    ClassDecl, DomainDecl, DomainItem, FileDiagnostic, Module, ModuleItem, TypeAlias, TypeDecl,
-    TypeExpr, TypeSig,
+    embedded_stdlib_modules, file_diagnostics_have_errors, infer_value_types_full, parse_modules,
+    render_diagnostics, resolve_import_names, AiviError, ClassDecl, DomainDecl, DomainItem,
+    FileDiagnostic, Module, ModuleItem, ReplJitSession, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
 use super::doc_index::{DocIndex, QuickInfoEntry, DOC_INDEX_JSON};
@@ -165,6 +164,8 @@ pub(crate) struct ReplEngine {
     builtin_completions: Vec<SymbolCompletion>,
     /// Inferred type strings for session-defined names. Updated after every successful compile.
     session_types: HashMap<String, String>,
+    /// Persisted source-signal values that should survive across REPL turns.
+    jit_session: ReplJitSession,
     /// Static inventory of stdlib symbols grouped by module for scope-aware completions.
     stdlib_module_completions: HashMap<String, Vec<SymbolCompletion>>,
     /// Session-local ADT constructors derived from successful definitions and loads.
@@ -199,6 +200,7 @@ impl ReplEngine {
             default_visible_modules,
             builtin_completions: builtin_symbol_completions(),
             session_types: HashMap::new(),
+            jit_session: ReplJitSession::new(),
             stdlib_module_completions: collect_module_completion_symbols(&stdlib, false),
             session_constructors: Vec::new(),
             autorun_effects: true,
@@ -436,6 +438,7 @@ Command Reference
         self.definitions.clear();
         self.history.clear();
         self.session_types.clear();
+        self.jit_session.reset();
         self.session_constructors.clear();
         self.autorun_effects = true;
         self.turn = 0;
@@ -752,9 +755,9 @@ Command Reference
 
         match classification {
             InputKind::Definition => {
-                self.definitions.push(input.to_owned());
-
                 let defined_names = extract_defined_names(input);
+                self.jit_session.forget_bindings(&defined_names);
+                self.definitions.push(input.to_owned());
                 if defined_names.is_empty() {
                     self.transcript.push(TranscriptEntry {
                         kind: TranscriptKind::Defined,
@@ -793,7 +796,9 @@ Command Reference
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
                 let program = desugar_modules(&all_modules);
-                match evaluate_binding_jit_detailed(
+                let capture_binding_names: Vec<String> =
+                    self.session_types.keys().cloned().collect();
+                match self.jit_session.evaluate_binding_detailed(
                     program,
                     infer.cg_types,
                     infer.monomorph_plan,
@@ -801,6 +806,7 @@ Command Reference
                     &all_modules,
                     "_replResult",
                     self.autorun_effects,
+                    &capture_binding_names,
                 ) {
                     Ok(result) => {
                         self.push_captured_stream(
@@ -2894,6 +2900,24 @@ mod tests {
         let last = peek.transcript.last().expect("peek result");
         assert_eq!(last.kind, TranscriptKind::ValueResult);
         assert_eq!(last.text, "2 :: Int");
+    }
+
+    #[test]
+    fn expression_submit_persists_signal_updates_for_derived_signals() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.reactive").unwrap();
+        engine.submit("x = signal 3").unwrap();
+        engine.submit("y = x ->> _ * 2").unwrap();
+
+        let update = engine.submit("x <<- 9").unwrap();
+        let last = update.transcript.last().expect("update result");
+        assert_eq!(last.kind, TranscriptKind::ValueResult);
+        assert_eq!(last.text, "Unit :: Unit");
+
+        let peek = engine.submit("peek y").unwrap();
+        let last = peek.transcript.last().expect("peek result");
+        assert_eq!(last.kind, TranscriptKind::ValueResult);
+        assert_eq!(last.text, "18 :: Int");
     }
 
     #[test]

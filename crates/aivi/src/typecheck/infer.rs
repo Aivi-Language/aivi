@@ -175,6 +175,10 @@ fn infer_value_types_incremental_impl(
             t_reg_types,
             checker.register_imported_type_names(module, &state.module_type_exports)
         );
+        // Rebuild alias bodies now that imported type names are resolved, so user-defined
+        // type aliases that reference imported types (e.g. `State = { name: Field Text }`)
+        // get correct internal qualified names instead of fresh type variables.
+        timed!(t_reg_types, checker.rebuild_module_alias_bodies(module));
         timed!(
             t_type_expr_diags,
             diagnostics.extend(checker.collect_type_expr_diags(module))

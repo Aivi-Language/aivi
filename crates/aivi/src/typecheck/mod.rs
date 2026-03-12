@@ -123,6 +123,7 @@ fn setup_module(
     let mut env = checker.builtins.clone();
     checker.register_module_types(module);
     checker.register_imported_type_names(module, module_type_exports);
+    checker.rebuild_module_alias_bodies(module);
     diagnostics.extend(checker.collect_type_expr_diags(module));
     let sigs = checker.collect_type_sigs(module);
     checker.register_module_constructors(module, &mut env);

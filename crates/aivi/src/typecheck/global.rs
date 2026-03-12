@@ -61,6 +61,8 @@ pub(super) fn collect_global_type_info(
         checker.reset_module_context(module);
         checker.register_module_types(module);
         checker.register_imported_type_names(module, &module_type_exports);
+        // Rebuild alias bodies with imported type names resolved (mirrors infer.rs).
+        checker.rebuild_module_alias_bodies(module);
 
         for item in &module.items {
             match item {
@@ -101,6 +103,23 @@ pub(super) fn collect_global_type_info(
         let mut export_surfaces = HashMap::new();
         for export in &module.exports {
             if export.kind == crate::surface::ScopeItemKind::Domain {
+                // Domain exports don't directly provide a type surface, but the domain's carrier
+                // type alias (a TypeAlias with the same name in the same module) should be
+                // available to importers so they can e.g. expand `ZonedDateTime` in field access.
+                let internal_name = format!("{}.{}", module.name.name, export.name.name);
+                if let Some(kind) = checker.type_kind(&internal_name).cloned() {
+                    let alias = checker.alias_info_for_name(&internal_name).cloned();
+                    let opaque_origin = checker.opaque_origin_for_name(&internal_name).cloned();
+                    export_surfaces.insert(
+                        export.name.name.clone(),
+                        TypeSurface {
+                            internal_name: internal_name.clone(),
+                            kind,
+                            alias,
+                            opaque_origin,
+                        },
+                    );
+                }
                 continue;
             }
             let Some(internal_name) = checker.resolve_type_binding(&export.name.name) else {

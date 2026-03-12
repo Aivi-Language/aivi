@@ -115,7 +115,7 @@ a b => a + b            // multi-argument
 
 `_` in expression position is a single-argument placeholder lambda. It is only valid where a unary function is expected.
 
-### Pipes (`|>`)
+### Pipes (`|>`) and signal derives (`->>`)
 
 Pipes apply the value on the left as the **last** argument to the right-hand side.
 
@@ -1205,12 +1205,12 @@ GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gs
 ```aivi
 // Shorthand (preferred)
 state = signal { count: 0 }
-title = state |> (s => "Count {s.count}")
+title = state ->> (s => "Count {s.count}")
 saveCounter = do Event {
   current = get state
   persistCount current.count
 }
-inc = _ => state <| { count: _ + 1 }
+inc = _ => state <<- { count: _ + 1 }
 
 view = ~<gtk>
   <GtkBox spacing="24" marginTop="12">
@@ -1230,20 +1230,20 @@ view = ~<gtk>
 </gtk>
 ```
 
-Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `derive`, `signal |> ...`, or `combineAll`, and mutate them with `set`, `update`, or `signal <| ...`:
+Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `derive`, `signal ->> ...`, or `combineAll`, and mutate them with `set`, `update`, or `signal <<- ...`:
 
 ```aivi
 state = signal { count: 0, query: "" }
-title = state |> _.count |> (_ + 1) |> toText
-nextCount = state |> { count } => count + 1
+title = state ->> _.count ->> (_ + 1) ->> toText
+nextCount = state ->> ({ count } => count + 1)
 canSearch = combineAll (state, searchEvent.running) ((st, running) =>
   st.query != "" && !running
 )
 
 update state (patch { count: _ + 1 })
 update state (patch { query: "gtk" })
-tick <| (_ + 1)
-tick <| 0
+tick <<- (_ + 1)
+tick <<- 0
 ```
 
 Event attrs accept either runtime functions or event-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles are commonly created with `do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`. The lower-level equivalent is `event (do Effect { ... })`.

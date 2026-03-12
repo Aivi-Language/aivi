@@ -773,7 +773,7 @@ impl TypeChecker {
                 }
             }
         }
-        Ok(Type::con("Generator").app(vec![yield_ty]))
+        Ok(Type::con("aivi.generator.Generator").app(vec![yield_ty]))
     }
 
     fn infer_resource_block(
@@ -1173,7 +1173,7 @@ impl TypeChecker {
     fn generate_source_elem(&mut self, expr_ty: Type, span: Span) -> Result<Type, TypeError> {
         let elem_ty = self.fresh_var();
         let list_ty = Type::con("List").app(vec![elem_ty.clone()]);
-        let gen_ty = Type::con("Generator").app(vec![elem_ty.clone()]);
+        let gen_ty = Type::con("aivi.generator.Generator").app(vec![elem_ty.clone()]);
         if self
             .unify_with_span(expr_ty.clone(), list_ty, span.clone())
             .is_ok()
