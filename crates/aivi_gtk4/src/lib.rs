@@ -1131,7 +1131,7 @@ mod linux_impl {
 
     fn known_signals_for_class(class_name: &str) -> &'static [&'static str] {
         if class_name.starts_with("Adw") && class_name.ends_with("Dialog") {
-            return &["notify::open"];
+            return &["notify::open", "close-attempt"];
         }
         match class_name {
             "GtkButton" => &["clicked"],
@@ -1245,7 +1245,7 @@ mod linux_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use std::sync::{Mutex, OnceLock};
+        use std::sync::{Arc, Mutex, OnceLock};
         use std::time::Duration;
 
         fn gtk_state_test_guard() -> std::sync::MutexGuard<'static, ()> {
@@ -1350,6 +1350,62 @@ mod linux_impl {
             assert_eq!(event.signal, "mailfox.tray.action");
             assert_eq!(event.handler, "quit");
             assert_eq!(event.payload, "");
+        }
+
+        #[test]
+        fn ui_debug_reentrant_helper_releases_state_between_stages() {
+            let _guard = gtk_state_test_guard();
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                *state = RealGtkState::default();
+            });
+
+            let result = with_ui_debug_reentrant_result(
+                |state| {
+                    state.ui_debug_tick = 41;
+                    Ok(state.ui_debug_tick)
+                },
+                |prepared| {
+                    GTK_STATE.with(|state| {
+                        state.borrow_mut().ui_debug_tick = prepared + 1;
+                    });
+                    Ok(())
+                },
+                |state, prepared| Ok((prepared, state.ui_debug_tick)),
+            )
+            .expect("reentrant helper should allow GTK state re-entry during apply");
+
+            assert_eq!(result, (41, 42));
+        }
+
+        #[test]
+        fn ui_debug_custom_handler_can_reborrow_state() {
+            let _guard = gtk_state_test_guard();
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                *state = RealGtkState::default();
+            });
+            set_ui_debug_request_handler(Some(Arc::new(|method, _params| {
+                assert_eq!(method, "custom");
+                GTK_STATE.with(|state| {
+                    state.borrow_mut().ui_debug_tick += 1;
+                });
+                Some(Ok(json!({
+                    "handled": true
+                })))
+            })));
+
+            let response = ui_debug_handle_line(
+                "secret",
+                r#"{"id":1,"token":"secret","method":"custom","params":{}}"#,
+            );
+
+            set_ui_debug_request_handler(None);
+            assert_eq!(response["ok"], json!(true));
+            assert_eq!(response["result"]["handled"], json!(true));
+            GTK_STATE.with(|state| {
+                assert_eq!(state.borrow().ui_debug_tick, 1);
+            });
         }
 
         #[test]
@@ -1601,8 +1657,12 @@ mod linux_impl {
                 Some(SignalPayloadKind::NotifyBool)
             );
             assert_eq!(
+                signal_payload_kind_for("AdwPreferencesDialog", "close-attempt"),
+                Some(SignalPayloadKind::None)
+            );
+            assert_eq!(
                 known_signals_for_class("AdwPreferencesDialog"),
-                &["notify::open"]
+                &["notify::open", "close-attempt"]
             );
         }
 
@@ -3515,63 +3575,79 @@ mod linux_impl {
         ))
     }
 
-    fn ui_debug_focus_result(
-        state: &mut RealGtkState,
-        params: &Map<String, Value>,
-    ) -> Result<Value, Gtk4Error> {
-        let widget_id = resolve_widget_id(state, params)?;
-        if state.windows.contains_key(&widget_id) && find_widget_context(state, widget_id).is_none()
-        {
-            return Err(Gtk4Error::new(
-                "gtk ui debug focus expects a focusable widget target, not a window id",
-            ));
-        }
-        let widget = widget_ptr(state, widget_id, "uiDebugFocus")?;
-        if unsafe { gtk_widget_grab_focus(widget) } == 0 {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug widget {widget_id} could not take focus"
-            )));
-        }
-        let (root_id, parent_id, child_type, live) = find_widget_context(state, widget_id)
-            .ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} disappeared after focus"
-                ))
-            })?;
-        Ok(json!({
-            "protocol": "aivi.gtk.debug.v1",
-            "rootId": root_id,
-            "focus": focus_summary_json(state),
-            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live)
-        }))
+    fn ui_debug_focus_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
+        with_ui_debug_reentrant_result(
+            |state| {
+                let widget_id = resolve_widget_id(state, params)?;
+                if state.windows.contains_key(&widget_id)
+                    && find_widget_context(state, widget_id).is_none()
+                {
+                    return Err(Gtk4Error::new(
+                        "gtk ui debug focus expects a focusable widget target, not a window id",
+                    ));
+                }
+                let widget = widget_ptr(state, widget_id, "uiDebugFocus")?;
+                Ok((widget_id, widget))
+            },
+            |(widget_id, widget)| {
+                if unsafe { gtk_widget_grab_focus(*widget) } == 0 {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug widget {widget_id} could not take focus"
+                    )));
+                }
+                Ok(())
+            },
+            |state, (widget_id, _)| {
+                let (root_id, parent_id, child_type, live) = find_widget_context(state, widget_id)
+                    .ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug widget {widget_id} disappeared after focus"
+                        ))
+                    })?;
+                Ok(json!({
+                    "protocol": "aivi.gtk.debug.v1",
+                    "rootId": root_id,
+                    "focus": focus_summary_json(state),
+                    "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live)
+                }))
+            },
+        )
     }
 
-    fn ui_debug_move_focus_result(
-        state: &mut RealGtkState,
-        params: &Map<String, Value>,
-    ) -> Result<Value, Gtk4Error> {
-        let direction_text = params
-            .get("direction")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Gtk4Error::new("gtk ui debug moveFocus requires direction"))?;
-        let direction = parse_focus_direction(direction_text).ok_or_else(|| {
-            Gtk4Error::new(format!(
-                "gtk ui debug moveFocus invalid direction '{direction_text}'"
-            ))
-        })?;
-        let container_id = resolve_focus_container_id(state, params)?;
-        let container = widget_ptr(state, container_id, "uiDebugMoveFocus")?;
-        if unsafe { gtk_widget_child_focus(container, direction) } == 0 {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug could not move focus from container {container_id} with direction '{direction_text}'"
-            )));
-        }
-        Ok(json!({
-            "protocol": "aivi.gtk.debug.v1",
-            "containerId": container_id,
-            "direction": direction_text,
-            "focus": focus_summary_json(state)
-        }))
+    fn ui_debug_move_focus_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
+        with_ui_debug_reentrant_result(
+            |state| {
+                let direction_text = params
+                    .get("direction")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Gtk4Error::new("gtk ui debug moveFocus requires direction"))?
+                    .to_string();
+                let direction = parse_focus_direction(&direction_text).ok_or_else(|| {
+                    Gtk4Error::new(format!(
+                        "gtk ui debug moveFocus invalid direction '{direction_text}'"
+                    ))
+                })?;
+                let container_id = resolve_focus_container_id(state, params)?;
+                let container = widget_ptr(state, container_id, "uiDebugMoveFocus")?;
+                Ok((container_id, container, direction_text, direction))
+            },
+            |(container_id, container, direction_text, direction)| {
+                if unsafe { gtk_widget_child_focus(*container, *direction) } == 0 {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug could not move focus from container {container_id} with direction '{direction_text}'"
+                    )));
+                }
+                Ok(())
+            },
+            |state, (container_id, _, direction_text, _)| {
+                Ok(json!({
+                    "protocol": "aivi.gtk.debug.v1",
+                    "containerId": container_id,
+                    "direction": direction_text,
+                    "focus": focus_summary_json(state)
+                }))
+            },
+        )
     }
 
     fn scroll_adjustment_json(adjustment: *mut c_void) -> Value {
@@ -3583,75 +3659,84 @@ mod linux_impl {
         })
     }
 
-    fn ui_debug_scroll_result(
-        state: &mut RealGtkState,
-        params: &Map<String, Value>,
-    ) -> Result<Value, Gtk4Error> {
-        let widget_id = resolve_widget_id(state, params)?;
-        let direction = params
-            .get("direction")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Gtk4Error::new("gtk ui debug scroll requires direction"))?;
-        let amount = params
-            .get("amount")
-            .and_then(Value::as_f64)
-            .unwrap_or(40.0)
-            .abs();
-        let (root_id, class_name) = {
-            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} is not part of the live tree"
-                ))
-            })?;
-            (root_id, live.class_name.clone())
-        };
-        if class_name != "GtkScrolledWindow" {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug widget {widget_id} does not support scrolling"
-            )));
-        }
-        let widget = widget_ptr(state, widget_id, "uiDebugScroll")?;
-        let adjustment = match direction {
-            "up" | "down" => unsafe { gtk_scrolled_window_get_vadjustment(widget) },
-            "left" | "right" => unsafe { gtk_scrolled_window_get_hadjustment(widget) },
-            _ => {
-                return Err(Gtk4Error::new(format!(
-                    "gtk ui debug scroll invalid direction '{direction}'"
-                )))
-            }
-        };
-        if adjustment.is_null() {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug widget {widget_id} has no scroll adjustment for direction '{direction}'"
-            )));
-        }
-        let current = unsafe { gtk_adjustment_get_value(adjustment) };
-        let lower = unsafe { gtk_adjustment_get_lower(adjustment) };
-        let upper = unsafe { gtk_adjustment_get_upper(adjustment) };
-        let page_size = unsafe { gtk_adjustment_get_page_size(adjustment) };
-        let max_value = (upper - page_size).max(lower);
-        let delta = match direction {
-            "up" | "left" => -amount,
-            "down" | "right" => amount,
-            _ => 0.0,
-        };
-        let next = (current + delta).clamp(lower, max_value);
-        unsafe { gtk_adjustment_set_value(adjustment, next) };
-        let (_, parent_id, child_type, live) =
-            find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} disappeared after scroll"
-                ))
-            })?;
-        Ok(json!({
-            "protocol": "aivi.gtk.debug.v1",
-            "rootId": root_id,
-            "direction": direction,
-            "amount": amount,
-            "focus": focus_summary_json(state),
-            "scroll": scroll_adjustment_json(adjustment),
-            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live)
-        }))
+    fn ui_debug_scroll_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
+        with_ui_debug_reentrant_result(
+            |state| {
+                let widget_id = resolve_widget_id(state, params)?;
+                let direction = params
+                    .get("direction")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Gtk4Error::new("gtk ui debug scroll requires direction"))?
+                    .to_string();
+                let amount = params
+                    .get("amount")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(40.0)
+                    .abs();
+                let (root_id, class_name) = {
+                    let (root_id, _, _, live) =
+                        find_widget_context(state, widget_id).ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug widget {widget_id} is not part of the live tree"
+                            ))
+                        })?;
+                    (root_id, live.class_name.clone())
+                };
+                if class_name != "GtkScrolledWindow" {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug widget {widget_id} does not support scrolling"
+                    )));
+                }
+                let widget = widget_ptr(state, widget_id, "uiDebugScroll")?;
+                let adjustment = match direction.as_str() {
+                    "up" | "down" => unsafe { gtk_scrolled_window_get_vadjustment(widget) },
+                    "left" | "right" => unsafe { gtk_scrolled_window_get_hadjustment(widget) },
+                    _ => {
+                        return Err(Gtk4Error::new(format!(
+                            "gtk ui debug scroll invalid direction '{direction}'"
+                        )))
+                    }
+                };
+                if adjustment.is_null() {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug widget {widget_id} has no scroll adjustment for direction '{direction}'"
+                    )));
+                }
+                let current = unsafe { gtk_adjustment_get_value(adjustment) };
+                let lower = unsafe { gtk_adjustment_get_lower(adjustment) };
+                let upper = unsafe { gtk_adjustment_get_upper(adjustment) };
+                let page_size = unsafe { gtk_adjustment_get_page_size(adjustment) };
+                let max_value = (upper - page_size).max(lower);
+                let delta = match direction.as_str() {
+                    "up" | "left" => -amount,
+                    "down" | "right" => amount,
+                    _ => 0.0,
+                };
+                let next = (current + delta).clamp(lower, max_value);
+                Ok((widget_id, root_id, direction, amount, adjustment, next))
+            },
+            |(_, _, _, _, adjustment, next)| {
+                unsafe { gtk_adjustment_set_value(*adjustment, *next) };
+                Ok(())
+            },
+            |state, (widget_id, root_id, direction, amount, adjustment, _)| {
+                let (_, parent_id, child_type, live) = find_widget_context(state, widget_id)
+                    .ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug widget {widget_id} disappeared after scroll"
+                        ))
+                    })?;
+                Ok(json!({
+                    "protocol": "aivi.gtk.debug.v1",
+                    "rootId": root_id,
+                    "direction": direction,
+                    "amount": amount,
+                    "focus": focus_summary_json(state),
+                    "scroll": scroll_adjustment_json(adjustment),
+                    "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live)
+                }))
+            },
+        )
     }
 
     fn ui_debug_click_result(
@@ -3701,282 +3786,415 @@ mod linux_impl {
         }))
     }
 
-    fn ui_debug_type_result(
-        state: &mut RealGtkState,
-        params: &Map<String, Value>,
-    ) -> Result<Value, Gtk4Error> {
-        let widget_id = resolve_widget_id(state, params)?;
-        let text = params
-            .get("text")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Gtk4Error::new("gtk ui debug type requires text"))?;
-        let (root_id, class_name, bindings) = {
-            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} is not part of the live tree"
-                ))
-            })?;
-            (
-                root_id,
-                live.class_name.clone(),
-                live.signals
-                    .iter()
-                    .filter(|binding| {
-                        binding.signal == "changed" || binding.signal == "notify::text"
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            )
-        };
-        if !is_text_input_class(&class_name) {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug widget {widget_id} does not support typing"
-            )));
-        }
-        let widget = widget_ptr(state, widget_id, "uiDebugType")?;
-        let text_c = c_text(text, "gtk ui debug invalid text payload")?;
-        unsafe {
-            if matches!(
-                class_name.as_str(),
-                "GtkEntry" | "GtkPasswordEntry" | "GtkSearchEntry"
-            ) {
-                gtk_editable_set_text(widget, text_c.as_ptr());
-            } else {
-                let prop_c = CString::new("text").unwrap();
-                gobject_set_str(widget, &prop_c, &text_c);
-            }
-        }
-        update_live_prop(state, widget_id, "text", text.to_string());
-        let mut emitted = Vec::new();
-        for binding in &bindings {
-            enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, text)?;
-            emitted.push(json!({
-                "signal": binding.signal,
-                "handler": binding.handler
-            }));
-        }
-        let (_, parent_id, child_type, live) =
-            find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} disappeared after typing"
-                ))
-            })?;
-        Ok(json!({
-            "protocol": "aivi.gtk.debug.v1",
-            "rootId": root_id,
-            "text": text,
-            "focus": focus_summary_json(state),
-            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
-            "emitted": emitted
-        }))
+    fn ui_debug_type_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
+        with_ui_debug_reentrant_result(
+            |state| {
+                let widget_id = resolve_widget_id(state, params)?;
+                let text = params
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Gtk4Error::new("gtk ui debug type requires text"))?
+                    .to_string();
+                let (root_id, class_name, bindings) = {
+                    let (root_id, _, _, live) =
+                        find_widget_context(state, widget_id).ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug widget {widget_id} is not part of the live tree"
+                            ))
+                        })?;
+                    (
+                        root_id,
+                        live.class_name.clone(),
+                        live.signals
+                            .iter()
+                            .filter(|binding| {
+                                binding.signal == "changed" || binding.signal == "notify::text"
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>(),
+                    )
+                };
+                if !is_text_input_class(&class_name) {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug widget {widget_id} does not support typing"
+                    )));
+                }
+                let widget = widget_ptr(state, widget_id, "uiDebugType")?;
+                Ok((widget_id, root_id, class_name, bindings, widget, text))
+            },
+            |(_, _, class_name, _, widget, text)| {
+                let text_c = c_text(text, "gtk ui debug invalid text payload")?;
+                unsafe {
+                    if matches!(
+                        class_name.as_str(),
+                        "GtkEntry" | "GtkPasswordEntry" | "GtkSearchEntry"
+                    ) {
+                        gtk_editable_set_text(*widget, text_c.as_ptr());
+                    } else {
+                        let prop_c = CString::new("text").unwrap();
+                        gobject_set_str(*widget, &prop_c, &text_c);
+                    }
+                }
+                Ok(())
+            },
+            |state, (widget_id, root_id, _, bindings, _, text)| {
+                update_live_prop(state, widget_id, "text", text.clone());
+                let mut emitted = Vec::new();
+                for binding in &bindings {
+                    enqueue_signal_event(
+                        state,
+                        widget_id,
+                        &binding.signal,
+                        &binding.handler,
+                        &text,
+                    )?;
+                    emitted.push(json!({
+                        "signal": binding.signal,
+                        "handler": binding.handler
+                    }));
+                }
+                let (_, parent_id, child_type, live) = find_widget_context(state, widget_id)
+                    .ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug widget {widget_id} disappeared after typing"
+                        ))
+                    })?;
+                Ok(json!({
+                    "protocol": "aivi.gtk.debug.v1",
+                    "rootId": root_id,
+                    "text": text,
+                    "focus": focus_summary_json(state),
+                    "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+                    "emitted": emitted
+                }))
+            },
+        )
     }
 
-    fn ui_debug_select_result(
-        state: &mut RealGtkState,
-        params: &Map<String, Value>,
-    ) -> Result<Value, Gtk4Error> {
-        let widget_id = resolve_widget_id(state, params)?;
-        let value = params
-            .get("value")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Gtk4Error::new("gtk ui debug select requires value"))?;
-        let (root_id, class_name, kind, bindings, props) = {
-            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} is not part of the live tree"
-                ))
-            })?;
-            (
-                root_id,
-                live.class_name.clone(),
-                live.kind,
-                live.signals.clone(),
-                live.props.clone(),
-            )
-        };
-        let widget = widget_ptr(state, widget_id, "uiDebugSelect")?;
-        let mut emitted = Vec::new();
-
-        if matches!(kind, CreatedWidgetKind::Stack) {
-            let page_c = c_text(value, "gtk ui debug invalid stack page name")?;
-            unsafe { gtk_stack_set_visible_child_name(widget, page_c.as_ptr()) };
-            update_live_prop(state, widget_id, "visible-child-name", value.to_string());
-            for binding in bindings
-                .iter()
-                .filter(|binding| binding.signal == "notify::visible-child-name")
-            {
-                enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, value)?;
-                emitted.push(json!({
-                    "signal": binding.signal,
-                    "handler": binding.handler
-                }));
-            }
-        } else if is_toggle_class(&class_name) {
-            let active = parse_bool_text(value).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug select expected a boolean-like value for widget {widget_id}"
-                ))
-            })?;
-            let prop_c = CString::new("active").unwrap();
-            unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(active)) };
-            update_live_prop(state, widget_id, "active", active.to_string());
-            let payload = if active { "true" } else { "false" };
-            for binding in bindings
-                .iter()
-                .filter(|binding| binding.signal == "toggled" || binding.signal == "notify::active")
-            {
-                enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, payload)?;
-                emitted.push(json!({
-                    "signal": binding.signal,
-                    "handler": binding.handler
-                }));
-            }
-        } else if class_name == "GtkDropDown" {
-            let options = string_prop_lines(props.get("strings"));
-            let selected = string_selection_index(&options, value).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug select expected a dropdown index or label for widget {widget_id}"
-                ))
-            })?;
-            unsafe { gtk_drop_down_set_selected(widget, selected as c_uint) };
-            update_live_prop(state, widget_id, "selected", selected.to_string());
-            let payload = selected.to_string();
-            for binding in bindings
-                .iter()
-                .filter(|binding| binding.signal == "notify::selected")
-            {
-                enqueue_signal_event(
-                    state,
-                    widget_id,
-                    &binding.signal,
-                    &binding.handler,
-                    &payload,
-                )?;
-                emitted.push(json!({
-                    "signal": binding.signal,
-                    "handler": binding.handler
-                }));
-            }
-        } else if class_name == "GtkComboBoxText" {
-            let options = string_prop_lines(props.get("strings"));
-            let selected = string_selection_index(&options, value).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug select expected a combo-box index or label for widget {widget_id}"
-                ))
-            })?;
-            unsafe { gtk_combo_box_set_active(widget, selected as c_int) };
-            update_live_prop(state, widget_id, "active", selected.to_string());
-            let payload = options
-                .get(selected)
-                .cloned()
-                .unwrap_or_else(|| selected.to_string());
-            for binding in bindings
-                .iter()
-                .filter(|binding| binding.signal == "changed")
-            {
-                enqueue_signal_event(
-                    state,
-                    widget_id,
-                    &binding.signal,
-                    &binding.handler,
-                    &payload,
-                )?;
-                emitted.push(json!({
-                    "signal": binding.signal,
-                    "handler": binding.handler
-                }));
-            }
-        } else if matches!(class_name.as_str(), "GtkRange" | "GtkScale") {
-            let requested = parse_f64_text(value).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug select expected a numeric value for widget {widget_id}"
-                ))
-            })?;
-            let min = props
-                .get("min")
-                .and_then(|raw| parse_f64_text(raw))
-                .unwrap_or(requested);
-            let max = props
-                .get("max")
-                .and_then(|raw| parse_f64_text(raw))
-                .unwrap_or(requested);
-            let selected = requested.clamp(min.min(max), min.max(max));
-            unsafe { gtk_range_set_value(widget, selected) };
-            update_live_prop(state, widget_id, "value", selected.to_string());
-            let payload = selected.to_string();
-            for binding in bindings
-                .iter()
-                .filter(|binding| binding.signal == "value-changed")
-            {
-                enqueue_signal_event(
-                    state,
-                    widget_id,
-                    &binding.signal,
-                    &binding.handler,
-                    &payload,
-                )?;
-                emitted.push(json!({
-                    "signal": binding.signal,
-                    "handler": binding.handler
-                }));
-            }
-        } else if class_name == "GtkSpinButton" {
-            let requested = parse_f64_text(value).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug select expected a numeric value for widget {widget_id}"
-                ))
-            })?;
-            let min = props
-                .get("min")
-                .and_then(|raw| parse_f64_text(raw))
-                .unwrap_or(requested);
-            let max = props
-                .get("max")
-                .and_then(|raw| parse_f64_text(raw))
-                .unwrap_or(requested);
-            let selected = requested.clamp(min.min(max), min.max(max));
-            unsafe { gtk_spin_button_set_value(widget, selected) };
-            update_live_prop(state, widget_id, "value", selected.to_string());
-            let payload = selected.to_string();
-            for binding in bindings
-                .iter()
-                .filter(|binding| binding.signal == "value-changed")
-            {
-                enqueue_signal_event(
-                    state,
-                    widget_id,
-                    &binding.signal,
-                    &binding.handler,
-                    &payload,
-                )?;
-                emitted.push(json!({
-                    "signal": binding.signal,
-                    "handler": binding.handler
-                }));
-            }
-        } else {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug widget {widget_id} does not support select"
-            )));
+    fn ui_debug_select_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
+        enum UiDebugSelectAction {
+            Stack {
+                page: CString,
+                payload: String,
+            },
+            Toggle {
+                property: CString,
+                active: bool,
+                payload: String,
+            },
+            DropDown {
+                selected: usize,
+                payload: String,
+            },
+            ComboBoxText {
+                selected: usize,
+                payload: String,
+            },
+            Range {
+                selected: f64,
+                payload: String,
+            },
+            SpinButton {
+                selected: f64,
+                payload: String,
+            },
         }
 
-        let (_, parent_id, child_type, live) =
-            find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} disappeared after selection"
-                ))
-            })?;
-        Ok(json!({
-            "protocol": "aivi.gtk.debug.v1",
-            "rootId": root_id,
-            "value": value,
-            "focus": focus_summary_json(state),
-            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
-            "emitted": emitted
-        }))
+        with_ui_debug_reentrant_result(
+            |state| {
+                let widget_id = resolve_widget_id(state, params)?;
+                let value = params
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Gtk4Error::new("gtk ui debug select requires value"))?
+                    .to_string();
+                let (root_id, class_name, kind, bindings, props) = {
+                    let (root_id, _, _, live) =
+                        find_widget_context(state, widget_id).ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug widget {widget_id} is not part of the live tree"
+                            ))
+                        })?;
+                    (
+                        root_id,
+                        live.class_name.clone(),
+                        live.kind,
+                        live.signals.clone(),
+                        live.props.clone(),
+                    )
+                };
+                let widget = widget_ptr(state, widget_id, "uiDebugSelect")?;
+                let action = if matches!(kind, CreatedWidgetKind::Stack) {
+                    UiDebugSelectAction::Stack {
+                        page: c_text(&value, "gtk ui debug invalid stack page name")?,
+                        payload: value.clone(),
+                    }
+                } else if is_toggle_class(&class_name) {
+                    let active = parse_bool_text(&value).ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug select expected a boolean-like value for widget {widget_id}"
+                        ))
+                    })?;
+                    UiDebugSelectAction::Toggle {
+                        property: CString::new("active").unwrap(),
+                        active,
+                        payload: if active { "true" } else { "false" }.to_string(),
+                    }
+                } else if class_name == "GtkDropDown" {
+                    let options = string_prop_lines(props.get("strings"));
+                    let selected = string_selection_index(&options, &value).ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug select expected a dropdown index or label for widget {widget_id}"
+                        ))
+                    })?;
+                    UiDebugSelectAction::DropDown {
+                        selected,
+                        payload: selected.to_string(),
+                    }
+                } else if class_name == "GtkComboBoxText" {
+                    let options = string_prop_lines(props.get("strings"));
+                    let selected = string_selection_index(&options, &value).ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug select expected a combo-box index or label for widget {widget_id}"
+                        ))
+                    })?;
+                    UiDebugSelectAction::ComboBoxText {
+                        selected,
+                        payload: options
+                            .get(selected)
+                            .cloned()
+                            .unwrap_or_else(|| selected.to_string()),
+                    }
+                } else if matches!(class_name.as_str(), "GtkRange" | "GtkScale") {
+                    let requested = parse_f64_text(&value).ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug select expected a numeric value for widget {widget_id}"
+                        ))
+                    })?;
+                    let min = props
+                        .get("min")
+                        .and_then(|raw| parse_f64_text(raw))
+                        .unwrap_or(requested);
+                    let max = props
+                        .get("max")
+                        .and_then(|raw| parse_f64_text(raw))
+                        .unwrap_or(requested);
+                    let selected = requested.clamp(min.min(max), min.max(max));
+                    UiDebugSelectAction::Range {
+                        selected,
+                        payload: selected.to_string(),
+                    }
+                } else if class_name == "GtkSpinButton" {
+                    let requested = parse_f64_text(&value).ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug select expected a numeric value for widget {widget_id}"
+                        ))
+                    })?;
+                    let min = props
+                        .get("min")
+                        .and_then(|raw| parse_f64_text(raw))
+                        .unwrap_or(requested);
+                    let max = props
+                        .get("max")
+                        .and_then(|raw| parse_f64_text(raw))
+                        .unwrap_or(requested);
+                    let selected = requested.clamp(min.min(max), min.max(max));
+                    UiDebugSelectAction::SpinButton {
+                        selected,
+                        payload: selected.to_string(),
+                    }
+                } else {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug widget {widget_id} does not support select"
+                    )));
+                };
+                Ok((widget_id, root_id, value, bindings, widget, action))
+            },
+            |(_, _, _, _, widget, action)| {
+                match action {
+                    UiDebugSelectAction::Stack { page, .. } => unsafe {
+                        gtk_stack_set_visible_child_name(*widget, page.as_ptr())
+                    },
+                    UiDebugSelectAction::Toggle {
+                        property, active, ..
+                    } => unsafe { gobject_set_bool(*widget, property, bool_to_c(*active)) },
+                    UiDebugSelectAction::DropDown { selected, .. } => unsafe {
+                        gtk_drop_down_set_selected(*widget, *selected as c_uint)
+                    },
+                    UiDebugSelectAction::ComboBoxText { selected, .. } => unsafe {
+                        gtk_combo_box_set_active(*widget, *selected as c_int)
+                    },
+                    UiDebugSelectAction::Range { selected, .. } => unsafe {
+                        gtk_range_set_value(*widget, *selected)
+                    },
+                    UiDebugSelectAction::SpinButton { selected, .. } => unsafe {
+                        gtk_spin_button_set_value(*widget, *selected)
+                    },
+                }
+                Ok(())
+            },
+            |state, (widget_id, root_id, value, bindings, _, action)| {
+                let mut emitted = Vec::new();
+                match &action {
+                    UiDebugSelectAction::Stack { payload, .. } => {
+                        update_live_prop(state, widget_id, "visible-child-name", payload.clone());
+                        for binding in bindings
+                            .iter()
+                            .filter(|binding| binding.signal == "notify::visible-child-name")
+                        {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                    UiDebugSelectAction::Toggle {
+                        active, payload, ..
+                    } => {
+                        update_live_prop(state, widget_id, "active", active.to_string());
+                        for binding in bindings.iter().filter(|binding| {
+                            binding.signal == "toggled" || binding.signal == "notify::active"
+                        }) {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                    UiDebugSelectAction::DropDown {
+                        selected, payload, ..
+                    } => {
+                        update_live_prop(state, widget_id, "selected", selected.to_string());
+                        for binding in bindings
+                            .iter()
+                            .filter(|binding| binding.signal == "notify::selected")
+                        {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                    UiDebugSelectAction::ComboBoxText {
+                        selected, payload, ..
+                    } => {
+                        update_live_prop(state, widget_id, "active", selected.to_string());
+                        for binding in bindings
+                            .iter()
+                            .filter(|binding| binding.signal == "changed")
+                        {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                    UiDebugSelectAction::Range { selected, payload } => {
+                        update_live_prop(state, widget_id, "value", selected.to_string());
+                        for binding in bindings
+                            .iter()
+                            .filter(|binding| binding.signal == "value-changed")
+                        {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                    UiDebugSelectAction::SpinButton { selected, payload } => {
+                        update_live_prop(state, widget_id, "value", selected.to_string());
+                        for binding in bindings
+                            .iter()
+                            .filter(|binding| binding.signal == "value-changed")
+                        {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                }
+
+                let (_, parent_id, child_type, live) = find_widget_context(state, widget_id)
+                    .ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug widget {widget_id} disappeared after selection"
+                        ))
+                    })?;
+                Ok(json!({
+                    "protocol": "aivi.gtk.debug.v1",
+                    "rootId": root_id,
+                    "value": value,
+                    "focus": focus_summary_json(state),
+                    "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+                    "emitted": emitted
+                }))
+            },
+        )
     }
 
-    fn ui_debug_handle_request(state: &mut RealGtkState, token: &str, request: &Value) -> Value {
+    fn with_ui_debug_state_result<T>(
+        f: impl FnOnce(&mut RealGtkState) -> Result<T, Gtk4Error>,
+    ) -> Result<T, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            f(&mut state)
+        })
+    }
+
+    fn with_ui_debug_reentrant_result<P, T>(
+        prepare: impl FnOnce(&mut RealGtkState) -> Result<P, Gtk4Error>,
+        apply: impl FnOnce(&P) -> Result<(), Gtk4Error>,
+        finish: impl FnOnce(&mut RealGtkState, P) -> Result<T, Gtk4Error>,
+    ) -> Result<T, Gtk4Error> {
+        let prepared = with_ui_debug_state_result(prepare)?;
+        apply(&prepared)?;
+        with_ui_debug_state_result(|state| finish(state, prepared))
+    }
+
+    fn ui_debug_handle_request(token: &str, request: &Value) -> Value {
         let id = request.get("id").cloned().unwrap_or(Value::Null);
         let request_token = request
             .get("token")
@@ -3999,26 +4217,50 @@ mod linux_impl {
         };
 
         let result = match method {
-            "hello" => Ok(ui_debug_hello_result(state)),
-            "capture" => ui_debug_capture_result(state, params),
-            "pollEvents" => Ok(ui_debug_poll_events_result(state, params)),
-            "pollMutations" => Ok(ui_debug_poll_mutations_result(state, params)),
-            "listNamedWidgets" => Ok(ui_debug_list_widgets_result(state)),
-            "listActionBindings" => ui_debug_list_action_bindings_result(state, params),
-            "inspectAt" => ui_debug_inspect_at_result(state, params),
-            "layoutSnapshot" => ui_debug_layout_snapshot_result(state, params),
-            "styleInfo" => ui_debug_style_info_result(state, params),
-            "explainWidget" => ui_debug_explain_widget_result(state, params),
-            "showOverlay" => ui_debug_show_overlay_result(state, params),
-            "dumpLiveTree" => ui_debug_dump_tree_result(state, params),
-            "inspectWidget" => ui_debug_inspect_widget_result(state, params),
-            "click" => ui_debug_click_result(state, params),
-            "type" => ui_debug_type_result(state, params),
-            "focus" => ui_debug_focus_result(state, params),
-            "moveFocus" => ui_debug_move_focus_result(state, params),
-            "select" => ui_debug_select_result(state, params),
-            "scroll" => ui_debug_scroll_result(state, params),
-            "keyPress" => ui_debug_key_press_result(state, params),
+            "hello" => with_ui_debug_state_result(|state| Ok(ui_debug_hello_result(state))),
+            "capture" => with_ui_debug_state_result(|state| ui_debug_capture_result(state, params)),
+            "pollEvents" => {
+                with_ui_debug_state_result(|state| Ok(ui_debug_poll_events_result(state, params)))
+            }
+            "pollMutations" => with_ui_debug_state_result(|state| {
+                Ok(ui_debug_poll_mutations_result(state, params))
+            }),
+            "listNamedWidgets" => {
+                with_ui_debug_state_result(|state| Ok(ui_debug_list_widgets_result(state)))
+            }
+            "listActionBindings" => with_ui_debug_state_result(|state| {
+                ui_debug_list_action_bindings_result(state, params)
+            }),
+            "inspectAt" => {
+                with_ui_debug_state_result(|state| ui_debug_inspect_at_result(state, params))
+            }
+            "layoutSnapshot" => {
+                with_ui_debug_state_result(|state| ui_debug_layout_snapshot_result(state, params))
+            }
+            "styleInfo" => {
+                with_ui_debug_state_result(|state| ui_debug_style_info_result(state, params))
+            }
+            "explainWidget" => {
+                with_ui_debug_state_result(|state| ui_debug_explain_widget_result(state, params))
+            }
+            "showOverlay" => {
+                with_ui_debug_state_result(|state| ui_debug_show_overlay_result(state, params))
+            }
+            "dumpLiveTree" => {
+                with_ui_debug_state_result(|state| ui_debug_dump_tree_result(state, params))
+            }
+            "inspectWidget" => {
+                with_ui_debug_state_result(|state| ui_debug_inspect_widget_result(state, params))
+            }
+            "click" => with_ui_debug_state_result(|state| ui_debug_click_result(state, params)),
+            "type" => ui_debug_type_result(params),
+            "focus" => ui_debug_focus_result(params),
+            "moveFocus" => ui_debug_move_focus_result(params),
+            "select" => ui_debug_select_result(params),
+            "scroll" => ui_debug_scroll_result(params),
+            "keyPress" => {
+                with_ui_debug_state_result(|state| ui_debug_key_press_result(state, params))
+            }
             _ => call_ui_debug_request_handler(method, params).unwrap_or_else(|| {
                 Err(Gtk4Error::new(format!(
                     "gtk ui debug unknown method {method}"
@@ -4032,18 +4274,14 @@ mod linux_impl {
         }
     }
 
-    fn ui_debug_handle_line(state: &mut RealGtkState, token: &str, line: &str) -> Value {
+    fn ui_debug_handle_line(token: &str, line: &str) -> Value {
         match serde_json::from_str::<Value>(line) {
-            Ok(request) => ui_debug_handle_request(state, token, &request),
+            Ok(request) => ui_debug_handle_request(token, &request),
             Err(err) => ui_debug_error_response(Value::Null, format!("invalid json: {err}")),
         }
     }
 
-    fn process_ui_debug_connection(
-        state: &mut RealGtkState,
-        token: &str,
-        stream: UnixStream,
-    ) -> Result<(), Gtk4Error> {
+    fn process_ui_debug_connection(token: &str, stream: UnixStream) -> Result<(), Gtk4Error> {
         stream
             .set_read_timeout(Some(Duration::from_millis(200)))
             .map_err(|err| Gtk4Error::new(format!("gtk ui debug read timeout failed: {err}")))?;
@@ -4058,7 +4296,7 @@ mod linux_impl {
         reader
             .read_line(&mut line)
             .map_err(|err| Gtk4Error::new(format!("gtk ui debug read failed: {err}")))?;
-        let response = ui_debug_handle_line(state, token, line.trim_end_matches('\n'));
+        let response = ui_debug_handle_line(token, line.trim_end_matches('\n'));
         let mut writer = stream;
         let mut bytes = serde_json::to_vec(&response)
             .map_err(|err| Gtk4Error::new(format!("gtk ui debug encode failed: {err}")))?;
@@ -4069,25 +4307,34 @@ mod linux_impl {
         Ok(())
     }
 
-    fn process_ui_debug_requests(state: &mut RealGtkState) -> Result<(), Gtk4Error> {
-        let token = match state.ui_debug.as_ref() {
-            Some(server) => server.token.clone(),
-            None => return Ok(()),
-        };
-        let mut streams = Vec::new();
-        if let Some(server) = state.ui_debug.as_mut() {
-            loop {
-                match server.listener.accept() {
-                    Ok((stream, _)) => streams.push(stream),
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
-                    Err(err) => {
-                        return Err(Gtk4Error::new(format!("gtk ui debug accept failed: {err}")))
+    fn process_ui_debug_requests() -> Result<(), Gtk4Error> {
+        let Some((token, streams)) = GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let token = match state.ui_debug.as_ref() {
+                Some(server) => server.token.clone(),
+                None => return Ok(None),
+            };
+            let mut streams = Vec::new();
+            if let Some(server) = state.ui_debug.as_mut() {
+                loop {
+                    match server.listener.accept() {
+                        Ok((stream, _)) => streams.push(stream),
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(err) => {
+                            return Err(Gtk4Error::new(format!(
+                                "gtk ui debug accept failed: {err}"
+                            )))
+                        }
                     }
                 }
             }
-        }
+            Ok(Some((token, streams)))
+        })?
+        else {
+            return Ok(());
+        };
         for stream in streams {
-            if let Err(err) = process_ui_debug_connection(state, &token, stream) {
+            if let Err(err) = process_ui_debug_connection(&token, stream) {
                 eprintln!("AIVI GTK UI debug request failed: {}", err);
             }
         }
@@ -4128,10 +4375,10 @@ mod linux_impl {
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             state.ui_debug_tick = state.ui_debug_tick.saturating_add(1);
-            if let Err(err) = process_ui_debug_requests(&mut state) {
-                eprintln!("AIVI GTK UI debug server error: {}", err);
-            }
         });
+        if let Err(err) = process_ui_debug_requests() {
+            eprintln!("AIVI GTK UI debug server error: {}", err);
+        }
         flush_pending_tray_actions();
         1
     }
@@ -5009,17 +5256,12 @@ mod linux_impl {
     }
 
     fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
-        if class_name.starts_with("Adw")
-            && class_name.ends_with("Dialog")
-            && signal_name == "closed"
-        {
-            return Some(SignalPayloadKind::None);
-        }
-        if class_name.starts_with("Adw")
-            && class_name.ends_with("Dialog")
-            && signal_name == "notify::open"
-        {
-            return Some(SignalPayloadKind::NotifyBool);
+        if class_name.starts_with("Adw") && class_name.ends_with("Dialog") {
+            return match signal_name {
+                "closed" | "close-attempt" => Some(SignalPayloadKind::None),
+                "notify::open" => Some(SignalPayloadKind::NotifyBool),
+                _ => None,
+            };
         }
         match (class_name, signal_name) {
             (_, "key-pressed") => Some(SignalPayloadKind::KeyPressed),
@@ -8149,12 +8391,9 @@ mod linux_impl {
                         g_main_context_iteration(ctx, 0);
                     }
                 }
-                GTK_STATE.with(|state| {
-                    let mut state = state.borrow_mut();
-                    if let Err(err) = process_ui_debug_requests(&mut state) {
-                        eprintln!("AIVI GTK UI debug server error: {}", err);
-                    }
-                });
+                if let Err(err) = process_ui_debug_requests() {
+                    eprintln!("AIVI GTK UI debug server error: {}", err);
+                }
                 flush_pending_tray_actions();
             }
         });
