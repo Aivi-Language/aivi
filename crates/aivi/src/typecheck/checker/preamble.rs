@@ -61,6 +61,12 @@ pub(super) struct TypeChecker {
     /// the inner type `A` of `Source K A` is concrete. Used to inject JSON validation
     /// schemas at source boundaries.
     load_source_schemas: Vec<(String, String, CgType)>,
+    /// Maps bare type names to their unique qualified names from the global type universe.
+    /// Built from `global_type_constructors` keys: e.g. `"DateTime"` → `"aivi.calendar.DateTime"`.
+    /// Seeded into `type_name_bindings` on every `reset_module_context` so that bare type names
+    /// used in stdlib definitions and sigil literals consistently resolve to qualified names
+    /// even when the module does not explicitly import the type's defining module.
+    bare_to_global_qualified: HashMap<String, String>,
 }
 
 impl TypeChecker {
@@ -97,6 +103,7 @@ impl TypeChecker {
             compact_subst_between_defs: false,
             current_def_name: String::new(),
             load_source_schemas: Vec::new(),
+            bare_to_global_qualified: HashMap::new(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -113,6 +120,35 @@ impl TypeChecker {
         self.global_type_constructors = type_constructors;
         self.global_aliases = aliases;
         self.global_opaque_types = opaque_types;
+
+        // Build bare→qualified fallback map from all qualified names in the global type universe.
+        // Only maps bare names that are UNIQUE across all modules so we never silently pick the
+        // wrong qualified name for an ambiguous bare identifier.
+        // Skips builtin type names to avoid user-defined types with the same name (e.g. a custom
+        // `Unit` type) accidentally overriding the builtin `Unit`, `Bool`, `Int`, etc.
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for key in self.global_type_constructors.keys() {
+            if key.contains('.') {
+                if let Some(bare) = key.rsplit('.').next() {
+                    if !self.builtin_types.contains_key(bare) {
+                        *counts.entry(bare).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+        let mut bare_to_qualified: HashMap<String, String> = HashMap::new();
+        for key in self.global_type_constructors.keys() {
+            if key.contains('.') {
+                if let Some(bare) = key.rsplit('.').next() {
+                    if !self.builtin_types.contains_key(bare)
+                        && counts.get(bare).copied().unwrap_or(0) == 1
+                    {
+                        bare_to_qualified.insert(bare.to_string(), key.clone());
+                    }
+                }
+            }
+        }
+        self.bare_to_global_qualified = bare_to_qualified;
     }
 
     pub(super) fn reset_module_context(&mut self, _module: &Module) {
@@ -125,6 +161,16 @@ impl TypeChecker {
         for name in self.builtin_types.keys() {
             self.type_name_bindings.insert(name.clone(), name.clone());
             self.type_display_names.insert(name.clone(), name.clone());
+        }
+        // Override bare→bare entries for types that have a unique qualified name in the global
+        // type universe (e.g. "ZonedDateTime" → "aivi.chronos.timezone.ZonedDateTime").  This
+        // ensures module-declared type names consistently resolve to their canonical qualified
+        // form even without an explicit import.  Per-module imports registered by
+        // `register_imported_type_names` may further override these defaults.
+        for (bare, qualified) in &self.bare_to_global_qualified.clone() {
+            self.type_name_bindings.insert(bare.clone(), qualified.clone());
+            // Keep the short bare name as the display name for error messages.
+            self.type_display_names.insert(qualified.clone(), bare.clone());
         }
         self.register_builtin_aliases();
         self.type_constructors

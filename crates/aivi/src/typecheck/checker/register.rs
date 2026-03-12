@@ -4,9 +4,18 @@ impl TypeChecker {
     }
 
     fn bind_type_name(&mut self, local_name: String, internal_name: String) {
-        self.type_name_bindings
-            .insert(local_name.clone(), internal_name.clone());
-        self.type_display_names.insert(internal_name, local_name);
+        // Never downgrade an already-qualified binding to a bare name.  This preserves the
+        // global-seeded qualified names (e.g. "DateTime" → "aivi.calendar.DateTime") when a
+        // re-export module (like `aivi`) ships a bare `internal_name` for the same type.
+        let keep_existing = self
+            .type_name_bindings
+            .get(&local_name)
+            .is_some_and(|existing| existing.contains('.') && !internal_name.contains('.'));
+        if !keep_existing {
+            self.type_name_bindings
+                .insert(local_name.clone(), internal_name.clone());
+            self.type_display_names.insert(internal_name, local_name);
+        }
     }
 
     pub(super) fn register_module_types(&mut self, module: &Module) {
@@ -92,15 +101,6 @@ impl TypeChecker {
         // `{}` as a type annotation produces Type::Record { fields: {} }.  Adding this
         // alias lets unification see through the distinction so callers can write
         // `render m {}` where the function expects `{}` (empty record).
-        self.aliases.insert(
-            "Unit".to_string(),
-            AliasInfo {
-                params: vec![],
-                body: Type::Record {
-                    fields: std::collections::BTreeMap::new(),
-                },
-            },
-        );
 
         // v0.1: Source errors are currently just `Text` messages.
         // The `K` parameter exists for spec alignment and future evolution.
