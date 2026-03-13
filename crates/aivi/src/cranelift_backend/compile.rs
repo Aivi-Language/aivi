@@ -30,8 +30,8 @@ use crate::{kernel, rust_ir};
 use super::abi::JitRuntimeCtx;
 use super::jit_module::create_jit_module;
 use super::lower::{
-    declare_helpers, decompose_func_type, CompiledLambda, DeclaredHelpers, JitFuncDecl,
-    JitFuncInfo, LowerCtx,
+    declare_helpers, declare_jit_helpers, decompose_func_type, CompiledLambda, DeclaredHelpers,
+    JitFuncDecl, JitFuncInfo, LowerCtx,
 };
 
 /// Pointer type used throughout.
@@ -134,7 +134,7 @@ fn jit_compile_into_runtime(
     // Declare runtime helper imports in the module
     let helpers = timed!(
         "declare_helpers",
-        declare_helpers(&mut module)
+        declare_jit_helpers(&mut module)
             .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?
     );
 
@@ -275,6 +275,7 @@ fn jit_compile_into_runtime(
         is_effect_block: bool,
     }
     let mut pending: Vec<PendingDef> = Vec::new();
+    let mut pending_lambdas: Vec<CompiledLambdaInfo> = Vec::new();
     let mut lambda_counter: usize = 0;
     let mut compiled_decls: HashMap<String, JitFuncDecl> = HashMap::new();
     let mut str_counter: usize = 0;
@@ -309,18 +310,7 @@ fn jit_compile_into_runtime(
             &mut str_counter,
         ) {
             Ok(lambdas) => {
-                // JIT-specific: finalize and install lambdas immediately
-                if !lambdas.is_empty() {
-                    module
-                        .finalize_definitions()
-                        .map_err(|e| AiviError::Runtime(format!("finalize lambdas: {e}")))?;
-                    for pl in &lambdas {
-                        let ptr = module.get_finalized_function(pl.func_id);
-                        let jit_value =
-                            make_jit_builtin(&pl.global_name, pl.total_arity, ptr as usize);
-                        runtime.ctx.globals.set(pl.global_name.clone(), jit_value);
-                    }
-                }
+                pending_lambdas.extend(lambdas);
                 pending.push(PendingDef {
                     name: dd.def.name.clone(),
                     qualified: dd.qualified.clone(),
@@ -352,6 +342,19 @@ fn jit_compile_into_runtime(
             .finalize_definitions()
             .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?
     );
+
+    for pending_lambda in &pending_lambdas {
+        let ptr = module.get_finalized_function(pending_lambda.func_id);
+        let jit_value = make_jit_builtin(
+            &pending_lambda.global_name,
+            pending_lambda.total_arity,
+            ptr as usize,
+        );
+        runtime
+            .ctx
+            .globals
+            .set(pending_lambda.global_name.clone(), jit_value);
+    }
 
     let mut compiled_globals: HashMap<String, Value> = HashMap::new();
 

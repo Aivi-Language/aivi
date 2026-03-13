@@ -43,3 +43,16 @@ pub fn file_diagnostics_have_non_embedded_errors(diags: &[FileDiagnostic]) -> bo
             && diag.diagnostic.severity == DiagnosticSeverity::Error
     })
 }
+
+#[allow(dead_code)]
+pub fn configured_test_threads(env_var: &str, default_cap: usize) -> usize {
+    std::env::var(env_var)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|count| *count > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|count| count.get().min(default_cap))
+                .unwrap_or(1)
+        })
+}
