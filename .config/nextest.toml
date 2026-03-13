@@ -5,15 +5,20 @@ final-status-level = "fail"
 failure-output = "final"
 
 # Heavy runner-style tests JIT-compile many .aivi files with per-file timeouts.
-# Running them all in parallel causes CPU contention and can trigger spurious
-# timeouts or OS-level kills, so serialize them.
+# Running them alongside the rest of the workspace causes CPU contention and can
+# stretch otherwise-fast tests well past their normal runtime, so reserve the
+# full pool for them and cap them at 25 seconds.
 [test-groups.runner-jit]
 max-threads = 1
 
 [[profile.default.overrides]]
 filter = 'binary_id(aivi::runner)'
 test-group = 'runner-jit'
+threads-required = "num-test-threads"
+slow-timeout = { period = "25s", terminate-after = 1, grace-period = "0s" }
 
 [[profile.default.overrides]]
 filter = 'binary_id(aivi::stdlib_runner)'
 test-group = 'runner-jit'
+threads-required = "num-test-threads"
+slow-timeout = { period = "25s", terminate-after = 1, grace-period = "0s" }

@@ -249,6 +249,8 @@ Valid public shapes therefore include:
 
 `GtkSignalEvent` remains the low-level event ADT for queue-based APIs and tests:
 
+Container-specific `<child type="...">` slots follow the underlying GTK/libadwaita widget API. For example, `AdwToolbarView` uses `<child type="top">` and `<child type="bottom">` for toolbar bars, while an untyped direct child (or `<property name="child">`) becomes the main content widget.
+
 ```aivi
 GtkSignalEvent =
   | GtkClicked       WidgetId Text

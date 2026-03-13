@@ -1288,7 +1288,7 @@ GTK sigils also support signal sugar in v0.1:
 </gtk>
 ```
 
-Signals without sugar can still be attached explicitly. `GtkEventControllerMotion` is available via `<child type="controller">` and currently exposes raw `enter` / `leave` signals.
+Signals without sugar can still be attached explicitly. `GtkEventControllerMotion` is available via `<child type="controller">` and currently exposes raw `enter` / `leave` signals. Container-specific child slots follow the underlying GTK/libadwaita widget API; for example, `AdwToolbarView` uses `<child type="top">` / `<child type="bottom">` for toolbar bars, while an untyped direct child becomes the main content widget.
 
 `GtkSignalEvent` remains the low-level queue/event type used by `signalStream`, `signalPoll`, and tests:
 

@@ -14,6 +14,8 @@ use walkdir::WalkDir;
 #[path = "test_support.rs"]
 mod test_support;
 
+const FILE_TIMEOUT_SECS: u64 = 25;
+
 fn runner_test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -102,7 +104,8 @@ fn process_test_file(
 
     let program = desugar_modules(&modules);
     let display = path.display().to_string();
-    let result = run_test_suite_with_timeout(program, &tests, &modules, &display, 60);
+    let result =
+        run_test_suite_with_timeout(program, &tests, &modules, &display, FILE_TIMEOUT_SECS);
     let Some(Ok(report)) = result else {
         return FileResult::Skipped;
     };
@@ -317,7 +320,7 @@ fn syntax_effects_selected_files_execute_without_failures() {
 }
 
 #[test]
-fn syntax_remaining_batch_files_execute_without_failures() {
+fn syntax_remaining_batch_one_files_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
@@ -333,6 +336,29 @@ fn syntax_remaining_batch_files_execute_without_failures() {
         "integration-tests/syntax/patching/record_patch_basic.aivi",
         "integration-tests/syntax/pattern_matching/as_binding.aivi",
         "integration-tests/syntax/pattern_matching/guarded_case_with_if.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, _total_failed, skipped_files, _) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+    assert!(
+        total_passed > 0,
+        "expected first remaining syntax batch to execute"
+    );
+    eprintln!("skipped first remaining syntax batch files: {skipped_files}");
+}
+
+#[test]
+fn syntax_remaining_batch_two_files_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
         "integration-tests/syntax/pattern_matching/guards_when.aivi",
         "integration-tests/syntax/pattern_matching/lists_and_records.aivi",
         "integration-tests/syntax/pattern_matching/match_keyword.aivi",
@@ -358,9 +384,9 @@ fn syntax_remaining_batch_files_execute_without_failures() {
         run_files_parallel(&files, &stdlib_modules, &checkpoint);
     assert!(
         total_passed > 0,
-        "expected remaining syntax batch tests to execute"
+        "expected second remaining syntax batch to execute"
     );
-    eprintln!("skipped remaining syntax batch files: {skipped_files}");
+    eprintln!("skipped second remaining syntax batch files: {skipped_files}");
 }
 
 #[test]
