@@ -36,7 +36,7 @@ That validator behaviour is stricter than the lowering code, which still knows h
 | `time` | Keep timing information for the function call |
 | `args` | Keep function argument information |
 | `return` | Keep returned-value information |
-| `pipes` | Keep per-step metadata for `|>` pipeline stages |
+| `pipes` | Keep per-step metadata for `\|>` pipeline stages |
 
 In practice:
 

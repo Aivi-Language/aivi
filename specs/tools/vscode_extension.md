@@ -56,7 +56,7 @@ The extension registers custom semantic token types so themes can style AIVI con
 | Token Type | Super Type | Description |
 |:---------- |:---------- |:----------- |
 | `aiviArrow` | `operator` | Arrow operators such as `=>`, `<-`, and `->` |
-| `aiviPipe` | `operator` | Pipe operators such as `|>`, `<|`, and `|` |
+| `aiviPipe` | `operator` | Pipe operators such as `\|>`, `<\|`, and `\|` |
 | `aiviBracket` | `operator` | Brackets and parentheses |
 | `aiviDot` | `operator` | Dot separators in dotted paths |
 | `aiviUnit` | `keyword` | Domain unit suffixes |

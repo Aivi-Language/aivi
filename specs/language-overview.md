@@ -35,7 +35,7 @@ If you keep those rules in mind, most of the syntax becomes easier to read.
 | exceptions | use `Result E A` or `Effect E A` |
 | loops | use pipelines, generators, folds, or recursion |
 | objects with mutable fields | use typed records and patch them into new records |
-| helper methods like `users.map(...)` | use functions like `map f users` or `users |> map f` |
+| helper methods like `users.map(...)` | use functions like `map f users` or `users \|> map f` |
 
 ---
 
