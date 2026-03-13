@@ -517,8 +517,8 @@ fn gtk_arch_completion_includes_architecture_snippets() {
         .as_deref()
         .expect("signal-first gtk snippet body");
     assert!(insert_text.contains("signal "));
-    assert!(insert_text.contains("buildFromNode"));
-    assert!(insert_text.contains("windowSetChild"));
+    assert!(insert_text.contains("runGtkApp"));
+    assert!(insert_text.contains("GtkApplicationWindow"));
 
     let docs = gtk_app.documentation.as_ref().expect("signal-first gtk snippet docs");
     let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
@@ -612,7 +612,7 @@ main = buildFromNode
         panic!("expected markup hover");
     };
     assert!(markup.value.contains("GtkNode -> Effect GtkError WidgetId"));
-    assert!(markup.value.contains("Mount a GTK node tree once"));
+    assert!(markup.value.contains("Mount a GTK subtree once"));
 }
 
 #[test]

@@ -68,6 +68,45 @@ main = do Effect {
     );
 }
 
+#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+#[test]
+fn rt_mount_app_window_accepts_root_application_window_tree() {
+    let has_display =
+        std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
+    if !has_display {
+        eprintln!("skipping: no DISPLAY/WAYLAND_DISPLAY");
+        return;
+    }
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+use aivi.ui.gtk4
+
+root = ~<gtk>
+  <AdwApplicationWindow id="root-window" title="AIVI GTK Root" defaultWidth={320} defaultHeight={180}>
+    <GtkBox orientation="vertical" spacing={8}>
+      <GtkLabel label="Hello" />
+    </GtkBox>
+  </AdwApplicationWindow>
+</gtk>
+
+main : Effect Text Unit
+main = do Effect {
+  _ <- init Unit
+  appId <- appNew "com.aivi.regression.root-window"
+  windowId <- mountAppWindow appId root
+  lookedUp <- widgetById "root-window"
+  assertEq lookedUp windowId
+  _ <- windowClose windowId
+  pure Unit
+}
+"#,
+    );
+}
+
 // ─── Pipes, currying, and bindings ────────────────────────────────────────────
 // Covers: pipe-as-application, chained pipes, currying, multi-stage currying,
 //         immutable bindings.

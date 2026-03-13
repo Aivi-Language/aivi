@@ -839,6 +839,28 @@ mod bridge {
         Ok(result)
     }
 
+    pub(super) fn materialize_app_window_with_bindings(
+        app_id: i64,
+        node: &ResolvedGtkNode,
+        runtime: &mut crate::runtime::Runtime,
+    ) -> Result<aivi_gtk4::BuildWithBindingsResult, RuntimeError> {
+        let mut next_binding_id = 1;
+        let mut bindings = Vec::new();
+        let mut structural_bindings = Vec::new();
+        let node = materialize_node(
+            node,
+            runtime,
+            &mut next_binding_id,
+            &mut bindings,
+            &mut structural_bindings,
+        )?;
+        let result =
+            aivi_gtk4::mount_app_window_with_bindings(app_id, &node).map_err(gtk4_err_to_runtime)?;
+        install_live_bindings(runtime, &result.binding_widgets, bindings)?;
+        install_structural_bindings(runtime, &result.binding_widgets, structural_bindings)?;
+        Ok(result)
+    }
+
     pub(super) fn execute_runtime_handler(
         ctx: Arc<RuntimeContext>,
         handler: Value,
@@ -1242,6 +1264,16 @@ mod bridge {
             let title = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("gtk4.windowNew expects Text title")) };
             let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.windowNew expects Int")) };
             Ok(effect(move |_| { let r = aivi_gtk4::window_new(app_id, &title, width, height).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
+        }));
+        fields.insert("mountAppWindow".to_string(), builtin("gtk4.mountAppWindow", 2, |mut args, _| {
+            let node = args.remove(1);
+            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.mountAppWindow expects Int")) };
+            Ok(effect(move |runtime| {
+                let node = runtime.force_value(node.clone())?;
+                let decoded = resolve_gtk_node(&node, runtime)?;
+                let result = materialize_app_window_with_bindings(app_id, &decoded, runtime)?;
+                Ok(Value::Int(result.root_id))
+            }))
         }));
         fields.insert("displayHeight".to_string(), builtin("gtk4.displayHeight", 1, |mut args, _| {
             match args.remove(0) { Value::Unit => {} _ => return Err(invalid("gtk4.displayHeight expects Unit")) }

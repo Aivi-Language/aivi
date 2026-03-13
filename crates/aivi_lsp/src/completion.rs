@@ -557,7 +557,7 @@ impl Backend {
         ),
         (
             "gtk signal-first app",
-            "use aivi.reactive\n\n${1:state} = signal { ${2:count}: ${3:0} }\n${4:title} = derive ${1:state} .${2:count}\n${6:increment} = _ => update ${1:state} (patch { ${2:count}: _ + 1 })\n\n${7:view} = ~<gtk>\n  <GtkBox orientation=\"vertical\" spacing=\"12\">\n    <GtkLabel label={${4:title}} />\n    <GtkButton label=\"${8:Increment}\" onClick={${6:increment}} />\n  </GtkBox>\n</gtk>\n\nmain = do Effect {\n  _ <- init Unit\n  appId <- appNew \"${9:com.example.app}\"\n  win <- windowNew appId \"${10:Example}\" ${11:960} ${12:640}\n  root <- buildFromNode ${7:view}\n  _ <- windowSetChild win root\n  _ <- windowPresent win\n  appRun appId\n}",
+            "use aivi.reactive\n\n${1:state} = signal { ${2:count}: ${3:0} }\n${4:title} = derive ${1:state} .${2:count}\n${6:increment} = _ => update ${1:state} (patch { ${2:count}: _ + 1 })\n\n${7:root} = ~<gtk>\n  <GtkApplicationWindow title=\"${8:Example}\" defaultWidth={${9:960}} defaultHeight={${10:640}}>\n    <GtkBox orientation=\"vertical\" spacing=\"12\">\n      <GtkLabel label={${4:title}} />\n      <GtkButton label=\"${11:Increment}\" onClick={${6:increment}} />\n    </GtkBox>\n  </GtkApplicationWindow>\n</gtk>\n\nmain = runGtkApp {\n  appId: \"${12:com.example.app}\"\n  root: ${7:root}\n  onStart: pure Unit\n}",
             "signal-first GTK app snippet",
         ),
         (
@@ -594,7 +594,7 @@ impl Backend {
                  Pass the resulting `Query A` to `runQueryOn conn query` to execute it.",
             ),
             "gtk signal-first app" => Some(
-                "Scaffold a signal-first GTK app.\n\nCreate source signals, derive more signals with `map`, mount the tree once with `buildFromNode`, and let callbacks mutate the signals directly.",
+                "Scaffold a signal-first GTK app.\n\nCreate source signals, derive more signals with `map`, declare a root application window with `~<gtk>`, and run it with `runGtkApp`.",
             ),
             "gtk toMsg" => Some(
                 "Match typed `GtkSignalEvent` constructors from the raw GTK stream.\n\nUse this in lower-level `signalStream` integrations or tests when you need explicit event routing by widget name.",

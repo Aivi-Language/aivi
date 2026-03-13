@@ -178,6 +178,7 @@ mod linux_impl {
         fn gtk_widget_child_focus(widget: *mut c_void, direction: c_int) -> c_int;
         fn gtk_widget_get_parent(widget: *mut c_void) -> *mut c_void;
         fn gtk_widget_unparent(widget: *mut c_void);
+        fn gtk_widget_remove_controller(widget: *mut c_void, controller: *mut c_void);
         // Sets the AT-SPI accessible label (GTK_ACCESSIBLE_PROPERTY_LABEL = 5)
         fn gtk_accessible_update_property(accessible: *mut c_void, first_property: c_int, ...);
 
@@ -910,6 +911,7 @@ mod linux_impl {
         Box,
         Button,
         HeaderBar,
+        Window,
         ScrolledWindow,
         Overlay,
         ListBox,
@@ -1105,6 +1107,7 @@ mod linux_impl {
             CreatedWidgetKind::Box => "box",
             CreatedWidgetKind::Button => "button",
             CreatedWidgetKind::HeaderBar => "header_bar",
+            CreatedWidgetKind::Window => "window",
             CreatedWidgetKind::ScrolledWindow => "scrolled_window",
             CreatedWidgetKind::Overlay => "overlay",
             CreatedWidgetKind::ListBox => "list_box",
@@ -1207,6 +1210,9 @@ mod linux_impl {
         }
         match class_name {
             "GtkButton" => &["clicked"],
+            "GtkWindow" | "GtkApplicationWindow" | "AdwWindow" | "AdwApplicationWindow" => {
+                &["key-pressed"]
+            }
             "GtkBox" | "GtkGrid" | "GtkOverlay" | "GtkScrolledWindow" | "GtkStack" => {
                 &["key-pressed"]
             }
@@ -1684,8 +1690,15 @@ mod linux_impl {
                 attrs: vec![("class".to_string(), class_name.to_string())],
                 children: vec![],
             };
-            build_widget_from_node_real(&mut state, &node, &mut id_map, &mut binding_map)
-                .expect_err(&format!("{class_name} must not be directly creatable"))
+            build_widget_from_node_real(
+                &mut state,
+                &node,
+                &mut id_map,
+                &mut binding_map,
+                "buildFromNode",
+                None,
+            )
+            .expect_err(&format!("{class_name} must not be directly creatable"))
         }
 
         #[test]
@@ -1807,14 +1820,8 @@ mod linux_impl {
                 ("GtkPageSetup", "printing is not part of the AIVI v0.1"),
                 ("GtkPaperSize", "printing is not part of the AIVI v0.1"),
                 ("GtkPrintSettings", "printing is not part of the AIVI v0.1"),
-                (
-                    "GtkWindow",
-                    "managed by windowNew during manual GTK startup",
-                ),
-                (
-                    "GtkApplicationWindow",
-                    "managed by windowNew during manual GTK startup",
-                ),
+                ("GtkWindow", "Use mountAppWindow or runGtkApp"),
+                ("GtkApplicationWindow", "Use mountAppWindow or runGtkApp"),
                 ("GtkAboutDialog", "AdwAboutDialog"),
                 ("GtkAlertDialog", "present it programmatically"),
                 ("GtkDialog", "prefer GtkAlertDialog"),
@@ -6284,17 +6291,22 @@ mod linux_impl {
         node_attr(attrs, "aivi-key").map(str::to_string)
     }
 
-    fn first_object_in_interface(node: &GtkNode) -> Result<&GtkNode, Gtk4Error> {
+    fn first_object_in_interface<'a>(
+        operation: &str,
+        node: &'a GtkNode,
+    ) -> Result<&'a GtkNode, Gtk4Error> {
         let GtkNode::Element { tag, children, .. } = node else {
-            return Err(invalid("gtk4.buildFromNode expects GtkNode root element"));
+            return Err(invalid(&format!(
+                "gtk4.{operation} expects GtkNode root element"
+            )));
         };
         if tag == "object" {
             return Ok(node);
         }
         if tag != "interface" && tag != "template" {
-            return Err(invalid(
-                "gtk4.buildFromNode root must be <object>, <interface>, or <template>",
-            ));
+            return Err(invalid(&format!(
+                "gtk4.{operation} root must be <object>, <interface>, or <template>",
+            )));
         }
         fn find_first_object(node: &GtkNode) -> Option<&GtkNode> {
             let GtkNode::Element { tag, children, .. } = node else {
@@ -6310,10 +6322,11 @@ mod linux_impl {
             }
             None
         }
-        children
-            .iter()
-            .find_map(find_first_object)
-            .ok_or_else(|| invalid("gtk4.buildFromNode root must contain at least one <object>"))
+        children.iter().find_map(find_first_object).ok_or_else(|| {
+            invalid(&format!(
+                "gtk4.{operation} root must contain at least one <object>"
+            ))
+        })
     }
 
     fn apply_widget_properties(
@@ -6373,6 +6386,29 @@ mod linux_impl {
         }
 
         match class_name {
+            "GtkWindow" | "GtkApplicationWindow" | "AdwWindow" | "AdwApplicationWindow" => {
+                set_obj_str(widget, props, "title", class_name)?;
+                let default_width = props.get("default-width").and_then(|v| parse_i32_text(v));
+                let default_height = props.get("default-height").and_then(|v| parse_i32_text(v));
+                if default_width.is_some() || default_height.is_some() {
+                    unsafe {
+                        gtk_window_set_default_size(
+                            widget,
+                            default_width.unwrap_or(-1),
+                            default_height.unwrap_or(-1),
+                        )
+                    };
+                }
+                if let Some(value) = props.get("hide-on-close").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_window_set_hide_on_close(widget, bool_to_c(value)) };
+                }
+                if let Some(value) = props.get("decorated").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_window_set_decorated(widget, bool_to_c(value)) };
+                }
+                if let Some(value) = props.get("modal").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_window_set_modal(widget, bool_to_c(value)) };
+                }
+            }
             "GtkLabel" => {
                 if let Some(value) = props.get("label").or_else(|| props.get("text")) {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid GtkLabel text")?;
@@ -6935,6 +6971,8 @@ mod linux_impl {
         node: &GtkNode,
         id_map: &mut HashMap<String, i64>,
         binding_map: &mut HashMap<String, i64>,
+        operation: &str,
+        root_window_app: Option<*mut c_void>,
     ) -> Result<(i64, LiveNode), Gtk4Error> {
         let GtkNode::Element {
             tag,
@@ -6942,10 +6980,14 @@ mod linux_impl {
             children,
         } = node
         else {
-            return Err(invalid("gtk4.buildFromNode root must be GtkElement"));
+            return Err(invalid(&format!(
+                "gtk4.{operation} root must be GtkElement"
+            )));
         };
         if tag != "object" {
-            return Err(invalid("gtk4.buildFromNode root tag must be <object>"));
+            return Err(invalid(&format!(
+                "gtk4.{operation} root tag must be <object>"
+            )));
         }
         if let Some(ref_id) = node_attr(attrs, "idref").or_else(|| node_attr(attrs, "ref")) {
             let wid = id_map.get(ref_id).copied().ok_or_else(|| {
@@ -6970,7 +7012,7 @@ mod linux_impl {
             return Ok((wid, live));
         }
         let class_name = node_attr(attrs, "class")
-            .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
+            .ok_or_else(|| invalid(&format!("gtk4.{operation} object requires class attribute")))?;
         let source_context = node_source_context(attrs);
         let props = collect_object_properties(attrs, children);
         let signal_bindings = collect_object_signals(attrs, children);
@@ -7266,7 +7308,6 @@ mod linux_impl {
             | "AdwAnimation"
             | "AdwAnimationTarget"
             | "AdwApplication"
-            | "AdwApplicationWindow"
             | "AdwAvatar"
             | "AdwBanner"
             | "AdwBin"
@@ -7335,7 +7376,6 @@ mod linux_impl {
             | "AdwViewSwitcher"
             | "AdwViewSwitcherBar"
             | "AdwViewSwitcherTitle"
-            | "AdwWindow"
             | "AdwWindowTitle"
             | "AdwWrapBox"
             | "AdwWrapLayout" => (create_adw_widget(class_name)?, CreatedWidgetKind::Other),
@@ -7442,10 +7482,18 @@ mod linux_impl {
                 ));
             }
             // Concrete widget families that are not yet exposed in AIVI widget trees
-            "GtkWindow" | "GtkApplicationWindow" => {
+            "GtkWindow" | "GtkApplicationWindow" | "AdwWindow" | "AdwApplicationWindow"
+                if root_window_app.is_some() =>
+            {
+                (
+                    create_root_window_widget(root_window_app.unwrap(), class_name)?,
+                    CreatedWidgetKind::Window,
+                )
+            }
+            "GtkWindow" | "GtkApplicationWindow" | "AdwWindow" | "AdwApplicationWindow" => {
                 return Err(Gtk4Error::new(format!(
-                    "{class_name} is a top-level window type managed by windowNew during manual GTK startup, not \
-                     a ~<gtk> widget-tree node"
+                    "{class_name} is a top-level window type. Use mountAppWindow or runGtkApp to mount a root \
+                     window tree instead of buildFromNode."
                 )));
             }
             "GtkListView" | "GtkColumnView" | "GtkGridView" => {
@@ -7798,17 +7846,23 @@ mod linux_impl {
             }
             _ => {
                 return Err(Gtk4Error::new(format!(
-                    "gtk4.buildFromNode unsupported class {class_name}"
+                    "gtk4.{operation} unsupported class {class_name}"
                 )));
             }
         };
         if raw.is_null() {
             return Err(Gtk4Error::new(format!(
-                "gtk4.buildFromNode failed to create {class_name}"
+                "gtk4.{operation} failed to create {class_name}"
             )));
         }
 
-        let id = state.alloc_id();
+        let id = if matches!(kind, CreatedWidgetKind::Window) {
+            register_window_widget(operation, state, raw)?
+        } else {
+            let id = state.alloc_id();
+            state.widgets.insert(id, raw);
+            id
+        };
         let node_id = node_attr(attrs, "id").map(str::to_string);
         let binding_id = node_attr(attrs, "aivi-binding-id").map(str::to_string);
         if let Some(object_id) = node_id.as_deref() {
@@ -7844,7 +7898,6 @@ mod linux_impl {
             unsafe { g_object_ref_sink(raw) };
             state.retained_widgets.insert(id, raw);
         }
-        state.widgets.insert(id, raw);
         match class_name {
             "GtkBox" | "AdwClamp" => {
                 state.boxes.insert(id, raw);
@@ -7895,7 +7948,7 @@ mod linux_impl {
                 class_name,
                 node_id.as_deref(),
                 source_context.as_ref(),
-                "buildFromNode",
+                operation,
                 binding,
             )?;
             signal_handlers.push(hid);
@@ -7903,6 +7956,8 @@ mod linux_impl {
 
         let mut child_objects = collect_child_objects(children);
         child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
+        let mut window_child_set = false;
+        let mut window_titlebar_set = false;
         let mut overlay_root_set = false;
         let mut live_children: Vec<LiveChild> = Vec::new();
         // For auto-wiring scroll fades inside GtkOverlay
@@ -7936,12 +7991,29 @@ mod linux_impl {
                 String::new()
             };
 
-            let (child_id, child_live) =
-                build_widget_from_node_real(state, child.node, id_map, binding_map)?;
-            let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
+            let (child_id, child_live) = build_widget_from_node_real(
+                state,
+                child.node,
+                id_map,
+                binding_map,
+                operation,
+                None,
+            )?;
+            let child_raw = widget_ptr(state, child_id, operation)?;
+            if child.child_type.as_deref() == Some("controller") {
+                unsafe { gtk_widget_add_controller(raw, child_raw) };
+                if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
+                    gesture.widget_id = id;
+                }
+                live_children.push(LiveChild {
+                    child_type: child.child_type.clone(),
+                    node: child_live,
+                });
+                continue;
+            }
             validate_parenting_state(
                 state,
-                "buildFromNode",
+                operation,
                 WidgetAttachmentInfo {
                     id,
                     class_name,
@@ -7972,17 +8044,6 @@ mod linux_impl {
                     scroll_fade_bottom = child_raw;
                 }
             }
-            if child.child_type.as_deref() == Some("controller") {
-                unsafe { gtk_widget_add_controller(raw, child_raw) };
-                if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
-                    gesture.widget_id = id;
-                }
-                live_children.push(LiveChild {
-                    child_type: child.child_type.clone(),
-                    node: child_live,
-                });
-                continue;
-            }
             match kind {
                 CreatedWidgetKind::Box => unsafe { gtk_box_append(raw, child_raw) },
                 CreatedWidgetKind::Button => unsafe { gtk_button_set_child(raw, child_raw) },
@@ -7990,6 +8051,26 @@ mod linux_impl {
                     Some("end") => unsafe { gtk_header_bar_pack_end(raw, child_raw) },
                     Some("title") => unsafe { gtk_header_bar_set_title_widget(raw, child_raw) },
                     _ => unsafe { gtk_header_bar_pack_start(raw, child_raw) },
+                },
+                CreatedWidgetKind::Window => match child.child_type.as_deref() {
+                    Some("titlebar") => {
+                        if window_titlebar_set {
+                            return Err(Gtk4Error::new(format!(
+                                "gtk4.{operation} window root can only have one titlebar child"
+                            )));
+                        }
+                        unsafe { gtk_window_set_titlebar(raw, child_raw) };
+                        window_titlebar_set = true;
+                    }
+                    _ => {
+                        if window_child_set {
+                            return Err(Gtk4Error::new(format!(
+                                "gtk4.{operation} window root can only have one content child"
+                            )));
+                        }
+                        set_window_content(class_name, raw, child_raw);
+                        window_child_set = true;
+                    }
                 },
                 CreatedWidgetKind::ScrolledWindow => {
                     if child.child_type.as_deref() != Some("overlay") {
@@ -8188,6 +8269,7 @@ mod linux_impl {
     fn cleanup_widget_state(state: &mut RealGtkState, live: &LiveNode) {
         let id = live.widget_id;
         state.widgets.remove(&id);
+        state.windows.remove(&id);
         if let Some(raw) = state.retained_widgets.remove(&id) {
             unsafe { g_object_unref(raw) };
         }
@@ -8220,6 +8302,7 @@ mod linux_impl {
     fn remove_child_from_parent(
         state: &mut RealGtkState,
         parent_id: i64,
+        parent_class_name: &str,
         parent_kind: CreatedWidgetKind,
         child_id: i64,
         child_type: Option<&str>,
@@ -8227,8 +8310,22 @@ mod linux_impl {
     ) -> Result<(), Gtk4Error> {
         let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
         let child_raw = widget_ptr(state, child_id, "reconcile")?;
+        if child_type == Some("controller") {
+            unsafe { gtk_widget_remove_controller(parent_raw, child_raw) };
+            if let Some(live) = child_live {
+                let live_clone = live.clone();
+                cleanup_widget_state(state, &live_clone);
+            }
+            return Ok(());
+        }
         match parent_kind {
             CreatedWidgetKind::Box => unsafe { gtk_box_remove(parent_raw, child_raw) },
+            CreatedWidgetKind::Window => match child_type {
+                Some("titlebar") => unsafe {
+                    gtk_window_set_titlebar(parent_raw, std::ptr::null_mut())
+                },
+                _ => set_window_content(parent_class_name, parent_raw, std::ptr::null_mut()),
+            },
             CreatedWidgetKind::ListBox => unsafe { gtk_list_box_remove(parent_raw, child_raw) },
             CreatedWidgetKind::FlowBox => unsafe { gtk_flow_box_remove(parent_raw, child_raw) },
             CreatedWidgetKind::Overlay => {
@@ -8254,6 +8351,10 @@ mod linux_impl {
         child: WidgetAttachmentTarget<'_>,
         placement: ChildPlacement<'_>,
     ) -> Result<(), Gtk4Error> {
+        if placement.child_type == Some("controller") {
+            unsafe { gtk_widget_add_controller(parent.raw, child.raw) };
+            return Ok(());
+        }
         validate_parenting_state(
             state,
             "reconcileNode",
@@ -8265,6 +8366,10 @@ mod linux_impl {
         match parent.info.kind {
             CreatedWidgetKind::Box => unsafe { gtk_box_append(parent.raw, child.raw) },
             CreatedWidgetKind::Button => unsafe { gtk_button_set_child(parent.raw, child.raw) },
+            CreatedWidgetKind::Window => match placement.child_type {
+                Some("titlebar") => unsafe { gtk_window_set_titlebar(parent.raw, child.raw) },
+                _ => set_window_content(parent.info.class_name, parent.raw, child.raw),
+            },
             CreatedWidgetKind::HeaderBar => match placement.child_type {
                 Some("end") => unsafe { gtk_header_bar_pack_end(parent.raw, child.raw) },
                 Some("title") => unsafe { gtk_header_bar_set_title_widget(parent.raw, child.raw) },
@@ -8509,6 +8614,7 @@ mod linux_impl {
                     remove_child_from_parent(
                         state,
                         parent_id,
+                        &parent.class_name,
                         parent_kind,
                         old_widget_id,
                         old_ct.as_deref(),
@@ -8520,6 +8626,8 @@ mod linux_impl {
                         new_spec.node,
                         id_map,
                         &mut binding_map,
+                        "reconcileNode",
+                        None,
                     )?;
                     next_children.push(LiveChild {
                         child_type: new_spec.child_type.clone(),
@@ -8529,8 +8637,14 @@ mod linux_impl {
                 }
             } else {
                 let mut binding_map = HashMap::new();
-                let (_new_id, new_live) =
-                    build_widget_from_node_real(state, new_spec.node, id_map, &mut binding_map)?;
+                let (_new_id, new_live) = build_widget_from_node_real(
+                    state,
+                    new_spec.node,
+                    id_map,
+                    &mut binding_map,
+                    "reconcileNode",
+                    None,
+                )?;
                 next_children.push(LiveChild {
                     child_type: new_spec.child_type.clone(),
                     node: new_live,
@@ -8549,6 +8663,7 @@ mod linux_impl {
             let _ = remove_child_from_parent(
                 state,
                 parent_id,
+                &parent.class_name,
                 parent_kind,
                 old_wid,
                 old_ct.as_deref(),
@@ -8567,6 +8682,7 @@ mod linux_impl {
                 remove_child_from_parent(
                     state,
                     parent_id,
+                    &parent.class_name,
                     parent_kind,
                     child.node.widget_id,
                     old_ct.as_deref(),
@@ -8648,6 +8764,7 @@ mod linux_impl {
                 remove_child_from_parent(
                     state,
                     parent_id,
+                    &parent.class_name,
                     parent_kind,
                     old_wid,
                     old_ct.as_deref(),
@@ -8659,6 +8776,8 @@ mod linux_impl {
                     new_children[i].node,
                     id_map,
                     &mut binding_map,
+                    "reconcileNode",
+                    None,
                 )?;
                 let new_raw = widget_ptr(state, new_id, "reconcile")?;
                 let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
@@ -8742,6 +8861,7 @@ mod linux_impl {
             let _ = remove_child_from_parent(
                 state,
                 parent_id,
+                &parent.class_name,
                 parent_kind,
                 old_wid,
                 old_ct.as_deref(),
@@ -8753,8 +8873,14 @@ mod linux_impl {
         // Build and add new children
         for (i, new_spec) in new_children.iter().enumerate().skip(min_len) {
             let mut binding_map = HashMap::new();
-            let (new_id, new_live) =
-                build_widget_from_node_real(state, new_spec.node, id_map, &mut binding_map)?;
+            let (new_id, new_live) = build_widget_from_node_real(
+                state,
+                new_spec.node,
+                id_map,
+                &mut binding_map,
+                "reconcileNode",
+                None,
+            )?;
             let new_raw = widget_ptr(state, new_id, "reconcile")?;
             let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
             add_child_to_parent(
@@ -8900,6 +9026,92 @@ mod linux_impl {
         })
     }
 
+    fn attach_window_key_controller(
+        operation: &str,
+        window_id: i64,
+        window: *mut c_void,
+    ) -> Result<(), Gtk4Error> {
+        let controller = unsafe { gtk_event_controller_key_new() };
+        if controller.is_null() {
+            return Err(Gtk4Error::new(format!(
+                "gtk4.{operation} failed to create key controller"
+            )));
+        }
+        let signal_c = CString::new("key-pressed")
+            .map_err(|_| Gtk4Error::new(format!("gtk4.{operation} invalid key signal")))?;
+        let callback_data = Box::new(WindowKeyCallbackData {
+            widget_id: window_id,
+        });
+        let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+        unsafe {
+            gtk_widget_set_focusable(window, 1);
+            gtk_widget_add_controller(window, controller);
+            g_signal_connect_data(
+                controller,
+                signal_c.as_ptr(),
+                gtk_window_key_pressed_callback as *const c_void,
+                callback_ptr,
+                std::ptr::null_mut(),
+                0,
+            );
+        }
+        Ok(())
+    }
+
+    fn register_window_widget(
+        operation: &str,
+        state: &mut RealGtkState,
+        window: *mut c_void,
+    ) -> Result<i64, Gtk4Error> {
+        let id = state.alloc_id();
+        state.windows.insert(id, window);
+        state.widgets.insert(id, window);
+        attach_window_key_controller(operation, id, window)?;
+        Ok(id)
+    }
+
+    fn create_root_window_widget(
+        app: *mut c_void,
+        class_name: &str,
+    ) -> Result<*mut c_void, Gtk4Error> {
+        let window = match class_name {
+            "GtkApplicationWindow" => unsafe { gtk_application_window_new(app) },
+            "GtkWindow" => {
+                let window = unsafe { gtk_window_new() };
+                let application_c = CString::new("application").unwrap();
+                unsafe { gobject_set_ptr(window, &application_c, app) };
+                window
+            }
+            "AdwApplicationWindow" | "AdwWindow" => {
+                let window = create_adw_widget_type(class_name)?;
+                let application_c = CString::new("application").unwrap();
+                unsafe { gobject_set_ptr(window, &application_c, app) };
+                window
+            }
+            _ => {
+                return Err(Gtk4Error::new(format!(
+                    "gtk4.mountAppWindow root must be GtkWindow, GtkApplicationWindow, AdwWindow, or AdwApplicationWindow; got {class_name}"
+                )));
+            }
+        };
+        if window.is_null() {
+            return Err(Gtk4Error::new(format!(
+                "gtk4.mountAppWindow failed to create {class_name}"
+            )));
+        }
+        Ok(window)
+    }
+
+    fn set_window_content(class_name: &str, window: *mut c_void, child: *mut c_void) {
+        match class_name {
+            "AdwApplicationWindow" => {
+                call_adw_fn_pp("adw_application_window_set_content", window, child)
+            }
+            "AdwWindow" => call_adw_fn_pp("adw_window_set_content", window, child),
+            _ => unsafe { gtk_window_set_child(window, child) },
+        }
+    }
+
     pub(super) fn window_new(
         app_id: i64,
         title: &str,
@@ -8920,32 +9132,8 @@ mod linux_impl {
             unsafe {
                 gtk_window_set_title(window, title_c.as_ptr());
                 gtk_window_set_default_size(window, width, height);
-                gtk_widget_set_focusable(window, 1);
             }
-            let id = state.alloc_id();
-            state.windows.insert(id, window);
-            state.widgets.insert(id, window);
-            let controller = unsafe { gtk_event_controller_key_new() };
-            if controller.is_null() {
-                return Err(Gtk4Error::new(
-                    "gtk4.windowNew failed to create key controller",
-                ));
-            }
-            let signal_c = CString::new("key-pressed")
-                .map_err(|_| Gtk4Error::new("gtk4.windowNew invalid key signal"))?;
-            let callback_data = Box::new(WindowKeyCallbackData { widget_id: id });
-            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
-            unsafe {
-                gtk_widget_add_controller(window, controller);
-                g_signal_connect_data(
-                    controller,
-                    signal_c.as_ptr(),
-                    gtk_window_key_pressed_callback as *const c_void,
-                    callback_ptr,
-                    std::ptr::null_mut(),
-                    0,
-                );
-            }
+            let id = register_window_widget("windowNew", &mut state, window)?;
             apply_pending_display_customizations(&mut state)?;
             Ok(id)
         })
@@ -9009,7 +9197,12 @@ mod linux_impl {
                 Gtk4Error::new(format!("gtk4.windowSetChild unknown window id {win_id}"))
             })?;
             let child = widget_ptr(&state, child_id, "windowSetChild")?;
-            unsafe { gtk_window_set_child(window, child) };
+            let class_name = state
+                .live_trees
+                .get(&win_id)
+                .map(|live| live.class_name.as_str())
+                .unwrap_or("GtkApplicationWindow");
+            set_window_content(class_name, window, child);
             Ok(())
         })
     }
@@ -10406,9 +10599,15 @@ mod linux_impl {
             let mut state = state.borrow_mut();
             let mut id_map = HashMap::new();
             let mut binding_map = HashMap::new();
-            let root = first_object_in_interface(node)?;
-            let (id, live) =
-                build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
+            let root = first_object_in_interface("buildFromNode", node)?;
+            let (id, live) = build_widget_from_node_real(
+                &mut state,
+                root,
+                &mut id_map,
+                &mut binding_map,
+                "buildFromNode",
+                None,
+            )?;
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
@@ -10434,9 +10633,15 @@ mod linux_impl {
             let mut state = state.borrow_mut();
             let mut id_map = HashMap::new();
             let mut binding_map = HashMap::new();
-            let root = first_object_in_interface(node)?;
-            let (id, live) =
-                build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
+            let root = first_object_in_interface("buildWithIds", node)?;
+            let (id, live) = build_widget_from_node_real(
+                &mut state,
+                root,
+                &mut id_map,
+                &mut binding_map,
+                "buildWithIds",
+                None,
+            )?;
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
@@ -10467,9 +10672,15 @@ mod linux_impl {
             let mut state = state.borrow_mut();
             let mut id_map = HashMap::new();
             let mut binding_map = HashMap::new();
-            let root = first_object_in_interface(node)?;
-            let (id, live) =
-                build_widget_from_node_real(&mut state, root, &mut id_map, &mut binding_map)?;
+            let root = first_object_in_interface("buildWithBindings", node)?;
+            let (id, live) = build_widget_from_node_real(
+                &mut state,
+                root,
+                &mut id_map,
+                &mut binding_map,
+                "buildWithBindings",
+                None,
+            )?;
             let root_class_name = live.class_name.clone();
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
@@ -10496,11 +10707,62 @@ mod linux_impl {
         })
     }
 
+    pub(super) fn mount_app_window(app_id: i64, node: &super::GtkNode) -> Result<i64, Gtk4Error> {
+        Ok(mount_app_window_with_bindings(app_id, node)?.root_id)
+    }
+
+    pub(super) fn mount_app_window_with_bindings(
+        app_id: i64,
+        node: &super::GtkNode,
+    ) -> Result<BuildWithBindingsResult, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let app = state.apps.get(&app_id).copied().ok_or_else(|| {
+                Gtk4Error::new(format!("gtk4.mountAppWindow unknown app id {app_id}"))
+            })?;
+            let mut id_map = HashMap::new();
+            let mut binding_map = HashMap::new();
+            let root = first_object_in_interface("mountAppWindow", node)?;
+            let (id, live) = build_widget_from_node_real(
+                &mut state,
+                root,
+                &mut id_map,
+                &mut binding_map,
+                "mountAppWindow",
+                Some(app),
+            )?;
+            let root_class_name = live.class_name.clone();
+            state.named_widgets.extend(id_map.clone());
+            for (name, wid) in &id_map {
+                state.widget_id_to_name.insert(*wid, name.clone());
+            }
+            state.live_trees.insert(id, live);
+            apply_pending_display_customizations(&mut state)?;
+            state.record_mutation(serde_json::Map::from_iter([
+                ("kind".to_string(), Value::String("root-built".to_string())),
+                ("rootId".to_string(), json!(id)),
+                ("widgetId".to_string(), json!(id)),
+                (
+                    "widgetName".to_string(),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                ),
+            ]));
+            Ok(BuildWithBindingsResult {
+                root_id: id,
+                root_class_name,
+                named_widgets: id_map,
+                binding_widgets: binding_map,
+            })
+        })
+    }
+
     pub(super) fn reconcile_widget(
         widget_id: i64,
         node: &super::GtkNode,
     ) -> Result<HashMap<String, i64>, Gtk4Error> {
-        let new_node = first_object_in_interface(node)?;
+        let new_node = first_object_in_interface("reconcileWidget", node)?;
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let root_id = state
@@ -10563,7 +10825,7 @@ mod linux_impl {
     }
 
     pub(super) fn reconcile_node_fn(root_id: i64, node: &super::GtkNode) -> Result<i64, Gtk4Error> {
-        let new_root = first_object_in_interface(node)?;
+        let new_root = first_object_in_interface("reconcileNode", node)?;
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let mut id_map: HashMap<String, i64> = HashMap::new();
@@ -10582,6 +10844,8 @@ mod linux_impl {
                     new_root,
                     &mut id_map,
                     &mut binding_map,
+                    "reconcileNode",
+                    None,
                 )?;
                 state.live_trees.insert(new_id, new_live);
                 new_id
@@ -10714,6 +10978,8 @@ delegate!(app_new(id: &str) -> Result<i64, Gtk4Error>);
 delegate!(app_run(app_id: i64) -> Result<(), Gtk4Error>);
 delegate!(app_set_css(app_id: i64, css: &str) -> Result<(), Gtk4Error>);
 delegate!(window_new(app_id: i64, title: &str, width: i32, height: i32) -> Result<i64, Gtk4Error>);
+delegate!(mount_app_window(app_id: i64, node: &GtkNode) -> Result<i64, Gtk4Error>);
+delegate!(mount_app_window_with_bindings(app_id: i64, node: &GtkNode) -> Result<BuildWithBindingsResult, Gtk4Error>);
 delegate!(display_height() -> Result<i64, Gtk4Error>);
 delegate!(window_set_title(win_id: i64, title: &str) -> Result<(), Gtk4Error>);
 delegate!(window_set_titlebar(win_id: i64, titlebar_id: i64) -> Result<(), Gtk4Error>);

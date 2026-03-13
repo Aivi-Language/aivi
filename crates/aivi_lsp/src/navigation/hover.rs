@@ -55,9 +55,17 @@ impl Backend {
 
     fn gtk_architecture_doc_for_ident(ident: &str) -> Option<String> {
         let (badge, body) = match ident {
+            "runGtkApp" => (
+                "function",
+                "`runGtkApp : { appId: Text, root: GtkNode, onStart: Effect GtkError Unit } -> Effect GtkError Unit`\n\nHigh-level signal-first GTK app entry point. Mount a root window tree once, run a startup effect, present the mounted window, and then enter `appRun`.",
+            ),
+            "mountAppWindow" => (
+                "function",
+                "`mountAppWindow : AppId -> GtkNode -> Effect GtkError WindowId`\n\nMount a root `GtkWindow`/`GtkApplicationWindow`/`AdwWindow`/`AdwApplicationWindow` tree under an existing application and return its `WindowId`. Use this when you need extra startup control before calling `appRun`.",
+            ),
             "buildFromNode" => (
                 "function",
-                "`buildFromNode : GtkNode -> Effect GtkError WidgetId`\n\nMount a GTK node tree once. In the signal-first runtime, widget props and structural bindings stay live after mounting, so later `Signal` writes update the mounted widgets directly.",
+                "`buildFromNode : GtkNode -> Effect GtkError WidgetId`\n\nMount a GTK subtree once. In the signal-first runtime, widget props and structural bindings stay live after mounting, so later `Signal` writes update the mounted widgets directly. Prefer `runGtkApp` or `mountAppWindow` for full app roots.",
             ),
             "buildWithIds" => (
                 "function",

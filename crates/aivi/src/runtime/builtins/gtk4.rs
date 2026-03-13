@@ -721,6 +721,7 @@ fn build_gtk4_stubs() -> Value {
         ("appRun", 1),
         ("appSetCss", 2),
         ("windowNew", 4),
+        ("mountAppWindow", 2),
         ("windowSetTitle", 2),
         ("windowSetTitlebar", 2),
         ("windowSetChild", 2),
