@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llamacpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local llama.cpp",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "omnicoder-9b": {
+          "name": "OmniCoder 9B (GGUF)",
+          "limit": {
+            "context": 12192,
+            "output": 10192
+          }
+        }
+      }
+    }
+  }
+}
