@@ -132,10 +132,13 @@ ExportableDefinition := ValueSig
 ExportList     := ExportItem { "," ExportItem }
 ExportItem     := lowerIdent | UpperIdent | ("domain" UpperIdent)
 UseStmt        := "use" ModulePath [ UseSpec ] Sep
+               | "use" ModulePath "(" GroupedImportList ")" Sep
 UseSpec        := "as" Ident
                | "(" ImportList ")"
                | "hiding" "(" ImportList ")"
-ImportList     := ImportItem { "," ImportItem }
+GroupedImportList := GroupedImportItem { (Sep | ",") GroupedImportItem }
+GroupedImportItem := lowerIdent "(" ImportList ")"
+ImportList     := ImportItem { ("," | Sep) ImportItem }
 ImportItem     := (lowerIdent | UpperIdent | ("domain" UpperIdent)) [ "as" Ident ]
 
 DomainDef      := "domain" UpperIdent "over" Type "=" "{" { DomainItem } "}" Sep
@@ -181,6 +184,7 @@ Notes:
 - `TypeDef` is the constructor-list form (`Foo = A | B | C`) used for ADTs.
 - Decorators may appear before ordinary declarations and before inline `export` declarations, but not before standalone `use` or export-list items.
 - `hiding (...)` is part of the documented module surface syntax. Current parser support is still being aligned.
+- A grouped import `use a.b (c (...), d (...))` desugars to `use a.b.c (...)` + `use a.b.d (...)` during parsing. The resolver and typechecker only see flat `UseDecl` values.
 - In the broader docs, “binding” is sometimes used more loosely for destructuring `=` forms. This grammar keeps the parser-facing distinction explicit and uses `BindingRhs` to show where the arm form from §0.5 fits.
 
 ## 0.3 Expressions

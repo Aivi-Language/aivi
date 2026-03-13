@@ -247,9 +247,7 @@ impl Parser {
                         decorator.span,
                     );
                 }
-                if let Some(use_decl) = self.parse_use_decl() {
-                    uses.push(use_decl);
-                }
+                uses.extend(self.parse_use_decls());
                 continue;
             }
             if self.match_keyword("class") {
@@ -584,9 +582,11 @@ impl Parser {
         false
     }
 
-    fn parse_use_decl(&mut self) -> Option<UseDecl> {
+    fn parse_use_decls(&mut self) -> Vec<UseDecl> {
         let start = self.previous_span();
-        let module = self.parse_dotted_name()?;
+        let Some(module) = self.parse_dotted_name() else {
+            return Vec::new();
+        };
         let alias = if self.match_keyword("as") {
             let as_span = self.previous_span();
             match self.consume_ident() {
@@ -599,68 +599,183 @@ impl Parser {
         } else {
             None
         };
-        let mut items = Vec::new();
-        let mut wildcard = true;
         if self.consume_symbol("(") {
-            wildcard = false;
+            // Disambiguate grouped vs selective import by lookahead:
+            // after `(`, skip newlines; if we see a lowercase non-keyword ident
+            // followed (after optional newlines) by `(`, it's a grouped import.
+            let checkpoint = self.pos;
             self.consume_newlines();
-            while !self.check_symbol(")") && self.pos < self.tokens.len() {
-                if self.match_keyword("domain") {
-                    if let Some(name) = self.consume_ident() {
-                        items.push(crate::surface::UseItem {
-                            kind: crate::surface::ScopeItemKind::Domain,
-                            name,
-                            alias: None,
-                        });
-                    } else {
-                        let span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                        self.emit_diag("E1500", "expected domain name after 'domain'", span);
-                        break;
-                    }
-                } else if let Some(name) = self.consume_ident() {
-                    let alias = if self.match_keyword("as") {
-                        let as_span = self.previous_span();
-                        match self.consume_ident() {
-                            Some(a) => Some(a),
-                            None => {
-                                self.emit_diag(
-                                    "E1500",
-                                    "expected alias name after 'as'",
-                                    as_span,
-                                );
-                                None
-                            }
-                        }
-                    } else {
-                        None
-                    };
-                    items.push(crate::surface::UseItem {
-                        kind: crate::surface::ScopeItemKind::Value,
-                        name,
-                        alias,
-                    });
-                }
-                let pos_before = self.pos;
-                self.consume_newlines();
-                self.consume_symbol(",");
-                self.consume_newlines();
-                if self.pos == pos_before && !self.check_symbol(")") {
-                    break;
-                }
+            let is_grouped = self.is_grouped_import_start();
+            self.pos = checkpoint;
+
+            if is_grouped {
+                return self.parse_grouped_import_items(&module, &start);
             }
+
+            // Selective import (existing logic)
+            let items = self.parse_use_item_list();
             self.expect_symbol(")", "expected ')' to close import list");
+            let span = merge_span(start, self.previous_span());
+            return vec![UseDecl {
+                module,
+                items,
+                span,
+                wildcard: false,
+                alias,
+            }];
         }
+        // Wildcard import (no parens)
         let span = match &alias {
             Some(alias) => merge_span(start, alias.span.clone()),
             None => merge_span(start, module.span.clone()),
         };
-        Some(UseDecl {
+        vec![UseDecl {
             module,
-            items,
+            items: Vec::new(),
             span,
-            wildcard,
+            wildcard: true,
             alias,
-        })
+        }]
+    }
+
+    /// Parse the comma/newline-separated list of import items inside `(...)`.
+    /// Assumes the opening `(` has already been consumed. Does NOT consume the
+    /// closing `)`.
+    fn parse_use_item_list(&mut self) -> Vec<crate::surface::UseItem> {
+        let mut items = Vec::new();
+        self.consume_newlines();
+        while !self.check_symbol(")") && self.pos < self.tokens.len() {
+            if self.match_keyword("domain") {
+                if let Some(name) = self.consume_ident() {
+                    items.push(crate::surface::UseItem {
+                        kind: crate::surface::ScopeItemKind::Domain,
+                        name,
+                        alias: None,
+                    });
+                } else {
+                    let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                    self.emit_diag("E1500", "expected domain name after 'domain'", span);
+                    break;
+                }
+            } else if let Some(name) = self.consume_ident() {
+                let alias = if self.match_keyword("as") {
+                    let as_span = self.previous_span();
+                    match self.consume_ident() {
+                        Some(a) => Some(a),
+                        None => {
+                            self.emit_diag(
+                                "E1500",
+                                "expected alias name after 'as'",
+                                as_span,
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                items.push(crate::surface::UseItem {
+                    kind: crate::surface::ScopeItemKind::Value,
+                    name,
+                    alias,
+                });
+            }
+            let pos_before = self.pos;
+            self.consume_newlines();
+            self.consume_symbol(",");
+            self.consume_newlines();
+            if self.pos == pos_before && !self.check_symbol(")") {
+                break;
+            }
+        }
+        items
+    }
+
+    /// Lookahead check: does the current position (after newlines have been
+    /// skipped) look like the start of a grouped import sub-item, i.e.
+    /// `lowerIdent (` ?
+    fn is_grouped_import_start(&self) -> bool {
+        let mut pos = self.pos;
+        // Skip newlines
+        while pos < self.tokens.len() && self.tokens[pos].kind == TokenKind::Newline {
+            pos += 1;
+        }
+        if pos >= self.tokens.len() {
+            return false;
+        }
+        let tok = &self.tokens[pos];
+        // Must be a lowercase, non-keyword ident
+        if tok.kind != TokenKind::Ident {
+            return false;
+        }
+        let is_lower = tok.text.chars().next().is_some_and(|c| c.is_ascii_lowercase());
+        if !is_lower {
+            return false;
+        }
+        if crate::syntax::KEYWORDS_ALL.contains(&tok.text.as_str()) {
+            return false;
+        }
+        // Skip to next non-newline token
+        let mut next_pos = pos + 1;
+        while next_pos < self.tokens.len() && self.tokens[next_pos].kind == TokenKind::Newline {
+            next_pos += 1;
+        }
+        if next_pos >= self.tokens.len() {
+            return false;
+        }
+        let next_tok = &self.tokens[next_pos];
+        next_tok.kind == TokenKind::Symbol && next_tok.text == "("
+    }
+
+    /// Parse grouped import items: `use foo.bar ( sub1 (...) sub2 (...) )`.
+    /// Assumes the opening `(` has already been consumed.
+    fn parse_grouped_import_items(
+        &mut self,
+        parent_module: &SpannedName,
+        start: &Span,
+    ) -> Vec<UseDecl> {
+        let mut decls = Vec::new();
+        self.consume_newlines();
+        while !self.check_symbol(")") && self.pos < self.tokens.len() {
+            let Some(sub_module) = self.consume_ident() else {
+                break;
+            };
+            if !self.consume_symbol("(") {
+                self.emit_diag(
+                    "E1500",
+                    "expected '(' after sub-module name in grouped import",
+                    sub_module.span.clone(),
+                );
+                break;
+            }
+            let items = self.parse_use_item_list();
+            self.expect_symbol(")", "expected ')' to close sub-module import list");
+
+            let full_name = format!("{}.{}", parent_module.name, sub_module.name);
+            let module_span = merge_span(parent_module.span.clone(), sub_module.span.clone());
+            let decl_span = merge_span(start.clone(), self.previous_span());
+
+            decls.push(UseDecl {
+                module: SpannedName {
+                    name: full_name,
+                    span: module_span,
+                },
+                items,
+                span: decl_span,
+                wildcard: false,
+                alias: None,
+            });
+
+            let pos_before = self.pos;
+            self.consume_newlines();
+            self.consume_symbol(",");
+            self.consume_newlines();
+            if self.pos == pos_before && !self.check_symbol(")") {
+                break;
+            }
+        }
+        self.expect_symbol(")", "expected ')' to close grouped import");
+        decls
     }
 
     fn validate_module_decorators(&mut self, decorators: &[Decorator]) {
@@ -814,6 +929,42 @@ mod use_separator_tests {
     #[test]
     fn mixed_comma_and_newline_separators() {
         let uses = parse_use("module test\nuse aivi.text (\n  length,\n  toUpper\n)\n");
+        let text_use = uses.iter().find(|u| u.module.name == "aivi.text").expect("aivi.text use not found");
+        assert_eq!(text_use.items.len(), 2);
+    }
+
+    #[test]
+    fn grouped_import_desugars_to_flat() {
+        let uses = parse_use(
+            "module test\nuse aivi.text (\n  utils (toUpper, toLower)\n  format (padLeft as pad)\n)\n",
+        );
+        // +1 for the injected prelude import
+        let non_prelude: Vec<_> = uses.iter().filter(|u| u.module.name != "aivi.prelude").collect();
+        assert_eq!(non_prelude.len(), 2);
+        let u1 = non_prelude.iter().find(|u| u.module.name == "aivi.text.utils").expect("aivi.text.utils not found");
+        assert_eq!(u1.items.len(), 2);
+        assert_eq!(u1.items[0].name.name, "toUpper");
+        assert_eq!(u1.items[1].name.name, "toLower");
+        let u2 = non_prelude.iter().find(|u| u.module.name == "aivi.text.format").expect("aivi.text.format not found");
+        assert_eq!(u2.items.len(), 1);
+        assert_eq!(u2.items[0].name.name, "padLeft");
+        assert_eq!(u2.items[0].alias.as_ref().expect("alias should be present").name, "pad");
+    }
+
+    #[test]
+    fn grouped_import_single_submodule() {
+        let uses = parse_use(
+            "module test\nuse aivi.core (\n  math (add)\n)\n",
+        );
+        let non_prelude: Vec<_> = uses.iter().filter(|u| u.module.name != "aivi.prelude").collect();
+        assert_eq!(non_prelude.len(), 1);
+        assert_eq!(non_prelude[0].module.name, "aivi.core.math");
+        assert_eq!(non_prelude[0].items.len(), 1);
+    }
+
+    #[test]
+    fn selective_import_still_works() {
+        let uses = parse_use("module test\nuse aivi.text (toUpper, toLower)\n");
         let text_use = uses.iter().find(|u| u.module.name == "aivi.text").expect("aivi.text use not found");
         assert_eq!(text_use.items.len(), 2);
     }

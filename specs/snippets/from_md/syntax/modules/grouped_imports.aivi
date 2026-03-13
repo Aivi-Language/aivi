@@ -1,0 +1,9 @@
+// Grouped: shared prefix written once
+use mailfox.ui.runtime.settings_dialog.accounts.editor (
+  auth_group (accountEditorAuthGroup as AccountEditorAuthGroup)
+  header (accountEditorHeader as AccountEditorHeader)
+)
+
+// Equivalent flat form:
+// use mailfox.ui.runtime.settings_dialog.accounts.editor.auth_group (accountEditorAuthGroup as AccountEditorAuthGroup)
+// use mailfox.ui.runtime.settings_dialog.accounts.editor.header (accountEditorHeader as AccountEditorHeader)

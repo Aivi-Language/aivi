@@ -4,8 +4,10 @@ use aivi
 use aivi.testing
 use aivi.collections
 use aivi.graph
-use aivi.math (sum)
-use aivi.vector (Vec2, magnitude, domain Vector)
+use aivi (
+  math (sum)
+  vector (Vec2, magnitude, domain Vector)
+)
 
 // Node positions for heuristic calculation using ~map{} sigil
 positions : Map Int Vec2

@@ -3,8 +3,10 @@ module integrationTests.syntax.domains.multiDomainOperatorResolutionNonColliding
 
 use aivi
 use aivi.testing
-use aivi.duration (domain Duration)
-use aivi.color (domain Color)
+use aivi (
+  duration (domain Duration)
+  color (domain Color)
+)
 
 span0 = { millis: 0 }
 span1 = span0 + 1min

@@ -2,9 +2,11 @@
 module integrationTests.syntax.decorators.staticJsonSchema
 
 use aivi
-use aivi.prelude (toText)
+use aivi (
+  prelude (toText)
+  text (contains)
+)
 use aivi.testing
-use aivi.text (contains)
 
 ExtractionResult = {
   title: Text
