@@ -301,7 +301,7 @@ Additional `Adw*` classes can be created dynamically when their GType is availab
 
 The signal-first host is the normal path, but lower-level tools still matter for libraries, tests, and embedding:
 
-- `mountAppWindow` mounts a root application window tree and returns its `WindowId`
+- `mountAppWindow` mounts a list of app roots, returns the primary `WindowId`, and keeps every mounted root live from signal writes
 - `buildFromNode` builds a GTK subtree from `<object>`, `<interface>`, or `<template>`
 - `buildWithIds` returns `{ root, widgets }` for named-widget lookup
 - `signalPoll` reads one queued `GtkSignalEvent`
@@ -312,9 +312,38 @@ For standard apps, bound callbacks and event handles are the normal path. `signa
 
 ## Windows, dialogs, and application infrastructure
 
-`GtkWindow`, `GtkApplicationWindow`, `AdwWindow`, and `AdwApplicationWindow` are valid root nodes in signal-first GTK trees. They should appear at the root of a mounted app tree rather than as nested children. Use `runGtkApp` for the common case, or `mountAppWindow` when you need manual access to the mounted `WindowId` before calling `appRun`.
+`GtkWindow`, `GtkApplicationWindow`, `AdwWindow`, and `AdwApplicationWindow` are valid primary root nodes in signal-first GTK trees. They should appear at the root of a mounted app tree rather than as nested children. Use `runGtkApp` for the common case, or `mountAppWindow` when you need manual access to the mounted `WindowId` before calling `appRun` or when you need to mount extra live roots such as persistent libadwaita dialogs.
 
-Dialogs and menus remain programmatic surfaces:
+`mountAppWindow : AppId -> List GtkNode -> Effect GtkError WindowId` has these rules:
+
+- the list must contain at least one root
+- the first entry is the primary app window root and is the returned `WindowId`
+- later entries mount as additional live roots under the same app/runtime
+- `Adw*Dialog` extra roots may omit `presentFor` / `transientFor`; they will default to the primary window
+
+```aivi
+windowRoot = ~<gtk>
+  <AdwApplicationWindow title="Mailfox">
+    <GtkBox />
+  </AdwApplicationWindow>
+</gtk>
+
+settingsDialog = ~<gtk>
+  <AdwPreferencesDialog id="settings-dialog" open={settingsOpen}>
+    <AdwPreferencesPage title="General" />
+  </AdwPreferencesDialog>
+</gtk>
+
+main = do Effect {
+  _   <- init Unit
+  app <- appNew "com.example.mailfox"
+  win <- mountAppWindow app [windowRoot, settingsDialog]
+  _   <- windowPresent win
+  appRun app
+}
+```
+
+Dialog API objects and popup/menu surfaces remain programmatic:
 
 | Type | Notes |
 | --- | --- |

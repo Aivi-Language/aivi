@@ -26,7 +26,4 @@ debug = true
 overflow-checks = false
 
 [profile.test]
-#
-# Work around a rust-lld hidden-symbol linker regression in test builds that
-# shows up with optimized test profiles on Linux.
-opt-level = 0
+opt-level = 1

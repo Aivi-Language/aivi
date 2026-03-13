@@ -576,7 +576,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
-                        Box::new(Type::con("GtkNode")),
+                        Box::new(Type::con("List").app(vec![Type::con("GtkNode")])),
                         Box::new(effect_text_int.clone()),
                     )),
                 ),

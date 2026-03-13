@@ -203,7 +203,7 @@ appNew = gtk4.appNew
 windowNew : AppId -> Text -> Int -> Int -> Effect GtkError WindowId
 windowNew = gtk4.windowNew
 
-mountAppWindow : AppId -> GtkNode -> Effect GtkError WindowId
+mountAppWindow : AppId -> List GtkNode -> Effect GtkError WindowId
 mountAppWindow = gtk4.mountAppWindow
 
 windowSetTitle : WindowId -> Text -> Effect GtkError Unit
@@ -240,7 +240,7 @@ runGtkApp : { appId: Text, root: GtkNode, onStart: Effect GtkError Unit } -> Eff
 runGtkApp = config => do Effect {
   _   <- init Unit
   app <- appNew config.appId
-  win <- mountAppWindow app config.root
+  win <- mountAppWindow app [config.root]
   _   <- config.onStart
   _   <- windowPresent win
   appRun app

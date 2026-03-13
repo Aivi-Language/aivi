@@ -1326,7 +1326,7 @@ Both are exported from `aivi.concurrency`.
 
 `buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — useful for tests or low-level integrations that need direct widget ids.
 
-A standard GTK app now exports a root `GtkWindow`/`GtkApplicationWindow`/`AdwWindow`/`AdwApplicationWindow` tree directly. Use `runGtkApp { appId, root, onStart }` for the common case, or `mountAppWindow` when you need manual access to the mounted `WindowId` before calling `appRun`. The host mounts that tree once and keeps bound props, text nodes, classes, and structural child scopes live from signal writes. `<show>` and `<each key={...}>` are mounted structural bindings rather than full-tree rerenders.
+A standard GTK app now exports a root `GtkWindow`/`GtkApplicationWindow`/`AdwWindow`/`AdwApplicationWindow` tree directly. Use `runGtkApp { appId, root, onStart }` for the common case, or `mountAppWindow app [primaryRoot, extraRoot1, extraRoot2]` when you need manual access to the mounted `WindowId` before calling `appRun` or want extra live roots such as persistent dialogs. The first list entry is the primary window root; later roots mount into the same live runtime, and `Adw*Dialog` extras default `present-for` to that primary window when omitted. The host mounts those trees once and keeps bound props, text nodes, classes, and structural child scopes live from signal writes. `<show>` and `<each key={...}>` are mounted structural bindings rather than full-tree rerenders.
 
 For forms, keep `aivi.ui.forms.Field` values inside a signal or a record-valued signal, update them directly from `onInput`/`onFocusOut`, derive visible errors as signals, and let submit IO live in an `Event` handle.
 

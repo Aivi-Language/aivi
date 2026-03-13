@@ -61,7 +61,7 @@ impl Backend {
             ),
             "mountAppWindow" => (
                 "function",
-                "`mountAppWindow : AppId -> GtkNode -> Effect GtkError WindowId`\n\nMount a root `GtkWindow`/`GtkApplicationWindow`/`AdwWindow`/`AdwApplicationWindow` tree under an existing application and return its `WindowId`. Use this when you need extra startup control before calling `appRun`.",
+                "`mountAppWindow : AppId -> List GtkNode -> Effect GtkError WindowId`\n\nMount one or more GTK roots under an existing application and return the primary window `WindowId`. The first list entry must be a root `GtkWindow`/`GtkApplicationWindow`/`AdwWindow`/`AdwApplicationWindow`; additional roots mount into the same live signal-first runtime, and libadwaita dialog roots default their `present-for` parent to that primary window when omitted.",
             ),
             "buildFromNode" => (
                 "function",

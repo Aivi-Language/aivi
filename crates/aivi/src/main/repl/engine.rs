@@ -478,15 +478,14 @@ Command Reference
         self.cached_symbols = self.build_symbol_entries(SymbolPane::Types, "");
 
         let header = if filter.is_empty() {
-            format!("{} types in scope", entries.len())
+            format!("{} types in scope (side panel)", entries.len())
         } else {
-            format!("{} types in scope (filter: {filter})", entries.len())
+            format!(
+                "{} types in scope (filter: {filter}, side panel)",
+                entries.len()
+            )
         };
-        let mut lines = vec![header];
-        for e in &entries {
-            lines.push(format!("  [type] {}", e.name));
-        }
-        self.push_command_output(lines.join("\n"));
+        self.push_command_output(header);
     }
 
     fn cmd_values(&mut self, filter: &str) {
@@ -499,22 +498,18 @@ Command Reference
         } else {
             let header = if filter.is_empty() {
                 format!(
-                    "{} session value{}",
+                    "{} session value{} (side panel)",
                     entries.len(),
                     if entries.len() == 1 { "" } else { "s" }
                 )
             } else {
                 format!(
-                    "{} session value{} (filter: {filter})",
+                    "{} session value{} (filter: {filter}, side panel)",
                     entries.len(),
                     if entries.len() == 1 { "" } else { "s" }
                 )
             };
-            let mut lines = vec![header];
-            for e in &entries {
-                lines.push(format!("  [val]  {}", e.name));
-            }
-            self.push_command_output(lines.join("\n"));
+            self.push_command_output(header);
         }
     }
 
@@ -528,22 +523,18 @@ Command Reference
         } else {
             let header = if filter.is_empty() {
                 format!(
-                    "{} function{}",
+                    "{} function{} (side panel)",
                     entries.len(),
                     if entries.len() == 1 { "" } else { "s" }
                 )
             } else {
                 format!(
-                    "{} function{} (filter: {filter})",
+                    "{} function{} (filter: {filter}, side panel)",
                     entries.len(),
                     if entries.len() == 1 { "" } else { "s" }
                 )
             };
-            let mut lines = vec![header];
-            for e in &entries {
-                lines.push(format!("  [fn]   {}", e.name));
-            }
-            self.push_command_output(lines.join("\n"));
+            self.push_command_output(header);
         }
     }
 
@@ -3062,9 +3053,11 @@ mod tests {
             .symbols
             .iter()
             .any(|entry| entry.name.contains("double :: Int -> Int  (repl_session)")));
+        // Transcript shows only a summary, not the full list.
         assert!(snap.transcript.iter().any(|entry| {
             matches!(entry.kind, TranscriptKind::CommandOutput)
-                && entry.text.contains("double :: Int -> Int  (repl_session)")
+                && entry.text.contains("function")
+                && entry.text.contains("side panel")
         }));
     }
 
