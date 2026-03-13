@@ -2,13 +2,16 @@
 title: AIVI Language Specification
 ---
 
-<p>
+<p align="center">
     <img src="/aivi-logo.png" alt="AIVI Logo" width="256">
+    <br/>
+    <b>A research project by Andreas Herd</b>
 </p>
+
+
 
 # AIVI language guide
 
-**A research project by Andreas Herd**
 
 AIVI is a statically typed, purely functional language for software that needs clear data models, predictable behavior, and explicit handling of side effects. It is built for APIs, data pipelines, automation, services, and user interfaces—places where you want the compiler to help catch missing cases, invalid data shapes, and boundary mistakes before the program runs.
 
