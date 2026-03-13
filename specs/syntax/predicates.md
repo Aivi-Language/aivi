@@ -41,42 +41,45 @@ If you want to name predicate functions explicitly, define ordinary functions of
 
 ## 4.2 Implicit binding rule
 
-When a predicate is being interpreted against a current value:
+When an expression is being interpreted against a "current element" (in filter, find, map, etc.):
 
-- `_` names that current value explicitly, as in `_.price > 80`
-- an unbound bare field name such as `price` is shorthand for `_.price`
-- `.field` is different: it is an accessor function (`x => x.field`), not a field value or boolean test
+- an unbound bare field name such as `price` is shorthand for a field accessor: `price` acts like `x => x.price`
+- `.field` is different: it is an explicit accessor function (`x => x.field`), not a field value or boolean test
+- `by prop` is sugar for `x => x.prop == prop`, capturing `prop` from the outer scope — useful when the local binding name matches the field name
 
 > [!TIP]
-> `users |> filter active` is shorthand for `users |> filter (_.active)` when `active` is a boolean field. If `active` is already bound in scope, that existing binding wins instead, so write `_.active` when you need to disambiguate.
+> `users |> filter active` is shorthand for `users |> filter (x => x.active)` when `active` is an unbound name that refers to a boolean field. If `active` is already bound in scope, that existing binding wins instead.
 
-If you write a pattern predicate such as `Some _`, the `_` inside the pattern keeps its normal wildcard meaning rather than referring to the current value.
+> [!NOTE]
+> `_.field` was removed in v0.1 and is now a compile error. Use `.field` for accessor functions or a bare unbound name for field lifting.
+
+If you write a pattern predicate such as `Some _`, the `_` inside the pattern keeps its normal wildcard meaning.
 
 <<< ../snippets/from_md/syntax/predicates/implicit_binding_rule.aivi{aivi}
 
-## 4.3 Predicate lifting
+## 4.3 Predicate lifting and function shorthand
 
-Whenever a function parameter has type `A -> Bool`, you can often write just the body of the test instead of spelling out `_ => ...` or `x => ...`.
+Whenever a call expects a function `A -> B`, you can often write just the body of that function instead of spelling out `x => ...`.
 
 <<< ../snippets/from_md/syntax/predicates/predicate_lifting_01.aivi{aivi}
 
 In other words, the compiler can treat:
 
 ```text
-predicateExpr
-⇒ (_ => predicateExpr)
+expr
+⇒ (_ => expr)
 ```
 
-as shorthand when the surrounding context expects `A -> Bool`.
+as shorthand when the surrounding context expects any single-argument function type `A -> B` — not just `A -> Bool`. This means bare unbound names and expressions lift to field accessors in any function position: `map name`, `sortBy age`, `find (price > 100)` all work without `x =>`.
 
 If you already write `_` explicitly, as in `takeWhile (_ < 10)`, you are using the ordinary unary-function shorthand from [Functions](functions.md), so there is nothing extra to lift.
 
 This applies to:
 
-- stdlib helpers such as `filter`, `find`, `takeWhile`, `dropWhile`
+- stdlib helpers such as `filter`, `find`, `map`, `takeWhile`, `dropWhile`, `sortBy`
 - generator guards (`item -> pred`) described in [Generators](generators.md)
 - patch predicates such as `items[price > 80]` from [Patching Records](patching.md)
-- your own helpers whose parameter type is `A -> Bool`
+- your own helpers that expect a single-argument function
 
 Examples:
 
@@ -89,6 +92,17 @@ Examples:
 <<< ../snippets/from_md/syntax/predicates/predicate_lifting_05.aivi{aivi}
 
 The last two examples show the same shorthand working in patch selectors and in a user-defined helper typed `(A -> Bool) -> ...`.
+
+## 4.3.1 `by prop` — same-name equality sugar
+
+`by prop` desugars to `x => x.prop == prop`, where `prop` is captured from the outer scope. This is useful when the field name and the local variable name are the same, which would otherwise be ambiguous:
+
+```aivi
+getUserById = id => users |> find (by id)
+// desugars to: id => users |> find (x => x.id == id)
+```
+
+Multi-field form: `by (id, name)` desugars to `x => x.id == id && x.name == name`.
 
 ## 4.4 No automatic unwrapping over `Option` or `Result`
 

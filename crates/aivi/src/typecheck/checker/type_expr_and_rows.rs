@@ -491,10 +491,8 @@ impl TypeChecker {
         let mut map = BTreeMap::new();
         if let TypeExpr::Record { fields, .. } = expr {
             for field in fields {
-                if let RecordTypeField::Named { name, ty } = field {
-                    if let TypeExpr::Name(new_name) = ty {
-                        map.insert(name.name.clone(), new_name.name.clone());
-                    }
+                if let RecordTypeField::Named { name, ty: TypeExpr::Name(new_name) } = field {
+                    map.insert(name.name.clone(), new_name.name.clone());
                 }
             }
         }

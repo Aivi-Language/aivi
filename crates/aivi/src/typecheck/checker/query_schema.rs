@@ -114,7 +114,7 @@ impl TypeChecker {
             expr.clone()
         } else if expr_contains_placeholder(expr) {
             self.rewrite_placeholder_lambda(expr, "__query")
-        } else if let Some(lifted) = lift_predicate_expr(expr, env, "__query") {
+        } else if let Some(lifted) = lift_predicate_expr(expr, env, &self.method_to_classes, "__query") {
             lifted
         } else {
             expr.clone()

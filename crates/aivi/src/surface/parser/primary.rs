@@ -19,7 +19,7 @@ impl Parser {
                     if crate::syntax::KEYWORDS_ALL.contains(&token.text.as_str()) {
                         return matches!(
                             token.text.as_str(),
-                            "if" | "do" | "generate" | "resource" | "patch" | "mock"
+                            "if" | "do" | "generate" | "resource" | "patch" | "mock" | "by"
                         );
                     }
                     return true;
@@ -327,6 +327,68 @@ impl Parser {
                 let span = merge_span(field.span.clone(), field.span.clone());
                 return Some(Expr::FieldSection { field, span });
             }
+        }
+
+        if self.match_keyword("by") {
+            let start = self.previous_span();
+            let fields: Vec<SpannedName> = if self.consume_symbol("(") {
+                let mut fields = Vec::new();
+                while let Some(f) = self.consume_ident() {
+                    fields.push(f);
+                    if !self.consume_symbol(",") {
+                        break;
+                    }
+                }
+                self.expect_symbol(")", "expected ')' after field list in 'by (...)' expression");
+                fields
+            } else {
+                let Some(f) = self.consume_ident() else {
+                    let sp = self.previous_span();
+                    self.emit_diag("E1619", "expected a field name after 'by'", sp.clone());
+                    return Some(Expr::Raw {
+                        text: String::new(),
+                        span: sp,
+                    });
+                };
+                vec![f]
+            };
+            let span = merge_span(start, self.previous_span());
+            let param = SpannedName {
+                name: "__by".to_string(),
+                span: span.clone(),
+            };
+            let body = fields.iter().fold(None::<Expr>, |acc, field| {
+                let lhs = Expr::FieldAccess {
+                    base: Box::new(Expr::Ident(param.clone())),
+                    field: field.clone(),
+                    span: field.span.clone(),
+                };
+                let rhs = Expr::Ident(field.clone());
+                let eq_expr = Expr::Binary {
+                    op: "==".to_string(),
+                    left: Box::new(lhs),
+                    right: Box::new(rhs),
+                    span: field.span.clone(),
+                };
+                Some(match acc {
+                    None => eq_expr,
+                    Some(prev) => Expr::Binary {
+                        op: "&&".to_string(),
+                        left: Box::new(prev),
+                        right: Box::new(eq_expr),
+                        span: span.clone(),
+                    },
+                })
+            });
+            let body = body.unwrap_or_else(|| Expr::Ident(SpannedName {
+                name: "True".to_string(),
+                span: span.clone(),
+            }));
+            return Some(Expr::Lambda {
+                params: vec![Pattern::Ident(param)],
+                body: Box::new(body),
+                span,
+            });
         }
 
         if self.match_keyword("if") {

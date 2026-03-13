@@ -965,7 +965,7 @@ impl TypeChecker {
                         current_ty = value_ty;
                     } else {
                         // Predicate selector: `items[price > 80]` treats unbound names as
-                        // implicit field accesses on the element (`_.price > 80`).
+                        // implicit field accesses on the element (`price > 80`).
                         let checkpoint = self.subst.clone();
 
                         // List predicate: element is `A`, predicate is `A -> Bool`.

@@ -13,4 +13,4 @@ productTable = table "products" [
 ]
 
 bad : Query Text
-bad = from productTable |> select _.sku
+bad = from productTable |> select (p => p.sku)

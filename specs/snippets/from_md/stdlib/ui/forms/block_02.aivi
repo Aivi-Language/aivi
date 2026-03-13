@@ -40,14 +40,14 @@ view =
     <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
       <GtkEntry
         id="nameInput"
-        text={form ->> map (_.name.value)}
+        text={form ->> map (s => s.name.value)}
         placeholderText="Name"
         onInput={onNameChange}
         onFocusOut={onNameBlur} />
       <GtkLabel label={form ->> map (s => text.join ", " (nameErrors s))} />
       <GtkEntry
         id="emailInput"
-        text={form ->> map (_.email.value)}
+        text={form ->> map (s => s.email.value)}
         placeholderText="Email"
         onInput={onEmailChange}
         onFocusOut={onEmailBlur} />

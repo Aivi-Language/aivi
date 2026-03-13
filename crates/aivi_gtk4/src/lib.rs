@@ -76,12 +76,12 @@ mod linux_impl {
     use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
-    use std::sync::{Arc, Mutex, OnceLock, mpsc};
+    use std::sync::{mpsc, Arc, Mutex, OnceLock};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use base64::Engine;
     use image::{ImageBuffer, ImageEncoder, Rgba};
-    use serde_json::{Map, Value, json};
+    use serde_json::{json, Map, Value};
 
     use super::{BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, SignalEvent};
 
@@ -504,7 +504,7 @@ mod linux_impl {
     unsafe extern "C" {
         fn g_type_from_name(name: *const c_char) -> usize;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
-        -> *mut c_void;
+            -> *mut c_void;
         fn g_object_ref(object: *mut c_void) -> *mut c_void;
         fn g_object_unref(object: *mut c_void);
         fn g_object_ref_sink(object: *mut c_void) -> *mut c_void;
@@ -949,7 +949,11 @@ mod linux_impl {
     }
 
     fn bool_to_c(val: bool) -> c_int {
-        if val { 1 } else { 0 }
+        if val {
+            1
+        } else {
+            0
+        }
     }
 
     const GTK_DIR_TAB_FORWARD: c_int = 0;
@@ -1331,10 +1335,10 @@ mod linux_impl {
         Err(Gtk4Error::new(message))
     }
 
-    fn existing_parent_context<'a>(
-        state: &'a RealGtkState,
+    fn existing_parent_context(
+        state: &RealGtkState,
         raw_parent: *mut c_void,
-    ) -> Option<(String, Option<&'a GtkSourceContext>)> {
+    ) -> Option<(String, Option<&GtkSourceContext>)> {
         state
             .widgets
             .iter()
@@ -1447,15 +1451,13 @@ mod linux_impl {
                 None,
                 &binding,
             );
-            assert!(
-                err.message
-                    .contains("widget #12 (GtkBox id=settings-panel)")
-            );
+            assert!(err
+                .message
+                .contains("widget #12 (GtkBox id=settings-panel)"));
             assert!(err.message.contains("bound to `Save`"));
-            assert!(
-                err.message
-                    .contains("Known supported signals for this class: key-pressed.")
-            );
+            assert!(err
+                .message
+                .contains("Known supported signals for this class: key-pressed."));
         }
 
         fn write_test_source(name: &str, contents: &str) -> PathBuf {
@@ -1533,14 +1535,12 @@ mod linux_impl {
                 },
             )
             .expect_err("expected invalid child mismatch");
-            assert!(
-                err.message
-                    .contains("expected a child with class `AdwPreferencesGroup`")
-            );
-            assert!(
-                err.message
-                    .contains("widget #9 (GtkBox id=account-connection)")
-            );
+            assert!(err
+                .message
+                .contains("expected a child with class `AdwPreferencesGroup`"));
+            assert!(err
+                .message
+                .contains("widget #9 (GtkBox id=account-connection)"));
         }
         #[test]
         fn adw_abstract_animation_gives_helpful_error() {
@@ -10305,11 +10305,9 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(
-                        id_map
-                            .iter()
-                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
-                    ),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
                 ),
             ]));
             Ok(id)
@@ -10335,11 +10333,9 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(
-                        id_map
-                            .iter()
-                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
-                    ),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
                 ),
             ]));
             Ok(BuildResult {
@@ -10371,11 +10367,9 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(
-                        id_map
-                            .iter()
-                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
-                    ),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
                 ),
             ]));
             Ok(BuildWithBindingsResult {

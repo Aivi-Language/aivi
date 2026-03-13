@@ -11,7 +11,7 @@ activateUsers = do Effect {
 
 deleteOldPosts : Instant -> Effect DbError Unit
 deleteOldPosts = cutoff => do Effect {
-  _ <- postTable + del (_.createdAt < cutoff)
+  _ <- postTable + del (createdAt < cutoff)
 }
 
 upsertActiveUser : User -> Effect DbError Unit

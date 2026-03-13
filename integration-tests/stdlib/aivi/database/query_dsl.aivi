@@ -42,7 +42,7 @@ where_filters_rows = do Effect {
   conn    <- connect { driver: Sqlite, url: ":memory:" }
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
-  results <- runQueryOn conn (where_ (_.active) (from productTable))
+  results <- runQueryOn conn (where_ active (from productTable))
   _       <- close conn
   assertEq (List.length results) 2
 }
@@ -52,7 +52,7 @@ select_projects_rows = do Effect {
   conn  <- connect { driver: Sqlite, url: ":memory:" }
   _     <- runMigrationsOn conn [productTable]
   _     <- seedProducts conn
-  names <- runQueryOn conn (select _.name (from productTable))
+  names <- runQueryOn conn (select.name (from productTable))
   _     <- close conn
   assertEq (List.length names) 3
 }
@@ -146,9 +146,9 @@ order_by_sorts_ascending = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
   _    <- runMigrationsOn conn [productTable]
   _    <- seedProducts conn
-  rows <- runQueryOn conn (orderBy _.price (from productTable))
+  rows <- runQueryOn conn (orderBy.price (from productTable))
   _    <- close conn
-  prices = List.map _.price rows
+  prices = List.map.price rows
   assertEq prices [10, 15, 20]
 }
 
@@ -157,9 +157,9 @@ order_by_sorts_text = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
   _    <- runMigrationsOn conn [productTable]
   _    <- seedProducts conn
-  rows <- runQueryOn conn (orderBy _.name (from productTable))
+  rows <- runQueryOn conn (orderBy.name (from productTable))
   _    <- close conn
-  names = List.map _.name rows
+  names = List.map.name rows
   assertEq names ["Doohick", "Gadget", "Widget"]
 }
 
@@ -208,9 +208,9 @@ order_by_then_limit = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
   _    <- runMigrationsOn conn [productTable]
   _    <- seedProducts conn
-  rows <- runQueryOn conn (limit 2 (orderBy _.price (from productTable)))
+  rows <- runQueryOn conn (limit 2 (orderBy.price (from productTable)))
   _    <- close conn
-  prices = List.map _.price rows
+  prices = List.map.price rows
   assertEq prices [10, 15]
 }
 
@@ -219,9 +219,9 @@ limit_and_offset_pagination = do Effect {
   conn    <- connect { driver: Sqlite, url: ":memory:" }
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
-  results <- runQueryOn conn (limit 1 (offset 1 (orderBy _.price (from productTable))))
+  results <- runQueryOn conn (limit 1 (offset 1 (orderBy.price (from productTable))))
   _       <- close conn
-  prices = List.map _.price results
+  prices = List.map.price results
   assertEq prices [15]
 }
 
@@ -233,10 +233,10 @@ do_query_with_order_by = do Effect {
   rows <- runQueryOn conn (do Query {
       p    <- from productTable
       guard_ p.active
-      orderBy _.price (queryOf p)
+      orderBy.price (queryOf p)
   })
   _ <- close conn
-  assertEq (List.map _.price rows) [10, 15]
+  assertEq (List.map.price rows) [10, 15]
 }
 
 // ── count ──────────────────────────────────────────────────────────────────
@@ -256,7 +256,7 @@ count_filtered = do Effect {
   conn   <- connect { driver: Sqlite, url: ":memory:" }
   _      <- runMigrationsOn conn [productTable]
   _      <- seedProducts conn
-  result <- runQueryOn conn (count (where_ _.active (from productTable)))
+  result <- runQueryOn conn (count (where_ active (from productTable)))
   _      <- close conn
   assertEq result [2]
 }
@@ -433,7 +433,7 @@ run_query_ambient_with_filter = do Effect {
   _       <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
   _       <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
   _       <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
-  results <- runQuery (where_ (_.active) (from productTable))
+  results <- runQuery (where_ active (from productTable))
   assertEq (List.length results) 2
 }
 

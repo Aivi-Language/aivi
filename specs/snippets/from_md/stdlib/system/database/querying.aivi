@@ -21,7 +21,7 @@ getUserById = id => do Effect {
   conn  <- db.connect dbDefault
   users <- db.loadOn conn userTable
   _     <- db.close conn
-  pure (users |> find (_.id == id))
+  pure (users |> find (by id))
 }
 
 // Query DSL — compose queries, execute once with runQueryOn.
@@ -56,8 +56,8 @@ runActiveUserNamesDefault = do Effect {
 // Functional pipeline form (no do-block) composes with |>
 cheapActiveNames : Query Text
 cheapActiveNames = db.from userTable
-  |> db.where_ _.active
-  |> db.select _.name
+  |> db.where_ active
+  |> db.select.name
 
 // Sorting and paging — all run in memory in v0.1 (no SQL pushdown yet)
 // orderBy : (A -> B) -> Query A -> Query A
@@ -65,11 +65,11 @@ cheapActiveNames = db.from userTable
 // offset  : Int -> Query A -> Query A
 recentActiveNames : Query Text
 recentActiveNames = db.from userTable
-  |> db.where_ _.active
-  |> db.orderBy _.createdAt // sort ascending by creation time (in memory)
+  |> db.where_ active
+  |> db.orderBy.createdAt // sort ascending by creation time (in memory)
   |> db.offset 10 // skip the first 10 rows
   |> db.limit 5 // then take at most 5
-  |> db.select _.name
+  |> db.select.name
 
 runRecentActiveNames : Effect DbError (List Text)
 runRecentActiveNames = do Effect {
@@ -117,7 +117,7 @@ runActiveUserOrders = do Effect {
 // db.count and db.exists aggregate queries; both run in memory (no SQL pushdown yet).
 
 countActive : Query Int
-countActive = db.count (db.from userTable |> db.where_ _.active)
+countActive = db.count (db.from userTable |> db.where_ active)
 
 activeCount : Effect DbError Int
 activeCount = do Effect {
@@ -128,7 +128,7 @@ activeCount = do Effect {
 }
 
 anyActive : Query Bool
-anyActive = db.exists (db.from userTable |> db.where_ _.active)
+anyActive = db.exists (db.from userTable |> db.where_ active)
 
 hasActiveUsers : Effect DbError Bool
 hasActiveUsers = do Effect {

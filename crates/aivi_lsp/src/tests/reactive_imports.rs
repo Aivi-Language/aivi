@@ -7,7 +7,7 @@ use aivi.reactive (Signal, signal, set, update, derive)
 state : Signal { count: Int }
 state = signal { count: 0 }
 
-title = derive state (_.count)
+title = derive state .count
 increment = _ => update state (patch { count: _ + 1 })
 reset = _ => set state { count: 0 }
 "#;
