@@ -30,8 +30,8 @@ use crate::{kernel, rust_ir};
 use super::abi::JitRuntimeCtx;
 use super::jit_module::create_jit_module;
 use super::lower::{
-    declare_helpers, declare_jit_helpers, decompose_func_type, CompiledLambda, DeclaredHelpers,
-    JitFuncDecl, JitFuncInfo, LowerCtx,
+    declare_helpers, decompose_func_type, CompiledLambda, DeclaredHelpers, JitFuncDecl,
+    JitFuncInfo, LowerCtx,
 };
 
 /// Pointer type used throughout.
@@ -134,7 +134,7 @@ fn jit_compile_into_runtime(
     // Declare runtime helper imports in the module
     let helpers = timed!(
         "declare_helpers",
-        declare_jit_helpers(&mut module)
+        declare_helpers(&mut module)
             .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?
     );
 
@@ -308,6 +308,7 @@ fn jit_compile_into_runtime(
             &mut lambda_counter,
             &spec_map,
             &mut str_counter,
+            true,
         ) {
             Ok(lambdas) => {
                 pending_lambdas.extend(lambdas);
@@ -564,7 +565,7 @@ pub fn run_cranelift_jit_prepared(
     if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
         ctx.merge_constructor_ordinals(constructor_ordinals);
     }
-    let _module = jit_compile_into_runtime(
+    let module = jit_compile_into_runtime(
         program,
         cg_types,
         monomorph_plan,
@@ -579,7 +580,10 @@ pub fn run_cranelift_jit_prepared(
             t0.elapsed().as_secs_f64() * 1000.0
         );
     }
-    run_main_effect(&mut runtime)
+    let result = run_main_effect(&mut runtime);
+    drop(runtime);
+    drop(module);
+    result
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -652,7 +656,7 @@ impl ReplJitSession {
                 ctx.merge_constructor_ordinals(surface_ordinals);
             }
         }
-        let _module = jit_compile_into_runtime(
+        let module = jit_compile_into_runtime(
             program,
             cg_types,
             monomorph_plan,
@@ -660,54 +664,59 @@ impl ReplJitSession {
             &mut runtime,
             &HashSet::new(),
         )?;
-        restore_repl_source_signals(&mut runtime, &module_names, &self.source_signal_values)
-            .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-        runtime.jit_pending_error = None;
-
-        let value = runtime.ctx.globals.get(binding_name).ok_or_else(|| {
-            AiviError::Runtime(format!("missing evaluated binding `{binding_name}`"))
-        })?;
-        let value = runtime
-            .force_value(value)
-            .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-        if let Some(err) = runtime.jit_pending_error.take() {
-            return Err(AiviError::Runtime(format_runtime_error(err)));
-        }
-
-        let was_effect = matches!(value, Value::Effect(_));
-        if autorun_effects && was_effect {
-            runtime.ctx.begin_console_capture();
-            let result = runtime
-                .run_effect_value(value)
+        let result = (|| {
+            restore_repl_source_signals(&mut runtime, &module_names, &self.source_signal_values)
                 .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-            let capture = runtime.ctx.take_console_capture();
+            runtime.jit_pending_error = None;
+
+            let value = runtime.ctx.globals.get(binding_name).ok_or_else(|| {
+                AiviError::Runtime(format!("missing evaluated binding `{binding_name}`"))
+            })?;
+            let value = runtime
+                .force_value(value)
+                .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
             if let Some(err) = runtime.jit_pending_error.take() {
                 return Err(AiviError::Runtime(format_runtime_error(err)));
             }
-            let binding = EvaluatedBinding {
-                value_text: format_value(&result),
-                was_effect: true,
-                effect_ran: true,
-                stdout_text: capture.stdout,
-                stderr_text: capture.stderr,
-            };
-            self.source_signal_values =
-                capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
+
+            let was_effect = matches!(value, Value::Effect(_));
+            if autorun_effects && was_effect {
+                runtime.ctx.begin_console_capture();
+                let result = runtime
+                    .run_effect_value(value)
                     .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-            Ok(binding)
-        } else {
-            let binding = EvaluatedBinding {
-                value_text: format_value(&value),
-                was_effect,
-                effect_ran: false,
-                stdout_text: String::new(),
-                stderr_text: String::new(),
-            };
-            self.source_signal_values =
-                capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
-                    .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-            Ok(binding)
-        }
+                let capture = runtime.ctx.take_console_capture();
+                if let Some(err) = runtime.jit_pending_error.take() {
+                    return Err(AiviError::Runtime(format_runtime_error(err)));
+                }
+                let binding = EvaluatedBinding {
+                    value_text: format_value(&result),
+                    was_effect: true,
+                    effect_ran: true,
+                    stdout_text: capture.stdout,
+                    stderr_text: capture.stderr,
+                };
+                self.source_signal_values =
+                    capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
+                        .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+                Ok(binding)
+            } else {
+                let binding = EvaluatedBinding {
+                    value_text: format_value(&value),
+                    was_effect,
+                    effect_ran: false,
+                    stdout_text: String::new(),
+                    stderr_text: String::new(),
+                };
+                self.source_signal_values =
+                    capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
+                        .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+                Ok(binding)
+            }
+        })();
+        drop(runtime);
+        drop(module);
+        result
     }
 }
 
@@ -882,7 +891,7 @@ pub(crate) fn run_cranelift_jit_cancellable(
             ctx.merge_constructor_ordinals(surface_ordinals);
         }
     }
-    let _module = jit_compile_into_runtime(
+    let module = jit_compile_into_runtime(
         program,
         cg_types,
         monomorph_plan,
@@ -890,7 +899,10 @@ pub(crate) fn run_cranelift_jit_cancellable(
         &mut runtime,
         &HashSet::new(),
     )?;
-    run_main_effect(&mut runtime)
+    let result = run_main_effect(&mut runtime);
+    drop(runtime);
+    drop(module);
+    result
 }
 
 /// JIT-compile an AIVI program and run its test suite.
@@ -927,8 +939,6 @@ pub fn run_test_suite_jit(
         &mut runtime,
         &HashSet::new(),
     )?;
-    // Discard any pending errors from the compilation phase so they don't
-    // contaminate the first test.
     runtime.jit_pending_error = None;
 
     const TEST_FUEL_BUDGET: u64 = 500_000;
@@ -955,7 +965,6 @@ pub fn run_test_suite_jit(
             continue;
         };
 
-        // Clear any pending JIT error from a prior test so it doesn't contaminate this one.
         runtime.jit_pending_error = None;
 
         let value = match runtime.force_value(value) {
@@ -984,14 +993,10 @@ pub fn run_test_suite_jit(
             }
         };
 
-        // Clear pending error right before executing the test effect, so only
-        // errors from `run_effect_value` are captured.
         runtime.jit_pending_error = None;
 
         match runtime.run_effect_value(effect) {
             Ok(_) => {
-                // Check for snapshot assertion failures that the JIT couldn't
-                // propagate through the Effect chain.
                 if let Some(msg) = runtime.snapshot_failure.take() {
                     runtime.jit_pending_error = None;
                     report.failed += 1;
@@ -1016,7 +1021,6 @@ pub fn run_test_suite_jit(
                 }
             }
             Err(err) => {
-                // Discard any pending error — the propagated Err is the authoritative failure.
                 runtime.jit_pending_error = None;
                 report.failed += 1;
                 report.failures.push(TestFailure {
@@ -1028,7 +1032,9 @@ pub fn run_test_suite_jit(
         }
     }
 
-    Ok(report)
+    let result = Ok(report);
+    drop(runtime);
+    result
 }
 
 /// Walk all RustIR modules and wrap `load(source)` calls with

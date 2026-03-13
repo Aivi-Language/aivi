@@ -584,7 +584,7 @@ Command Reference
             ));
             return;
         }
-        if !self.imports.contains(&module_path.to_owned()) {
+        if !self.imports.iter().any(|import| import == module_path) {
             self.imports.push(module_path.to_owned());
         }
         self.transcript.push(TranscriptEntry {
@@ -2683,6 +2683,17 @@ mod tests {
             engine.imports.iter().filter(|i| *i == "aivi.text").count(),
             1
         );
+    }
+
+    #[test]
+    fn expression_submit_keeps_map_working_after_using_default_visible_logic_module() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.logic").unwrap();
+        let snap = engine.submit("Some 5 |> map (_ + 1)").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult)
+                && entry.text == "Some 6 :: Option Int"
+        }));
     }
 
     #[test]
