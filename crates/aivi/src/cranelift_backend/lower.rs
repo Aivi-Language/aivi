@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use cranelift_codegen::ir::FuncRef;
 use cranelift_codegen::ir::{types, AbiParam, BlockArg, Function, InstBuilder, Value};
 use cranelift_frontend::FunctionBuilder;
+use cranelift_jit::JITModule;
 use cranelift_module::{DataDescription, Linkage, Module};
 
 use crate::cg_type::CgType;
@@ -247,6 +248,142 @@ pub(crate) struct HelperRefs {
     // Snapshot mock helpers
     pub(crate) rt_snapshot_mock_install: FuncRef,
     pub(crate) rt_snapshot_mock_flush: FuncRef,
+}
+
+fn define_jit_helper_thunk(
+    module: &mut JITModule,
+    func_id: cranelift_module::FuncId,
+    sig: &cranelift_codegen::ir::Signature,
+    host_ptr: *const u8,
+    helper_name: &str,
+) -> Result<(), String> {
+    let mut function = Function::with_name_signature(
+        cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32()),
+        sig.clone(),
+    );
+    let call_sig = function.import_signature(sig.clone());
+    let mut fb_ctx = cranelift_frontend::FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut function, &mut fb_ctx);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        builder.seal_block(entry);
+
+        let args = builder.block_params(entry).to_vec();
+        let target = builder.ins().iconst(PTR, host_ptr as usize as i64);
+        let call = builder.ins().call_indirect(call_sig, target, &args);
+        let results = builder.inst_results(call).to_vec();
+        builder.ins().return_(&results);
+        builder.finalize();
+    }
+
+    let mut ctx = module.make_context();
+    ctx.func = function;
+    module
+        .define_function(func_id, &mut ctx)
+        .map_err(|e| format!("define JIT helper thunk {helper_name}: {e}"))?;
+    module.clear_context(&mut ctx);
+    Ok(())
+}
+
+/// Declare helper thunks for JIT mode.
+///
+/// Direct imported host calls can overflow x86 rel32 relocations when the JIT
+/// code cache lands far from the Rust/runtime text segments. These local thunks
+/// keep JIT-to-thunk calls module-local and use an indirect call for the final
+/// host jump.
+pub(crate) fn declare_jit_helpers(module: &mut JITModule) -> Result<DeclaredHelpers, String> {
+    let helper_symbols: std::collections::HashMap<&'static str, *const u8> =
+        super::runtime_helpers::runtime_helper_symbols()
+            .into_iter()
+            .collect();
+
+    macro_rules! decl {
+        ($name:expr, [$($param:expr),*], [$($ret:expr),*]) => {{
+            let mut sig = module.make_signature();
+            $(sig.params.push(AbiParam::new($param));)*
+            $(sig.returns.push(AbiParam::new($ret));)*
+            let func_name = format!("__aivi_jit_helper_{}", $name);
+            let func_id = module
+                .declare_function(&func_name, Linkage::Local, &sig)
+                .map_err(|e| format!("declare JIT helper thunk {}: {e}", $name))?;
+            let host_ptr = *helper_symbols
+                .get($name)
+                .ok_or_else(|| format!("missing runtime helper symbol {}", $name))?;
+            define_jit_helper_thunk(module, func_id, &sig, host_ptr, $name)?;
+            func_id
+        }};
+    }
+
+    Ok(DeclaredHelpers {
+        rt_check_call_depth: decl!("rt_check_call_depth", [PTR], [PTR]),
+        rt_dec_call_depth: decl!("rt_dec_call_depth", [PTR], []),
+        rt_signal_match_fail: decl!("rt_signal_match_fail", [PTR], [PTR]),
+        rt_box_int: decl!("rt_box_int", [PTR, PTR], [PTR]),
+        rt_box_float: decl!("rt_box_float", [PTR, PTR], [PTR]),
+        rt_box_bool: decl!("rt_box_bool", [PTR, PTR], [PTR]),
+        rt_unbox_int: decl!("rt_unbox_int", [PTR, PTR], [PTR]),
+        rt_unbox_float: decl!("rt_unbox_float", [PTR, PTR], [PTR]),
+        rt_unbox_bool: decl!("rt_unbox_bool", [PTR, PTR], [PTR]),
+        rt_alloc_unit: decl!("rt_alloc_unit", [PTR], [PTR]),
+        rt_alloc_string: decl!("rt_alloc_string", [PTR, PTR, PTR], [PTR]),
+        rt_alloc_list: decl!("rt_alloc_list", [PTR, PTR, PTR], [PTR]),
+        rt_alloc_tuple: decl!("rt_alloc_tuple", [PTR, PTR, PTR], [PTR]),
+        rt_alloc_record: decl!("rt_alloc_record", [PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_alloc_constructor: decl!("rt_alloc_constructor", [PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_record_field: decl!("rt_record_field", [PTR, PTR, PTR, PTR], [PTR]),
+        rt_list_index: decl!("rt_list_index", [PTR, PTR, PTR], [PTR]),
+        rt_clone_value: decl!("rt_clone_value", [PTR, PTR], [PTR]),
+        rt_drop_value: decl!("rt_drop_value", [PTR, PTR], []),
+        rt_get_global: decl!("rt_get_global", [PTR, PTR, PTR], [PTR]),
+        rt_set_global: decl!("rt_set_global", [PTR, PTR, PTR, PTR], []),
+        rt_apply: decl!("rt_apply", [PTR, PTR, PTR], [PTR]),
+        rt_force_thunk: decl!("rt_force_thunk", [PTR, PTR], [PTR]),
+        rt_run_effect: decl!("rt_run_effect", [PTR, PTR], [PTR]),
+        rt_bind_effect: decl!("rt_bind_effect", [PTR, PTR, PTR], [PTR]),
+        rt_wrap_effect: decl!("rt_wrap_effect", [PTR, PTR], [PTR]),
+        rt_push_resource_scope: decl!("rt_push_resource_scope", [PTR], []),
+        rt_pop_resource_scope: decl!("rt_pop_resource_scope", [PTR], []),
+        rt_binary_op: decl!("rt_binary_op", [PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_constructor_name_eq: decl!("rt_constructor_name_eq", [PTR, PTR, PTR, PTR], [PTR]),
+        rt_constructor_arity: decl!("rt_constructor_arity", [PTR, PTR], [PTR]),
+        rt_constructor_arg: decl!("rt_constructor_arg", [PTR, PTR, PTR], [PTR]),
+        rt_tuple_len: decl!("rt_tuple_len", [PTR, PTR], [PTR]),
+        rt_tuple_item: decl!("rt_tuple_item", [PTR, PTR, PTR], [PTR]),
+        rt_list_len: decl!("rt_list_len", [PTR, PTR], [PTR]),
+        rt_list_tail: decl!("rt_list_tail", [PTR, PTR, PTR], [PTR]),
+        rt_list_concat: decl!("rt_list_concat", [PTR, PTR, PTR], [PTR]),
+        rt_value_equals: decl!("rt_value_equals", [PTR, PTR, PTR], [PTR]),
+        rt_patch_record: decl!("rt_patch_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_patch_record_inplace: decl!(
+            "rt_patch_record_inplace",
+            [PTR, PTR, PTR, PTR, PTR, PTR],
+            [PTR]
+        ),
+        rt_make_closure: decl!("rt_make_closure", [PTR, PTR, PTR, PTR], [PTR]),
+        rt_generator_to_list: decl!("rt_generator_to_list", [PTR, PTR], [PTR]),
+        rt_gen_vec_new: decl!("rt_gen_vec_new", [PTR], [PTR]),
+        rt_gen_vec_push: decl!("rt_gen_vec_push", [PTR, PTR, PTR], []),
+        rt_gen_vec_extend_generator: decl!("rt_gen_vec_extend_generator", [PTR, PTR, PTR], []),
+        rt_gen_vec_into_generator: decl!("rt_gen_vec_into_generator", [PTR, PTR], [PTR]),
+        rt_register_jit_fn: decl!("rt_register_jit_fn", [PTR, PTR, PTR, PTR, PTR, PTR], []),
+        rt_alloc_datetime: decl!("rt_alloc_datetime", [PTR, PTR, PTR], [PTR]),
+        rt_eval_sigil: decl!("rt_eval_sigil", [PTR, PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_try_reuse: decl!("rt_try_reuse", [PTR, PTR], [PTR]),
+        rt_reuse_constructor: decl!(
+            "rt_reuse_constructor",
+            [PTR, PTR, PTR, PTR, PTR, PTR],
+            [PTR]
+        ),
+        rt_reuse_record: decl!("rt_reuse_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_reuse_list: decl!("rt_reuse_list", [PTR, PTR, PTR, PTR], [PTR]),
+        rt_reuse_tuple: decl!("rt_reuse_tuple", [PTR, PTR, PTR, PTR], [PTR]),
+        rt_enter_fn: decl!("rt_enter_fn", [PTR, PTR, PTR], []),
+        rt_set_location: decl!("rt_set_location", [PTR, PTR, PTR], []),
+        rt_snapshot_mock_install: decl!("rt_snapshot_mock_install", [PTR, PTR, PTR], [PTR]),
+        rt_snapshot_mock_flush: decl!("rt_snapshot_mock_flush", [PTR, PTR, PTR], []),
+    })
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs

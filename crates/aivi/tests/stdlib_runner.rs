@@ -1,3 +1,4 @@
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -29,7 +30,9 @@ fn run_test_suite_with_timeout(
         .name(format!("test-{}", display_name))
         .stack_size(256 * 1024 * 1024)
         .spawn(move || {
-            let result = run_test_suite(program, &test_entries, &modules, false, None);
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                run_test_suite(program, &test_entries, &modules, false, None)
+            }));
             done2.store(true, Ordering::Release);
             result
         })
@@ -42,7 +45,11 @@ fn run_test_suite_with_timeout(
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    handle.join().ok()
+    let result = handle.join().ok()?;
+    match result {
+        Ok(report) => Some(report),
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 fn walk_aivi_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -141,15 +148,7 @@ fn stdlib_modules_execute_without_failures_inner() {
 
     assert!(!files.is_empty(), "no stdlib @test files found");
 
-    let stdlib_threads = std::env::var("AIVI_STDLIB_TEST_THREADS")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|count| *count > 0)
-        .unwrap_or_else(|| {
-            std::thread::available_parallelism()
-                .map(|count| count.get().min(2))
-                .unwrap_or(1)
-        });
+    let stdlib_threads = test_support::configured_test_threads("AIVI_STDLIB_TEST_THREADS", 2);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(stdlib_threads)
         .build()

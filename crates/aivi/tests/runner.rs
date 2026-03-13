@@ -1,3 +1,4 @@
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -37,7 +38,9 @@ fn run_test_suite_with_timeout(
         .name(format!("test-{}", display_name))
         .stack_size(256 * 1024 * 1024)
         .spawn(move || {
-            let result = run_test_suite(program, &test_entries, &modules, false, None);
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                run_test_suite(program, &test_entries, &modules, false, None)
+            }));
             done2.store(true, Ordering::Release);
             result
         })
@@ -50,7 +53,11 @@ fn run_test_suite_with_timeout(
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    handle.join().ok()
+    let result = handle.join().ok()?;
+    match result {
+        Ok(report) => Some(report),
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 /// Result of processing a single test file.
@@ -125,9 +132,7 @@ fn run_files_parallel(
     let total_failed = AtomicUsize::new(0);
     let skipped = AtomicUsize::new(0);
     let failures = std::sync::Mutex::new(Vec::<(String, String)>::new());
-    let max_threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
+    let max_threads = test_support::configured_test_threads("AIVI_RUNNER_TEST_THREADS", 1);
     let semaphore = Arc::new((std::sync::Mutex::new(0usize), std::sync::Condvar::new()));
 
     std::thread::scope(|s| {
