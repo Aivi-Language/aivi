@@ -158,6 +158,8 @@ manual_mount_helpers_available = do Effect {
   _ = init
   _ = appNew
   _ = windowNew
+  _ = mountAppWindow
+  _ = runGtkApp
   _ = windowSetChild
   _ = windowPresent
   _ = appRun
@@ -168,6 +170,19 @@ manual_mount_helpers_available = do Effect {
   _ = signalStream
   _ = signalEmit
   _ = gtkSetInterval
+  assertEq True True
+}
+
+@test "root application window sigils compile"
+root_application_window_sigil = do Effect {
+  root = ~<gtk>
+    <AdwApplicationWindow title="Counter" defaultWidth={320} defaultHeight={180}>
+      <GtkBox orientation="vertical" spacing={8}>
+        <GtkLabel label="Hello" />
+      </GtkBox>
+    </AdwApplicationWindow>
+  </gtk>
+  _ = root
   assertEq True True
 }
 

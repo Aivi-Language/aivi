@@ -165,21 +165,19 @@ state = signal { count: 0 }
 title = derive state (s => "Count {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
-view = ~<gtk>
-  <GtkBox orientation="vertical" spacing="8">
-    <GtkLabel label={title} />
-    <GtkButton label="Increment" onClick={increment} />
-  </GtkBox>
+root = ~<gtk>
+  <GtkApplicationWindow title="My App" defaultWidth={800} defaultHeight={600}>
+    <GtkBox orientation="vertical" spacing="8">
+      <GtkLabel label={title} />
+      <GtkButton label="Increment" onClick={increment} />
+    </GtkBox>
+  </GtkApplicationWindow>
 </gtk>
 
-main = do Effect {
-  _ <- init Unit
-  appId <- appNew "com.example.app"
-  win <- windowNew appId "My App" 800 600
-  root <- buildFromNode view
-  _ <- windowSetChild win root
-  _ <- windowPresent win
-  appRun appId
+main = runGtkApp {
+  appId: "com.example.app"
+  root: root
+  onStart: pure Unit
 }
 ```
 
@@ -200,7 +198,7 @@ concurrency.forEach rx (event =>
 **Rules for agents:**
 
 - Prefer mounted signal-bound trees over host loops.
-- Use `buildFromNode` / `buildWithIds` to mount once; later signal writes should drive the UI directly.
+- Prefer `runGtkApp` for normal root-window apps and `mountAppWindow` when startup needs the mounted `WindowId`; use `buildFromNode` / `buildWithIds` for subtrees, tests, and lower-level escape hatches.
 - `reconcileNode` is a low-level escape hatch for structural hosting work, not the primary architecture.
 - Signal events carry both `WidgetId` and the widget's `id="..."` name (e.g., `GtkClicked widgetId "saveBtn"`). Match by name string instead of comparing integer IDs.
 - Call `signalStream {}` once per manual event flow and keep ownership/cleanup explicit.

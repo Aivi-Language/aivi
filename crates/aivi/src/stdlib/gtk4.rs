@@ -11,6 +11,7 @@ export GtkStaticAttr, GtkBoundAttr, GtkStaticProp, GtkBoundProp, GtkEventProp, G
 export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkWindowClosed, GtkUnknownSignal, GtkTick
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated, displayHeight
+export mountAppWindow, runGtkApp
 export widgetShow, widgetHide
 export widgetSetSizeRequest, widgetSetHexpand, widgetSetVexpand
 export widgetSetHalign, widgetSetValign
@@ -202,6 +203,9 @@ appNew = gtk4.appNew
 windowNew : AppId -> Text -> Int -> Int -> Effect GtkError WindowId
 windowNew = gtk4.windowNew
 
+mountAppWindow : AppId -> GtkNode -> Effect GtkError WindowId
+mountAppWindow = gtk4.mountAppWindow
+
 windowSetTitle : WindowId -> Text -> Effect GtkError Unit
 windowSetTitle = gtk4.windowSetTitle
 
@@ -231,6 +235,16 @@ displayHeight = gtk4.displayHeight
 
 appRun : AppId -> Effect GtkError Unit
 appRun = gtk4.appRun
+
+runGtkApp : { appId: Text, root: GtkNode, onStart: Effect GtkError Unit } -> Effect GtkError Unit
+runGtkApp = config => do Effect {
+  _   <- init Unit
+  app <- appNew config.appId
+  win <- mountAppWindow app config.root
+  _   <- config.onStart
+  _   <- windowPresent win
+  appRun app
+}
 
 widgetShow : WidgetId -> Effect GtkError Unit
 widgetShow = gtk4.widgetShow

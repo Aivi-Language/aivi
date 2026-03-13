@@ -27,10 +27,11 @@ Most GTK apps only need this smaller subset:
 
 - `Signal` values for authoritative UI state
 - `derive` and `combineAll` for derived reactive state
-- `~<gtk>...</gtk>` with a root `GtkWindow` or `GtkApplicationWindow`
+- `~<gtk>...</gtk>` with a root `GtkWindow`, `GtkApplicationWindow`, `AdwWindow`, or `AdwApplicationWindow`
+- `runGtkApp` for the normal signal-first app entry point
 - callback attrs such as `onClick={handler}` or `onClick={eventHandle}`
 - structural bindings such as `<show>` and `<each key={...}>`
-- `signalStream`, `signalPoll`, and `signalEmit` only for lower-level integrations and tests
+- `mountAppWindow`, `signalStream`, `signalPoll`, and `signalEmit` only for lower-level integrations and tests
 
 ## Choosing the right entry point
 
@@ -74,25 +75,23 @@ state = signal { count: 0 }
 title = derive state (s => "Count {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
-view = ~<gtk>
-  <GtkBox orientation="vertical" spacing="12" marginTop="12" marginStart="12">
-    <GtkLabel label={title} />
-    <GtkButton label="Increment" onClick={increment} />
-  </GtkBox>
+root = ~<gtk>
+  <GtkApplicationWindow title="Counter" defaultWidth={640} defaultHeight={480}>
+    <GtkBox orientation="vertical" spacing="12" marginTop="12" marginStart="12">
+      <GtkLabel label={title} />
+      <GtkButton label="Increment" onClick={increment} />
+    </GtkBox>
+  </GtkApplicationWindow>
 </gtk>
 
-main = do Effect {
-  _ <- init Unit
-  appId <- appNew "com.example.counter"
-  win <- windowNew appId "Counter" 640 480
-  root <- buildFromNode view
-  _ <- windowSetChild win root
-  _ <- windowPresent win
-  appRun appId
+main = runGtkApp {
+  appId: "com.example.counter"
+  root: root
+  onStart: pure Unit
 }
 ```
 
-There is no required `Model -> Msg -> update` host. Signals are the source of truth, `buildFromNode` mounts the tree, and later signal writes mutate the live widgets directly.
+There is no required `Model -> Msg -> update` host. Signals are the source of truth, the root GTK tree is mounted once, and later signal writes mutate the live widgets directly.
 
 ## Core signal-first surface
 
@@ -101,7 +100,7 @@ The core surface is:
 - reactive values: `signal`, `get`, `set`, `update`, `derive`, `combineAll`, `watch`, `on`, `batch`, `peek`
 - effect handles: `do Event { ... }` with `result`, `error`, `done`, and `running`
 - GTK binding surface: `~<gtk>...</gtk>`, callback attributes, `<show>`, `<each>`, and widget/window helpers
-- low-level escape hatches: `buildFromNode`, `buildWithIds`, `signalStream`, `signalPoll`, `signalEmit`
+- low-level escape hatches: `mountAppWindow`, `buildFromNode`, `buildWithIds`, `signalStream`, `signalPoll`, `signalEmit`
 
 Useful lower-level runtime functions still include:
 
@@ -109,6 +108,7 @@ Useful lower-level runtime functions still include:
 | --- | --- |
 | `init` | `gtk4.init` |
 | `appNew` | `gtk4.appNew` |
+| `mountAppWindow` | `gtk4.mountAppWindow` |
 | `windowNew` | `gtk4.windowNew` |
 | `windowSetTitle` | `gtk4.windowSetTitle` |
 | `windowSetChild` | `gtk4.windowSetChild` |
@@ -301,6 +301,7 @@ Additional `Adw*` classes can be created dynamically when their GType is availab
 
 The signal-first host is the normal path, but lower-level tools still matter for libraries, tests, and embedding:
 
+- `mountAppWindow` mounts a root application window tree and returns its `WindowId`
 - `buildFromNode` builds a GTK subtree from `<object>`, `<interface>`, or `<template>`
 - `buildWithIds` returns `{ root, widgets }` for named-widget lookup
 - `signalPoll` reads one queued `GtkSignalEvent`
@@ -311,7 +312,7 @@ For standard apps, bound callbacks and event handles are the normal path. `signa
 
 ## Windows, dialogs, and application infrastructure
 
-`GtkWindow` and `GtkApplicationWindow` are valid root nodes in signal-first GTK trees. They should appear at the root of a mounted app tree rather than as nested children.
+`GtkWindow`, `GtkApplicationWindow`, `AdwWindow`, and `AdwApplicationWindow` are valid root nodes in signal-first GTK trees. They should appear at the root of a mounted app tree rather than as nested children. Use `runGtkApp` for the common case, or `mountAppWindow` when you need manual access to the mounted `WindowId` before calling `appRun`.
 
 Dialogs and menus remain programmatic surfaces:
 

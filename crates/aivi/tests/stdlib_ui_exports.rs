@@ -83,6 +83,8 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "buildFromNode",
         "buildWithIds",
         "reconcileNode",
+        "mountAppWindow",
+        "runGtkApp",
         "signalPoll",
         "signalStream",
         "signalEmit",
