@@ -2,6 +2,7 @@
 module integrationTests.stdlib.aivi.chronos.calendarFormatting.tests
 
 use aivi
+use aivi.prelude (toText)
 use aivi.testing
 use aivi.chronos.calendar
 

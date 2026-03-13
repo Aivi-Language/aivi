@@ -143,7 +143,7 @@ impl TypeChecker {
         result
     }
 
-    fn normalize_pipe_transformer(&self, expr: &Expr) -> Expr {
+    fn normalize_pipe_transformer(&self, expr: &Expr, env: &TypeEnv) -> Expr {
         if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
             if let Expr::Binary { op, left, right, .. } = expr {
                 let has_ph = expr_contains_placeholder(expr);
@@ -154,17 +154,18 @@ impl TypeChecker {
             }
         }
         match expr {
-            Expr::Lambda { .. } | Expr::FieldSection { .. } | Expr::Ident(_) => expr.clone(),
+            Expr::Lambda { .. } | Expr::FieldSection { .. } => expr.clone(),
             Expr::Call { func, args, span } => Expr::Call {
-                func: Box::new(self.normalize_pipe_transformer(func)),
+                func: Box::new(self.normalize_pipe_transformer(func, env)),
                 args: args
                     .iter()
-                    .map(|arg| self.normalize_pipe_transformer(arg))
+                    .map(|arg| self.normalize_pipe_transformer(arg, env))
                     .collect(),
                 span: span.clone(),
             },
             _ if expr_contains_placeholder(expr) => self.rewrite_placeholder_lambda(expr, "__pipe"),
-            _ => expr.clone(),
+            _ => lift_predicate_expr(expr, env, &self.method_to_classes, "__pipe")
+                .unwrap_or_else(|| expr.clone()),
         }
     }
 

@@ -9,6 +9,34 @@ export addDays, addMonths, addYears, negateDelta
 export now, format
 export Calendar
 
-use aivi.calendar (Date, DateTime, EndOfMonth, isLeapYear, daysInMonth, endOfMonth, addDays, addMonths, addYears, negateDelta, now, format)
+use aivi
+use aivi.calendar (Date, DateTime, EndOfMonth)
 use aivi.calendar (domain Calendar)
+
+isLeapYear : Date -> Bool
+isLeapYear = value => calendar.isLeapYear value
+
+daysInMonth : Date -> Int
+daysInMonth = value => calendar.daysInMonth value
+
+endOfMonth : Date -> Date
+endOfMonth = value => calendar.endOfMonth value
+
+addDays : Date -> Int -> Date
+addDays = value n => calendar.addDays value n
+
+addMonths : Date -> Int -> Date
+addMonths = value n => calendar.addMonths value n
+
+addYears : Date -> Int -> Date
+addYears = value n => calendar.addYears value n
+
+negateDelta : Calendar.Delta -> Calendar.Delta
+negateDelta = delta => calendar.negateDelta delta
+
+now : Effect DateTime
+now = clock.now Unit
+
+format : Text -> Date -> Text
+format = pattern value => calendar.format value pattern
 "#;

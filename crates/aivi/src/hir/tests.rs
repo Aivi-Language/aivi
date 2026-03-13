@@ -333,6 +333,239 @@ mod lower_tests {
         }
     }
 
+    fn expr_contains_var(expr: &HirExpr, target: &str) -> bool {
+        match expr {
+            HirExpr::Var { name, .. } => name == target,
+            HirExpr::Lambda { body, .. } => expr_contains_var(body, target),
+            HirExpr::App { func, arg, .. } | HirExpr::Pipe { func, arg, .. } => {
+                expr_contains_var(func, target) || expr_contains_var(arg, target)
+            }
+            HirExpr::Call { func, args, .. } => {
+                expr_contains_var(func, target) || args.iter().any(|arg| expr_contains_var(arg, target))
+            }
+            HirExpr::DebugFn { body, .. } => expr_contains_var(body, target),
+            HirExpr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+                crate::hir::HirTextPart::Text { .. } => false,
+                crate::hir::HirTextPart::Expr { expr } => expr_contains_var(expr, target),
+            }),
+            HirExpr::List { items, .. } => items.iter().any(|item| expr_contains_var(&item.expr, target)),
+            HirExpr::Tuple { items, .. } => items.iter().any(|item| expr_contains_var(item, target)),
+            HirExpr::Record { fields, .. } => fields
+                .iter()
+                .any(|field| expr_contains_var(&field.value, target)),
+            HirExpr::Patch { target: base, fields, .. } => {
+                expr_contains_var(base, target)
+                    || fields
+                        .iter()
+                        .any(|field| expr_contains_var(&field.value, target))
+            }
+            HirExpr::FieldAccess { base, .. } => expr_contains_var(base, target),
+            HirExpr::Index { base, index, .. } => {
+                expr_contains_var(base, target) || expr_contains_var(index, target)
+            }
+            HirExpr::Binary { left, right, .. } => {
+                expr_contains_var(left, target) || expr_contains_var(right, target)
+            }
+            HirExpr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                expr_contains_var(cond, target)
+                    || expr_contains_var(then_branch, target)
+                    || expr_contains_var(else_branch, target)
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                expr_contains_var(scrutinee, target)
+                    || arms.iter().any(|arm| {
+                        expr_contains_var(&arm.body, target)
+                            || arm.guard.as_ref().is_some_and(|guard| expr_contains_var(guard, target))
+                    })
+            }
+            HirExpr::Block { items, .. } => items.iter().any(|item| match item {
+                HirBlockItem::Bind { expr, .. }
+                | HirBlockItem::Filter { expr }
+                | HirBlockItem::Yield { expr }
+                | HirBlockItem::Recurse { expr }
+                | HirBlockItem::Expr { expr } => expr_contains_var(expr, target),
+            }),
+            HirExpr::LitNumber { .. }
+            | HirExpr::LitString { .. }
+            | HirExpr::LitSigil { .. }
+            | HirExpr::LitBool { .. }
+            | HirExpr::LitDateTime { .. }
+            | HirExpr::Mock { .. }
+            | HirExpr::Raw { .. } => false,
+        }
+    }
+
+    fn expr_contains_reactive_call(expr: &HirExpr, field_name: &str) -> bool {
+        match expr {
+            HirExpr::Call { func, args, .. } => {
+                matches!(
+                    func.as_ref(),
+                    HirExpr::FieldAccess { base, field, .. }
+                        if field == field_name
+                            && matches!(base.as_ref(), HirExpr::Var { name, .. } if name == "reactive")
+                ) || expr_contains_reactive_call(func, field_name)
+                    || args
+                        .iter()
+                        .any(|arg| expr_contains_reactive_call(arg, field_name))
+            }
+            HirExpr::Lambda { body, .. } => expr_contains_reactive_call(body, field_name),
+            HirExpr::App { func, arg, .. } | HirExpr::Pipe { func, arg, .. } => {
+                expr_contains_reactive_call(func, field_name)
+                    || expr_contains_reactive_call(arg, field_name)
+            }
+            HirExpr::DebugFn { body, .. } => expr_contains_reactive_call(body, field_name),
+            HirExpr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+                crate::hir::HirTextPart::Text { .. } => false,
+                crate::hir::HirTextPart::Expr { expr } => expr_contains_reactive_call(expr, field_name),
+            }),
+            HirExpr::List { items, .. } => items
+                .iter()
+                .any(|item| expr_contains_reactive_call(&item.expr, field_name)),
+            HirExpr::Tuple { items, .. } => items
+                .iter()
+                .any(|item| expr_contains_reactive_call(item, field_name)),
+            HirExpr::Record { fields, .. } => fields
+                .iter()
+                .any(|field| expr_contains_reactive_call(&field.value, field_name)),
+            HirExpr::Patch { target, fields, .. } => {
+                expr_contains_reactive_call(target, field_name)
+                    || fields
+                        .iter()
+                        .any(|field| expr_contains_reactive_call(&field.value, field_name))
+            }
+            HirExpr::FieldAccess { base, .. } => expr_contains_reactive_call(base, field_name),
+            HirExpr::Index { base, index, .. } => {
+                expr_contains_reactive_call(base, field_name)
+                    || expr_contains_reactive_call(index, field_name)
+            }
+            HirExpr::Binary { left, right, .. } => {
+                expr_contains_reactive_call(left, field_name)
+                    || expr_contains_reactive_call(right, field_name)
+            }
+            HirExpr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                expr_contains_reactive_call(cond, field_name)
+                    || expr_contains_reactive_call(then_branch, field_name)
+                    || expr_contains_reactive_call(else_branch, field_name)
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                expr_contains_reactive_call(scrutinee, field_name)
+                    || arms.iter().any(|arm| {
+                        expr_contains_reactive_call(&arm.body, field_name)
+                            || arm
+                                .guard
+                                .as_ref()
+                                .is_some_and(|guard| expr_contains_reactive_call(guard, field_name))
+                    })
+            }
+            HirExpr::Block { items, .. } => items.iter().any(|item| match item {
+                HirBlockItem::Bind { expr, .. }
+                | HirBlockItem::Filter { expr }
+                | HirBlockItem::Yield { expr }
+                | HirBlockItem::Recurse { expr }
+                | HirBlockItem::Expr { expr } => expr_contains_reactive_call(expr, field_name),
+            }),
+            HirExpr::Raw { .. }
+            | HirExpr::LitNumber { .. }
+            | HirExpr::LitString { .. }
+            | HirExpr::LitSigil { .. }
+            | HirExpr::LitBool { .. }
+            | HirExpr::LitDateTime { .. }
+            | HirExpr::Var { .. }
+            | HirExpr::Mock { .. } => false,
+        }
+    }
+
+    fn expr_contains_binary_op(expr: &HirExpr, target: &str) -> bool {
+        match expr {
+            HirExpr::Binary { op, left, right, .. } => {
+                op == target
+                    || expr_contains_binary_op(left, target)
+                    || expr_contains_binary_op(right, target)
+            }
+            HirExpr::Lambda { body, .. } => expr_contains_binary_op(body, target),
+            HirExpr::App { func, arg, .. } | HirExpr::Pipe { func, arg, .. } => {
+                expr_contains_binary_op(func, target) || expr_contains_binary_op(arg, target)
+            }
+            HirExpr::Call { func, args, .. } => {
+                expr_contains_binary_op(func, target)
+                    || args.iter().any(|arg| expr_contains_binary_op(arg, target))
+            }
+            HirExpr::DebugFn { body, .. } => expr_contains_binary_op(body, target),
+            HirExpr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+                crate::hir::HirTextPart::Text { .. } => false,
+                crate::hir::HirTextPart::Expr { expr } => expr_contains_binary_op(expr, target),
+            }),
+            HirExpr::List { items, .. } => items
+                .iter()
+                .any(|item| expr_contains_binary_op(&item.expr, target)),
+            HirExpr::Tuple { items, .. } => items.iter().any(|item| expr_contains_binary_op(item, target)),
+            HirExpr::Record { fields, .. } => fields
+                .iter()
+                .any(|field| expr_contains_binary_op(&field.value, target)),
+            HirExpr::Patch { target: base, fields, .. } => {
+                expr_contains_binary_op(base, target)
+                    || fields
+                        .iter()
+                        .any(|field| expr_contains_binary_op(&field.value, target))
+            }
+            HirExpr::FieldAccess { base, .. } => expr_contains_binary_op(base, target),
+            HirExpr::Index { base, index, .. } => {
+                expr_contains_binary_op(base, target) || expr_contains_binary_op(index, target)
+            }
+            HirExpr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                expr_contains_binary_op(cond, target)
+                    || expr_contains_binary_op(then_branch, target)
+                    || expr_contains_binary_op(else_branch, target)
+            }
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
+                expr_contains_binary_op(scrutinee, target)
+                    || arms.iter().any(|arm| {
+                        expr_contains_binary_op(&arm.body, target)
+                            || arm
+                                .guard
+                                .as_ref()
+                                .is_some_and(|guard| expr_contains_binary_op(guard, target))
+                    })
+            }
+            HirExpr::Block { items, .. } => items.iter().any(|item| match item {
+                HirBlockItem::Bind { expr, .. }
+                | HirBlockItem::Filter { expr }
+                | HirBlockItem::Yield { expr }
+                | HirBlockItem::Recurse { expr }
+                | HirBlockItem::Expr { expr } => expr_contains_binary_op(expr, target),
+            }),
+            HirExpr::Var { .. }
+            | HirExpr::LitNumber { .. }
+            | HirExpr::LitString { .. }
+            | HirExpr::LitSigil { .. }
+            | HirExpr::LitBool { .. }
+            | HirExpr::LitDateTime { .. }
+            | HirExpr::Mock { .. }
+            | HirExpr::Raw { .. } => false,
+        }
+    }
+
     // ---- lower_blocks_and_patterns.rs: lower_pattern ----
 
     #[test]
@@ -1054,6 +1287,161 @@ tick = counter => counter <<- (_ + 1)
                 assert_eq!(args.len(), 2);
             }
             other => panic!("expected reactive update call, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lower_block_local_signal_sugar_inside_effect_blocks() {
+        let program = parse_elaborate_and_lower(
+            r#"
+module Test
+use aivi
+use aivi.reactive
+
+main = do Effect {
+  count = signal 1
+  doubled = count ->> (_ * 2)
+  _ = count <<- 5
+  pure doubled
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "main");
+        assert!(
+            expr_contains_reactive_call(expr, "derive"),
+            "expected block-local signal pipe sugar to lower to reactive.derive"
+        );
+        assert!(
+            expr_contains_reactive_call(expr, "set"),
+            "expected block-local signal write sugar to lower to reactive.set"
+        );
+    }
+
+    #[test]
+    fn lower_block_local_signal_sugar_in_no_prelude_test_modules() {
+        let program = parse_elaborate_and_lower(
+            r#"
+@no_prelude
+module integrationTests.stdlib.aivi.reactive.tests
+
+use aivi
+use aivi.reactive
+use aivi.testing
+
+@test "signal patch operator updates scalar signals"
+signal_patch_operator_updates_scalar = do Effect {
+  count = signal 1
+
+  assertEq (count <<- (_ + 3)) Unit
+  assertEq (get count) 4
+}
+
+@test "signal pipe derives a new signal from the current value"
+signal_pipe_derives_from_source = do Effect {
+  count   = signal 2
+  doubled = count ->> (_ * 2)
+
+  assertEq (get doubled) 4
+  assertEq (set count 5) Unit
+  assertEq (get doubled) 10
+}
+"#,
+        );
+        for def_name in [
+            "signal_patch_operator_updates_scalar",
+            "signal_pipe_derives_from_source",
+        ] {
+            let expr = find_def_expr(&program, def_name);
+            assert!(
+                !expr_contains_binary_op(expr, "<<-") && !expr_contains_binary_op(expr, "->>"),
+                "expected {def_name} to lower signal sugar in @no_prelude test modules: {expr:#?}"
+            );
+        }
+        let patch_expr = find_def_expr(&program, "signal_patch_operator_updates_scalar");
+        let pipe_expr = find_def_expr(&program, "signal_pipe_derives_from_source");
+        assert!(
+            expr_contains_reactive_call(patch_expr, "update"),
+            "expected scalar signal test to lower to reactive.update: {patch_expr:#?}"
+        );
+        assert!(
+            expr_contains_reactive_call(pipe_expr, "derive"),
+            "expected pipe signal test to lower to reactive.derive: {pipe_expr:#?}"
+        );
+    }
+
+    #[test]
+    fn lower_query_lifting_inside_query_apis_and_blocks() {
+        let program = parse_elaborate_and_lower(
+            r#"
+module Test
+use aivi
+use aivi.database
+
+Product = { id: Int, price: Int, active: Bool }
+
+productTable : Table Product
+productTable = table "products" [
+  { name: "id", type: IntType, constraints: [NotNull], default: None }
+  { name: "price", type: IntType, constraints: [NotNull], default: None }
+  { name: "active", type: BoolType, constraints: [NotNull], default: None }
+]
+
+filtered = where_ active (from productTable)
+sorted = orderBy.price (from productTable)
+queryBlock = do Query {
+  p <- from productTable
+  guard_ p.active
+  orderBy.price (queryOf p)
+}
+"#,
+        );
+        for def_name in ["filtered", "sorted", "queryBlock"] {
+            let expr = find_def_expr(&program, def_name);
+            assert!(
+                !expr_contains_var(expr, "active"),
+                "expected {def_name} to rewrite bare `active` lifting"
+            );
+            assert!(
+                !expr_contains_var(expr, "price"),
+                "expected {def_name} to rewrite bare `price` lifting"
+            );
+        }
+    }
+
+    #[test]
+    fn lower_query_lifting_in_no_prelude_test_modules() {
+        let program = parse_elaborate_and_lower(
+            r#"
+@no_prelude
+module integrationTests.stdlib.aivi.database.queryDsl
+
+use aivi
+use aivi.testing
+use aivi.database
+
+Product = { id: Int, price: Int, active: Bool }
+
+productTable : Table Product
+productTable = table "products" [
+  { name: "id", type: IntType, constraints: [NotNull], default: None }
+  { name: "price", type: IntType, constraints: [NotNull], default: None }
+  { name: "active", type: BoolType, constraints: [NotNull], default: None }
+]
+
+filtered = where_ active (from productTable)
+sorted = orderBy.price (from productTable)
+"#,
+        );
+        for def_name in ["filtered", "sorted"] {
+            let expr = find_def_expr(&program, def_name);
+            assert!(
+                !expr_contains_var(expr, "active"),
+                "expected {def_name} to rewrite bare `active` lifting in @no_prelude modules: {expr:#?}"
+            );
+            assert!(
+                !expr_contains_var(expr, "price"),
+                "expected {def_name} to rewrite bare `price` lifting in @no_prelude modules: {expr:#?}"
+            );
         }
     }
 

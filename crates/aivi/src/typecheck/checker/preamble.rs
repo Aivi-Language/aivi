@@ -111,6 +111,25 @@ impl TypeChecker {
         checker
     }
 
+    fn reserves_builtin_type_binding(name: &str) -> bool {
+        matches!(
+            name,
+            "Unit"
+                | "Bool"
+                | "Int"
+                | "Float"
+                | "Text"
+                | "Char"
+                | "Bytes"
+                | "List"
+                | "Option"
+                | "Result"
+                | "Validation"
+                | "Effect"
+                | "Resource"
+        )
+    }
+
     pub(super) fn set_global_type_info(
         &mut self,
         type_constructors: HashMap<String, Kind>,
@@ -124,13 +143,15 @@ impl TypeChecker {
         // Build bare→qualified fallback map from all qualified names in the global type universe.
         // Only maps bare names that are UNIQUE across all modules so we never silently pick the
         // wrong qualified name for an ambiguous bare identifier.
-        // Skips builtin type names to avoid user-defined types with the same name (e.g. a custom
-        // `Unit` type) accidentally overriding the builtin `Unit`, `Bool`, `Int`, etc.
+        // Skips reserved core builtin spellings so user-defined types with names like `Unit`
+        // cannot accidentally override the language's fundamental constructors. Other registered
+        // type constructors (for example `TimeZone`) may still resolve to their unique qualified
+        // stdlib aliases.
         let mut counts: HashMap<&str, usize> = HashMap::new();
         for key in self.global_type_constructors.keys() {
             if key.contains('.') {
                 if let Some(bare) = key.rsplit('.').next() {
-                    if !self.builtin_types.contains_key(bare) {
+                    if !Self::reserves_builtin_type_binding(bare) {
                         *counts.entry(bare).or_insert(0) += 1;
                     }
                 }
@@ -140,7 +161,7 @@ impl TypeChecker {
         for key in self.global_type_constructors.keys() {
             if key.contains('.') {
                 if let Some(bare) = key.rsplit('.').next() {
-                    if !self.builtin_types.contains_key(bare)
+                    if !Self::reserves_builtin_type_binding(bare)
                         && counts.get(bare).copied().unwrap_or(0) == 1
                     {
                         bare_to_qualified.insert(bare.to_string(), key.clone());

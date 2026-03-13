@@ -181,7 +181,7 @@ fn run_test_group(
     let mut diags: Vec<FileDiagnostic> = pipeline.parse_diagnostics().to_vec();
     let mut modules = pipeline.into_modules();
     diags.extend(check_modules(&modules));
-    if !file_diagnostics_have_errors(&diags) {
+    if !test_support::file_diagnostics_have_non_embedded_errors(&diags) {
         diags.extend(elaborate_expected_coercions(&mut modules));
     }
     diags.extend(check_types(&modules));

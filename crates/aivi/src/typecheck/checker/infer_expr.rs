@@ -139,7 +139,18 @@ impl TypeChecker {
         Ok(record_ty)
     }
 
-    fn infer_field_access(
+    fn callable_field_access_expr(&self, base: Expr, field: SpannedName, span: Span) -> Expr {
+        Expr::Call {
+            func: Box::new(base),
+            args: vec![Expr::FieldSection {
+                field,
+                span: span.clone(),
+            }],
+            span,
+        }
+    }
+
+    fn infer_plain_field_access(
         &mut self,
         base: &Expr,
         field: &SpannedName,
@@ -165,6 +176,31 @@ impl TypeChecker {
             &[PathSegment::Field(field.clone())],
             field.span.clone(),
         )
+    }
+
+    fn infer_field_access(
+        &mut self,
+        base: &Expr,
+        field: &SpannedName,
+        span: &Span,
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        let checkpoint = self.subst.clone();
+        match self.infer_plain_field_access(base, field, env) {
+            Ok(ty) => Ok(ty),
+            Err(record_err) => {
+                self.subst = checkpoint.clone();
+                let rewritten =
+                    self.callable_field_access_expr(base.clone(), field.clone(), span.clone());
+                match self.infer_expr(&rewritten, env) {
+                    Ok(ty) => Ok(ty),
+                    Err(_) => {
+                        self.subst = checkpoint;
+                        Err(record_err)
+                    }
+                }
+            }
+        }
     }
 
     fn infer_index(

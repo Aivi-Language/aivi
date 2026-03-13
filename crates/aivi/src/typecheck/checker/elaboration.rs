@@ -120,7 +120,9 @@ impl TypeChecker {
             Expr::Tuple { items, .. } => self.infer_tuple(items, env),
             Expr::Record { fields, .. } => self.infer_record(fields, env),
             Expr::PatchLit { fields, .. } => self.infer_patch_literal(fields, env),
-            Expr::FieldAccess { base, field, .. } => self.infer_field_access(base, field, env),
+            Expr::FieldAccess { base, field, span } => {
+                self.infer_field_access(base, field, span, env)
+            }
             Expr::FieldSection { field, .. } => {
                 let param = SpannedName {
                     name: "_arg0".into(),
@@ -531,7 +533,11 @@ impl TypeChecker {
                 // item-by-item elaboration and defer to infer_generic_do_block
                 // via check_or_coerce. The elaboration's bind processing uses
                 // shared substitution state that conflicts with the inference pass.
-                if matches!(&kind, BlockKind::Do { monad } if monad.name != "Effect" && monad.name != "Event") {
+                if matches!(
+                    &kind,
+                    BlockKind::Do { monad }
+                        if monad.name != "Effect" && monad.name != "Event" && monad.name != "Query"
+                ) {
                     let out = Expr::Block { kind, items, span };
                     return self.check_or_coerce(out, expected, env);
                 }
@@ -681,6 +687,33 @@ impl TypeChecker {
                 };
                 self.check_or_coerce(out, expected, env)
             }
+            Expr::FieldAccess { base, field, span } => {
+                let base = *base;
+                let checkpoint = self.subst.clone();
+                match self.infer_plain_field_access(&base, &field, env) {
+                    Ok(_) => {
+                        self.subst = checkpoint;
+                        let (base, _base_ty) = self.elab_expr(base, None, env)?;
+                        let out = Expr::FieldAccess {
+                            base: Box::new(base),
+                            field,
+                            span,
+                        };
+                        self.check_or_coerce(out, expected, env)
+                    }
+                    Err(record_err) => {
+                        self.subst = checkpoint.clone();
+                        let rewritten = self.callable_field_access_expr(base, field, span);
+                        match self.elab_expr(rewritten, expected, env) {
+                            Ok(result) => Ok(result),
+                            Err(_) => {
+                                self.subst = checkpoint;
+                                Err(record_err)
+                            }
+                        }
+                    }
+                }
+            }
             other => self.check_or_coerce(other, expected, env),
         }
     }
@@ -694,11 +727,22 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
-        let right = if op == "->>" {
-            self.normalize_pipe_transformer(&right)
+        let right = if matches!(op.as_str(), "|>" | "->>") {
+            self.normalize_pipe_transformer(&right, env)
         } else {
             right
         };
+        if op == "|>" {
+            let (left, _left_ty) = self.elab_expr(left, None, env)?;
+            let (right, _right_ty) = self.elab_expr(right, None, env)?;
+            let out = Expr::Binary {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                span,
+            };
+            return self.check_or_coerce(out, expected, env);
+        }
         let left_ty = self.infer_expr(&left, env)?;
         if let Some(signal_item_ty) = self.extract_signal_item_type(left_ty) {
             match op.as_str() {

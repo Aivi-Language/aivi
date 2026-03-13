@@ -115,6 +115,35 @@ pub(crate) fn is_database_helper(expr: &Expr, name: &str) -> bool {
     }
 }
 
+fn database_helper_name(expr: &Expr) -> Option<&str> {
+    let Expr::Ident(crate::surface::SpannedName { name, .. }) = expr else {
+        return None;
+    };
+    let local = name.strip_prefix(&format!("{DB_MODULE}.")).unwrap_or(name);
+    match local {
+        "from" | "where_" | "select" | "orderBy" | "limit" | "offset" | "count"
+        | "exists" | "queryOf" | "guard_" => Some(local),
+        _ => None,
+    }
+}
+
+fn flatten_call_args<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) -> &'a Expr {
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let head = flatten_call_args(func, out);
+            out.extend(args.iter());
+            head
+        }
+        _ => expr,
+    }
+}
+
+fn database_helper_invocation(expr: &Expr) -> Option<(&str, Vec<&Expr>)> {
+    let mut args = Vec::new();
+    let head = flatten_call_args(expr, &mut args);
+    Some((database_helper_name(head)?, args))
+}
+
 pub(crate) fn is_query_do_block(expr: &Expr) -> bool {
     matches!(
         expr,
@@ -130,102 +159,108 @@ fn compile_static_query_with_env(
     env: &QueryCompileEnv,
     base: Option<StaticCompiledQuery>,
 ) -> Result<StaticCompiledQuery, String> {
+    if let Some((helper, args)) = database_helper_invocation(expr) {
+        match helper {
+            "from" => {
+                if args.len() != 1 {
+                    return Err("db.from expects exactly one table argument".to_string());
+                }
+                if base.is_some() {
+                    return Err("db.from cannot appear after query composition has started".to_string());
+                }
+                let alias = format!("q{}", 0usize);
+                return Ok(StaticCompiledQuery {
+                    plan: CompiledQueryPlan {
+                        sources: vec![CompiledQuerySource {
+                            alias: alias.clone(),
+                            source_index: 0,
+                        }],
+                        filters: Vec::new(),
+                        projection: CompiledProjection::Row { alias },
+                        order_by: Vec::new(),
+                        limit: None,
+                        offset: None,
+                        aggregate: CompiledAggregate::None,
+                    },
+                    source_exprs: vec![args[0].clone()],
+                });
+            }
+            "where_" => {
+                if args.len() != 2 {
+                    return Err("db.where_ expects predicate and query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[1], env, base)?;
+                let pred = compile_lambda_scalar(args[0], &inner.plan.projection)?;
+                inner.plan.filters.push(pred);
+                return Ok(inner);
+            }
+            "select" => {
+                if args.len() != 2 {
+                    return Err("db.select expects mapper and query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[1], env, base)?;
+                inner.plan.projection = compile_lambda_projection(args[0], &inner.plan.projection)?;
+                return Ok(inner);
+            }
+            "orderBy" => {
+                if args.len() != 2 {
+                    return Err("db.orderBy expects key function and query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[1], env, base)?;
+                let key = compile_lambda_scalar(args[0], &inner.plan.projection)?;
+                inner.plan.order_by.push(CompiledOrderBy {
+                    expr: key,
+                    descending: false,
+                });
+                return Ok(inner);
+            }
+            "limit" => {
+                if args.len() != 2 {
+                    return Err("db.limit expects n and query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[1], env, base)?;
+                inner.plan.limit = Some(compile_const_int(args[0], env)?);
+                return Ok(inner);
+            }
+            "offset" => {
+                if args.len() != 2 {
+                    return Err("db.offset expects n and query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[1], env, base)?;
+                inner.plan.offset = Some(compile_const_int(args[0], env)?);
+                return Ok(inner);
+            }
+            "count" => {
+                if args.len() != 1 {
+                    return Err("db.count expects query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[0], env, base)?;
+                inner.plan.aggregate = CompiledAggregate::Count;
+                return Ok(inner);
+            }
+            "exists" => {
+                if args.len() != 1 {
+                    return Err("db.exists expects query".to_string());
+                }
+                let mut inner = compile_static_query_with_env(args[0], env, base)?;
+                inner.plan.aggregate = CompiledAggregate::Exists;
+                return Ok(inner);
+            }
+            "queryOf" => {
+                if args.len() != 1 {
+                    return Err("db.queryOf expects one value".to_string());
+                }
+                let mut inner = base.ok_or_else(|| {
+                    "db.queryOf only lowers to SQL inside a query that already has a source".to_string()
+                })?;
+                inner.plan.projection = compile_value_expr(args[0], env)?;
+                return Ok(inner);
+            }
+            _ => {}
+        }
+    }
+
     match expr {
-        Expr::Call { func, args, .. } if is_database_helper(func, "from") => {
-            if args.len() != 1 {
-                return Err("db.from expects exactly one table argument".to_string());
-            }
-            if base.is_some() {
-                return Err("db.from cannot appear after query composition has started".to_string());
-            }
-            let alias = format!("q{}", 0usize);
-            Ok(StaticCompiledQuery {
-                plan: CompiledQueryPlan {
-                    sources: vec![CompiledQuerySource {
-                        alias: alias.clone(),
-                        source_index: 0,
-                    }],
-                    filters: Vec::new(),
-                    projection: CompiledProjection::Row { alias },
-                    order_by: Vec::new(),
-                    limit: None,
-                    offset: None,
-                    aggregate: CompiledAggregate::None,
-                },
-                source_exprs: vec![args[0].clone()],
-            })
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "where_") => {
-            if args.len() != 2 {
-                return Err("db.where_ expects predicate and query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[1], env, base)?;
-            let pred = compile_lambda_scalar(&args[0], &inner.plan.projection)?;
-            inner.plan.filters.push(pred);
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "select") => {
-            if args.len() != 2 {
-                return Err("db.select expects mapper and query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[1], env, base)?;
-            inner.plan.projection = compile_lambda_projection(&args[0], &inner.plan.projection)?;
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "orderBy") => {
-            if args.len() != 2 {
-                return Err("db.orderBy expects key function and query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[1], env, base)?;
-            let key = compile_lambda_scalar(&args[0], &inner.plan.projection)?;
-            inner.plan.order_by.push(CompiledOrderBy {
-                expr: key,
-                descending: false,
-            });
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "limit") => {
-            if args.len() != 2 {
-                return Err("db.limit expects n and query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[1], env, base)?;
-            inner.plan.limit = Some(compile_const_int(&args[0], env)?);
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "offset") => {
-            if args.len() != 2 {
-                return Err("db.offset expects n and query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[1], env, base)?;
-            inner.plan.offset = Some(compile_const_int(&args[0], env)?);
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "count") => {
-            if args.len() != 1 {
-                return Err("db.count expects query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[0], env, base)?;
-            inner.plan.aggregate = CompiledAggregate::Count;
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "exists") => {
-            if args.len() != 1 {
-                return Err("db.exists expects query".to_string());
-            }
-            let mut inner = compile_static_query_with_env(&args[0], env, base)?;
-            inner.plan.aggregate = CompiledAggregate::Exists;
-            Ok(inner)
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "queryOf") => {
-            if args.len() != 1 {
-                return Err("db.queryOf expects one value".to_string());
-            }
-            let mut inner = base.ok_or_else(|| {
-                "db.queryOf only lowers to SQL inside a query that already has a source".to_string()
-            })?;
-            inner.plan.projection = compile_value_expr(&args[0], env)?;
-            Ok(inner)
-        }
         Expr::Block {
             kind: crate::surface::BlockKind::Do { monad },
             items,
@@ -317,15 +352,12 @@ fn compile_query_do_block(items: &[crate::surface::BlockItem]) -> Result<StaticC
 }
 
 fn is_guard_call(expr: &Expr) -> bool {
-    match expr {
-        Expr::Call { func, args, .. } => is_database_helper(func, "guard_") && args.len() == 1,
-        _ => false,
-    }
+    matches!(database_helper_invocation(expr), Some(("guard_", args)) if args.len() == 1)
 }
 
 fn guard_arg(expr: &Expr) -> Option<&Expr> {
-    match expr {
-        Expr::Call { args, .. } if args.len() == 1 => Some(&args[0]),
+    match database_helper_invocation(expr) {
+        Some(("guard_", args)) if args.len() == 1 => Some(args[0]),
         _ => None,
     }
 }

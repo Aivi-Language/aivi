@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use aivi::{Expr, Literal, Module, ModuleItem};
+use aivi::{diagnostics::DiagnosticSeverity, Expr, FileDiagnostic, Literal, Module, ModuleItem};
 
+#[allow(dead_code)]
 pub fn workspace_root() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest_dir
@@ -34,4 +35,11 @@ pub fn collect_test_entries(modules: &[Module]) -> Vec<(String, String)> {
     entries.sort();
     entries.dedup();
     entries
+}
+
+pub fn file_diagnostics_have_non_embedded_errors(diags: &[FileDiagnostic]) -> bool {
+    diags.iter().any(|diag| {
+        !diag.path.starts_with("<embedded:")
+            && diag.diagnostic.severity == DiagnosticSeverity::Error
+    })
 }

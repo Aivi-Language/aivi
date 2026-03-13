@@ -117,6 +117,8 @@ fn jit_compile_into_runtime(
         "inline_program",
         super::inline::inline_program(&mut rust_program.modules)
     );
+    let duplicate_trivial_self_aliases =
+        duplicate_trivial_self_alias_qualifieds(&rust_program.modules);
 
     let total_defs: usize = rust_program.modules.iter().map(|m| m.defs.len()).sum();
     if trace {
@@ -169,8 +171,12 @@ fn jit_compile_into_runtime(
             if def.name.starts_with(&module_dot) {
                 continue;
             }
-            let (params, body) = peel_params(&def.expr);
             let qualified = format!("{}.{}", ir_module.name, def.name);
+            if duplicate_trivial_self_aliases.contains(&qualified) && is_trivial_self_alias_def(def)
+            {
+                continue;
+            }
+            let (params, body) = peel_params(&def.expr);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
             if params.len() > MAX_JIT_ARITY {
                 if is_stdlib_module {

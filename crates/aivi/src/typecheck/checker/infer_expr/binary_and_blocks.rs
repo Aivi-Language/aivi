@@ -104,7 +104,7 @@ impl TypeChecker {
         }
         if op == "|>" {
             let arg_ty = self.infer_expr(left, env)?;
-            let right = self.normalize_pipe_transformer(right);
+            let right = self.normalize_pipe_transformer(right, env);
             if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
                 eprintln!("[PIPE_INNER] |> right after normalize: disc={:?}", std::mem::discriminant(&right));
             }
@@ -137,7 +137,7 @@ impl TypeChecker {
         }
         if op == "->>" {
             let arg_ty = self.infer_expr(left, env)?;
-            let right = self.normalize_pipe_transformer(right);
+            let right = self.normalize_pipe_transformer(right, env);
             if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
                 eprintln!("[SIG_PIPE] right after normalize: disc={:?}", std::mem::discriminant(&right));
             }

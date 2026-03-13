@@ -356,6 +356,122 @@ patchState = state <<- (current => current <| { count: _ + 1, enabled: True })
 }
 
 #[test]
+fn elaborates_signal_sugar_inside_effect_blocks() {
+    let source = r#"
+module test.signal_block
+
+use aivi
+use aivi.reactive
+
+main = do Effect {
+  count = signal 1
+  doubled = count ->> (_ * 2)
+  _ = count <<- 5
+  pure doubled
+}
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let diags = without_embedded_errors(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let program = crate::hir::desugar_modules(&all_modules);
+    let module = program
+        .modules
+        .iter()
+        .find(|m| m.name == "test.signal_block")
+        .expect("expected test.signal_block module");
+    let def = module
+        .defs
+        .iter()
+        .find(|d| d.name == "main")
+        .expect("expected main def");
+
+    assert!(
+        hir_contains_reactive_call(&def.expr, "derive"),
+        "expected block-local signal pipe sugar to elaborate to reactive.derive"
+    );
+    assert!(
+        hir_contains_reactive_call(&def.expr, "set"),
+        "expected block-local signal write sugar to elaborate to reactive.set"
+    );
+}
+
+#[test]
+fn elaborates_query_lifting_inside_query_apis_and_blocks() {
+    let source = r#"
+module test.query_lifting
+
+use aivi
+use aivi.database
+
+Product = { id: Int, price: Int, active: Bool }
+
+productTable : Table Product
+productTable = table "products" [
+  { name: "id", type: IntType, constraints: [NotNull], default: None }
+  { name: "price", type: IntType, constraints: [NotNull], default: None }
+  { name: "active", type: BoolType, constraints: [NotNull], default: None }
+]
+
+filtered = where_ active (from productTable)
+sorted = orderBy.price (from productTable)
+queryBlock = do Query {
+  p <- from productTable
+  guard_ p.active
+  orderBy.price (queryOf p)
+}
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let diags = without_embedded_errors(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let program = crate::hir::desugar_modules(&all_modules);
+    let module = program
+        .modules
+        .iter()
+        .find(|m| m.name == "test.query_lifting")
+        .expect("expected test.query_lifting module");
+
+    for def_name in ["filtered", "sorted", "queryBlock"] {
+        let def = module
+            .defs
+            .iter()
+            .find(|d| d.name == def_name)
+            .unwrap_or_else(|| panic!("expected {def_name} def"));
+        assert!(
+            !hir_contains_var(&def.expr, "active"),
+            "expected {def_name} to rewrite bare `active` lifting"
+        );
+        assert!(
+            !hir_contains_var(&def.expr, "price"),
+            "expected {def_name} to rewrite bare `price` lifting"
+        );
+    }
+}
+
+#[test]
 fn elaboration_rejects_cyclic_signal_dependencies() {
     let source = r#"
 module test.signal_cycle
