@@ -186,6 +186,32 @@ root_application_window_sigil = do Effect {
   assertEq True True
 }
 
+@test "mountAppWindow accepts multiple live roots"
+mount_app_window_accepts_multiple_live_roots = do Effect {
+  _   <- init Unit
+  app <- appNew "integration-tests.multi-root"
+  windowRoot =
+    ~<gtk>
+      <AdwApplicationWindow id="root-window" title="Counter" defaultWidth={320} defaultHeight={180}>
+        <GtkBox orientation="vertical" spacing={8}>
+          <GtkLabel label="Hello" />
+        </GtkBox>
+      </AdwApplicationWindow>
+    </gtk>
+  dialogRoot =
+    ~<gtk>
+      <AdwPreferencesDialog id="prefs-dialog" title="Preferences" open={True}>
+        <AdwPreferencesPage title="General" />
+      </AdwPreferencesDialog>
+    </gtk>
+    win      <- mountAppWindow app [windowRoot, dialogRoot]
+    lookedUp <- widgetById "root-window"
+    dialogId <- widgetById "prefs-dialog"
+    assertEq lookedUp win
+    assertEq False (dialogId == 0)
+    _ <- windowClose win
+}
+
 @test "GtkValueChanged carries widget name and float value"
 signal_value_changed = do Effect {
   assertEq (getValueTriple (GtkValueChanged 5 "slider" 0.75)) (5, "slider", 0.75)

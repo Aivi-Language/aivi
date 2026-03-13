@@ -741,6 +741,24 @@ mod bridge {
         Ok(())
     }
 
+    fn sync_mounted_dialog_roots(
+        runtime: &mut crate::runtime::Runtime,
+        result: &aivi_gtk4::BuildWithBindingsResult,
+    ) -> Result<(), RuntimeError> {
+        for root in &result.mounted_roots {
+            register_dialog_root_cleanup(
+                runtime,
+                root.root_id,
+                &root.root_class_name,
+                &result.binding_widgets,
+            )?;
+            if root.root_class_name.starts_with("Adw") && root.root_class_name.ends_with("Dialog") {
+                aivi_gtk4::dialog_sync_open_state(root.root_id).map_err(gtk4_err_to_runtime)?;
+            }
+        }
+        Ok(())
+    }
+
     fn structural_binding_signals(
         children: &[ResolvedGtkNode],
         runtime: &mut crate::runtime::Runtime,
@@ -827,38 +845,47 @@ mod bridge {
         let result = aivi_gtk4::build_with_bindings(&node).map_err(gtk4_err_to_runtime)?;
         install_live_bindings(runtime, &result.binding_widgets, bindings)?;
         install_structural_bindings(runtime, &result.binding_widgets, structural_bindings)?;
-        register_dialog_root_cleanup(
-            runtime,
-            result.root_id,
-            &result.root_class_name,
-            &result.binding_widgets,
-        )?;
-        if result.root_class_name.starts_with("Adw") && result.root_class_name.ends_with("Dialog") {
-            aivi_gtk4::dialog_sync_open_state(result.root_id).map_err(gtk4_err_to_runtime)?;
-        }
+        sync_mounted_dialog_roots(runtime, &result)?;
         Ok(result)
     }
 
     pub(super) fn materialize_app_window_with_bindings(
         app_id: i64,
-        node: &ResolvedGtkNode,
+        nodes: &[ResolvedGtkNode],
         runtime: &mut crate::runtime::Runtime,
     ) -> Result<aivi_gtk4::BuildWithBindingsResult, RuntimeError> {
         let mut next_binding_id = 1;
         let mut bindings = Vec::new();
         let mut structural_bindings = Vec::new();
-        let node = materialize_node(
-            node,
-            runtime,
-            &mut next_binding_id,
-            &mut bindings,
-            &mut structural_bindings,
-        )?;
-        let result =
-            aivi_gtk4::mount_app_window_with_bindings(app_id, &node).map_err(gtk4_err_to_runtime)?;
+        let mut materialized_nodes = Vec::with_capacity(nodes.len());
+        for node in nodes {
+            materialized_nodes.push(materialize_node(
+                node,
+                runtime,
+                &mut next_binding_id,
+                &mut bindings,
+                &mut structural_bindings,
+            )?);
+        }
+        let result = aivi_gtk4::mount_app_window_with_bindings(app_id, &materialized_nodes)
+            .map_err(gtk4_err_to_runtime)?;
         install_live_bindings(runtime, &result.binding_widgets, bindings)?;
         install_structural_bindings(runtime, &result.binding_widgets, structural_bindings)?;
+        sync_mounted_dialog_roots(runtime, &result)?;
         Ok(result)
+    }
+
+    fn resolve_gtk_node_list(
+        value: &Value,
+        runtime: &mut crate::runtime::Runtime,
+    ) -> Result<Vec<ResolvedGtkNode>, RuntimeError> {
+        match value {
+            Value::List(items) => items
+                .iter()
+                .map(|item| resolve_gtk_node(item, runtime))
+                .collect(),
+            _ => Err(invalid("gtk4.mountAppWindow expects List GtkNode")),
+        }
     }
 
     pub(super) fn execute_runtime_handler(
@@ -1266,11 +1293,11 @@ mod bridge {
             Ok(effect(move |_| { let r = aivi_gtk4::window_new(app_id, &title, width, height).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
         }));
         fields.insert("mountAppWindow".to_string(), builtin("gtk4.mountAppWindow", 2, |mut args, _| {
-            let node = args.remove(1);
+            let nodes = args.remove(1);
             let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.mountAppWindow expects Int")) };
             Ok(effect(move |runtime| {
-                let node = runtime.force_value(node.clone())?;
-                let decoded = resolve_gtk_node(&node, runtime)?;
+                let nodes = runtime.force_value(nodes.clone())?;
+                let decoded = resolve_gtk_node_list(&nodes, runtime)?;
                 let result = materialize_app_window_with_bindings(app_id, &decoded, runtime)?;
                 Ok(Value::Int(result.root_id))
             }))

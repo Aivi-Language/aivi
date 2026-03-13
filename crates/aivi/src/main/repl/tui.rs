@@ -10,7 +10,7 @@
 use std::io::{self, IsTerminal, Stdout};
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -19,7 +19,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Wrap,
+    },
     Frame, Terminal,
 };
 
@@ -280,6 +283,8 @@ struct TuiState {
     cursor: usize,
     /// How many transcript rows we've scrolled up from the bottom.
     scroll_offset: usize,
+    /// Scroll offset for the symbol side-pane (0 = top).
+    symbol_scroll_offset: usize,
     /// Submitted input history, oldest first.
     history: Vec<String>,
     history_idx: Option<usize>,
@@ -290,6 +295,8 @@ struct TuiState {
     palette: Palette,
     suggestion_index: usize,
     completion_state: Option<CompletionState>,
+    /// Last rendered symbol pane area (for mouse scroll hit-testing).
+    symbol_pane_rect: Option<Rect>,
 }
 
 impl TuiState {
@@ -298,6 +305,7 @@ impl TuiState {
             input: String::new(),
             cursor: 0,
             scroll_offset: 0,
+            symbol_scroll_offset: 0,
             history: Vec::new(),
             history_idx: None,
             history_saved: String::new(),
@@ -306,6 +314,7 @@ impl TuiState {
             palette,
             suggestion_index: 0,
             completion_state: None,
+            symbol_pane_rect: None,
         }
     }
 
@@ -492,9 +501,14 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
 
     enable_raw_mode().map_err(AiviError::Io)?;
     let mut stdout = io::stdout();
-    // Do not enable mouse capture: terminals need normal mouse behavior so users can
-    // select and copy transcript text from the REPL.
-    execute!(stdout, EnterAlternateScreen).map_err(AiviError::Io)?;
+    // Enable mouse capture for scroll-wheel support.  Text selection still
+    // works in most terminals by holding Shift while selecting.
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        crossterm::event::EnableMouseCapture
+    )
+    .map_err(AiviError::Io)?;
 
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AiviError::Io)?;
@@ -505,7 +519,11 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
 
     // Always restore — even if event_loop returns an error.
     let _ = disable_raw_mode();
-    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let _ = execute!(
+        terminal.backend_mut(),
+        crossterm::event::DisableMouseCapture,
+        LeaveAlternateScreen
+    );
     let _ = terminal.show_cursor();
 
     result
@@ -530,6 +548,9 @@ fn event_loop(
         match event::read().map_err(AiviError::Io)? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 handle_key(key.code, key.modifiers, engine, state)?;
+            }
+            Event::Mouse(mouse) => {
+                handle_mouse(mouse.kind, mouse.column, mouse.row, state);
             }
             Event::Resize(_, _) => {
                 // Re-draw happens automatically at the top of the loop.
@@ -580,6 +601,7 @@ fn handle_key(
             let input = std::mem::take(&mut state.input);
             state.cursor = 0;
             state.scroll_offset = 0;
+            state.symbol_scroll_offset = 0;
             state.suggestion_index = 0;
             state.record_history(input.clone());
             state.snapshot = engine.submit(&input)?;
@@ -610,12 +632,20 @@ fn handle_key(
             }
         }
 
-        // Transcript scrolling.
+        // Scrolling: symbol pane when open, otherwise transcript.
         KeyCode::PageUp => {
-            state.scroll_offset = state.scroll_offset.saturating_add(5);
+            if state.snapshot.symbol_pane.is_some() {
+                state.symbol_scroll_offset = state.symbol_scroll_offset.saturating_add(5);
+            } else {
+                state.scroll_offset = state.scroll_offset.saturating_add(5);
+            }
         }
         KeyCode::PageDown => {
-            state.scroll_offset = state.scroll_offset.saturating_sub(5);
+            if state.snapshot.symbol_pane.is_some() {
+                state.symbol_scroll_offset = state.symbol_scroll_offset.saturating_sub(5);
+            } else {
+                state.scroll_offset = state.scroll_offset.saturating_sub(5);
+            }
         }
 
         // Accept a command suggestion, otherwise toggle the symbol pane.
@@ -625,11 +655,13 @@ fn handle_key(
             } else {
                 engine.toggle_symbol_pane();
                 state.snapshot = engine.snapshot();
+                state.symbol_scroll_offset = 0;
             }
         }
         KeyCode::Esc => {
             engine.close_symbol_pane();
             state.snapshot = engine.snapshot();
+            state.symbol_scroll_offset = 0;
         }
 
         // Text editing.
@@ -683,9 +715,38 @@ fn handle_key(
     Ok(())
 }
 
+// ─── Mouse handling ──────────────────────────────────────────────────────────
+
+fn handle_mouse(kind: MouseEventKind, col: u16, row: u16, state: &mut TuiState) {
+    let scroll_amount = 3;
+    let in_pane = state
+        .symbol_pane_rect
+        .is_some_and(|r| col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height);
+
+    match kind {
+        MouseEventKind::ScrollUp => {
+            if in_pane {
+                state.symbol_scroll_offset =
+                    state.symbol_scroll_offset.saturating_sub(scroll_amount);
+            } else {
+                state.scroll_offset = state.scroll_offset.saturating_add(scroll_amount);
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            if in_pane {
+                state.symbol_scroll_offset =
+                    state.symbol_scroll_offset.saturating_add(scroll_amount);
+            } else {
+                state.scroll_offset = state.scroll_offset.saturating_sub(scroll_amount);
+            }
+        }
+        _ => {}
+    }
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
-fn render(frame: &mut Frame, state: &TuiState) {
+fn render(frame: &mut Frame, state: &mut TuiState) {
     let snap = &state.snapshot;
     let palette = state.palette;
     let show_pane = snap.symbol_pane.is_some();
@@ -712,9 +773,10 @@ fn render(frame: &mut Frame, state: &TuiState) {
         (outer[0], None)
     };
 
+    state.symbol_pane_rect = pane_rect;
     render_transcript(frame, transcript_rect, snap, state, palette);
     if let Some(area) = pane_rect {
-        render_symbol_pane(frame, area, snap, palette);
+        render_symbol_pane(frame, area, snap, state, palette);
     }
     render_status_bar(frame, outer[1], snap, palette);
     render_input(frame, outer[2], state, palette);
@@ -754,7 +816,13 @@ fn render_transcript(
     frame.render_widget(List::new(visible_items).block(block), area);
 }
 
-fn render_symbol_pane(frame: &mut Frame, area: Rect, snap: &ReplSnapshot, palette: Palette) {
+fn render_symbol_pane(
+    frame: &mut Frame,
+    area: Rect,
+    snap: &ReplSnapshot,
+    state: &TuiState,
+    palette: Palette,
+) {
     let title = match snap.symbol_pane {
         Some(SymbolPane::Types) => " /types ",
         Some(SymbolPane::Values) => " /values ",
@@ -763,7 +831,7 @@ fn render_symbol_pane(frame: &mut Frame, area: Rect, snap: &ReplSnapshot, palett
         None => "",
     };
 
-    let items: Vec<ListItem> = if snap.symbols.is_empty() {
+    let all_items: Vec<ListItem> = if snap.symbols.is_empty() {
         vec![ListItem::new(Line::from(Span::styled(
             "  (empty)",
             palette.hint(),
@@ -775,12 +843,46 @@ fn render_symbol_pane(frame: &mut Frame, area: Rect, snap: &ReplSnapshot, palett
             .collect()
     };
 
+    let total = all_items.len();
+    let visible = area.height.saturating_sub(2) as usize; // borders
+    let max_scroll = total.saturating_sub(visible);
+    let effective_scroll = state.symbol_scroll_offset.min(max_scroll);
+
+    let visible_items: Vec<ListItem> = all_items
+        .into_iter()
+        .skip(effective_scroll)
+        .take(visible)
+        .collect();
+
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
         .border_style(palette.border());
 
-    frame.render_widget(List::new(items).block(block), area);
+    frame.render_widget(List::new(visible_items).block(block), area);
+
+    // Render scrollbar when content overflows.
+    if total > visible {
+        let mut scrollbar_state = ScrollbarState::new(max_scroll).position(effective_scroll);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None)
+                .track_symbol(Some("░"))
+                .thumb_symbol("█")
+                .track_style(palette.border())
+                .thumb_style(if palette.use_color {
+                    Style::default().fg(Color::DarkGray)
+                } else {
+                    Style::default().add_modifier(Modifier::BOLD)
+                }),
+            area.inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
+            &mut scrollbar_state,
+        );
+    }
 }
 
 fn render_status_bar(frame: &mut Frame, area: Rect, snap: &ReplSnapshot, palette: Palette) {
@@ -1166,7 +1268,8 @@ mod tests {
             entry.kind,
             TranscriptKind::CommandOutput
         ) && entry.text.contains("function")
-            && entry.text.contains("filter: jo")));
+            && entry.text.contains("filter: jo")
+            && entry.text.contains("side panel")));
     }
 
     #[test]
@@ -1235,10 +1338,10 @@ mod tests {
             symbols: Vec::new(),
             turn: 5,
         };
-        let state = TuiState::new(snapshot, Palette::new(ColorMode::Never, true));
+        let mut state = TuiState::new(snapshot, Palette::new(ColorMode::Never, true));
         let mut terminal = Terminal::new(TestBackend::new(90, 10)).unwrap();
 
-        terminal.draw(|frame| render(frame, &state)).unwrap();
+        terminal.draw(|frame| render(frame, &mut state)).unwrap();
 
         let status_row = buffer_row(terminal.backend().buffer(), 6);
         let status_text =

@@ -97,9 +97,49 @@ main : Effect Text Unit
 main = do Effect {
   _ <- init Unit
   appId <- appNew "com.aivi.regression.root-window"
-  windowId <- mountAppWindow appId root
+  windowId <- mountAppWindow appId [root]
   lookedUp <- widgetById "root-window"
   assertEq lookedUp windowId
+  _ <- windowClose windowId
+  pure Unit
+}
+"#,
+    );
+}
+
+#[test]
+fn rt_mount_app_window_mounts_extra_dialog_roots() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+use aivi.ui.gtk4
+
+windowRoot = ~<gtk>
+  <AdwApplicationWindow id="root-window" title="AIVI GTK Root" defaultWidth={320} defaultHeight={180}>
+    <GtkBox orientation="vertical" spacing={8}>
+      <GtkLabel label="Hello" />
+    </GtkBox>
+  </AdwApplicationWindow>
+</gtk>
+
+dialogRoot = ~<gtk>
+  <AdwPreferencesDialog id="prefs-dialog" title="Preferences" open={True}>
+    <AdwPreferencesPage title="General" />
+  </AdwPreferencesDialog>
+</gtk>
+
+main : Effect Text Unit
+main = do Effect {
+  _ <- init Unit
+  appId <- appNew "com.aivi.regression.multi-root-window"
+  windowId <- mountAppWindow appId [windowRoot, dialogRoot]
+  lookedUp <- widgetById "root-window"
+  dialogId <- widgetById "prefs-dialog"
+  assertEq lookedUp windowId
+  assertEq False (dialogId == 0)
   _ <- windowClose windowId
   pure Unit
 }

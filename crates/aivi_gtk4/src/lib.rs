@@ -57,8 +57,14 @@ pub struct BuildResult {
 pub struct BuildWithBindingsResult {
     pub root_id: i64,
     pub root_class_name: String,
+    pub mounted_roots: Vec<MountedRootInfo>,
     pub named_widgets: HashMap<String, i64>,
     pub binding_widgets: HashMap<String, i64>,
+}
+
+pub struct MountedRootInfo {
+    pub root_id: i64,
+    pub root_class_name: String,
 }
 
 pub type UiDebugRequestHandler =
@@ -83,7 +89,9 @@ mod linux_impl {
     use image::{ImageBuffer, ImageEncoder, Rgba};
     use serde_json::{json, Map, Value};
 
-    use super::{BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, SignalEvent};
+    use super::{
+        BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, MountedRootInfo, SignalEvent,
+    };
 
     #[repr(C)]
     #[derive(Debug, Clone, Copy, Default)]
@@ -6329,6 +6337,24 @@ mod linux_impl {
         })
     }
 
+    fn record_root_built_mutation(
+        state: &mut RealGtkState,
+        root_id: i64,
+        id_map: &HashMap<String, i64>,
+    ) {
+        state.record_mutation(serde_json::Map::from_iter([
+            ("kind".to_string(), Value::String("root-built".to_string())),
+            ("rootId".to_string(), json!(root_id)),
+            ("widgetId".to_string(), json!(root_id)),
+            (
+                "widgetName".to_string(),
+                json!(id_map
+                    .iter()
+                    .find_map(|(name, wid)| (*wid == root_id).then_some(name.clone()))),
+            ),
+        ]));
+    }
+
     fn apply_widget_properties(
         widget: *mut c_void,
         class_name: &str,
@@ -10687,42 +10713,44 @@ mod linux_impl {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
             state.live_trees.insert(id, live);
-            state.record_mutation(serde_json::Map::from_iter([
-                ("kind".to_string(), Value::String("root-built".to_string())),
-                ("rootId".to_string(), json!(id)),
-                ("widgetId".to_string(), json!(id)),
-                (
-                    "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
-                ),
-            ]));
+            record_root_built_mutation(&mut state, id, &id_map);
             Ok(BuildWithBindingsResult {
                 root_id: id,
-                root_class_name,
+                root_class_name: root_class_name.clone(),
+                mounted_roots: vec![MountedRootInfo {
+                    root_id: id,
+                    root_class_name,
+                }],
                 named_widgets: id_map,
                 binding_widgets: binding_map,
             })
         })
     }
 
-    pub(super) fn mount_app_window(app_id: i64, node: &super::GtkNode) -> Result<i64, Gtk4Error> {
-        Ok(mount_app_window_with_bindings(app_id, node)?.root_id)
+    pub(super) fn mount_app_window(
+        app_id: i64,
+        nodes: &[super::GtkNode],
+    ) -> Result<i64, Gtk4Error> {
+        Ok(mount_app_window_with_bindings(app_id, nodes)?.root_id)
     }
 
     pub(super) fn mount_app_window_with_bindings(
         app_id: i64,
-        node: &super::GtkNode,
+        nodes: &[super::GtkNode],
     ) -> Result<BuildWithBindingsResult, Gtk4Error> {
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             let app = state.apps.get(&app_id).copied().ok_or_else(|| {
                 Gtk4Error::new(format!("gtk4.mountAppWindow unknown app id {app_id}"))
             })?;
+            if nodes.is_empty() {
+                return Err(Gtk4Error::new(
+                    "gtk4.mountAppWindow expects at least one GtkNode root".to_string(),
+                ));
+            }
             let mut id_map = HashMap::new();
             let mut binding_map = HashMap::new();
-            let root = first_object_in_interface("mountAppWindow", node)?;
+            let root = first_object_in_interface("mountAppWindow", &nodes[0])?;
             let (id, live) = build_widget_from_node_real(
                 &mut state,
                 root,
@@ -10732,26 +10760,50 @@ mod linux_impl {
                 Some(app),
             )?;
             let root_class_name = live.class_name.clone();
+            let mut mounted_roots = vec![MountedRootInfo {
+                root_id: id,
+                root_class_name: root_class_name.clone(),
+            }];
+            state.live_trees.insert(id, live);
+            record_root_built_mutation(&mut state, id, &id_map);
+
+            for extra_node in nodes.iter().skip(1) {
+                let root = first_object_in_interface("mountAppWindow", extra_node)?;
+                let (extra_id, mut extra_live) = build_widget_from_node_real(
+                    &mut state,
+                    root,
+                    &mut id_map,
+                    &mut binding_map,
+                    "mountAppWindow",
+                    Some(app),
+                )?;
+                if extra_live.class_name.starts_with("Adw")
+                    && extra_live.class_name.ends_with("Dialog")
+                    && !extra_live.props.contains_key("present-for")
+                    && !extra_live.props.contains_key("transient-for")
+                {
+                    extra_live
+                        .props
+                        .insert("present-for".to_string(), id.to_string());
+                }
+                let extra_class_name = extra_live.class_name.clone();
+                state.live_trees.insert(extra_id, extra_live);
+                mounted_roots.push(MountedRootInfo {
+                    root_id: extra_id,
+                    root_class_name: extra_class_name.clone(),
+                });
+                record_root_built_mutation(&mut state, extra_id, &id_map);
+            }
+
             state.named_widgets.extend(id_map.clone());
             for (name, wid) in &id_map {
                 state.widget_id_to_name.insert(*wid, name.clone());
             }
-            state.live_trees.insert(id, live);
             apply_pending_display_customizations(&mut state)?;
-            state.record_mutation(serde_json::Map::from_iter([
-                ("kind".to_string(), Value::String("root-built".to_string())),
-                ("rootId".to_string(), json!(id)),
-                ("widgetId".to_string(), json!(id)),
-                (
-                    "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
-                ),
-            ]));
             Ok(BuildWithBindingsResult {
                 root_id: id,
                 root_class_name,
+                mounted_roots,
                 named_widgets: id_map,
                 binding_widgets: binding_map,
             })
@@ -10978,8 +11030,8 @@ delegate!(app_new(id: &str) -> Result<i64, Gtk4Error>);
 delegate!(app_run(app_id: i64) -> Result<(), Gtk4Error>);
 delegate!(app_set_css(app_id: i64, css: &str) -> Result<(), Gtk4Error>);
 delegate!(window_new(app_id: i64, title: &str, width: i32, height: i32) -> Result<i64, Gtk4Error>);
-delegate!(mount_app_window(app_id: i64, node: &GtkNode) -> Result<i64, Gtk4Error>);
-delegate!(mount_app_window_with_bindings(app_id: i64, node: &GtkNode) -> Result<BuildWithBindingsResult, Gtk4Error>);
+delegate!(mount_app_window(app_id: i64, nodes: &[GtkNode]) -> Result<i64, Gtk4Error>);
+delegate!(mount_app_window_with_bindings(app_id: i64, nodes: &[GtkNode]) -> Result<BuildWithBindingsResult, Gtk4Error>);
 delegate!(display_height() -> Result<i64, Gtk4Error>);
 delegate!(window_set_title(win_id: i64, title: &str) -> Result<(), Gtk4Error>);
 delegate!(window_set_titlebar(win_id: i64, titlebar_id: i64) -> Result<(), Gtk4Error>);

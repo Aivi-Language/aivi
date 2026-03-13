@@ -1,2 +1,6 @@
 [alias]
 t = "nextest run --workspace --cargo-quiet --show-progress none"
+
+[target.x86_64-unknown-linux-gnu]
+# Work around rust-lld hidden-symbol link failures in optimized test builds.
+rustflags = ["-Clinker-features=-lld"]
