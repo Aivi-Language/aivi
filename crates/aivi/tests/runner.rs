@@ -80,7 +80,7 @@ fn process_test_file(
     resolve_import_names(&mut modules);
 
     let mut diags = check_modules(&modules);
-    if !file_diagnostics_have_errors(&diags) {
+    if !test_support::file_diagnostics_have_non_embedded_errors(&diags) {
         diags.extend(elaborate_with_checkpoint(&mut modules, checkpoint));
     }
     diags.retain(|d| !d.path.starts_with("<embedded:"));

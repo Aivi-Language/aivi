@@ -116,6 +116,42 @@ fn peel_params(expr: &RustIrExpr) -> (Vec<String>, &RustIrExpr) {
     }
 }
 
+fn is_trivial_self_alias_def(def: &RustIrDef) -> bool {
+    let (params, body) = peel_params(&def.expr);
+    params.is_empty()
+        && matches!(
+            body,
+            RustIrExpr::Global { name, .. } if name == &def.name
+        )
+}
+
+fn duplicate_trivial_self_alias_qualifieds(
+    modules: &[crate::rust_ir::RustIrModule],
+) -> HashSet<String> {
+    let mut has_non_trivial = HashSet::new();
+    let mut has_trivial_self_alias = HashSet::new();
+
+    for module in modules {
+        let module_dot = format!("{}.", module.name);
+        for def in &module.defs {
+            if def.name.starts_with(&module_dot) {
+                continue;
+            }
+            let qualified = format!("{}.{}", module.name, def.name);
+            if is_trivial_self_alias_def(def) {
+                has_trivial_self_alias.insert(qualified);
+            } else {
+                has_non_trivial.insert(qualified);
+            }
+        }
+    }
+
+    has_trivial_self_alias
+        .into_iter()
+        .filter(|qualified| has_non_trivial.contains(qualified))
+        .collect()
+}
+
 /// Collect all global names referenced in an expression (shallow, no dedup).
 fn collect_called_globals(expr: &RustIrExpr, out: &mut HashSet<String>) {
     match expr {

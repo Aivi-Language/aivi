@@ -216,7 +216,7 @@ fn check_expr(
             check_expr(func, scope, diagnostics, module, allow_unknown);
             for (index, arg) in args.iter().enumerate() {
                 let arg_allow_unknown =
-                    allow_unknown || call_arg_allows_predicate_unknown(func, index);
+                    allow_unknown || call_arg_allows_function_lifting(func, index);
                 check_expr(arg, scope, diagnostics, module, arg_allow_unknown);
             }
         }
@@ -256,9 +256,11 @@ fn check_expr(
             check_expr(then_branch, scope, diagnostics, module, allow_unknown);
             check_expr(else_branch, scope, diagnostics, module, allow_unknown);
         }
-        Expr::Binary { left, right, .. } => {
+        Expr::Binary { op, left, right, .. } => {
             check_expr(left, scope, diagnostics, module, allow_unknown);
-            check_expr(right, scope, diagnostics, module, allow_unknown);
+            let right_allow_unknown =
+                allow_unknown || binary_rhs_allows_function_lifting(op.as_str());
+            check_expr(right, scope, diagnostics, module, right_allow_unknown);
         }
         Expr::Block { items, .. } => {
             let mut block_scope = scope.clone();
@@ -335,23 +337,35 @@ fn special_unknown_name_message(name: &str) -> Option<String> {
     }
 }
 
-fn call_arg_allows_predicate_unknown(func: &Expr, index: usize) -> bool {
-    if index != 0 {
-        return false;
-    }
-    match func {
-        Expr::Ident(name) => is_predicate_callee_name(&name.name),
-        Expr::FieldAccess { field, .. } => is_predicate_callee_name(&field.name),
-        _ => false,
-    }
+fn call_arg_allows_function_lifting(func: &Expr, index: usize) -> bool {
+    let name = match func {
+        Expr::Ident(name) => name.name.as_str(),
+        Expr::FieldAccess { field, .. } => field.name.as_str(),
+        _ => return false,
+    };
+    let base = name.rsplit('.').next().unwrap_or(name);
+
+    matches!(
+        (base, index),
+        ("filter", 0)
+            | ("find", 0)
+            | ("takeWhile", 0)
+            | ("dropWhile", 0)
+            | ("map", 0)
+            | ("partition", 0)
+            | ("findMap", 0)
+            | ("uniqueBy", 0)
+            | ("sortBy", 0)
+            | ("where_", 0)
+            | ("upd", 0)
+            | ("del", 0)
+            | ("ups", 0)
+            | ("derive", 1)
+    )
 }
 
-fn is_predicate_callee_name(name: &str) -> bool {
-    let base = name.rsplit('.').next().unwrap_or(name);
-    matches!(
-        base,
-        "filter" | "find" | "takeWhile" | "dropWhile" | "upd" | "del" | "ups"
-    )
+fn binary_rhs_allows_function_lifting(op: &str) -> bool {
+    matches!(op, "|>" | "->>")
 }
 
 /// Returns true if the pattern is a compiler-generated binding (name starts with `__`).
@@ -739,6 +753,14 @@ use aivi.database (domain Database)
 rows = [{ id: 1 }, { id: 2 }]
 out = filter (id == 1) rows
 
+Product = { id: Int, active: Bool }
+productTable : Table Product
+productTable = table "products" [
+  { name: "id", type: IntType, constraints: [], default: None }
+  { name: "active", type: BoolType, constraints: [], default: None }
+]
+query = where_ active (from productTable)
+
 tableRows = table "rows"[]
 updated = tableRows + upd (id == 1) (row => row)
 "#;
@@ -758,6 +780,39 @@ updated = tableRows + upd (id == 1) (row => row)
         assert!(
             unknown_name_errors.is_empty(),
             "expected no unknown-name errors for predicate-position bare fields, got {unknown_name_errors:#?}"
+        );
+    }
+
+    #[test]
+    fn pipe_right_hand_sides_allow_bare_field_names() {
+        let source = r#"
+module test.pipe_rhs
+use aivi.reactive
+
+next = { count: 1 } |> count + 1
+
+derived = do Effect {
+  state = signal { count: 1 }
+  nextSignal = state ->> count + 1
+  pure nextSignal
+}
+"#;
+
+        let path = std::path::Path::new("test.aivi");
+        let (mut modules, diags) = crate::surface::parse_modules(path, source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let unknown_name_errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            unknown_name_errors.is_empty(),
+            "expected no unknown-name errors for pipe-position bare fields, got {unknown_name_errors:#?}"
         );
     }
 

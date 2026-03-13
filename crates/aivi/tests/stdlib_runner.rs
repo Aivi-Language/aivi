@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use aivi::{
-    check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
-    load_modules_from_paths, run_test_suite,
+    check_modules, desugar_modules, elaborate_expected_coercions, load_modules_from_paths,
+    run_test_suite,
 };
 use rayon::prelude::*;
 
@@ -87,12 +87,12 @@ fn run_stdlib_file_with_timeout(path: &Path, timeout_secs: u64) -> aivi::TestRep
         .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
 
     let mut diags = check_modules(&modules);
-    if !file_diagnostics_have_errors(&diags) {
+    if !test_support::file_diagnostics_have_non_embedded_errors(&diags) {
         diags.extend(elaborate_expected_coercions(&mut modules));
     }
     diags.retain(|d| !d.path.starts_with("<embedded:"));
     assert!(
-        !file_diagnostics_have_errors(&diags),
+        !test_support::file_diagnostics_have_non_embedded_errors(&diags),
         "type errors in {}: {diags:?}",
         path.display()
     );
@@ -141,11 +141,26 @@ fn stdlib_modules_execute_without_failures_inner() {
 
     assert!(!files.is_empty(), "no stdlib @test files found");
 
-    // Run files in parallel — rayon caps concurrency at num_cpus, preventing memory/CPU thrash.
-    let results: Vec<_> = files
-        .par_iter()
-        .map(|path| (path.clone(), run_stdlib_file_with_timeout(path, 60)))
-        .collect();
+    let stdlib_threads = std::env::var("AIVI_STDLIB_TEST_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|count| *count > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|count| count.get().min(2))
+                .unwrap_or(1)
+        });
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(stdlib_threads)
+        .build()
+        .expect("build stdlib runner rayon pool");
+
+    let results: Vec<_> = pool.install(|| {
+        files
+            .par_iter()
+            .map(|path| (path.clone(), run_stdlib_file_with_timeout(path, 60)))
+            .collect()
+    });
 
     let mut total_passed = 0usize;
     let mut total_failed = 0usize;
