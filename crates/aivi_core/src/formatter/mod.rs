@@ -402,6 +402,17 @@ mod tests {
     }
 
     #[test]
+    fn format_preserves_space_before_accessor_argument_dot() {
+        let input = "names = people |> map .name\n";
+        let formatted = format_text(input);
+        assert_eq!(formatted, input);
+
+        let input2 = "name = user.name\n";
+        let formatted2 = format_text(input2);
+        assert_eq!(formatted2, input2);
+    }
+
+    #[test]
     fn format_html_sigil_uses_one_tag_per_line_and_nested_indent() {
         let text = "module demo\n\nx=~<html><div class=\"card\"><span>ok</span></div></html>\n";
         let formatted = format_text(text);

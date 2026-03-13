@@ -214,13 +214,14 @@ fn wants_space_between(
         return prev_text != "." && prev_text != "@";
     }
 
-    // Dot access: no spaces around dot in `a.b`, but allow space before dot when starting `.name`.
+    // Dot access: keep authored postfix access tight in `a.b`, but preserve a separating
+    // space for accessor application such as `map .name`.
     if prev_text == "." {
         return false;
     }
     if curr_text == "." {
         if is_word_kind(prev_kind) || matches!(prev_text, ")" | "]" | "}") {
-            return false;
+            return !adjacent_in_input;
         }
         return true;
     }
