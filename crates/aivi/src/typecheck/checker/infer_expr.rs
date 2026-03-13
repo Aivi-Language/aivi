@@ -412,7 +412,7 @@ impl TypeChecker {
             Ok(ty) => Ok(ty),
             Err(original_err) => {
                 self.subst = checkpoint.clone();
-                let Some(rewritten) = lift_predicate_expr(arg, env, "__pred") else {
+                let Some(rewritten) = lift_predicate_expr(arg, env, &self.method_to_classes, "__pred") else {
                     return Err(original_err);
                 };
                 let Ok(rewritten_ty) = self.infer_expr(&rewritten, env) else {

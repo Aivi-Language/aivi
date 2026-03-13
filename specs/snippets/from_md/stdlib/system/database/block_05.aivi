@@ -1,7 +1,7 @@
 recentTopNames : Query Text
 recentTopNames = db.from userTable
-|> db.where_ _.active
-|> db.orderBy _.createdAt // sort before slicing
-|> db.offset 10 // skip the first page
-|> db.limit 5 // then keep the next five rows
-|> db.select _.name
+  |> db.where_ active
+  |> db.orderBy.createdAt // sort before slicing
+  |> db.offset 10 // skip the first page
+  |> db.limit 5 // then keep the next five rows
+  |> db.select.name

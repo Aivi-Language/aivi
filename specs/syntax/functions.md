@@ -97,7 +97,7 @@ In the example above, `filter active` uses predicate lifting and `map.name` uses
 Pipe right-hand sides also count as unary-function positions, so hole-based mappers and direct lambda syntax both work there without extra wrapping:
 
 ```aivi
-state |> _.count + 1
+state |> count + 1
 state |> { count } => count + 1
 ```
 

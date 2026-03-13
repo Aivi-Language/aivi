@@ -627,6 +627,16 @@ impl Parser {
             }
             if self.consume_symbol(".") {
                 if let Some(field) = self.consume_ident() {
+                    if matches!(&expr, Expr::Ident(name) if name.name == "_") {
+                        self.emit_diag(
+                            "E1620",
+                            &format!(
+                                "`_.{}` is not valid — use `.{}` for an accessor function or `{}` as a bare field name",
+                                field.name, field.name, field.name
+                            ),
+                            field.span.clone(),
+                        );
+                    }
                     let span = merge_span(expr_span(&expr), field.span.clone());
                     expr = Expr::FieldAccess {
                         base: Box::new(expr),

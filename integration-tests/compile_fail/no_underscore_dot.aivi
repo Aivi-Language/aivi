@@ -1,0 +1,14 @@
+// EXPECT-ERROR: is not valid
+@no_prelude
+module integrationTests.compileFail.noUnderscoreDot
+
+use aivi
+use aivi.list
+
+// _.field syntax has been removed. Use .field or a bare name instead.
+
+items : List { price: Int }
+items = [{ price: 1 }]
+
+// This should be a compile error:
+bad = List.map _.price items

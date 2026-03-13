@@ -15,7 +15,7 @@ impl TypeChecker {
                     let (arg, _ty) = match self.elab_expr(arg.clone(), None, env) {
                         Ok(value) => value,
                         Err(err) if err.message.starts_with("unknown name '") => {
-                            let Some(rewritten) = lift_predicate_expr(&arg, env, "__pred") else {
+                            let Some(rewritten) = lift_predicate_expr(&arg, env, &self.method_to_classes, "__pred") else {
                                 return Err(err);
                             };
                             self.elab_expr(rewritten, None, env)?
@@ -203,24 +203,14 @@ impl TypeChecker {
         self.in_call_arg = true;
 
         if allow_predicate_try {
-            if let Some(rewritten) = lift_predicate_expr(&arg, env, "__pred") {
+            if let Some(rewritten) = lift_predicate_expr(&arg, env, &self.method_to_classes, "__pred") {
                 let checkpoint = self.subst.clone();
                 if let Ok((elab_arg, elab_ty)) =
                     self.elab_expr(rewritten, Some(expected_arg_ty.clone()), env)
                 {
                     let elab_applied_inner = self.apply(elab_ty.clone());
                     let elab_applied = self.expand_alias(elab_applied_inner);
-                    let is_predicate_fn = if let Type::Func(_, result_ty) = elab_applied {
-                        let result_applied_inner = self.apply(*result_ty);
-                        let result_applied = self.expand_alias(result_applied_inner);
-                        matches!(
-                            result_applied,
-                            Type::Con(ref name, ref args) if name == "Bool" && args.is_empty()
-                        )
-                    } else {
-                        false
-                    };
-                    if is_predicate_fn {
+                    if matches!(elab_applied, Type::Func(_, _)) {
                         self.in_call_arg = prev_in_call_arg;
                         return Ok((elab_arg, elab_ty));
                     }
@@ -536,30 +526,16 @@ impl TypeChecker {
             let allow_predicate_try =
                 matches!(expected_applied, Type::Func(_, _) | Type::Var(_));
             if allow_predicate_try {
-                if let Some(rewritten) = lift_predicate_expr(&expr, env, "__pred") {
+                if let Some(rewritten) = lift_predicate_expr(&expr, env, &self.method_to_classes, "__pred") {
                     let checkpoint = self.subst.clone();
                     if let Ok(rewritten_ty) = self.infer_expr(&rewritten, env) {
-                        let rewritten_applied_inner = self.apply(rewritten_ty.clone());
-                        let rewritten_applied = self.expand_alias(rewritten_applied_inner);
-                        let rewritten_is_predicate = if let Type::Func(_, result_ty) = rewritten_applied
-                        {
-                            let result_applied_inner = self.apply(*result_ty);
-                            let result_applied = self.expand_alias(result_applied_inner);
-                            matches!(
-                                result_applied,
-                                Type::Con(ref name, ref args) if name == "Bool" && args.is_empty()
+                        if self
+                            .unify_with_span(
+                                rewritten_ty,
+                                expected_ty.clone(),
+                                expr_span(&rewritten),
                             )
-                        } else {
-                            false
-                        };
-                        if rewritten_is_predicate
-                            && self
-                                .unify_with_span(
-                                    rewritten_ty,
-                                    expected_ty.clone(),
-                                    expr_span(&rewritten),
-                                )
-                                .is_ok()
+                            .is_ok()
                         {
                             return Ok((rewritten, self.apply(expected_ty)));
                         }

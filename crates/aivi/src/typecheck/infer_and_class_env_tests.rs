@@ -513,13 +513,13 @@ double = _ * 2
 }
 
 #[test]
-fn holes_in_field_access() {
+fn dot_field_accessor_syntax() {
     let diags = parse_and_check(
         r#"
 module Test
 
 getName : { name: Text } -> Text
-getName = _.name
+getName = .name
 "#,
     );
     assert!(!has_errors(&diags), "unexpected errors: {diags:?}");

@@ -155,7 +155,7 @@ gcd = (a, b) => (a, b) match
 `.field` (with dot prefix) is shorthand for `x => x.field`:
 
 ```aivi
-users |> map name // or map _.name
+users |> map name
 ```
 
 ---
@@ -446,20 +446,23 @@ body: { grant_type: "authorization_code", code: code }
 
 ## 7 Predicates
 
-Predicate expressions are `Bool` expressions that can be used directly where a function `A -> Bool` is expected (auto-lifted).
+Predicate expressions are `Bool` expressions that can be used directly where a function `A -> Bool` is expected (auto-lifted). Lifting also works in any function position, not just `Bool`-returning ones.
 
 ```aivi
-users |> filter active               // active is _.active
-users |> filter (age > 18)           // age is _.age
+users |> filter active               // active is unbound → lifted to x => x.active
+users |> filter (age > 18)           // age is unbound → x => x.age
+users |> find (by id)                // by id → x => x.id == id  (outer id captured)
 users |> find (email == Some "x")
 xs |> takeWhile (_ < 10)
 ```
 
-Inside predicates:
+Inside fn positions:
 
-- `_` is the current element.
-- Bare field names resolve to `_.field`.
-- `.field` is an accessor function, not a field value.
+- Bare unbound names lift to field accessors: `price` → `x => x.price`.
+- `.field` is an explicit accessor function, not a field value.
+- `by prop` desugars to `x => x.prop == prop` (outer-scope capture).
+- `by (f1, f2)` desugars to `x => x.f1 == f1 && x.f2 == f2`.
+- `_.field` is a **compile error** — use `.field` or a bare name instead.
 - Combinators: `!p`, `p && q`, `p || q`.
 - Pattern predicates: `Some _`, `Ok { value } when value > 10`.
 - Predicates do not automatically unwrap `Option` or `Result`; use a pattern predicate or a full `match`.
@@ -953,7 +956,7 @@ expensiveItems = do Query {
 }
 // Or with functional helpers
 expensiveItems2 : Query Text
-expensiveItems2 = db.from itemTable |> db.where_ (_.price > 100) |> db.select _.name
+expensiveItems2 = db.from itemTable |> db.where_ (price > 100) |> db.select .name
 
 // Execute against an explicit connection
 names <- db.runQueryOn conn expensiveItems
@@ -976,11 +979,11 @@ keep the older in-memory sort/slice behavior.
 page : Query Text
 page =
   db.from userTable
-  |> db.where_ _.active
-  |> db.orderBy _.createdAt
+  |> db.where_ active
+  |> db.orderBy .createdAt
   |> db.offset 10
   |> db.limit 5
-  |> db.select _.name
+  |> db.select .name
 ```
 
 **Multi-table join (v0.1 portable subset):** use repeated `from` binds with `guard_`
@@ -1237,7 +1240,7 @@ Signals are first-class reactive values. Create source signals with `signal`, de
 
 ```aivi
 state = signal { count: 0, query: "" }
-title = state ->> _.count ->> (_ + 1) ->> toText
+title = state ->> count ->> (_ + 1) ->> toText
 nextCount = state ->> ({ count } => count + 1)
 canSearch = combineAll (state, searchEvent.running) ((st, running) =>
   st.query != "" && !running

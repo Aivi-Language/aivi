@@ -4,7 +4,7 @@ activeUserNames : Effect LoadError (List Text)
 activeUserNames = do Effect {
   users <- load (file.csv "users.csv")
   pure (users
-    |> filter (_.active)
+    |> filter active
     |> map.name
   )
 }

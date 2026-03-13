@@ -10,17 +10,17 @@ createUser = conn => newUser =>
 // db.deleteWhereOn deletes all rows matching a predicate.
 removeInactiveUsers : DbConnection -> Effect DbError (Table User)
 removeInactiveUsers = conn =>
-  db.deleteWhereOn conn userTable (!_.active)
+  db.deleteWhereOn conn userTable (!active)
 
 // db.updateWhereOn updates all rows matching a predicate.
 promoteAdmin : DbConnection -> Int -> Effect DbError (Table User)
 promoteAdmin = conn => userId =>
-  db.updateWhereOn conn userTable (_.id == userId) (u => u <| { role: "admin" })
+  db.updateWhereOn conn userTable (id == userId) (u => u <| { role: "admin" })
 
 // db.upsertOn patches matching rows and inserts the seed row when none match.
 syncUser : DbConnection -> User -> Effect DbError (Table User)
 syncUser = conn => user =>
-  db.upsertOn conn userTable (_.id == user.id) user (u => u <| { name: user.name, active: user.active })
+  db.upsertOn conn userTable (id == user.id) user (u => u <| { name: user.name, active: user.active })
 
 // Ambient variants use the default connection from db.configure
 // and mirror the explicit forms exactly:
@@ -36,4 +36,4 @@ addUserAmbient = newUser =>
 
 deleteStaleAmbient : Instant -> Effect DbError (Table User)
 deleteStaleAmbient = cutoff =>
-  db.deleteWhere userTable (_.createdAt < cutoff)
+  db.deleteWhere userTable (createdAt < cutoff)

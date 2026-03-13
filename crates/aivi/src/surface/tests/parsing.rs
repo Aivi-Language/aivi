@@ -995,11 +995,11 @@ f = { count: 1 } |> { count } => count + 1
 }
 
 #[test]
-fn parses_placeholder_projection_addition_as_pipe_rhs_expression() {
+fn parses_bare_name_projection_addition_as_pipe_rhs_expression() {
     let src = r#"
 module Example
 
-f = state |> _.count + 1
+f = state |> count + 1
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -1025,6 +1025,6 @@ f = state |> _.count + 1
     assert_eq!(op, "|>");
     assert!(
         matches!(&**right, Expr::Binary { op, .. } if op == "+"),
-        "expected `_.count + 1` to stay grouped on the pipe rhs, got: {right:?}"
+        "expected `count + 1` to stay grouped on the pipe rhs, got: {right:?}"
     );
 }

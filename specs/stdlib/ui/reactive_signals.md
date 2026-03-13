@@ -108,7 +108,7 @@ Signal pipes keep the ordinary pipe semantics inside the mapper. That means `s -
 count = signal 1
 countText = count ->> (_ + 1) ->> toText
 display = count ->> (n => "Count {n}")
-nextCount = signal { count: 1 } ->> _.count + 1
+nextCount = signal { count: 1 } ->> count + 1
 nextCountViaPattern = signal { count: 1 } ->> { count } => count + 1
 ```
 

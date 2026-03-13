@@ -42,7 +42,7 @@ mapDotAge = do Effect {
   assertEq ages1 ages2
 }
 
-// Predicate lifting: bare field name in predicate position becomes _.field
+// Predicate lifting: bare unbound field name in fn position becomes a field accessor
 // filter active items  →  filter (__pred => __pred.active) items
 items : List { label: Text, active: Bool }
 items = [
@@ -66,4 +66,40 @@ labels = items |> filter active |> map.label
 @test "pipeline with filter+predicate and .field accessor"
 pipelineAccessor = do Effect {
   assertEq labels ["A", "C"]
+}
+
+// `by prop` sugar: desugars to x => x.prop == prop (outer-scope capture)
+records : List { id: Int, name: Text }
+records = [
+  { id: 1, name: "Alice" }
+  { id: 2, name: "Bob" }
+  { id: 3, name: "Carol" }
+]
+
+@test "by id: find by same-name equality"
+byIdSugar = do Effect {
+  id     = 2
+  result = find (by id) records
+  assertEq result (Some { id: 2, name: "Bob" })
+}
+
+@test "by (f1, f2): multi-field same-name equality"
+byMultiField = do Effect {
+  id     = 3
+  name   = "Carol"
+  result = find (by (id, name)) records
+  assertEq result (Some { id: 3, name: "Carol" })
+}
+
+// Generalised lifting: bare name in any fn position, not just Bool
+nums : List { value: Int }
+nums = [{ value: 3 }, { value: 1 }, { value: 4 }, { value: 1 }, { value: 5 }]
+
+sortedValues     = sortBy value nums |> map.value
+explSortedValues = sortBy (x => x.value) nums |> map (x => x.value)
+
+@test "generalised lifting: bare name in sortBy (non-Bool fn position)"
+generalisedLifting = do Effect {
+  assertEq sortedValues [1, 1, 3, 4, 5]
+  assertEq sortedValues explSortedValues
 }

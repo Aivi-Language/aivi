@@ -57,7 +57,7 @@ In a guard, the current item is also available implicitly, using the same rule a
 
 <<< ../snippets/from_md/syntax/generators/guards_and_predicates_01.aivi{aivi}
 
-A small but important distinction: `.email` is an accessor function (`user => user.email`). It is useful for `map .email`, but in a guard you usually want a boolean-valued expression such as `email`, `_.email`, or `user.email`.
+A small but important distinction: `.email` is an accessor function (`user => user.email`). It is useful for `map .email`, but in a guard you usually want a boolean-valued expression such as `email` or `user.email`.
 
 For example, if `xs` contains records with a `price` field, this keeps only the items whose price is above `80`:
 

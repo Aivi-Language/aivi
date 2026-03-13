@@ -265,7 +265,7 @@ other : Signal Int
 other = signal 5
 
 countText : Signal Text
-countText = derive state (_.label)
+countText = derive state label
 
 total : Signal Int
 total = combineAll (state, other) ((s, o) => s.count + o)

@@ -46,9 +46,8 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                 if name.name == "_" {
                     return;
                 }
-                let reserved = matches!(name.name.as_str(), "key" | "value");
                 let is_bound = bound.iter().rev().any(|b| b == &name.name)
-                    || (!reserved && env.get(&name.name).is_some());
+                    || env.get_all(&name.name).is_some();
                 if !is_bound {
                     out.insert(name.name.clone());
                 }
@@ -411,12 +410,23 @@ fn rewrite_implicit_field_vars(
     }
 }
 
-fn lift_predicate_expr(expr: &Expr, env: &TypeEnv, implicit_param: &str) -> Option<Expr> {
+pub(crate) fn lift_predicate_expr(
+    expr: &Expr,
+    env: &TypeEnv,
+    method_names: &HashMap<String, Vec<String>>,
+    implicit_param: &str,
+) -> Option<Expr> {
     if matches!(expr, Expr::Lambda { .. }) || expr_contains_placeholder(expr) {
         return None;
     }
 
     let unbound = collect_unbound_names(expr, env);
+    // Class method names are not field accessors — exclude them so that
+    // `map f xs` doesn't get lifted to `__pred => __pred.map f xs`.
+    let unbound: HashSet<String> = unbound
+        .into_iter()
+        .filter(|name| !method_names.contains_key(name.as_str()))
+        .collect();
     if unbound.is_empty() {
         return None;
     }

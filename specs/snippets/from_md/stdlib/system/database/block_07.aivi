@@ -1,8 +1,8 @@
 activeUserCountQuery : Query Int
-activeUserCountQuery = db.count (db.from userTable |> db.where_ _.active)
+activeUserCountQuery = db.count (db.from userTable |> db.where_ active)
 
 hasActiveUsers : Query Bool
-hasActiveUsers = db.exists (db.from userTable |> db.where_ _.active)
+hasActiveUsers = db.exists (db.from userTable |> db.where_ active)
 
 main = do Effect {
   dbConn       <- db.connect { driver: Sqlite, url: "app.db" }

@@ -40,7 +40,7 @@ signal_pipe_derives_from_source = do Effect {
 @test "signal pipe accepts placeholder and pattern lambda sugar"
 signal_pipe_accepts_placeholder_and_pattern_lambda_sugar = do Effect {
   state          = signal { count: 1 }
-  viaPlaceholder = state ->> _.count + 1
+  viaPlaceholder = state ->> count + 1
   viaPattern     = state ->> { count } => count + 1
 
   assertEq (get viaPlaceholder) 2
