@@ -51,7 +51,7 @@ The structure is hidden.
 | Class instances | ✅ | `Eq`, `ToText`, and similar instances work normally |
 | Record literal construction | ❌ | Callers cannot build the hidden representation directly |
 | Field access (`url.host`) | ❌ | Hidden fields stay hidden |
-| Record update (`url <| { ... }`) | ❌ | Updates would depend on the hidden layout |
+| Record update (`url <\| { ... }`) | ❌ | Updates would depend on the hidden layout |
 | Pattern match on structure | ❌ | Matching would reveal internals |
 | ADT constructor (`Red`, `Green`) | ❌ | For opaque ADTs, constructors are hidden too |
 
