@@ -1268,8 +1268,18 @@ GTK sigils also support signal sugar in v0.1:
   <GtkButton>
     <signal name="clicked" on={saveEvent} />
   </GtkButton>
+  <GtkBox>
+    <child type="controller">
+      <GtkEventControllerMotion>
+        <signal name="enter" on={_ => set hovered True} />
+        <signal name="leave" on={_ => set hovered False} />
+      </GtkEventControllerMotion>
+    </child>
+  </GtkBox>
 </gtk>
 ```
+
+Signals without sugar can still be attached explicitly. `GtkEventControllerMotion` is available via `<child type="controller">` and currently exposes raw `enter` / `leave` signals.
 
 `GtkSignalEvent` remains the low-level queue/event type used by `signalStream`, `signalPoll`, and tests:
 

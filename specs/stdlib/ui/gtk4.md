@@ -214,6 +214,7 @@ Signal sugar works on both shorthand and verbose tags:
 - `onFocusIn={handler}` -> `signal:focus-enter`
 - `onFocusOut={handler}` -> `signal:focus-leave`
 - `<signal name="clicked" on={handler} />` -> the same binding path
+- `GtkEventControllerMotion` uses explicit `<signal name="enter" ... />` / `<signal name="leave" ... />` children rather than sugar attrs
 
 Callback values may be either runtime functions or `Event` handles. For the common sugar attrs, the function receives the useful GTK payload when one exists:
 
@@ -222,6 +223,7 @@ Callback values may be either runtime functions or `Event` handles. For the comm
 - `onToggle` -> current `Bool`
 - `onValueChanged` -> current `Float`
 - click/focus-style signals -> a unit-like or widget event payload, depending on the underlying signal
+- raw motion-controller `enter` / `leave` bindings can ignore the payload or match them as `GtkUnknownSignal ... "enter" ...` and `GtkUnknownSignal ... "leave" ...` in lower-level event consumers
 
 Valid public shapes therefore include:
 
@@ -235,6 +237,14 @@ Valid public shapes therefore include:
 } />
 <GtkSwitch onToggle={active => set enabled active} />
 <GtkButton onClick={saveEvent} />
+<GtkBox>
+  <child type="controller">
+    <GtkEventControllerMotion>
+      <signal name="enter" on={_ => set hovered True} />
+      <signal name="leave" on={_ => set hovered False} />
+    </GtkEventControllerMotion>
+  </child>
+</GtkBox>
 ```
 
 `GtkSignalEvent` remains the low-level event ADT for queue-based APIs and tests:
@@ -283,7 +293,7 @@ The runtime directly covers the standard signal-first widget story:
 - layout containers: `GtkBox`, `GtkGrid`, `GtkOverlay`, `GtkScrolledWindow`, `GtkStack`, `GtkRevealer`, `GtkPaned`, `GtkHeaderBar`, `AdwHeaderBar`, `AdwClamp`
 - interactive widgets: `GtkButton`, `GtkCheckButton`, `GtkToggleButton`, `GtkSwitch`, `GtkEntry`, `GtkPasswordEntry`, `GtkSearchEntry`, `GtkTextView`, `GtkScale`, `GtkSpinButton`, `GtkDropDown`, `GtkMenuButton`, `GtkSpinner`, `GtkProgressBar`
 - display widgets: `GtkLabel`, `GtkImage`, `GtkPicture`, `GtkDrawingArea`, `GtkSeparator`, `GtkListBox`
-- event controllers: `GtkGestureClick`, keyboard capture via `onKeyPress={...}`
+- event controllers: `GtkGestureClick`, `GtkEventControllerMotion` via raw `enter`/`leave` signals, keyboard capture via `onKeyPress={...}`
 
 Additional `Adw*` classes can be created dynamically when their GType is available. Container-specific child-slot rules remain a thin handwritten layer even when widget metadata comes from GIR/GObject reflection.
 

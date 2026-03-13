@@ -73,7 +73,7 @@ mod linux_impl {
     use std::ffi::{CStr, CString};
     use std::fs;
     use std::io::{BufRead, BufReader, Write};
-    use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
+    use std::os::raw::{c_char, c_double, c_int, c_uint, c_ulong, c_void};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
     use std::sync::{mpsc, Arc, Mutex, OnceLock};
@@ -285,6 +285,7 @@ mod linux_impl {
         fn gtk_gesture_click_new() -> *mut c_void;
         fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
         fn gtk_event_controller_key_new() -> *mut c_void;
+        fn gtk_event_controller_motion_new() -> *mut c_void;
         fn gdk_keyval_name(keyval: c_uint) -> *const c_char;
         fn gtk_widget_set_focusable(widget: *mut c_void, focusable: c_int);
 
@@ -1209,6 +1210,7 @@ mod linux_impl {
             "GtkBox" | "GtkGrid" | "GtkOverlay" | "GtkScrolledWindow" | "GtkStack" => {
                 &["key-pressed"]
             }
+            "GtkEventControllerMotion" => &["enter", "leave"],
             "GtkEntry" | "GtkPasswordEntry" => &["changed", "activate"],
             "AdwEntryRow" | "AdwPasswordEntryRow" => &["changed"],
             "GtkCheckButton" | "AdwSwitchRow" => &["toggled"],
@@ -1881,6 +1883,22 @@ mod linux_impl {
         }
 
         #[test]
+        fn gtk_event_controller_motion_has_enter_leave_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkEventControllerMotion", "enter"),
+                Some(SignalPayloadKind::None)
+            );
+            assert_eq!(
+                signal_payload_kind_for("GtkEventControllerMotion", "leave"),
+                Some(SignalPayloadKind::None)
+            );
+            assert_eq!(
+                known_signals_for_class("GtkEventControllerMotion"),
+                &["enter", "leave"]
+            );
+        }
+
+        #[test]
         fn adw_preferences_dialog_uses_closed_and_close_attempt_signals() {
             assert_eq!(
                 signal_payload_kind_for("AdwPreferencesDialog", "closed"),
@@ -1902,6 +1920,41 @@ mod linux_impl {
                 dialog_open_transition(false, true, false),
                 (DialogOpenTransition::None, false)
             );
+        }
+
+        #[test]
+        fn motion_enter_callback_enqueues_event_for_signal_stream() {
+            let _guard = gtk_state_test_guard();
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                *state = RealGtkState::default();
+                state
+                    .widget_id_to_name
+                    .insert(77, "hover-target".to_string());
+            });
+
+            let receiver = signal_stream().expect("signal stream");
+            let callback_data = Box::new(SignalCallbackData {
+                widget_id: 77,
+                signal_name: "enter".to_string(),
+                handler: "HoverOpen".to_string(),
+                payload_kind: SignalPayloadKind::None,
+            });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+
+            unsafe {
+                gtk_motion_enter_callback(std::ptr::null_mut(), 12.0, 24.0, callback_ptr);
+                drop(Box::from_raw(callback_ptr as *mut SignalCallbackData));
+            }
+
+            let event = receiver
+                .recv_timeout(Duration::from_millis(100))
+                .expect("motion enter should reach signal stream");
+            assert_eq!(event.widget_id, 77);
+            assert_eq!(event.widget_name, "hover-target");
+            assert_eq!(event.signal, "enter");
+            assert_eq!(event.handler, "HoverOpen");
+            assert_eq!(event.payload, "");
         }
 
         #[test]
@@ -5159,6 +5212,37 @@ mod linux_impl {
         0
     }
 
+    unsafe extern "C" fn gtk_motion_enter_callback(
+        _controller: *mut c_void,
+        _x: c_double,
+        _y: c_double,
+        data: *mut c_void,
+    ) {
+        if data.is_null() {
+            return;
+        }
+        let binding = unsafe { &*(data as *const SignalCallbackData) };
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let event = SignalEventState {
+                widget_id: binding.widget_id,
+                signal: binding.signal_name.clone(),
+                handler: binding.handler.clone(),
+                payload: String::new(),
+            };
+            let widget_name = state
+                .widget_id_to_name
+                .get(&binding.widget_id)
+                .cloned()
+                .unwrap_or_default();
+            let typed_event = make_signal_event(event.clone(), widget_name);
+            state
+                .signal_senders
+                .retain(|s| s.send(typed_event.clone()).is_ok());
+            state.signal_events.push_back(event);
+        });
+    }
+
     unsafe extern "C" fn gtk_signal_callback(instance: *mut c_void, data: *mut c_void) {
         if data.is_null() {
             return;
@@ -5527,6 +5611,9 @@ mod linux_impl {
         match (class_name, signal_name) {
             (_, "key-pressed") => Some(SignalPayloadKind::KeyPressed),
             ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
+            ("GtkEventControllerMotion", "enter") | ("GtkEventControllerMotion", "leave") => {
+                Some(SignalPayloadKind::None)
+            }
             ("GtkEntry", "changed")
             | ("GtkEntry", "activate")
             | ("GtkPasswordEntry", "changed")
@@ -5594,6 +5681,30 @@ mod linux_impl {
             };
             return Ok(SignalHandlerConnection {
                 instance: controller as usize,
+                handler_id,
+            });
+        }
+        if class_name == "GtkEventControllerMotion" && binding.signal == "enter" {
+            let signal_c = c_text(&binding.signal, "gtk4.buildFromNode invalid signal name")?;
+            let callback_data = Box::new(SignalCallbackData {
+                widget_id,
+                signal_name: binding.signal.clone(),
+                handler: binding.handler.clone(),
+                payload_kind: SignalPayloadKind::None,
+            });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+            let handler_id = unsafe {
+                g_signal_connect_data(
+                    widget,
+                    signal_c.as_ptr(),
+                    gtk_motion_enter_callback as *const c_void,
+                    callback_ptr,
+                    null_mut(),
+                    0,
+                )
+            };
+            return Ok(SignalHandlerConnection {
+                instance: widget as usize,
                 handler_id,
             });
         }
@@ -6919,6 +7030,10 @@ mod linux_impl {
             "GtkTextView" => (unsafe { gtk_text_view_new() }, CreatedWidgetKind::Other),
             "GtkDrawingArea" => (unsafe { gtk_drawing_area_new() }, CreatedWidgetKind::Other),
             "GtkGestureClick" => (unsafe { gtk_gesture_click_new() }, CreatedWidgetKind::Other),
+            "GtkEventControllerMotion" => (
+                unsafe { gtk_event_controller_motion_new() },
+                CreatedWidgetKind::Other,
+            ),
             "GtkScrolledWindow" => (
                 unsafe { gtk_scrolled_window_new() },
                 CreatedWidgetKind::ScrolledWindow,
@@ -7269,8 +7384,9 @@ mod linux_impl {
             "GtkEventController" => {
                 return Err(Gtk4Error::new(
                     "GtkEventController is an abstract base class; use a concrete subclass \
-                     such as GtkEventControllerKey, GtkEventControllerFocus, or GtkGestureClick, \
-                     and attach it with <child type=\"controller\">"
+                     such as GtkEventControllerKey, GtkEventControllerFocus, \
+                     GtkEventControllerMotion, or GtkGestureClick, and attach it with \
+                     <child type=\"controller\">"
                         .to_string(),
                 ));
             }
@@ -7534,7 +7650,6 @@ mod linux_impl {
             // Event controllers (attach via child type="controller", not as tree nodes)
             "GtkEventControllerKey"
             | "GtkEventControllerFocus"
-            | "GtkEventControllerMotion"
             | "GtkEventControllerScroll"
             | "GtkEventControllerLegacy"
             | "GtkGestureDrag"
