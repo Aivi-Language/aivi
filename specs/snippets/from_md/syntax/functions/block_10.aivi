@@ -1,3 +1,3 @@
 users
-  |> filter active
-  |> map.name
+|> filter active
+|> map.name
