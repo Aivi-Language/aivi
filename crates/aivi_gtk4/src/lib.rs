@@ -924,6 +924,7 @@ mod linux_impl {
         Overlay,
         ListBox,
         SplitView,
+        ToolbarView,
         Stack,
         Revealer,
         Paned,
@@ -1120,6 +1121,7 @@ mod linux_impl {
             CreatedWidgetKind::Overlay => "overlay",
             CreatedWidgetKind::ListBox => "list_box",
             CreatedWidgetKind::SplitView => "split_view",
+            CreatedWidgetKind::ToolbarView => "toolbar_view",
             CreatedWidgetKind::Stack => "stack",
             CreatedWidgetKind::Revealer => "revealer",
             CreatedWidgetKind::Paned => "paned",
@@ -1442,6 +1444,36 @@ mod linux_impl {
                 .get_or_init(|| Mutex::new(()))
                 .lock()
                 .expect("gtk state test guard lock poisoned")
+        }
+
+        fn reset_test_gtk_state() {
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                *state = RealGtkState::default();
+            });
+        }
+
+        fn test_object(class_name: &str, id: &str, children: Vec<GtkNode>) -> GtkNode {
+            GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), class_name.to_string()),
+                    ("id".to_string(), id.to_string()),
+                ],
+                children,
+            }
+        }
+
+        fn test_child(child_type: Option<&str>, child: GtkNode) -> GtkNode {
+            let mut attrs = Vec::new();
+            if let Some(child_type) = child_type {
+                attrs.push(("type".to_string(), child_type.to_string()));
+            }
+            GtkNode::Element {
+                tag: "child".to_string(),
+                attrs,
+                children: vec![child],
+            }
         }
 
         #[test]
@@ -2168,6 +2200,89 @@ mod linux_impl {
                     "{class} should have no registered signals (removed in GTK 4.10)"
                 );
             }
+        }
+
+        #[test]
+        fn adw_toolbar_view_build_attaches_top_and_content_children() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let node = test_object(
+                "AdwToolbarView",
+                "toolbar-view",
+                vec![
+                    test_child(
+                        Some("top"),
+                        test_object("AdwHeaderBar", "toolbar-top", vec![]),
+                    ),
+                    test_child(None, test_object("GtkBox", "toolbar-content", vec![])),
+                ],
+            );
+
+            let result = build_with_ids(&node).expect("build toolbar view");
+            let top_id = *result
+                .named_widgets
+                .get("toolbar-top")
+                .expect("top bar should be named");
+            let content_id = *result
+                .named_widgets
+                .get("toolbar-content")
+                .expect("content should be named");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let top_raw = widget_ptr(&state, top_id, "test").expect("top ptr");
+                let content_raw = widget_ptr(&state, content_id, "test").expect("content ptr");
+                assert!(
+                    !unsafe { gtk_widget_get_parent(top_raw) }.is_null(),
+                    "top bar should be attached to the toolbar view"
+                );
+                assert!(
+                    !unsafe { gtk_widget_get_parent(content_raw) }.is_null(),
+                    "content should be attached to the toolbar view"
+                );
+            });
+        }
+
+        #[test]
+        fn adw_toolbar_view_reconcile_attaches_new_top_bar() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let initial = test_object(
+                "AdwToolbarView",
+                "toolbar-view",
+                vec![test_child(
+                    None,
+                    test_object("GtkBox", "toolbar-content", vec![]),
+                )],
+            );
+            let result = build_with_ids(&initial).expect("build initial toolbar view");
+            let updated = test_object(
+                "AdwToolbarView",
+                "toolbar-view",
+                vec![
+                    test_child(
+                        Some("top"),
+                        test_object("AdwHeaderBar", "toolbar-top", vec![]),
+                    ),
+                    test_child(None, test_object("GtkBox", "toolbar-content", vec![])),
+                ],
+            );
+
+            reconcile_node_fn(result.root_id, &updated).expect("reconcile toolbar view");
+
+            let top_id = widget_by_id("toolbar-top").expect("look up reconciled top bar");
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let top_raw = widget_ptr(&state, top_id, "test").expect("top ptr");
+                assert!(
+                    !unsafe { gtk_widget_get_parent(top_raw) }.is_null(),
+                    "reconciled top bar should be attached to the toolbar view"
+                );
+            });
         }
     }
 
@@ -7300,6 +7415,10 @@ mod linux_impl {
                 (raw, CreatedWidgetKind::Other)
             }
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
+            "AdwToolbarView" => (
+                create_adw_widget(class_name)?,
+                CreatedWidgetKind::ToolbarView,
+            ),
             "GtkSearchBar" => (
                 unsafe { gtk_search_bar_new() },
                 CreatedWidgetKind::SearchBar,
@@ -7395,7 +7514,6 @@ mod linux_impl {
             | "AdwToastOverlay"
             | "AdwToggle"
             | "AdwToggleGroup"
-            | "AdwToolbarView"
             | "AdwViewStack"
             | "AdwViewStackPage"
             | "AdwViewStackPages"
@@ -8159,6 +8277,9 @@ mod linux_impl {
                     let prop_c = CString::new(prop_name).unwrap();
                     unsafe { gobject_set_ptr(raw, &prop_c, child_raw) };
                 }
+                CreatedWidgetKind::ToolbarView => {
+                    attach_toolbar_view_child(raw, child_raw, child.child_type.as_deref())
+                }
                 CreatedWidgetKind::Other => {}
                 CreatedWidgetKind::PreferencesDialog => {
                     call_adw_fn_pp("adw_preferences_dialog_add", raw, child_raw);
@@ -8361,6 +8482,9 @@ mod linux_impl {
                     unsafe { gtk_overlay_set_child(parent_raw, std::ptr::null_mut()) };
                 }
             }
+            CreatedWidgetKind::ToolbarView => {
+                remove_toolbar_view_child(parent_raw, child_raw, child_type)
+            }
             _ => unsafe { gtk_widget_unparent(child_raw) },
         }
         if let Some(live) = child_live {
@@ -8428,6 +8552,9 @@ mod linux_impl {
                 };
                 let prop_c = CString::new(prop_name).unwrap();
                 unsafe { gobject_set_ptr(parent.raw, &prop_c, child.raw) };
+            }
+            CreatedWidgetKind::ToolbarView => {
+                attach_toolbar_view_child(parent.raw, child.raw, placement.child_type)
             }
             CreatedWidgetKind::PreferencesDialog => {
                 call_adw_fn_pp("adw_preferences_dialog_add", parent.raw, child.raw);
@@ -9135,6 +9262,37 @@ mod linux_impl {
             }
             "AdwWindow" => call_adw_fn_pp("adw_window_set_content", window, child),
             _ => unsafe { gtk_window_set_child(window, child) },
+        }
+    }
+
+    fn attach_toolbar_view_child(
+        toolbar_view: *mut c_void,
+        child: *mut c_void,
+        child_type: Option<&str>,
+    ) {
+        match child_type {
+            Some("top") => call_adw_fn_pp("adw_toolbar_view_add_top_bar", toolbar_view, child),
+            Some("bottom") => {
+                call_adw_fn_pp("adw_toolbar_view_add_bottom_bar", toolbar_view, child)
+            }
+            _ => call_adw_fn_pp("adw_toolbar_view_set_content", toolbar_view, child),
+        }
+    }
+
+    fn remove_toolbar_view_child(
+        toolbar_view: *mut c_void,
+        child: *mut c_void,
+        child_type: Option<&str>,
+    ) {
+        match child_type {
+            Some("top") | Some("bottom") => {
+                call_adw_fn_pp("adw_toolbar_view_remove", toolbar_view, child)
+            }
+            _ => call_adw_fn_pp(
+                "adw_toolbar_view_set_content",
+                toolbar_view,
+                std::ptr::null_mut(),
+            ),
         }
     }
 

@@ -13,6 +13,8 @@ use rayon::prelude::*;
 #[path = "test_support.rs"]
 mod test_support;
 
+const FILE_TIMEOUT_SECS: u64 = 25;
+
 /// Run a test suite for a single file with a timeout to guard against JIT infinite loops.
 fn run_test_suite_with_timeout(
     program: aivi::HirProgram,
@@ -119,11 +121,11 @@ fn run_stdlib_file_with_timeout(path: &Path, timeout_secs: u64) -> aivi::TestRep
 }
 
 #[test]
-fn stdlib_modules_execute_without_failures() {
+fn stdlib_modules_batch_one_execute_without_failures() {
     let result = std::thread::Builder::new()
-        .name("stdlib-all".into())
+        .name("stdlib-batch-one".into())
         .stack_size(256 * 1024 * 1024)
-        .spawn(stdlib_modules_execute_without_failures_inner)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(0, 2))
         .expect("spawn test thread")
         .join();
     match result {
@@ -132,7 +134,21 @@ fn stdlib_modules_execute_without_failures() {
     }
 }
 
-fn stdlib_modules_execute_without_failures_inner() {
+#[test]
+fn stdlib_modules_batch_two_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-two".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(1, 2))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+fn stdlib_modules_execute_without_failures_inner(batch_index: usize, batch_count: usize) {
     let workspace_root = test_support::workspace_root();
     std::env::set_current_dir(&workspace_root).expect("set cwd");
     let root = workspace_root.join("integration-tests/stdlib/aivi");
@@ -148,7 +164,18 @@ fn stdlib_modules_execute_without_failures_inner() {
 
     assert!(!files.is_empty(), "no stdlib @test files found");
 
-    let stdlib_threads = test_support::configured_test_threads("AIVI_STDLIB_TEST_THREADS", 2);
+    let batch_len = files.len().div_ceil(batch_count);
+    let batch_start = batch_index * batch_len;
+    let batch_end = ((batch_index + 1) * batch_len).min(files.len());
+    let files = &files[batch_start..batch_end];
+
+    assert!(
+        !files.is_empty(),
+        "no stdlib @test files found for batch {batch_index}/{batch_count}"
+    );
+
+    let stdlib_threads =
+        test_support::configured_test_threads("AIVI_STDLIB_TEST_THREADS", 4).min(files.len());
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(stdlib_threads)
         .build()
@@ -157,7 +184,12 @@ fn stdlib_modules_execute_without_failures_inner() {
     let results: Vec<_> = pool.install(|| {
         files
             .par_iter()
-            .map(|path| (path.clone(), run_stdlib_file_with_timeout(path, 60)))
+            .map(|path| {
+                (
+                    path.clone(),
+                    run_stdlib_file_with_timeout(path, FILE_TIMEOUT_SECS),
+                )
+            })
             .collect()
     });
 

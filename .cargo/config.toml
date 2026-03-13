@@ -1,5 +1,5 @@
 [alias]
-t = "nextest run --workspace --cargo-quiet --show-progress none"
+t = "nextest run --workspace --cargo-quiet"
 
 [target.x86_64-unknown-linux-gnu]
 # Work around rust-lld hidden-symbol link failures in optimized test builds.
