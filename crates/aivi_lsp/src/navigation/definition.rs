@@ -87,12 +87,14 @@ impl Backend {
         use aivi::TypeExpr;
 
         match ty {
-            TypeExpr::Record { fields, .. } => fields.iter().find_map(|(name, _)| {
-                if name.name == field_name {
+            TypeExpr::Record { fields, .. } => fields.iter().rev().find_map(|field| match field {
+                aivi::RecordTypeField::Named { name, .. } if name.name == field_name => {
                     Some(Self::span_to_range(name.span.clone()))
-                } else {
-                    None
                 }
+                aivi::RecordTypeField::Spread { ty, .. } => {
+                    Self::record_field_definition_range_for_type(module, ty, field_name)
+                }
+                _ => None,
             }),
             TypeExpr::Name(name) => {
                 let bare = name.name.rsplit('.').next().unwrap_or(&name.name);

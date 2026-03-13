@@ -1,3 +1,5 @@
+use crate::surface::RecordTypeField;
+
 impl TypeChecker {
     fn type_from_expr(&mut self, ty: &TypeExpr, ctx: &mut TypeContext) -> Type {
         match ty {
@@ -80,9 +82,21 @@ impl TypeChecker {
             }
             TypeExpr::Record { fields, .. } => {
                 let mut field_map = BTreeMap::new();
-                for (name, ty) in fields {
-                    let field_ty = self.type_from_expr(ty, ctx);
-                    field_map.insert(name.name.clone(), field_ty);
+                for field in fields {
+                    match field {
+                        RecordTypeField::Named { name, ty } => {
+                            let field_ty = self.type_from_expr(ty, ctx);
+                            field_map.insert(name.name.clone(), field_ty);
+                        }
+                        RecordTypeField::Spread { ty, .. } => {
+                            let Some(spread_fields) = self.record_from_type_expr(ty, ctx) else {
+                                return self.fresh_var();
+                            };
+                            for (name, field_ty) in spread_fields {
+                                field_map.insert(name, field_ty);
+                            }
+                        }
+                    }
                 }
                 Type::Record { fields: field_map }
             }
@@ -140,8 +154,23 @@ impl TypeChecker {
                 self.validate_type_expr(result, errors);
             }
             TypeExpr::Record { fields, .. } => {
-                for (_, ty) in fields {
-                    self.validate_type_expr(ty, errors);
+                for field in fields {
+                    match field {
+                        RecordTypeField::Named { ty, .. } => self.validate_type_expr(ty, errors),
+                        RecordTypeField::Spread { ty, span } => {
+                            self.validate_type_expr(ty, errors);
+                            let mut ctx = TypeContext::new(&self.type_constructors);
+                            if self.record_from_type_expr(ty, &mut ctx).is_none() {
+                                errors.push(TypeError {
+                                    span: span.clone(),
+                                    message: "record type spread expects a closed record type"
+                                        .to_string(),
+                                    expected: None,
+                                    found: None,
+                                });
+                            }
+                        }
+                    }
                 }
             }
             TypeExpr::Tuple { items, .. } => {
@@ -210,12 +239,23 @@ impl TypeChecker {
             "Rename" => {
                 let mut rename_map = BTreeMap::new();
                 if let TypeExpr::Record { fields, .. } = &args[0] {
-                    for (old_name, ty) in fields {
-                        if let TypeExpr::Name(new_name) = ty {
-                            rename_map.insert(
-                                old_name.name.clone(),
-                                (new_name.name.clone(), new_name.span.clone()),
-                            );
+                    for field in fields {
+                        match field {
+                            RecordTypeField::Named { name: old_name, ty } => {
+                                if let TypeExpr::Name(new_name) = ty {
+                                    rename_map.insert(
+                                        old_name.name.clone(),
+                                        (new_name.name.clone(), new_name.span.clone()),
+                                    );
+                                }
+                            }
+                            RecordTypeField::Spread { span, .. } => errors.push(TypeError {
+                                span: span.clone(),
+                                message: "record spread is not allowed in Rename mappings"
+                                    .to_string(),
+                                expected: None,
+                                found: None,
+                            }),
                         }
                     }
                 }
@@ -285,7 +325,10 @@ impl TypeChecker {
         match expr {
             TypeExpr::Record { fields, .. } => fields
                 .iter()
-                .map(|(name, _)| (name.name.clone(), name.span.clone()))
+                .filter_map(|field| match field {
+                    RecordTypeField::Named { name, .. } => Some((name.name.clone(), name.span.clone())),
+                    RecordTypeField::Spread { .. } => None,
+                })
                 .collect(),
             _ => Vec::new(),
         }
@@ -433,9 +476,13 @@ impl TypeChecker {
 
     fn row_fields_from_record_expr(&self, expr: &TypeExpr) -> Vec<String> {
         match expr {
-            TypeExpr::Record { fields, .. } => {
-                fields.iter().map(|(name, _)| name.name.clone()).collect()
-            }
+            TypeExpr::Record { fields, .. } => fields
+                .iter()
+                .filter_map(|field| match field {
+                    RecordTypeField::Named { name, .. } => Some(name.name.clone()),
+                    RecordTypeField::Spread { .. } => None,
+                })
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -443,9 +490,11 @@ impl TypeChecker {
     fn row_rename_map_from_expr(&self, expr: &TypeExpr) -> BTreeMap<String, String> {
         let mut map = BTreeMap::new();
         if let TypeExpr::Record { fields, .. } = expr {
-            for (name, ty) in fields {
-                if let TypeExpr::Name(new_name) = ty {
-                    map.insert(name.name.clone(), new_name.name.clone());
+            for field in fields {
+                if let RecordTypeField::Named { name, ty } = field {
+                    if let TypeExpr::Name(new_name) = ty {
+                        map.insert(name.name.clone(), new_name.name.clone());
+                    }
                 }
             }
         }

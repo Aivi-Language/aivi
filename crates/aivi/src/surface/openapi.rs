@@ -77,6 +77,13 @@ fn sn(name: &str, span: &Span) -> SpannedName {
     }
 }
 
+fn type_record_field(name: &str, ty: TypeExpr, span: &Span) -> RecordTypeField {
+    RecordTypeField::Named {
+        name: sn(name, span),
+        ty,
+    }
+}
+
 fn str_lit(text: &str, span: &Span) -> Expr {
     Expr::Literal(Literal::String {
         text: text.to_string(),
@@ -423,7 +430,7 @@ fn inline_schema_to_type_expr(schema: &Schema, spec: &OpenAPI, span: &Span) -> T
         SchemaKind::Type(OaType::Object(obj)) => {
             let required: std::collections::HashSet<&str> =
                 obj.required.iter().map(|s| s.as_str()).collect();
-            let fields: Vec<(SpannedName, TypeExpr)> = obj
+            let fields: Vec<RecordTypeField> = obj
                 .properties
                 .iter()
                 .map(|(name, prop_ref)| {
@@ -437,7 +444,7 @@ fn inline_schema_to_type_expr(schema: &Schema, spec: &OpenAPI, span: &Span) -> T
                             span: span.clone(),
                         }
                     };
-                    (sn(name, span), ty)
+                    type_record_field(name, ty, span)
                 })
                 .collect();
             TypeExpr::Record {
@@ -591,12 +598,12 @@ fn generate_binding_type_sig(
     };
     let config_ty = TypeExpr::Record {
         fields: vec![
-            (sn("bearerToken", span), option_text.clone()),
-            (sn("headers", span), option_header_list),
-            (sn("timeoutMs", span), option_int.clone()),
-            (sn("retryCount", span), option_int),
-            (sn("strictStatus", span), option_bool),
-            (sn("baseUrl", span), option_text),
+            type_record_field("bearerToken", option_text.clone(), span),
+            type_record_field("headers", option_header_list, span),
+            type_record_field("timeoutMs", option_int.clone(), span),
+            type_record_field("retryCount", option_int, span),
+            type_record_field("strictStatus", option_bool, span),
+            type_record_field("baseUrl", option_text, span),
         ],
         span: span.clone(),
     };
@@ -604,27 +611,32 @@ fn generate_binding_type_sig(
     // Response type placeholder (for all endpoints)
     let response_ty = TypeExpr::Record {
         fields: vec![
-            (sn("status", span), TypeExpr::Name(sn("Int", span))),
-            (
-                sn("headers", span),
+            type_record_field("status", TypeExpr::Name(sn("Int", span)), span),
+            type_record_field(
+                "headers",
                 TypeExpr::Apply {
                     base: Box::new(TypeExpr::Name(sn("List", span))),
                     args: vec![TypeExpr::Record {
                         fields: vec![
-                            (sn("name", span), TypeExpr::Name(sn("Text", span))),
-                            (sn("value", span), TypeExpr::Name(sn("Text", span))),
+                            type_record_field("name", TypeExpr::Name(sn("Text", span)), span),
+                            type_record_field("value", TypeExpr::Name(sn("Text", span)), span),
                         ],
                         span: span.clone(),
                     }],
                     span: span.clone(),
                 },
+                span,
             ),
-            (sn("body", span), TypeExpr::Name(sn("Text", span))),
+            type_record_field("body", TypeExpr::Name(sn("Text", span)), span),
         ],
         span: span.clone(),
     };
     let error_ty = TypeExpr::Record {
-        fields: vec![(sn("message", span), TypeExpr::Name(sn("Text", span)))],
+        fields: vec![type_record_field(
+            "message",
+            TypeExpr::Name(sn("Text", span)),
+            span,
+        )],
         span: span.clone(),
     };
     let result_response_ty = TypeExpr::Apply {
@@ -639,11 +651,11 @@ fn generate_binding_type_sig(
     };
 
     // Build endpoint record: { endpoint: Params -> Source ... }
-    let mut endpoint_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
+    let mut endpoint_fields: Vec<RecordTypeField> = Vec::new();
 
     for (_path, _method, op_id, operation) in ops {
         // Build params type from operation parameters + request body
-        let mut param_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
+        let mut param_fields: Vec<RecordTypeField> = Vec::new();
 
         for param_ref in &operation.parameters {
             if let ReferenceOr::Item(param) = param_ref {
@@ -663,7 +675,7 @@ fn generate_binding_type_sig(
                         span: span.clone(),
                     }
                 };
-                param_fields.push((sn(&data.name, span), param_ty));
+                param_fields.push(type_record_field(&data.name, param_ty, span));
             }
         }
 
@@ -688,7 +700,7 @@ fn generate_binding_type_sig(
                                             span: span.clone(),
                                         }
                                     };
-                                    param_fields.push((sn(name, span), ty));
+                                    param_fields.push(type_record_field(name, ty, span));
                                 }
                             }
                         }
@@ -718,7 +730,7 @@ fn generate_binding_type_sig(
                                                     span: span.clone(),
                                                 }
                                             };
-                                            param_fields.push((sn(name, span), ty));
+                                            param_fields.push(type_record_field(name, ty, span));
                                         }
                                     }
                                 }
@@ -740,7 +752,7 @@ fn generate_binding_type_sig(
             span: span.clone(),
         };
 
-        endpoint_fields.push((sn(op_id, span), endpoint_ty));
+        endpoint_fields.push(type_record_field(op_id, endpoint_ty, span));
     }
 
     let endpoints_record_ty = TypeExpr::Record {

@@ -30,12 +30,13 @@ pub mod surface {
         ArenaBlockItem, ArenaBlockKind, ArenaClassDecl, ArenaClassMember, ArenaDecorator, ArenaDef,
         ArenaDomainDecl, ArenaDomainItem, ArenaExpr, ArenaInstanceDecl, ArenaListItem,
         ArenaLiteral, ArenaMatchArm, ArenaModule, ArenaModuleItem, ArenaPathSegment, ArenaPattern,
-        ArenaRecordField, ArenaRecordPatternField, ArenaScopeItem, ArenaTextPart, ArenaTypeAlias,
-        ArenaTypeCtor, ArenaTypeDecl, ArenaTypeExpr, ArenaTypeSig, ArenaTypeVarConstraint,
-        ArenaUseDecl, AstArena, BlockItem, BlockKind, ClassDecl, Decorator, Def, DomainDecl,
-        DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem,
-        PathSegment, Pattern, RecordField, RecordPatternField, ScopeItemKind, SpannedName,
-        SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
+        ArenaRecordField, ArenaRecordPatternField, ArenaRecordTypeField, ArenaScopeItem,
+        ArenaTextPart, ArenaTypeAlias, ArenaTypeCtor, ArenaTypeDecl, ArenaTypeExpr, ArenaTypeSig,
+        ArenaTypeVarConstraint, ArenaUseDecl, AstArena, BlockItem, BlockKind, ClassDecl, Decorator,
+        Def, DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module,
+        ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField, RecordTypeField,
+        ScopeItemKind, SpannedName, SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl,
+        TypeExpr, TypeSig, UseDecl,
     };
 }
 
@@ -111,11 +112,12 @@ pub use aivi_core::{
     ArenaClassDecl, ArenaClassMember, ArenaDecorator, ArenaDef, ArenaDomainDecl, ArenaDomainItem,
     ArenaExpr, ArenaInstanceDecl, ArenaListItem, ArenaLiteral, ArenaMatchArm, ArenaModule,
     ArenaModuleItem, ArenaPathSegment, ArenaPattern, ArenaRecordField, ArenaRecordPatternField,
-    ArenaScopeItem, ArenaTextPart, ArenaTypeAlias, ArenaTypeCtor, ArenaTypeDecl, ArenaTypeExpr,
-    ArenaTypeSig, ArenaTypeVarConstraint, ArenaUseDecl, AstArena, BlockItem, BlockKind, ClassDecl,
-    Decorator, Def, DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm,
-    Module, ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField, SpannedName,
-    SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
+    ArenaRecordTypeField, ArenaScopeItem, ArenaTextPart, ArenaTypeAlias, ArenaTypeCtor,
+    ArenaTypeDecl, ArenaTypeExpr, ArenaTypeSig, ArenaTypeVarConstraint, ArenaUseDecl, AstArena,
+    BlockItem, BlockKind, ClassDecl, Decorator, Def, DomainDecl, DomainItem, Expr, InstanceDecl,
+    ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment, Pattern, RecordField,
+    RecordPatternField, RecordTypeField, SpannedName, SpannedSymbol, TextPart, TypeAlias, TypeCtor,
+    TypeDecl, TypeExpr, TypeSig, UseDecl,
 };
 pub use aivi_core::{
     file_diagnostics_have_errors, render_diagnostics, Diagnostic, DiagnosticLabel,

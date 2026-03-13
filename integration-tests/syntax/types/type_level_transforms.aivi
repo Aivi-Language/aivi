@@ -31,6 +31,11 @@ UserForm = Optional (email) User
 // Equivalent: Omit admin, then make email optional.
 UserDraft = User |> Omit (admin) |> Optional (email)
 
+UserCore       = { id: Int, name: Text }
+UserWithEmail  = { ...UserCore, email: Text }
+UserMaybeName  = { name: Option Text }
+UserNormalized = { ...UserMaybeName, ...UserCore }
+
 // ── Helper functions ──────────────────────────────────────────────────────────
 
 toIdOnly : User -> IdOnly
@@ -42,10 +47,19 @@ toNameEmail = u => { name: u.name, email: u.email }
 toPublic : User -> PublicUser
 toPublic = u => { id: u.id, name: u.name, email: u.email }
 
+extendUser : UserCore -> Text -> UserWithEmail
+extendUser = user email => { id: user.id, name: user.name, email }
+
+normalizedName : UserNormalized -> Text
+normalizedName = user => user.name
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 alice : User
 alice = { id: 1, name: "Alice", email: "alice@example.com", admin: False }
+
+baseUser : UserCore
+baseUser = { id: 10, name: "Dana" }
 
 @test "Pick single field"
 pickSingle = do Effect {
@@ -83,4 +97,19 @@ typePipe = do Effect {
   draft = { id: 3, name: "Carol", email: None }
   assertEq draft.id 3
   assertEq draft.name "Carol"
+}
+
+@test "Record type spread adds fields"
+recordTypeSpreadAddsFields = do Effect {
+  extended = extendUser baseUser "dana@example.com"
+  assertEq extended.id 10
+  assertEq extended.name "Dana"
+  assertEq extended.email "dana@example.com"
+}
+
+@test "Later spread overrides earlier field type"
+recordTypeSpreadOverridesEarlierFields = do Effect {
+  normalized : UserNormalized
+  normalized = { id: 11, name: "Eli" }
+  assertEq (normalizedName normalized) "Eli"
 }

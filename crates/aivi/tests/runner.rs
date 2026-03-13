@@ -338,6 +338,7 @@ fn syntax_remaining_batch_files_execute_without_failures() {
         "integration-tests/syntax/sigils/gtk_builder.aivi",
         "integration-tests/syntax/sigils/raw_text.aivi",
         "integration-tests/syntax/bidirectional_class_members.aivi",
+        "integration-tests/syntax/types/type_level_transforms.aivi",
         "integration-tests/syntax/types/unions_and_aliases.aivi",
     ]
     .iter()

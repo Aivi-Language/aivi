@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::surface::{Expr, Module, ModuleItem, ScopeItemKind, TypeDecl, TypeExpr};
+use crate::surface::{
+    Expr, Module, ModuleItem, RecordTypeField, ScopeItemKind, TypeDecl, TypeExpr,
+};
 
 #[derive(Clone, Debug)]
 pub(super) struct ClassDeclInfo {
@@ -221,11 +223,10 @@ fn type_expr_eq(left: &TypeExpr, right: &TypeExpr) -> bool {
             },
         ) => {
             left_fields.len() == right_fields.len()
-                && left_fields.iter().zip(right_fields.iter()).all(
-                    |((left_name, left_ty), (right_name, right_ty))| {
-                        left_name.name == right_name.name && type_expr_eq(left_ty, right_ty)
-                    },
-                )
+                && left_fields
+                    .iter()
+                    .zip(right_fields.iter())
+                    .all(|(left_field, right_field)| record_type_field_eq(left_field, right_field))
         }
         (
             TypeExpr::Tuple {
@@ -319,10 +320,23 @@ fn rewrite_type_expr(ty: &TypeExpr, from: &TypeExpr, to: &TypeExpr) -> (TypeExpr
             let mut changed = false;
             let fields = fields
                 .iter()
-                .map(|(name, field_ty)| {
-                    let (rewritten, did_change) = rewrite_type_expr(field_ty, from, to);
-                    changed |= did_change;
-                    (name.clone(), rewritten)
+                .map(|field| match field {
+                    RecordTypeField::Named { name, ty } => {
+                        let (rewritten, did_change) = rewrite_type_expr(ty, from, to);
+                        changed |= did_change;
+                        RecordTypeField::Named {
+                            name: name.clone(),
+                            ty: rewritten,
+                        }
+                    }
+                    RecordTypeField::Spread { ty, span } => {
+                        let (rewritten, did_change) = rewrite_type_expr(ty, from, to);
+                        changed |= did_change;
+                        RecordTypeField::Spread {
+                            ty: rewritten,
+                            span: span.clone(),
+                        }
+                    }
                 })
                 .collect();
             (
@@ -351,6 +365,26 @@ fn rewrite_type_expr(ty: &TypeExpr, from: &TypeExpr, to: &TypeExpr) -> (TypeExpr
                 changed,
             )
         }
+    }
+}
+
+fn record_type_field_eq(left: &RecordTypeField, right: &RecordTypeField) -> bool {
+    match (left, right) {
+        (
+            RecordTypeField::Named {
+                name: left_name,
+                ty: left_ty,
+            },
+            RecordTypeField::Named {
+                name: right_name,
+                ty: right_ty,
+            },
+        ) => left_name.name == right_name.name && type_expr_eq(left_ty, right_ty),
+        (
+            RecordTypeField::Spread { ty: left_ty, .. },
+            RecordTypeField::Spread { ty: right_ty, .. },
+        ) => type_expr_eq(left_ty, right_ty),
+        _ => false,
     }
 }
 

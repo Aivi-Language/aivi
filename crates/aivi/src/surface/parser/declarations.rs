@@ -451,13 +451,27 @@ impl Parser {
         self.consume_newlines();
         if self.check_symbol("{") {
             if let Some(TypeExpr::Record { fields, .. }) = self.parse_type_atom() {
-                for (field_name, field_ty) in fields {
-                    let span = merge_span(field_name.span.clone(), type_span(&field_ty));
-                    members.push(ClassMember {
-                        name: field_name,
-                        ty: field_ty,
-                        span,
-                    });
+                for field in fields {
+                    match field {
+                        RecordTypeField::Named {
+                            name: field_name,
+                            ty: field_ty,
+                        } => {
+                            let span = merge_span(field_name.span.clone(), type_span(&field_ty));
+                            members.push(ClassMember {
+                                name: field_name,
+                                ty: field_ty,
+                                span,
+                            });
+                        }
+                        RecordTypeField::Spread { span, .. } => {
+                            self.emit_diag(
+                                "E1500",
+                                "class member sets do not support record type spread",
+                                span,
+                            );
+                        }
+                    }
                 }
             } else {
                 self.expect_symbol("{", "expected '{' to start class member set");

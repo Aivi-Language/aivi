@@ -198,7 +198,16 @@ fn expand_module_aliases(modules: &mut [Module]) {
             TypeExpr::Record { fields, span } => TypeExpr::Record {
                 fields: fields
                     .into_iter()
-                    .map(|(label, ty)| (label, rewrite_type_expr(ty, aliases)))
+                    .map(|field| match field {
+                        RecordTypeField::Named { name, ty } => RecordTypeField::Named {
+                            name,
+                            ty: rewrite_type_expr(ty, aliases),
+                        },
+                        RecordTypeField::Spread { ty, span } => RecordTypeField::Spread {
+                            ty: rewrite_type_expr(ty, aliases),
+                            span,
+                        },
+                    })
                     .collect(),
                 span,
             },

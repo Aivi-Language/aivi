@@ -1,0 +1,7 @@
+// EXPECT-ERROR: E3000
+module integrationTests.compileFail.typeLevelRecordSpreadNonRecord
+
+Bad = { ...Text, id: Int }
+
+value : Bad
+value = { id: 1 }

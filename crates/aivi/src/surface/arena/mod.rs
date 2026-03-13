@@ -261,6 +261,12 @@ pub struct ArenaRecordPatternField {
 }
 
 #[derive(Debug, Clone)]
+pub enum ArenaRecordTypeField {
+    Named { name: SpannedSymbol, ty: TypeExprId },
+    Spread { ty: TypeExprId, span: Span },
+}
+
+#[derive(Debug, Clone)]
 pub enum ArenaTypeExpr {
     Name(SpannedSymbol),
     And {
@@ -278,7 +284,7 @@ pub enum ArenaTypeExpr {
         span: Span,
     },
     Record {
-        fields: Vec<(SpannedSymbol, TypeExprId)>,
+        fields: Vec<ArenaRecordTypeField>,
         span: Span,
     },
     Tuple {

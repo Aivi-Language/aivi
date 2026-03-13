@@ -346,6 +346,8 @@ Literal        := "True"
 - Parsing `{ ... }` should disambiguate **record literal vs block** by lookahead:
   - if the first non-newline token can start a record entry (`...`, `name`, or `name.path:`), parse as `RecordLit`
   - otherwise parse as `Block`
+- `RecordTypeSpread` (`...Type`) merges record-type entries left to right, with later entries overriding earlier ones
+- a `RecordTypeSpread` target must elaborate to a closed record type
 - `.field` is shorthand for `x => x.field`
 - `_` is not a value; in expression position it appears only as placeholder-lambda sugar
 - `mock snapshot some.binding` records the real binding result for later replay; see [@test — Test Declarations](decorators/test.md#mock-expressions)
@@ -406,8 +408,10 @@ TypeAtom       := UpperIdent
                | RecordType
 
 TupleType      := "(" Type "," Type { "," Type } ")"
-RecordType     := "{" { RecordTypeField } "}"
-RecordTypeField := lowerIdent ":" Type [ FieldSep ]
+RecordType      := "{" { RecordTypeEntry } "}"
+RecordTypeEntry := RecordTypeSpread
+                 | lowerIdent ":" Type [ FieldSep ]
+RecordTypeSpread := "..." Type [ FieldSep ]
 ```
 
 ## 0.7 Patterns

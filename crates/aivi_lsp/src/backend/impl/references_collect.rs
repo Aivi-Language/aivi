@@ -284,14 +284,21 @@ impl Backend {
                 Self::collect_type_expr_references(result, ident, uri, locations);
             }
             TypeExpr::Record { fields, .. } => {
-                for (name, ty) in fields.iter() {
-                    if name.name == ident {
-                        locations.push(Location::new(
-                            uri.clone(),
-                            Self::span_to_range(name.span.clone()),
-                        ));
+                for field in fields.iter() {
+                    match field {
+                        aivi::RecordTypeField::Named { name, ty } => {
+                            if name.name == ident {
+                                locations.push(Location::new(
+                                    uri.clone(),
+                                    Self::span_to_range(name.span.clone()),
+                                ));
+                            }
+                            Self::collect_type_expr_references(ty, ident, uri, locations);
+                        }
+                        aivi::RecordTypeField::Spread { ty, .. } => {
+                            Self::collect_type_expr_references(ty, ident, uri, locations);
+                        }
                     }
-                    Self::collect_type_expr_references(ty, ident, uri, locations);
                 }
             }
             TypeExpr::Tuple { items, .. } => {

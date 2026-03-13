@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::diagnostics::{fuzzy_suggest, Diagnostic, DiagnosticSeverity, FileDiagnostic};
 use crate::surface::{
     BlockItem, Decorator, Def, DomainItem, Expr, Literal, Module, ModuleItem, Pattern,
-    ScopeItemKind, TextPart, TypeAlias, TypeDecl, TypeExpr, TypeSig,
+    RecordTypeField, ScopeItemKind, TextPart, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
 pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
@@ -162,8 +162,12 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                 collect_type_expr(result, out);
             }
             TypeExpr::Record { fields, .. } => {
-                for (_label, ty) in fields {
-                    collect_type_expr(ty, out);
+                for field in fields {
+                    match field {
+                        RecordTypeField::Named { ty, .. } | RecordTypeField::Spread { ty, .. } => {
+                            collect_type_expr(ty, out);
+                        }
+                    }
                 }
             }
             TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {}
