@@ -19,7 +19,6 @@ Plain-language decoder:
 
 ::: repl
 ```aivi
-/use aivi.logic
 Some 5 |> map (_ + 1)
 // => Some 6
 [1, 2, 3] |> map (_ * 10)

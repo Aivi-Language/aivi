@@ -268,3 +268,26 @@ gtk_center_box_node = do Effect {
     | _                   => ""
     assertEq tag "GtkCenterBox"
 }
+
+@test "GtkEventControllerMotion mounts as a controller child"
+gtk_motion_controller_mounts = do Effect {
+  _   <- init Unit
+  app <- appNew "integration-tests.motion-controller"
+  win <- windowNew app "MotionController" 320 120
+  hovered = signal False
+  view    =
+    ~<gtk>
+      <GtkBox id="hover-target" orientation="vertical" spacing="4">
+        <child type="controller">
+          <GtkEventControllerMotion>
+            <signal name="enter" on={_ => hovered <<- True} />
+            <signal name="leave" on={_ => hovered <<- False} />
+          </GtkEventControllerMotion>
+        </child>
+        <GtkLabel label="Hover target" />
+      </GtkBox>
+    </gtk>
+    root <- buildFromNode view
+    _    <- windowSetChild win root
+    assertEq (get hovered) False
+}

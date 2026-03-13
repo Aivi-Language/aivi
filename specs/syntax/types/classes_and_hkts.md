@@ -33,10 +33,9 @@ The caller-side benefit is simple:
 
 ::: repl
 ```aivi
-/use aivi.logic
-map (_ + 1) (Some 5)
+Some 5 |> map (_ + 1)
 // => Some 6
-map (_ + 1) [1, 2, 3]
+[1, 2, 3] |> map (_ + 1) 
 // => [2, 3, 4]
 ```
 :::

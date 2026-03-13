@@ -1838,6 +1838,22 @@ mod tests {
             .expect("GTK test mutex should not be poisoned")
     }
 
+    fn make_test_widget_invisible(widget_id: i64, context: &str) {
+        aivi_gtk4::widget_set_opacity(widget_id, 0.0)
+            .unwrap_or_else(|err| panic!("{context}: {}", err.message));
+    }
+
+    fn present_stealth_host_window(app_id: i64, title: &str) -> i64 {
+        let win = aivi_gtk4::window_new(app_id, title, 480, 320)
+            .unwrap_or_else(|err| panic!("create host window: {}", err.message));
+        aivi_gtk4::window_set_decorated(win, false)
+            .unwrap_or_else(|err| panic!("disable host window decorations: {}", err.message));
+        make_test_widget_invisible(win, "make host window transparent");
+        aivi_gtk4::window_present(win)
+            .unwrap_or_else(|err| panic!("present host window: {}", err.message));
+        win
+    }
+
     fn ok_or_panic<T>(result: Result<T, crate::runtime::RuntimeError>, context: &str) -> T {
         match result {
             Ok(value) => value,
@@ -2809,10 +2825,8 @@ mod tests {
 
         let app = aivi_gtk4::app_new("com.aivi.dialog.cleanup.test")
             .unwrap_or_else(|err| panic!("create app: {}", err.message));
-        let win = aivi_gtk4::window_new(app, "Host", 480, 320)
-            .unwrap_or_else(|err| panic!("create host window: {}", err.message));
-        aivi_gtk4::window_present(win)
-            .unwrap_or_else(|err| panic!("present host window: {}", err.message));
+        let win = present_stealth_host_window(app, "Cleanup Host");
+        make_test_widget_invisible(result.root_id, "make cleanup dialog transparent");
         aivi_gtk4::adw_dialog_present(result.root_id, win)
             .unwrap_or_else(|err| panic!("present cleanup dialog: {}", err.message));
         super::pump_gtk_events();
@@ -2868,10 +2882,7 @@ mod tests {
 
         let app = aivi_gtk4::app_new("com.aivi.dialog.open.binding.test")
             .unwrap_or_else(|err| panic!("create app: {}", err.message));
-        let win = aivi_gtk4::window_new(app, "Host", 480, 320)
-            .unwrap_or_else(|err| panic!("create host window: {}", err.message));
-        aivi_gtk4::window_present(win)
-            .unwrap_or_else(|err| panic!("present host window: {}", err.message));
+        let win = present_stealth_host_window(app, "Persistent Host");
 
         let node = ResolvedGtkNode::Element {
             tag: "object".to_string(),
@@ -2925,6 +2936,7 @@ mod tests {
             materialize_with_bindings(&node, &mut runtime),
             "build persistent dialog",
         );
+        make_test_widget_invisible(result.root_id, "make persistent dialog transparent");
         let entry_id = *result
             .named_widgets
             .get("persistent-dialog-entry")

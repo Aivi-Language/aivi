@@ -240,6 +240,8 @@ Uppercase or dotted tags in HTML sigils are treated as component calls with reco
 
 Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`, `onActivate` → `activate`, `onKeyPress` → `key-pressed`, `onToggle` → `toggled`, `onValueChanged` → `value-changed`, `onFocusIn` → `focus-enter`, `onFocusOut` → `focus-leave`.
 
+For controller-only signals that have no sugar, use explicit signal nodes. Example: attach `GtkEventControllerMotion` under `<child type="controller">` and bind `<signal name="enter" ... />` / `<signal name="leave" ... />`.
+
 Signal handlers must be compile-time expressions.
 
 **`props` attribute** is sugar for a record literal written inside a splice, for example `props={ { label: "Save" } }`. The shape must be a record literal with simple field names, but field values may still be ordinary expressions.
