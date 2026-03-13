@@ -38,26 +38,176 @@ pub fn format_text(content: &str) -> String {
 }
 
 pub fn format_text_with_options(content: &str, options: FormatOptions) -> String {
-    // Fast path: files without matrix literals need only a single formatting pass.
-    if !content.contains("~mat[") {
-        return engine::format_text_with_options(content, options);
+    let result = if !content.contains("~mat[") {
+        // Fast path: files without matrix literals need only a single formatting pass.
+        engine::format_text_with_options(content, options)
+    } else {
+        // Transformations like semicolon removal or comma stripping can change the
+        // token stream on re-lexing (e.g. `& ; &` → `& &` → `&&`).  Iterate
+        // until a fixed point is reached (typically 1-3 passes).
+        let mut result = engine::format_text_with_options(content, options);
+        for _ in 0..4 {
+            let collapsed = collapse_multiline_matrix(&result);
+            let next = engine::format_text_with_options(&collapsed, options);
+            if next == result {
+                break;
+            }
+            result = next;
+        }
+        result
+    };
+
+    // Post-pass: group consecutive `use` lines that share a common module prefix.
+    group_use_imports(&result, options.indent_size)
+}
+
+/// Parsed representation of a single flat `use` line for grouping purposes.
+struct UseLine {
+    indent: String,
+    module: String,
+    suffix: String,
+    has_selective: bool,
+}
+
+/// Parse a flat `use ...` line into its components.
+/// Returns `None` for non-use lines, aliased/hiding imports, or multi-line grouped imports.
+fn parse_use_line(line: &str) -> Option<UseLine> {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("use ") {
+        return None;
+    }
+    let indent = &line[..line.len() - trimmed.len()];
+    let rest = &trimmed[4..];
+
+    let mod_end = rest
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '.')
+        .unwrap_or(rest.len());
+    let module = rest[..mod_end].trim_end_matches('.');
+    if module.is_empty() {
+        return None;
+    }
+    let suffix = rest[mod_end..].to_string();
+    let suffix_trimmed = suffix.trim_start();
+    let has_selective = suffix_trimmed.starts_with('(');
+
+    // Skip aliased or hiding imports.
+    if suffix_trimmed.starts_with("as ") || suffix_trimmed.starts_with("hiding") {
+        return None;
     }
 
-    // Transformations like semicolon removal or comma stripping can change the
-    // token stream on re-lexing (e.g. `& ; &` → `& &` → `&&`).  Iterate
-    // until a fixed point is reached (typically 1-3 passes).
-    let mut result = engine::format_text_with_options(content, options);
-    for _ in 0..4 {
-        // Collapse any multi-line `~mat[...]` back to a single line with `;`
-        // row separators so the next pass can re-detect and re-align the matrix.
-        let collapsed = collapse_multiline_matrix(&result);
-        let next = engine::format_text_with_options(&collapsed, options);
-        if next == result {
-            break;
+    // Skip already-grouped imports: if parens are not balanced on this line,
+    // it is a multi-line grouped import — leave it alone for idempotency.
+    if has_selective {
+        let mut depth: i32 = 0;
+        for ch in suffix_trimmed.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
         }
-        result = next;
+        if depth != 0 {
+            return None;
+        }
     }
-    result
+
+    Some(UseLine {
+        indent: indent.to_string(),
+        module: module.to_string(),
+        suffix,
+        has_selective,
+    })
+}
+
+/// Group consecutive flat `use` lines sharing a common module prefix into
+/// grouped import form. Only groups selective-import lines (with parens).
+fn group_use_imports(text: &str, indent_size: usize) -> String {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut i = 0;
+
+    while i < lines.len() {
+        let run_start = i;
+        let mut use_lines: Vec<(usize, UseLine)> = Vec::new();
+
+        while i < lines.len() {
+            if let Some(ul) = parse_use_line(lines[i]) {
+                use_lines.push((i, ul));
+                i += 1;
+            } else {
+                break;
+            }
+        }
+
+        if use_lines.len() < 2 {
+            for (idx, _) in &use_lines {
+                out.push(lines[*idx].to_string());
+            }
+            if use_lines.is_empty() {
+                out.push(lines[run_start].to_string());
+                i = run_start + 1;
+            }
+            continue;
+        }
+
+        // Group by common prefix (everything up to the last `.segment`).
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        let mut group_indices: std::collections::HashMap<String, usize> = Default::default();
+
+        for (idx, (_line_idx, ul)) in use_lines.iter().enumerate() {
+            if !ul.has_selective {
+                let key = format!("__standalone_{idx}");
+                group_indices.insert(key, groups.len());
+                groups.push(vec![idx]);
+                continue;
+            }
+            if let Some(dot_pos) = ul.module.rfind('.') {
+                let prefix = &ul.module[..dot_pos];
+                if let Some(&gi) = group_indices.get(prefix) {
+                    groups[gi].push(idx);
+                } else {
+                    group_indices.insert(prefix.to_string(), groups.len());
+                    groups.push(vec![idx]);
+                }
+            } else {
+                let key = format!("__standalone_{idx}");
+                group_indices.insert(key, groups.len());
+                groups.push(vec![idx]);
+            }
+        }
+
+        let inner_indent = " ".repeat(indent_size);
+
+        for group in &groups {
+            if group.len() < 2 {
+                let (line_idx, _) = &use_lines[group[0]];
+                out.push(lines[*line_idx].to_string());
+                continue;
+            }
+
+            let first = &use_lines[group[0]].1;
+            let prefix = {
+                let dot_pos = first.module.rfind('.').expect("checked above");
+                first.module[..dot_pos].to_string()
+            };
+            let indent = &first.indent;
+
+            let mut grouped = format!("{indent}use {prefix} (");
+            for &member_idx in group {
+                let ul = &use_lines[member_idx].1;
+                let dot_pos = ul.module.rfind('.').expect("checked above");
+                let sub_module = &ul.module[dot_pos + 1..];
+                let selective = ul.suffix.trim_start();
+                grouped.push('\n');
+                grouped.push_str(&format!("{indent}{inner_indent}{sub_module} {selective}"));
+            }
+            grouped.push('\n');
+            grouped.push_str(&format!("{indent})"));
+            out.push(grouped);
+        }
+    }
+
+    out.join("\n")
 }
 
 /// Collapse multi-line `~mat[row1\n      row2]` back to `~mat[row1;row2]`.
@@ -401,6 +551,47 @@ mod tests {
             "expected space between < and - but got {:?}",
             out1
         );
+    }
+
+    #[test]
+    fn format_groups_use_imports_with_shared_prefix() {
+        let input = "module demo\n\nuse aivi.text.utils (toUpper, toLower)\nuse aivi.text.format (padLeft)\n\nmain = 1\n";
+        let formatted = format_text(input);
+        assert!(
+            formatted.contains("use aivi.text ("),
+            "expected grouped use, got:\n{}",
+            formatted,
+        );
+        assert!(
+            formatted.contains("  utils (toUpper, toLower)"),
+            "expected utils sub-import, got:\n{}",
+            formatted,
+        );
+        assert!(
+            formatted.contains("  format (padLeft)"),
+            "expected format sub-import, got:\n{}",
+            formatted,
+        );
+        let out2 = format_text(&formatted);
+        assert_eq!(
+            formatted, out2,
+            "grouped use formatting should be idempotent"
+        );
+    }
+
+    #[test]
+    fn format_does_not_group_wildcard_uses() {
+        let input = "module demo\n\nuse aivi.text\nuse aivi.math\n\nmain = 1\n";
+        let formatted = format_text(input);
+        assert!(formatted.contains("use aivi.text\n"));
+        assert!(formatted.contains("use aivi.math\n"));
+    }
+
+    #[test]
+    fn format_does_not_group_single_use() {
+        let input = "module demo\n\nuse aivi.text.utils (toUpper)\n\nmain = 1\n";
+        let formatted = format_text(input);
+        assert!(formatted.contains("use aivi.text.utils (toUpper)"));
     }
 }
 

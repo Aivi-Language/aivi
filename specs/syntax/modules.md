@@ -57,6 +57,14 @@ Aliasing helps when a module name is long or when two imports would otherwise co
 
 <<< ../snippets/from_md/syntax/modules/renaming_aliasing.aivi{aivi}
 
+### Grouped Imports
+
+When several imports share a long module prefix, use a grouped import to avoid repeating the common path:
+
+<<< ../snippets/from_md/syntax/modules/grouped_imports.aivi{aivi}
+
+Each sub-module line must include a selective import list in parentheses. The grouped form desugars to flat `use` declarations during parsing, so the resolver and typechecker see ordinary imports.
+
 Compiler checks:
 
 - importing a missing module or symbol is a compile-time error

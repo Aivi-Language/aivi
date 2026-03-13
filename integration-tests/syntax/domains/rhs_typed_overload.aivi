@@ -3,8 +3,10 @@ module integrationTests.syntax.domains.rhsTypedOverload
 
 use aivi
 use aivi.testing
-use aivi.vector (vec4, transform4)
-use aivi.matrix (identity4, multiply4)
+use aivi (
+  vector (vec4, transform4)
+  matrix (identity4, multiply4)
+)
 
 // Test 1: Vec4 domain scalar scaling with *
 @test "vec4 scalar mul"

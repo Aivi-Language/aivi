@@ -891,6 +891,15 @@ use aivi.text (toUpper, toLower)         // selective
 use aivi.text hiding (trim)             // import all except
 use aivi.text as T                       // aliased module
 use aivi.chronos.duration (domain Duration)  // import domain
+
+// Grouped: shared prefix written once
+use aivi.chronos (
+  instant (now, toEpoch)
+  duration (domain Duration)
+)
+// Desugars to:
+//   use aivi.chronos.instant (now, toEpoch)
+//   use aivi.chronos.duration (domain Duration)
 ```
 
 ### Export forms

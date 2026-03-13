@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.syntax.groupedImports
+
+use aivi
+
+// Grouped import: two sub-modules from aivi
+use aivi (
+  testing (assertEq)
+  text (toUpper)
+)
+
+@test "grouped imports resolve correctly"
+groupedImportsWork = do Effect {
+  assertEq (toUpper "hello") "HELLO"
+}

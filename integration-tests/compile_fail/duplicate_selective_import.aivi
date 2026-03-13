@@ -2,6 +2,8 @@
 @no_prelude
 module integrationTests.compileFail.duplicateSelectiveImport
 
-use aivi.list (filter)
-use aivi.list (filter)
+use aivi (
+  list (filter)
+  list (filter)
+)
 use aivi

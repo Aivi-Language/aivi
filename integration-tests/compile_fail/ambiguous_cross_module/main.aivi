@@ -1,5 +1,7 @@
 // EXPECT-ERROR: E2005
 module testImports.main
 
-use testImports.libA (process)
-use testImports.libB (process)
+use testImports (
+  libA (process)
+  libB (process)
+)

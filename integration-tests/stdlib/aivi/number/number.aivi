@@ -4,8 +4,10 @@ module integrationTests.stdlib.aivi.number.tests
 use aivi
 use aivi.testing
 use aivi.number
-use aivi.number.bigint (domain BigInt)
-use aivi.number.rational (fromBigInts)
+use aivi.number (
+  bigint (domain BigInt)
+  rational (fromBigInts)
+)
 use aivi.number.decimal as dec
 use aivi.math
 
