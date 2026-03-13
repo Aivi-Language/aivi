@@ -1,5 +1,8 @@
 [profile.default]
 test-threads = "num-cpus"
+status-level = "fail"
+final-status-level = "fail"
+failure-output = "final"
 
 # Heavy runner tests JIT-compile many .aivi files with per-file timeouts.
 # Running them all in parallel causes CPU contention → timeouts → spurious failures.

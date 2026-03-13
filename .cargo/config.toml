@@ -1,2 +1,2 @@
 [alias]
-t = "nextest run --workspace"
+t = "nextest run --workspace --cargo-quiet --show-progress none"

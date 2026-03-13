@@ -7,7 +7,7 @@ users = [
 // Data processing pipeline
 activeNames = users
   |> filter active
-  |> map.name
+  |> map .name
   |> sort
   |> join ", "
 // "Alice, Carol"
