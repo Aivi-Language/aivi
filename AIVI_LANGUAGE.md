@@ -274,6 +274,7 @@ The `opaque` keyword hides the type's internal structure outside its defining mo
 
 ```aivi
 User = { id: Int, name: Text, email: Option Text }
+UserWithEmail = { ...User, email: Text }
 
 // Functions require the exact record shape:
 greet : User -> Text
@@ -309,6 +310,8 @@ Defaulted (email) User   // like Optional at type level; used for codec/default 
 // Type-level pipe:
 User |> Pick (id, name) |> Optional (name)
 ```
+
+Use row transforms to reshape existing fields. Use type-level record spread (`{ ...Base, extra: T }`) when you want to extend or override a closed record type.
 
 ### Type signatures
 

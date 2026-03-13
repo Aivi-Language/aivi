@@ -11,6 +11,7 @@ impl Parser {
         struct GtkAttr {
             name: String,
             value: GtkAttrValue,
+            span: Span,
         }
 
         #[derive(Debug, Clone)]
@@ -19,13 +20,21 @@ impl Parser {
                 tag: String,
                 attrs: Vec<GtkAttr>,
                 children: Vec<GtkNode>,
+                span: Span,
             },
             FunctionCall {
                 tag: String,
                 args: Vec<Expr>,
+                span: Span,
             },
-            Text(String),
-            Splice(Expr),
+            Text {
+                text: String,
+                span: Span,
+            },
+            Splice {
+                expr: Expr,
+                span: Span,
+            },
         }
 
         fn is_name_start(ch: char) -> bool {
@@ -48,6 +57,40 @@ impl Parser {
                 }
             }
             (line, col)
+        }
+
+        fn span_at_char_offsets(
+            start: &Position,
+            text: &str,
+            start_offset: usize,
+            end_offset_exclusive: usize,
+        ) -> Span {
+            let (start_line, start_column) = pos_at_char_offset(start, text, start_offset);
+            let end_offset = if end_offset_exclusive > start_offset {
+                end_offset_exclusive - 1
+            } else {
+                start_offset
+            };
+            let (end_line, end_column) = pos_at_char_offset(start, text, end_offset);
+            Span {
+                start: Position {
+                    line: start_line,
+                    column: start_column,
+                },
+                end: Position {
+                    line: end_line,
+                    column: end_column,
+                },
+            }
+        }
+
+        fn gtk_node_span(node: &GtkNode) -> &Span {
+            match node {
+                GtkNode::Element { span, .. }
+                | GtkNode::FunctionCall { span, .. }
+                | GtkNode::Text { span, .. }
+                | GtkNode::Splice { span, .. } => span,
+            }
         }
 
         fn normalize_prop_name(name: &str) -> String {
@@ -102,9 +145,9 @@ impl Parser {
 
         fn static_value_expr_text(expr: &Expr) -> Option<String> {
             match expr {
-                Expr::Literal(_)
-                | Expr::UnaryNeg { .. }
-                | Expr::Suffixed { .. } => compile_time_expr_text(expr),
+                Expr::Literal(_) | Expr::UnaryNeg { .. } | Expr::Suffixed { .. } => {
+                    compile_time_expr_text(expr)
+                }
                 _ => None,
             }
         }
@@ -121,7 +164,7 @@ impl Parser {
         let mut i = 0usize;
 
         let mut nodes: Vec<GtkNode> = Vec::new();
-        let mut stack: Vec<(String, Vec<GtkAttr>, Vec<GtkNode>)> = Vec::new();
+        let mut stack: Vec<(String, Vec<GtkAttr>, Vec<GtkNode>, Span)> = Vec::new();
 
         let emit_gtk_diag = |this: &mut Parser, message: &str| {
             this.emit_diag("E1610", message, sigil.span.clone());
@@ -130,8 +173,8 @@ impl Parser {
         let push_node =
             |node: GtkNode,
              nodes: &mut Vec<GtkNode>,
-             stack: &mut Vec<(String, Vec<GtkAttr>, Vec<GtkNode>)>| {
-                if let Some((_tag, _attrs, children)) = stack.last_mut() {
+             stack: &mut Vec<(String, Vec<GtkAttr>, Vec<GtkNode>, Span)>| {
+                if let Some((_tag, _attrs, children, _span)) = stack.last_mut() {
                     children.push(node);
                 } else {
                     nodes.push(node);
@@ -158,7 +201,19 @@ impl Parser {
                 let expr =
                     self.parse_embedded_expr(&expr_decoded, &expr_raw_map, expr_line, expr_col);
                 if let Some(expr) = expr {
-                    push_node(GtkNode::Splice(expr), &mut nodes, &mut stack);
+                    push_node(
+                        GtkNode::Splice {
+                            expr,
+                            span: span_at_char_offsets(
+                                &sigil.span.start,
+                                &sigil.text,
+                                body_start_offset + i,
+                                body_start_offset + close_index + 1,
+                            ),
+                        },
+                        &mut nodes,
+                        &mut stack,
+                    );
                 } else {
                     emit_gtk_diag(self, "invalid gtk splice expression");
                 }
@@ -191,7 +246,7 @@ impl Parser {
                         emit_gtk_diag(self, "expected '>' to close gtk end tag");
                     }
 
-                    if let Some((open_tag, open_attrs, open_children)) = stack.pop() {
+                    if let Some((open_tag, open_attrs, open_children, open_span)) = stack.pop() {
                         if open_tag != name {
                             emit_gtk_diag(
                                 self,
@@ -203,6 +258,7 @@ impl Parser {
                                 tag: open_tag,
                                 attrs: open_attrs,
                                 children: open_children,
+                                span: open_span,
                             },
                             &mut nodes,
                             &mut stack,
@@ -214,6 +270,7 @@ impl Parser {
                 }
 
                 // Start tag / self-close.
+                let tag_start = i;
                 i += 1;
                 while i < body_chars.len() && body_chars[i].is_whitespace() {
                     i += 1;
@@ -241,8 +298,14 @@ impl Parser {
                     }
                     if body_chars[i] == '>' {
                         i += 1;
+                        let tag_span = span_at_char_offsets(
+                            &sigil.span.start,
+                            &sigil.text,
+                            body_start_offset + tag_start,
+                            body_start_offset + i,
+                        );
                         if positional_args.is_empty() {
-                            stack.push((tag.clone(), attrs, Vec::new()));
+                            stack.push((tag.clone(), attrs, Vec::new(), tag_span));
                         } else {
                             self.emit_diag(
                                 "E1617",
@@ -253,6 +316,7 @@ impl Parser {
                                 GtkNode::FunctionCall {
                                     tag: tag.clone(),
                                     args: positional_args,
+                                    span: tag_span,
                                 },
                                 &mut nodes,
                                 &mut stack,
@@ -263,12 +327,19 @@ impl Parser {
                     if body_chars[i] == '/' && i + 1 < body_chars.len() && body_chars[i + 1] == '>'
                     {
                         i += 2;
+                        let tag_span = span_at_char_offsets(
+                            &sigil.span.start,
+                            &sigil.text,
+                            body_start_offset + tag_start,
+                            body_start_offset + i,
+                        );
                         if positional_args.is_empty() {
                             push_node(
                                 GtkNode::Element {
                                     tag: tag.clone(),
                                     attrs,
                                     children: Vec::new(),
+                                    span: tag_span,
                                 },
                                 &mut nodes,
                                 &mut stack,
@@ -278,6 +349,7 @@ impl Parser {
                                 GtkNode::FunctionCall {
                                     tag: tag.clone(),
                                     args: positional_args,
+                                    span: tag_span,
                                 },
                                 &mut nodes,
                                 &mut stack,
@@ -436,7 +508,16 @@ impl Parser {
                         GtkAttrValue::Bare
                     };
 
-                    attrs.push(GtkAttr { name, value });
+                    attrs.push(GtkAttr {
+                        name,
+                        value,
+                        span: span_at_char_offsets(
+                            &sigil.span.start,
+                            &sigil.text,
+                            body_start_offset + astart,
+                            body_start_offset + i,
+                        ),
+                    });
                 }
                 continue;
             }
@@ -448,18 +529,31 @@ impl Parser {
             }
             let text: String = body_chars[start..i].iter().collect();
             if !text.trim().is_empty() {
-                push_node(GtkNode::Text(text), &mut nodes, &mut stack);
+                push_node(
+                    GtkNode::Text {
+                        text,
+                        span: span_at_char_offsets(
+                            &sigil.span.start,
+                            &sigil.text,
+                            body_start_offset + start,
+                            body_start_offset + i,
+                        ),
+                    },
+                    &mut nodes,
+                    &mut stack,
+                );
             }
         }
 
         // Close any unclosed tags.
-        while let Some((open_tag, open_attrs, open_children)) = stack.pop() {
+        while let Some((open_tag, open_attrs, open_children, open_span)) = stack.pop() {
             emit_gtk_diag(self, &format!("unclosed gtk tag <{open_tag}>"));
             push_node(
                 GtkNode::Element {
                     tag: open_tag,
                     attrs: open_attrs,
                     children: open_children,
+                    span: open_span,
                 },
                 &mut nodes,
                 &mut stack,
@@ -467,7 +561,8 @@ impl Parser {
         }
 
         // Lower parsed GTK XML nodes to `aivi.ui.gtk4` helper constructors.
-        fn lower_raw_attr(attr: GtkAttr, span: &Span) -> Expr {
+        fn lower_raw_attr(attr: GtkAttr) -> Expr {
+            let span = attr.span.clone();
             let mk_ui = |name: &str| {
                 Expr::Ident(SpannedName {
                     name: name.into(),
@@ -617,6 +712,53 @@ impl Parser {
                 args: vec![mk_string(signal_name), handler_expr],
                 span: span.clone(),
             })
+        }
+
+        fn lower_source_meta(module_path: &str, span: &Span) -> Vec<Expr> {
+            let mk_ui = |name: &str| {
+                Expr::Ident(SpannedName {
+                    name: name.into(),
+                    span: span.clone(),
+                })
+            };
+            let mk_string = |value: &str| {
+                Expr::Literal(Literal::String {
+                    text: value.to_string(),
+                    span: span.clone(),
+                })
+            };
+            let call2 = |fname: &str, a: Expr, b: Expr| Expr::Call {
+                func: Box::new(mk_ui(fname)),
+                args: vec![a, b],
+                span: span.clone(),
+            };
+            vec![
+                call2(
+                    "gtkStaticAttr",
+                    mk_string("aivi-source-path"),
+                    mk_string(module_path),
+                ),
+                call2(
+                    "gtkStaticAttr",
+                    mk_string("aivi-source-start-line"),
+                    mk_string(&span.start.line.to_string()),
+                ),
+                call2(
+                    "gtkStaticAttr",
+                    mk_string("aivi-source-start-column"),
+                    mk_string(&span.start.column.to_string()),
+                ),
+                call2(
+                    "gtkStaticAttr",
+                    mk_string("aivi-source-end-line"),
+                    mk_string(&span.end.line.to_string()),
+                ),
+                call2(
+                    "gtkStaticAttr",
+                    mk_string("aivi-source-end-column"),
+                    mk_string(&span.end.column.to_string()),
+                ),
+            ]
         }
 
         fn gtk_attr_name_end(chars: &[char], start: usize) -> Option<usize> {
@@ -781,19 +923,26 @@ impl Parser {
             Some((expr, i))
         }
 
-        fn lower_children(this: &mut Parser, children: Vec<GtkNode>, span: &Span) -> Expr {
+        fn lower_children(
+            this: &mut Parser,
+            module_path: &str,
+            children: Vec<GtkNode>,
+            span: &Span,
+        ) -> Expr {
             let mut lowered_items: Vec<ListItem> = Vec::new();
             for child in children {
+                let child_span = gtk_node_span(&child).clone();
                 let GtkNode::Element {
                     tag,
                     attrs,
                     children: each_children,
+                    ..
                 } = child.clone()
                 else {
                     lowered_items.push(ListItem {
-                        expr: lower_node(this, child, span),
+                        expr: lower_node(this, module_path, child),
                         spread: false,
-                        span: span.clone(),
+                        span: child_span,
                     });
                     continue;
                 };
@@ -801,15 +950,16 @@ impl Parser {
                     lowered_items.push(ListItem {
                         expr: lower_node(
                             this,
+                            module_path,
                             GtkNode::Element {
                                 tag,
                                 attrs,
                                 children: each_children,
+                                span: child_span.clone(),
                             },
-                            span,
                         ),
                         spread: false,
-                        span: span.clone(),
+                        span: child_span,
                     });
                     continue;
                 }
@@ -824,13 +974,13 @@ impl Parser {
                                 this.emit_diag(
                                     "E1615",
                                     "<show> `when` must be a splice expression: when={visible}",
-                                    span.clone(),
+                                    child_span.clone(),
                                 );
                             }
                         }
                     }
                     let Some(when_expr) = when_expr else {
-                        this.emit_diag("E1615", "<show> requires `when={...}`", span.clone());
+                        this.emit_diag("E1615", "<show> requires `when={...}`", child_span.clone());
                         continue;
                     };
                     let mut show_children_iter = each_children.into_iter();
@@ -838,7 +988,7 @@ impl Parser {
                         this.emit_diag(
                             "E1615",
                             "<show> requires exactly one child node",
-                            span.clone(),
+                            child_span.clone(),
                         );
                         continue;
                     };
@@ -846,7 +996,7 @@ impl Parser {
                         this.emit_diag(
                             "E1615",
                             "<show> requires exactly one child node",
-                            span.clone(),
+                            child_span.clone(),
                         );
                         continue;
                     }
@@ -854,13 +1004,13 @@ impl Parser {
                         expr: Expr::Call {
                             func: Box::new(Expr::Ident(SpannedName {
                                 name: "gtkShow".into(),
-                                span: span.clone(),
+                                span: child_span.clone(),
                             })),
-                            args: vec![when_expr, lower_node(this, show_child, span)],
-                            span: span.clone(),
+                            args: vec![when_expr, lower_node(this, module_path, show_child)],
+                            span: child_span.clone(),
                         },
                         spread: false,
-                        span: span.clone(),
+                        span: child_span,
                     });
                     continue;
                 }
@@ -876,7 +1026,7 @@ impl Parser {
                             this.emit_diag(
                                 "E1615",
                                 "<each> `items` must be a splice expression: items={items}",
-                                span.clone(),
+                                child_span.clone(),
                             );
                         }
                     } else if attr.name == "as" {
@@ -886,7 +1036,7 @@ impl Parser {
                             this.emit_diag(
                                 "E1615",
                                 "<each> `as` must be an identifier splice: as={item}",
-                                span.clone(),
+                                child_span.clone(),
                             );
                         }
                     } else if attr.name == "key" {
@@ -896,18 +1046,18 @@ impl Parser {
                             this.emit_diag(
                                 "E1615",
                                 "<each> `key` must be a splice expression: key={item => item.id}",
-                                span.clone(),
+                                child_span.clone(),
                             );
                         }
                     }
                 }
 
                 let Some(items_expr) = each_items else {
-                    this.emit_diag("E1615", "<each> requires `items={...}`", span.clone());
+                    this.emit_diag("E1615", "<each> requires `items={...}`", child_span.clone());
                     continue;
                 };
                 let Some(item_binder) = each_binder else {
-                    this.emit_diag("E1615", "<each> requires `as={...}`", span.clone());
+                    this.emit_diag("E1615", "<each> requires `as={...}`", child_span.clone());
                     continue;
                 };
                 let mut each_children_iter = each_children.into_iter();
@@ -915,7 +1065,7 @@ impl Parser {
                     this.emit_diag(
                         "E1615",
                         "<each> requires exactly one child template node",
-                        span.clone(),
+                        child_span.clone(),
                     );
                     continue;
                 };
@@ -923,15 +1073,15 @@ impl Parser {
                     this.emit_diag(
                         "E1615",
                         "<each> requires exactly one child template node",
-                        span.clone(),
+                        child_span.clone(),
                     );
                     continue;
                 }
 
                 let lambda_expr = Expr::Lambda {
                     params: vec![Pattern::Ident(item_binder)],
-                    body: Box::new(lower_node(this, each_template_node, span)),
-                    span: span.clone(),
+                    body: Box::new(lower_node(this, module_path, each_template_node)),
+                    span: child_span.clone(),
                 };
                 let func_name = if each_key.is_some() {
                     "gtkEachKeyed"
@@ -947,13 +1097,13 @@ impl Parser {
                     expr: Expr::Call {
                         func: Box::new(Expr::Ident(SpannedName {
                             name: func_name.into(),
-                            span: span.clone(),
+                            span: child_span.clone(),
                         })),
                         args,
-                        span: span.clone(),
+                        span: child_span.clone(),
                     },
                     spread: false,
-                    span: span.clone(),
+                    span: child_span,
                 });
             }
             Expr::List {
@@ -962,7 +1112,8 @@ impl Parser {
             }
         }
 
-        fn lower_node(this: &mut Parser, node: GtkNode, span: &Span) -> Expr {
+        fn lower_node(this: &mut Parser, module_path: &str, node: GtkNode) -> Expr {
+            let span = gtk_node_span(&node).clone();
             let mk_ui = |name: &str| {
                 Expr::Ident(SpannedName {
                     name: name.into(),
@@ -993,13 +1144,13 @@ impl Parser {
             };
 
             match node {
-                GtkNode::Text(t) => Expr::Call {
+                GtkNode::Text { text, .. } => Expr::Call {
                     func: Box::new(mk_ui("gtkTextNode")),
-                    args: vec![mk_string(&t)],
+                    args: vec![mk_string(&text)],
                     span: span.clone(),
                 },
-                GtkNode::FunctionCall { tag, args } => {
-                    let Some(func) = function_call_tag_expr(&tag, span) else {
+                GtkNode::FunctionCall { tag, args, .. } => {
+                    let Some(func) = function_call_tag_expr(&tag, &span) else {
                         return Expr::Ident(SpannedName {
                             name: tag,
                             span: span.clone(),
@@ -1015,11 +1166,12 @@ impl Parser {
                         }
                     }
                 }
-                GtkNode::Splice(expr) => expr,
+                GtkNode::Splice { expr, .. } => expr,
                 GtkNode::Element {
                     tag,
                     attrs,
                     children,
+                    ..
                 } => {
                     // GTK widget shorthand: tags starting with Gtk/Adw/Gsk are
                     // lowered as `<object class="WidgetName">` where all
@@ -1030,9 +1182,12 @@ impl Parser {
                     if is_gtk_shorthand {
                         // Rewrite: <GtkButton label="Hello" onClick={handler}>
                         // → <object class="GtkButton" props={{ label: "Hello" }} onClick={handler}>
-                        let mut lowered_attrs = Vec::new();
-                        lowered_attrs
-                            .push(call2("gtkStaticAttr", mk_string("class"), mk_string(&tag)));
+                        let mut lowered_attrs = lower_source_meta(module_path, &span);
+                        lowered_attrs.push(call2(
+                            "gtkStaticAttr",
+                            mk_string("class"),
+                            mk_string(&tag),
+                        ));
                         for attr in attrs {
                             // Signal sugar (onClick, onInput, etc.)
                             let signal_name_opt = match attr.name.as_str() {
@@ -1053,7 +1208,7 @@ impl Parser {
                                     signal_name,
                                     &attr.name,
                                     attr.value,
-                                    span,
+                                    &attr.span,
                                 ) {
                                     lowered_attrs.push(lowered);
                                 }
@@ -1062,13 +1217,13 @@ impl Parser {
 
                             // Skip standard XML attrs that are handled separately
                             if attr.name == "id" || attr.name == "ref" {
-                                lowered_attrs.push(lower_raw_attr(attr, span));
+                                lowered_attrs.push(lower_raw_attr(attr));
                                 continue;
                             }
 
                             // Everything else is a prop: normalize and emit as prop:name
                             let prop_name = normalize_prop_name(&attr.name);
-                            lowered_attrs.push(lower_prop_attr(&prop_name, attr.value, span));
+                            lowered_attrs.push(lower_prop_attr(&prop_name, attr.value, &attr.span));
                         }
 
                         // Process children same as <object>
@@ -1086,42 +1241,48 @@ impl Parser {
                             if child_tag == "signal" {
                                 let mut signal_name = None::<String>;
                                 let mut signal_handler = None::<Expr>;
-                                if let GtkNode::Element { attrs, .. } = child {
+                                if let GtkNode::Element { ref attrs, .. } = child {
                                     for attr in attrs {
                                         if attr.name == "name" {
-                                            signal_name = match attr.value {
-                                                GtkAttrValue::Text(v) => Some(v),
+                                            signal_name = match &attr.value {
+                                                GtkAttrValue::Text(v) => Some(v.clone()),
                                                 GtkAttrValue::Splice(expr) => {
-                                                    compile_time_expr_text(&expr)
+                                                    compile_time_expr_text(expr)
                                                 }
                                                 GtkAttrValue::Bare => None,
                                             };
                                         } else if attr.name == "handler" || attr.name == "on" {
-                                            signal_handler = match attr.value {
-                                                GtkAttrValue::Splice(expr) => Some(expr),
-                                                GtkAttrValue::Text(v) => Some(mk_string(&v)),
+                                            signal_handler = match &attr.value {
+                                                GtkAttrValue::Splice(expr) => Some(expr.clone()),
+                                                GtkAttrValue::Text(v) => Some(mk_string(v)),
                                                 GtkAttrValue::Bare => None,
                                             };
                                         }
                                     }
                                 }
                                 let Some(name) = signal_name else {
+                                    let child_span = gtk_node_span(&child).clone();
                                     this.emit_diag(
                                         "E1614",
                                         "signal tag requires a compile-time `name` attribute",
-                                        span.clone(),
+                                        child_span,
                                     );
                                     continue;
                                 };
                                 let Some(handler) = signal_handler else {
+                                    let child_span = gtk_node_span(&child).clone();
                                     this.emit_diag(
                                         "E1614",
                                         "signal tag requires a `handler` or `on` value expression",
-                                        span.clone(),
+                                        child_span,
                                     );
                                     continue;
                                 };
-                                lowered_attrs.push(call2("gtkEventAttr", mk_string(&name), handler));
+                                lowered_attrs.push(call2(
+                                    "gtkEventAttr",
+                                    mk_string(&name),
+                                    handler,
+                                ));
                                 continue;
                             }
                             if child_tag == "child" {
@@ -1146,7 +1307,7 @@ impl Parser {
                         }
 
                         let attrs_expr = list(lowered_attrs);
-                        let children_expr = lower_children(this, kept_children, span);
+                        let children_expr = lower_children(this, module_path, kept_children, &span);
                         return Expr::Call {
                             func: Box::new(mk_ui("gtkElement")),
                             args: vec![mk_string("object"), attrs_expr, children_expr],
@@ -1158,7 +1319,7 @@ impl Parser {
                     // lowering: attrs become record fields, children become
                     // a `children` field. No signal sugar or props
                     // normalization — the component function owns its API.
-                    if let Some(component_expr) = component_tag_expr(&tag, span) {
+                    if let Some(component_expr) = component_tag_expr(&tag, &span) {
                         let mut fields: Vec<RecordField> = Vec::new();
                         for attr in attrs {
                             let value_expr = match attr.value {
@@ -1180,7 +1341,7 @@ impl Parser {
                             });
                         }
                         if !children.is_empty() {
-                            let children_expr = lower_children(this, children, span);
+                            let children_expr = lower_children(this, module_path, children, &span);
                             fields.push(RecordField {
                                 spread: false,
                                 path: vec![PathSegment::Field(SpannedName {
@@ -1203,7 +1364,7 @@ impl Parser {
                     }
 
                     // Built-in GTK element lowering (lowercase tags).
-                    let mut lowered_attrs = Vec::new();
+                    let mut lowered_attrs = lower_source_meta(module_path, &span);
                     for attr in attrs {
                         if attr.name == "props" {
                             match attr.value {
@@ -1246,7 +1407,7 @@ impl Parser {
                                         lowered_attrs.push(lower_prop_attr(
                                             &prop_name,
                                             GtkAttrValue::Splice(field.value),
-                                            span,
+                                            &span,
                                         ));
                                     }
                                 }
@@ -1273,14 +1434,18 @@ impl Parser {
                             _ => None,
                         };
                         if let Some(signal_name) = signal_name_opt {
-                            if let Some(lowered) =
-                                lower_event_attr(this, signal_name, &attr.name, attr.value, span)
-                            {
+                            if let Some(lowered) = lower_event_attr(
+                                this,
+                                signal_name,
+                                &attr.name,
+                                attr.value,
+                                &attr.span,
+                            ) {
                                 lowered_attrs.push(lowered);
                             }
                             continue;
                         }
-                        lowered_attrs.push(lower_raw_attr(attr, span));
+                        lowered_attrs.push(lower_raw_attr(attr));
                     }
 
                     let mut kept_children = Vec::new();
@@ -1297,38 +1462,40 @@ impl Parser {
                         if child_tag == "signal" {
                             let mut signal_name = None::<String>;
                             let mut signal_handler = None::<Expr>;
-                            if let GtkNode::Element { attrs, .. } = child {
+                            if let GtkNode::Element { ref attrs, .. } = child {
                                 for attr in attrs {
                                     if attr.name == "name" {
-                                        signal_name = match attr.value {
-                                            GtkAttrValue::Text(v) => Some(v),
+                                        signal_name = match &attr.value {
+                                            GtkAttrValue::Text(v) => Some(v.clone()),
                                             GtkAttrValue::Splice(expr) => {
-                                                compile_time_expr_text(&expr)
+                                                compile_time_expr_text(expr)
                                             }
                                             GtkAttrValue::Bare => None,
                                         };
                                     } else if attr.name == "handler" || attr.name == "on" {
-                                        signal_handler = match attr.value {
-                                            GtkAttrValue::Splice(expr) => Some(expr),
-                                            GtkAttrValue::Text(v) => Some(mk_string(&v)),
+                                        signal_handler = match &attr.value {
+                                            GtkAttrValue::Splice(expr) => Some(expr.clone()),
+                                            GtkAttrValue::Text(v) => Some(mk_string(v)),
                                             GtkAttrValue::Bare => None,
                                         };
                                     }
                                 }
                             }
                             let Some(name) = signal_name else {
+                                let child_span = gtk_node_span(&child).clone();
                                 this.emit_diag(
                                     "E1614",
                                     "signal tag requires a compile-time `name` attribute",
-                                    span.clone(),
+                                    child_span,
                                 );
                                 continue;
                             };
                             let Some(handler) = signal_handler else {
+                                let child_span = gtk_node_span(&child).clone();
                                 this.emit_diag(
                                     "E1614",
                                     "signal tag requires a `handler` or `on` value expression",
-                                    span.clone(),
+                                    child_span,
                                 );
                                 continue;
                             };
@@ -1361,24 +1528,33 @@ impl Parser {
                     let children_expr = if tag == "property" {
                         let wrapped: Vec<GtkNode> = kept_children
                             .into_iter()
-                            .map(|child| match child {
-                                GtkNode::Splice(expr) => {
-                                    if let Some(text) = static_value_expr_text(&expr) {
-                                        GtkNode::Text(text)
-                                    } else {
-                                        GtkNode::Splice(Expr::Call {
-                                            func: Box::new(mk_ui("gtkBoundText")),
-                                            args: vec![expr],
-                                            span: span.clone(),
-                                        })
+                            .map(|child| {
+                                let child_span = gtk_node_span(&child).clone();
+                                match child {
+                                    GtkNode::Splice { expr, .. } => {
+                                        if let Some(text) = static_value_expr_text(&expr) {
+                                            GtkNode::Text {
+                                                text,
+                                                span: child_span,
+                                            }
+                                        } else {
+                                            GtkNode::Splice {
+                                                expr: Expr::Call {
+                                                    func: Box::new(mk_ui("gtkBoundText")),
+                                                    args: vec![expr],
+                                                    span: child_span.clone(),
+                                                },
+                                                span: child_span,
+                                            }
+                                        }
                                     }
+                                    other => other,
                                 }
-                                other => other,
                             })
                             .collect();
-                        lower_children(this, wrapped, span)
+                        lower_children(this, module_path, wrapped, &span)
                     } else {
-                        lower_children(this, kept_children, span)
+                        lower_children(this, module_path, kept_children, &span)
                     };
                     Expr::Call {
                         func: Box::new(mk_ui("gtkElement")),
@@ -1390,6 +1566,7 @@ impl Parser {
         }
 
         let root_span = sigil.span.clone();
+        let source_path = self.path.clone();
         if nodes.len() == 1 {
             let root = nodes.remove(0);
             if let GtkNode::Element { tag, .. } = &root {
@@ -1401,7 +1578,7 @@ impl Parser {
                     );
                 }
             }
-            return lower_node(self, root, &root_span);
+            return lower_node(self, &source_path, root);
         }
         self.emit_diag(
             "E1611",
@@ -1415,9 +1592,11 @@ impl Parser {
             attrs: vec![GtkAttr {
                 name: "class".to_string(),
                 value: GtkAttrValue::Text("GtkBox".to_string()),
+                span: root_span.clone(),
             }],
             children: nodes,
+            span: root_span.clone(),
         };
-        lower_node(self, wrapper, &root_span)
+        lower_node(self, &source_path, wrapper)
     }
 }

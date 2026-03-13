@@ -810,6 +810,50 @@ UserPublic = User |> Omit (isAdmin) |> Rename { email: email_address }
 }
 
 #[test]
+fn typecheck_record_type_spread_extends_and_overrides() {
+    let source = r#"
+module test.record_type_spread
+export extendedEmail, normalizedName
+
+UserCore = { id: Int, name: Text }
+UserWithEmail = { ...UserCore, email: Text }
+UserMaybeName = { name: Option Text }
+UserDisplay = { ...UserCore, name: Option Text }
+UserNormalized = { ...UserMaybeName, ...UserCore }
+
+extend : UserCore -> Text -> UserWithEmail
+extend = user email => { id: user.id, name: user.name, email }
+
+displayName : UserDisplay -> Option Text
+displayName = user => user.name
+
+normalize : UserNormalized -> Text
+normalize = user => user.name
+
+extendedEmail : Text
+extendedEmail = (extend { id: 1, name: "Ada" } "ada@example.com").email
+
+normalizedName : Text
+normalizedName = normalize { id: 2, name: "Bea" }
+
+displayed : Option Text
+displayed = displayName { id: 3, name: Some "Cy" }"#;
+    check_ok(source);
+}
+
+#[test]
+fn typecheck_record_type_spread_rejects_non_record() {
+    let source = r#"
+module test.record_type_spread_error
+
+Bad = { ...Text, id: Int }
+
+bad : Bad
+bad = { id: 1 }"#;
+    check_err_with_code(source, "E3000");
+}
+
+#[test]
 fn typecheck_patch_literal() {
     let source = r#"
 module test.patch_literal

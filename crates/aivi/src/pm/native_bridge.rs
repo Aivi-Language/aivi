@@ -5,8 +5,8 @@
 //! 1. Wraps each crate function with AIVI `Value` marshalling
 //! 2. Provides a registration function to install them as builtins
 
-use crate::surface::{Decorator, Expr, Literal, Module, ModuleItem, TypeExpr};
-use std::collections::HashMap;
+use crate::surface::{Decorator, Expr, Literal, Module, ModuleItem, RecordTypeField, TypeExpr};
+use std::collections::{HashMap, HashSet};
 
 /// A single crate-native binding extracted from the surface AST.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -48,6 +48,14 @@ pub fn collect_crate_natives(modules: &[Module]) -> Vec<CrateNativeBinding> {
     for module in modules {
         // Collect type signatures with @native crate paths
         let mut sig_map: HashMap<String, (&str, &TypeExpr)> = HashMap::new();
+        let type_aliases: HashMap<String, &TypeExpr> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::TypeAlias(alias) => Some((alias.name.name.clone(), &alias.aliased)),
+                _ => None,
+            })
+            .collect();
         for item in &module.items {
             if let ModuleItem::TypeSig(sig) = item {
                 if let Some(path) = native_crate_target(&sig.decorators) {
@@ -63,7 +71,7 @@ pub fn collect_crate_natives(modules: &[Module]) -> Vec<CrateNativeBinding> {
                 .unwrap_or(rust_path)
                 .to_string();
             let global_name = crate_native_global_name(rust_path);
-            let (param_types, return_type) = decompose_type(ty);
+            let (param_types, return_type) = decompose_type(ty, &type_aliases);
 
             bindings.push(CrateNativeBinding {
                 aivi_name: aivi_name.clone(),
@@ -101,62 +109,117 @@ fn crate_native_global_name(path: &str) -> String {
 
 /// Decompose a TypeExpr into parameter types and the final return type.
 /// Handles right-associative `->` chains: `A -> B -> C` is `Func([A], Func([B], C))`.
-fn decompose_type(ty: &TypeExpr) -> (Vec<AiviType>, AiviType) {
-    fn collect_params(ty: &TypeExpr, params: &mut Vec<AiviType>) -> AiviType {
+fn decompose_type(
+    ty: &TypeExpr,
+    aliases: &HashMap<String, &TypeExpr>,
+) -> (Vec<AiviType>, AiviType) {
+    fn collect_params(
+        ty: &TypeExpr,
+        aliases: &HashMap<String, &TypeExpr>,
+        params: &mut Vec<AiviType>,
+    ) -> AiviType {
         match ty {
             TypeExpr::Func {
                 params: ps, result, ..
             } => {
                 for p in ps {
-                    params.push(type_expr_to_aivi_type(p));
+                    params.push(type_expr_to_aivi_type(p, aliases));
                 }
-                collect_params(result, params)
+                collect_params(result, aliases, params)
             }
-            _ => type_expr_to_aivi_type(ty),
+            _ => type_expr_to_aivi_type(ty, aliases),
         }
     }
     let mut params = Vec::new();
-    let ret = collect_params(ty, &mut params);
+    let ret = collect_params(ty, aliases, &mut params);
     (params, ret)
 }
 
 /// Convert a surface TypeExpr to a simplified AiviType for bridge generation.
-fn type_expr_to_aivi_type(ty: &TypeExpr) -> AiviType {
-    match ty {
-        TypeExpr::Name(name) => match name.name.as_str() {
-            "Text" => AiviType::Text,
-            "Int" => AiviType::Int,
-            "Float" => AiviType::Float,
-            "Bool" => AiviType::Bool,
-            "Unit" => AiviType::Unit,
-            other => AiviType::Opaque(other.to_string()),
-        },
-        TypeExpr::Apply { base, args, .. } => {
-            if let TypeExpr::Name(name) = base.as_ref() {
-                match (name.name.as_str(), args.as_slice()) {
-                    ("Option", [inner]) => {
-                        AiviType::Option(Box::new(type_expr_to_aivi_type(inner)))
-                    }
-                    ("List", [inner]) => AiviType::List(Box::new(type_expr_to_aivi_type(inner))),
-                    ("Result", [err, ok]) => AiviType::Result(
-                        Box::new(type_expr_to_aivi_type(err)),
-                        Box::new(type_expr_to_aivi_type(ok)),
-                    ),
-                    _ => AiviType::Opaque(name.name.to_string()),
-                }
-            } else {
-                AiviType::Opaque("unknown".to_string())
-            }
+fn type_expr_to_aivi_type(ty: &TypeExpr, aliases: &HashMap<String, &TypeExpr>) -> AiviType {
+    fn upsert_record_field(fields: &mut Vec<(String, AiviType)>, name: String, ty: AiviType) {
+        if let Some((_, existing_ty)) = fields
+            .iter_mut()
+            .find(|(existing_name, _)| *existing_name == name)
+        {
+            *existing_ty = ty;
+        } else {
+            fields.push((name, ty));
         }
-        TypeExpr::Record { fields, .. } => {
-            let field_types: Vec<(String, AiviType)> = fields
-                .iter()
-                .map(|(name, ty)| (name.name.clone(), type_expr_to_aivi_type(ty)))
-                .collect();
-            AiviType::Record(field_types)
-        }
-        _ => AiviType::Opaque("unknown".to_string()),
     }
+
+    fn lower_type_expr(
+        ty: &TypeExpr,
+        aliases: &HashMap<String, &TypeExpr>,
+        seen_aliases: &mut HashSet<String>,
+    ) -> AiviType {
+        match ty {
+            TypeExpr::Name(name) => {
+                if let Some(alias_ty) = aliases.get(&name.name) {
+                    if seen_aliases.insert(name.name.clone()) {
+                        let lowered = lower_type_expr(alias_ty, aliases, seen_aliases);
+                        seen_aliases.remove(&name.name);
+                        return lowered;
+                    }
+                }
+                match name.name.as_str() {
+                    "Text" => AiviType::Text,
+                    "Int" => AiviType::Int,
+                    "Float" => AiviType::Float,
+                    "Bool" => AiviType::Bool,
+                    "Unit" => AiviType::Unit,
+                    other => AiviType::Opaque(other.to_string()),
+                }
+            }
+            TypeExpr::Apply { base, args, .. } => {
+                if let TypeExpr::Name(name) = base.as_ref() {
+                    match (name.name.as_str(), args.as_slice()) {
+                        ("Option", [inner]) => AiviType::Option(Box::new(lower_type_expr(
+                            inner,
+                            aliases,
+                            seen_aliases,
+                        ))),
+                        ("List", [inner]) => {
+                            AiviType::List(Box::new(lower_type_expr(inner, aliases, seen_aliases)))
+                        }
+                        ("Result", [err, ok]) => AiviType::Result(
+                            Box::new(lower_type_expr(err, aliases, seen_aliases)),
+                            Box::new(lower_type_expr(ok, aliases, seen_aliases)),
+                        ),
+                        _ => AiviType::Opaque(name.name.to_string()),
+                    }
+                } else {
+                    AiviType::Opaque("unknown".to_string())
+                }
+            }
+            TypeExpr::Record { fields, .. } => {
+                let mut field_types = Vec::new();
+                for field in fields {
+                    match field {
+                        RecordTypeField::Named { name, ty } => {
+                            let lowered = lower_type_expr(ty, aliases, seen_aliases);
+                            upsert_record_field(&mut field_types, name.name.clone(), lowered);
+                        }
+                        RecordTypeField::Spread { ty, .. } => {
+                            if let AiviType::Record(spread_fields) =
+                                lower_type_expr(ty, aliases, seen_aliases)
+                            {
+                                for (name, ty) in spread_fields {
+                                    upsert_record_field(&mut field_types, name, ty);
+                                }
+                            } else {
+                                return AiviType::Opaque("unknown".to_string());
+                            }
+                        }
+                    }
+                }
+                AiviType::Record(field_types)
+            }
+            _ => AiviType::Opaque("unknown".to_string()),
+        }
+    }
+
+    lower_type_expr(ty, aliases, &mut HashSet::new())
 }
 
 /// Generate the Rust source code for `native_bridge.rs`.

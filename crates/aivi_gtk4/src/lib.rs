@@ -76,12 +76,12 @@ mod linux_impl {
     use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
-    use std::sync::{mpsc, Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex, OnceLock, mpsc};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use base64::Engine;
     use image::{ImageBuffer, ImageEncoder, Rgba};
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
 
     use super::{BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, SignalEvent};
 
@@ -176,6 +176,7 @@ mod linux_impl {
         fn gtk_widget_set_opacity(widget: *mut c_void, opacity: f64);
         fn gtk_widget_grab_focus(widget: *mut c_void) -> c_int;
         fn gtk_widget_child_focus(widget: *mut c_void, direction: c_int) -> c_int;
+        fn gtk_widget_get_parent(widget: *mut c_void) -> *mut c_void;
         fn gtk_widget_unparent(widget: *mut c_void);
         // Sets the AT-SPI accessible label (GTK_ACCESSIBLE_PROPERTY_LABEL = 5)
         fn gtk_accessible_update_property(accessible: *mut c_void, first_property: c_int, ...);
@@ -503,7 +504,7 @@ mod linux_impl {
     unsafe extern "C" {
         fn g_type_from_name(name: *const c_char) -> usize;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
-            -> *mut c_void;
+        -> *mut c_void;
         fn g_object_ref(object: *mut c_void) -> *mut c_void;
         fn g_object_unref(object: *mut c_void);
         fn g_object_ref_sink(object: *mut c_void) -> *mut c_void;
@@ -624,6 +625,15 @@ mod linux_impl {
 
     /// Mirrors the live GTK widget tree for reconciliation.
     #[derive(Clone, Debug)]
+    struct GtkSourceContext {
+        path: String,
+        start_line: usize,
+        start_column: usize,
+        end_line: usize,
+        end_column: usize,
+    }
+
+    #[derive(Clone, Debug)]
     struct LiveNode {
         widget_id: i64,
         class_name: String,
@@ -631,6 +641,7 @@ mod linux_impl {
         node_id: Option<String>,
         key: Option<String>,
         binding_id: Option<String>,
+        source_context: Option<GtkSourceContext>,
         props: HashMap<String, String>,
         signals: Vec<SignalBindingState>,
         signal_handlers: Vec<SignalHandlerConnection>,
@@ -938,11 +949,7 @@ mod linux_impl {
     }
 
     fn bool_to_c(val: bool) -> c_int {
-        if val {
-            1
-        } else {
-            0
-        }
+        if val { 1 } else { 0 }
     }
 
     const GTK_DIR_TAB_FORWARD: c_int = 0;
@@ -1129,9 +1136,69 @@ mod linux_impl {
         }
     }
 
+    fn format_source_context(context: &GtkSourceContext, label: &str) -> String {
+        let mut out = format!(
+            "at {}:{}:{}",
+            context.path, context.start_line, context.start_column
+        );
+        if let Ok(source) = fs::read_to_string(&context.path) {
+            if let Some(line_text) = source.lines().nth(context.start_line.saturating_sub(1)) {
+                let underline_start = context.start_column.saturating_sub(1);
+                let underline_len = if context.start_line == context.end_line {
+                    context
+                        .end_column
+                        .saturating_sub(context.start_column)
+                        .saturating_add(1)
+                        .max(1)
+                } else {
+                    line_text
+                        .chars()
+                        .count()
+                        .saturating_sub(underline_start)
+                        .max(1)
+                };
+                out.push('\n');
+                out.push_str(line_text);
+                out.push('\n');
+                out.push_str(&" ".repeat(underline_start));
+                out.push_str(&"^".repeat(underline_len));
+                if !label.is_empty() {
+                    out.push(' ');
+                    out.push_str(label);
+                }
+            }
+        }
+        out
+    }
+
+    fn append_source_context(
+        message: &mut String,
+        heading: &str,
+        context: Option<&GtkSourceContext>,
+        label: &str,
+    ) {
+        let Some(context) = context else {
+            return;
+        };
+        message.push_str("\n\n");
+        message.push_str(heading);
+        message.push('\n');
+        message.push_str(&format_source_context(context, label));
+    }
+
+    fn node_source_context(attrs: &[(String, String)]) -> Option<GtkSourceContext> {
+        Some(GtkSourceContext {
+            path: node_attr(attrs, "aivi-source-path")?.to_string(),
+            start_line: parse_usize_text(node_attr(attrs, "aivi-source-start-line")?)?,
+            start_column: parse_usize_text(node_attr(attrs, "aivi-source-start-column")?)?,
+            end_line: parse_usize_text(node_attr(attrs, "aivi-source-end-line")?)?,
+            end_column: parse_usize_text(node_attr(attrs, "aivi-source-end-column")?)?,
+        })
+    }
+
     fn known_signals_for_class(class_name: &str) -> &'static [&'static str] {
         if class_name.starts_with("Adw") && class_name.ends_with("Dialog") {
-            return &["notify::open", "close-attempt"];
+            return &["closed", "close-attempt"];
         }
         match class_name {
             "GtkButton" => &["clicked"],
@@ -1174,15 +1241,23 @@ mod linux_impl {
         widget_id: i64,
         class_name: &str,
         node_id: Option<&str>,
+        source_context: Option<&GtkSourceContext>,
         binding: &SignalBindingState,
     ) -> Gtk4Error {
-        Gtk4Error::new(format!(
+        let mut message = format!(
             "gtk4.{operation} unsupported signal `{}` on {} bound to `{}`. {}",
             binding.signal,
             widget_debug_label(widget_id, class_name, node_id),
             binding.handler,
             known_signal_note(class_name)
-        ))
+        );
+        append_source_context(
+            &mut message,
+            "GTK node",
+            source_context,
+            "unsupported signal binding",
+        );
+        Gtk4Error::new(message)
     }
 
     fn expected_preferences_child(
@@ -1209,6 +1284,7 @@ mod linux_impl {
         class_name: &'a str,
         kind: CreatedWidgetKind,
         node_id: Option<&'a str>,
+        source_context: Option<&'a GtkSourceContext>,
     }
 
     #[derive(Clone, Copy)]
@@ -1235,16 +1311,108 @@ mod linux_impl {
         if child.kind == expected_kind {
             return Ok(());
         }
-        Err(Gtk4Error::new(format!(
+        let mut message = format!(
             "gtk4.{operation} invalid child attachment: {} expected a child with class `{expected_class}`, but got {}. {note}",
             widget_debug_label(parent.id, parent.class_name, parent.node_id),
             widget_debug_label(child.id, child.class_name, child.node_id),
-        )))
+        );
+        append_source_context(
+            &mut message,
+            "Parent node",
+            parent.source_context,
+            "target parent",
+        );
+        append_source_context(
+            &mut message,
+            "Child node",
+            child.source_context,
+            "attached child",
+        );
+        Err(Gtk4Error::new(message))
+    }
+
+    fn existing_parent_context<'a>(
+        state: &'a RealGtkState,
+        raw_parent: *mut c_void,
+    ) -> Option<(String, Option<&'a GtkSourceContext>)> {
+        state
+            .widgets
+            .iter()
+            .find(|(_, candidate)| **candidate == raw_parent)
+            .and_then(|(widget_id, _)| {
+                find_widget_context(state, *widget_id).map(|(_, _, _, live)| {
+                    (
+                        widget_debug_label(*widget_id, &live.class_name, live.node_id.as_deref()),
+                        live.source_context.as_ref(),
+                    )
+                })
+            })
+            .or_else(|| {
+                state
+                    .windows
+                    .iter()
+                    .find(|(_, candidate)| **candidate == raw_parent)
+                    .map(|(window_id, _)| (format!("window #{window_id}"), None))
+            })
+    }
+
+    fn validate_parenting_state(
+        state: &RealGtkState,
+        operation: &str,
+        parent: WidgetAttachmentInfo<'_>,
+        parent_raw: *mut c_void,
+        child: WidgetAttachmentInfo<'_>,
+        child_raw: *mut c_void,
+    ) -> Result<(), Gtk4Error> {
+        validate_special_child_attachment(operation, parent, child)?;
+        let existing_parent = unsafe { gtk_widget_get_parent(child_raw) };
+        if existing_parent.is_null() {
+            return Ok(());
+        }
+        let same_parent = existing_parent == parent_raw;
+        let (existing_parent_label, existing_parent_source) =
+            existing_parent_context(state, existing_parent)
+                .unwrap_or_else(|| ("an unknown GTK parent".to_string(), None));
+        let mut message = if same_parent {
+            format!(
+                "gtk4.{operation} cannot attach {} to {} because the child is already parented there.",
+                widget_debug_label(child.id, child.class_name, child.node_id),
+                widget_debug_label(parent.id, parent.class_name, parent.node_id),
+            )
+        } else {
+            format!(
+                "gtk4.{operation} cannot attach {} to {} because the child is already parented by {}.",
+                widget_debug_label(child.id, child.class_name, child.node_id),
+                widget_debug_label(parent.id, parent.class_name, parent.node_id),
+                existing_parent_label,
+            )
+        };
+        append_source_context(
+            &mut message,
+            "Child node",
+            child.source_context,
+            "already parented child",
+        );
+        append_source_context(
+            &mut message,
+            "Target parent",
+            parent.source_context,
+            "requested parent",
+        );
+        append_source_context(
+            &mut message,
+            "Existing parent",
+            existing_parent_source,
+            "current parent",
+        );
+        Err(Gtk4Error::new(message))
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::fs;
+        use std::path::PathBuf;
         use std::sync::{Arc, Mutex, OnceLock};
         use std::time::Duration;
 
@@ -1276,15 +1444,73 @@ mod linux_impl {
                 12,
                 "GtkBox",
                 Some("settings-panel"),
+                None,
                 &binding,
             );
-            assert!(err
-                .message
-                .contains("widget #12 (GtkBox id=settings-panel)"));
+            assert!(
+                err.message
+                    .contains("widget #12 (GtkBox id=settings-panel)")
+            );
             assert!(err.message.contains("bound to `Save`"));
-            assert!(err
-                .message
-                .contains("Known supported signals for this class: key-pressed."));
+            assert!(
+                err.message
+                    .contains("Known supported signals for this class: key-pressed.")
+            );
+        }
+
+        fn write_test_source(name: &str, contents: &str) -> PathBuf {
+            let path = std::env::temp_dir().join(format!(
+                "aivi-gtk4-source-context-{name}-{}.aivi",
+                std::process::id()
+            ));
+            fs::write(&path, contents).expect("write source context fixture");
+            path
+        }
+
+        #[test]
+        fn format_source_context_quotes_source_line_and_underline() {
+            let path = write_test_source("quote", "module test\n<GtkButton attr1=\"save\" />\n");
+            let rendered = format_source_context(
+                &GtkSourceContext {
+                    path: path.to_string_lossy().into_owned(),
+                    start_line: 2,
+                    start_column: 12,
+                    end_line: 2,
+                    end_column: 16,
+                },
+                "unknown property",
+            );
+            assert!(rendered.contains(":2:12"));
+            assert!(rendered.contains("<GtkButton attr1=\"save\" />"));
+            assert!(rendered.contains("^^^^^ unknown property"));
+            let _ = fs::remove_file(path);
+        }
+
+        #[test]
+        fn invalid_signal_error_includes_source_quote_when_available() {
+            let path = write_test_source("signal", "module test\n<GtkBox onClick={ Save } />\n");
+            let binding = SignalBindingState {
+                signal: "clicked".to_string(),
+                handler: "Save".to_string(),
+            };
+            let err = invalid_signal_error(
+                "buildFromNode",
+                12,
+                "GtkBox",
+                Some("settings-panel"),
+                Some(&GtkSourceContext {
+                    path: path.to_string_lossy().into_owned(),
+                    start_line: 2,
+                    start_column: 9,
+                    end_line: 2,
+                    end_column: 15,
+                }),
+                &binding,
+            );
+            assert!(err.message.contains("GTK node"));
+            assert!(err.message.contains("<GtkBox onClick={ Save } />"));
+            assert!(err.message.contains("^^^^^^^ unsupported signal binding"));
+            let _ = fs::remove_file(path);
         }
 
         #[test]
@@ -1296,21 +1522,25 @@ mod linux_impl {
                     class_name: "AdwPreferencesPage",
                     kind: CreatedWidgetKind::PreferencesPage,
                     node_id: Some("settings-page"),
+                    source_context: None,
                 },
                 WidgetAttachmentInfo {
                     id: 9,
                     class_name: "GtkBox",
                     kind: CreatedWidgetKind::Box,
                     node_id: Some("account-connection"),
+                    source_context: None,
                 },
             )
             .expect_err("expected invalid child mismatch");
-            assert!(err
-                .message
-                .contains("expected a child with class `AdwPreferencesGroup`"));
-            assert!(err
-                .message
-                .contains("widget #9 (GtkBox id=account-connection)"));
+            assert!(
+                err.message
+                    .contains("expected a child with class `AdwPreferencesGroup`")
+            );
+            assert!(
+                err.message
+                    .contains("widget #9 (GtkBox id=account-connection)")
+            );
         }
         #[test]
         fn adw_abstract_animation_gives_helpful_error() {
@@ -1651,10 +1881,10 @@ mod linux_impl {
         }
 
         #[test]
-        fn adw_preferences_dialog_has_notify_open_signal_support() {
+        fn adw_preferences_dialog_uses_closed_and_close_attempt_signals() {
             assert_eq!(
-                signal_payload_kind_for("AdwPreferencesDialog", "notify::open"),
-                Some(SignalPayloadKind::NotifyBool)
+                signal_payload_kind_for("AdwPreferencesDialog", "closed"),
+                Some(SignalPayloadKind::None)
             );
             assert_eq!(
                 signal_payload_kind_for("AdwPreferencesDialog", "close-attempt"),
@@ -1662,7 +1892,39 @@ mod linux_impl {
             );
             assert_eq!(
                 known_signals_for_class("AdwPreferencesDialog"),
-                &["notify::open", "close-attempt"]
+                &["closed", "close-attempt"]
+            );
+        }
+
+        #[test]
+        fn dialog_open_transition_skips_close_when_dialog_is_already_closed() {
+            assert_eq!(
+                dialog_open_transition(false, true, false),
+                (DialogOpenTransition::None, false)
+            );
+        }
+
+        #[test]
+        fn dialog_open_transition_preserves_tracked_open_dialog() {
+            assert_eq!(
+                dialog_open_transition(true, true, false),
+                (DialogOpenTransition::None, true)
+            );
+            assert_eq!(
+                dialog_open_transition(true, false, true),
+                (DialogOpenTransition::None, true)
+            );
+        }
+
+        #[test]
+        fn dialog_open_transition_requests_present_and_close_when_needed() {
+            assert_eq!(
+                dialog_open_transition(true, false, false),
+                (DialogOpenTransition::Present, true)
+            );
+            assert_eq!(
+                dialog_open_transition(false, true, true),
+                (DialogOpenTransition::Close, true)
             );
         }
 
@@ -3694,7 +3956,7 @@ mod linux_impl {
                     _ => {
                         return Err(Gtk4Error::new(format!(
                             "gtk ui debug scroll invalid direction '{direction}'"
-                        )))
+                        )));
                     }
                 };
                 if adjustment.is_null() {
@@ -4323,7 +4585,7 @@ mod linux_impl {
                         Err(err) => {
                             return Err(Gtk4Error::new(format!(
                                 "gtk ui debug accept failed: {err}"
-                            )))
+                            )));
                         }
                     }
                 }
@@ -4417,7 +4679,7 @@ mod linux_impl {
             Err(err) => {
                 return Err(Gtk4Error::new(format!(
                     "failed to remove stale ui debug socket {socket_path}: {err}"
-                )))
+                )));
             }
         }
         let listener = UnixListener::bind(&socket_path).map_err(|err| {
@@ -4723,7 +4985,7 @@ mod linux_impl {
             Err(std::env::VarError::NotUnicode(_)) => {
                 return Err(Gtk4Error::new(format!(
                     "{GRESOURCE_ENV} must be valid UTF-8"
-                )))
+                )));
             }
         };
         if path.is_empty() {
@@ -5259,7 +5521,6 @@ mod linux_impl {
         if class_name.starts_with("Adw") && class_name.ends_with("Dialog") {
             return match signal_name {
                 "closed" | "close-attempt" => Some(SignalPayloadKind::None),
-                "notify::open" => Some(SignalPayloadKind::NotifyBool),
                 _ => None,
             };
         }
@@ -5299,6 +5560,7 @@ mod linux_impl {
         widget_id: i64,
         class_name: &str,
         node_id: Option<&str>,
+        source_context: Option<&GtkSourceContext>,
         operation: &str,
         binding: &SignalBindingState,
     ) -> Result<SignalHandlerConnection, Gtk4Error> {
@@ -5337,7 +5599,12 @@ mod linux_impl {
         }
         let Some(payload_kind) = signal_payload_kind_for(class_name, &binding.signal) else {
             return Err(invalid_signal_error(
-                operation, widget_id, class_name, node_id, binding,
+                operation,
+                widget_id,
+                class_name,
+                node_id,
+                source_context,
+                binding,
             ));
         };
         let signal_c = c_text(&binding.signal, "gtk4.buildFromNode invalid signal name")?;
@@ -6583,6 +6850,7 @@ mod linux_impl {
                 node_id: Some(ref_id.to_string()),
                 key: None,
                 binding_id: None,
+                source_context: node_source_context(attrs),
                 props: HashMap::new(),
                 signals: Vec::new(),
                 signal_handlers: Vec::new(),
@@ -6592,6 +6860,7 @@ mod linux_impl {
         }
         let class_name = node_attr(attrs, "class")
             .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
+        let source_context = node_source_context(attrs);
         let props = collect_object_properties(attrs, children);
         let signal_bindings = collect_object_signals(attrs, children);
 
@@ -7510,6 +7779,7 @@ mod linux_impl {
                 id,
                 class_name,
                 node_id.as_deref(),
+                source_context.as_ref(),
                 "buildFromNode",
                 binding,
             )?;
@@ -7554,20 +7824,25 @@ mod linux_impl {
             let (child_id, child_live) =
                 build_widget_from_node_real(state, child.node, id_map, binding_map)?;
             let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
-            validate_special_child_attachment(
+            validate_parenting_state(
+                state,
                 "buildFromNode",
                 WidgetAttachmentInfo {
                     id,
                     class_name,
                     kind,
                     node_id: node_id.as_deref(),
+                    source_context: source_context.as_ref(),
                 },
+                raw,
                 WidgetAttachmentInfo {
                     id: child_id,
                     class_name: &child_live.class_name,
                     kind: child_live.kind,
                     node_id: child_live.node_id.as_deref(),
+                    source_context: child_live.source_context.as_ref(),
                 },
+                child_raw,
             )?;
 
             // Track for scroll-fade auto-wiring
@@ -7738,6 +8013,7 @@ mod linux_impl {
             node_id,
             key: node_attr(attrs, "aivi-key").map(str::to_string),
             binding_id,
+            source_context,
             props,
             signals: signal_bindings,
             signal_handlers,
@@ -7858,11 +8134,19 @@ mod linux_impl {
 
     /// Add a child widget to a parent container (mirrors the build logic).
     fn add_child_to_parent(
+        state: &RealGtkState,
         parent: WidgetAttachmentTarget<'_>,
         child: WidgetAttachmentTarget<'_>,
         placement: ChildPlacement<'_>,
     ) -> Result<(), Gtk4Error> {
-        validate_special_child_attachment("reconcileNode", parent.info, child.info)?;
+        validate_parenting_state(
+            state,
+            "reconcileNode",
+            parent.info,
+            parent.raw,
+            child.info,
+            child.raw,
+        )?;
         match parent.info.kind {
             CreatedWidgetKind::Box => unsafe { gtk_box_append(parent.raw, child.raw) },
             CreatedWidgetKind::Button => unsafe { gtk_button_set_child(parent.raw, child.raw) },
@@ -7985,6 +8269,7 @@ mod linux_impl {
             Some(c) => c,
             None => return Ok(false),
         };
+        let new_source_context = node_source_context(attrs);
         // Different widget class → cannot patch in-place
         if live.class_name != new_class {
             return Ok(false);
@@ -8020,6 +8305,7 @@ mod linux_impl {
                 live.widget_id,
                 new_class,
                 live.node_id.as_deref(),
+                new_source_context.as_ref(),
                 "reconcileNode",
                 binding,
             )?;
@@ -8027,6 +8313,7 @@ mod linux_impl {
         }
         live.signals = new_signals;
         live.signal_handlers = new_handlers;
+        live.source_context = new_source_context;
 
         // Update node_id if it changed
         let new_node_id = node_attr(attrs, "id").map(str::to_string);
@@ -8177,6 +8464,7 @@ mod linux_impl {
             let child_id = child.node.widget_id;
             let child_raw = widget_ptr(state, child_id, "reconcile")?;
             add_child_to_parent(
+                state,
                 WidgetAttachmentTarget {
                     raw: parent_raw,
                     info: WidgetAttachmentInfo {
@@ -8184,6 +8472,7 @@ mod linux_impl {
                         class_name: &parent.class_name,
                         kind: parent_kind,
                         node_id: parent.node_id.as_deref(),
+                        source_context: parent.source_context.as_ref(),
                     },
                 },
                 WidgetAttachmentTarget {
@@ -8193,6 +8482,7 @@ mod linux_impl {
                         class_name: &child.node.class_name,
                         kind: child.node.kind,
                         node_id: child.node.node_id.as_deref(),
+                        source_context: child.node.source_context.as_ref(),
                     },
                 },
                 ChildPlacement {
@@ -8264,6 +8554,7 @@ mod linux_impl {
                         unsafe { gtk_box_insert_child_after(parent_raw, new_raw, prev_raw) };
                     } else {
                         add_child_to_parent(
+                            state,
                             WidgetAttachmentTarget {
                                 raw: parent_raw,
                                 info: WidgetAttachmentInfo {
@@ -8271,6 +8562,7 @@ mod linux_impl {
                                     class_name: &parent.class_name,
                                     kind: parent_kind,
                                     node_id: parent.node_id.as_deref(),
+                                    source_context: parent.source_context.as_ref(),
                                 },
                             },
                             WidgetAttachmentTarget {
@@ -8280,6 +8572,7 @@ mod linux_impl {
                                     class_name: &new_live.class_name,
                                     kind: new_live.kind,
                                     node_id: new_live.node_id.as_deref(),
+                                    source_context: new_live.source_context.as_ref(),
                                 },
                             },
                             ChildPlacement {
@@ -8290,6 +8583,7 @@ mod linux_impl {
                     }
                 } else {
                     add_child_to_parent(
+                        state,
                         WidgetAttachmentTarget {
                             raw: parent_raw,
                             info: WidgetAttachmentInfo {
@@ -8297,6 +8591,7 @@ mod linux_impl {
                                 class_name: &parent.class_name,
                                 kind: parent_kind,
                                 node_id: parent.node_id.as_deref(),
+                                source_context: parent.source_context.as_ref(),
                             },
                         },
                         WidgetAttachmentTarget {
@@ -8306,6 +8601,7 @@ mod linux_impl {
                                 class_name: &new_live.class_name,
                                 kind: new_live.kind,
                                 node_id: new_live.node_id.as_deref(),
+                                source_context: new_live.source_context.as_ref(),
                             },
                         },
                         ChildPlacement {
@@ -8347,6 +8643,7 @@ mod linux_impl {
             let new_raw = widget_ptr(state, new_id, "reconcile")?;
             let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
             add_child_to_parent(
+                state,
                 WidgetAttachmentTarget {
                     raw: parent_raw,
                     info: WidgetAttachmentInfo {
@@ -8354,6 +8651,7 @@ mod linux_impl {
                         class_name: &parent.class_name,
                         kind: parent_kind,
                         node_id: parent.node_id.as_deref(),
+                        source_context: parent.source_context.as_ref(),
                     },
                 },
                 WidgetAttachmentTarget {
@@ -8363,6 +8661,7 @@ mod linux_impl {
                         class_name: &new_live.class_name,
                         kind: new_live.kind,
                         node_id: new_live.node_id.as_deref(),
+                        source_context: new_live.source_context.as_ref(),
                     },
                 },
                 ChildPlacement {
@@ -9574,6 +9873,31 @@ mod linux_impl {
         Ok(root)
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum DialogOpenTransition {
+        None,
+        Present,
+        Close,
+    }
+
+    fn dialog_open_transition(
+        requested_open: bool,
+        tracked_presented: bool,
+        actual_presented: bool,
+    ) -> (DialogOpenTransition, bool) {
+        if requested_open {
+            if tracked_presented || actual_presented {
+                (DialogOpenTransition::None, true)
+            } else {
+                (DialogOpenTransition::Present, true)
+            }
+        } else if actual_presented {
+            (DialogOpenTransition::Close, true)
+        } else {
+            (DialogOpenTransition::None, false)
+        }
+    }
+
     fn dialog_parent_id(root: &LiveNode, root_id: i64, fn_name: &str) -> Result<i64, Gtk4Error> {
         root.props
             .get("present-for")
@@ -9586,6 +9910,10 @@ mod linux_impl {
             })
     }
 
+    fn dialog_actual_presented(dialog: *mut c_void) -> bool {
+        unsafe { !gtk_widget_get_parent(dialog).is_null() }
+    }
+
     pub(super) fn dialog_root_is_persistent(root_id: i64) -> Result<bool, Gtk4Error> {
         GTK_STATE.with(|state| {
             let state = state.borrow();
@@ -9596,44 +9924,50 @@ mod linux_impl {
     }
 
     pub(super) fn dialog_set_open(root_id: i64, open: bool) -> Result<(), Gtk4Error> {
-        if open {
-            let (dialog, parent) = GTK_STATE.with(|state| {
-                let state = state.borrow();
-                let root = dialog_root(&state, root_id, "dialogSetOpen")?;
-                if state.presented_dialogs.contains(&root_id) {
-                    return Ok((std::ptr::null_mut(), std::ptr::null_mut()));
-                }
-                let dialog = widget_ptr(&state, root_id, "dialogSetOpen")?;
+        let (transition, next_tracked_presented, dialog, parent) = GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let root = dialog_root(&state, root_id, "dialogSetOpen")?;
+            let dialog = widget_ptr(&state, root_id, "dialogSetOpen")?;
+            let tracked_presented = state.presented_dialogs.contains(&root_id);
+            let actual_presented = dialog_actual_presented(dialog);
+            let (transition, next_tracked_presented) =
+                dialog_open_transition(open, tracked_presented, actual_presented);
+            let parent = if matches!(transition, DialogOpenTransition::Present) {
                 let parent_id = dialog_parent_id(root, root_id, "dialogSetOpen")?;
-                let parent = widget_ptr(&state, parent_id, "dialogSetOpen")?;
-                Ok((dialog, parent))
-            })?;
-            if dialog.is_null() {
-                return Ok(());
+                widget_ptr(&state, parent_id, "dialogSetOpen")?
+            } else {
+                std::ptr::null_mut()
+            };
+            Ok((transition, next_tracked_presented, dialog, parent))
+        })?;
+
+        match transition {
+            DialogOpenTransition::Present => {
+                call_adw_fn_pp("adw_dialog_present", dialog, parent);
             }
-            call_adw_fn_pp("adw_dialog_present", dialog, parent);
-            GTK_STATE.with(|state| {
-                state.borrow_mut().presented_dialogs.insert(root_id);
-            });
-            Ok(())
-        } else {
-            let dialog = GTK_STATE.with(|state| {
-                let state = state.borrow();
-                dialog_root(&state, root_id, "dialogSetOpen")?;
-                if !state.presented_dialogs.contains(&root_id) {
-                    return Ok(std::ptr::null_mut());
-                }
-                widget_ptr(&state, root_id, "dialogSetOpen")
-            })?;
-            if dialog.is_null() {
-                return Ok(());
+            DialogOpenTransition::Close => {
+                let _ = call_adw_fn_p_bool("adw_dialog_close", dialog);
             }
-            let _ = call_adw_fn_p_bool("adw_dialog_close", dialog);
-            GTK_STATE.with(|state| {
-                state.borrow_mut().presented_dialogs.remove(&root_id);
-            });
-            Ok(())
+            DialogOpenTransition::None => {}
         }
+
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            match transition {
+                DialogOpenTransition::Present => {
+                    state.presented_dialogs.insert(root_id);
+                }
+                DialogOpenTransition::None => {
+                    if next_tracked_presented {
+                        state.presented_dialogs.insert(root_id);
+                    } else {
+                        state.presented_dialogs.remove(&root_id);
+                    }
+                }
+                DialogOpenTransition::Close => {}
+            }
+        });
+        Ok(())
     }
 
     pub(super) fn dialog_sync_open_state(root_id: i64) -> Result<(), Gtk4Error> {
@@ -9971,9 +10305,11 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                    json!(
+                        id_map
+                            .iter()
+                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
+                    ),
                 ),
             ]));
             Ok(id)
@@ -9999,9 +10335,11 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                    json!(
+                        id_map
+                            .iter()
+                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
+                    ),
                 ),
             ]));
             Ok(BuildResult {
@@ -10033,9 +10371,11 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                    json!(
+                        id_map
+                            .iter()
+                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
+                    ),
                 ),
             ]));
             Ok(BuildWithBindingsResult {

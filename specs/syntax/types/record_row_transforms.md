@@ -44,6 +44,15 @@ The example above keeps a single source-of-truth record type and derives narrowe
 `PublicUser` removes a private field, `PatchUser` makes selected fields optional, and `RenamedUser` keeps the data but exposes a different field name.
 That reduces duplication while keeping the final types explicit.
 
+If you need to add or override fields rather than reshape existing ones, use type-level record spread from [Closed Records](closed_records.md):
+
+```aivi
+UserCore = { id: Int, name: Text }
+UserWithEmail = { ...UserCore, email: Text }
+```
+
+The two features compose: row transforms reshape existing fields, while type-level spread extends the final closed record shape.
+
 ## Errors to expect
 
 The compiler reports a type error when:

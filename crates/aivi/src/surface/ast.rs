@@ -167,6 +167,12 @@ pub struct Module {
 }
 
 #[derive(Debug, Clone)]
+pub enum RecordTypeField {
+    Named { name: SpannedName, ty: TypeExpr },
+    Spread { ty: TypeExpr, span: Span },
+}
+
+#[derive(Debug, Clone)]
 pub enum TypeExpr {
     Name(SpannedName),
     And {
@@ -184,7 +190,7 @@ pub enum TypeExpr {
         span: Span,
     },
     Record {
-        fields: Vec<(SpannedName, TypeExpr)>,
+        fields: Vec<RecordTypeField>,
         span: Span,
     },
     Tuple {

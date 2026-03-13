@@ -119,6 +119,7 @@ impl Parser {
             return Some(TypeExpr::Tuple { items, span });
         }
         if self.consume_symbol("{") {
+            let open_span = self.previous_span();
             let mut fields = Vec::new();
             self.consume_newlines();
             while !self.check_symbol("}") && self.pos < self.tokens.len() {
@@ -126,12 +127,20 @@ impl Parser {
                 if self.check_symbol("}") {
                     break;
                 }
-                if let Some(name) = self.consume_ident() {
+                if self.consume_symbol("...") {
+                    let dots_span = self.previous_span();
+                    self.consume_newlines();
+                    let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+                        span: dots_span.clone(),
+                    });
+                    let span = merge_span(dots_span, type_span(&ty));
+                    fields.push(RecordTypeField::Spread { ty, span });
+                } else if let Some(name) = self.consume_ident() {
                     self.consume_newlines();
                     self.expect_symbol(":", "expected ':' in record type");
                     self.consume_newlines();
                     if let Some(ty) = self.parse_type_expr() {
-                        fields.push((name, ty));
+                        fields.push(RecordTypeField::Named { name, ty });
                     }
                 } else {
                     // Recovery: skip unexpected tokens inside record types.
@@ -148,11 +157,17 @@ impl Parser {
                     break;
                 }
             }
-            self.expect_symbol("}", "expected '}' to close record type");
-            let span = fields
-                .first()
-                .map(|field| field.0.span.clone())
-                .unwrap_or(self.previous_span());
+            let close_span = self
+                .expect_symbol("}", "expected '}' to close record type")
+                .unwrap_or_else(|| open_span.clone());
+            let field_span = |field: &RecordTypeField| match field {
+                RecordTypeField::Named { name, ty } => merge_span(name.span.clone(), type_span(ty)),
+                RecordTypeField::Spread { span, .. } => span.clone(),
+            };
+            let span = match (fields.first(), fields.last()) {
+                (Some(first), Some(last)) => merge_span(field_span(first), field_span(last)),
+                _ => merge_span(open_span, close_span),
+            };
             return Some(TypeExpr::Record { fields, span });
         }
         if self.consume_symbol("*") {

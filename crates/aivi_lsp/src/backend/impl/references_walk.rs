@@ -205,7 +205,14 @@ impl Backend {
             TypeExpr::Record { fields, .. } => {
                 let fields_str = fields
                     .iter()
-                    .map(|(name, ty)| format!("{}: {}", name.name, Self::type_expr_to_string(ty)))
+                    .map(|field| match field {
+                        aivi::RecordTypeField::Named { name, ty } => {
+                            format!("{}: {}", name.name, Self::type_expr_to_string(ty))
+                        }
+                        aivi::RecordTypeField::Spread { ty, .. } => {
+                            format!("...{}", Self::type_expr_to_string(ty))
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{{{}}}", fields_str)

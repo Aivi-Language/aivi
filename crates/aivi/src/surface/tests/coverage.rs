@@ -8,8 +8,8 @@ use std::path::Path;
 
 use crate::surface::{
     lower_modules_to_arena, parse_modules, ArenaBlockItem, ArenaBlockKind, ArenaExpr, ArenaLiteral,
-    ArenaModuleItem, ArenaPattern, ArenaTypeExpr, BlockItem, BlockKind, Expr, Literal, ModuleItem,
-    PathSegment,
+    ArenaModuleItem, ArenaPattern, ArenaRecordTypeField, ArenaTypeExpr, BlockItem, BlockKind, Expr,
+    Literal, ModuleItem, PathSegment,
 };
 
 use super::diag_codes;
@@ -1006,6 +1006,37 @@ f = { name: "x", age: 1 }
         .expect("f sig");
     match arena.type_expr(sig.ty) {
         ArenaTypeExpr::Record { fields, .. } => assert_eq!(fields.len(), 2),
+        other => panic!("expected Record type, got {other:?}"),
+    }
+}
+
+#[test]
+fn lower_record_type_spread_to_arena() {
+    let src = r#"
+module Example
+
+Base = { id: Int }
+
+f : { ...Base, name: Text }
+f = { id: 1, name: "x" }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let sig = lowered[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ArenaModuleItem::TypeSig(s) if s.name.symbol.as_str() == "f" => Some(s),
+            _ => None,
+        })
+        .expect("f sig");
+    match arena.type_expr(sig.ty) {
+        ArenaTypeExpr::Record { fields, .. } => {
+            assert_eq!(fields.len(), 2);
+            assert!(matches!(fields[0], ArenaRecordTypeField::Spread { .. }));
+            assert!(matches!(fields[1], ArenaRecordTypeField::Named { .. }));
+        }
         other => panic!("expected Record type, got {other:?}"),
     }
 }

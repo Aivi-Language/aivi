@@ -585,8 +585,13 @@ impl Backend {
                 Self::collect_type_names_inner(result, names);
             }
             TypeExpr::Record { fields, .. } => {
-                for (_, ty) in fields {
-                    Self::collect_type_names_inner(ty, names);
+                for field in fields {
+                    match field {
+                        aivi::RecordTypeField::Named { ty, .. }
+                        | aivi::RecordTypeField::Spread { ty, .. } => {
+                            Self::collect_type_names_inner(ty, names);
+                        }
+                    }
                 }
             }
             TypeExpr::Tuple { items, .. } | TypeExpr::And { items, .. } => {

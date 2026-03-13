@@ -847,27 +847,68 @@ fn type_expr_to_openai_json_schema(
             }
             TypeExpr::Record { fields, .. } => {
                 let mut properties = serde_json::Map::new();
-                let mut required = Vec::new();
-                for (field_name, field_type) in fields {
-                    let is_option = is_option_type(field_type);
-                    let schema = if is_option {
-                        // For OpenAI strict mode: nullable inner type
-                        let inner = te_to_schema(&unwrap_option(field_type), aliases, seen);
-                        let mut s = inner.as_object().cloned().unwrap_or_default();
-                        s.insert("nullable".to_string(), json!(true));
-                        serde_json::Value::Object(s)
-                    } else {
-                        te_to_schema(field_type, aliases, seen)
-                    };
-                    properties.insert(field_name.name.clone(), schema);
-                    // OpenAI strict mode requires ALL properties in required
-                    required.push(serde_json::Value::String(field_name.name.clone()));
+                let mut required_names = Vec::new();
+                for field in fields {
+                    match field {
+                        RecordTypeField::Named {
+                            name: field_name,
+                            ty: field_type,
+                        } => {
+                            let is_option = is_option_type(field_type);
+                            let schema = if is_option {
+                                let inner = te_to_schema(&unwrap_option(field_type), aliases, seen);
+                                let mut s = inner.as_object().cloned().unwrap_or_default();
+                                s.insert("nullable".to_string(), json!(true));
+                                serde_json::Value::Object(s)
+                            } else {
+                                te_to_schema(field_type, aliases, seen)
+                            };
+                            properties.insert(field_name.name.clone(), schema);
+                            if !required_names.contains(&field_name.name) {
+                                required_names.push(field_name.name.clone());
+                            }
+                        }
+                        RecordTypeField::Spread { ty, .. } => {
+                            let spread_schema = te_to_schema(ty, aliases, seen);
+                            if let Some(spread_obj) = spread_schema.as_object() {
+                                if let Some(spread_props) = spread_obj
+                                    .get("properties")
+                                    .and_then(serde_json::Value::as_object)
+                                {
+                                    for (name, schema) in spread_props {
+                                        properties.insert(name.clone(), schema.clone());
+                                    }
+                                }
+                                if let Some(spread_required) = spread_obj
+                                    .get("required")
+                                    .and_then(serde_json::Value::as_array)
+                                {
+                                    for required in spread_required {
+                                        if let Some(name) = required.as_str() {
+                                            let name = name.to_string();
+                                            if !required_names.contains(&name) {
+                                                required_names.push(name);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 let mut obj = serde_json::Map::new();
                 obj.insert("type".to_string(), json!("object"));
                 obj.insert("properties".to_string(), serde_json::Value::Object(properties));
-                if !required.is_empty() {
-                    obj.insert("required".to_string(), serde_json::Value::Array(required));
+                if !required_names.is_empty() {
+                    obj.insert(
+                        "required".to_string(),
+                        serde_json::Value::Array(
+                            required_names
+                                .into_iter()
+                                .map(serde_json::Value::String)
+                                .collect(),
+                        ),
+                    );
                 }
                 obj.insert("additionalProperties".to_string(), json!(false));
                 serde_json::Value::Object(obj)

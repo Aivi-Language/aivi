@@ -12,7 +12,8 @@ use aivi::{
     check_modules, check_types, desugar_modules, elaborate_expected_coercions,
     embedded_stdlib_modules, file_diagnostics_have_errors, infer_value_types_full, parse_modules,
     render_diagnostics, resolve_import_names, AiviError, ClassDecl, DomainDecl, DomainItem,
-    FileDiagnostic, Module, ModuleItem, ReplJitSession, TypeAlias, TypeDecl, TypeExpr, TypeSig,
+    FileDiagnostic, Module, ModuleItem, RecordTypeField, ReplJitSession, TypeAlias, TypeDecl,
+    TypeExpr, TypeSig,
 };
 
 use super::doc_index::{DocIndex, QuickInfoEntry, DOC_INDEX_JSON};
@@ -2203,7 +2204,14 @@ fn render_type_expr(ty: &TypeExpr) -> String {
         TypeExpr::Record { fields, .. } => {
             let fields = fields
                 .iter()
-                .map(|(name, ty)| format!("{}: {}", name.name, render_type_expr(ty)))
+                .map(|field| match field {
+                    RecordTypeField::Named { name, ty } => {
+                        format!("{}: {}", name.name, render_type_expr(ty))
+                    }
+                    RecordTypeField::Spread { ty, .. } => {
+                        format!("...{}", render_type_expr(ty))
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{{ {fields} }}")

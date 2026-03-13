@@ -2,8 +2,8 @@ use crate::intern::{ExprId, PatternId, Symbol, TypeExprId};
 use crate::surface::{
     BlockItem, BlockKind, ClassDecl, ClassMember, Decorator, Def, DomainDecl, DomainItem,
     ExportItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
-    Pattern, RecordField, RecordPatternField, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr,
-    TypeSig, TypeVarConstraint, UseDecl, UseItem,
+    Pattern, RecordField, RecordPatternField, RecordTypeField, TextPart, TypeAlias, TypeCtor,
+    TypeDecl, TypeExpr, TypeSig, TypeVarConstraint, UseDecl, UseItem,
 };
 
 use super::*;
@@ -603,7 +603,16 @@ impl ArenaBuilder {
             TypeExpr::Record { fields, span } => ArenaTypeExpr::Record {
                 fields: fields
                     .iter()
-                    .map(|(name, item)| (SpannedSymbol::from(name), self.lower_type_expr(item)))
+                    .map(|field| match field {
+                        RecordTypeField::Named { name, ty } => ArenaRecordTypeField::Named {
+                            name: SpannedSymbol::from(name),
+                            ty: self.lower_type_expr(ty),
+                        },
+                        RecordTypeField::Spread { ty, span } => ArenaRecordTypeField::Spread {
+                            ty: self.lower_type_expr(ty),
+                            span: span.clone(),
+                        },
+                    })
                     .collect(),
                 span: span.clone(),
             },

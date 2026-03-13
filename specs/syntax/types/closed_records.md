@@ -54,6 +54,25 @@ If the same field appears more than once, the later entry wins.
 Use spread when you want to build a nearby value inline.
 For typed structural updates that can reach nested data, see [Patching Records](../patching.md).
 
+## Reusing an existing record type with spread
+
+Record types can also spread another closed record type and then add or override fields:
+
+```aivi
+UserCore = { id: Int, name: Text }
+UserWithEmail = { ...UserCore, email: Text }
+UserDraft = { ...UserWithEmail, email: Option Text }
+```
+
+Type-level spreads follow the same left-to-right rule as value-level spreads:
+
+- later entries override earlier ones
+- the spread target must elaborate to a closed record type
+- after elaboration the result is still an ordinary closed record type
+
+Use type-level spread when you want to extend a canonical record shape with a few extra fields.
+Use [Record Row Transforms](record_row_transforms.md) when you want to pick, omit, rename, or change optionality of existing fields.
+
 ## Records in function signatures
 
 Functions can use record types to state the exact shape they expect:
