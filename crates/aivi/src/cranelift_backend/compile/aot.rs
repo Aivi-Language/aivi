@@ -177,6 +177,7 @@ pub fn compile_to_object(
             &mut lambda_counter,
             &spec_map,
             &mut str_counter,
+            false,
         ) {
             Ok(lambdas) => {
                 all_lambdas.extend(lambdas);

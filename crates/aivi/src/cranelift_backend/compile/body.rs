@@ -18,6 +18,7 @@ fn compile_definition_body<M: Module>(
     lambda_counter: &mut usize,
     spec_map: &HashMap<String, Vec<String>>,
     str_counter: &mut usize,
+    use_far_jit_calls: bool,
 ) -> Result<Vec<CompiledLambdaInfo>, String> {
     let (params, body) = peel_params(&def.expr);
 
@@ -135,6 +136,7 @@ fn compile_definition_body<M: Module>(
                 module,
                 str_counter,
                 module_name,
+                use_far_jit_calls,
             );
 
             // Emit function-entry tracking (lambda — show parent name for context).
@@ -224,7 +226,16 @@ fn compile_definition_body<M: Module>(
             compiled_decls.get(&qualified)
         });
         if let Some(decl) = decl {
-            let func_ref = module.declare_func_in_func(decl.func_id, &mut function);
+            let func_ref = if use_far_jit_calls {
+                super::lower::declare_module_func_in_func(
+                    module,
+                    decl.func_id,
+                    &mut function,
+                    false,
+                )
+            } else {
+                module.declare_func_in_func(decl.func_id, &mut function)
+            };
             local_jit_funcs.insert(
                 name.clone(),
                 JitFuncInfo {
@@ -246,7 +257,16 @@ fn compile_definition_body<M: Module>(
                     .get(spec_short)
                     .or_else(|| compiled_decls.get(&spec_qualified));
                 if let Some(sd) = spec_decl {
-                    let func_ref = module.declare_func_in_func(sd.func_id, &mut function);
+                    let func_ref = if use_far_jit_calls {
+                        super::lower::declare_module_func_in_func(
+                            module,
+                            sd.func_id,
+                            &mut function,
+                            false,
+                        )
+                    } else {
+                        module.declare_func_in_func(sd.func_id, &mut function)
+                    };
                     local_jit_funcs.insert(
                         spec_short.clone(),
                         JitFuncInfo {
@@ -313,6 +333,7 @@ fn compile_definition_body<M: Module>(
             module,
             str_counter,
             module_name,
+            use_far_jit_calls,
         );
 
         // Emit function-entry tracking so runtime warnings can include the function name.

@@ -543,6 +543,16 @@ pub(super) fn collect_imported_class_env(
 ) -> (HashMap<String, ClassDeclInfo>, Vec<InstanceDeclInfo>) {
     let mut classes = HashMap::new();
     let mut instances = Vec::new();
+
+    let mut push_unique_instance = |candidate: &InstanceDeclInfo| {
+        if !instances
+            .iter()
+            .any(|existing| instance_decl_eq(existing, candidate))
+        {
+            instances.push(candidate.clone());
+        }
+    };
+
     for use_decl in &module.uses {
         let Some(class_exports) = module_class_exports.get(&use_decl.module.name) else {
             continue;
@@ -552,7 +562,9 @@ pub(super) fn collect_imported_class_env(
                 classes.insert(name.clone(), info.clone());
             }
             if let Some(instance_exports) = module_instance_exports.get(&use_decl.module.name) {
-                instances.extend(instance_exports.iter().cloned());
+                for instance in instance_exports {
+                    push_unique_instance(instance);
+                }
             }
             continue;
         }
@@ -574,7 +586,7 @@ pub(super) fn collect_imported_class_env(
         if let Some(instance_exports) = module_instance_exports.get(&use_decl.module.name) {
             for instance in instance_exports {
                 if imported_classes.contains(&instance.class_name) {
-                    instances.push(instance.clone());
+                    push_unique_instance(instance);
                 }
             }
         }
