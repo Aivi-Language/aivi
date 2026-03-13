@@ -2,12 +2,11 @@
 title: AIVI Language Specification
 ---
 
-<p align="center">
+<p align="left">
     <img src="/aivi-logo.png" alt="AIVI Logo" width="256">
     <br/>
     <b>A research project by Andreas Herd</b>
 </p>
-
 
 
 # AIVI language guide
