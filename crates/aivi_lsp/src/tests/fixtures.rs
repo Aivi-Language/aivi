@@ -345,6 +345,80 @@ run = add 1 2"#;
 }
 
 #[test]
+fn build_definition_resolves_module_alias_qualifier_across_files() {
+    let lib_text = r#"@no_prelude
+module examples.settings_view
+export llmStatusMessage
+llmStatusMessage = "ready""#;
+    let app_text = r#"@no_prelude
+module examples.app
+use examples.settings_view as SettingsView
+run = SettingsView.llmStatusMessage"#;
+
+    let lib_uri = Url::parse("file:///settings_view.aivi").expect("valid uri");
+    let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
+
+    let mut workspace = HashMap::new();
+    let lib_path = PathBuf::from("settings_view.aivi");
+    let (lib_modules, _) = parse_modules(&lib_path, lib_text);
+    for module in &lib_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: lib_uri.clone(),
+                module: module.clone(),
+                text: Some(lib_text.to_string()),
+            },
+        );
+    }
+
+    let position = position_for(app_text, "SettingsView.llmStatusMessage");
+    let location = Backend::build_definition_with_workspace(app_text, &app_uri, position, &workspace)
+        .expect("definition found");
+
+    let expected_range = Backend::span_to_range(lib_modules[0].name.span.clone());
+    assert_eq!(location.uri, lib_uri);
+    assert_eq!(location.range, expected_range);
+}
+
+#[test]
+fn build_definition_resolves_module_alias_member_across_files() {
+    let lib_text = r#"@no_prelude
+module examples.settings_view
+export llmStatusMessage
+llmStatusMessage = "ready""#;
+    let app_text = r#"@no_prelude
+module examples.app
+use examples.settings_view as SettingsView
+run = SettingsView.llmStatusMessage"#;
+
+    let lib_uri = Url::parse("file:///settings_view.aivi").expect("valid uri");
+    let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
+
+    let mut workspace = HashMap::new();
+    let lib_path = PathBuf::from("settings_view.aivi");
+    let (lib_modules, _) = parse_modules(&lib_path, lib_text);
+    for module in &lib_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: lib_uri.clone(),
+                module: module.clone(),
+                text: Some(lib_text.to_string()),
+            },
+        );
+    }
+
+    let position = position_for(app_text, "llmStatusMessage");
+    let location = Backend::build_definition_with_workspace(app_text, &app_uri, position, &workspace)
+        .expect("definition found");
+
+    let expected_range = Backend::span_to_range(find_symbol_span(lib_text, "llmStatusMessage"));
+    assert_eq!(location.uri, lib_uri);
+    assert_eq!(location.range, expected_range);
+}
+
+#[test]
 fn build_hover_reports_type_signature() {
     let text = sample_text();
     let uri = sample_uri();

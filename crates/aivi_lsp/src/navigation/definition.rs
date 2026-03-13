@@ -7,9 +7,78 @@ use tower_lsp::lsp_types::{Location, Position, Url};
 use crate::backend::Backend;
 use crate::state::IndexedModule;
 
-use super::resolve_import_name;
+use super::{resolve_import_name, resolve_module_alias};
 
 impl Backend {
+    fn identifier_span_at_position(
+        text: &str,
+        position: Position,
+        allow_dot: bool,
+    ) -> Option<(usize, usize)> {
+        let offset = Self::offset_at(text, position).min(text.len());
+        if text.is_empty() {
+            return None;
+        }
+
+        let is_ident_char = |c: char| c.is_alphanumeric() || c == '_' || (allow_dot && c == '.');
+        let ch_at = (offset < text.len())
+            .then(|| text[offset..].chars().next())
+            .flatten();
+        let ch_before = (offset > 0)
+            .then(|| text[..offset].chars().last())
+            .flatten();
+        let on_ident = ch_at.is_some_and(is_ident_char) || ch_before.is_some_and(is_ident_char);
+        if !on_ident {
+            return None;
+        }
+
+        let mut start = offset;
+        while start > 0 {
+            let ch = text[..start].chars().last().unwrap();
+            if is_ident_char(ch) {
+                start -= ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        let mut end = offset;
+        while end < text.len() {
+            let ch = text[end..].chars().next().unwrap();
+            if is_ident_char(ch) {
+                end += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        Some((start, end))
+    }
+
+    fn cursor_on_final_identifier_segment(text: &str, position: Position) -> bool {
+        let Some((_, full_end)) = Self::identifier_span_at_position(text, position, true) else {
+            return false;
+        };
+        let Some((_, segment_end)) = Self::identifier_span_at_position(text, position, false)
+        else {
+            return false;
+        };
+        segment_end == full_end
+    }
+
+    fn resolve_dotted_definition_target<'a>(
+        ident: &'a str,
+        current_module: &'a Module,
+        workspace_modules: &'a HashMap<String, IndexedModule>,
+    ) -> Option<(&'a IndexedModule, &'a str)> {
+        let (qualifier, member) = ident.rsplit_once('.')?;
+        let module_name =
+            resolve_module_alias(&current_module.uses, qualifier).unwrap_or(qualifier);
+        workspace_modules
+            .get(module_name)
+            .map(|indexed| (indexed, member))
+    }
+
     fn record_field_definition_range_for_type(
         module: &Module,
         ty: &aivi::TypeExpr,
@@ -118,6 +187,28 @@ impl Backend {
 
         if ident.contains('.') {
             if let Some(indexed) = workspace_modules.get(&ident) {
+                let range = Self::span_to_range(indexed.module.name.span.clone());
+                return Some(Location::new(indexed.uri.clone(), range));
+            }
+
+            if let Some((indexed, member)) =
+                Self::resolve_dotted_definition_target(&ident, current_module, workspace_modules)
+            {
+                if Self::cursor_on_final_identifier_segment(text, position) {
+                    if let Some(range) =
+                        Self::module_member_definition_range(&indexed.module, member)
+                    {
+                        return Some(Location::new(indexed.uri.clone(), range));
+                    }
+                } else {
+                    let range = Self::span_to_range(indexed.module.name.span.clone());
+                    return Some(Location::new(indexed.uri.clone(), range));
+                }
+            }
+        }
+
+        if let Some(module_name) = resolve_module_alias(&current_module.uses, &ident) {
+            if let Some(indexed) = workspace_modules.get(module_name) {
                 let range = Self::span_to_range(indexed.module.name.span.clone());
                 return Some(Location::new(indexed.uri.clone(), range));
             }

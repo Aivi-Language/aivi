@@ -16,3 +16,18 @@ pub(crate) fn resolve_import_name<'a>(items: &'a [aivi::UseItem], ident: &str) -
         }
     })
 }
+
+/// For a module import alias like `use foo.bar as Baz`, resolve `Baz` back to
+/// the original module path `foo.bar`.
+pub(crate) fn resolve_module_alias<'a>(
+    use_decls: &'a [aivi::UseDecl],
+    ident: &str,
+) -> Option<&'a str> {
+    use_decls.iter().find_map(|use_decl| {
+        use_decl
+            .alias
+            .as_ref()
+            .filter(|alias| alias.name == ident)
+            .map(|_| use_decl.module.name.as_str())
+    })
+}
