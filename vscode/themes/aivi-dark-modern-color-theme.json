@@ -447,10 +447,11 @@
     {
       "name": "HTML Tag Names (Dark Modern)",
       "scope": [
-        "entity.name.tag.html"
+        "entity.name.tag.html",
+        "entity.name.tag.aivi"
       ],
       "settings": {
-        "foreground": "#569CD6"
+        "foreground": "#85c3f5"
       }
     },
     {

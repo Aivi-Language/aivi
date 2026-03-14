@@ -7,9 +7,21 @@ mod native_fixture;
 
 use aivi::{desugar_target_with_cg_types, run_cranelift_jit};
 use native_fixture::write_aivi_source;
+use std::sync::{Mutex, OnceLock};
 use tempfile::tempdir;
 
+fn runtime_qa_guard() -> std::sync::MutexGuard<'static, ()> {
+    static RUNTIME_QA_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+    RUNTIME_QA_MUTEX
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("runtime_qa mutex poisoned")
+}
+
 fn run_jit(source: &str) {
+    // The real GTK/JIT runtime keeps process-global state, so these QA programs must
+    // execute one-at-a-time even when the Rust test harness enables parallel tests.
+    let _guard = runtime_qa_guard();
     let source = source.to_string();
     let result = std::thread::Builder::new()
         .name("runtime-qa-jit".into())

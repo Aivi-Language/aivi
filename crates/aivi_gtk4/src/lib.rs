@@ -195,6 +195,9 @@ mod linux_impl {
         fn gtk_widget_grab_focus(widget: *mut c_void) -> c_int;
         fn gtk_widget_child_focus(widget: *mut c_void, direction: c_int) -> c_int;
         fn gtk_widget_get_parent(widget: *mut c_void) -> *mut c_void;
+        fn gtk_widget_get_first_child(widget: *mut c_void) -> *mut c_void;
+        fn gtk_widget_get_next_sibling(widget: *mut c_void) -> *mut c_void;
+        fn gtk_widget_activate(widget: *mut c_void) -> c_int;
         fn gtk_widget_unparent(widget: *mut c_void);
         fn gtk_widget_remove_controller(widget: *mut c_void, controller: *mut c_void);
         // Sets the AT-SPI accessible label (GTK_ACCESSIBLE_PROPERTY_LABEL = 5)
@@ -1165,6 +1168,14 @@ mod linux_impl {
                 "gtk4.buildFromNode invalid property name `{prop_name}` on {class_name}"
             ))
         })?;
+        if prop_name == "menu-model" {
+            if let Ok(id) = raw_value.trim().parse::<i64>() {
+                if let Some(&menu_model) = state.menu_models.get(&id) {
+                    unsafe { gobject_set_ptr(widget, &prop_c, menu_model) };
+                    return Ok(true);
+                }
+            }
+        }
         match prop_info.prop_type.as_str() {
             "utf8" | "gchararray" => {
                 let text_c = c_text(
@@ -1890,6 +1901,58 @@ mod linux_impl {
                 let prop = CString::new("menu-model").expect("menu-model property CString");
                 let attached = unsafe { gobject_get_ptr(button, &prop) };
                 assert_eq!(attached, menu);
+                let popover_prop = CString::new("popover").expect("popover property CString");
+                let popover = unsafe { gobject_get_ptr(button, &popover_prop) };
+                assert!(
+                    !popover.is_null(),
+                    "gtk_menu_button_set_menu_model should create a backing popover"
+                );
+            });
+        }
+
+        #[test]
+        fn build_widget_from_node_resolves_menu_button_menu_model_ids() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let menu_id = menu_model_new().expect("create menu model");
+            menu_model_append_item(menu_id, "AI settings", "app.settings-ai")
+                .expect("append menu item");
+            let node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "GtkMenuButton".to_string()),
+                    ("id".to_string(), "settings-button".to_string()),
+                    ("prop:menu-model".to_string(), menu_id.to_string()),
+                ],
+                children: vec![],
+            };
+
+            let result = build_with_ids(&node).expect("build menu button from node");
+            let button_id = *result
+                .named_widgets
+                .get("settings-button")
+                .expect("menu button should be named");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let button =
+                    widget_ptr(&state, button_id, "menu_button_build_test").expect("button ptr");
+                let menu = state
+                    .menu_models
+                    .get(&menu_id)
+                    .copied()
+                    .expect("menu model should be stored after creation");
+                let prop = CString::new("menu-model").expect("menu-model property CString");
+                let attached = unsafe { gobject_get_ptr(button, &prop) };
+                assert_eq!(attached, menu);
+                let popover_prop = CString::new("popover").expect("popover property CString");
+                let popover = unsafe { gobject_get_ptr(button, &popover_prop) };
+                assert!(
+                    !popover.is_null(),
+                    "building a GtkMenuButton with prop:menu-model should create a backing popover"
+                );
             });
         }
 
@@ -2282,6 +2345,179 @@ mod linux_impl {
         }
 
         #[test]
+        fn mounted_extra_dialog_set_open_presents_with_auto_parent() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let app_id =
+                app_new("integration-tests.mounted-dialog").expect("create GTK application");
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "mounted-dialog-host".to_string()),
+                    ("prop:title".to_string(), "Mounted Dialog Host".to_string()),
+                    ("prop:default-width".to_string(), "480".to_string()),
+                    ("prop:default-height".to_string(), "320".to_string()),
+                ],
+                children: vec![],
+            };
+            let dialog_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwPreferencesDialog".to_string()),
+                    ("id".to_string(), "mounted-settings-dialog".to_string()),
+                    ("prop:title".to_string(), "Mounted Settings".to_string()),
+                    ("prop:open".to_string(), "false".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "AdwPreferencesPage".to_string())],
+                    children: vec![],
+                }],
+            };
+
+            let result = mount_app_window_with_bindings(app_id, &[window_node, dialog_node])
+                .expect("mount window with extra dialog");
+            let dialog_id = result
+                .mounted_roots
+                .iter()
+                .find(|root| root.root_id != result.root_id)
+                .map(|root| root.root_id)
+                .expect("mounted dialog root");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            widget_set_opacity(dialog_id, 0.0).expect("hide mounted dialog");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            dialog_set_open(dialog_id, true).expect("open mounted dialog");
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let dialog =
+                    widget_ptr(&state, dialog_id, "mounted_dialog_present_test").expect("dialog");
+                let root = state
+                    .live_trees
+                    .get(&dialog_id)
+                    .expect("dialog live tree should exist after mount");
+                assert_eq!(
+                    root.props
+                        .get("present-for")
+                        .and_then(|value| parse_i64_text(value)),
+                    Some(result.root_id)
+                );
+                assert!(dialog_actual_presented(dialog));
+            });
+        }
+
+        fn collect_widget_descendants(widget: *mut c_void, out: &mut Vec<*mut c_void>) {
+            let mut child = unsafe { gtk_widget_get_first_child(widget) };
+            while !child.is_null() {
+                out.push(child);
+                collect_widget_descendants(child, out);
+                child = unsafe { gtk_widget_get_next_sibling(child) };
+            }
+        }
+
+        #[test]
+        fn mounted_menu_button_menu_item_activation_reaches_action_signal_stream() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let receiver = signal_stream().expect("signal stream");
+            let app_id =
+                app_new("integration-tests.menu-button-activation").expect("create GTK application");
+            let action_id = action_new("settings-ai").expect("create settings action");
+            app_add_action(app_id, action_id).expect("attach settings action to app");
+
+            let menu_id = menu_model_new().expect("create menu model");
+            menu_model_append_item(menu_id, "AI settings", "app.settings-ai")
+                .expect("append menu item");
+
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "menu-button-host".to_string()),
+                    ("prop:title".to_string(), "Menu Button Host".to_string()),
+                    ("prop:default-width".to_string(), "320".to_string()),
+                    ("prop:default-height".to_string(), "180".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "GtkBox".to_string())],
+                    children: vec![GtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ("class".to_string(), "GtkMenuButton".to_string()),
+                            ("id".to_string(), "mounted-settings-button".to_string()),
+                            (
+                                "prop:icon-name".to_string(),
+                                "preferences-system-symbolic".to_string(),
+                            ),
+                            ("prop:menu-model".to_string(), menu_id.to_string()),
+                        ],
+                        children: vec![],
+                    }],
+                }],
+            };
+
+            let result =
+                mount_app_window_with_bindings(app_id, &[window_node]).expect("mount window");
+            let button_id = *result
+                .named_widgets
+                .get("mounted-settings-button")
+                .expect("menu button should be named");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            let descendants = GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let button =
+                    widget_ptr(&state, button_id, "menu_button_activation_test").expect("button");
+                assert_ne!(
+                    unsafe { gtk_widget_activate(button) },
+                    0,
+                    "GtkMenuButton should activate to open its popup"
+                );
+                let popover_prop = CString::new("popover").expect("popover property CString");
+                let popover = unsafe { gobject_get_ptr(button, &popover_prop) };
+                assert!(!popover.is_null(), "menu button should expose a backing popover");
+                let mut descendants = Vec::new();
+                collect_widget_descendants(popover, &mut descendants);
+                descendants
+            });
+
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+
+            for widget in descendants {
+                if unsafe { gtk_widget_activate(widget) } == 0 {
+                    continue;
+                }
+                for _ in 0..20 {
+                    crate::pump_events();
+                }
+                if let Ok(event) = receiver.recv_timeout(Duration::from_millis(50)) {
+                    if event.signal == "action" && event.handler == "settings-ai" {
+                        return;
+                    }
+                }
+            }
+
+            panic!("activating generated menu item widgets should reach settings-ai action");
+        }
+
+        #[test]
         fn gtk_scale_has_value_changed_signal_support() {
             assert_eq!(
                 signal_payload_kind_for("GtkScale", "value-changed"),
@@ -2534,6 +2770,63 @@ mod linux_impl {
                 assert!(
                     !unsafe { gtk_widget_get_parent(top_raw) }.is_null(),
                     "reconciled top bar should be attached to the toolbar view"
+                );
+            });
+        }
+
+        #[test]
+        fn adw_header_bar_build_uses_adw_instance_and_props() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwHeaderBar".to_string()),
+                    ("id".to_string(), "adw-header-bar".to_string()),
+                    (
+                        "prop:show-start-title-buttons".to_string(),
+                        "false".to_string(),
+                    ),
+                    (
+                        "prop:show-end-title-buttons".to_string(),
+                        "true".to_string(),
+                    ),
+                    (
+                        "prop:decoration-layout".to_string(),
+                        ":minimize,maximize,close".to_string(),
+                    ),
+                ],
+                children: vec![
+                    test_object("GtkButton", "header-start", vec![]),
+                    test_child(Some("end"), test_object("GtkButton", "header-end", vec![])),
+                ],
+            };
+
+            let result = build_with_ids(&node).expect("build AdwHeaderBar");
+            let header_id = *result
+                .named_widgets
+                .get("adw-header-bar")
+                .expect("header bar should be named");
+            let end_id = *result
+                .named_widgets
+                .get("header-end")
+                .expect("end child should be named");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let header_raw = widget_ptr(&state, header_id, "test").expect("header ptr");
+                let header_type =
+                    gtype_for_name("AdwHeaderBar", "test AdwHeaderBar type").expect("Adw type");
+                let end_raw = widget_ptr(&state, end_id, "test").expect("end ptr");
+                assert!(
+                    unsafe { g_type_check_instance_is_a(header_raw, header_type) != 0 },
+                    "AdwHeaderBar nodes should create real libadwaita header bars"
+                );
+                assert!(
+                    !unsafe { gtk_widget_get_parent(end_raw) }.is_null(),
+                    "end child should be attached to the libadwaita header bar"
                 );
             });
         }
@@ -7106,7 +7399,7 @@ mod linux_impl {
                     unsafe { gtk_box_set_homogeneous(widget, bool_to_c(value)) };
                 }
             }
-            "GtkHeaderBar" | "AdwHeaderBar" => {
+            "GtkHeaderBar" => {
                 if let Some(value) = props.get("decoration-layout") {
                     let layout_c = c_text(
                         value,
@@ -7637,8 +7930,12 @@ mod linux_impl {
                     CreatedWidgetKind::Box,
                 )
             }
-            "GtkHeaderBar" | "AdwHeaderBar" => (
+            "GtkHeaderBar" => (
                 unsafe { gtk_header_bar_new() },
+                CreatedWidgetKind::HeaderBar,
+            ),
+            "AdwHeaderBar" => (
+                create_adw_widget_type("AdwHeaderBar")?,
                 CreatedWidgetKind::HeaderBar,
             ),
             "GtkLabel" => {
@@ -8712,11 +9009,9 @@ mod linux_impl {
             match kind {
                 CreatedWidgetKind::Box => unsafe { gtk_box_append(raw, child_raw) },
                 CreatedWidgetKind::Button => unsafe { gtk_button_set_child(raw, child_raw) },
-                CreatedWidgetKind::HeaderBar => match child.child_type.as_deref() {
-                    Some("end") => unsafe { gtk_header_bar_pack_end(raw, child_raw) },
-                    Some("title") => unsafe { gtk_header_bar_set_title_widget(raw, child_raw) },
-                    _ => unsafe { gtk_header_bar_pack_start(raw, child_raw) },
-                },
+                CreatedWidgetKind::HeaderBar => {
+                    attach_header_bar_child(class_name, raw, child_raw, child.child_type.as_deref())
+                }
                 CreatedWidgetKind::Window => match child.child_type.as_deref() {
                     Some("titlebar") => {
                         if window_titlebar_set {
@@ -9077,11 +9372,12 @@ mod linux_impl {
                 Some("titlebar") => unsafe { gtk_window_set_titlebar(parent.raw, child.raw) },
                 _ => set_window_content(parent.info.class_name, parent.raw, child.raw),
             },
-            CreatedWidgetKind::HeaderBar => match placement.child_type {
-                Some("end") => unsafe { gtk_header_bar_pack_end(parent.raw, child.raw) },
-                Some("title") => unsafe { gtk_header_bar_set_title_widget(parent.raw, child.raw) },
-                _ => unsafe { gtk_header_bar_pack_start(parent.raw, child.raw) },
-            },
+            CreatedWidgetKind::HeaderBar => attach_header_bar_child(
+                parent.info.class_name,
+                parent.raw,
+                child.raw,
+                placement.child_type,
+            ),
             CreatedWidgetKind::ScrolledWindow => {
                 if placement.child_type != Some("overlay") {
                     unsafe { gtk_scrolled_window_set_child(parent.raw, child.raw) };
@@ -9865,6 +10161,28 @@ mod linux_impl {
             }
             "AdwWindow" => call_adw_fn_pp("adw_window_set_content", window, child),
             _ => unsafe { gtk_window_set_child(window, child) },
+        }
+    }
+
+    fn attach_header_bar_child(
+        header_bar_class_name: &str,
+        header_bar: *mut c_void,
+        child: *mut c_void,
+        child_type: Option<&str>,
+    ) {
+        match header_bar_class_name {
+            "AdwHeaderBar" => match child_type {
+                Some("end") => call_adw_fn_pp("adw_header_bar_pack_end", header_bar, child),
+                Some("title") => {
+                    call_adw_fn_pp("adw_header_bar_set_title_widget", header_bar, child)
+                }
+                _ => call_adw_fn_pp("adw_header_bar_pack_start", header_bar, child),
+            },
+            _ => match child_type {
+                Some("end") => unsafe { gtk_header_bar_pack_end(header_bar, child) },
+                Some("title") => unsafe { gtk_header_bar_set_title_widget(header_bar, child) },
+                _ => unsafe { gtk_header_bar_pack_start(header_bar, child) },
+            },
         }
     }
 
