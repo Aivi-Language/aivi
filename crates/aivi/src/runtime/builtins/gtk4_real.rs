@@ -2139,9 +2139,8 @@ mod tests {
         .join()
         .expect("runtime handler thread should not panic");
 
-        assert_eq!(
+        assert!(
             runtime.reactive_graph.lock().deferred_flush,
-            true,
             "background GTK update should defer until the main thread pump"
         );
         assert_eq!(

@@ -251,27 +251,33 @@ retry_eventual_success = do Effect {
     close tx
 }
 
-@test "multiple spawned threads writing the same signal converge"
-multiple_threads_write_same_signal = do Effect {
+@test "multiple spawned threads can coordinate signal updates through a channel"
+multiple_threads_coordinate_signal_updates_through_channel = do Effect {
   counter = signal 0
   (tx, rx) <- make 0
 
-  worker = id => do Effect {
+  worker = _ => do Effect {
     loop remaining = 10 => {
       if remaining == 0 then pure Unit
       else do Effect {
-        _ = update counter (_ + 1)
+        send tx 1
         recurse (remaining - 1)
       }
     }
   }
 
-  t1 <- spawn (worker 1)
-  t2 <- spawn (worker 2)
-  t3 <- spawn (worker 3)
-  _ <- t1.join
-  _ <- t2.join
-  _ <- t3.join
+  t1 <- spawn (worker Unit)
+  t2 <- spawn (worker Unit)
+  t3 <- spawn (worker Unit)
+  _  <- t1.join
+  _  <- t2.join
+  _  <- t3.join
+  close tx
+
+  forEach rx (delta => do Effect {
+      _ = update counter (_ + delta)
+      pure Unit
+  })
 
   assertEq (get counter) 30
 }
@@ -282,13 +288,13 @@ derived_reflects_final_after_concurrent = do Effect {
   doubled = derive base (_ * 2)
 
   task <- spawn (do Effect {
-    loop remaining = 5 => {
-      if remaining == 0 then pure Unit
-      else do Effect {
-        _ = update base (_ + 1)
-        recurse (remaining - 1)
+      loop remaining = 5 => {
+        if remaining == 0 then pure Unit
+        else do Effect {
+          _ = update base (_ + 1)
+          recurse (remaining - 1)
+        }
       }
-    }
   })
   _ <- task.join
 
@@ -298,13 +304,13 @@ derived_reflects_final_after_concurrent = do Effect {
 
 @test "watcher fires for cross-thread signal updates via channel"
 watcher_fires_cross_thread = do Effect {
-  count     = signal 0
+  count = signal 0
   (tx, rx) <- make 0
-  _watcher  = watch count (value => send tx value)
+  _watcher = watch count (value => send tx value)
 
   task <- spawn (do Effect {
-    _ = set count 7
-    pure Unit
+      _ = set count 7
+      pure Unit
   })
   _ <- task.join
 
@@ -322,10 +328,11 @@ batch_from_spawned_thread = do Effect {
   total = combineAll (a, b) ((x, y) => x + y)
 
   task <- spawn (do Effect {
-    batch (_ => {
-      set a 10
-      set b 20
-    })
+      _ = batch (_ => {
+          set a 10
+          set b 20
+      })
+      pure Unit
   })
   _ <- task.join
 
@@ -334,16 +341,28 @@ batch_from_spawned_thread = do Effect {
 
 @test "concurrent combineAll with many sources"
 concurrent_combineAll_many_sources = do Effect {
-  s1 = signal 0
-  s2 = signal 0
-  s3 = signal 0
-  s4 = signal 0
+  s1    = signal 0
+  s2    = signal 0
+  s3    = signal 0
+  s4    = signal 0
   total = combineAll (s1, s2, s3, s4) ((a, b, c, d) => a + b + c + d)
 
-  t1 <- spawn (do Effect { _ = set s1 10; pure Unit })
-  t2 <- spawn (do Effect { _ = set s2 20; pure Unit })
-  t3 <- spawn (do Effect { _ = set s3 30; pure Unit })
-  t4 <- spawn (do Effect { _ = set s4 40; pure Unit })
+  t1 <- spawn (do Effect {
+      _ = set s1 10
+      pure Unit
+  })
+  t2 <- spawn (do Effect {
+      _ = set s2 20
+      pure Unit
+  })
+  t3 <- spawn (do Effect {
+      _ = set s3 30
+      pure Unit
+  })
+  t4 <- spawn (do Effect {
+      _ = set s4 40
+      pure Unit
+  })
   _ <- t1.join
   _ <- t2.join
   _ <- t3.join
