@@ -159,6 +159,64 @@ main = do Effect {
     );
 }
 
+// The JIT QA runner can prove that background tasks mutate the shared reactive
+// graph seen by the main runtime. Lower-level Rust GTK tests cover the actual
+// live-binding/dialog presentation handoff on the GTK thread.
+#[test]
+fn rt_background_tasks_share_signal_state_with_main_runtime() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.concurrency
+use aivi.reactive
+use aivi.testing
+use aivi.ui.gtk4
+
+entryTextSignal = signal "before"
+
+windowRoot = ~<gtk>
+  <AdwApplicationWindow id="root-window" title="AIVI GTK Root" defaultWidth={320} defaultHeight={180}>
+    <GtkBox orientation="vertical" spacing={8}>
+      <GtkEntry id="threaded-entry" text={entryTextSignal} />
+    </GtkBox>
+  </AdwApplicationWindow>
+</gtk>
+
+main : Effect Text Unit
+main = do Effect {
+  _ <- init Unit
+  appId <- appNew "com.aivi.regression.dialog-threading"
+  (phaseTx, phaseRx) <- make "phase"
+  windowId <- mountAppWindow appId [windowRoot]
+  _ <- windowPresent windowId
+  worker <- spawn do Effect {
+    _ <- sleep 40
+    _ = set entryTextSignal "after"
+    _ <- sleep 200
+    _ <- send phaseTx "updated"
+    pure Unit
+  }
+  entryId <- widgetById "threaded-entry"
+  phase <- timeoutWith 1000 "missing threaded GTK update" (recv phaseRx)
+  phase match
+    | Ok msg =>
+        if msg == "updated" then pure Unit
+        else fail "unexpected threaded GTK phase message"
+    | Err _  => fail "threaded GTK phase receiver closed"
+  assertEq False (entryId == 0)
+  currentSignal <- pure (get entryTextSignal)
+  if currentSignal == "after" then pure Unit
+  else fail "threaded signal value did not update"
+  _ <- worker.join
+  _ <- windowClose windowId
+  pure Unit
+}
+"#,
+    );
+}
+
 // ─── Pipes, currying, and bindings ────────────────────────────────────────────
 // Covers: pipe-as-application, chained pipes, currying, multi-stage currying,
 //         immutable bindings.

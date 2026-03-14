@@ -1355,7 +1355,7 @@ mod tests {
                     .reactive_get_signal(source.clone())
                     .unwrap_or_else(|err| panic!("reader get: {}", format_runtime_error(err))),
             );
-            assert!(val >= 0 && val <= 200, "unexpected value: {val}");
+            assert!((0..=200).contains(&val), "unexpected value: {val}");
             read_count += 1;
         }
         writer.join().expect("writer thread should not panic");
