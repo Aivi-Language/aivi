@@ -249,7 +249,24 @@ Valid public shapes therefore include:
 
 `GtkSignalEvent` remains the low-level event ADT for queue-based APIs and tests:
 
-Container-specific `<child type="...">` slots follow the underlying GTK/libadwaita widget API. For example, `AdwToolbarView` uses `<child type="top">` and `<child type="bottom">` for toolbar bars, while an untyped direct child (or `<property name="child">`) becomes the main content widget.
+Container-specific `<child type="...">` slots follow the underlying GTK/libadwaita widget API. For example, `AdwToolbarView` uses `<child type="top">` and `<child type="bottom">` for toolbar bars, while an untyped direct child (or `<property name="child">`) becomes the main content widget. When a surface is not a plain widget child, nest the helper object under `<property name="...">`; this is the normal escape hatch for object-valued GTK properties such as `model`, `factory`, `adjustment`, `stream`, and `layout-manager`.
+
+```aivi
+~<gtk>
+  <GtkListView>
+    <property name="model">
+      <GtkNoSelection>
+        <property name="model">
+          <GtkStringList id="items" />
+        </property>
+      </GtkNoSelection>
+    </property>
+    <property name="factory">
+      <GtkSignalListItemFactory />
+    </property>
+  </GtkListView>
+</gtk>
+```
 
 ```aivi
 GtkSignalEvent =
@@ -289,15 +306,18 @@ The public contract is:
 
 ## Runtime coverage
 
-The runtime directly covers the standard signal-first widget story:
+The runtime now combines hand-written fast paths for the common signal-first story with GIR-derived metadata for the broader GTK4/libadwaita surface.
 
-- root windows: `GtkWindow`, `GtkApplicationWindow`
-- layout containers: `GtkBox`, `GtkGrid`, `GtkOverlay`, `GtkScrolledWindow`, `GtkStack`, `GtkRevealer`, `GtkPaned`, `GtkHeaderBar`, `AdwHeaderBar`, `AdwClamp`
-- interactive widgets: `GtkButton`, `GtkCheckButton`, `GtkToggleButton`, `GtkSwitch`, `GtkEntry`, `GtkPasswordEntry`, `GtkSearchEntry`, `GtkTextView`, `GtkScale`, `GtkSpinButton`, `GtkDropDown`, `GtkMenuButton`, `GtkSpinner`, `GtkProgressBar`
-- display widgets: `GtkLabel`, `GtkImage`, `GtkPicture`, `GtkDrawingArea`, `GtkSeparator`, `GtkListBox`
-- event controllers: `GtkGestureClick`, `GtkEventControllerMotion` via raw `enter`/`leave` signals, keyboard capture via `onKeyPress={...}`
+The public contract is:
 
-Additional `Adw*` classes can be created dynamically when their GType is available. Container-specific child-slot rules remain a thin handwritten layer even when widget metadata comes from GIR/GObject reflection.
+- any indexed `Gtk*` / `Adw*` class that is valid in the surrounding GTK API may be instantiated from `~<gtk>`, `buildFromNode`, or `buildWithIds`
+- writable scalar properties still use the existing hand-tuned setters where needed, then fall back to metadata-driven generic property application
+- object-valued properties can be expressed explicitly with nested `<property name="..."> <object .../> </property>` nodes
+- common single-child containers fall back to common pointer properties such as `child` and `content` when they do not need a custom slot API
+- container-specific `<child type="...">` attachment remains a thin handwritten layer for widget families that require specialized add/remove calls
+- typed signal payloads remain curated for the common AIVI event sugar, while other indexed signals may still connect and surface through `GtkUnknownSignal`
+
+That means the runtime is no longer limited to a small allowlist of hand-wrapped classes. In addition to the standard `GtkBox` / `GtkButton` / `GtkEntry` flow, metadata-driven construction now covers broader widget families such as `GtkListView`, `GtkColumnView`, `GtkGridView`, `GtkPopover`, `GtkPopoverMenu`, `GtkPopoverMenuBar`, `GtkVideo`, and `GtkMediaControls`, plus helper-object graphs such as `GtkStringList`, `GtkAdjustment`, `GtkSelectionModel` implementations, `GtkFilterListModel`, `GtkSortListModel`, `GtkSignalListItemFactory`, `GtkBuilderListItemFactory`, and layout-manager objects when they are wired through the appropriate property.
 
 ## Low-level runtime helpers
 
@@ -314,7 +334,7 @@ For standard apps, bound callbacks and event handles are the normal path. `signa
 
 ## Windows, dialogs, and application infrastructure
 
-`GtkWindow`, `GtkApplicationWindow`, `AdwWindow`, and `AdwApplicationWindow` are valid primary root nodes in signal-first GTK trees. They should appear at the root of a mounted app tree rather than as nested children. Use `runGtkApp` for the common case, or `mountAppWindow` when you need manual access to the mounted `WindowId` before calling `appRun` or when you need to mount extra live roots such as persistent libadwaita dialogs.
+Any GTK/libadwaita class that is a `GtkWindow` subclass is a valid primary root node in a signal-first GTK tree. In practice that usually means `GtkWindow`, `GtkApplicationWindow`, `AdwWindow`, `AdwApplicationWindow`, and other concrete window/dialog subclasses. They should appear at the root of a mounted app tree rather than as nested children. Use `runGtkApp` for the common case, or `mountAppWindow` when you need manual access to the mounted `WindowId` before calling `appRun` or when you need to mount extra live roots such as persistent libadwaita dialogs.
 
 `mountAppWindow : AppId -> List GtkNode -> Effect GtkError WindowId` has these rules:
 
@@ -345,15 +365,16 @@ main = do Effect {
 }
 ```
 
-Dialog API objects and popup/menu surfaces remain programmatic:
+Some special-lifecycle APIs still need specialized handling:
 
 | Type | Notes |
 | --- | --- |
 | `GtkAlertDialog` | asynchronous dialog API object; create and present programmatically or from an `Event`/callback |
-| `GtkDialog`, `GtkMessageDialog` | legacy dialog APIs; prefer `GtkAlertDialog` or libadwaita dialogs |
-| `GtkPopover`, `GtkPopoverMenu` | transient popup/menu surfaces; still created and presented programmatically |
+| `GtkDialog`, `GtkMessageDialog` | legacy top-level dialog window APIs; mount them as root windows only if needed, but prefer `GtkAlertDialog` or libadwaita dialogs |
 | `GtkFileDialog` | asynchronous file chooser object; create and present programmatically |
 | `GSimpleAction` / `GMenu` | programmatic action and menu infrastructure |
+
+`GtkPopover` / `GtkPopoverMenu` / `GtkPopoverMenuBar` and the newer list/media widgets are ordinary tree nodes now; only the truly async or application-lifecycle APIs above remain outside the declarative tree surface.
 
 GIO actions and menus are still wired up programmatically. In the signal-first model, do that from startup/mount-time effects or other library setup code rather than a reducer host hook.
 
@@ -398,13 +419,13 @@ addPoint = point => batch (_ =>
 - `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)
 - runtime binding failures report the widget id/class, optional `id="..."` name, the failing binding, and the known supported signals for that class
 
-## Notable non-widget-tree surfaces
+## Special and managed surfaces
 
-Some GTK/libadwaita types are still relevant but are not direct widget-tree nodes:
+Some GTK/libadwaita types are still relevant but need extra care:
 
-- animation objects such as `AdwTimedAnimation` and `AdwSpringAnimation`
-- list/model infrastructure such as `GtkSelectionModel`, `GtkFilterListModel`, and `GtkSortListModel`
-- printing infrastructure such as `GtkPrintOperation`
-- singleton/builder infrastructure such as `GtkSettings`, `GtkStyleContext`, and `GtkBuilder`
+- helper-object graphs such as `GtkSelectionModel`, `GtkFilterListModel`, `GtkSortListModel`, `GtkStringList`, `GtkAdjustment`, `GtkSignalListItemFactory`, `GtkBuilderListItemFactory`, and layout-manager objects may now appear as nested object-valued `<property>` children
+- animation objects such as `AdwTimedAnimation` and `AdwSpringAnimation` remain programmatic helpers rather than common tree roots
+- printing infrastructure such as `GtkPrintOperation`, singleton/builder infrastructure such as `GtkSettings`, `GtkStyleContext`, and `GtkBuilder`, and lifecycle objects such as `GtkApplication`, `GtkAlertDialog`, and `GtkFileDialog` remain outside the normal declarative tree surface
+- GTK-managed/internal types such as `GtkListItem`, `GtkColumnViewColumn`, `GtkColumnViewRow`, `GtkColumnViewCell`, `GtkColumnViewSorter`, shortcut helper objects, and `GtkMediaStream` still require their owning GTK API rather than direct tree construction
 
-Use these programmatically when needed; they are not the primary signal-first app surface.
+Use these through the appropriate property, helper function, or programmatic GTK integration point rather than treating every type as a drop-in root widget.

@@ -2,173 +2,87 @@
 apply: always
 ---
 
-# AIVI Language Reference (LLM Context)
+# AIVI Language Reference — Token-Optimized LLM Context
 
-> This file is the authoritative quick-reference for writing AIVI code.
-> For the full specification see `specs/`. When in doubt, the specs win.
+Use this as the compact default reference for generating AIVI. If a case is unclear, the full spec/reference wins.
 
----
-
-## 1 Core Design
+## 1. Core rules
 
 - Statically typed, purely functional, expression-oriented.
-- Immutable bindings; **no mutation**, no loops, no null.
-- Use `Option A` / `Result E A` instead of null; `Validation E A` for error accumulation; recursion, folds, or generators instead of loops.
-- Pattern bindings with `=` must be **total**; refutable matches use `match`.
-- Records are structural and closed (no row polymorphism).
-- Effects are explicit: `Effect E A` (error type `E`, success type `A`).
-- Domains give meaning to operators and suffix literals for non-`Int` types.
-- No semicolons — bindings and block statements are separated by newlines.
-- Opening `{` always on the same line as the keyword (`do Effect {`, `generate {`, `x match`).
-- Avoid deeply nested expressions — extract inner logic into named helper functions.
+- Immutable bindings only. No mutation, no loops, no null, no semicolons.
+- Prefer `Option A`, `Result E A`, `Validation E A`.
+- Bindings use `=` only. No `let`, `var`, `const`.
+- Records are structural and closed.
+- Effects are explicit: `Effect E A`.
+- Functions are curried; application is by whitespace.
+- Pattern bindings with `=` must be total; use `match` for refutable cases.
+- Opening `{` stays on the same line: `do Effect {`, `generate {`, `x match`.
+- Avoid deep nesting; extract helpers.
 
----
+## 2. Lexical / naming
 
-## 2 Lexical Basics
+- Comments: `// ...`, `/* ... */` (non-nesting).
+- lowerCamelCase: values/functions/fields.
+- UpperCamelCase: types/constructors/domains/classes.
+- snake_case: module path segments / file names.
+- Text: `"hello { name }"`.
+- Numbers: `42`, `3.14`, suffixed literals like `10px`, `30s`, `100%`.
+- Constructors, not keywords: `True False None Some Ok Err`.
+- Deprecated: `effect {}` → use `do Effect {}`. `name@pat` → use `name as pat`.
 
-| Element                                   | Syntax                                                                                                                                                                                 |
-|:----------------------------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Line comment                              | `//` to end of line                                                                                                                                                                    |
-| Block comment                             | `/* ... */` — may span multiple lines; **does not nest**                                                                                                                               |
-| Value / function / field names            | `lowerCamelCase` (`lowerIdent`)                                                                                                                                                        |
-| Type / constructor / domain / class names | `UpperCamelCase` (`UpperIdent`)                                                                                                                                                        |
-| Module path segments / `.aivi` file names | `snake_case` (for example `myapp.daemon.command_queue` -> `myapp/daemon/command_queue.aivi`)                                                                                           |
-| Text literal                              | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                                                     |
-| Int, Float                                | `42`, `3.14`                                                                                                                                                                           |
-| Char                                      | `'a'`                                                                                                                                                                                  |
-| ISO date-time / timestamp carrier         | `2024-05-21T12:00:00Z`                                                                                                                                                                 |
-| Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                                |
-| Keywords                                  | `as class do domain effect else export generate given hiding if in instance match mock module opaque or over patch recurse resource snapshot then unless use when with yield loop` |
-
-`True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
-
-`effect { }` is a **deprecated** alias for `do Effect { }` (emits warning W1600); always write `do Effect { }`.
-`@` in patterns is **deprecated** in favour of `as` (emits warning W1603); write `name as pattern` instead of `name@pattern`.
-
----
-
-## 3 Bindings and Scope
-
-All bindings use `=`. There is no `let`, `var`, or `const`.
+## 3. Bindings / destructuring
 
 ```aivi
 x = 42
 add = a b => a + b
+{name, age} = user
+(a, b) = pair
+[h, ...t] = list          // must be total
+user as { name } = getUser
 ```
 
-### Destructuring
+- Shadowing creates a new binding; it is not mutation.
+- Top-level bindings are recursive.
 
-```aivi
-{ name, age } = user             // record destructuring
-(a, b) = pair                    // tuple destructuring
-[h, ...t] = list                 // list head/tail (must be total)
-user as { name } = getUser       // whole-value + destructure
-```
+Record pattern forms:
 
-### Record pattern operators
+- `{ field }` bind field directly.
+- `{ field: pat }` rename/match.
+- `{ field as { pat } }` keep whole field and destructure.
+- `{ field.{ pat } }` destructure only.
+- Deep path destructuring allowed: `{ data.user.profile.name }`.
 
-| Syntax                 | `field` in scope? | Inner bindings? | Purpose                         |
-|:---------------------- |:-----------------:|:---------------:|:------------------------------- |
-| `{ field: pat }`       | no (renamed)      | yes             | Match / rename a field          |
-| `{ field as { pat } }` | yes               | yes             | Keep whole field + destructure  |
-| `{ field.{ pat } }`    | no                | yes             | Destructure only, discard field |
-| `{ field }`            | yes               | -               | Shorthand, binds field by name  |
-
-Deep path destructuring: `{ data.user.profile.name }` reaches nested fields directly.
-
-### Shadowing
-
-Shadowing is allowed. It introduces a new binding; there is no mutation.
-
-```aivi
-x = 1
-x = x + 1  // new binding, old `x` is no longer accessible
-```
-
-### Recursion
-
-Top-level module bindings are recursive (can refer to themselves and later bindings). Local recursion uses module-level helpers or generators with `loop`/`recurse`.
-
----
-
-## 4 Functions
-
-### Definition and application
-
-Functions are **curried**. Application is by whitespace.
+## 4. Functions / application
 
 ```aivi
 add : Int -> Int -> Int
 add = a b => a + b
-
-result = add 5 10       // 15
-inc = add 1             // partial application
+inc = add 1
+result = add 5 10
+f = x => x + 1
+g = _ + 1                 // unary placeholder lambda only
 ```
 
-### Lambdas
+- Application uses spaces, not parentheses: `f x y`.
+- `.field` means accessor lambda: `x => x.field`.
+- Pipes pass the left value as the last argument:
+    - `x |> f` == `f x`
+    - `x |> f a b` == `f a b x`
+- For `Signal A`, use `->>` for derivation.
+
+Multi-clause unary functions require a type signature:
 
 ```aivi
-x => x + 1              // explicit lambda
-_ + 1                   // placeholder lambda (unary only)
-a b => a + b            // multi-argument
-```
-
-`_` in expression position is a single-argument placeholder lambda. It is only valid where a unary function is expected.
-
-### Pipes (`|>`) and signal derives (`->>`)
-
-Pipes apply the value on the left as the **last** argument to the right-hand side.
-
-```aivi
-xs |> map inc |> filter (_ > 0)
-```
-
-Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
-
-Use `->>` (signal derive) when the left-hand side is a `Signal A`: `signal ->> f` is sugar for `derive signal (value => value |> f)`, so the result is another `Signal` and placeholder lambdas still work inside the mapped step. The RHS can also be a bare matcher block:
-
-```aivi
-aiSettingsOpen = shellState ->>
-  | Some AiSettingsSection => True
-  | _                      => False
-```
-
-### Multi-clause functions
-
-A unary function can be written as multiple match arms directly:
-
-```aivi
+describe : Int -> Text
 describe =
   | 0 => "zero"
   | 1 => "one"
   | _ => "many"
 ```
 
-Multi-clause definitions require an explicit type signature for that function name.
-With closed records, this keeps each clause checked against the exact input record shape.
-If no clause matches at runtime, evaluation fails with a non-exhaustive-match runtime error.
+For multi-arg matching, match a tuple.
 
-For multi-argument matching, match on a tuple:
-
-```aivi
-gcd = (a, b) => (a, b) match
-  | (x, 0) => x
-  | (x, y) => gcd y (x % y)
-```
-
-### Accessor sugar
-
-`.field` (with dot prefix) is shorthand for `x => x.field`:
-
-```aivi
-users |> map name
-```
-
----
-
-## 5 Pattern Matching (`match`)
-
-`match` takes the expression **immediately to its left** and tests it against arms.
+## 5. `match`
 
 ```aivi
 value match
@@ -176,64 +90,20 @@ value match
   | Err _ => 0
 ```
 
-Works with pipelines:
+- `match` consumes the expression immediately to its left.
+- Must be exhaustive; use `_` as catch-all.
+- Guards use `when`.
+- Whole-value binding works inside patterns with `as`.
 
-```aivi
-input |> parse |> validate match
-  | Ok x  => x
-  | Err e => handle e
-```
+## 6. Types
 
-### Guards
+Primitives / common carriers:
 
-```aivi
-classify = n => n match
-  | _ when n > 0 => "positive"
-  | _ when n < 0 => "negative"
-  | _            => "zero"
-```
+- `Unit Bool Int Float`
+- `Text Bytes Decimal BigInt`
+- `DateTime Timestamp Date TimeZone ZonedDateTime`
 
-### Whole-value binding in patterns
-
-```aivi
-response match
-  | { data.user.profile as { name } }  => name
-  | { data.guest: True }               => "Guest"
-  | _                                  => "Unknown"
-```
-
-### Nested constructor patterns
-
-```aivi
-parse = expr => expr match
-  | Add (Lit a) (Lit b) => Lit (a + b)
-  | _                   => expr
-```
-
-### Exhaustiveness
-
-All `match` expressions must be exhaustive. Non-exhaustive matches are compile errors. Use `_` as a catch-all.
-
----
-
-## 6 Types
-
-### Compiler primitives
-
-```aivi
-Unit  Bool  Int  Float
-```
-
-### Standard library carriers and aliases
-
-```aivi
-Text  Bytes  Decimal  BigInt
-DateTime  Timestamp  Date  TimeZone  ZonedDateTime
-```
-
-`Timestamp = DateTime` in `aivi.chronos.instant`. `Duration` and `Instant` are important library-facing names, but they are not separate primitive carriers in the current verified v0.1 surface.
-
-### Algebraic data types (ADTs)
+ADTs:
 
 ```aivi
 Option A = None | Some A
@@ -243,67 +113,35 @@ Color = Red | Green | Blue
 Tree A = Node A (List (Tree A))
 ```
 
-Create values by applying constructors: `Some 42`, `Err "nope"`, `Valid "ok"`, `Node 1 [Node 2 [], Node 3 []]`.
-Nullary constructors (`None`, `True`, `Red`) are values directly.
-Use `constructorName value` and `constructorOrdinal value` to inspect an ADT value at runtime.
-`constructorOrdinal` is zero-based by constructor declaration order.
-
-### Branded nominal types
+Branded nominal type:
 
 ```aivi
 Email = Text!
-
-mkEmail : Text -> Email
-mkEmail = text => Email text
 ```
 
-`T = U!` creates a nominal type `T` (distinct from `U`) using a single constructor named `T`.
-Instances for the base type are auto-forwarded to the branded type when available; explicit
-instances for the branded type take precedence.
-
-### Opaque types
+Opaque type hides representation outside its module:
 
 ```aivi
-opaque Url = {
-  protocol: Text, host: Text, port: Option Int,
-  path: Text, query: List (Text, Text), hash: Option Text
-}
+opaque Url = { protocol: Text, host: Text, ... }
 ```
 
-The `opaque` keyword hides the type's internal structure outside its defining module:
-- **Inside the module**: fully transparent — construct, access fields, pattern match, update freely.
-- **Outside the module**: opaque — no record literals, no field access, no `<|` update, no structural pattern matching.
-- Domain operators and exported functions still work from outside.
-- Works for records, ADTs (`opaque Color = Red | Green | Blue`), branded types, and plain aliases.
-
-### Closed records
+Closed records:
 
 ```aivi
 User = { id: Int, name: Text, email: Option Text }
 UserWithEmail = { ...User, email: Text }
-
-// Functions require the exact record shape:
-greet : User -> Text
-greet = user => "Hello, { user.name }"
 ```
 
-### Record creation and spread
-
-```aivi
-p = { x: 1, y: 2 }
-q = { ...p, x: 3 }          // later fields win: { x: 3, y: 2 }
-```
-
-### Tuples and lists
+Values:
 
 ```aivi
 pair = (1, "hello")
 xs = [1, 2, 3]
-ys = [0, ...xs, 4]          // spread
-zs = [1 .. 10]              // range (inclusive)
+ys = [0, ...xs, 4]
+zs = [1 .. 10]
 ```
 
-### Row transforms (type-level)
+Type-level row transforms:
 
 ```aivi
 Pick (id, name) User
@@ -311,1472 +149,418 @@ Omit (isAdmin) User
 Optional (email) User
 Required (email) User
 Rename { createdAt: created_at } User
-Defaulted (email) User   // like Optional at type level; used for codec/default derivation
-
-// Type-level pipe:
+Defaulted (email) User
 User |> Pick (id, name) |> Optional (name)
 ```
 
-Use row transforms to reshape existing fields. Use type-level record spread (`{ ...Base, extra: T }`) when you want to extend or override a closed record type.
+## 7. Classes / instances
 
-### Type signatures
-
-```aivi
-add : Int -> Int -> Int
-```
-
-Type signatures are also required for multi-clause function definitions (`f = | ... => ...`).
-
-### Classes and instances (ad-hoc polymorphism, HKTs)
+Supported style:
 
 ```aivi
-class Setoid A = {
-  equals: A -> A -> Bool
-}
-
-class Ord A = Setoid {
-  lte: A -> A -> Bool
-}
-
-class Semigroup A = {
-  concat: A -> A -> A
-}
-
-class Monoid A = Semigroup {
-  empty: A
-}
-
-class Functor (F A) = {
-  map: (A -> B) -> F B
-}
-
-class Apply (F A) = Functor {
-  ap: F (A -> B) -> F B
-}
-
-class Applicative (F A) = Apply {
-  of: A -> F A
-}
-
-class Chain (F A) = Apply {
-  chain: (A -> F B) -> F B
-}
-
-class Monad (M A) = Applicative, Chain {}
-
-class Foldable (F A) = {
-  reduce: (B -> A -> B) -> B -> B
-}
-
-class Traversable (T A) = Functor, Foldable {
-  traverse: (A -> F B) -> F (T B)
-}
-
-class Filterable (F A) = Functor {
-  filter: (A -> Bool) -> F A
-}
-
-class Alternative (F A) = Applicative {
-  alt: F A -> F A
-}
-
-class Plus (F A) = Alternative {
-  zero: F A
-}
-
-class Bifunctor (F A B) = {
-  bimap: (A -> C) -> (B -> D) -> F C D
-}
-
+class Semigroup A = { concat: A -> A -> A }
+class Monoid A = Semigroup { empty: A }
+class Functor (F A) = { map: (A -> B) -> F B }
 instance Monad (Option A) = { ... }
-instance Monad (Result E A) = { ... }
-instance Monad (List A) = { ... }
-instance Semigroup Text = { ... }
-instance Monoid Text = { ... }
 ```
 
-Type variables in class/instance declarations are implicitly universally quantified.
-Use `given (A: ClassName)` only when a real constraint is needed (e.g., `given (A: Eq)`).
-HKT class member signatures use **abbreviated form**: the container type is omitted and
-added internally by the compiler as the last argument.
+Key notes:
 
-All class methods from `aivi.logic` support both direct application and pipe syntax:
-`map f xs` and `xs |> map f` are equivalent. `use aivi.logic` brings all class methods
-into scope.
+- Type variables are implicitly universally quantified.
+- Use `given (A: ClassName)` only for real constraints.
+- `use aivi.logic` brings class methods into scope.
+- Class methods work both direct and piped: `map f xs` and `xs |> map f`.
+- Zero-arg members like `empty` resolve from expected type; qualify if ambiguous.
 
-**Bidirectional resolution of zero-argument members**: Class members that are values
-(e.g. `empty` from `Monoid`) resolve via expected type from context — a type annotation
-or function signature is enough. When ambiguous, use qualified forms: `List.empty`,
-`Map.empty`.
+## 8. Coercions
 
-### Type class instance table
+When expected type requires it:
 
-| Type | Setoid | Ord | Semigroup | Monoid | Functor | Filterable | Foldable | Traversable | Apply | Applicative | Chain | Monad | Bifunctor | Alternative | Plus |
-|------|:------:|:---:|:---------:|:------:|:-------:|:----------:|:--------:|:-----------:|:-----:|:-----------:|:-----:|:-----:|:---------:|:-----------:|:----:|
-| `List A` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
-| `Option A` | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
-| `Result E A` | ✓ | — | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
-| `Map K V` | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
-| `Generator A` | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
-| `Stream A` | — | — | — | — | ✓ | ✓ | — | — | — | — | — | — | — | — | — |
+- `Text` context may insert `toText` if `ToText` exists.
+- `Body` context can coerce:
+    - record literal → `Json (toJson record)`
+    - `Text` → `Plain text`
+    - `JsonValue` → `Json ...`
+- `Option A` context may wrap a plain `A` as `Some A`.
 
-### Type variable constraints
+## 9. Predicates
+
+Predicate expressions auto-lift to functions where needed:
 
 ```aivi
-class Collection (C A) = given (A: Eq) {
-  elem : A -> C A -> Bool
-  unique : C A -> C A
-}
-```
-
-### Expected-type coercions
-
-In positions where a `Text` is expected, the compiler may insert `toText expr` if a `ToText A` instance is in scope.
-
-When the expected type is `Body` (from `aivi.net.http`), the compiler coerces:
-
-- Record literal → `Json (toJson record)`
-- `Text` → `Plain text`
-- `JsonValue` → `Json jv`
-
-When the expected type is `Option A` and the expression does not match, the compiler tries to coerce to `A` and wraps in `Some`. These coercions chain, so a bare record in an `Option Body` position becomes `Some (Json (toJson { ... }))`:
-
-```aivi
-body: { grant_type: "authorization_code", code: code }
-// elaborated to: Some (Json (toJson { grant_type: ..., code: ... }))
-```
-
-`toJson : A -> JsonValue` is a structural built-in that converts any value — records, lists, primitives, `Option` — to a `JsonValue`. The `Json` body variant also auto-injects `Content-Type: application/json`.
-
----
-
-## 7 Predicates
-
-Predicate expressions are `Bool` expressions that can be used directly where a function `A -> Bool` is expected (auto-lifted). Lifting also works in any function position, not just `Bool`-returning ones.
-
-```aivi
-users |> filter active               // active is unbound → lifted to x => x.active
-users |> filter (age > 18)           // age is unbound → x => x.age
-users |> find (by id)                // by id → x => x.id == id  (outer id captured)
+users |> filter active
+users |> filter (age > 18)
+users |> find (by id)
 users |> find (email == Some "x")
 xs |> takeWhile (_ < 10)
 ```
 
-Inside fn positions:
+Rules:
 
-- Bare unbound names lift to field accessors: `price` → `x => x.price`.
-- `.field` is an explicit accessor function, not a field value.
-- `by prop` desugars to `x => x.prop == prop` (outer-scope capture).
-- `by (f1, f2)` desugars to `x => x.f1 == f1 && x.f2 == f2`.
-- `_.field` is a **compile error** — use `.field` or a bare name instead.
-- Combinators: `!p`, `p && q`, `p || q`.
-- Pattern predicates: `Some _`, `Ok { value } when value > 10`.
-- Predicates do not automatically unwrap `Option` or `Result`; use a pattern predicate or a full `match`.
+- bare unbound name → field accessor
+- `by prop` → `x => x.prop == prop`
+- `by (f1, f2)` compares multiple fields
+- `!`, `&&`, `||` compose predicates
+- use pattern predicates for `Option` / `Result`
+- `_.field` is invalid; use `.field` or bare field name
 
----
+## 10. Patching
 
-## 8 Patching (Structural Updates)
-
-`<|` applies a declarative, type-checked patch to a record.
+`<|` applies structural updates to a record.
 
 ```aivi
 user2 = user <| { name: "Sam" }
 user3 = user <| { profile.avatar: "new.png" }
+record <| { items[*].price: _ * 1.1 }
+record <| { items[price > 80].tag: "hot" }
+record <| { lookup["key"]: newVal }
 ```
 
-Use `<<-` (signal write) when the left-hand side is a `Signal A`: plain values call `set`, functions call `update`, and record literals keep patch semantics against the current signal value.
+Patch instructions:
+
+- `value` replace/insert
+- `function` transform existing value
+- `:= function` store function as data
+- `-` remove field
+
+Patch value:
 
 ```aivi
-count <<- 10
-profile <<- (state => { name: "AIVI", saveCount: state.saveCount + 1 })
-profile <<- (state => state <| { saveCount: _ + 1 })
-profile <<- { saveCount: _ + 1 }
-```
-
-### Path addressing
-
-```aivi
-record <| { a.b.c: value }                // dot paths
-record <| { items[*].price: _ * 1.1 }     // traversal (all items)
-record <| { items[price > 80].tag: "hot" } // predicate selector
-record <| { lookup["key"]: newVal }        // map key selector
-```
-
-### Instructions
-
-| Instruction   | Meaning                                         |
-|:------------- |:----------------------------------------------- |
-| `value`       | Replace or insert                               |
-| `function`    | Transform existing value (applied to old value) |
-| `:= function` | Replace with function **as data** (not applied) |
-| `-`           | Remove field (shrinks record type)              |
-
-### Patch-as-value
-
-```aivi
-p = patch { name: toUpper }     // Patch User, i.e. User -> User
+p = patch { name: toUpper }
 result = user <| p
 ```
 
----
+For `Signal A`, use `<<-`:
 
-## 9 Blocks
+- plain value → `set`
+- function → `update`
+- record literal preserves patch semantics
 
-AIVI's core block families are `generate`, `do ...`, `resource`, and plain `{ ... }` (pure computation). The `do` family includes `do Effect`, generic `do M`, `do Applicative`, and the event-handle sugar `do Event`. The most common forms are summarized below; `resource` is covered in §11.
+## 11. Blocks
 
-### `generate { ... }` - Pure sequences
+### `generate { ... }`
 
-Pull-based, lazy sequences. No effects, no suspension.
-
-```aivi
-gen = generate {
-  yield 1
-  yield 2
-  yield 3
-}
-```
-
-**Bindings, guards, transforms:**
+Pure lazy sequence builder.
 
 ```aivi
-evens = generate {
-  x <- [1 .. 100]
-  x -> x % 2 == 0           // guard (filter)
+generate {
+  x <- [1 .. 10]
+  x -> x % 2 == 0
   yield x
 }
 ```
 
-**Cartesian product:**
+Inside `generate`:
+
+- `x <- source`
+- `x = expr`
+- `x -> pred`
+- `yield expr`
+- `loop ... => { ... recurse ... }`
+
+### `do Effect { ... }`
+
+Most common effect block.
 
 ```aivi
-pairs = generate {
-  x <- [1 .. 3]
-  y <- ["a", "b"]
-  yield (x, y)
+do Effect {
+  cfg <- loadConfig
+  name = cfg.appName
+  when cfg.verbose <- print "verbose"
+  given cfg.ok or fail BadConfig
+  pure name
 }
 ```
 
-**Tail-recursive loops:**
+Inside `do Effect`:
+
+- `x <- eff`
+- `x = expr`
+- `x <- resource`
+- `when cond <- eff`
+- `unless cond <- eff`
+- `given cond or failExpr`
+- final expression is an effect, usually `pure value`
+- local `loop`/`recurse` supported
+
+### `do M { ... }`
+
+Generic monadic block for `Option`, `Result`, `Query`, etc.
+
+### `do Applicative { ... }`
+
+Use for independent validations; final line is a plain value.
+
+### `do Event { ... }`
+
+Convenience for event handles. Same body rules as `do Effect`.
+Returns a handle with reactive fields like `result`, `error`, `done`, `running`.
+
+## 12. Effects
 
 ```aivi
-fibs = generate {
-  loop (a, b) = (0, 1) => {
-    yield a
-    recurse (b, a + b)
-  }
-}
+pure    : A -> Effect E A
+fail    : E -> Effect E A
+bind    : Effect E A -> (A -> Effect E B) -> Effect E B
+attempt : Effect E A -> Effect F (Result E A)
 ```
 
-Summary of statements inside `generate { ... }`:
-
-- `x <- source` - bind from another generator/list
-- `x = expr` - pure local binding
-- `x -> pred` - guard (filter by predicate)
-- `yield expr` - emit a value
-- `loop pat = init => { ... recurse next }` - local tail recursion
-
-### `do Effect { ... }` - Effectful computation
-
-The most common block form. Sequences effectful operations with typed errors.
+Fallbacks:
 
 ```aivi
-main = do Effect {
-  cfg  <- load (file.read "config.json")   // <- runs effect
-  name = cfg.appName                        // = is pure binding
-  print "loaded { name }"
-}
-```
-
-Statements inside `do Effect { ... }`:
-
-- `x <- eff` - run effect, bind result
-- `_ <- eff` - run effect and intentionally discard result (optional; use when value is unused)
-- `x = expr` - pure local binding (`expr` must NOT be `Effect`)
-- `x <- resource` - acquire a `Resource`, released on scope exit
-- `when cond <- eff` - conditional (runs `eff` only when `cond` is true)
-- `unless cond <- eff` - negated conditional (runs `eff` only when `cond` is false)
-- `given cond or failExpr` - precondition guard
-- Final expression must be `Effect E A` (commonly `pure value`)
-- Statement expressions must be `Effect E Unit`; non-Unit results must be bound
-
-**Tail-recursive loops in effect blocks:**
-
-`loop`/`recurse` works inside `do Effect { ... }` blocks for stateful iteration:
-
-```aivi
-dijkstra = source graph => do Effect {
-  dists0 = empty |> insert source 0.0
-
-  loop state = { dists: dists0, pq: Heap.push (0.0, source) Heap.empty } => {
-    dists = state.dists
-    pq = state.pq
-    result = Heap.popMin pq
-    result match
-      | None                       => pure dists
-      | Some ((d, node), restPq)   => do Effect {
-          currentDist = dists |> getOrElse node 999999.0
-          if d > currentDist
-            then do Effect { recurse { dists: dists, pq: restPq } }
-            else do Effect {
-              edges = edgesFrom graph node
-              nextState <- processEdges dists d edges restPq
-              recurse nextState
-          }
-        }
-  }
-}
-```
-
-- `loop pat = init => { body }` - local tail-recursive loop (same syntax as in generators)
-- `recurse newState` - continue with the next iteration
-- Omitting `recurse` in a branch terminates the loop
-- The loop body `{ ... }` is promoted to the parent effect-block kind, so `<-`, `when`/`unless`, and `recurse` work inside
-
-### `do M { ... }` - General monadic blocks
-
-`do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. `Option`, `Result`, and `Query` are also supported:
-
-```aivi
-// do Option: short-circuits on None
-safeLookup = key1 key2 map => do Option {
-  x <- map |> get key1
-  y <- map |> get key2
-  Some (x + y)
-}
-
-// do Result: short-circuits on Err
-validateAge = input => do Result {
-  n <- parseInt input
-  ok <- if n >= 0 && n <= 150 then Ok n else Err "out of range"
-  Ok ok
-}
-
-// do Query: compose typed database queries (aivi.database)
-// The shipped portable subset lowers to SQL; other helper-built queries keep legacy runtime semantics.
-activeNames : Query Text
-activeNames = do Query {
-  user <- db.from userTable    // bind each row
-  db.guard user.active        // skip rows where active is False
-  db.queryOf user.name         // project the name field
-}
-
-// Execute against a connection
-names <- db.runQueryOn conn activeNames
-```
-
-The same bind (`<-`) and pure-bind (`=`) syntax applies. Statement availability by block kind:
-
-| Statement                   | `do Effect` | `do M` (generic) | `generate`        |
-|:--------------------------- |:-----------:|:----------------:|:-----------------:|
-| `x <- expr`                 | ✓           | ✓                | ✓ (from sequence) |
-| `x = expr`                  | ✓           | ✓                | ✓                 |
-| `expr` (sequencing)         | ✓           | ✓                | —                 |
-| `yield expr`                | —           | —                | ✓                 |
-| `x -> pred` (guard)         | —           | —                | ✓                 |
-| `or` fallback               | ✓           | —                | —                 |
-| `when`/`unless cond <- eff` | ✓           | —                | —                 |
-| `given cond or expr`        | ✓           | —                | —                 |
-| `loop`/`recurse`            | ✓           | —                | ✓                 |
-| resource `<-`               | ✓           | —                | —                 |
-
-Effect-specific statements (`or`, `when`, `unless`, `given`, resource `<-`, `loop`/`recurse`) are **only** available in `do Effect` blocks.
-
-### `do Applicative { ... }` - Independent applicative blocks
-
-Use `do Applicative { ... }` when each `<-` input is independent and you want the compiler to combine them with `map` / `ap` instead of sequencing them with `chain`.
-
-```aivi
-contactValidation = model => do Applicative {
-  name <- validate (allOf [required, minLength 2]) model.name
-  email <- validate (allOf [required, email]) model.email
-  MkContact name email
-}
-```
-
-- Each `<-` right-hand side must be independent of earlier applicative-bound names.
-- `=` still introduces a pure local.
-- Non-final bare expression statements are not allowed.
-- The final line is a plain result value; the compiler lifts it for you.
-
-### `do Event { ... }` - Event handles with reactive lifecycle
-
-`do Event { ... }` is the signal-first convenience form for event handles. It is equivalent to `event (do Effect { ... })`, but it reads better in UI code and makes the event-handle intent explicit.
-
-```aivi
-saveDraft = do Event {
-  persistDraft (get draft)
-  pure "Saved"
-}
-
-saveMessage = saveDraft.result |> (maybeText =>
-  maybeText match
-    | Some text => text
-    | None      => ""
-)
-```
-
-- Inside the body, the same statement rules as `do Effect { ... }` apply.
-- The resulting event handle exposes reactive lifecycle fields: `result`, `error`, `done`, and `running`.
-- GTK callback attrs can accept either ordinary runtime functions or an `Event` handle directly.
-- The lower-level equivalent remains `event (do Effect { ... })`.
-
----
-
-## 10 Effects
-
-`Effect E A` models typed effects where `E` is the error type and `A` is the success type.
-
-### Core operations
-
-| Operation | Type                                            | Purpose                 |
-|:--------- |:----------------------------------------------- |:----------------------- |
-| `pure`    | `A -> Effect E A`                               | Lift a value            |
-| `fail`    | `E -> Effect E A`                               | Abort with error        |
-| `bind`    | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence                |
-| `attempt` | `Effect E A -> Effect F (Result E A)`           | Catch error as `Result` |
-
-### Error fallback with `or`
-
-```aivi
-// Effect fallback (inside do Effect block after <-):
 txt <- load (file.read path) or "(missing)"
-
-// With error pattern matching:
 val <- riskyOp or
-  | NotFound msg => pure default
-  | Timeout _    => fail "timed out"
-
-// Result fallback (expression form):
+  | NotFound _ => pure default
+  | Timeout _  => fail "timed out"
 count = result or 0
 ```
 
-`or` arms match the **error value** directly (write `NotFound m`, not `Err NotFound m`).
+- `attempt` captures effect errors as `Result`.
+- `when` / `unless` are conditional effects.
+- `given cond or ...` is a precondition guard.
+- `if` is an expression; use nested `do Effect` for multi-step branches.
 
-### Attempt (error recovery)
-
-```aivi
-getUser = id => do Effect {
-  res <- attempt (api.fetchUser id)
-  res match
-    | Ok user => pure user
-    | Err _   => pure GuestUser
-}
-```
-
-`attempt` catches errors of type `E`, producing `Result E A`. The outer effect has error type `F` (different from `E`).
-
-### Conditional effects (`when`)
-
-`when cond <- eff` runs `eff` only when `cond` is true. Otherwise the block continues with `Unit`.
-
-```aivi
-main = do Effect {
-  cfg <- loadConfig
-  when cfg.verbose <- print "verbose mode enabled"
-  when cfg.dryRun <- print "dry run, no side effects"
-  process cfg
-}
-```
-
-Desugars to: `_ <- if cond then eff else pure Unit`.
-
-### Negated conditional effects (`unless`)
-
-`unless cond <- eff` runs `eff` only when `cond` is **false**. It is the exact negation of `when`.
-
-```aivi
-main = do Effect {
-  cfg <- loadConfig
-  unless cfg.skipSetup <- runSetup cfg
-  unless cfg.quiet     <- print "done"
-  process cfg
-}
-```
-
-Desugars to: `_ <- if cond then pure Unit else eff`.
-
-### Precondition guards (`given`)
-
-`given cond or failExpr` asserts a condition. If `cond` is false, `failExpr` is evaluated (typically `fail`).
-
-```aivi
-withdraw = amount account => do Effect {
-  given amount > 0 or fail (InvalidAmount amount)
-  given account.balance >= amount or fail InsufficientFunds
-  updateBalance account (account.balance - amount)
-}
-```
-
-`given` also supports match arms on the condition's value:
-
-```aivi
-main = do Effect {
-  given validate input or
-    | InvalidField f => fail (BadRequest f)
-    | MissingField f => fail (BadRequest "missing: { f }")
-  process input
-}
-```
-
-Desugars to: `_ <- if cond then pure Unit else failExpr`.
-
-### Branching in effect blocks
-
-`if`/`then`/`else` is an expression. For multi-step branches, use nested `do Effect { ... }`:
-
-```aivi
-process = input => do Effect {
-  validated <- validate input
-  result <- if validated.needsReview then
-    do Effect {
-      _ <- notifyReviewer validated
-      pure (Pending validated)
-    }
-  else pure (Approved validated)
-  pure result
-}
-```
-
----
-
-## 11 Resources
-
-`Resource E A` - a recipe for acquiring a handle of type `A` (with error type `E`), using it, and releasing it.
-
-### Defining
+## 13. Resources
 
 ```aivi
 managedFile = path => resource {
-  handle <- file.open path       // acquire
-  yield handle                   // provide to caller
-  file.close handle              // release (runs on scope exit)
+  handle <- file.open path
+  yield handle
+  file.close handle
 }
 ```
 
-Rules: exactly one `yield`; code after `yield` is cleanup; cleanup may perform effects.
+- exactly one `yield`
+- code after `yield` is cleanup
+- cleanup runs on scope exit, error, or cancellation
+- resources release in LIFO order
 
-### Using
-
-```aivi
-main = do Effect {
-  f <- managedFile "data.txt"       // acquired here
-  content <- file.readAll f
-  print content
-}                                    // f released here (LIFO)
-```
-
-Multiple resources are released in reverse acquisition order. Cleanup runs even on error or cancellation.
-
----
-
-## 12 Modules and Imports
-
-One module per file. `module` must be the first non-empty item.
+## 14. Modules / imports / exports
 
 ```aivi
 module my.app.api
 export fetchUser, User
-
 use aivi.net.http (get)
 use aivi.json (decode)
-
-User = { id: Int, name: Text }
-
-fetchUser : Int -> Effect HttpError User
-fetchUser = id => do Effect {
-  resp <- get (~u(https://api.example.com/users/{ id }))
-  decode resp.body
-}
 ```
 
-### Import forms
+Import forms:
 
 ```aivi
-use aivi.text                            // import all public symbols
-use aivi.text (toUpper, toLower)         // selective
-use aivi.text hiding (trim)             // import all except
-use aivi.text as T                       // aliased module
-use aivi.chronos.duration (domain Duration)  // import domain
-
-// Grouped: shared prefix written once
-use aivi.chronos (
-  instant (now, toEpoch)
-  duration (domain Duration)
-)
-// Desugars to:
-//   use aivi.chronos.instant (now, toEpoch)
-//   use aivi.chronos.duration (domain Duration)
+use aivi.text
+use aivi.text (toUpper, toLower)
+use aivi.text hiding (trim)
+use aivi.text as T
+use aivi.chronos.duration (domain Duration)
 ```
 
-### Export forms
+- One module per file.
+- `module` is first non-empty item.
+- Prelude is implicit via `use aivi.prelude`; disable with `@no_prelude`.
+- Application module/file path segments should be `snake_case`.
+
+## 15. External sources
+
+Preferred: schema-first declarations, `load` only inside `do Effect`.
 
 ```aivi
-export add, subtract, pi                 // selective
-export domain Color                      // export domain
-export add = a b => a + b                // inline exported binding
-export Flow = { status: 0 }              // inline exported declaration
-```
-
-### Prelude
-
-Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
-
-### Module path convention
-
-- `vendor.name.*` - third-party libraries
-- `user.app.*` - application code
-- In application code, module path segments and backing file names should be `snake_case`.
-
-**Core & Utils** (`aivi.*`):
-`prelude` (implicit), `text`, `logic`, `units`, `regex`, `testing`, `collections` (re-exports `list`, `map`, `set`, `queue`, `heap`), `i18n`, `generator`, `json`, `defaults`
-
-**Math & Science** (`aivi.*`):
-`math`, `vector`, `matrix`, `number`, `geometry`, `graph`, `linear_algebra`, `tree`
-
-**Time** (`aivi.chronos.*`):
-`instant`, `calendar`, `duration`, `timezone`, `scheduler`
-
-**System** (`aivi.*`):
-`system`, `concurrency`, `crypto`, `secrets`, `log`
-
-**IO** (`aivi.*`):
-`file`, `console`, `database`, `database.pool`, `email`, `path`, `url`, `rest`
-
-`aivi.database` supports both a default configured backend (`configure`, `load`, `applyDelta`) and
-explicit `DbConnection` handles (`connect`, `open`, `loadOn`, `applyDeltaOn`). Prefer
-`beginTxOn` / `inTransactionOn` / savepoint `...On` helpers for transaction-safe pooled code.
-
-**Typed mutation helpers:** `db.insertOn`, `db.deleteWhereOn`, `db.updateWhereOn`, `db.upsertOn`
-(and ambient `db.insert`, `db.deleteWhere`, `db.updateWhere`, `db.upsert`) are convenience
-wrappers that construct the appropriate `Delta A` and call `applyDeltaOn` / `applyDelta` in one
-step.  In v0.1 they execute **in memory** — they do not compile to SQL DML statements.
-
-**Query DSL (v0.1):** `aivi.database` also exports a `Query A` type and `do Query { ... }`
-notation for composing typed, composable queries. The portable subset (`db.from`,
-`db.where`, `db.guard`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`,
-`db.count`, `db.exists`, and `do Query` blocks built from those forms) now lowers to a
-SQL-backed plan when every participating table has an explicit column list. Those same
-static schemas also let the checker catch missing row fields and obvious bad
-projection/join field references early. Use `runQueryOn conn q` to execute against an
-explicit connection, or `runQuery q` to execute against the default connection
-configured with `db.configure`.
-
-```aivi
-// Build a typed query
-expensiveItems : Query Text
-expensiveItems = do Query {
-  item <- db.from itemTable
-  db.guard (item.price > 100)
-  db.queryOf item.name
-}
-// Or with functional helpers
-expensiveItems2 : Query Text
-expensiveItems2 = db.from itemTable |> db.where (price > 100) |> db.select .name
-
-// Execute against an explicit connection
-names <- db.runQueryOn conn expensiveItems
-
-// Execute against the default connection (configured with db.configure)
-names <- db.runQuery expensiveItems
-```
-
-Helper-built queries that do not lower still use the older in-memory `Query` runtime.
-Unsupported `do Query` shapes do not silently fall back; today they surface a query
-error when run, so keep `do Query` blocks to plain `from` binds, `guard` filters,
-simple `=` let-bindings, and a final `queryOf`/helper around it.
-
-**Sorting and paging (v0.1):** `orderBy`, `limit`, and `offset` compile to SQL
-`ORDER BY` / `LIMIT` / `OFFSET` inside the lowered subset. Queries outside that subset
-keep the older in-memory sort/slice behavior.
-
-```aivi
-// Take 5 active users sorted by creation time, skipping the first 10
-page : Query Text
-page =
-  db.from userTable
-  |> db.where active
-  |> db.orderBy .createdAt
-  |> db.offset 10
-  |> db.limit 5
-  |> db.select .name
-```
-
-**Multi-table join (v0.1 portable subset):** use repeated `from` binds with `guard`
-in a `do Query` block. Inside the lowered subset this becomes a SQL cross join plus
-pushed-down `WHERE` predicates. Current limits: each bind must still be a plain table
-source; explicit join syntax, outer joins, grouping, and correlated subqueries are not
-shipped yet.
-
-```aivi
-activeUserOrders : Query { user: User, order: Order }
-activeUserOrders = do Query {
-  user  <- db.from userTable
-  db.guard user.active
-  order <- db.from orderTable
-  db.guard (order.userId == user.id)
-  db.queryOf { user: user, order: order }
-}
-```
-
-**`db.count` / `db.exists` (v0.1):** both helpers are available now. In the lowered
-subset `db.count` emits SQL `COUNT(*)`, and `db.exists` emits a SQL existence probe
-(`SELECT 1 ... LIMIT 1`-style). Outside the lowered subset they keep the older
-in-memory behavior; they do not make an arbitrary query lowerable.
-
-**Network** (`aivi.net.*`):
-`http`, `https`, `httpServer`, `sockets`, `streams`
-
-**UI** (`aivi.ui.*` and `aivi.*`):
-`ui.gtk4`, `ui.layout`, `color`
-
----
-
-## 13 External Sources
-
-`Source K A` represents typed external data. Prefer **schema-first source declarations** and keep
-`load` as the only effectful step inside `do Effect { ... }`.
-
-```aivi
-User = { id: Int, name: Text }
-
-usersSource : Source File (List User)
 usersSource =
   file.json {
-    path: "./users.json"
+    path: "./users.json",
     schema: source.schema.derive
   }
 
-appConfig : Source Env { port: Int, debug: Bool }
-appConfig =
+cfgSource =
   env.decode {
-    prefix: "AIVI_APP"
+    prefix: "AIVI_APP",
     schema: source.schema.derive
   }
-
-do Effect {
-  users <- load usersSource
-  cfg   <- load appConfig
-  pure (users, cfg)
-}
 ```
 
-Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/decode`, `email.imap`.
+Helpers in verified subset:
 
-### Source pipeline helpers
+- `source.transform`
+- `source.validate`
+- `source.decodeErrors`
 
-The broader source-composition model adds pure source-pipeline combinators around the declaration. Today, the verified runtime subset is `source.transform` and `source.validate`:
+Also supports `@static` embedding and `openapi.fromUrl` / `openapi.fromFile` factories.
+`@static type.jsonSchema TypeName` generates an OpenAI-compatible JSON Schema.
+
+## 16. Sigils
+
+Common sigils:
 
 ```aivi
-nonEmpty : List A -> Validation (List DecodeError) (List A)
-nonEmpty = xs =>
-  if List.length xs == 0 then
-    Invalid [{ path: [], message: "expected at least one row" }]
-  else
-    Valid xs
-
-usersCount : Source File Int
-usersCount =
-  usersSource
-    |> source.transform List.length
-
-validatedUsers : Source File (List User)
-validatedUsers =
-  usersSource
-    |> source.validate nonEmpty
-```
-
-- `source.transform` is for pure normalization after decode.
-- `source.validate` is for semantic rejection that should surface as `DecodeError`.
-- `source.decodeErrors : SourceError K -> List DecodeError` extracts structured schema/validation mismatches (`IOError` becomes `[]`).
-- The broader composition model also specifies canonical retry/timeout/cache/provenance stages around `load`; see `specs/syntax/external_sources/composition.md` for the stage order and policy semantics.
-
-Compatibility forms like `file.json "./users.json"` and `env.decode "AIVI_APP"` still work, but the record forms above are the preferred public surface because tooling can describe the schema contract before `load`.
-
-### Tooling notes
-
-- Schema-first record declarations power hover/diagnostics for `file.json`, `env.decode`, `source.transform`, `source.validate`, `source.decodeErrors`, and `source.schema.derive`.
-- `aivi lsp` checks whole **workspace snapshots** incrementally: open documents shadow disk, cached checkpoints reuse only when their fingerprints match, and dependents recheck when export surfaces or exported schema summaries change.
-- AIVI comes with own MCP server `aivi mcp serve --ui --allow-effects`; you can use it to inspect GTK interfaces, move focus with `aivi_gtk_focus` / `aivi_gtk_moveFocus`, scroll widgets, drive dropdowns/ranges, and read bundled docs.
-
-### Email Module (`aivi.email`)
-
-**Auth**: `EmailAuth = Password Text | OAuth2 Text` — supports XOAUTH2 for Gmail/Outlook.
-
-**One-shot**: `imap : ImapConfig -> Effect Text (List A)` — connect, fetch, disconnect.
-**SMTP**: `smtpSend : SmtpConfig -> Effect Text Unit` — multi-recipient with CC/BCC.
-**MIME**: `mimeParts : Text -> List MimePart`, `flattenBodies : List MimePart -> Text`.
-
-**Session API** (persistent connection via `Resource`):
-```
-imapOpen      : ImapConfig -> Resource Text ImapSession
-imapSelect    : Text -> ImapSession -> Effect Text MailboxInfo
-imapExamine   : Text -> ImapSession -> Effect Text MailboxInfo
-imapSearch    : Text -> ImapSession -> Effect Text (List Int)
-imapFetch     : List Int -> ImapSession -> Effect Text (List A)
-imapSetFlags  : List Int -> List Text -> ImapSession -> Effect Text Unit
-imapAddFlags  : List Int -> List Text -> ImapSession -> Effect Text Unit
-imapRemoveFlags : List Int -> List Text -> ImapSession -> Effect Text Unit
-imapExpunge   : ImapSession -> Effect Text Unit
-imapCopy      : List Int -> Text -> ImapSession -> Effect Text Unit
-imapMove      : List Int -> Text -> ImapSession -> Effect Text Unit
-imapListMailboxes   : ImapSession -> Effect Text (List MailboxInfo)
-imapCreateMailbox   : Text -> ImapSession -> Effect Text Unit
-imapDeleteMailbox   : Text -> ImapSession -> Effect Text Unit
-imapRenameMailbox   : Text -> Text -> ImapSession -> Effect Text Unit
-imapAppend    : Text -> Text -> ImapSession -> Effect Text Unit
-imapIdle      : Int -> ImapSession -> Effect Text IdleResult
-```
-
-Types: `MailboxInfo = { name: Text, separator: Option Text, attributes: List Text }`, `IdleResult = TimedOut | MailboxChanged`.
-
-`@static` embeds sources at compile time: `@static schema = file.json "schema.json"` or `@static envName = env.get "AIVI_BUILD_ENV"`.
-
-`@static` can also generate typed, callable API clients from OpenAPI specs:
-
-```aivi
-@static
-petStoreApi = openapi.fromUrl ~url(https://petstore.example.com/v2/swagger.json)
-
-@static
-internalApi = openapi.fromFile "./specs/api.yaml"
-```
-
-The result is a factory function: pass a config record to get callable endpoint functions.
-
-```aivi
-client = petStoreApi { bearerToken: Some "sk-...", baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
-pets <- client.listPets { limit: Some 10 }
-
-// Destructuring works too
-{ listPets } = petStoreApi { bearerToken: None, baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
-result <- listPets {}
-```
-
-Config fields: `bearerToken : Option Text`, `headers : Option (List (Text, Text))`, `timeoutMs : Option Int`, `retryCount : Option Int`, `strictStatus : Option Bool`, `baseUrl : Option Text`.
-
-`@static type.jsonSchema TypeName` generates an OpenAI-compatible JSON Schema from a type alias at compile time:
-
-```aivi
-ExtractionResult = {
-  title:   Text,
-  summary: Text,
-  tags:    List Text,
-  score:   Option Float
-}
-
-@static
-extractionSchema = type.jsonSchema ExtractionResult
-schemaText = toText extractionSchema
-```
-
-`extractionSchema` becomes an embedded schema value; use `toText extractionSchema` when another system expects the JSON document itself. Maps `Text`→string, `Int`→integer, `Float`→number, `Bool`→boolean, `List T`→array, records→object, `Option T`→nullable. Useful for LLM structured-output APIs.
-
----
-
-## 14 Sigils
-
-Custom literals with `~tag` and a delimiter:
-
-```aivi
-~u(https://example.com)        // URL
-~path[/usr/local/bin]          // Path
-~r/[a-z]+/i                    // Regex
-~map{ "a" => 1, "b" => 2 }    // Map K V literal
-~set[1, 2, 3]                  // Set A literal
-~mat[1.0 0.0                   // Matrix literal (Mat2/Mat3/Mat4)
+~u(https://example.com)
+~path[/usr/local/bin]
+~r/[a-z]+/i
+~map{ "a" => 1 }
+~set[1, 2, 3]
+~mat[1.0 0.0
      0.0 1.0]
-~d(2024-05-21)                 // Date
-~dt(2024-05-21T12:00:00Z)      // DateTime
-~tz(Europe/Paris)              // TimeZone
-~zdt(2024-05-21T12:00:00[Europe/Paris]) // ZonedDateTime
-~k"app.button.save"            // i18n key (validated at parse time)
-~m"Hello, {name}!"             // i18n message template (validated at parse time)
-~`raw text, no interpolation`  // Raw Text — multiline, no { } interpolation
-~<html><div>{ "x" }</div></html> // Typed VDOM node
-~<gtk><object class="GtkBox" /></gtk> // Typed GTK builder node
-~<gtk><GtkBox spacing="24" /></gtk> // Shorthand widget syntax
+~d(2024-05-21)
+~dt(2024-05-21T12:00:00Z)
+~tz(Europe/Paris)
+~zdt(2024-05-21T12:00:00[Europe/Paris])
+~k"app.button.save"
+~m"Hello, {name}!"
+~`raw text`
+~<html><div>{ "x" }</div></html>
+~<gtk><GtkBox spacing="24" /></gtk>
 ```
 
-`~map{...}`, `~set[...]`, `~mat[...]`, `~<html>...</html>`, and `~<gtk>...</gtk>` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
+- `~map`, `~set`, `~mat`, `~<html>`, `~<gtk>` are structured.
+- Other sigils are raw text until closing delimiter.
+- Raw-text backtick sigil has no interpolation and supports multiline margin stripping.
 
-The backtick sigil `` ~`...` `` produces a `Text` value with the verbatim content between the backticks. It supports multiple lines and no `{ }` interpolation occurs:
+GTK / reactive essentials:
 
-```aivi
-json   = ~`{"id": 1, "name": "Alice"}`
-query  = ~`SELECT *
-           FROM users
-           WHERE id = 1`
-indent = ~`
-           | Hallo
-           | Andreas
-`
-styles = ~`css
-  | .myClass {
-  |   color: red;
-  | }
-`
-```
+- `signal { ... }` creates state.
+- `signal ->> ...` derives signals.
+- `set`, `update`, `<<-` mutate signal values declaratively.
+- `do Event { ... }` creates event handles.
+- GTK sigils support shorthand `Gtk*` / `Adw*` tags, signal sugar, `<each>`, `<show>`, component tags, function-call tags, and nested `<property name="..."> <Gtk.../> </property>` helper-object graphs for GTK object-valued properties such as `model` and `factory`.
 
-If every non-empty line in a multiline raw-text sigil starts with optional indentation followed by `|`, AIVI strips that indentation, removes the `|`, and drops one optional space after it. In that margin mode, an opening blank line and the final blank line before the closing backtick are removed as well.
+## 17. Decorators
 
-The VSCode extension recognizes the first line of a multiline raw-text sigil as an embedded-language header when it is one of `css`, `html`, `xml`, `json`, `sql`, `js`, `javascript`, `ts`, or `typescript`. That header is editor metadata only and is not part of the resulting `Text`.
+Built-in only:
 
-GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="...">` where attributes become props, bindings, or callback hooks automatically:
-
-```aivi
-// Shorthand (preferred)
-state = signal { count: 0 }
-title = state ->> (s => "Count {s.count}")
-saveCounter = do Event {
-  current = get state
-  persistCount current.count
-}
-inc = _ => state <<- { count: _ + 1 }
-
-view = ~<gtk>
-  <GtkBox spacing="24" marginTop="12">
-    <GtkLabel label={title} />
-    <GtkButton label="Increment" onClick={inc} />
-    <GtkButton label="Save" onClick={saveCounter} />
-  </GtkBox>
-</gtk>
-
-// Equivalent verbose form
-view = ~<gtk>
-  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-    <object class="GtkLabel" props={{ label: title }} />
-    <object class="GtkButton" props={{ label: "Increment" }} onClick={inc} />
-    <object class="GtkButton" props={{ label: "Save" }} onClick={saveCounter} />
-  </object>
-</gtk>
-```
-
-Signals are first-class reactive values. Create source signals with `signal`, derive more signals with `derive`, `signal ->> ...`, or `combineAll`, and mutate them with `set`, `update`, or `signal <<- ...`:
-
-```aivi
-state = signal { count: 0, query: "" }
-title = state ->> count ->> (_ + 1) ->> toText
-nextCount = state ->> ({ count } => count + 1)
-canSearch = combineAll (state, searchEvent.running) ((st, running) =>
-  st.query != "" && !running
-)
-
-update state (patch { count: _ + 1 })
-update state (patch { query: "gtk" })
-tick <<- (_ + 1)
-tick <<- 0
-```
-
-Event attrs accept either runtime functions or event-handle values. `onClick={handler}` installs the function directly; `onClick={saveEvent}` triggers the event handle directly. Event handles are commonly created with `do Event { ... }` and expose reactive fields such as `result`, `error`, `done`, and `running`. The lower-level equivalent is `event (do Effect { ... })`.
-
-GTK sigils also support signal sugar in v0.1:
-
-```aivi
-~<gtk>
-  <GtkButton onClick={...} />
-  <GtkEntry onInput={...} />
-  <GtkEntry onActivate={...} />
-  <GtkBox onKeyPress={...} />
-  <GtkCheckButton onToggle={...} />
-  <GtkScale onValueChanged={...} />
-  <GtkEntry onFocusIn={...} />
-  <GtkButton>
-    <signal name="clicked" on={saveEvent} />
-  </GtkButton>
-  <GtkBox>
-    <child type="controller">
-      <GtkEventControllerMotion>
-        <signal name="enter" on={_ => set hovered True} />
-        <signal name="leave" on={_ => set hovered False} />
-      </GtkEventControllerMotion>
-    </child>
-  </GtkBox>
-</gtk>
-```
-
-Signals without sugar can still be attached explicitly. `GtkEventControllerMotion` is available via `<child type="controller">` and currently exposes raw `enter` / `leave` signals. Container-specific child slots follow the underlying GTK/libadwaita widget API; for example, `AdwToolbarView` uses `<child type="top">` / `<child type="bottom">` for toolbar bars, while an untyped direct child becomes the main content widget.
-
-`GtkSignalEvent` remains the low-level queue/event type used by `signalStream`, `signalPoll`, and tests:
-
-```aivi
-GtkSignalEvent =
-  | GtkClicked       WidgetId Text
-  | GtkInputChanged  WidgetId Text Text
-  | GtkActivated     WidgetId Text
-  | GtkToggled       WidgetId Text Bool
-  | GtkValueChanged  WidgetId Text Float
-  | GtkKeyPressed    WidgetId Text Text Text
-  | GtkFocusIn       WidgetId Text
-  | GtkFocusOut      WidgetId Text
-  | GtkUnknownSignal WidgetId Text Text Text Text
-```
-
-For custom integrations and library code, consume raw events via `signalStream` (preferred) or `signalPoll`:
-
-```aivi
-use aivi.concurrency
-
-events <- signalStream {}
-concurrency.forEach events (event =>
-  event match
-    | GtkClicked _ _          => handleSave
-    | GtkInputChanged _ _ txt => handleInput txt
-    | GtkToggled _ _ active   => handleToggle active
-    | _                       => pure Unit
-)
-```
-
-`concurrency.fold` threads state over a channel: `fold : s -> (s -> a -> Effect e s) -> Recv a -> Effect e s`.
-`concurrency.forEach` runs an action on each event: `forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit`.
-Both are exported from `aivi.concurrency`.
-
-`buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — useful for tests or low-level integrations that need direct widget ids.
-
-A standard GTK app now exports a root `GtkWindow`/`GtkApplicationWindow`/`AdwWindow`/`AdwApplicationWindow` tree directly. Use `runGtkApp { appId, root, onStart }` for the common case, or `mountAppWindow app [primaryRoot, extraRoot1, extraRoot2]` when you need manual access to the mounted `WindowId` before calling `appRun` or want extra live roots such as persistent dialogs. The first list entry is the primary window root; later roots mount into the same live runtime, and `Adw*Dialog` extras default `present-for` to that primary window when omitted. The host mounts those trees once and keeps bound props, text nodes, classes, and structural child scopes live from signal writes. `<show>` and `<each key={...}>` are mounted structural bindings rather than full-tree rerenders.
-
-For forms, keep `aivi.ui.forms.Field` values inside a signal or a record-valued signal, update them directly from `onInput`/`onFocusOut`, derive visible errors as signals, and let submit IO live in an `Event` handle.
-
-Dynamic child lists are supported with keyed `<each>` bindings:
-
-```aivi
-~<gtk>
-  <GtkBox>
-    <each items={items} as={item} key={item => item.id}>
-      <GtkLabel label={item.name} />
-    </each>
-  </GtkBox>
-</gtk>
-```
-
-Component-style tags (uppercase/dotted) use **record-based lowering** in both sigils — attributes become record fields, children become a `children` field. Signal sugar and `props` normalization do not apply to component tags:
-
-```aivi
-// HTML component: Ui.Card { title: "Hello", children: [vElement "span" ...] }
-~<html><Ui.Card title="Hello"><span>Body</span></Ui.Card></html>
-
-// GTK component: Ui.Row { id: "r1", onClick: saveEvent }
-~<gtk><Ui.Row id="r1" onClick={saveEvent} /></gtk>
-```
-
-GTK sigils also support **function-call tags** for local lowerCamel helpers. A simple uppercase self-closing tag with positional arguments lowers by lowercasing the first letter of the tag name:
-
-```aivi
-// Equivalent to: { navRailNode activeSection "sidebar" }
-~<gtk><NavRailNode activeSection "sidebar" /></gtk>
-```
-
-Function-call tags do not use component record lowering, cannot mix positional arguments with attributes, and must be self-closing.
-
----
-
-## 15 Decorators (v0.1)
-
-Compile-time metadata only. No user-defined decorators.
-
-| Decorator                                      | Purpose                                                |
-|:---------------------------------------------- |:------------------------------------------------------ |
-| `@test "desc"` / `@test`                       | Mark a top-level test, or tag a module as test metadata |
-| `@static`                                      | Embed at compile time                     |
-| `@native "mod.fn"`                             | Bind typed def to runtime/native path     |
-| `@native "crate::path::fn"`                    | Bridge to Rust crate function (AOT only)  |
-| `@deprecated`                                  | Emit warning on use                       |
-| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
-| `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
-
-`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`, `type.jsonSchema TypeName`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable. `type.jsonSchema` produces an embedded OpenAI-compatible JSON Schema value; render it with `toText` when a downstream API expects JSON text.
-
-At definition level, `@test` requires a description string. At module level, bare `@test` is metadata only and does not itself create a runnable test.
+- `@test "desc"`
+- `@static`
+- `@native "mod.fn"`
+- `@native "crate::path::fn"`
+- `@deprecated`
+- `@debug` / `@debug(...)`
+- `@no_prelude`
 
 Unknown decorators are compile errors.
-`@native` is only valid on top-level definitions and requires an explicit type signature. No dummy body is needed — the compiler auto-generates the def from the type signature. Runtime natives use `.` paths (`"mod.fn"`); crate natives use `::` paths (`"crate::fn"`) and require `aivi build`.
-Current limitation: `@debug` may still reject ordinary `name = x => ...` definitions with `E2010`; prefer the forms exercised by the decorator docs until resolver/HIR alignment lands.
 
----
-
-## 16 Mock Expressions (Testing)
-
-`mock ... in` scopes a binding substitution for testing without restructuring production code.
+## 18. Mocking / testing
 
 ```aivi
-mock <qualified.path> = <expr>
-in <body>
-```
-
-**Deep scoping**: any function called inside `body` that internally uses the mocked binding sees the mock, not the original. This is what makes it useful — no dependency injection needed.
-
-```aivi
-use aivi.rest
-use aivi.testing
-
-fetchUsers = rest.get ~u(https://api.example.com/users)
-
-@test "mock rest.get"
-testFetch =
-  mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
-  in do Effect {
-    users <- fetchUsers   // calls mock transparently
-    assertEq (length users) 1
-  }
-```
-
-**Multiple mocks** stack before `in`:
-
-```aivi
-mock rest.get  = _ => pure [{ id: 1, name: "Ada" }]
-mock rest.post = _ _ => pure { success: True }
-in do Effect { ... }
-```
-
-**Nested mocks** re-shadow outer mocks:
-
-```aivi
-mock rest.get = _ => pure []
-in mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
-   in do Effect { ... }   // sees inner mock
-```
-
-| Rule                 | Detail                                                                  |
-|:-------------------- |:----------------------------------------------------------------------- |
-| Only qualified paths | `mock rest.get = ...` ✓ — `mock localFn = ...` ✗ (use a local binding/helper for locals) |
-| Type-safe            | Mock expression must match the original binding's type                  |
-| Scoped               | Mock is only active inside `in <body>` — originals restored after       |
-| Composable           | Works in any expression position, not just `@test`                      |
-
-### Snapshot mocks
-
-`mock snapshot <path>` records real responses on first run and replays from `.snap` files:
-
-```aivi
-@test "fetch users (snapshot)"
-snapshotTest =
-  mock snapshot rest.get
-  in do Effect {
-    users <- fetchUsers
-    assertEq (length users) 3
-  }
-```
-
-| CLI command                    | Behaviour                             |
-|:------------------------------ |:------------------------------------- |
-| `aivi test`                    | Replay from `.snap` — fail if missing |
-| `aivi test --update-snapshots` | Re-record from real calls             |
-
-### Snapshot assertions
-
-Common extraction helpers from `aivi.testing`:
-
-```aivi
-assertOk   : Result E A -> Effect Text A
-assertErr  : Result E A -> Effect Text E
-assertSome : Option A -> Effect Text A
-assertNone : Option A -> Effect Text Unit
-```
-
-They are useful when a test wants to keep asserting on the unwrapped `Ok`, `Err`, or `Some` payload instead of falling back to `assert False`.
-
-`assertSnapshot` compares a value against a stored `.snap` file:
-
-```aivi
-assertSnapshot : Text -> A -> Effect Text Unit
-
-@test "user table"
-tableTest = do Effect {
-  formatted <- pure (formatUserTable users)
-  assertSnapshot "user_table" formatted
+mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
+in do Effect {
+  users <- fetchUsers
+  assertEq (length users) 1
 }
 ```
 
----
+Rules:
 
-## 17 Domains, Units, and Operators
+- mock only qualified paths
+- mock must be type-correct
+- scope is limited to `in ...`
+- nested mocks shadow outer mocks
+- deep calls inside body see the mock
 
-Domains define operator semantics and suffix literals for non-`Int` types.
+Snapshot support:
+
+- `mock snapshot path`
+- `assertSnapshot "name" value`
+- helpers: `assertOk`, `assertErr`, `assertSome`, `assertNone`
+
+## 19. Domains / suffix literals / operators
+
+Domains define operator semantics and suffix literals for non-`Int` carriers.
 
 ```aivi
 use aivi.chronos.duration (domain Duration)
-
-deadline = { millis: 0 } + 10min     // + resolved by Duration domain
+deadline = start + 10min
 ```
 
-### Suffix literals
+- suffix literal resolves through a domain template like `1min`
+- `(x)kg` applies suffix to parenthesized expression
+- if imported domains collide on the same suffix, disambiguate by imports or constructors
+- domains define operator meaning; they do not add implicit casts
 
-Suffix literals are numeric literals followed immediately by a suffix identifier. They resolve to domain-defined **template functions** named `1{suffix}`:
+Operator resolution:
 
-```aivi
-10min  30s  100px  50%  1d  1y
-```
+- domain-resolved on non-`Int`: `+ - * × / %`
+- built-in for primitives/text comparisons: `< <= > >=`
+- always built-in: `== != && || |> <| ..`
+- `×` is preferred for structural products (e.g. matrix × vector)
 
-Suffix can also be applied to a parenthesized expression (variable suffix):
+## 20. Precedence (low → high)
 
-```aivi
-(x)kg       // desugars to 1kg applied to x; parentheses required, no space before suffix
-```
+1. `|>`
+2. `??`
+3. `||`
+4. `&&`
+5. `== !=`
+6. `< <= > >=`
+7. `+ - ++`
+8. `* × / %`
+9. `<|`
 
-Common suffix → domain mapping:
+Unary: `!`, unary `-`.
+`~` is not a unary operator; it only starts sigils.
+No bitwise operators in core syntax; use `aivi.bits`.
 
-| Suffix                     | Domain   | Type            |
-|:-------------------------- |:-------- |:--------------- |
-| `10ms`, `1s`, `5min`, `2h` | Duration | `Duration`      |
-| `1d`, `1m`, `1y`           | Calendar | `CalendarDelta` |
-| `20deg`, `1.2rad`          | Angle    | `Angle`         |
-| `10l`, `5s`, `30h`         | Color    | `ColorDelta`    |
-
-**Collision rule**: if two imported domains define the same suffix (e.g. both define `1m`), the compiler does not disambiguate by carrier. Resolve by importing only one conflicting domain per module, using `hiding`, or using explicit constructors instead.
-
-### Defining domains
-
-A domain declares one **carrier type** and may contain multiple operator entries for the same token (RHS-typed overloads), provided the full `LHS -> RHS -> Result` types are pairwise distinct. The compiler selects among them by matching the inferred RHS type after the LHS carrier is resolved.
-
-```aivi
-domain Color over Rgb = {
-  Delta = Lightness Int | Hue Int
-
-  (+) : Rgb -> Delta -> Rgb
-  (+) = color (Lightness amount) => adjustLightness color amount
-  (+) = color (Hue amount) => adjustHue color amount
-
-  1l = Lightness 1     // suffix template: 3l desugars to Lightness 3
-  1h = Hue 1
-}
-```
-
-**`×` convention**: use `×` for structural/transform-style products (matrix × matrix, matrix × vector) and `*` for scalar scaling. This makes the visual intent explicit.
-
-```aivi
-domain LinAlg over Mat3 = {
-  (×) : Mat3 -> Mat3 -> Mat3     // matrix-matrix product
-  (*) : Mat3 -> Float -> Mat3   // scalar scaling
-}
-```
-
-### Multi-carrier domains
-
-For types that need the same domain semantics at different arities (e.g. `Vec2` and `Vec3`), define the domain once per carrier:
-
-```aivi
-domain Vector over Vec2 = { ... }
-domain Vector over Vec3 = { ... }
-```
-
-### Import/export
-
-```aivi
-use aivi.chronos.duration (domain Duration)    // import domain
-export domain Color                             // export domain
-export domain Color over Rgb = { ... }         // inline exported domain declaration
-```
-
-### Built-in vs domain-resolved operators
-
-Domain-resolved (when non-`Int`): `+`, `-`, `*`, `×`, `/`, `%`.
-Built-in for `Int`, `Float`, `BigInt`, `Decimal`, and `Text`: `<`, `<=`, `>`, `>=` (lexicographic / Unicode codepoint order for `Text`).
-Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
-
-**Domains are not implicit casts.** They supply operator semantics and literal templates only. No global coercions are introduced by importing a domain.
-
----
-
-## 18 Operator Precedence (lowest to highest)
-
-1. `|>` (pipe)
-2. `??` (coalesce Option)
-3. `||` (logical or)
-4. `&&` (logical and)
-5. `==`, `!=` (equality)
-6. `<`, `<=`, `>`, `>=` (comparison)
-7. `+`, `-`, `++` (add, concat)
-8. `*`, `×`, `/`, `%` (multiply)
-9. `<|` (patch)
-
-Unary prefix: `!` (not), `-` (negate).
-
-> **Note:** `~` is **not** a unary operator; it is exclusively a sigil prefix (e.g. `~u(...)`, `~r/.../`).
-> Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`) are not part of AIVI syntax. Use `aivi.bits` instead.
-
----
-
-## 19 Complete Example
-
-```aivi
-@no_prelude
-module integrationTests.complex.TopologicalSort
-
-use aivi
-use aivi.testing
-use aivi.list
-use aivi.map
-
-Graph = { nodes: List Int, adj: Map Int (List Int) }
-
-neighbors = node graph => graph.adj |> get node match
-  | Some ns => ns
-  | None    => []
-
-reverseList = xs => reverseGo xs []
-
-reverseGo = list acc => list match
-  | []        => acc
-  | [h, ...t] => reverseGo t [h, ...acc]
-
-buildIndegree : Graph -> Map Int Int
-buildIndegree = graph => {
-  start = initIndegree graph.nodes empty
-  processNodes graph graph.nodes start
-}
-
-initIndegree = nodes acc => nodes match
-  | []        => acc
-  | [n, ...t] => initIndegree t (acc |> insert n 0)
-
-topologicalSort : Graph -> Result (List Int) (List Int)
-topologicalSort = graph => {
-  indeg = buildIndegree graph
-  q0 = enqueueZero graph.nodes indeg Queue.empty
-  sortLoop graph indeg q0 []
-}
-
-@test "Kahn topological sort"
-topoSmoke = do Effect {
-  adj = ~map{
-    0 => [1, 2]
-    1 => [3]
-    2 => [3]
-    3 => []
-  }
-  graph = { nodes: [0, 1, 2, 3], adj: adj }
-
-  result <- pure (topologicalSort graph)
-  assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
-}
-```
-
----
-
-## 20 Quick Idiom Reference
-
-| Task                         | AIVI idiom                                                              |
-|:---------------------------- |:----------------------------------------------------------------------- |
-| Transform a list             | `xs \|> map f`                                                          |
-| Filter a list                | `xs \|> filter (age > 18)`                                              |
-| Find first match             | `xs \|> find (name == "Alice")`                                         |
-| Handle Option                | `opt match \| Some x => x \| None => default`                           |
-| Handle Result                | `res match \| Ok x => x \| Err e => handle e`                           |
-| Provide default for Option   | `opt ?? default` or `opt \|> getOrElse default`                         |
-| Provide default for Result   | `res \|> getOrElse default`                                             |
-| Check Option state           | `isSome opt`, `isNone opt`                                              |
-| Check Result state           | `isOk res`, `isErr res`                                                 |
-| Transform Option             | `opt \|> map f \|> filter pred \|> chain g`                             |
-| Transform Result             | `res \|> map f \|> mapErr g \|> chain h`                                |
-| Accumulate errors            | `do Applicative { x <- v1; y <- v2; f x y }`                           |
-| GTK form field state         | `use aivi.ui.forms; field ""`, `setValue txt field`, `touch field`      |
-| Check Validation state       | `isValid v`, `isInvalid v`                                              |
-| Validation to Result         | `v \|> toResult`                                                        |
-| Result to Validation         | `r \|> fromResult`                                                      |
-| Option to Result             | `opt \|> toResult "error msg"`                                          |
-| Result to Option             | `res \|> toOption`                                                      |
-| Run fallback on effect error | `val <- riskyOp or default` (inside `do Effect`)                        |
-| Catch error as Result        | `res <- attempt riskyOp` (inside `do Effect`)                           |
-| Conditional effect           | `when cond <- eff` (inside `do Effect`)                                 |
-| Precondition guard           | `given cond or failExpr` (inside `do Effect`)                           |
-| Update nested record         | `state <\| { user.profile.name: "New" }`                                |
-| Transform nested field       | `state <\| { items[*].price: _ * 1.1 }`                                 |
-| Create map                   | `~map{ "key" => value }`                                                |
-| Create set                   | `~set[1, 2, 3]`                                                         |
-| Build a sequence             | `generate { x <- src; x -> pred; yield f x }`                           |
-| Infinite sequence            | `generate { loop s = init => { yield s; recurse (next s) } }`           |
-| Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
-| Write a test                 | `@test "adds correctly"`<br>`myTest = do Effect { assertEq (f 1) 2 }`   |
-| Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                  |
-| Bitwise AND                  | `use aivi.bits; and a b`                                                |
-| Shift bits right             | `use aivi.bits; b \|> shiftRight 8`                                     |
-| Test a single bit            | `use aivi.bits; get 0 b`                                                |
-
----
-
-## 21 REPL (`aivi repl`)
-
-`aivi repl` opens an interactive session with the prelude pre-loaded. It is the fastest way to try snippets without creating a project.
+## 21. REPL
 
 ```bash
-aivi repl            # full-screen TUI (default when stdin is a terminal)
-aivi repl --plain    # plain read-eval-print, pipe-friendly
-aivi repl --color    # force ANSI colour
-aivi repl --no-color # disable ANSI colour
+aivi repl
+aivi repl --plain
 ```
 
-**Inside the session**
+- prelude loaded by default
+- top-level effects autorun unless `/autorun off`
+- useful commands: `/help`, `/explain`, `/use`, `/types`, `/values`, `/functions`, `/modules`, `/history`, `/load`, `/clear`
 
-- Type any AIVI expression or definition and press Enter to evaluate.
-- Successful expressions show their runtime value together with the inferred type, for example `4 :: Int`.
-- Top-level effect expressions autorun by default, so inputs like `print "hi"` execute immediately; use `/autorun off` to keep them inert values.
-- Use Shift+Enter for multi-line input; Ctrl+C cancels the current input; Ctrl+D (on empty input) exits.
-- Ctrl+L clears the transcript. When you start with `/`, the TUI suggests matching slash commands; use `↑` / `↓` to move, `Tab` to accept, or let Tab toggle the symbol pane when no suggestion is shown.
+## 22. High-value idioms
 
-**Key slash commands**
+```aivi
+xs |> map f
+xs |> filter (age > 18)
+xs |> find (name == "Alice")
+opt match | Some x => x | None => d
+res match | Ok x => x | Err e => handle e
+opt ?? default
+opt |> getOrElse default
+res |> getOrElse default
+opt |> map f |> filter pred |> chain g
+res |> map f |> mapErr g |> chain h
+do Applicative { x <- v1; y <- v2; f x y }
+res <- attempt risky
+val <- risky or default
+when cond <- eff
+given cond or fail err
+state <| { user.profile.name: "New" }
+state <| { items[*].price: _ * 1.1 }
+generate { x <- src; x -> pred; yield f x }
+```
 
-| Command | What it does |
-| --- | --- |
-| `/help` | Print command reference |
-| `/explain <name>` | Show quick info, the best available signature, and the module where that symbol lives |
-| `/use <module.path>` | Add a module import for this session |
-| `/types [filter]` | List types in scope |
-| `/values [filter]` | List session-defined values with their inferred types |
-| `/functions [filter]` | List functions in scope with their module names |
-| `/autorun [on\|off]` | Toggle whether top-level effect expressions execute automatically |
-| `/modules` | Show loaded modules in the session |
-| `/history [n]` | Show the last `n` inputs |
-| `/load <path>` | Load a file into the session |
-| `/clear` | Clear transcript (keep definitions) |
-| `/reset` | Clear transcript and all session state |
-| `/openapi file <path> [as <name>]` | Inject an OpenAPI spec file as a typed module |
-| `/openapi url <url> [as <name>]` | Inject an OpenAPI spec from URL as a typed module |
+## 23. Anti-patterns (never emit)
 
-The `/openapi` commands inject `@static`-style bindings (typed per the OpenAPI schema) so you can call the API's operations immediately. The module name defaults to a slug of the spec's `info.title`; pass `as <name>` to override it. `/explain` accepts a function, value, type, or module name and prints the indexed quick-info text together with the best available signature and module name.
+- No `let`, `var`, `const`, `fn`, `def`, `return`, `import`.
+- No semicolons.
+- No mutation.
+- No `null`, `nil`, `Just`, `Nothing`, `Left`, `Right`.
+- No `Some(x)` / `Ok(x)` constructor-paren style.
+- No loop syntax: `for`, `while`.
+- No paren-call style: write `f x`, not `f(x)`.
+- No method-call style: use `map f xs` or `xs |> map f`.
+- No angle-bracket generics: `List Int`, not `List<Int>`.
+- No `flatMap`; use `chain`.
+- No `case ... of`; use `match`.
+- No `String`; use `Text`.
+- Record fields use `:`, not `=`.
+- No bitwise infix operators; use `aivi.bits` functions.
+- No `~` as bitwise-not.
+- Prefer interpolation over string concat operators.
+- Keep opening `{` on same line as keyword.
 
----
+## 24. Minimal generation checklist
 
-## Anti-Patterns (Do NOT write these)
+When writing AIVI, default to:
 
-| Wrong                  | Why                              | Correct                                             |
-|:---------------------- |:-------------------------------- |:--------------------------------------------------- |
-| `let x = 1`            | No `let` keyword                 | `x = 1`                                             |
-| `def f(x):`            | No `def`, no parens for args     | `f = x => ...`                                      |
-| `fn f(x: T) -> R`      | No `fn` keyword                  | `f : T -> R` / `f = x => ...`                       |
-| `f :: T -> R`          | Single colon for type signatures | `f : T -> R`                                        |
-| `var x = 1; x = 2`     | No mutation                      | `x = 1` (shadow with `x = x + 1` on next line)      |
-| `x = 1; y = 2`         | No semicolons — use newlines     | `x = 1` (newline) `y = 2`                           |
-| `do Effect` `{` on next line | Opening `{` must be on same line | `do Effect {`                                 |
-| `null` / `nil`         | No nulls                         | `None` / `Option A`                                 |
-| `Just x` / `Nothing`   | AIVI is not Haskell              | `Some x` / `None`                                   |
-| `Left e` / `Right x`   | AIVI is not Haskell              | `Err e` / `Ok x`                                    |
-| `Some(x)` / `Ok(x)`    | Constructors take no parens      | `Some x` / `Ok x`                                   |
-| `throw` / `try/catch`  | No exceptions                    | `fail e` / `attempt` / `or`                         |
-| `for x in xs { ... }`  | No loops                         | `xs \|> map f` or `generate { x <- xs; yield f x }` |
-| `while cond { ... }`   | No loops                         | Recursion or `loop`/`recurse` in generators         |
-| `f(x, y)`              | No parens for function calls     | `f x y`                                             |
-| `x.method()`           | No methods, no parens            | `method x` or `x \|> method`                        |
-| `List<Int>` / `Option<T>` | No angle-bracket generics     | `List Int` / `Option T`                             |
-| `List.map f xs`        | HKT methods are unqualified      | `map f xs` (with `use aivi.logic`)                  |
-| `opt \|> flatMap f`    | Option uses `chain`, not `flatMap` | `opt \|> chain f`                                 |
-| `res \|> flatMap f`    | Result uses `chain`, not `flatMap` | `res \|> chain f`                                 |
-| `fmap` / `>>=` / `<$>` / `<*>` | Haskell operators        | `map` / `chain` / `map` / `ap`                      |
-| `Tree A = Leaf A \| Node (Tree A) (Tree A)` | `aivi.tree` is a rose tree | `Tree A = Node A (List (Tree A))`        |
-| `impl Trait for Type`  | Rust syntax                      | `instance Class (Type) = { ... }`                   |
-| `newtype Foo = Foo T`  | Haskell syntax                   | `opaque Foo = T`                                    |
-| `do { x <- m }`        | Must name the monad              | `do Effect { x <- m }`                              |
-| `case x of ...`        | `case` is kernel only            | `x match \| pat => expr`                            |
-| `String`               | Type is called `Text`            | `Text`                                              |
-| `return x`             | No return statement              | Expression result is implicit; `pure x` in effects  |
-| `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
-| `a & b`, `a \| b`      | No bitwise operators             | `use aivi.bits; and a b`, `or a b`                  |
-| `a << 2`, `a >> 2`     | No shift operators               | `use aivi.bits; shiftLeft 2 a`, `shiftRight 2 a`    |
-| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a`                       |
-| `"x" ++ "y"`           | No string concat operator        | `"{x}{y}"`                                          |
-| `import X`             | No `import` keyword              | `use module.path`                                   |
-| `~t(12:00:00)`         | Verified time/date sigils use `~dt(...)` / `~zdt(...)` | `~dt(2024-05-21T12:00:00Z)` |
-| `pure ()`              | Aivi uses Unit as ()             | `pure Unit`                                         |
-| `use Aivi.List`        | Module paths are `snake_case`    | `use aivi.list`                                     |
-| `x = 1 -- init`        | No `--` comments                 | use `//` or `/* .... */`                            |
-| no \n after `=`        | Keep it on the same line         | `test = arg => arg match `                          | 
-| no semicolons          | Aivi uses newline                | Separate statement with newline                     | 
-| Deep nesting / inline lambdas in lambdas | Extract into named helpers | `step1 = ...; step2 = ...; result = step2 (step1 x)` |
+1. `module ...`
+2. `use ...`
+3. type aliases / ADTs / opaque / branded types
+4. signatures for public functions and all multi-clause functions
+5. curried defs with `=` and `=>`
+6. `match` for refutable branching
+7. `do Effect { ... }` for effects
+8. `Option` / `Result` instead of null / exceptions
+9. pipelines, predicates, patches, recursion, generators
+10. concise helpers instead of nested expressions
