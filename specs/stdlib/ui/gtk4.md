@@ -357,6 +357,16 @@ Dialog API objects and popup/menu surfaces remain programmatic:
 
 GIO actions and menus are still wired up programmatically. In the signal-first model, do that from startup/mount-time effects or other library setup code rather than a reducer host hook.
 
+When a `GSimpleAction` created with `actionNew` is activated, AIVI pushes a raw runtime event onto `signalStream`. Match it as:
+
+```aivi
+handleRuntimeEvent = event => event match
+  | GtkUnknownSignal _ _ "action" actionName _ => ...
+  | _                                          => pure Unit
+```
+
+For application menus, create the action with its bare name (for example `"settings-ai"`), add it with `appAddAction`, and reference it from menu items with the usual `"app.settings-ai"` detailed action string.
+
 ## Custom drawing and redraw
 
 For drawing areas or custom stateful widgets, the pattern is:

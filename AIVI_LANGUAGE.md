@@ -125,7 +125,13 @@ xs |> map inc |> filter (_ > 0)
 
 Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
 
-Use `->>` (signal derive) when the left-hand side is a `Signal A`: `signal ->> f` is sugar for `derive signal (value => value |> f)`, so the result is another `Signal` and placeholder lambdas still work inside the mapped step.
+Use `->>` (signal derive) when the left-hand side is a `Signal A`: `signal ->> f` is sugar for `derive signal (value => value |> f)`, so the result is another `Signal` and placeholder lambdas still work inside the mapped step. The RHS can also be a bare matcher block:
+
+```aivi
+aiSettingsOpen = shellState ->>
+  | Some AiSettingsSection => True
+  | _                      => False
+```
 
 ### Multi-clause functions
 

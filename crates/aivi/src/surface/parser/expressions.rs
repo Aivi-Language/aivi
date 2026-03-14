@@ -1,4 +1,43 @@
 impl Parser {
+    fn parse_bare_arm_expr(&mut self, start: Span, arrow_message: &str) -> Expr {
+        let mut arms = Vec::new();
+        loop {
+            self.consume_newlines();
+            if !self.consume_symbol("|") {
+                break;
+            }
+            let pattern = self
+                .parse_pattern()
+                .unwrap_or(Pattern::Wildcard(start.clone()));
+            let guard = if self.match_keyword("when") {
+                self.parse_guard_expr()
+            } else {
+                None
+            };
+            self.expect_symbol("=>", arrow_message);
+            let body = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: start.clone(),
+            });
+            let span = merge_span(pattern_span(&pattern), expr_span(&body));
+            arms.push(MatchArm {
+                pattern,
+                guard,
+                body,
+                span,
+            });
+        }
+        let span = merge_span(
+            start.clone(),
+            arms.last().map(|arm| arm.span.clone()).unwrap_or(start),
+        );
+        Expr::Match {
+            scrutinee: None,
+            arms,
+            span,
+        }
+    }
+
     fn parse_expr(&mut self) -> Option<Expr> {
         self.parse_expr_with_result_or()
     }
@@ -7,42 +46,7 @@ impl Parser {
         self.consume_newlines();
         if self.check_symbol("|") {
             let start = self.peek_span().unwrap_or_else(|| self.previous_span());
-            let mut arms = Vec::new();
-            loop {
-                self.consume_newlines();
-                if !self.consume_symbol("|") {
-                    break;
-                }
-                let pattern = self
-                    .parse_pattern()
-                    .unwrap_or(Pattern::Wildcard(start.clone()));
-                let guard = if self.match_keyword("when") {
-                    self.parse_guard_expr()
-                } else {
-                    None
-                };
-                self.expect_symbol("=>", "expected '=>' in match arm");
-                let body = self.parse_expr().unwrap_or(Expr::Raw {
-                    text: String::new(),
-                    span: start.clone(),
-                });
-                let span = merge_span(pattern_span(&pattern), expr_span(&body));
-                arms.push(MatchArm {
-                    pattern,
-                    guard,
-                    body,
-                    span,
-                });
-            }
-            let span = merge_span(
-                start.clone(),
-                arms.last().map(|arm| arm.span.clone()).unwrap_or(start),
-            );
-            return Some(Expr::Match {
-                scrutinee: None,
-                arms,
-                span,
-            });
+            return Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"));
         }
         let mut expr = self.parse_lambda_or_binary()?;
         // Result fallback sugar:
@@ -77,42 +81,7 @@ impl Parser {
             // Multi-clause unary function. `or` isn't allowed in the function head.
             // The bodies are parsed with the normal expression parser.
             let start = self.peek_span().unwrap_or_else(|| self.previous_span());
-            let mut arms = Vec::new();
-            loop {
-                self.consume_newlines();
-                if !self.consume_symbol("|") {
-                    break;
-                }
-                let pattern = self
-                    .parse_pattern()
-                    .unwrap_or(Pattern::Wildcard(start.clone()));
-                let guard = if self.match_keyword("when") {
-                    self.parse_guard_expr()
-                } else {
-                    None
-                };
-                self.expect_symbol("=>", "expected '=>' in match arm");
-                let body = self.parse_expr().unwrap_or(Expr::Raw {
-                    text: String::new(),
-                    span: start.clone(),
-                });
-                let span = merge_span(pattern_span(&pattern), expr_span(&body));
-                arms.push(MatchArm {
-                    pattern,
-                    guard,
-                    body,
-                    span,
-                });
-            }
-            let span = merge_span(
-                start.clone(),
-                arms.last().map(|arm| arm.span.clone()).unwrap_or(start),
-            );
-            return Some(Expr::Match {
-                scrutinee: None,
-                arms,
-                span,
-            });
+            return Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"));
         }
         self.parse_lambda_or_binary()
     }
@@ -259,6 +228,7 @@ impl Parser {
     }
 
     fn parse_pipe_rhs(&mut self, min_prec: u8) -> Option<Expr> {
+        self.consume_newlines();
         let checkpoint = self.pos;
         let diag_checkpoint = self.diagnostics.len();
         let mut params = Vec::new();
@@ -278,6 +248,10 @@ impl Parser {
 
         self.pos = checkpoint;
         self.diagnostics.truncate(diag_checkpoint);
+        if self.check_symbol("|") {
+            let start = self.peek_span().unwrap_or_else(|| self.previous_span());
+            return Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"));
+        }
         self.parse_binary(min_prec)
     }
 

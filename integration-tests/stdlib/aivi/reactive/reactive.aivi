@@ -5,6 +5,8 @@ use aivi
 use aivi.reactive
 use aivi.testing
 
+ShellState = AiSettingsSection | SearchSection
+
 @test "signal stores and updates current value"
 signal_set_update = do Effect {
   count = signal 1
@@ -49,6 +51,20 @@ signal_pipe_accepts_placeholder_and_pattern_lambda_sugar = do Effect {
   assertEq (state <<- { count: _ + 2 }) Unit
   assertEq (get viaPlaceholder) 4
   assertEq (get viaPattern) 4
+}
+
+@test "signal pipe accepts bare matcher blocks"
+signal_pipe_accepts_bare_matcher_blocks = do Effect {
+  shellState     = signal (Some SearchSection)
+  aiSettingsOpen = shellState ->>
+    | Some AiSettingsSection => True
+    | _                      => False
+
+    assertEq (get aiSettingsOpen) False
+    assertEq (set shellState (Some AiSettingsSection)) Unit
+    assertEq (get aiSettingsOpen) True
+    assertEq (set shellState None) Unit
+    assertEq (get aiSettingsOpen) False
 }
 
 @test "signal patch operator accepts replacement values"

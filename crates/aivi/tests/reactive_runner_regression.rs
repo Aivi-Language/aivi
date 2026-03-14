@@ -117,6 +117,8 @@ use aivi
 use aivi.reactive
 use aivi.testing
 
+ShellState = AiSettingsSection | SearchSection
+
 @test "signal patch operator updates scalar signals"
 signal_patch_operator_updates_scalar = do Effect {
   count = signal 1
@@ -133,6 +135,20 @@ signal_pipe_derives_from_source = do Effect {
   assertEq (get doubled) 4
   assertEq (set count 5) Unit
   assertEq (get doubled) 10
+}
+
+@test "signal pipe accepts bare matcher blocks"
+signal_pipe_accepts_bare_matcher_blocks = do Effect {
+  shellState     = signal (Some SearchSection)
+  aiSettingsOpen = shellState ->>
+    | Some AiSettingsSection => True
+    | _                      => False
+
+  assertEq (get aiSettingsOpen) False
+  assertEq (set shellState (Some AiSettingsSection)) Unit
+  assertEq (get aiSettingsOpen) True
+  assertEq (set shellState None) Unit
+  assertEq (get aiSettingsOpen) False
 }
 "#;
 
@@ -163,6 +179,7 @@ signal_pipe_derives_from_source = do Effect {
     for def_name in [
         "signal_patch_operator_updates_scalar",
         "signal_pipe_derives_from_source",
+        "signal_pipe_accepts_bare_matcher_blocks",
     ] {
         let def = main_module
             .defs
@@ -194,5 +211,5 @@ signal_pipe_derives_from_source = do Effect {
         .expect("run_test_suite succeeds");
 
     assert_eq!(report.failed, 0, "unexpected test failures: {report:#?}");
-    assert_eq!(report.passed, 2, "expected both tests to pass");
+    assert_eq!(report.passed, 3, "expected all three tests to pass");
 }

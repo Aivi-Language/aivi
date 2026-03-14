@@ -106,10 +106,14 @@ Signal pipes keep the ordinary pipe semantics inside the mapper. That means `s -
 
 ```aivi
 count = signal 1
+maybeSelection = signal (Some 1)
 countText = count ->> (_ + 1) ->> toText
 display = count ->> (n => "Count {n}")
 nextCount = signal { count: 1 } ->> count + 1
 nextCountViaPattern = signal { count: 1 } ->> { count } => count + 1
+hasSelection = maybeSelection ->>
+  | Some _ => True
+  | None   => False
 ```
 
 ## Watching and side effects
