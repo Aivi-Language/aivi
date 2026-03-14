@@ -241,9 +241,9 @@ Uppercase or dotted tags in HTML sigils are treated as component calls with reco
 <<< ../snippets/from_md/syntax/operators/block_05.aivi{aivi}
 
 
-Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`, `onActivate` → `activate`, `onKeyPress` → `key-pressed`, `onToggle` → `toggled`, `onValueChanged` → `value-changed`, `onFocusIn` → `focus-enter`, `onFocusOut` → `focus-leave`.
+Sugar attribute → GTK signal: `onClick` → `clicked`, `onInput` → `changed`, `onActivate` → `activate`, `onKeyPress` → `key-pressed`, `onToggle` → `notify::active` for `GtkSwitch` and `toggled` elsewhere, `onSelect` → `notify::selected` for `GtkDropDown`, `onClosed` → `closed` for dialog widgets, `onValueChanged` → `value-changed`, `onFocusIn` → `focus-enter`, `onFocusOut` → `focus-leave`.
 
-For controller-only signals that have no sugar, use explicit signal nodes. Example: attach `GtkEventControllerMotion` under `<child type="controller">` and bind `<signal name="enter" ... />` / `<signal name="leave" ... />`.
+For controller-only signals that have no sugar, or when you want the raw `GtkSignalEvent`, use explicit signal nodes. Example: attach `GtkEventControllerMotion` under `<child type="controller">` and bind `<signal name="enter" ... />` / `<signal name="leave" ... />`.
 
 Signal handlers must be compile-time expressions.
 

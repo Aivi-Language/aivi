@@ -78,6 +78,7 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "gtkStaticProp",
         "gtkBoundProp",
         "gtkEventAttr",
+        "gtkEventSugarAttr",
         "gtkIdAttr",
         "gtkRefAttr",
         "buildFromNode",

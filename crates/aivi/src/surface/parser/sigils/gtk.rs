@@ -152,6 +152,50 @@ impl Parser {
             }
         }
 
+        fn gtk_element_class_name(tag: &str, attrs: &[GtkAttr]) -> Option<String> {
+            if tag.starts_with("Gtk") || tag.starts_with("Adw") || tag.starts_with("Gsk") {
+                return Some(tag.to_string());
+            }
+            attrs.iter().find_map(|attr| {
+                if attr.name != "class" {
+                    return None;
+                }
+                match &attr.value {
+                    GtkAttrValue::Text(value) => Some(value.clone()),
+                    GtkAttrValue::Splice(expr) => compile_time_expr_text(expr),
+                    GtkAttrValue::Bare => None,
+                }
+            })
+        }
+
+        fn gtk_signal_sugar_name(class_name: Option<&str>, attr_name: &str) -> Option<&'static str> {
+            match attr_name {
+                "onClick" => Some("clicked"),
+                "onInput" => Some("changed"),
+                "onActivate" => Some("activate"),
+                "onToggle" => match class_name {
+                    Some("GtkSwitch") => Some("notify::active"),
+                    _ => Some("toggled"),
+                },
+                "onValueChanged" => Some("value-changed"),
+                "onKeyPress" => Some("key-pressed"),
+                "onFocusIn" => Some("focus-enter"),
+                "onFocusOut" => Some("focus-leave"),
+                "onSelect" => match class_name {
+                    Some("GtkDropDown") => Some("notify::selected"),
+                    _ => None,
+                },
+                "onClosed" => match class_name {
+                    Some(name) if name.starts_with("Adw") && name.ends_with("Dialog") => {
+                        Some("closed")
+                    }
+                    _ => None,
+                },
+                "onShowSidebarChanged" => Some("notify::show-sidebar"),
+                _ => None,
+            }
+        }
+
         // Compute the body offset inside the full sigil token (`~<gtk> ... </gtk>`).
         let body_start_offset = sigil
             .text
@@ -721,8 +765,8 @@ impl Parser {
                 }
             };
             Some(Expr::Call {
-                func: Box::new(mk_ui("gtkEventAttr")),
-                args: vec![mk_string(signal_name), handler_expr],
+                func: Box::new(mk_ui("gtkEventSugarAttr")),
+                args: vec![mk_string(signal_name), mk_string(source_name), handler_expr],
                 span: span.clone(),
             })
         }
@@ -1207,18 +1251,8 @@ impl Parser {
                         ));
                         for attr in attrs {
                             // Signal sugar (onClick, onInput, etc.)
-                            let signal_name_opt = match attr.name.as_str() {
-                                "onClick" => Some("clicked"),
-                                "onInput" => Some("changed"),
-                                "onActivate" => Some("activate"),
-                                "onToggle" => Some("toggled"),
-                                "onValueChanged" => Some("value-changed"),
-                                "onKeyPress" => Some("key-pressed"),
-                                "onFocusIn" => Some("focus-enter"),
-                                "onFocusOut" => Some("focus-leave"),
-                                "onShowSidebarChanged" => Some("notify::show-sidebar"),
-                                _ => None,
-                            };
+                            let signal_name_opt =
+                                gtk_signal_sugar_name(Some(tag.as_str()), attr.name.as_str());
                             if let Some(signal_name) = signal_name_opt {
                                 if let Some(lowered) = lower_event_attr(
                                     this,
@@ -1382,6 +1416,7 @@ impl Parser {
 
                     // Built-in GTK element lowering (lowercase tags).
                     let mut lowered_attrs = lower_source_meta(module_path, &span);
+                    let sugar_class_name = gtk_element_class_name(&tag, &attrs);
                     for attr in attrs {
                         if attr.name == "props" {
                             match attr.value {
@@ -1438,18 +1473,10 @@ impl Parser {
                             }
                             continue;
                         }
-                        let signal_name_opt = match attr.name.as_str() {
-                            "onClick" => Some("clicked"),
-                            "onInput" => Some("changed"),
-                            "onActivate" => Some("activate"),
-                            "onToggle" => Some("toggled"),
-                            "onValueChanged" => Some("value-changed"),
-                            "onKeyPress" => Some("key-pressed"),
-                            "onFocusIn" => Some("focus-enter"),
-                            "onFocusOut" => Some("focus-leave"),
-                            "onShowSidebarChanged" => Some("notify::show-sidebar"),
-                            _ => None,
-                        };
+                        let signal_name_opt = gtk_signal_sugar_name(
+                            sugar_class_name.as_deref(),
+                            attr.name.as_str(),
+                        );
                         if let Some(signal_name) = signal_name_opt {
                             if let Some(lowered) = lower_event_attr(
                                 this,

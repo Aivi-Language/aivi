@@ -1222,23 +1222,13 @@ impl Backend {
                     }
 
                     // Signal sugar shortcuts
-                    let signal_sugar = [
-                        ("onClick", "clicked"),
-                        ("onInput", "changed"),
-                        ("onActivate", "activate"),
-                        ("onKeyPress", "key-pressed"),
-                        ("onToggle", "toggled"),
-                        ("onValueChanged", "value-changed"),
-                        ("onFocusIn", "focus-enter"),
-                        ("onFocusOut", "focus-leave"),
-                        ("onShowSidebarChanged", "notify::show-sidebar"),
-                    ];
+                    let signal_sugar = Self::gtk_signal_sugar_specs(tag_name);
                     for (sugar, signal_name) in &signal_sugar {
                         if !prefix.is_empty() && !sugar.starts_with(prefix.as_str()) {
                             continue;
                         }
-                        let has_signal = *signal_name == "key-pressed"
-                            || widget.signals.iter().any(|s| s.name == *signal_name);
+                        let has_signal =
+                            Self::gtk_signal_sugar_is_supported(tag_name, signal_name, widget);
                         if has_signal {
                             items.push(CompletionItem {
                                 label: sugar.to_string(),
@@ -1281,17 +1271,53 @@ impl Backend {
         }
     }
 
+    fn gtk_signal_sugar_specs(tag_name: &str) -> Vec<(&'static str, &'static str)> {
+        let mut specs = vec![
+            ("onClick", "clicked"),
+            ("onInput", "changed"),
+            ("onActivate", "activate"),
+            ("onKeyPress", "key-pressed"),
+            ("onValueChanged", "value-changed"),
+            ("onFocusIn", "focus-enter"),
+            ("onFocusOut", "focus-leave"),
+            ("onShowSidebarChanged", "notify::show-sidebar"),
+        ];
+        if tag_name == "GtkSwitch" {
+            specs.push(("onToggle", "notify::active"));
+        } else {
+            specs.push(("onToggle", "toggled"));
+        }
+        if tag_name == "GtkDropDown" {
+            specs.push(("onSelect", "notify::selected"));
+        }
+        if tag_name.starts_with("Adw") && tag_name.ends_with("Dialog") {
+            specs.push(("onClosed", "closed"));
+        }
+        specs
+    }
+
+    fn gtk_signal_sugar_is_supported(
+        tag_name: &str,
+        signal_name: &str,
+        widget: &crate::gtk_index::GtkWidgetInfo,
+    ) -> bool {
+        match signal_name {
+            "key-pressed" => true,
+            "notify::active" => tag_name == "GtkSwitch",
+            "notify::selected" => tag_name == "GtkDropDown",
+            "closed" => tag_name.starts_with("Adw") && tag_name.ends_with("Dialog"),
+            _ => widget.signals.iter().any(|s| s.name == signal_name),
+        }
+    }
+
     fn gtk_signal_sugar_completion_doc(sugar: &str, signal_name: &str) -> String {
-        let typed_event = match sugar {
-            "onClick" => "`GtkClicked WidgetId Text`",
-            "onInput" => "`GtkInputChanged WidgetId Text Text`",
-            "onActivate" => "`GtkActivated WidgetId Text`",
+        let payload = match sugar {
+            "onClick" | "onActivate" | "onFocusIn" | "onFocusOut" | "onClosed" => "`Unit`",
+            "onInput" => "`Text`",
             "onKeyPress" => "`GtkKeyPressed WidgetId Text Text Text`",
-            "onToggle" => "`GtkToggled WidgetId Text Bool`",
-            "onValueChanged" => "`GtkValueChanged WidgetId Text Float`",
-            "onFocusIn" => "`GtkFocusIn WidgetId Text`",
-            "onFocusOut" => "`GtkFocusOut WidgetId Text`",
-            "onShowSidebarChanged" => "`GtkUnknownSignal WidgetId Text Text Text Text`",
+            "onToggle" | "onShowSidebarChanged" => "`Bool`",
+            "onValueChanged" => "`Float`",
+            "onSelect" => "`Int`",
             _ => "`GtkSignalEvent`",
         };
 
@@ -1300,15 +1326,24 @@ impl Backend {
             "onKeyPress" => {
                 "Use this for keyboard-driven widgets. Pattern match `GtkKeyPressed _ _ key _` in the callback to steer or trigger shortcuts."
             }
+            "onSelect" => {
+                "Use this with `GtkDropDown` to receive the selected index directly instead of parsing `GtkUnknownSignal` payload text."
+            }
+            "onToggle" => {
+                "Toggle callbacks receive the current `Bool`. `GtkSwitch` uses `notify::active`; other toggle-style widgets continue to map to `toggled`."
+            }
+            "onClosed" => {
+                "Dialog close callbacks receive `Unit`, so ordinary `_ => ...` handlers work without an explicit `<signal name=\"closed\" ... />` child."
+            }
             "onFocusOut" => {
                 "Use this to mark blur/touch state directly from a callback or lower-level signal handler."
             }
             "onClick" => "Bind this to a runtime function or an `Event` handle. Direct signal mutation is the normal path.",
-            _ => "Handle the typed event directly in a callback or route it through a lower-level `signalStream` consumer.",
+            _ => "Sugar callbacks receive the ergonomic payload directly; use explicit `<signal ... />` when you want the raw `GtkSignalEvent` instead.",
         };
 
         format!(
-            "Sugar for GTK signal `{signal_name}`.\n\nThis signal corresponds to the typed event constructor {typed_event}.\n\n{guidance}"
+            "Sugar for GTK signal `{signal_name}`.\n\nRuntime callback payload: {payload}.\n\n{guidance}"
         )
     }
 }

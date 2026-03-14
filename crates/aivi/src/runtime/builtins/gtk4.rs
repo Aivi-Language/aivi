@@ -184,9 +184,36 @@ pub(super) enum ResolvedGtkAttr {
     BoundAttr { name: String, value: Value },
     StaticProp { name: String, value: String },
     BoundProp { name: String, value: Value },
-    EventProp { name: String, handler: Value },
+    EventProp {
+        name: String,
+        handler: Value,
+        arg_mode: GtkCallbackArgMode,
+    },
     Id(String),
     Ref(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum GtkCallbackArgMode {
+    Raw,
+    Unit,
+    Text,
+    Bool,
+    Float,
+    Int,
+}
+
+fn gtk_callback_arg_mode_for_source(source: &str) -> GtkCallbackArgMode {
+    match source {
+        "onClick" | "onActivate" | "onFocusIn" | "onFocusOut" | "onClosed" => {
+            GtkCallbackArgMode::Unit
+        }
+        "onInput" => GtkCallbackArgMode::Text,
+        "onToggle" | "onShowSidebarChanged" => GtkCallbackArgMode::Bool,
+        "onValueChanged" => GtkCallbackArgMode::Float,
+        "onSelect" => GtkCallbackArgMode::Int,
+        _ => GtkCallbackArgMode::Raw,
+    }
 }
 
 #[derive(Clone)]
@@ -270,6 +297,18 @@ fn decode_resolved_attr(
             name: decode_text(name)
                 .ok_or_else(|| RuntimeError::Message("gtk4 invalid event prop name".to_string()))?,
             handler: decode_binding_handle(handler, runtime, "gtk4 event prop")?,
+            arg_mode: GtkCallbackArgMode::Raw,
+        }),
+        ("GtkEventSugarProp", [name, source, handler]) => Ok(ResolvedGtkAttr::EventProp {
+            name: decode_text(name).ok_or_else(|| {
+                RuntimeError::Message("gtk4 invalid event sugar prop name".to_string())
+            })?,
+            handler: decode_binding_handle(handler, runtime, "gtk4 event sugar prop")?,
+            arg_mode: decode_text(source)
+                .map(|source| gtk_callback_arg_mode_for_source(&source))
+                .ok_or_else(|| {
+                    RuntimeError::Message("gtk4 invalid event sugar source name".to_string())
+                })?,
         }),
         ("GtkIdAttr", [value]) => Ok(ResolvedGtkAttr::Id(
             decode_text(value)
@@ -436,7 +475,7 @@ fn collect_auto_bindings_into(
             for attr in attrs {
                 match attr {
                     ResolvedGtkAttr::Id(value) => widget_name = value.clone(),
-                    ResolvedGtkAttr::EventProp { name, handler } => {
+                    ResolvedGtkAttr::EventProp { name, handler, .. } => {
                         if let Some(serialized) = serialize_signal_text(handler) {
                             signal_handlers.push((name.clone(), serialized));
                         }
