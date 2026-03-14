@@ -155,6 +155,14 @@ mod linux_impl {
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
         fn gtk_window_new() -> *mut c_void;
         fn gtk_application_window_new(application: *mut c_void) -> *mut c_void;
+        fn gtk_builder_new() -> *mut c_void;
+        fn gtk_builder_add_from_string(
+            builder: *mut c_void,
+            buffer: *const c_char,
+            length: isize,
+            error: *mut *mut c_void,
+        ) -> c_int;
+        fn gtk_builder_get_object(builder: *mut c_void, name: *const c_char) -> *mut c_void;
         fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
         fn gtk_window_set_modal(window: *mut c_void, modal: c_int);
         fn gtk_window_set_transient_for(window: *mut c_void, parent: *mut c_void);
@@ -163,6 +171,8 @@ mod linux_impl {
         fn gtk_window_close(window: *mut c_void);
         fn gtk_window_set_hide_on_close(window: *mut c_void, setting: c_int);
         fn gtk_window_set_decorated(window: *mut c_void, setting: c_int);
+        fn gtk_widget_get_type() -> usize;
+        fn gtk_window_get_type() -> usize;
 
         fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
         fn gtk_widget_set_sensitive(widget: *mut c_void, sensitive: c_int);
@@ -520,6 +530,8 @@ mod linux_impl {
     #[link(name = "gobject-2.0")]
     unsafe extern "C" {
         fn g_type_from_name(name: *const c_char) -> usize;
+        fn g_type_is_a(type_: usize, is_a_type: usize) -> c_int;
+        fn g_type_check_instance_is_a(instance: *mut c_void, iface_type: usize) -> c_int;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
             -> *mut c_void;
         fn g_object_ref(object: *mut c_void) -> *mut c_void;
@@ -668,6 +680,7 @@ mod linux_impl {
     #[derive(Clone, Debug)]
     struct LiveChild {
         child_type: Option<String>,
+        property_name: Option<String>,
         node: LiveNode,
     }
 
@@ -964,8 +977,37 @@ mod linux_impl {
     struct ChildSpec<'a> {
         node: &'a GtkNode,
         child_type: Option<String>,
+        property_name: Option<String>,
         position: Option<usize>,
     }
+
+    #[derive(Clone, Debug, serde::Deserialize)]
+    struct RuntimeGtkWidgetInfo {
+        name: String,
+        #[allow(dead_code)]
+        parent: Option<String>,
+        #[allow(dead_code)]
+        doc: Option<String>,
+        properties: Vec<RuntimeGtkPropertyInfo>,
+        signals: Vec<RuntimeGtkSignalInfo>,
+    }
+
+    #[derive(Clone, Debug, serde::Deserialize)]
+    struct RuntimeGtkPropertyInfo {
+        name: String,
+        #[serde(rename = "type")]
+        prop_type: String,
+        writable: bool,
+        construct_only: bool,
+    }
+
+    #[derive(Clone, Debug, serde::Deserialize)]
+    struct RuntimeGtkSignalInfo {
+        name: String,
+    }
+
+    static GTK_RUNTIME_INDEX: OnceLock<HashMap<String, RuntimeGtkWidgetInfo>> = OnceLock::new();
+    const GTK_RUNTIME_INDEX_JSON: &str = include_str!("../../../assets/gtk_index.json");
 
     // ── Helpers ──
 
@@ -1103,6 +1145,130 @@ mod linux_impl {
             let prop_c = CString::new(key).unwrap();
             unsafe { gobject_set_i32(widget, &prop_c, value) };
         }
+    }
+
+    fn apply_generic_indexed_property(
+        widget: *mut c_void,
+        class_name: &str,
+        prop_name: &str,
+        raw_value: &str,
+        state: &RealGtkState,
+    ) -> Result<bool, Gtk4Error> {
+        let Some(prop_info) = runtime_property_info(class_name, prop_name) else {
+            return Ok(false);
+        };
+        if !prop_info.writable || prop_info.construct_only {
+            return Ok(false);
+        }
+        let prop_c = CString::new(prop_name).map_err(|_| {
+            Gtk4Error::new(format!(
+                "gtk4.buildFromNode invalid property name `{prop_name}` on {class_name}"
+            ))
+        })?;
+        match prop_info.prop_type.as_str() {
+            "utf8" | "gchararray" => {
+                let text_c = c_text(
+                    raw_value,
+                    &format!("gtk4.buildFromNode invalid {class_name} {prop_name}"),
+                )?;
+                unsafe { gobject_set_str(widget, &prop_c, &text_c) };
+                Ok(true)
+            }
+            "gboolean" => {
+                if let Some(value) = parse_bool_text(raw_value) {
+                    unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            "gint" | "gint8" | "gint16" | "gint32" | "gint64" => {
+                if let Some(value) = parse_i32_text(raw_value) {
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            "guint" | "guint8" | "guint16" | "guint32" | "guint64" => {
+                if let Ok(value) = raw_value.trim().parse::<u32>() {
+                    unsafe { gobject_set_u32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            "gfloat" | "gdouble" => {
+                if let Some(value) = parse_f64_text(raw_value) {
+                    unsafe { gobject_set_f64(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            _ if prop_name == "orientation" => {
+                unsafe { gobject_set_i32(widget, &prop_c, parse_orientation_text(raw_value)) };
+                Ok(true)
+            }
+            _ if prop_name == "wrap-mode" => {
+                if let Some(value) = parse_wrap_mode_text(raw_value) {
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            _ if prop_name == "ellipsize" => {
+                if let Some(value) = parse_ellipsize_text(raw_value) {
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            _ if prop_name == "halign" || prop_name == "valign" => {
+                if let Some(value) = parse_align_text(raw_value) {
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            _ if prop_name == "hscrollbar-policy" || prop_name == "vscrollbar-policy" => {
+                if let Some(value) = parse_policy_text(raw_value) {
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            _ => {
+                if let Ok(id) = raw_value.trim().parse::<i64>() {
+                    if let Some(&other) = state.widgets.get(&id) {
+                        unsafe { gobject_set_ptr(widget, &prop_c, other) };
+                        return Ok(true);
+                    }
+                }
+                if let Some(value) = parse_i32_text(raw_value) {
+                    unsafe { gobject_set_i32(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                if let Some(value) = parse_f64_text(raw_value) {
+                    unsafe { gobject_set_f64(widget, &prop_c, value) };
+                    return Ok(true);
+                }
+                if let Some(value) = parse_bool_text(raw_value) {
+                    unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+        }
+    }
+
+    fn apply_generic_indexed_properties(
+        widget: *mut c_void,
+        class_name: &str,
+        props: &HashMap<String, String>,
+        state: &RealGtkState,
+    ) -> Result<(), Gtk4Error> {
+        for (prop_name, raw_value) in props {
+            let _ =
+                apply_generic_indexed_property(widget, class_name, prop_name, raw_value, state)?;
+        }
+        Ok(())
     }
 
     fn apply_pending_display_customizations(state: &mut RealGtkState) -> Result<(), Gtk4Error> {
@@ -1347,6 +1513,7 @@ mod linux_impl {
     #[derive(Clone, Copy)]
     struct ChildPlacement<'a> {
         child_type: Option<&'a str>,
+        property_name: Option<&'a str>,
         overlay_index: usize,
     }
 
@@ -1502,6 +1669,14 @@ mod linux_impl {
             GtkNode::Element {
                 tag: "child".to_string(),
                 attrs,
+                children: vec![child],
+            }
+        }
+
+        fn test_property(name: &str, child: GtkNode) -> GtkNode {
+            GtkNode::Element {
+                tag: "property".to_string(),
+                attrs: vec![("name".to_string(), name.to_string())],
                 children: vec![child],
             }
         }
@@ -1671,14 +1846,15 @@ mod linux_impl {
             let action_id = action_new("settings-ai").expect("create settings action");
             app_add_action(app_id, action_id).expect("attach settings action to app");
 
-            GTK_STATE.with(|state| {
+            let action_raw = GTK_STATE.with(|state| {
                 let state = state.borrow();
-                let action = state
+                state
                     .actions
                     .get(&action_id)
-                    .expect("action should be stored after creation");
-                unsafe { g_action_activate(action.raw, null_mut()) };
+                    .map(|action| action.raw)
+                    .expect("action should be stored after creation")
             });
+            unsafe { g_action_activate(action_raw, null_mut()) };
 
             let event = receiver
                 .recv_timeout(Duration::from_millis(100))
@@ -1694,6 +1870,7 @@ mod linux_impl {
         fn menu_button_set_menu_model_attaches_model_property() {
             let _guard = gtk_state_test_guard();
             reset_test_gtk_state();
+            init().expect("init gtk");
 
             let menu_id = menu_model_new().expect("create menu model");
             menu_model_append_item(menu_id, "AI settings", "app.settings-ai")
@@ -1828,148 +2005,138 @@ mod linux_impl {
         }
 
         #[test]
-        fn gtk_documented_filter_sorter_and_expression_types_give_helpful_errors() {
-            for (class, needle) in [
-                ("GtkCustomFilter", "filter` property of GtkFilterListModel"),
-                ("GtkStringFilter", "filter` property of GtkFilterListModel"),
-                ("GtkBoolFilter", "filter` property of GtkFilterListModel"),
-                ("GtkMultiFilter", "GtkEveryFilter or GtkAnyFilter"),
-                ("GtkEveryFilter", "filter` property of GtkFilterListModel"),
-                ("GtkAnyFilter", "filter` property of GtkFilterListModel"),
-                ("GtkCustomSorter", "sorter` property of GtkSortListModel"),
-                ("GtkStringSorter", "sorter` property of GtkSortListModel"),
-                ("GtkNumericSorter", "sorter` property of GtkSortListModel"),
-                ("GtkMultiSorter", "priority order"),
-                ("GtkPropertyExpression", "prefer pure AIVI derivations"),
-                ("GtkConstantExpression", "prefer pure AIVI derivations"),
-                ("GtkCClosureExpression", "prefer pure AIVI derivations"),
-                ("GtkObjectExpression", "prefer pure AIVI derivations"),
-            ] {
-                let err = build_gtk_widget_error(class);
-                assert!(
-                    err.message.contains(needle),
-                    "{class} error should mention `{needle}`, got: {}",
-                    err.message
+        fn gtk_generic_runtime_attaches_nested_model_and_factory_objects() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let node = test_object(
+                "GtkListView",
+                "generic-list",
+                vec![
+                    test_property(
+                        "model",
+                        test_object(
+                            "GtkNoSelection",
+                            "generic-selection",
+                            vec![test_property(
+                                "model",
+                                test_object("GtkStringList", "generic-strings", vec![]),
+                            )],
+                        ),
+                    ),
+                    test_property(
+                        "factory",
+                        test_object("GtkSignalListItemFactory", "generic-factory", vec![]),
+                    ),
+                ],
+            );
+
+            let result = build_with_ids(&node).expect("build generic GtkListView tree");
+            let list_id = *result
+                .named_widgets
+                .get("generic-list")
+                .expect("list view should be named");
+            let selection_id = *result
+                .named_widgets
+                .get("generic-selection")
+                .expect("selection model should be named");
+            let strings_id = *result
+                .named_widgets
+                .get("generic-strings")
+                .expect("string list should be named");
+            let factory_id = *result
+                .named_widgets
+                .get("generic-factory")
+                .expect("factory should be named");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let list_raw = widget_ptr(&state, list_id, "test").expect("list view ptr");
+                let selection_raw =
+                    widget_ptr(&state, selection_id, "test").expect("selection model ptr");
+                let strings_raw = widget_ptr(&state, strings_id, "test").expect("string list ptr");
+                let factory_raw = widget_ptr(&state, factory_id, "test").expect("factory ptr");
+                let model_prop = CString::new("model").expect("model property CString");
+                let factory_prop = CString::new("factory").expect("factory property CString");
+
+                assert_eq!(
+                    unsafe { gobject_get_ptr(list_raw, &model_prop) },
+                    selection_raw
                 );
-            }
+                assert_eq!(
+                    unsafe { gobject_get_ptr(list_raw, &factory_prop) },
+                    factory_raw
+                );
+                assert_eq!(
+                    unsafe { gobject_get_ptr(selection_raw, &model_prop) },
+                    strings_raw
+                );
+            });
         }
 
         #[test]
-        fn gtk_documented_factory_and_column_view_types_give_helpful_errors() {
-            for (class, needle) in [
-                (
-                    "GtkSignalListItemFactory",
-                    "factory` property of GtkListView or GtkColumnView",
-                ),
-                (
-                    "GtkBuilderListItemFactory",
-                    "prefer the ~<gtk> sigil over raw Builder XML",
-                ),
-                (
-                    "GtkColumnViewColumn",
-                    "added to GtkColumnView programmatically",
-                ),
-                ("GtkColumnViewRow", "managed internally by GtkColumnView"),
-                (
-                    "GtkColumnViewCell",
-                    "managed internally by the column factory",
-                ),
-                (
-                    "GtkColumnViewSorter",
-                    "obtained from the `sorter` property of GtkColumnView",
-                ),
-            ] {
-                let err = build_gtk_widget_error(class);
-                assert!(
-                    err.message.contains(needle),
-                    "{class} error should mention `{needle}`, got: {}",
-                    err.message
+        fn gtk_generic_runtime_attaches_children_via_common_pointer_properties() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let node = test_object(
+                "GtkPopover",
+                "generic-popover",
+                vec![test_child(
+                    None,
+                    test_object("GtkLabel", "generic-popover-child", vec![]),
+                )],
+            );
+
+            let result = build_with_ids(&node).expect("build generic GtkPopover tree");
+            let popover_id = *result
+                .named_widgets
+                .get("generic-popover")
+                .expect("popover should be named");
+            let child_id = *result
+                .named_widgets
+                .get("generic-popover-child")
+                .expect("popover child should be named");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let popover_raw = widget_ptr(&state, popover_id, "test").expect("popover ptr");
+                let child_raw = widget_ptr(&state, child_id, "test").expect("child ptr");
+                let child_prop = CString::new("child").expect("child property CString");
+                assert_eq!(
+                    unsafe { gobject_get_ptr(popover_raw, &child_prop) },
+                    child_raw
                 );
-            }
+            });
         }
 
         #[test]
-        fn gtk_documented_shortcut_and_media_types_give_helpful_errors() {
-            for (class, needle) in [
-                ("GtkShortcut", "GtkShortcutController"),
-                ("GtkShortcutAction", "GtkActivateAction"),
-                ("GtkShortcutTrigger", "GtkKeyvalTrigger"),
-                ("GtkActivateAction", "shortcut action"),
-                ("GtkSignalAction", "shortcut action"),
-                ("GtkNamedAction", "shortcut action"),
-                ("GtkNothingAction", "shortcut action"),
-                ("GtkMnemonicAction", "shortcut action"),
-                ("GtkKeyvalTrigger", "shortcut trigger"),
-                ("GtkMnemonicTrigger", "shortcut trigger"),
-                ("GtkAlternativeTrigger", "shortcut trigger"),
-                ("GtkNeverTrigger", "shortcut trigger"),
-                ("GtkAnyTrigger", "shortcut trigger"),
-                ("GtkMediaStream", "set it as the `stream` property"),
-                ("GtkMediaFile", "set it as the `stream` property"),
-                ("GtkVideo", "does not yet expose it in ~<gtk> widget trees"),
-                (
-                    "GtkMediaControls",
-                    "does not yet expose it in ~<gtk> widget trees",
-                ),
-            ] {
-                let err = build_gtk_widget_error(class);
-                assert!(
-                    err.message.contains(needle),
-                    "{class} error should mention `{needle}`, got: {}",
-                    err.message
-                );
-            }
+        fn gtk_runtime_index_exposes_generic_untyped_signals() {
+            assert_eq!(
+                signal_payload_kind_for("GtkListView", "activate"),
+                Some(SignalPayloadKind::None)
+            );
         }
 
         #[test]
-        fn gtk_future_surface_and_programmatic_helper_types_give_helpful_errors() {
+        fn gtk_programmatic_and_managed_helper_types_still_give_helpful_errors() {
             for (class, needle) in [
-                (
-                    "GtkListView",
-                    "use GtkListBox with <each> for simple read-only lists today",
-                ),
-                (
-                    "GtkColumnView",
-                    "use GtkListBox with <each> for simple read-only lists today",
-                ),
-                (
-                    "GtkGridView",
-                    "use GtkListBox with <each> for simple read-only lists today",
-                ),
                 (
                     "GtkApplication",
                     "managed by appNew during manual GTK startup",
                 ),
-                ("GtkPrintOperation", "printing is not part of the AIVI v0.1"),
-                ("GtkPrinter", "printing is not part of the AIVI v0.1"),
-                ("GtkPrintContext", "printing is not part of the AIVI v0.1"),
-                ("GtkPageSetup", "printing is not part of the AIVI v0.1"),
-                ("GtkPaperSize", "printing is not part of the AIVI v0.1"),
-                ("GtkPrintSettings", "printing is not part of the AIVI v0.1"),
-                ("GtkWindow", "Use mountAppWindow or runGtkApp"),
-                ("GtkApplicationWindow", "Use mountAppWindow or runGtkApp"),
-                ("GtkAboutDialog", "AdwAboutDialog"),
                 ("GtkAlertDialog", "present it programmatically"),
-                ("GtkDialog", "prefer GtkAlertDialog"),
-                ("GtkMessageDialog", "prefer GtkAlertDialog"),
-                ("GtkShortcutsWindow", "AdwShortcutsDialog"),
-                ("GtkPopover", "GtkMenuButton with a menu model"),
-                ("GtkPopoverMenu", "GtkMenuButton with a menu model"),
-                ("GtkPopoverMenuBar", "menu model"),
-                ("GtkFileDialog", "AIVI does not yet expose file dialogs"),
-                ("GtkFileChooserDialog", "prefer GtkFileDialog"),
-                ("GtkFileChooserNative", "prefer GtkFileDialog"),
-                ("GtkFileChooserWidget", "prefer GtkFileDialog"),
-                ("GtkPrintDialog", "printing is not part of the AIVI v0.1"),
-                ("GtkPrintJob", "printing is not part of the AIVI v0.1"),
+                ("GtkFileDialog", "does not yet expose file dialogs"),
+                ("GtkPrintOperation", "printing is not part of the AIVI v0.1"),
                 (
-                    "GtkPageSetupUnixDialog",
-                    "printing is not part of the AIVI v0.1",
+                    "GtkColumnViewColumn",
+                    "added to GtkColumnView programmatically",
                 ),
-                (
-                    "GtkPrintUnixDialog",
-                    "printing is not part of the AIVI v0.1",
-                ),
+                ("GtkListItem", "created and recycled internally"),
+                ("GtkShortcut", "GtkShortcutController"),
+                ("GtkMediaStream", "set it as the `stream` property"),
             ] {
                 let err = build_gtk_widget_error(class);
                 assert!(
@@ -5091,6 +5258,71 @@ mod linux_impl {
         out.trim().to_string()
     }
 
+    fn gtk_runtime_index() -> &'static HashMap<String, RuntimeGtkWidgetInfo> {
+        GTK_RUNTIME_INDEX.get_or_init(|| {
+            serde_json::from_str::<Vec<RuntimeGtkWidgetInfo>>(GTK_RUNTIME_INDEX_JSON)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|entry| (entry.name.clone(), entry))
+                .collect()
+        })
+    }
+
+    fn runtime_widget_info(class_name: &str) -> Option<&'static RuntimeGtkWidgetInfo> {
+        gtk_runtime_index().get(class_name)
+    }
+
+    fn runtime_property_info(
+        class_name: &str,
+        property_name: &str,
+    ) -> Option<&'static RuntimeGtkPropertyInfo> {
+        runtime_widget_info(class_name)?
+            .properties
+            .iter()
+            .find(|prop| prop.name == property_name)
+    }
+
+    fn runtime_signal_known(class_name: &str, signal_name: &str) -> bool {
+        runtime_widget_info(class_name)
+            .map(|widget| {
+                widget
+                    .signals
+                    .iter()
+                    .any(|signal| signal.name == signal_name)
+            })
+            .unwrap_or(false)
+    }
+
+    fn gtype_for_name(type_name: &str, context: &str) -> Result<usize, Gtk4Error> {
+        let type_c = c_text(type_name, context)?;
+        let g_type = unsafe { g_type_from_name(type_c.as_ptr()) };
+        if g_type == 0 {
+            return Err(Gtk4Error::new(format!(
+                "gtk4.buildFromNode unknown GType {type_name}"
+            )));
+        }
+        Ok(g_type)
+    }
+
+    fn gtype_is_a(type_name: &str, base_type: usize, context: &str) -> Result<bool, Gtk4Error> {
+        let g_type = gtype_for_name(type_name, context)?;
+        Ok(unsafe { g_type_is_a(g_type, base_type) != 0 })
+    }
+
+    fn class_is_window_subclass(class_name: &str) -> bool {
+        gtype_is_a(
+            class_name,
+            unsafe { gtk_window_get_type() },
+            "gtk4.buildFromNode invalid window class name",
+        )
+        .unwrap_or(false)
+    }
+
+    fn instance_is_widget(instance: *mut c_void) -> bool {
+        !instance.is_null()
+            && unsafe { g_type_check_instance_is_a(instance, gtk_widget_get_type()) != 0 }
+    }
+
     fn invalid(name: &str) -> Gtk4Error {
         Gtk4Error::new(name.to_string())
     }
@@ -5891,6 +6123,7 @@ mod linux_impl {
             ("GtkColorDialogButton", "notify::rgba") => Some(SignalPayloadKind::NotifyRgba),
             ("GtkFontDialogButton", "notify::font-desc") => Some(SignalPayloadKind::NotifyFontDesc),
             ("GtkCalendar", "day-selected") => Some(SignalPayloadKind::None),
+            _ if runtime_signal_known(class_name, signal_name) => Some(SignalPayloadKind::None),
             _ => None,
         }
     }
@@ -6143,22 +6376,106 @@ mod linux_impl {
     }
 
     // ── Widget Builder ──
-    fn create_adw_widget_type(type_name: &str) -> Result<*mut c_void, Gtk4Error> {
-        try_adw_init();
-        let class_c = c_text(type_name, "gtk4.buildFromNode invalid Adw class name")?;
-        let g_type = unsafe { g_type_from_name(class_c.as_ptr()) };
-        if g_type == 0 {
+    fn create_builder_object(type_name: &str) -> Result<*mut c_void, Gtk4Error> {
+        let builder = unsafe { gtk_builder_new() };
+        if builder.is_null() {
+            return Err(Gtk4Error::new(
+                "gtk4.buildFromNode failed to create GtkBuilder fallback".to_string(),
+            ));
+        }
+        let xml = format!(r#"<interface><object class="{type_name}" id="root"/></interface>"#);
+        let xml_c = c_text(&xml, "gtk4.buildFromNode invalid GtkBuilder fallback XML")?;
+        let object_id = CString::new("root").expect("static object id is valid");
+        let added = unsafe {
+            gtk_builder_add_from_string(builder, xml_c.as_ptr(), xml.len() as isize, null_mut())
+        };
+        if added == 0 {
+            unsafe { g_object_unref(builder) };
             return Err(Gtk4Error::new(format!(
-                "gtk4.buildFromNode unknown Adw class {type_name}"
+                "gtk4.buildFromNode failed to create {type_name} via GtkBuilder"
             )));
         }
-        let raw = unsafe { g_object_new(g_type, std::ptr::null::<c_char>()) };
+        let raw = unsafe { gtk_builder_get_object(builder, object_id.as_ptr()) };
         if raw.is_null() {
+            unsafe { g_object_unref(builder) };
             return Err(Gtk4Error::new(format!(
-                "gtk4.buildFromNode failed to create {type_name}"
+                "gtk4.buildFromNode GtkBuilder fallback did not return {type_name}"
             )));
+        }
+        unsafe {
+            g_object_ref_sink(raw);
+            g_object_unref(builder);
         }
         Ok(raw)
+    }
+
+    fn create_gtype_object(type_name: &str, context: &str) -> Result<*mut c_void, Gtk4Error> {
+        match gtype_for_name(type_name, context) {
+            Ok(g_type) => {
+                let raw = unsafe { g_object_new(g_type, std::ptr::null::<c_char>()) };
+                if raw.is_null() {
+                    create_builder_object(type_name)
+                } else {
+                    Ok(raw)
+                }
+            }
+            Err(err) if err.message.contains("unknown GType") => create_builder_object(type_name),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn create_adw_widget_type(type_name: &str) -> Result<*mut c_void, Gtk4Error> {
+        try_adw_init();
+        create_gtype_object(type_name, "gtk4.buildFromNode invalid Adw class name")
+    }
+
+    fn create_generic_gtk_object(class_name: &str) -> Result<*mut c_void, Gtk4Error> {
+        create_gtype_object(class_name, "gtk4.buildFromNode invalid GTK class name")
+    }
+
+    fn should_block_generic_runtime_creation(class_name: &str) -> bool {
+        matches!(
+            class_name,
+            "GtkAlertDialog"
+                | "GtkFileDialog"
+                | "GtkFileChooserDialog"
+                | "GtkFileChooserNative"
+                | "GtkFileChooserWidget"
+                | "GtkListItem"
+                | "GtkColumnViewColumn"
+                | "GtkColumnViewRow"
+                | "GtkColumnViewCell"
+                | "GtkColumnViewSorter"
+                | "GtkMediaStream"
+                | "GtkShortcut"
+                | "GtkShortcutAction"
+                | "GtkShortcutTrigger"
+                | "GtkActivateAction"
+                | "GtkSignalAction"
+                | "GtkNamedAction"
+                | "GtkNothingAction"
+                | "GtkMnemonicAction"
+                | "GtkKeyvalTrigger"
+                | "GtkMnemonicTrigger"
+                | "GtkAlternativeTrigger"
+                | "GtkNeverTrigger"
+                | "GtkAnyTrigger"
+                | "GtkBuilder"
+                | "GtkApplication"
+                | "GtkPrintOperation"
+                | "GtkPrintDialog"
+                | "GtkPrinter"
+                | "GtkPrintJob"
+                | "GtkPrintContext"
+                | "GtkPageSetup"
+                | "GtkPageSetupUnixDialog"
+                | "GtkPaperSize"
+                | "GtkPrintSettings"
+                | "GtkPrintUnixDialog"
+                | "GtkSettings"
+                | "GtkStyleContext"
+                | "GtkCssProvider"
+        )
     }
 
     fn create_adw_widget(class_name: &str) -> Result<*mut c_void, Gtk4Error> {
@@ -6365,7 +6682,19 @@ mod linux_impl {
             };
             if tag == "property" {
                 if let Some(name) = node_attr(attrs, "name") {
-                    out.insert(name.to_string(), collect_text(children));
+                    let has_object_child = children.iter().any(|child| {
+                        matches!(
+                            child,
+                            GtkNode::Element {
+                                tag,
+                                attrs: _,
+                                children: _
+                            } if tag == "object"
+                        )
+                    });
+                    if !has_object_child {
+                        out.insert(name.to_string(), collect_text(children));
+                    }
                 }
                 continue;
             }
@@ -6494,13 +6823,15 @@ mod linux_impl {
                         out.push(ChildSpec {
                             node: nested,
                             child_type: child_type.clone(),
+                            property_name: None,
                             position,
                         });
                     }
                 }
                 continue;
             }
-            if tag == "property" && node_attr(attrs, "name") == Some("child") {
+            if tag == "property" {
+                let property_name = node_attr(attrs, "name").map(str::to_string);
                 for nested in children {
                     if matches!(
                         nested,
@@ -6510,9 +6841,16 @@ mod linux_impl {
                             children: _
                         } if tag == "object"
                     ) {
+                        let property_name = property_name.clone();
+                        let (child_type, property_name) = match property_name.as_deref() {
+                            Some("child") => (None, None),
+                            Some(name) => (None, Some(name.to_string())),
+                            None => (None, None),
+                        };
                         out.push(ChildSpec {
                             node: nested,
-                            child_type: None,
+                            child_type,
+                            property_name,
                             position: None,
                         });
                     }
@@ -6523,6 +6861,7 @@ mod linux_impl {
                 out.push(ChildSpec {
                     node: child,
                     child_type: None,
+                    property_name: None,
                     position: None,
                 });
             }
@@ -6599,53 +6938,55 @@ mod linux_impl {
         props: &HashMap<String, String>,
         state: &RealGtkState,
     ) -> Result<(), Gtk4Error> {
-        if let Some(value) = props.get("margin-start").and_then(|v| parse_i32_text(v)) {
-            unsafe { gtk_widget_set_margin_start(widget, value) };
-        }
-        if let Some(value) = props.get("margin-end").and_then(|v| parse_i32_text(v)) {
-            unsafe { gtk_widget_set_margin_end(widget, value) };
-        }
-        if let Some(value) = props.get("margin-top").and_then(|v| parse_i32_text(v)) {
-            unsafe { gtk_widget_set_margin_top(widget, value) };
-        }
-        if let Some(value) = props.get("margin-bottom").and_then(|v| parse_i32_text(v)) {
-            unsafe { gtk_widget_set_margin_bottom(widget, value) };
-        }
-        if let Some(value) = props.get("hexpand").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_hexpand(widget, bool_to_c(value)) };
-        }
-        if let Some(value) = props.get("vexpand").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_vexpand(widget, bool_to_c(value)) };
-        }
-        if let Some(value) = props.get("halign").and_then(|v| parse_align_text(v)) {
-            unsafe { gtk_widget_set_halign(widget, value) };
-        }
-        if let Some(value) = props.get("valign").and_then(|v| parse_align_text(v)) {
-            unsafe { gtk_widget_set_valign(widget, value) };
-        }
-        if let Some(value) = props.get("width-request").and_then(|v| parse_i32_text(v)) {
-            unsafe { gtk_widget_set_size_request(widget, value, -1) };
-        }
-        if let Some(value) = props.get("height-request").and_then(|v| parse_i32_text(v)) {
-            unsafe { gtk_widget_set_size_request(widget, -1, value) };
-        }
-        if let Some(value) = props.get("tooltip-text") {
-            let text_c = c_text(value, "gtk4.buildFromNode invalid tooltip-text")?;
-            unsafe { gtk_widget_set_tooltip_text(widget, text_c.as_ptr()) };
-        }
-        if let Some(value) = props.get("opacity").and_then(|v| parse_f64_text(v)) {
-            unsafe { gtk_widget_set_opacity(widget, value) };
-        }
-        if let Some(value) = props.get("visible").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_visible(widget, bool_to_c(value)) };
-        }
-        if let Some(value) = props.get("sensitive").and_then(|v| parse_bool_text(v)) {
-            unsafe { gtk_widget_set_sensitive(widget, bool_to_c(value)) };
-        }
-        if let Some(value) = props.get("css-class") {
-            for class_name in value.split_whitespace() {
-                let class_c = c_text(class_name, "gtk4.buildFromNode invalid css class")?;
-                unsafe { gtk_widget_add_css_class(widget, class_c.as_ptr()) };
+        if instance_is_widget(widget) {
+            if let Some(value) = props.get("margin-start").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_widget_set_margin_start(widget, value) };
+            }
+            if let Some(value) = props.get("margin-end").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_widget_set_margin_end(widget, value) };
+            }
+            if let Some(value) = props.get("margin-top").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_widget_set_margin_top(widget, value) };
+            }
+            if let Some(value) = props.get("margin-bottom").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_widget_set_margin_bottom(widget, value) };
+            }
+            if let Some(value) = props.get("hexpand").and_then(|v| parse_bool_text(v)) {
+                unsafe { gtk_widget_set_hexpand(widget, bool_to_c(value)) };
+            }
+            if let Some(value) = props.get("vexpand").and_then(|v| parse_bool_text(v)) {
+                unsafe { gtk_widget_set_vexpand(widget, bool_to_c(value)) };
+            }
+            if let Some(value) = props.get("halign").and_then(|v| parse_align_text(v)) {
+                unsafe { gtk_widget_set_halign(widget, value) };
+            }
+            if let Some(value) = props.get("valign").and_then(|v| parse_align_text(v)) {
+                unsafe { gtk_widget_set_valign(widget, value) };
+            }
+            if let Some(value) = props.get("width-request").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_widget_set_size_request(widget, value, -1) };
+            }
+            if let Some(value) = props.get("height-request").and_then(|v| parse_i32_text(v)) {
+                unsafe { gtk_widget_set_size_request(widget, -1, value) };
+            }
+            if let Some(value) = props.get("tooltip-text") {
+                let text_c = c_text(value, "gtk4.buildFromNode invalid tooltip-text")?;
+                unsafe { gtk_widget_set_tooltip_text(widget, text_c.as_ptr()) };
+            }
+            if let Some(value) = props.get("opacity").and_then(|v| parse_f64_text(v)) {
+                unsafe { gtk_widget_set_opacity(widget, value) };
+            }
+            if let Some(value) = props.get("visible").and_then(|v| parse_bool_text(v)) {
+                unsafe { gtk_widget_set_visible(widget, bool_to_c(value)) };
+            }
+            if let Some(value) = props.get("sensitive").and_then(|v| parse_bool_text(v)) {
+                unsafe { gtk_widget_set_sensitive(widget, bool_to_c(value)) };
+            }
+            if let Some(value) = props.get("css-class") {
+                for class_name in value.split_whitespace() {
+                    let class_c = c_text(class_name, "gtk4.buildFromNode invalid css class")?;
+                    unsafe { gtk_widget_add_css_class(widget, class_c.as_ptr()) };
+                }
             }
         }
 
@@ -7226,6 +7567,7 @@ mod linux_impl {
             }
             _ => {}
         }
+        apply_generic_indexed_properties(widget, class_name, props, state)?;
         Ok(())
     }
 
@@ -7762,6 +8104,24 @@ mod linux_impl {
                      window tree instead of buildFromNode."
                 )));
             }
+            _ if root_window_app.is_some() && class_is_window_subclass(class_name) => (
+                create_root_window_widget(root_window_app.unwrap(), class_name)?,
+                CreatedWidgetKind::Window,
+            ),
+            _ if class_is_window_subclass(class_name) => {
+                return Err(Gtk4Error::new(format!(
+                    "{class_name} is a top-level window type. Use mountAppWindow or runGtkApp to mount a root \
+                     window tree instead of buildFromNode."
+                )));
+            }
+            _ if runtime_widget_info(class_name).is_some()
+                && !should_block_generic_runtime_creation(class_name) =>
+            {
+                (
+                    create_generic_gtk_object(class_name)?,
+                    CreatedWidgetKind::Other,
+                )
+            }
             "GtkListView" | "GtkColumnView" | "GtkGridView" => {
                 return Err(Gtk4Error::new(format!(
                     "{class_name} is a concrete GTK list widget, but AIVI does not yet expose it \
@@ -8133,27 +8493,29 @@ mod linux_impl {
         let binding_id = node_attr(attrs, "aivi-binding-id").map(str::to_string);
         if let Some(object_id) = node_id.as_deref() {
             id_map.insert(object_id.to_string(), id);
-            if let Ok(name_c) = CString::new(object_id.as_bytes()) {
-                unsafe {
-                    // Set the GTK CSS widget name (used for styling/lookup)
-                    gtk_widget_set_name(raw, name_c.as_ptr());
-                    // For GtkBox (which defaults to GTK_ACCESSIBLE_ROLE_GENERIC),
-                    // upgrade to GROUP (18) so the accessible name is exposed by AT-SPI.
-                    // GTK_ACCESSIBLE_ROLE_GROUP = 18
-                    if matches!(class_name, "GtkBox") {
-                        if let Ok(role_prop) = CString::new("accessible-role") {
-                            gobject_set_bool(raw, &role_prop, 18);
+            if instance_is_widget(raw) {
+                if let Ok(name_c) = CString::new(object_id.as_bytes()) {
+                    unsafe {
+                        // Set the GTK CSS widget name (used for styling/lookup)
+                        gtk_widget_set_name(raw, name_c.as_ptr());
+                        // For GtkBox (which defaults to GTK_ACCESSIBLE_ROLE_GENERIC),
+                        // upgrade to GROUP (18) so the accessible name is exposed by AT-SPI.
+                        // GTK_ACCESSIBLE_ROLE_GROUP = 18
+                        if matches!(class_name, "GtkBox") {
+                            if let Ok(role_prop) = CString::new("accessible-role") {
+                                gobject_set_bool(raw, &role_prop, 18);
+                            }
                         }
+                        // Set the AT-SPI accessible label so AT-SPI clients can find
+                        // widgets by their id. GTK_ACCESSIBLE_PROPERTY_LABEL = 4,
+                        // terminated by -1.
+                        gtk_accessible_update_property(
+                            raw,
+                            4i32,            // GTK_ACCESSIBLE_PROPERTY_LABEL
+                            name_c.as_ptr(), // label value (const char*)
+                            -1i32,           // sentinel
+                        );
                     }
-                    // Set the AT-SPI accessible label so AT-SPI clients can find
-                    // widgets by their id. GTK_ACCESSIBLE_PROPERTY_LABEL = 4,
-                    // terminated by -1.
-                    gtk_accessible_update_property(
-                        raw,
-                        4i32,            // GTK_ACCESSIBLE_PROPERTY_LABEL
-                        name_c.as_ptr(), // label value (const char*)
-                        -1i32,           // sentinel
-                    );
                 }
             }
         }
@@ -8266,6 +8628,42 @@ mod linux_impl {
                 None,
             )?;
             let child_raw = widget_ptr(state, child_id, operation)?;
+            if let Some(property_name) = child.property_name.as_deref() {
+                if instance_is_widget(child_raw) {
+                    validate_parenting_state(
+                        state,
+                        operation,
+                        WidgetAttachmentInfo {
+                            id,
+                            class_name,
+                            kind,
+                            node_id: node_id.as_deref(),
+                            source_context: source_context.as_ref(),
+                        },
+                        raw,
+                        WidgetAttachmentInfo {
+                            id: child_id,
+                            class_name: &child_live.class_name,
+                            kind: child_live.kind,
+                            node_id: child_live.node_id.as_deref(),
+                            source_context: child_live.source_context.as_ref(),
+                        },
+                        child_raw,
+                    )?;
+                }
+                let prop_c = CString::new(property_name).map_err(|_| {
+                    Gtk4Error::new(format!(
+                        "gtk4.{operation} invalid object property name `{property_name}`"
+                    ))
+                })?;
+                unsafe { gobject_set_ptr(raw, &prop_c, child_raw) };
+                live_children.push(LiveChild {
+                    child_type: child.child_type.clone(),
+                    property_name: child.property_name.clone(),
+                    node: child_live,
+                });
+                continue;
+            }
             if child.child_type.as_deref() == Some("controller") {
                 unsafe { gtk_widget_add_controller(raw, child_raw) };
                 if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
@@ -8273,6 +8671,7 @@ mod linux_impl {
                 }
                 live_children.push(LiveChild {
                     child_type: child.child_type.clone(),
+                    property_name: child.property_name.clone(),
                     node: child_live,
                 });
                 continue;
@@ -8402,7 +8801,9 @@ mod linux_impl {
                 CreatedWidgetKind::ToolbarView => {
                     attach_toolbar_view_child(raw, child_raw, child.child_type.as_deref())
                 }
-                CreatedWidgetKind::Other => {}
+                CreatedWidgetKind::Other => {
+                    attach_generic_child(class_name, raw, child_raw, child.child_type.as_deref())?
+                }
                 CreatedWidgetKind::PreferencesDialog => {
                     call_adw_fn_pp("adw_preferences_dialog_add", raw, child_raw);
                 }
@@ -8429,6 +8830,7 @@ mod linux_impl {
             }
             live_children.push(LiveChild {
                 child_type: child.child_type.clone(),
+                property_name: child.property_name.clone(),
                 node: child_live,
             });
         }
@@ -8574,12 +8976,26 @@ mod linux_impl {
         parent_class_name: &str,
         parent_kind: CreatedWidgetKind,
         child_id: i64,
-        child_type: Option<&str>,
+        placement: ChildPlacement<'_>,
         child_live: Option<&LiveNode>,
     ) -> Result<(), Gtk4Error> {
         let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
         let child_raw = widget_ptr(state, child_id, "reconcile")?;
-        if child_type == Some("controller") {
+        if let Some(property_name) = placement.property_name {
+            let prop_c = CString::new(property_name).map_err(|_| {
+                Gtk4Error::new(format!(
+                    "gtk4.reconcile invalid object property name `{property_name}`"
+                ))
+            })?;
+            unsafe { gobject_set_ptr(parent_raw, &prop_c, std::ptr::null_mut()) };
+            if let Some(live) = child_live {
+                let live_clone = live.clone();
+                cleanup_widget_state(state, &live_clone);
+            }
+            let _ = child_raw;
+            return Ok(());
+        }
+        if placement.child_type == Some("controller") {
             unsafe { gtk_widget_remove_controller(parent_raw, child_raw) };
             if let Some(live) = child_live {
                 let live_clone = live.clone();
@@ -8589,7 +9005,7 @@ mod linux_impl {
         }
         match parent_kind {
             CreatedWidgetKind::Box => unsafe { gtk_box_remove(parent_raw, child_raw) },
-            CreatedWidgetKind::Window => match child_type {
+            CreatedWidgetKind::Window => match placement.child_type {
                 Some("titlebar") => unsafe {
                     gtk_window_set_titlebar(parent_raw, std::ptr::null_mut())
                 },
@@ -8598,14 +9014,14 @@ mod linux_impl {
             CreatedWidgetKind::ListBox => unsafe { gtk_list_box_remove(parent_raw, child_raw) },
             CreatedWidgetKind::FlowBox => unsafe { gtk_flow_box_remove(parent_raw, child_raw) },
             CreatedWidgetKind::Overlay => {
-                if child_type == Some("overlay") {
+                if placement.child_type == Some("overlay") {
                     unsafe { gtk_overlay_remove_overlay(parent_raw, child_raw) };
                 } else {
                     unsafe { gtk_overlay_set_child(parent_raw, std::ptr::null_mut()) };
                 }
             }
             CreatedWidgetKind::ToolbarView => {
-                remove_toolbar_view_child(parent_raw, child_raw, child_type)
+                remove_toolbar_view_child(parent_raw, child_raw, placement.child_type)
             }
             _ => unsafe { gtk_widget_unparent(child_raw) },
         }
@@ -8623,6 +9039,25 @@ mod linux_impl {
         child: WidgetAttachmentTarget<'_>,
         placement: ChildPlacement<'_>,
     ) -> Result<(), Gtk4Error> {
+        if let Some(property_name) = placement.property_name {
+            if instance_is_widget(child.raw) {
+                validate_parenting_state(
+                    state,
+                    "reconcileNode",
+                    parent.info,
+                    parent.raw,
+                    child.info,
+                    child.raw,
+                )?;
+            }
+            let prop_c = CString::new(property_name).map_err(|_| {
+                Gtk4Error::new(format!(
+                    "gtk4.reconcile invalid object property name `{property_name}`"
+                ))
+            })?;
+            unsafe { gobject_set_ptr(parent.raw, &prop_c, child.raw) };
+            return Ok(());
+        }
         if placement.child_type == Some("controller") {
             unsafe { gtk_widget_add_controller(parent.raw, child.raw) };
             return Ok(());
@@ -8736,7 +9171,12 @@ mod linux_impl {
                 Some("end") => unsafe { gtk_center_box_set_end_widget(parent.raw, child.raw) },
                 _ => unsafe { gtk_center_box_set_start_widget(parent.raw, child.raw) },
             },
-            CreatedWidgetKind::Other => {}
+            CreatedWidgetKind::Other => attach_generic_child(
+                parent.info.class_name,
+                parent.raw,
+                child.raw,
+                placement.child_type,
+            )?,
         }
         Ok(())
     }
@@ -8854,7 +9294,10 @@ mod linux_impl {
         let mut unkeyed_old = std::collections::VecDeque::new();
 
         for child in old_children {
-            old_placements.insert(child.node.widget_id, child.child_type.clone());
+            old_placements.insert(
+                child.node.widget_id,
+                (child.child_type.clone(), child.property_name.clone()),
+            );
             if let Some(key) = child.node.key.clone() {
                 keyed_old.entry(key).or_default().push_back(child);
             } else {
@@ -8877,14 +9320,16 @@ mod linux_impl {
                 let old_widget_id = old_child.node.widget_id;
                 let patched = reconcile_node(state, &mut old_child.node, new_spec.node, id_map)?;
                 old_child.child_type = new_spec.child_type.clone();
+                old_child.property_name = new_spec.property_name.clone();
                 if patched {
                     reused_ids.insert(old_widget_id);
                     next_children.push(old_child);
                 } else {
-                    let old_ct = old_placements
-                        .get(&old_widget_id)
-                        .cloned()
-                        .unwrap_or(old_child.child_type.clone());
+                    let (old_ct, old_prop) =
+                        old_placements.get(&old_widget_id).cloned().unwrap_or((
+                            old_child.child_type.clone(),
+                            old_child.property_name.clone(),
+                        ));
                     let old_live = old_child.node.clone();
                     remove_child_from_parent(
                         state,
@@ -8892,7 +9337,11 @@ mod linux_impl {
                         &parent.class_name,
                         parent_kind,
                         old_widget_id,
-                        old_ct.as_deref(),
+                        ChildPlacement {
+                            child_type: old_ct.as_deref(),
+                            property_name: old_prop.as_deref(),
+                            overlay_index: 0,
+                        },
                         Some(&old_live),
                     )?;
                     let mut binding_map = HashMap::new();
@@ -8906,6 +9355,7 @@ mod linux_impl {
                     )?;
                     next_children.push(LiveChild {
                         child_type: new_spec.child_type.clone(),
+                        property_name: new_spec.property_name.clone(),
                         node: new_live,
                     });
                     let _ = new_id;
@@ -8922,6 +9372,7 @@ mod linux_impl {
                 )?;
                 next_children.push(LiveChild {
                     child_type: new_spec.child_type.clone(),
+                    property_name: new_spec.property_name.clone(),
                     node: new_live,
                 });
             }
@@ -8934,6 +9385,7 @@ mod linux_impl {
         {
             let old_wid = child.node.widget_id;
             let old_ct = child.child_type.clone();
+            let old_prop = child.property_name.clone();
             let old_live = child.node.clone();
             let _ = remove_child_from_parent(
                 state,
@@ -8941,7 +9393,11 @@ mod linux_impl {
                 &parent.class_name,
                 parent_kind,
                 old_wid,
-                old_ct.as_deref(),
+                ChildPlacement {
+                    child_type: old_ct.as_deref(),
+                    property_name: old_prop.as_deref(),
+                    overlay_index: 0,
+                },
                 Some(&old_live),
             );
         }
@@ -8950,7 +9406,7 @@ mod linux_impl {
             if reused_ids.contains(&child.node.widget_id) {
                 let child_raw = widget_ptr(state, child.node.widget_id, "reconcile")?;
                 unsafe { g_object_ref(child_raw) };
-                let old_ct = old_placements
+                let (old_ct, old_prop) = old_placements
                     .get(&child.node.widget_id)
                     .cloned()
                     .unwrap_or_default();
@@ -8960,7 +9416,11 @@ mod linux_impl {
                     &parent.class_name,
                     parent_kind,
                     child.node.widget_id,
-                    old_ct.as_deref(),
+                    ChildPlacement {
+                        child_type: old_ct.as_deref(),
+                        property_name: old_prop.as_deref(),
+                        overlay_index: 0,
+                    },
                     None,
                 )?;
             }
@@ -8993,6 +9453,7 @@ mod linux_impl {
                 },
                 ChildPlacement {
                     child_type: child.child_type.as_deref(),
+                    property_name: child.property_name.as_deref(),
                     overlay_index: i,
                 },
             )?;
@@ -9042,7 +9503,11 @@ mod linux_impl {
                     &parent.class_name,
                     parent_kind,
                     old_wid,
-                    old_ct.as_deref(),
+                    ChildPlacement {
+                        child_type: old_ct.as_deref(),
+                        property_name: parent.children[i].property_name.as_deref(),
+                        overlay_index: i,
+                    },
                     Some(&old_live),
                 )?;
                 let mut binding_map = HashMap::new();
@@ -9086,6 +9551,7 @@ mod linux_impl {
                             },
                             ChildPlacement {
                                 child_type: new_children[i].child_type.as_deref(),
+                                property_name: new_children[i].property_name.as_deref(),
                                 overlay_index: i,
                             },
                         )?;
@@ -9115,16 +9581,19 @@ mod linux_impl {
                         },
                         ChildPlacement {
                             child_type: new_children[i].child_type.as_deref(),
+                            property_name: new_children[i].property_name.as_deref(),
                             overlay_index: i,
                         },
                     )?;
                 }
                 parent.children[i] = LiveChild {
                     child_type: new_children[i].child_type.clone(),
+                    property_name: new_children[i].property_name.clone(),
                     node: new_live,
                 };
             } else {
                 parent.children[i].child_type = new_children[i].child_type.clone();
+                parent.children[i].property_name = new_children[i].property_name.clone();
             }
         }
 
@@ -9139,7 +9608,11 @@ mod linux_impl {
                 &parent.class_name,
                 parent_kind,
                 old_wid,
-                old_ct.as_deref(),
+                ChildPlacement {
+                    child_type: old_ct.as_deref(),
+                    property_name: parent.children[i].property_name.as_deref(),
+                    overlay_index: i,
+                },
                 Some(&old_live),
             );
         }
@@ -9182,11 +9655,13 @@ mod linux_impl {
                 },
                 ChildPlacement {
                     child_type: new_spec.child_type.as_deref(),
+                    property_name: new_spec.property_name.as_deref(),
                     overlay_index: i,
                 },
             )?;
             parent.children.push(LiveChild {
                 child_type: new_spec.child_type.clone(),
+                property_name: new_spec.property_name.clone(),
                 node: new_live,
             });
         }
@@ -9363,9 +9838,15 @@ mod linux_impl {
                 unsafe { gobject_set_ptr(window, &application_c, app) };
                 window
             }
+            _ if class_is_window_subclass(class_name) => {
+                let window = create_generic_gtk_object(class_name)?;
+                let application_c = CString::new("application").unwrap();
+                unsafe { gobject_set_ptr(window, &application_c, app) };
+                window
+            }
             _ => {
                 return Err(Gtk4Error::new(format!(
-                    "gtk4.mountAppWindow root must be GtkWindow, GtkApplicationWindow, AdwWindow, or AdwApplicationWindow; got {class_name}"
+                    "gtk4.mountAppWindow root must be a GtkWindow/libadwaita window subclass; got {class_name}"
                 )));
             }
         };
@@ -9385,6 +9866,58 @@ mod linux_impl {
             "AdwWindow" => call_adw_fn_pp("adw_window_set_content", window, child),
             _ => unsafe { gtk_window_set_child(window, child) },
         }
+    }
+
+    fn attach_generic_child(
+        parent_class_name: &str,
+        parent: *mut c_void,
+        child: *mut c_void,
+        child_type: Option<&str>,
+    ) -> Result<(), Gtk4Error> {
+        let mut candidates = Vec::new();
+        if let Some(child_type) = child_type {
+            candidates.push(child_type);
+        }
+        for candidate in [
+            "child",
+            "content",
+            "widget",
+            "title-widget",
+            "start-widget",
+            "end-widget",
+            "center-widget",
+            "titlebar",
+            "sidebar",
+            "menu-model",
+            "model",
+            "factory",
+            "adjustment",
+            "popover",
+        ] {
+            if !candidates.contains(&candidate) {
+                candidates.push(candidate);
+            }
+        }
+        for candidate in candidates {
+            let Some(prop_info) = runtime_property_info(parent_class_name, candidate) else {
+                continue;
+            };
+            if !prop_info.writable || prop_info.construct_only {
+                continue;
+            }
+            let prop_c = CString::new(candidate).map_err(|_| {
+                Gtk4Error::new(format!(
+                    "gtk4.buildFromNode invalid child attachment property `{candidate}`"
+                ))
+            })?;
+            unsafe { gobject_set_ptr(parent, &prop_c, child) };
+            return Ok(());
+        }
+        Err(Gtk4Error::new(format!(
+            "gtk4.buildFromNode could not attach a child to {parent_class_name}. Use an explicit \
+             `<property name=\"...\"> <object .../> </property>` wrapper for object-valued GTK \
+             properties on this type."
+        )))
     }
 
     fn attach_toolbar_view_child(
