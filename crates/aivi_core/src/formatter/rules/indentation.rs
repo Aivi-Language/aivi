@@ -886,7 +886,8 @@
             && find_top_level_token(&state.tokens, ":", first_idx).is_none();
 
         // Continuation blocks:
-        // - Multi-line `| ...` blocks (multi-clause functions and `match` expressions).
+        // - Multi-line `| ...` blocks (multi-clause functions, `match` expressions, and
+        //   matcher transformers on pipe / signal-pipe RHSs).
         //   These blocks can contain continuation lines (e.g. multi-line patterns/bodies), so we
         //   keep the block active until we hit a same-indent non-`|` line (or a blank line).
         // - Multi-line `|> ...` pipeline blocks (common after `=`, even when RHS starts on same line).
@@ -895,8 +896,11 @@
         let starts_with_pipeop = state.tokens[first_idx].text == "|>";
         let is_arm_line =
             starts_with_pipe && find_top_level_token(&state.tokens, "=>", first_idx + 1).is_some();
-        let should_start_pipe_block =
-            starts_with_pipe && matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?") | Some("match"));
+        let should_start_pipe_block = starts_with_pipe
+            && matches!(
+                prev_non_blank_last_token.as_deref(),
+                Some("=") | Some("?") | Some("match") | Some("|>") | Some("->>")
+            );
         let should_start_pipeop_block = starts_with_pipeop
             && (pipeop_seed_match
                 || matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?")));

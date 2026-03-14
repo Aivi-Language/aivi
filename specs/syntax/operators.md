@@ -77,12 +77,15 @@ profile <<- { saveCount: _ + 1 }
 
 ### Signal derivation (`->>`)
 
-`signal ->> fn` is shorthand for `derive signal (value => value |> fn)`, so the right-hand side still uses the normal pipe rules over the current signal value. The left side must be a `Signal A`.
+`signal ->> fn` is shorthand for `derive signal (value => value |> fn)`, so the right-hand side still uses the normal pipe rules over the current signal value. That means the RHS can be an expression, lambda sugar, or a bare matcher block. The left side must be a `Signal A`.
 
 ```aivi
 count = signal 1
 countText = count ->> (_ + 1) ->> toText
 label = count ->> (n => "Count {n}")
+aiSettingsOpen = shellState ->>
+  | Some AiSettingsSection => True
+  | _                      => False
 ```
 
 ## 11.3 Lists: literals, range items, and spread

@@ -104,6 +104,29 @@ fn test_fmt_pipe_blocks_indent_after_equals_and_question() {
 }
 
 #[test]
+fn test_fmt_signal_matcher_pipe_blocks_indent_after_signal_derive() {
+    let input = "aiSettingsOpen = shellState ->>\n| Some AiSettingsSection => True\n| _                      => False\n";
+    let expected =
+        "aiSettingsOpen = shellState ->>\n  | Some AiSettingsSection => True\n  | _                      => False\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_signal_matcher_pipe_block_preserves_block_rhs_indentation_style() {
+    let input = r#"
+main = do Effect {
+  aiSettingsOpen = shellState ->>
+    | Some AiSettingsSection => True
+    | _                      => False
+
+  assertEq aiSettingsOpen False
+}
+"#;
+    let expected = "main = do Effect {\n  aiSettingsOpen = shellState ->>\n    | Some AiSettingsSection => True\n    | _                      => False\n\n    assertEq aiSettingsOpen False\n}\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
 fn test_fmt_no_space_before_index_bracket() {
     // Adjacent `)[` (no space in source) → index access: space stays stripped.
     let input = "userTable = (database.table \"users\")[a]";

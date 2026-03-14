@@ -287,12 +287,19 @@ use aivi
 use aivi.prelude (toText)
 use aivi.reactive
 
+ShellState = AiSettingsSection | SearchSection
+
 count = signal 0
 state = signal { count: 0, enabled: False }
+shellState = signal (Some SearchSection)
 
 countText = count ->> (_ + 1) ->> toText
 stateCount = state ->> (s => s.count + 1)
 stateCountViaPattern = state ->> { count } => count + 1
+aiSettingsOpen : Signal Bool
+aiSettingsOpen = shellState ->>
+  | Some AiSettingsSection => True
+  | _                      => False
 countSet = count <<- 5
 countUpdate = count <<- (_ + 1)
 statePatch = state <<- { count: _ + 1, enabled: True }

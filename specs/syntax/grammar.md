@@ -224,6 +224,7 @@ OrArm          := Pattern [ "when" Expr ] "=>" Expr
 
 PipeExpr       := CoalesceExpr { ("|>" | "->>") PipeArg }
 PipeArg        := LambdaArgs "=>" Expr
+               | MatchArms
                | CoalesceExpr
 (* `|>` is the regular pipe. `->>` is the signal-derive pipe; the LHS must be
    a Signal A and the result is another Signal. Both share precedence 2. *)
@@ -446,7 +447,7 @@ RecordPatKey   := lowerIdent { "." lowerIdent }
 
 Good syntax errors are part of the language experience. These are especially useful cases to diagnose clearly:
 
-- **arms without a `match`**: `| p => e` is valid only after `match` or directly after `=` in the multi-clause unary form
+- **arms without a `match`**: `| p => e` is valid only after `match`, directly after `=` in the multi-clause unary form, or as the right-hand side of `|>` / `->>`
 - **multi-clause signature requirement**: when a function uses multiple pattern clauses, require an explicit type signature for that name
 - **`_` placeholder misuse**: `_ + 1` is legal only where a unary function is expected; otherwise suggest `x => x + 1`
 - **deep keys in record literals**: if `a.b: 1` appears where an update was intended, suggest `<|` / `patch`; in a record literal it builds nested data rather than patching an existing value

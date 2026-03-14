@@ -313,6 +313,7 @@ mod linux_impl {
         fn gtk_stack_set_transition_duration(stack: *mut c_void, duration: c_uint);
 
         fn gtk_menu_button_new() -> *mut c_void;
+        fn gtk_menu_button_set_menu_model(button: *mut c_void, menu_model: *mut c_void);
 
         fn gtk_revealer_new() -> *mut c_void;
         fn gtk_revealer_set_child(revealer: *mut c_void, child: *mut c_void);
@@ -493,6 +494,12 @@ mod linux_impl {
         ) -> c_int;
         fn g_application_hold(application: *mut c_void);
         fn g_application_release(application: *mut c_void);
+        fn g_simple_action_new(name: *const c_char, parameter_type: *mut c_void) -> *mut c_void;
+        fn g_simple_action_set_enabled(action: *mut c_void, enabled: c_int);
+        fn g_action_map_add_action(action_map: *mut c_void, action: *mut c_void);
+        fn g_action_activate(action: *mut c_void, parameter: *mut c_void);
+        fn g_menu_new() -> *mut c_void;
+        fn g_menu_append(menu: *mut c_void, label: *const c_char, detailed_action: *const c_char);
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
         fn g_resources_register(resource: *mut c_void);
     }
@@ -717,6 +724,8 @@ mod linux_impl {
     struct RealGtkState {
         next_id: i64,
         apps: HashMap<i64, *mut c_void>,
+        actions: HashMap<i64, ActionState>,
+        menu_models: HashMap<i64, *mut c_void>,
         windows: HashMap<i64, *mut c_void>,
         widgets: HashMap<i64, *mut c_void>,
         retained_widgets: HashMap<i64, *mut c_void>,
@@ -752,6 +761,10 @@ mod linux_impl {
         layout_snapshots: HashMap<String, UiDebugJsonSnapshot>,
         ui_debug: Option<UiDebugServer>,
         main_loop_tick_registered: bool,
+    }
+
+    struct ActionState {
+        raw: *mut c_void,
     }
 
     #[derive(Clone, Debug)]
@@ -828,6 +841,10 @@ mod linux_impl {
         signal_name: String,
         handler: String,
         payload_kind: SignalPayloadKind,
+    }
+
+    struct ActionActivateCallbackData {
+        action_name: String,
     }
 
     struct WindowKeyCallbackData {
@@ -1029,6 +1046,18 @@ mod linux_impl {
             widget,
             prop.as_ptr(),
             &mut val as *mut c_uint,
+            std::ptr::null::<c_char>(),
+        );
+        val
+    }
+
+    /// Get a GObject pointer property.
+    unsafe fn gobject_get_ptr(widget: *mut c_void, prop: &CStr) -> *mut c_void {
+        let mut val: *mut c_void = null_mut();
+        g_object_get(
+            widget,
+            prop.as_ptr(),
+            &mut val as *mut *mut c_void,
             std::ptr::null::<c_char>(),
         );
         val
@@ -1433,6 +1462,7 @@ mod linux_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::ffi::CString;
         use std::fs;
         use std::path::PathBuf;
         use std::sync::{Arc, Mutex, OnceLock};
@@ -1628,6 +1658,62 @@ mod linux_impl {
             assert_eq!(event.signal, "mailfox.tray.action");
             assert_eq!(event.handler, "quit");
             assert_eq!(event.payload, "");
+        }
+
+        #[test]
+        fn simple_action_activation_reaches_signal_stream() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+
+            let receiver = signal_stream().expect("signal stream");
+            let app_id = app_new("integration-tests.menu-actions")
+                .expect("create GTK application for menu actions");
+            let action_id = action_new("settings-ai").expect("create settings action");
+            app_add_action(app_id, action_id).expect("attach settings action to app");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let action = state
+                    .actions
+                    .get(&action_id)
+                    .expect("action should be stored after creation");
+                unsafe { g_action_activate(action.raw, null_mut()) };
+            });
+
+            let event = receiver
+                .recv_timeout(Duration::from_millis(100))
+                .expect("simple action activation should reach signal stream");
+            assert_eq!(event.widget_id, 0);
+            assert_eq!(event.widget_name, "");
+            assert_eq!(event.signal, "action");
+            assert_eq!(event.handler, "settings-ai");
+            assert_eq!(event.payload, "");
+        }
+
+        #[test]
+        fn menu_button_set_menu_model_attaches_model_property() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+
+            let menu_id = menu_model_new().expect("create menu model");
+            menu_model_append_item(menu_id, "AI settings", "app.settings-ai")
+                .expect("append menu item");
+            let button_id = menu_button_new("").expect("create menu button");
+            menu_button_set_menu_model(button_id, menu_id).expect("attach menu model");
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let button = widget_ptr(&state, button_id, "menu_button_property_test")
+                    .expect("menu button widget should exist");
+                let menu = state
+                    .menu_models
+                    .get(&menu_id)
+                    .copied()
+                    .expect("menu model should be stored after creation");
+                let prop = CString::new("menu-model").expect("menu-model property CString");
+                let attached = unsafe { gobject_get_ptr(button, &prop) };
+                assert_eq!(attached, menu);
+            });
         }
 
         #[test]
@@ -2973,6 +3059,28 @@ mod linux_impl {
             .retain(|sender| sender.send(typed_event.clone()).is_ok());
         state.signal_events.push_back(event);
         Ok(())
+    }
+
+    fn action_ptr(
+        state: &RealGtkState,
+        action_id: i64,
+        fn_name: &str,
+    ) -> Result<*mut c_void, Gtk4Error> {
+        state
+            .actions
+            .get(&action_id)
+            .map(|action| action.raw)
+            .ok_or_else(|| Gtk4Error::new(format!("gtk4.{fn_name} unknown action id {action_id}")))
+    }
+
+    fn menu_model_ptr(
+        state: &RealGtkState,
+        model_id: i64,
+        fn_name: &str,
+    ) -> Result<*mut c_void, Gtk4Error> {
+        state.menu_models.get(&model_id).copied().ok_or_else(|| {
+            Gtk4Error::new(format!("gtk4.{fn_name} unknown menu model id {model_id}"))
+        })
     }
 
     fn update_live_prop(state: &mut RealGtkState, widget_id: i64, key: &str, value: String) {
@@ -5653,6 +5761,21 @@ mod linux_impl {
         }
     }
 
+    unsafe extern "C" fn gtk_action_activate_callback(
+        _action: *mut c_void,
+        _parameter: *mut c_void,
+        data: *mut c_void,
+    ) {
+        if data.is_null() {
+            return;
+        }
+        let callback = unsafe { &*(data as *const ActionActivateCallbackData) };
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let _ = enqueue_signal_event(&mut state, 0, "action", &callback.action_name, "");
+        });
+    }
+
     /// Callback for GObject `notify::` property-change signals.
     /// These have a 3-argument C signature: (instance, pspec, user_data).
     unsafe extern "C" fn gtk_notify_callback(
@@ -6783,9 +6906,8 @@ mod linux_impl {
                 set_obj_str(widget, props, "icon-name", "GtkMenuButton")?;
                 if let Some(id_str) = props.get("menu-model") {
                     if let Ok(id) = id_str.parse::<i64>() {
-                        if let Some(&menu_raw) = state.widgets.get(&id) {
-                            let prop_c = CString::new("menu-model").unwrap();
-                            unsafe { gobject_set_ptr(widget, &prop_c, menu_raw) };
+                        if let Some(&menu_raw) = state.menu_models.get(&id) {
+                            unsafe { gtk_menu_button_set_menu_model(widget, menu_raw) };
                         }
                     }
                 }
@@ -10167,18 +10289,54 @@ mod linux_impl {
         Ok(String::new())
     }
 
-    pub(super) fn action_new(_name: &str) -> Result<i64, Gtk4Error> {
+    pub(super) fn action_new(name: &str) -> Result<i64, Gtk4Error> {
+        let name_c = c_text(name, "gtk4.actionNew invalid action name")?;
+        let activate_signal = CString::new("activate")
+            .map_err(|_| Gtk4Error::new("gtk4.actionNew invalid activate signal name"))?;
         GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
+            let mut state = state.borrow_mut();
+            let raw = unsafe { g_simple_action_new(name_c.as_ptr(), null_mut()) };
+            if raw.is_null() {
+                return Err(Gtk4Error::new("gtk4.actionNew failed to create action"));
+            }
+            let callback_data = Box::new(ActionActivateCallbackData {
+                action_name: name.to_string(),
+            });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+            unsafe {
+                g_signal_connect_data(
+                    raw,
+                    activate_signal.as_ptr(),
+                    gtk_action_activate_callback as *const c_void,
+                    callback_ptr,
+                    null_mut(),
+                    0,
+                );
+            }
+            let id = state.alloc_id();
+            state.actions.insert(id, ActionState { raw });
+            Ok(id)
         })
     }
 
-    pub(super) fn action_set_enabled(_id: i64, _enabled: bool) -> Result<(), Gtk4Error> {
-        Ok(())
+    pub(super) fn action_set_enabled(id: i64, enabled: bool) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let action = action_ptr(&state, id, "actionSetEnabled")?;
+            unsafe { g_simple_action_set_enabled(action, bool_to_c(enabled)) };
+            Ok(())
+        })
     }
-    pub(super) fn app_add_action(_app_id: i64, _action_id: i64) -> Result<(), Gtk4Error> {
-        Ok(())
+    pub(super) fn app_add_action(app_id: i64, action_id: i64) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let app = state.apps.get(&app_id).copied().ok_or_else(|| {
+                Gtk4Error::new(format!("gtk4.appAddAction unknown app id {app_id}"))
+            })?;
+            let action = action_ptr(&state, action_id, "appAddAction")?;
+            unsafe { g_action_map_add_action(app, action) };
+            Ok(())
+        })
     }
 
     pub(super) fn shortcut_new(_accel: &str, _action: &str) -> Result<i64, Gtk4Error> {
@@ -10237,34 +10395,58 @@ mod linux_impl {
 
     pub(super) fn menu_model_new() -> Result<i64, Gtk4Error> {
         GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
+            let mut state = state.borrow_mut();
+            let raw = unsafe { g_menu_new() };
+            if raw.is_null() {
+                return Err(Gtk4Error::new(
+                    "gtk4.menuModelNew failed to create menu model",
+                ));
+            }
+            let id = state.alloc_id();
+            state.menu_models.insert(id, raw);
+            Ok(id)
         })
     }
     pub(super) fn menu_model_append_item(
-        _id: i64,
-        _label: &str,
-        _action: &str,
+        id: i64,
+        label: &str,
+        action: &str,
     ) -> Result<(), Gtk4Error> {
-        Ok(())
+        let label_c = c_text(label, "gtk4.menuModelAppendItem invalid label")?;
+        let action_c = c_text(action, "gtk4.menuModelAppendItem invalid action")?;
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let menu = menu_model_ptr(&state, id, "menuModelAppendItem")?;
+            unsafe { g_menu_append(menu, label_c.as_ptr(), action_c.as_ptr()) };
+            Ok(())
+        })
     }
-    pub(super) fn menu_button_new(_label: &str) -> Result<i64, Gtk4Error> {
-        let c = c_text("", "menu_button_new")?;
+    pub(super) fn menu_button_new(label: &str) -> Result<i64, Gtk4Error> {
+        let label_c = c_text(label, "gtk4.menuButtonNew invalid label")?;
         let id = GTK_STATE.with(|state| {
             let mut s = state.borrow_mut();
             let raw = unsafe { gtk_menu_button_new() };
+            if !label.is_empty() {
+                let prop_c = CString::new("label").unwrap();
+                unsafe { gobject_set_str(raw, &prop_c, &label_c) };
+            }
             let id = s.alloc_id();
             s.widgets.insert(id, raw);
-            let _ = c;
             id
         });
         Ok(id)
     }
     pub(super) fn menu_button_set_menu_model(
-        _button_id: i64,
-        _model_id: i64,
+        button_id: i64,
+        model_id: i64,
     ) -> Result<(), Gtk4Error> {
-        Ok(())
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let button = widget_ptr(&state, button_id, "menuButtonSetMenuModel")?;
+            let menu = menu_model_ptr(&state, model_id, "menuButtonSetMenuModel")?;
+            unsafe { gtk_menu_button_set_menu_model(button, menu) };
+            Ok(())
+        })
     }
 
     pub(super) fn dialog_new() -> Result<i64, Gtk4Error> {

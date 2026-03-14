@@ -995,6 +995,57 @@ f = { count: 1 } |> { count } => count + 1
 }
 
 #[test]
+fn parses_bare_matcher_block_on_signal_pipe_rhs() {
+    let src = r#"
+module Example
+
+ShellState = AiSettingsSection | SearchSection
+
+aiSettingsOpen = shellState ->>
+  | Some AiSettingsSection => True
+  | _                      => False
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "aiSettingsOpen" => Some(def),
+            _ => None,
+        })
+        .expect("aiSettingsOpen def");
+
+    let Expr::Binary { op, right, .. } = &def.expr else {
+        panic!("expected signal pipe expression");
+    };
+    assert_eq!(op, "->>");
+
+    let Expr::Match {
+        scrutinee, arms, ..
+    } = &**right
+    else {
+        panic!("expected scrutinee-less matcher block on signal pipe rhs, got: {right:?}");
+    };
+    assert!(
+        scrutinee.is_none(),
+        "matcher block should stay scrutinee-less"
+    );
+    assert_eq!(arms.len(), 2);
+    assert!(
+        matches!(&arms[0].pattern, Pattern::Constructor { name, .. } if name.name == "Some"),
+        "expected first matcher arm to be `Some ...`"
+    );
+}
+
+#[test]
 fn parses_bare_name_projection_addition_as_pipe_rhs_expression() {
     let src = r#"
 module Example
