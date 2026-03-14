@@ -419,7 +419,7 @@ GTK / reactive essentials:
 - `signal ->> ...` derives signals.
 - `set`, `update`, `<<-` mutate signal values declaratively.
 - `do Event { ... }` creates event handles.
-- GTK sigils support shorthand `Gtk*` / `Adw*` tags, signal sugar, `<each>`, `<show>`, component tags, function-call tags, and nested `<property name="..."> <Gtk.../> </property>` helper-object graphs for GTK object-valued properties such as `model` and `factory`.
+- GTK sigils support shorthand `Gtk*` / `Adw*` tags, signal sugar, `<each>`, `<show>`, component tags, function-call tags (including zero-arg `<Pane />` -> `pane Unit` sugar for simple self-closing helpers), and nested `<property name="..."> <Gtk.../> </property>` helper-object graphs for GTK object-valued properties such as `model` and `factory`.
 
 ## 17. Decorators
 

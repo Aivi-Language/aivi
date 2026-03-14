@@ -3,7 +3,7 @@ module integrationTests.syntax.sigils.gtkBuilder
 
 use aivi.ui.gtk4
 
-export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice, shorthandNode, shorthandSignalNode, keySignalNode, functionCallSugarNode
+export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice, shorthandNode, shorthandSignalNode, keySignalNode, functionCallSugarNode, zeroArgFunctionCallSugarNode
 
 node : GtkNode
 node =
@@ -122,10 +122,24 @@ navRailNode = activeSection =>
     <GtkLabel label={activeSection} />
   </gtk>
 
+accountSettingsPage : Unit -> GtkNode
+accountSettingsPage = _ =>
+  ~<gtk>
+    <GtkLabel label="Settings" />
+  </gtk>
+
 functionCallSugarNode : GtkNode
 functionCallSugarNode =
   ~<gtk>
     <GtkBox>
       <NavRailNode "settings" />
+    </GtkBox>
+  </gtk>
+
+zeroArgFunctionCallSugarNode : GtkNode
+zeroArgFunctionCallSugarNode =
+  ~<gtk>
+    <GtkBox>
+      <AccountSettingsPage />
     </GtkBox>
   </gtk>

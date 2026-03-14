@@ -333,7 +333,20 @@ impl Parser {
                             body_start_offset + tag_start,
                             body_start_offset + i,
                         );
-                        if positional_args.is_empty() {
+                        if positional_args.is_empty()
+                            && attrs.is_empty()
+                            && function_call_tag_expr(&tag, &sigil.span).is_some()
+                        {
+                            push_node(
+                                GtkNode::FunctionCall {
+                                    tag: tag.clone(),
+                                    args: Vec::new(),
+                                    span: tag_span,
+                                },
+                                &mut nodes,
+                                &mut stack,
+                            );
+                        } else if positional_args.is_empty() {
                             push_node(
                                 GtkNode::Element {
                                     tag: tag.clone(),
@@ -1156,14 +1169,18 @@ impl Parser {
                             span: span.clone(),
                         });
                     };
-                    if args.is_empty() {
-                        func
-                    } else {
-                        Expr::Call {
-                            func: Box::new(func),
-                            args,
+                    let args = if args.is_empty() {
+                        vec![Expr::Ident(SpannedName {
+                            name: "Unit".into(),
                             span: span.clone(),
-                        }
+                        })]
+                    } else {
+                        args
+                    };
+                    Expr::Call {
+                        func: Box::new(func),
+                        args,
+                        span: span.clone(),
                     }
                 }
                 GtkNode::Splice { expr, .. } => expr,
