@@ -282,7 +282,7 @@ fn run_aivi_sources_inner() {
 }
 
 #[test]
-fn syntax_effects_selected_files_execute_without_failures() {
+fn syntax_effects_selected_batch_one_files_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
@@ -295,6 +295,29 @@ fn syntax_effects_selected_files_execute_without_failures() {
         "integration-tests/syntax/effects/attempt_and_match.aivi",
         "integration-tests/syntax/effects/attempt_converts_to_result.aivi",
         "integration-tests/syntax/effects/do_list_block.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, _total_failed, skipped_files, _) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+    assert!(
+        total_passed > 0,
+        "expected first syntax/effects batch to execute"
+    );
+    eprintln!("skipped first syntax/effects batch files: {skipped_files}");
+}
+
+#[test]
+fn syntax_effects_selected_batch_two_files_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
         "integration-tests/syntax/effects/do_monad_block.aivi",
         "integration-tests/syntax/effects/do_option_block.aivi",
         "integration-tests/syntax/effects/do_result_block.aivi",
@@ -315,8 +338,11 @@ fn syntax_effects_selected_files_execute_without_failures() {
 
     let (total_passed, _total_failed, skipped_files, _) =
         run_files_parallel(&files, &stdlib_modules, &checkpoint);
-    assert!(total_passed > 0, "expected syntax/effects tests to execute");
-    eprintln!("skipped syntax/effects files in selected batch: {skipped_files}");
+    assert!(
+        total_passed > 0,
+        "expected second syntax/effects batch to execute"
+    );
+    eprintln!("skipped second syntax/effects batch files: {skipped_files}");
 }
 
 #[test]
@@ -325,17 +351,13 @@ fn syntax_remaining_batch_one_files_execute_without_failures() {
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/syntax/effects/when_conditional.aivi",
-        "integration-tests/syntax/external_sources/env_get_and_default.aivi",
-        "integration-tests/syntax/functions/multi_arg_and_sig.aivi",
         "integration-tests/syntax/generators/basic_yield.aivi",
-        "integration-tests/syntax/ir_dump_minimal.aivi",
-        "integration-tests/syntax/modules/use_alias_and_selective_imports.aivi",
         "integration-tests/syntax/operators/domain_operator_resolution.aivi",
-        "integration-tests/syntax/operators/list_concat_operator.aivi",
-        "integration-tests/syntax/operators/precedence_and_pipes.aivi",
         "integration-tests/syntax/patching/record_patch_basic.aivi",
-        "integration-tests/syntax/pattern_matching/as_binding.aivi",
-        "integration-tests/syntax/pattern_matching/guarded_case_with_if.aivi",
+        "integration-tests/syntax/pattern_matching/guards_when.aivi",
+        "integration-tests/syntax/predicates/implicit_and_explicit.aivi",
+        "integration-tests/syntax/sigils/collections_structured.aivi",
+        "integration-tests/syntax/bidirectional_class_members.aivi",
     ]
     .iter()
     .map(|p| root.join(p))
@@ -359,18 +381,14 @@ fn syntax_remaining_batch_two_files_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
-        "integration-tests/syntax/pattern_matching/guards_when.aivi",
+        "integration-tests/syntax/external_sources/env_get_and_default.aivi",
+        "integration-tests/syntax/ir_dump_minimal.aivi",
+        "integration-tests/syntax/operators/list_concat_operator.aivi",
+        "integration-tests/syntax/pattern_matching/as_binding.aivi",
         "integration-tests/syntax/pattern_matching/lists_and_records.aivi",
-        "integration-tests/syntax/pattern_matching/match_keyword.aivi",
-        "integration-tests/syntax/predicates/implicit_and_explicit.aivi",
         "integration-tests/syntax/resources/basic_resource_block.aivi",
-        "integration-tests/syntax/sigils/basic.aivi",
-        "integration-tests/syntax/sigils/collections_structured.aivi",
         "integration-tests/syntax/sigils/gtk_builder.aivi",
-        "integration-tests/syntax/sigils/raw_text.aivi",
-        "integration-tests/syntax/bidirectional_class_members.aivi",
         "integration-tests/syntax/types/type_level_transforms.aivi",
-        "integration-tests/syntax/types/unions_and_aliases.aivi",
     ]
     .iter()
     .map(|p| root.join(p))
@@ -390,20 +408,80 @@ fn syntax_remaining_batch_two_files_execute_without_failures() {
 }
 
 #[test]
-fn combinations_execute_without_failures() {
+fn syntax_remaining_batch_three_files_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/syntax/functions/multi_arg_and_sig.aivi",
+        "integration-tests/syntax/modules/use_alias_and_selective_imports.aivi",
+        "integration-tests/syntax/operators/precedence_and_pipes.aivi",
+        "integration-tests/syntax/pattern_matching/guarded_case_with_if.aivi",
+        "integration-tests/syntax/pattern_matching/match_keyword.aivi",
+        "integration-tests/syntax/sigils/basic.aivi",
+        "integration-tests/syntax/sigils/raw_text.aivi",
+        "integration-tests/syntax/types/unions_and_aliases.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, _total_failed, skipped_files, _) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+    assert!(
+        total_passed > 0,
+        "expected third remaining syntax batch to execute"
+    );
+    eprintln!("skipped third remaining syntax batch files: {skipped_files}");
+}
+
+#[test]
+fn combinations_batch_one_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/combinations/combo_closures_across_scopes.aivi",
-        "integration-tests/combinations/combo_do_nesting.aivi",
-        "integration-tests/combinations/combo_lambda_nesting.aivi",
         "integration-tests/combinations/combo_generator_nesting.aivi",
-        "integration-tests/combinations/combo_match_nesting.aivi",
-        "integration-tests/combinations/combo_loop_nesting.aivi",
         "integration-tests/combinations/combo_resource_nesting.aivi",
-        "integration-tests/combinations/combo_operators_in_scopes.aivi",
-        "integration-tests/combinations/combo_adt_lifecycle.aivi",
         "integration-tests/combinations/combo_multi_clause_with_nesting.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected first combination batch to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(
+        total_failed, 0,
+        "{total_failed} first combination batch test(s) failed"
+    );
+    eprintln!("combination batch one: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn combinations_batch_two_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/combinations/combo_do_nesting.aivi",
+        "integration-tests/combinations/combo_match_nesting.aivi",
+        "integration-tests/combinations/combo_operators_in_scopes.aivi",
         "integration-tests/combinations/combo_mock_nesting.aivi",
     ]
     .iter()
@@ -423,10 +501,48 @@ fn combinations_execute_without_failures() {
 
     assert!(
         total_passed > 0,
-        "expected combination tests to execute (skipped: {skipped_files})"
+        "expected second combination batch to execute (skipped: {skipped_files})"
     );
-    assert_eq!(total_failed, 0, "{total_failed} combination test(s) failed");
-    eprintln!("combinations: {total_passed} passed, {skipped_files} file(s) skipped");
+    assert_eq!(
+        total_failed, 0,
+        "{total_failed} second combination batch test(s) failed"
+    );
+    eprintln!("combination batch two: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn combinations_batch_three_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/combinations/combo_lambda_nesting.aivi",
+        "integration-tests/combinations/combo_loop_nesting.aivi",
+        "integration-tests/combinations/combo_adt_lifecycle.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected third combination batch to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(
+        total_failed, 0,
+        "{total_failed} third combination batch test(s) failed"
+    );
+    eprintln!("combination batch three: {total_passed} passed, {skipped_files} file(s) skipped");
 }
 
 #[test]
@@ -536,7 +652,7 @@ fn determinism_tests_execute_without_failures() {
 }
 
 #[test]
-fn eval_order_and_tco_tests_execute_without_failures() {
+fn eval_order_and_tco_batch_one_tests_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
@@ -544,6 +660,38 @@ fn eval_order_and_tco_tests_execute_without_failures() {
         "integration-tests/runtime/eval_order_record_fields.aivi",
         "integration-tests/runtime/effect_stack_safety_channels.aivi",
         "integration-tests/runtime/effectful_tuple_loop_state.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected first eval-order / TCO batch to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(
+        total_failed, 0,
+        "{total_failed} first eval-order / TCO batch test(s) failed"
+    );
+    eprintln!("eval-order / TCO batch one: {total_passed} passed, {skipped_files} file(s) skipped");
+}
+
+#[test]
+fn eval_order_and_tco_batch_two_tests_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
         "integration-tests/runtime/short_circuit_and_or.aivi",
         "integration-tests/runtime/tco_deep_recursion.aivi",
         "integration-tests/runtime/tco_mutual_recursion_deep.aivi",
@@ -565,13 +713,13 @@ fn eval_order_and_tco_tests_execute_without_failures() {
 
     assert!(
         total_passed > 0,
-        "expected eval-order / TCO tests to execute (skipped: {skipped_files})"
+        "expected second eval-order / TCO batch to execute (skipped: {skipped_files})"
     );
     assert_eq!(
         total_failed, 0,
-        "{total_failed} eval-order / TCO test(s) failed"
+        "{total_failed} second eval-order / TCO batch test(s) failed"
     );
-    eprintln!("eval-order / TCO: {total_passed} passed, {skipped_files} file(s) skipped");
+    eprintln!("eval-order / TCO batch two: {total_passed} passed, {skipped_files} file(s) skipped");
 }
 
 #[test]

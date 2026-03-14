@@ -14,7 +14,7 @@ use rayon::prelude::*;
 mod test_support;
 
 const FILE_TIMEOUT_SECS: u64 = 25;
-const STDLIB_BATCH_COUNT: usize = 4;
+const STDLIB_BATCH_COUNT: usize = 8;
 
 /// Run a test suite for a single file with a timeout to guard against JIT infinite loops.
 fn run_test_suite_with_timeout(
@@ -177,6 +177,62 @@ fn stdlib_modules_batch_four_execute_without_failures() {
     }
 }
 
+#[test]
+fn stdlib_modules_batch_five_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-five".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(4, STDLIB_BATCH_COUNT))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+#[test]
+fn stdlib_modules_batch_six_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-six".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(5, STDLIB_BATCH_COUNT))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+#[test]
+fn stdlib_modules_batch_seven_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-seven".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(6, STDLIB_BATCH_COUNT))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+#[test]
+fn stdlib_modules_batch_eight_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-eight".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(7, STDLIB_BATCH_COUNT))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
 fn stdlib_modules_execute_without_failures_inner(batch_index: usize, batch_count: usize) {
     assert!(batch_index < batch_count, "invalid stdlib batch index");
     let workspace_root = test_support::workspace_root();
@@ -194,10 +250,12 @@ fn stdlib_modules_execute_without_failures_inner(batch_index: usize, batch_count
 
     assert!(!files.is_empty(), "no stdlib @test files found");
 
-    let batch_len = files.len().div_ceil(batch_count);
-    let batch_start = batch_index * batch_len;
-    let batch_end = ((batch_index + 1) * batch_len).min(files.len());
-    let files = &files[batch_start..batch_end];
+    let files: Vec<_> = files
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| index % batch_count == batch_index)
+        .map(|(_, path)| path)
+        .collect();
 
     assert!(
         !files.is_empty(),
