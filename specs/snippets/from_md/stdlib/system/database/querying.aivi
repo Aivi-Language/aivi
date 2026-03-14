@@ -30,7 +30,7 @@ getUserById = id => do Effect {
 activeUserNames : Query Text
 activeUserNames = do Query {
   user <- db.from userTable
-  db.guard_ user.active
+  db.guard user.active
   db.queryOf user.name
 }
 
@@ -56,7 +56,7 @@ runActiveUserNamesDefault = do Effect {
 // Functional pipeline form (no do-block) composes with |>
 cheapActiveNames : Query Text
 cheapActiveNames = db.from userTable
-  |> db.where_ active
+  |> db.where active
   |> db.select.name
 
 // Sorting and paging — all run in memory in v0.1 (no SQL pushdown yet)
@@ -65,7 +65,7 @@ cheapActiveNames = db.from userTable
 // offset  : Int -> Query A -> Query A
 recentActiveNames : Query Text
 recentActiveNames = db.from userTable
-  |> db.where_ active
+  |> db.where active
   |> db.orderBy.createdAt // sort ascending by creation time (in memory)
   |> db.offset 10 // skip the first 10 rows
   |> db.limit 5 // then take at most 5
@@ -82,7 +82,7 @@ runRecentActiveNames = do Effect {
 
 // ── Multi-table join (in-memory, v0.1) ──────────────────────────────────────
 // SQL JOIN pushdown is not yet available.  Use repeated `from` binds with
-// `guard_` to correlate rows from two tables.  Both tables are fully loaded
+// `guard` to correlate rows from two tables.  Both tables are fully loaded
 // before the predicate runs in the AIVI runtime.
 
 Order = { id: Int, userId: Int, total: Int }
@@ -98,9 +98,9 @@ orderTable = db.table "orders" [
 activeUserOrders : Query { user: User, order: Order }
 activeUserOrders = do Query {
   user <- db.from userTable
-  db.guard_ user.active
+  db.guard user.active
   order <- db.from orderTable
-  db.guard_ (order.userId == user.id)
+  db.guard (order.userId == user.id)
   db.queryOf { user: user, order: order }
 }
 
@@ -117,7 +117,7 @@ runActiveUserOrders = do Effect {
 // db.count and db.exists aggregate queries; both run in memory (no SQL pushdown yet).
 
 countActive : Query Int
-countActive = db.count (db.from userTable |> db.where_ active)
+countActive = db.count (db.from userTable |> db.where active)
 
 activeCount : Effect DbError Int
 activeCount = do Effect {
@@ -128,7 +128,7 @@ activeCount = do Effect {
 }
 
 anyActive : Query Bool
-anyActive = db.exists (db.from userTable |> db.where_ active)
+anyActive = db.exists (db.from userTable |> db.where active)
 
 hasActiveUsers : Effect DbError Bool
 hasActiveUsers = do Effect {

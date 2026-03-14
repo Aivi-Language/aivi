@@ -650,7 +650,7 @@ validateAge = input => do Result {
 activeNames : Query Text
 activeNames = do Query {
   user <- db.from userTable    // bind each row
-  db.guard_ user.active        // skip rows where active is False
+  db.guard user.active        // skip rows where active is False
   db.queryOf user.name         // project the name field
 }
 
@@ -947,7 +947,7 @@ step.  In v0.1 they execute **in memory** — they do not compile to SQL DML sta
 
 **Query DSL (v0.1):** `aivi.database` also exports a `Query A` type and `do Query { ... }`
 notation for composing typed, composable queries. The portable subset (`db.from`,
-`db.where_`, `db.guard_`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`,
+`db.where`, `db.guard`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`,
 `db.count`, `db.exists`, and `do Query` blocks built from those forms) now lowers to a
 SQL-backed plan when every participating table has an explicit column list. Those same
 static schemas also let the checker catch missing row fields and obvious bad
@@ -960,12 +960,12 @@ configured with `db.configure`.
 expensiveItems : Query Text
 expensiveItems = do Query {
   item <- db.from itemTable
-  db.guard_ (item.price > 100)
+  db.guard (item.price > 100)
   db.queryOf item.name
 }
 // Or with functional helpers
 expensiveItems2 : Query Text
-expensiveItems2 = db.from itemTable |> db.where_ (price > 100) |> db.select .name
+expensiveItems2 = db.from itemTable |> db.where (price > 100) |> db.select .name
 
 // Execute against an explicit connection
 names <- db.runQueryOn conn expensiveItems
@@ -976,7 +976,7 @@ names <- db.runQuery expensiveItems
 
 Helper-built queries that do not lower still use the older in-memory `Query` runtime.
 Unsupported `do Query` shapes do not silently fall back; today they surface a query
-error when run, so keep `do Query` blocks to plain `from` binds, `guard_` filters,
+error when run, so keep `do Query` blocks to plain `from` binds, `guard` filters,
 simple `=` let-bindings, and a final `queryOf`/helper around it.
 
 **Sorting and paging (v0.1):** `orderBy`, `limit`, and `offset` compile to SQL
@@ -988,14 +988,14 @@ keep the older in-memory sort/slice behavior.
 page : Query Text
 page =
   db.from userTable
-  |> db.where_ active
+  |> db.where active
   |> db.orderBy .createdAt
   |> db.offset 10
   |> db.limit 5
   |> db.select .name
 ```
 
-**Multi-table join (v0.1 portable subset):** use repeated `from` binds with `guard_`
+**Multi-table join (v0.1 portable subset):** use repeated `from` binds with `guard`
 in a `do Query` block. Inside the lowered subset this becomes a SQL cross join plus
 pushed-down `WHERE` predicates. Current limits: each bind must still be a plain table
 source; explicit join syntax, outer joins, grouping, and correlated subqueries are not
@@ -1005,9 +1005,9 @@ shipped yet.
 activeUserOrders : Query { user: User, order: Order }
 activeUserOrders = do Query {
   user  <- db.from userTable
-  db.guard_ user.active
+  db.guard user.active
   order <- db.from orderTable
-  db.guard_ (order.userId == user.id)
+  db.guard (order.userId == user.id)
   db.queryOf { user: user, order: order }
 }
 ```

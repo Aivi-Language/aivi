@@ -10,8 +10,8 @@ orderTable = db.table "orders" [
 activeUserOrders : Query { user: User, order: Order }
 activeUserOrders = do Query {
   user <- db.from userTable
-  db.guard_ user.active
+  db.guard user.active
   order <- db.from orderTable
-  db.guard_ (order.userId == user.id) // join condition
+  db.guard (order.userId == user.id) // join condition
   db.queryOf { user: user, order: order }
 }

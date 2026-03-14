@@ -1,4 +1,4 @@
 activeUserNamesQuery : Query Text
 activeUserNamesQuery = db.from userTable
-  |> db.where_ active
+  |> db.where active
   |> db.select.name

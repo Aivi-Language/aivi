@@ -121,8 +121,8 @@ fn database_helper_name(expr: &Expr) -> Option<&str> {
     };
     let local = name.strip_prefix(&format!("{DB_MODULE}.")).unwrap_or(name);
     match local {
-        "from" | "where_" | "select" | "orderBy" | "limit" | "offset" | "count"
-        | "exists" | "queryOf" | "guard_" => Some(local),
+        "from" | "where" | "select" | "orderBy" | "limit" | "offset" | "count"
+        | "exists" | "queryOf" | "guard" => Some(local),
         _ => None,
     }
 }
@@ -185,9 +185,9 @@ fn compile_static_query_with_env(
                     source_exprs: vec![args[0].clone()],
                 });
             }
-            "where_" => {
+            "where" => {
                 if args.len() != 2 {
-                    return Err("db.where_ expects predicate and query".to_string());
+                    return Err("db.where expects predicate and query".to_string());
                 }
                 let mut inner = compile_static_query_with_env(args[1], env, base)?;
                 let pred = compile_lambda_scalar(args[0], &inner.plan.projection)?;
@@ -313,7 +313,7 @@ fn compile_query_do_block(items: &[crate::surface::BlockItem]) -> Result<StaticC
                 env.lets.insert(name, value);
             }
             BlockItem::Expr { expr, .. } if !is_last && is_guard_call(expr) => {
-                let arg = guard_arg(expr).expect("guard_ arg should exist");
+                let arg = guard_arg(expr).expect("guard arg should exist");
                 filters.push(compile_scalar_expr(arg, &env)?);
             }
             BlockItem::Expr { expr, .. } if is_last => {
@@ -338,7 +338,7 @@ fn compile_query_do_block(items: &[crate::surface::BlockItem]) -> Result<StaticC
                 };
             }
             BlockItem::Expr { .. } => {
-                return Err("only db.guard_ may appear before the final query expression".to_string())
+                return Err("only db.guard may appear before the final query expression".to_string())
             }
             _ => {
                 return Err(
@@ -352,12 +352,12 @@ fn compile_query_do_block(items: &[crate::surface::BlockItem]) -> Result<StaticC
 }
 
 fn is_guard_call(expr: &Expr) -> bool {
-    matches!(database_helper_invocation(expr), Some(("guard_", args)) if args.len() == 1)
+    matches!(database_helper_invocation(expr), Some(("guard", args)) if args.len() == 1)
 }
 
 fn guard_arg(expr: &Expr) -> Option<&Expr> {
     match database_helper_invocation(expr) {
-        Some(("guard_", args)) if args.len() == 1 => Some(args[0]),
+        Some(("guard", args)) if args.len() == 1 => Some(args[0]),
         _ => None,
     }
 }

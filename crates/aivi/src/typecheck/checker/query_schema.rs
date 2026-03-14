@@ -315,10 +315,10 @@ impl TypeChecker {
                     Self::callee_leaf_name(func),
                     Some(
                         "from"
-                            | "where_"
+                            | "where"
                             | "select"
                             | "orderBy"
-                            | "guard_"
+                            | "guard"
                             | "queryOf"
                             | "count"
                             | "exists"
@@ -416,7 +416,7 @@ impl TypeChecker {
                 let callee = Self::callee_leaf_name(func);
                 match (callee, args.as_slice()) {
                     (Some("from"), [table]) => self.table_row_fields_from_expr(table, env),
-                    (Some("where_"), [pred, query]) | (Some("orderBy"), [pred, query]) => {
+                    (Some("where"), [pred, query]) | (Some("orderBy"), [pred, query]) => {
                         let row = self.validate_query_schema_expr(query, env, bindings);
                         if let Some(fields) = row.as_ref() {
                             self.validate_query_row_expr(pred, Some(fields), bindings);
@@ -437,7 +437,7 @@ impl TypeChecker {
                         self.validate_query_schema_expr(query, env, bindings);
                         None
                     }
-                    (Some("guard_"), [guard]) | (Some("queryOf"), [guard]) => {
+                    (Some("guard"), [guard]) | (Some("queryOf"), [guard]) => {
                         self.validate_query_row_expr(guard, None, bindings);
                         None
                     }
@@ -455,7 +455,7 @@ impl TypeChecker {
                 if let Some(fields) = left_row.as_ref() {
                     match &**right {
                         Expr::Call { func, args, .. } => match (Self::callee_leaf_name(func), args.as_slice()) {
-                            (Some("where_"), [pred]) | (Some("orderBy"), [pred]) => {
+                            (Some("where"), [pred]) | (Some("orderBy"), [pred]) => {
                                 self.validate_query_row_expr(pred, Some(fields), bindings);
                                 left_row
                             }
@@ -719,7 +719,7 @@ impl TypeChecker {
 
     fn query_projection_expected_type(&mut self, callee: &str, row_ty: Type) -> Option<Type> {
         match callee {
-            "where_" => Some(Type::Func(Box::new(row_ty), Box::new(Type::con("Bool")))),
+            "where" => Some(Type::Func(Box::new(row_ty), Box::new(Type::con("Bool")))),
             "select" | "orderBy" => Some(Type::Func(
                 Box::new(row_ty),
                 Box::new(self.fresh_var()),

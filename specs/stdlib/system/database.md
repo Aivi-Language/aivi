@@ -114,7 +114,7 @@ If you are approaching this domain from a traditional application background, a 
 `Query A` is a typed description of a database read that eventually produces values of type `A`.
 The `do Query { ... }` notation lets you write those reads in a step-by-step style that feels close to a SQL `SELECT` while staying inside ordinary AIVI code.
 
-Queries are translated to a structured SQL-backed form when every participating table has an explicit column list and the query stays within the portable subset. Here, **portable subset** means “query shapes that cleanly translate to SQL instead of relying on the older in-memory runtime.” That subset includes `db.from`, `db.where_`, `db.guard_`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`, `db.count`, `db.exists`, and `do Query` blocks built from those forms.
+Queries are translated to a structured SQL-backed form when every participating table has an explicit column list and the query stays within the portable subset. Here, **portable subset** means “query shapes that cleanly translate to SQL instead of relying on the older in-memory runtime.” That subset includes `db.from`, `db.where`, `db.guard`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`, `db.count`, `db.exists`, and `do Query` blocks built from those forms.
 
 Helper-built queries that fall outside that subset still run through the older in-memory query runtime. Unsupported `do Query` shapes fail with a query error when executed instead of silently changing behavior.
 
@@ -152,7 +152,7 @@ Inside a `do Query` block, apply those helpers to the source query on the right-
 ### Multi-table joins
 
 <!-- quick-info: {"kind":"feature","name":"Multi-table join"} -->
-Multi-table reads are written as repeated `db.from` binds plus `db.guard_` conditions that relate the rows.
+Multi-table reads are written as repeated `db.from` binds plus `db.guard` conditions that relate the rows.
 In the portable subset, that pattern lowers to a SQL cross join with pushed-down `WHERE` predicates. In practice, when the guard compares keys from the participating rows, that behaves like the inner joins most SQL users expect.
 
 <<< ../../snippets/from_md/stdlib/system/database/block_06.aivi{aivi}
@@ -177,7 +177,7 @@ These helpers do not make an otherwise unsupported query lowerable; they only fo
 
 ## Shaping multi-table results
 
-Use repeated `db.from` binds plus `db.guard_` when you want one flattened row per match; the [Multi-table joins](#multi-table-joins) example above is the canonical portable form.
+Use repeated `db.from` binds plus `db.guard` when you want one flattened row per match; the [Multi-table joins](#multi-table-joins) example above is the canonical portable form.
 
 When you need a nested parent/child result such as `{ user, posts }`, keep the database read typed and do the final shaping in ordinary AIVI code after one or more explicit `db.runQueryOn` or `db.loadOn` calls. That keeps this page aligned with the currently documented `Query` and table-loading helpers without implying extra preload-specific APIs.
 
@@ -328,8 +328,8 @@ Use the typed helpers for one-off mutations. Use `db.applyDeltas` or `db.applyDe
 | Function | What it does |
 | --- | --- |
 | **db.from** tbl<br><code>Table A -> Query A</code> | Lifts a table into a query source. |
-| **db.where\_** pred q<br><code>(A -> Bool) -> Query A -> Query A</code> | Filters rows by a predicate. In lowered queries the filter is pushed into SQL. |
-| **db.guard\_** cond<br><code>Bool -> Query Unit</code> | Inside `do Query`, continues when `cond` is `True` and produces no rows when it is `False`. |
+| **db.where** pred q<br><code>(A -> Bool) -> Query A -> Query A</code> | Filters rows by a predicate. In lowered queries the filter is pushed into SQL. |
+| **db.guard** cond<br><code>Bool -> Query Unit</code> | Inside `do Query`, continues when `cond` is `True` and produces no rows when it is `False`. |
 | **db.select** f q<br><code>(A -> B) -> Query A -> Query B</code> | Projects each row into a new shape. |
 | **db.queryOf** value<br><code>A -> Query A</code> | Wraps one value as a singleton query result. |
 | **db.emptyQuery**<br><code>Query A</code> | A query that always returns an empty list. |
