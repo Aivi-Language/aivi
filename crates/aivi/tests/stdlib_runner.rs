@@ -14,6 +14,7 @@ use rayon::prelude::*;
 mod test_support;
 
 const FILE_TIMEOUT_SECS: u64 = 25;
+const STDLIB_BATCH_COUNT: usize = 4;
 
 /// Run a test suite for a single file with a timeout to guard against JIT infinite loops.
 fn run_test_suite_with_timeout(
@@ -125,7 +126,7 @@ fn stdlib_modules_batch_one_execute_without_failures() {
     let result = std::thread::Builder::new()
         .name("stdlib-batch-one".into())
         .stack_size(256 * 1024 * 1024)
-        .spawn(|| stdlib_modules_execute_without_failures_inner(0, 2))
+        .spawn(|| stdlib_modules_execute_without_failures_inner(0, STDLIB_BATCH_COUNT))
         .expect("spawn test thread")
         .join();
     match result {
@@ -139,7 +140,35 @@ fn stdlib_modules_batch_two_execute_without_failures() {
     let result = std::thread::Builder::new()
         .name("stdlib-batch-two".into())
         .stack_size(256 * 1024 * 1024)
-        .spawn(|| stdlib_modules_execute_without_failures_inner(1, 2))
+        .spawn(|| stdlib_modules_execute_without_failures_inner(1, STDLIB_BATCH_COUNT))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+#[test]
+fn stdlib_modules_batch_three_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-three".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(2, STDLIB_BATCH_COUNT))
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+#[test]
+fn stdlib_modules_batch_four_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-batch-four".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(|| stdlib_modules_execute_without_failures_inner(3, STDLIB_BATCH_COUNT))
         .expect("spawn test thread")
         .join();
     match result {
@@ -149,6 +178,7 @@ fn stdlib_modules_batch_two_execute_without_failures() {
 }
 
 fn stdlib_modules_execute_without_failures_inner(batch_index: usize, batch_count: usize) {
+    assert!(batch_index < batch_count, "invalid stdlib batch index");
     let workspace_root = test_support::workspace_root();
     std::env::set_current_dir(&workspace_root).expect("set cwd");
     let root = workspace_root.join("integration-tests/stdlib/aivi");
@@ -175,7 +205,7 @@ fn stdlib_modules_execute_without_failures_inner(batch_index: usize, batch_count
     );
 
     let stdlib_threads =
-        test_support::configured_test_threads("AIVI_STDLIB_TEST_THREADS", 4).min(files.len());
+        test_support::configured_test_threads("AIVI_STDLIB_TEST_THREADS", 2).min(files.len());
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(stdlib_threads)
         .build()

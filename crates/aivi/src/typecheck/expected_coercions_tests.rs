@@ -424,11 +424,11 @@ productTable = table "products" [
   { name: "active", type: BoolType, constraints: [NotNull], default: None }
 ]
 
-filtered = where_ active (from productTable)
+filtered = where active (from productTable)
 sorted = orderBy.price (from productTable)
 queryBlock = do Query {
   p <- from productTable
-  guard_ p.active
+  guard p.active
   orderBy.price (queryOf p)
 }
 "#;

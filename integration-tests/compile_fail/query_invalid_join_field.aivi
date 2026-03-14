@@ -23,6 +23,6 @@ badJoin : Query Order
 badJoin = do Query {
   order   <- from orderTable
   product <- from productTable
-  guard_ (order.productId == product.sku)
+  guard (order.productId == product.sku)
   queryOf order
 }

@@ -516,7 +516,7 @@ impl Backend {
         ),
         (
             "do Query",
-            "do Query {\n  ${1:row} <- from ${2:table}\n  guard_ ${3:condition}\n  queryOf ${0:row}\n}",
+            "do Query {\n  ${1:row} <- from ${2:table}\n  guard ${3:condition}\n  queryOf ${0:row}\n}",
             "do Query DSL block",
         ),
         (
@@ -587,10 +587,10 @@ impl Backend {
             "do Query" => Some(
                 "Compose a database query using the monadic `do Query` DSL.\n\n\
                  - `from table` — bind all rows from a `Table A` as a `Query A`\n\
-                 - `guard_ condition` — filter rows by a boolean predicate\n\
+                 - `guard condition` — filter rows by a boolean predicate\n\
                  - `queryOf value` — lift a value into the result set (terminal step)\n\
                  - `select f query` — project each row through `f`\n\
-                 - `where_ pred query` — functional filter (alternative to `guard_`)\n\n\
+                 - `where pred query` — functional filter (alternative to `guard`)\n\n\
                  Pass the resulting `Query A` to `runQueryOn conn query` to execute it.",
             ),
             "gtk signal-first app" => Some(
@@ -1095,7 +1095,7 @@ impl Backend {
                 "Bind all rows of a table into the query. Usually the first step: `row <- from myTable`.",
             ),
             (
-                "guard_",
+                "guard",
                 "Bool -> Query Unit",
                 "Filter the current row set by a boolean predicate. Rows for which the predicate is `False` are dropped.",
             ),
@@ -1110,9 +1110,9 @@ impl Backend {
                 "Project each row through a function, producing a new `Query B`.",
             ),
             (
-                "where_",
+                "where",
                 "(A -> Bool) -> Query A -> Query A",
-                "Functional filter: keep only rows satisfying the predicate. Equivalent to `guard_` in bind style.",
+                "Functional filter: keep only rows satisfying the predicate. Equivalent to `guard` in bind style.",
             ),
             (
                 "runQueryOn",

@@ -37,12 +37,12 @@ from_loads_all_rows = do Effect {
   assertEq (List.length results) 3
 }
 
-@test "where_ filters rows"
+@test "where filters rows"
 where_filters_rows = do Effect {
   conn    <- connect { driver: Sqlite, url: ":memory:" }
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
-  results <- runQueryOn conn (where_ active (from productTable))
+  results <- runQueryOn conn (where active (from productTable))
   _       <- close conn
   assertEq (List.length results) 2
 }
@@ -70,14 +70,14 @@ do_query_from_single_bind = do Effect {
   assertEq (List.length results) 3
 }
 
-@test "do Query with guard_ filters"
+@test "do Query with guard filters"
 do_query_guard_filters = do Effect {
   conn    <- connect { driver: Sqlite, url: ":memory:" }
   _       <- runMigrationsOn conn [productTable]
   _       <- seedProducts conn
   results <- runQueryOn conn (do Query {
       p       <- from productTable
-      guard_ p.active
+      guard p.active
       queryOf p
   })
   _ <- close conn
@@ -97,14 +97,14 @@ do_query_projects_field = do Effect {
   assertEq (List.length names) 3
 }
 
-@test "do Query guard_ and project"
+@test "do Query guard and project"
 do_query_guard_and_project = do Effect {
   conn  <- connect { driver: Sqlite, url: ":memory:" }
   _     <- runMigrationsOn conn [productTable]
   _     <- seedProducts conn
   names <- runQueryOn conn (do Query {
       p     <- from productTable
-      guard_ p.active
+      guard p.active
       queryOf p.name
   })
   _ <- close conn
@@ -232,7 +232,7 @@ do_query_with_order_by = do Effect {
   _    <- seedProducts conn
   rows <- runQueryOn conn (do Query {
       p    <- from productTable
-      guard_ p.active
+      guard p.active
       orderBy.price (queryOf p)
   })
   _ <- close conn
@@ -256,7 +256,7 @@ count_filtered = do Effect {
   conn   <- connect { driver: Sqlite, url: ":memory:" }
   _      <- runMigrationsOn conn [productTable]
   _      <- seedProducts conn
-  result <- runQueryOn conn (count (where_ active (from productTable)))
+  result <- runQueryOn conn (count (where active (from productTable)))
   _      <- close conn
   assertEq result [2]
 }
@@ -272,7 +272,7 @@ count_empty = do Effect {
 activeProductsQ : Query Product
 activeProductsQ = do Query {
   p <- from productTable
-  guard_ p.active
+  guard p.active
   queryOf p
 }
 
@@ -307,7 +307,7 @@ exists_false_when_empty = do Effect {
 }
 
 expensiveProductsQ : Query Product
-expensiveProductsQ = where_ (p => p.price > 100) (from productTable)
+expensiveProductsQ = where (p => p.price > 100) (from productTable)
 
 @test "exists returns False when filter matches nothing"
 exists_false_when_no_match = do Effect {
@@ -320,7 +320,7 @@ exists_false_when_no_match = do Effect {
 }
 
 affordableProductsQ : Query Product
-affordableProductsQ = where_ (p => p.price > 10) (from productTable)
+affordableProductsQ = where (p => p.price > 10) (from productTable)
 
 @test "exists returns True when at least one row matches"
 exists_true_when_some_match = do Effect {
@@ -354,8 +354,8 @@ activeOrdersQ : Query Order
 activeOrdersQ = do Query {
   order   <- from orderTable
   product <- from productTable
-  guard_ (order.productId == product.id)
-  guard_ product.active
+  guard (order.productId == product.id)
+  guard product.active
   queryOf order
 }
 
@@ -363,8 +363,8 @@ inactiveOrdersQ : Query Order
 inactiveOrdersQ = do Query {
   order   <- from orderTable
   product <- from productTable
-  guard_ (order.productId == product.id)
-  guard_ (product.active == False)
+  guard (order.productId == product.id)
+  guard (product.active == False)
   queryOf order
 }
 
@@ -372,8 +372,8 @@ activeOrderSummariesQ : Query { orderId: Int, productName: Text }
 activeOrderSummariesQ = do Query {
   order   <- from orderTable
   product <- from productTable
-  guard_ (order.productId == product.id)
-  guard_ product.active
+  guard (order.productId == product.id)
+  guard product.active
   queryOf { orderId: order.id, productName: product.name }
 }
 
@@ -426,14 +426,14 @@ run_query_ambient_all_rows = do Effect {
   assertEq (List.length results) 3
 }
 
-@test "runQuery with where_ filter uses ambient connection"
+@test "runQuery with where filter uses ambient connection"
 run_query_ambient_with_filter = do Effect {
   _       <- configure { driver: Sqlite, url: ":memory:" }
   _       <- runMigrations [productTable]
   _       <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
   _       <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
   _       <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
-  results <- runQuery (where_ active (from productTable))
+  results <- runQuery (where active (from productTable))
   assertEq (List.length results) 2
 }
 
@@ -446,7 +446,7 @@ run_query_ambient_do_query = do Effect {
   _     <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
   names <- runQuery (do Query {
       p     <- from productTable
-      guard_ p.active
+      guard p.active
       queryOf p.name
   })
   assertEq (List.length names) 2

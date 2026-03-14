@@ -26,7 +26,7 @@ export deleteWhere, deleteWhereOn
 export updateWhere, updateWhereOn
 export upsert, upsertOn
 export domain Database
-export Query, queryOf, queryChain, emptyQuery, from, where_, guard_, select, runQueryOn, runQuery
+export Query, queryOf, queryChain, emptyQuery, from, where, guard, select, runQueryOn, runQuery
 export orderBy, limit, offset, count, exists
 
 use aivi
@@ -83,7 +83,7 @@ FtsQuery = {
 // Query DSL — portable subset
 //
 // `Query A` still has an ordinary runtime representation, but the compiler now
-// recognizes the portable subset (`from`/`where_`/`guard_`/`select`/`orderBy`/
+// recognizes the portable subset (`from`/`where`/`guard`/`select`/`orderBy`/
 // `limit`/`offset`, plus `count`/`exists`) and attaches a structured SQL-backed
 // plan when every participating table has an explicit column list.
 //
@@ -99,7 +99,7 @@ FtsQuery = {
 //   activeNames : Query Text
 //   activeNames = do Query {
 //     user <- from userTable
-//     guard_ user.active
+//     guard user.active
 //     queryOf user.name
 //   }
 //
@@ -136,14 +136,14 @@ queryChain = f q => { run: conn => do Effect {
 from : Table A -> Query A
 from = tbl => { run: conn => loadOn conn tbl }
 
-where_ : (A -> Bool) -> Query A -> Query A
-where_ = pred q => { run: conn => do Effect {
+where : (A -> Bool) -> Query A -> Query A
+where = pred q => { run: conn => do Effect {
   xs <- q.run conn
   pure (List.filter pred xs)
 }}
 
-guard_ : Bool -> Query Unit
-guard_ = cond => if cond then queryOf Unit else emptyQuery
+guard : Bool -> Query Unit
+guard = cond => if cond then queryOf Unit else emptyQuery
 
 select : (A -> B) -> Query A -> Query B
 select = f q => { run: conn => do Effect {

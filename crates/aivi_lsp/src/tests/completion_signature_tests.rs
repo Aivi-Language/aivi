@@ -412,7 +412,7 @@ fn do_query_snippet_has_correct_body_and_docs() {
     let body = snip.insert_text.as_deref().expect("snippet body");
     assert!(body.contains("do Query"), "snippet body should start with 'do Query'");
     assert!(body.contains("from"), "snippet should contain 'from'");
-    assert!(body.contains("guard_"), "snippet should contain 'guard_'");
+    assert!(body.contains("guard"), "snippet should contain 'guard'");
     assert!(body.contains("queryOf"), "snippet should contain 'queryOf'");
 
     let tower_lsp::lsp_types::Documentation::MarkupContent(markup) =
@@ -439,10 +439,10 @@ fn inside_do_query_block_offers_query_dsl_completions() {
         Backend::build_completion_items(text, &uri, position, &HashMap::new(), &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(labels.contains(&"from"), "should offer 'from' inside do Query block");
-    assert!(labels.contains(&"guard_"), "should offer 'guard_' inside do Query block");
+    assert!(labels.contains(&"guard"), "should offer 'guard' inside do Query block");
     assert!(labels.contains(&"queryOf"), "should offer 'queryOf' inside do Query block");
     assert!(labels.contains(&"select"), "should offer 'select' inside do Query block");
-    assert!(labels.contains(&"where_"), "should offer 'where_' inside do Query block");
+    assert!(labels.contains(&"where"), "should offer 'where' inside do Query block");
     assert!(labels.contains(&"runQueryOn"), "should offer 'runQueryOn' inside do Query block");
 }
 
@@ -457,8 +457,8 @@ fn do_query_dsl_completions_not_offered_outside_block() {
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     // These are Query-DSL specific items that should NOT be injected when not in a Query block
     assert!(
-        !labels.contains(&"guard_"),
-        "guard_ should not appear outside a do Query block (it is not in general scope)"
+        !labels.contains(&"guard"),
+        "guard should not appear outside a do Query block (it is not in general scope)"
     );
     assert!(
         !labels.contains(&"queryOf"),

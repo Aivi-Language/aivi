@@ -2,7 +2,7 @@
 activeUserNamesQuery : Query Text
 activeUserNamesQuery = do Query {
   user <- db.from userTable
-  db.guard_ user.active // keep only active users
+  db.guard user.active // keep only active users
   db.queryOf user.name // project one field
 }
 

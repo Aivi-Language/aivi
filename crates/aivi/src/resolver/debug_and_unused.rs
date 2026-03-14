@@ -356,7 +356,7 @@ fn call_arg_allows_function_lifting(func: &Expr, index: usize) -> bool {
             | ("findMap", 0)
             | ("uniqueBy", 0)
             | ("sortBy", 0)
-            | ("where_", 0)
+            | ("where", 0)
             | ("upd", 0)
             | ("del", 0)
             | ("ups", 0)
@@ -759,7 +759,7 @@ productTable = table "products" [
   { name: "id", type: IntType, constraints: [], default: None }
   { name: "active", type: BoolType, constraints: [], default: None }
 ]
-query = where_ active (from productTable)
+query = where active (from productTable)
 
 tableRows = table "rows"[]
 updated = tableRows + upd (id == 1) (row => row)
