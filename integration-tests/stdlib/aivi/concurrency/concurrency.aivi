@@ -251,6 +251,107 @@ retry_eventual_success = do Effect {
     close tx
 }
 
+@test "multiple spawned threads writing the same signal converge"
+multiple_threads_write_same_signal = do Effect {
+  counter = signal 0
+  (tx, rx) <- make 0
+
+  worker = id => do Effect {
+    loop remaining = 10 => {
+      if remaining == 0 then pure Unit
+      else do Effect {
+        _ = update counter (_ + 1)
+        recurse (remaining - 1)
+      }
+    }
+  }
+
+  t1 <- spawn (worker 1)
+  t2 <- spawn (worker 2)
+  t3 <- spawn (worker 3)
+  _ <- t1.join
+  _ <- t2.join
+  _ <- t3.join
+
+  assertEq (get counter) 30
+}
+
+@test "derived signal reflects final value after concurrent writes"
+derived_reflects_final_after_concurrent = do Effect {
+  base    = signal 0
+  doubled = derive base (_ * 2)
+
+  task <- spawn (do Effect {
+    loop remaining = 5 => {
+      if remaining == 0 then pure Unit
+      else do Effect {
+        _ = update base (_ + 1)
+        recurse (remaining - 1)
+      }
+    }
+  })
+  _ <- task.join
+
+  assertEq (get base) 5
+  assertEq (get doubled) 10
+}
+
+@test "watcher fires for cross-thread signal updates via channel"
+watcher_fires_cross_thread = do Effect {
+  count     = signal 0
+  (tx, rx) <- make 0
+  _watcher  = watch count (value => send tx value)
+
+  task <- spawn (do Effect {
+    _ = set count 7
+    pure Unit
+  })
+  _ <- task.join
+
+  result <- timeoutWith 500 "missing watcher notification" (recv rx)
+  result match
+    | Ok value => assertEq value 7
+    | Err _    => assert False
+    close tx
+}
+
+@test "batch from spawned thread delivers consistent derived state"
+batch_from_spawned_thread = do Effect {
+  a     = signal 1
+  b     = signal 2
+  total = combineAll (a, b) ((x, y) => x + y)
+
+  task <- spawn (do Effect {
+    batch (_ => {
+      set a 10
+      set b 20
+    })
+  })
+  _ <- task.join
+
+  assertEq (get total) 30
+}
+
+@test "concurrent combineAll with many sources"
+concurrent_combineAll_many_sources = do Effect {
+  s1 = signal 0
+  s2 = signal 0
+  s3 = signal 0
+  s4 = signal 0
+  total = combineAll (s1, s2, s3, s4) ((a, b, c, d) => a + b + c + d)
+
+  t1 <- spawn (do Effect { _ = set s1 10; pure Unit })
+  t2 <- spawn (do Effect { _ = set s2 20; pure Unit })
+  t3 <- spawn (do Effect { _ = set s3 30; pure Unit })
+  t4 <- spawn (do Effect { _ = set s4 40; pure Unit })
+  _ <- t1.join
+  _ <- t2.join
+  _ <- t3.join
+  _ <- t4.join
+
+  assertEq (get total) 100
+}
+
 @test "retry fails after attempts"
 retry_failure = do Effect {
   (tx, rx) <- make 0

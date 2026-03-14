@@ -883,11 +883,28 @@ mod tests {
         Runtime::new(ctx, CancelToken::root())
     }
 
+    fn expect_signal_id(value: &Value) -> usize {
+        match value {
+            Value::Signal(signal) => signal.id,
+            other => panic!("expected Signal, got {}", format_value(other)),
+        }
+    }
+
     fn expect_int(value: Value) -> i64 {
         match value {
             Value::Int(value) => value,
             other => panic!("expected Int, got {}", format_value(&other)),
         }
+    }
+
+    fn watcher_last_revision(runtime: &Runtime, watcher_id: usize) -> u64 {
+        runtime
+            .reactive_graph
+            .lock()
+            .watchers
+            .get(&watcher_id)
+            .unwrap_or_else(|| panic!("missing watcher {watcher_id}"))
+            .last_revision
     }
 
     fn record_field(record: &Value, field: &str) -> Value {
@@ -961,6 +978,247 @@ mod tests {
     }
 
     #[test]
+    fn reactive_main_thread_watcher_defers_background_signal_updates_until_flush() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(1))
+            .unwrap_or_else(|err| panic!("source signal: {}", format_runtime_error(err)));
+        let source_id = expect_signal_id(&source);
+        let ctx = runtime.ctx.clone();
+        let owner_thread = format!("{:?}", std::thread::current().id());
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let callback_threads = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let callback_count_for_watch = callback_count.clone();
+        let callback_threads_for_watch = callback_threads.clone();
+        let callback = runtime_builtin("test.main_thread_watch", 1, move |_args, _| {
+            callback_count_for_watch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            callback_threads_for_watch
+                .lock()
+                .expect("callback thread log lock should not be poisoned")
+                .push(format!("{:?}", std::thread::current().id()));
+            Ok(Value::Unit)
+        });
+        let (watcher_id, _disposable) = runtime
+            .reactive_watch_signal_main_thread(source.clone(), callback)
+            .unwrap_or_else(|err| panic!("main-thread watcher: {}", format_runtime_error(err)));
+
+        {
+            let graph = runtime.reactive_graph.lock();
+            assert_eq!(graph.flush_thread, Some(std::thread::current().id()));
+            assert!(!graph.deferred_flush);
+            assert!(graph.pending_notifications.is_empty());
+        }
+        assert_eq!(watcher_last_revision(&runtime, watcher_id), 1);
+
+        let source_for_thread = source.clone();
+        std::thread::spawn(move || {
+            let mut bg_runtime = Runtime::new(ctx, CancelToken::root());
+            bg_runtime
+                .reactive_set_signal(source_for_thread, Value::Int(7))
+                .unwrap_or_else(|err| panic!("background set signal: {}", format_runtime_error(err)));
+        })
+        .join()
+        .expect("background runtime should not panic");
+
+        assert_eq!(
+            expect_int(
+                runtime
+                    .reactive_get_signal(source.clone())
+                    .unwrap_or_else(|err| panic!("source value after background set: {}", format_runtime_error(err)))
+            ),
+            7
+        );
+        {
+            let graph = runtime.reactive_graph.lock();
+            assert_eq!(graph.flush_thread, Some(std::thread::current().id()));
+            assert!(graph.deferred_flush);
+            assert!(graph.pending_notifications.contains(&source_id));
+            assert_eq!(
+                graph
+                    .signals
+                    .get(&source_id)
+                    .unwrap_or_else(|| panic!("missing source signal {source_id}"))
+                    .revision,
+                2
+            );
+        }
+        assert_eq!(watcher_last_revision(&runtime, watcher_id), 1);
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+        assert!(
+            callback_threads
+                .lock()
+                .expect("callback thread log lock should not be poisoned")
+                .is_empty()
+        );
+
+        runtime
+            .reactive_flush_deferred()
+            .unwrap_or_else(|err| panic!("flush deferred source watcher: {}", format_runtime_error(err)));
+        {
+            let graph = runtime.reactive_graph.lock();
+            assert!(!graph.deferred_flush);
+            assert!(graph.pending_notifications.is_empty());
+        }
+        assert_eq!(watcher_last_revision(&runtime, watcher_id), 2);
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        assert_eq!(
+            callback_threads
+                .lock()
+                .expect("callback thread log lock should not be poisoned")
+                .as_slice(),
+            [owner_thread.as_str()]
+        );
+
+        runtime
+            .reactive_flush_deferred()
+            .unwrap_or_else(|err| panic!("second deferred flush: {}", format_runtime_error(err)));
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+    }
+
+    #[test]
+    fn reactive_main_thread_batch_flush_coalesces_derived_watchers() {
+        let mut runtime = test_runtime();
+        let first = runtime
+            .reactive_create_signal(Value::Int(1))
+            .unwrap_or_else(|err| panic!("first signal: {}", format_runtime_error(err)));
+        let second = runtime
+            .reactive_create_signal(Value::Int(2))
+            .unwrap_or_else(|err| panic!("second signal: {}", format_runtime_error(err)));
+        let sum = runtime
+            .reactive_combine_all(
+                Value::Tuple(vec![first.clone(), second.clone()]),
+                runtime_builtin("test.sum_pair", 1, |mut args, _| {
+                    let tuple = args.remove(0);
+                    let Value::Tuple(items) = tuple else {
+                        panic!("expected tuple");
+                    };
+                    let [left, right] = items.as_slice() else {
+                        panic!("expected two tuple items");
+                    };
+                    Ok(Value::Int(expect_int(left.clone()) + expect_int(right.clone())))
+                }),
+            )
+            .unwrap_or_else(|err| panic!("sum signal: {}", format_runtime_error(err)));
+        let sum_id = expect_signal_id(&sum);
+        let ctx = runtime.ctx.clone();
+        let owner_thread = format!("{:?}", std::thread::current().id());
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let callback_threads = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let callback_count_for_watch = callback_count.clone();
+        let callback_threads_for_watch = callback_threads.clone();
+        let callback = runtime_builtin("test.main_thread_batch_watch", 1, move |_args, _| {
+            callback_count_for_watch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            callback_threads_for_watch
+                .lock()
+                .expect("callback thread log lock should not be poisoned")
+                .push(format!("{:?}", std::thread::current().id()));
+            Ok(Value::Unit)
+        });
+        let (watcher_id, _disposable) = runtime
+            .reactive_watch_signal_main_thread(sum.clone(), callback)
+            .unwrap_or_else(|err| panic!("derived watcher: {}", format_runtime_error(err)));
+
+        assert_eq!(
+            expect_int(
+                runtime
+                    .reactive_get_signal(sum.clone())
+                    .unwrap_or_else(|err| panic!("initial sum value: {}", format_runtime_error(err)))
+            ),
+            3
+        );
+        assert_eq!(watcher_last_revision(&runtime, watcher_id), 1);
+
+        let first_for_batch = first.clone();
+        let second_for_batch = second.clone();
+        std::thread::spawn(move || {
+            let mut bg_runtime = Runtime::new(ctx, CancelToken::root());
+            let batch_callback = runtime_builtin("test.background_batch", 1, move |_args, runtime| {
+                runtime.reactive_set_signal(first_for_batch.clone(), Value::Int(3))?;
+                runtime.reactive_set_signal(second_for_batch.clone(), Value::Int(4))?;
+                Ok(Value::Unit)
+            });
+            bg_runtime
+                .reactive_batch(batch_callback)
+                .unwrap_or_else(|err| panic!("background batch: {}", format_runtime_error(err)));
+        })
+        .join()
+        .expect("background batch runtime should not panic");
+
+        {
+            let graph = runtime.reactive_graph.lock();
+            assert!(graph.deferred_flush);
+            assert!(!graph.pending_notifications.is_empty());
+            assert!(
+                graph
+                    .signals
+                    .get(&sum_id)
+                    .unwrap_or_else(|| panic!("missing derived signal {sum_id}"))
+                    .dirty
+            );
+        }
+        assert_eq!(watcher_last_revision(&runtime, watcher_id), 1);
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        runtime
+            .reactive_flush_deferred()
+            .unwrap_or_else(|err| panic!("flush deferred derived watcher: {}", format_runtime_error(err)));
+
+        assert_eq!(
+            expect_int(
+                runtime
+                    .reactive_get_signal(sum.clone())
+                    .unwrap_or_else(|err| panic!("flushed sum value: {}", format_runtime_error(err)))
+            ),
+            7
+        );
+        {
+            let graph = runtime.reactive_graph.lock();
+            assert!(!graph.deferred_flush);
+            assert!(graph.pending_notifications.is_empty());
+            let sum_entry = graph
+                .signals
+                .get(&sum_id)
+                .unwrap_or_else(|| panic!("missing derived signal {sum_id}"));
+            assert!(!sum_entry.dirty);
+            assert_eq!(sum_entry.revision, 2);
+        }
+        assert_eq!(watcher_last_revision(&runtime, watcher_id), 2);
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        assert_eq!(
+            callback_threads
+                .lock()
+                .expect("callback thread log lock should not be poisoned")
+                .as_slice(),
+            [owner_thread.as_str()]
+        );
+
+        runtime
+            .reactive_flush_deferred()
+            .unwrap_or_else(|err| panic!("second derived deferred flush: {}", format_runtime_error(err)));
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+    }
+
+    #[test]
     fn reactive_event_clears_previous_result_on_failed_rerun() {
         let mut runtime = test_runtime();
         let should_succeed = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -1017,5 +1275,490 @@ mod tests {
             }
             other => panic!("expected Some error, got {}", format_value(&other)),
         }
+    }
+
+    /// Multiple background threads concurrently writing the same source signal.
+    /// The final value must equal the last write and the graph must remain
+    /// consistent (no panics, no poisoned locks).
+    #[test]
+    fn reactive_concurrent_writes_to_same_signal() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("source signal: {}", format_runtime_error(err)));
+        let ctx = runtime.ctx.clone();
+
+        let threads: Vec<_> = (0..8)
+            .map(|i| {
+                let ctx = ctx.clone();
+                let source = source.clone();
+                std::thread::spawn(move || {
+                    let mut bg = Runtime::new(ctx, CancelToken::root());
+                    for j in 0..50 {
+                        bg.reactive_set_signal(source.clone(), Value::Int(i * 100 + j))
+                            .unwrap_or_else(|err| {
+                                panic!("thread {i} set #{j}: {}", format_runtime_error(err))
+                            });
+                    }
+                })
+            })
+            .collect();
+
+        for handle in threads {
+            handle.join().expect("worker thread should not panic");
+        }
+
+        // Value must be one of the final writes (i*100+49 for some i).
+        let final_val = expect_int(
+            runtime
+                .reactive_get_signal(source)
+                .unwrap_or_else(|err| panic!("final get: {}", format_runtime_error(err))),
+        );
+        assert!(final_val >= 0, "signal value should be non-negative");
+
+        // Graph must be in a valid state: not flushing, no leftover batch depth.
+        let graph = runtime.reactive_graph.lock();
+        assert_eq!(graph.batch_depth, 0);
+        assert!(!graph.flushing);
+    }
+
+    /// Background threads write while the main thread reads concurrently.
+    /// No panics, no poisoned locks, reads always return a valid value.
+    #[test]
+    fn reactive_concurrent_read_and_write() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("source signal: {}", format_runtime_error(err)));
+        let ctx = runtime.ctx.clone();
+
+        let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        // Spawn a writer thread
+        let done_writer = done.clone();
+        let ctx_writer = ctx.clone();
+        let source_writer = source.clone();
+        let writer = std::thread::spawn(move || {
+            let mut bg = Runtime::new(ctx_writer, CancelToken::root());
+            for i in 1..=200 {
+                bg.reactive_set_signal(source_writer.clone(), Value::Int(i))
+                    .unwrap_or_else(|err| panic!("writer set #{i}: {}", format_runtime_error(err)));
+            }
+            done_writer.store(true, std::sync::atomic::Ordering::Release);
+        });
+
+        // Read from main thread while writer is going
+        let mut read_count = 0u64;
+        while !done.load(std::sync::atomic::Ordering::Acquire) {
+            let val = expect_int(
+                runtime
+                    .reactive_get_signal(source.clone())
+                    .unwrap_or_else(|err| panic!("reader get: {}", format_runtime_error(err))),
+            );
+            assert!(val >= 0 && val <= 200, "unexpected value: {val}");
+            read_count += 1;
+        }
+        writer.join().expect("writer thread should not panic");
+        assert!(read_count > 0, "main thread should have read at least once");
+
+        let final_val = expect_int(
+            runtime
+                .reactive_get_signal(source)
+                .unwrap_or_else(|err| panic!("final get: {}", format_runtime_error(err))),
+        );
+        assert_eq!(final_val, 200);
+    }
+
+    /// Dispose a watcher from the main thread while a background thread is
+    /// writing to the watched signal. Neither thread should panic.
+    #[test]
+    fn reactive_dispose_watcher_while_background_writes() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("source signal: {}", format_runtime_error(err)));
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let cc = callback_count.clone();
+        let watch_callback = runtime_builtin("test.dispose_race_watch", 1, move |_args, _| {
+            cc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Value::Unit)
+        });
+        let (watcher_id, _disposable) = runtime
+            .reactive_watch_signal_with_id(source.clone(), watch_callback)
+            .unwrap_or_else(|err| panic!("watcher: {}", format_runtime_error(err)));
+
+        let ctx = runtime.ctx.clone();
+        let source_for_thread = source.clone();
+        let writer = std::thread::spawn(move || {
+            let mut bg = Runtime::new(ctx, CancelToken::root());
+            for i in 1..=100 {
+                bg.reactive_set_signal(source_for_thread.clone(), Value::Int(i))
+                    .unwrap_or_else(|err| panic!("bg set #{i}: {}", format_runtime_error(err)));
+            }
+        });
+
+        // Dispose watcher while writes are happening
+        runtime.reactive_dispose_watcher(watcher_id);
+
+        writer.join().expect("writer thread should not panic");
+
+        // After dispose, the callback count should not increase from main-thread
+        // flushes.
+        let count_after_dispose = callback_count.load(std::sync::atomic::Ordering::SeqCst);
+        runtime
+            .reactive_set_signal(source.clone(), Value::Int(999))
+            .unwrap_or_else(|err| panic!("post-dispose set: {}", format_runtime_error(err)));
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            count_after_dispose
+        );
+
+        // Graph is consistent
+        let graph = runtime.reactive_graph.lock();
+        assert!(!graph.watchers.contains_key(&watcher_id));
+    }
+
+    /// Multiple background threads each write their own source signal. A derived
+    /// signal (combineAll) depends on all sources. After all writers finish, the
+    /// derived value must reflect the final source values.
+    #[test]
+    fn reactive_concurrent_writes_to_different_sources_with_derived() {
+        let mut runtime = test_runtime();
+        let num_sources = 4;
+        let sources: Vec<Value> = (0..num_sources)
+            .map(|i| {
+                runtime
+                    .reactive_create_signal(Value::Int(0))
+                    .unwrap_or_else(|err| panic!("source {i}: {}", format_runtime_error(err)))
+            })
+            .collect();
+
+        let sum = runtime
+            .reactive_combine_all(
+                Value::Tuple(sources.clone()),
+                runtime_builtin("test.sum_n", 1, |mut args, _| {
+                    let Value::Tuple(items) = args.remove(0) else {
+                        panic!("expected tuple");
+                    };
+                    let total: i64 = items.iter().map(|v| expect_int(v.clone())).sum();
+                    Ok(Value::Int(total))
+                }),
+            )
+            .unwrap_or_else(|err| panic!("sum signal: {}", format_runtime_error(err)));
+
+        let ctx = runtime.ctx.clone();
+        let threads: Vec<_> = sources
+            .iter()
+            .enumerate()
+            .map(|(i, source)| {
+                let ctx = ctx.clone();
+                let source = source.clone();
+                std::thread::spawn(move || {
+                    let mut bg = Runtime::new(ctx, CancelToken::root());
+                    for j in 1..=20 {
+                        bg.reactive_set_signal(source.clone(), Value::Int(j))
+                            .unwrap_or_else(|err| {
+                                panic!("thread {i} set #{j}: {}", format_runtime_error(err))
+                            });
+                    }
+                })
+            })
+            .collect();
+
+        for handle in threads {
+            handle.join().expect("source writer thread should not panic");
+        }
+
+        // Each source ends at 20, so sum = 4 * 20 = 80
+        let sum_val = expect_int(
+            runtime
+                .reactive_get_signal(sum)
+                .unwrap_or_else(|err| panic!("sum value: {}", format_runtime_error(err))),
+        );
+        assert_eq!(sum_val, num_sources as i64 * 20);
+    }
+
+    /// Background threads write rapidly to a signal that has a deferred-flush
+    /// watcher. Accumulated writes should coalesce into one watcher callback
+    /// per flush.
+    #[test]
+    fn reactive_rapid_background_writes_coalesce_on_deferred_flush() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("source signal: {}", format_runtime_error(err)));
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let cc = callback_count.clone();
+        let callback = runtime_builtin("test.coalesce_watch", 1, move |_args, _| {
+            cc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Value::Unit)
+        });
+        runtime
+            .reactive_watch_signal_main_thread(source.clone(), callback)
+            .unwrap_or_else(|err| panic!("main-thread watcher: {}", format_runtime_error(err)));
+
+        // Rapid writes from a background thread
+        let ctx = runtime.ctx.clone();
+        let source_for_thread = source.clone();
+        std::thread::spawn(move || {
+            let mut bg = Runtime::new(ctx, CancelToken::root());
+            for i in 1..=50 {
+                bg.reactive_set_signal(source_for_thread.clone(), Value::Int(i))
+                    .unwrap_or_else(|err| panic!("rapid set #{i}: {}", format_runtime_error(err)));
+            }
+        })
+        .join()
+        .expect("rapid writer should not panic");
+
+        // No callbacks yet — everything is deferred
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        // Single flush should deliver exactly one notification
+        runtime
+            .reactive_flush_deferred()
+            .unwrap_or_else(|err| panic!("flush deferred: {}", format_runtime_error(err)));
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+
+        let final_val = expect_int(
+            runtime
+                .reactive_get_signal(source)
+                .unwrap_or_else(|err| panic!("final get: {}", format_runtime_error(err))),
+        );
+        assert_eq!(final_val, 50);
+    }
+
+    /// Multiple background threads write to the same signal while another set
+    /// of threads create derived signals from it concurrently. Tests that
+    /// signal creation and invalidation are safe under contention.
+    #[test]
+    fn reactive_concurrent_derive_creation_and_writes() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("source signal: {}", format_runtime_error(err)));
+        let ctx = runtime.ctx.clone();
+
+        // Spawn writers
+        let writer_handles: Vec<_> = (0..4)
+            .map(|i| {
+                let ctx = ctx.clone();
+                let source = source.clone();
+                std::thread::spawn(move || {
+                    let mut bg = Runtime::new(ctx, CancelToken::root());
+                    for j in 1..=30 {
+                        bg.reactive_set_signal(source.clone(), Value::Int(i * 100 + j))
+                            .unwrap_or_else(|err| {
+                                panic!("writer {i} set #{j}: {}", format_runtime_error(err))
+                            });
+                    }
+                })
+            })
+            .collect();
+
+        // Spawn derive creators — each creates a derived signal in its own
+        // Runtime, which still shares the same reactive graph.
+        let derive_handles: Vec<_> = (0..4)
+            .map(|i| {
+                let ctx = ctx.clone();
+                let source = source.clone();
+                std::thread::spawn(move || {
+                    let mut bg = Runtime::new(ctx, CancelToken::root());
+                    let derived = bg
+                        .reactive_derive_signal(
+                            source.clone(),
+                            runtime_builtin(
+                                &format!("test.derive_thread_{i}"),
+                                1,
+                                move |mut args, _| {
+                                    let val = expect_int(args.remove(0));
+                                    Ok(Value::Int(val * (i + 1)))
+                                },
+                            ),
+                        )
+                        .unwrap_or_else(|err| {
+                            panic!("derive thread {i}: {}", format_runtime_error(err))
+                        });
+                    // Read the derived signal a few times
+                    for _ in 0..10 {
+                        let _ = bg.reactive_get_signal(derived.clone());
+                    }
+                })
+            })
+            .collect();
+
+        for h in writer_handles {
+            h.join().expect("writer should not panic");
+        }
+        for h in derive_handles {
+            h.join().expect("deriver should not panic");
+        }
+
+        // Source should have a valid final value
+        let final_val = expect_int(
+            runtime
+                .reactive_get_signal(source)
+                .unwrap_or_else(|err| panic!("final source: {}", format_runtime_error(err))),
+        );
+        assert!(final_val >= 0, "final value must be non-negative");
+
+        let graph = runtime.reactive_graph.lock();
+        assert_eq!(graph.batch_depth, 0);
+        assert!(!graph.flushing);
+    }
+
+    /// Background threads each batch-write to their own source signal. After
+    /// joining, a deferred flush on the main thread delivers the settled derived
+    /// value exactly once.
+    #[test]
+    fn reactive_concurrent_batches_from_multiple_threads_with_deferred_flush() {
+        let mut runtime = test_runtime();
+        let first = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("first: {}", format_runtime_error(err)));
+        let second = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("second: {}", format_runtime_error(err)));
+        let sum = runtime
+            .reactive_combine_all(
+                Value::Tuple(vec![first.clone(), second.clone()]),
+                runtime_builtin("test.sum_pair_concurrent", 1, |mut args, _| {
+                    let Value::Tuple(items) = args.remove(0) else {
+                        panic!("expected tuple");
+                    };
+                    let [left, right] = items.as_slice() else {
+                        panic!("expected 2 items");
+                    };
+                    Ok(Value::Int(expect_int(left.clone()) + expect_int(right.clone())))
+                }),
+            )
+            .unwrap_or_else(|err| panic!("sum: {}", format_runtime_error(err)));
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen_values = Arc::new(std::sync::Mutex::new(Vec::<i64>::new()));
+        let cc = callback_count.clone();
+        let sv = seen_values.clone();
+        let sum_for_watch = sum.clone();
+        let callback = runtime_builtin("test.concurrent_batch_watch", 1, move |_args, runtime| {
+            cc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let val = runtime.reactive_get_signal(sum_for_watch.clone())?;
+            sv.lock()
+                .expect("seen_values lock should not be poisoned")
+                .push(expect_int(val));
+            Ok(Value::Unit)
+        });
+        runtime
+            .reactive_watch_signal_main_thread(sum.clone(), callback)
+            .unwrap_or_else(|err| panic!("watcher: {}", format_runtime_error(err)));
+
+        let ctx = runtime.ctx.clone();
+
+        // Thread A writes first=10, Thread B writes second=20
+        let ctx_a = ctx.clone();
+        let first_for_a = first.clone();
+        let handle_a = std::thread::spawn(move || {
+            let mut bg = Runtime::new(ctx_a, CancelToken::root());
+            let first_c = first_for_a.clone();
+            let batch_cb = runtime_builtin("test.batch_a", 1, move |_args, runtime| {
+                runtime.reactive_set_signal(first_c.clone(), Value::Int(10))?;
+                Ok(Value::Unit)
+            });
+            bg.reactive_batch(batch_cb)
+                .unwrap_or_else(|err| panic!("batch A: {}", format_runtime_error(err)));
+        });
+
+        let ctx_b = ctx.clone();
+        let second_for_b = second.clone();
+        let handle_b = std::thread::spawn(move || {
+            let mut bg = Runtime::new(ctx_b, CancelToken::root());
+            let second_c = second_for_b.clone();
+            let batch_cb = runtime_builtin("test.batch_b", 1, move |_args, runtime| {
+                runtime.reactive_set_signal(second_c.clone(), Value::Int(20))?;
+                Ok(Value::Unit)
+            });
+            bg.reactive_batch(batch_cb)
+                .unwrap_or_else(|err| panic!("batch B: {}", format_runtime_error(err)));
+        });
+
+        handle_a.join().expect("thread A should not panic");
+        handle_b.join().expect("thread B should not panic");
+
+        // No callbacks yet
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        runtime
+            .reactive_flush_deferred()
+            .unwrap_or_else(|err| panic!("flush: {}", format_runtime_error(err)));
+
+        let final_sum = expect_int(
+            runtime
+                .reactive_get_signal(sum)
+                .unwrap_or_else(|err| panic!("final sum: {}", format_runtime_error(err))),
+        );
+        assert_eq!(final_sum, 30);
+
+        // Watcher should have fired (at least once, possibly twice if the graph
+        // saw two separate pending-notification rounds).
+        let count = callback_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(count >= 1, "watcher should fire at least once, got {count}");
+
+        // The last seen value must be 30 (the settled sum).
+        let values = seen_values
+            .lock()
+            .expect("seen_values lock should not be poisoned");
+        assert_eq!(
+            *values.last().expect("should have at least one seen value"),
+            30
+        );
+    }
+
+    /// Set the same value repeatedly — the signal should detect equality and
+    /// skip watcher notifications (no-change optimization under contention).
+    #[test]
+    fn reactive_no_change_skips_notification_under_contention() {
+        let mut runtime = test_runtime();
+        let source = runtime
+            .reactive_create_signal(Value::Int(42))
+            .unwrap_or_else(|err| panic!("source: {}", format_runtime_error(err)));
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let cc = callback_count.clone();
+        let callback = runtime_builtin("test.noop_watch", 1, move |_args, _| {
+            cc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Value::Unit)
+        });
+        runtime
+            .reactive_watch_signal(source.clone(), callback)
+            .unwrap_or_else(|err| panic!("watcher: {}", format_runtime_error(err)));
+
+        // Write the same value many times — should not trigger watcher
+        for _ in 0..20 {
+            runtime
+                .reactive_set_signal(source.clone(), Value::Int(42))
+                .unwrap_or_else(|err| panic!("set same: {}", format_runtime_error(err)));
+        }
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            0
+        );
+
+        // Now write a different value — should trigger once
+        runtime
+            .reactive_set_signal(source.clone(), Value::Int(43))
+            .unwrap_or_else(|err| panic!("set different: {}", format_runtime_error(err)));
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
     }
 }

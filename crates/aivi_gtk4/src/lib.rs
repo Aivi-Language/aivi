@@ -327,12 +327,16 @@ mod linux_impl {
 
         fn gtk_menu_button_new() -> *mut c_void;
         fn gtk_menu_button_set_menu_model(button: *mut c_void, menu_model: *mut c_void);
+        fn gtk_menu_button_set_popover(button: *mut c_void, popover: *mut c_void);
+        fn gtk_menu_button_popup(button: *mut c_void);
 
         fn gtk_revealer_new() -> *mut c_void;
         fn gtk_revealer_set_child(revealer: *mut c_void, child: *mut c_void);
         fn gtk_revealer_set_reveal_child(revealer: *mut c_void, reveal_child: c_int);
         fn gtk_revealer_set_transition_type(revealer: *mut c_void, transition: c_int);
         fn gtk_revealer_set_transition_duration(revealer: *mut c_void, duration: c_uint);
+
+        fn gtk_popover_set_child(popover: *mut c_void, child: *mut c_void);
 
         fn gtk_progress_bar_new() -> *mut c_void;
         fn gtk_progress_bar_set_fraction(progress_bar: *mut c_void, fraction: f64);
@@ -1072,6 +1076,28 @@ mod linux_impl {
         g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
     }
 
+    fn set_object_property_ptr(
+        operation: &str,
+        widget: *mut c_void,
+        class_name: &str,
+        prop_name: &str,
+        val: *mut c_void,
+    ) -> Result<(), Gtk4Error> {
+        match (class_name, prop_name) {
+            ("GtkMenuButton", "popover") => unsafe { gtk_menu_button_set_popover(widget, val) },
+            ("GtkPopover", "child") => unsafe { gtk_popover_set_child(widget, val) },
+            _ => {
+                let prop_c = CString::new(prop_name).map_err(|_| {
+                    Gtk4Error::new(format!(
+                        "gtk4.{operation} invalid object property name `{prop_name}`"
+                    ))
+                })?;
+                unsafe { gobject_set_ptr(widget, &prop_c, val) };
+            }
+        }
+        Ok(())
+    }
+
     /// Get a GObject boolean (c_int) property.
     unsafe fn gobject_get_bool(widget: *mut c_void, prop: &CStr) -> c_int {
         let mut val: c_int = 0;
@@ -1248,7 +1274,13 @@ mod linux_impl {
             _ => {
                 if let Ok(id) = raw_value.trim().parse::<i64>() {
                     if let Some(&other) = state.widgets.get(&id) {
-                        unsafe { gobject_set_ptr(widget, &prop_c, other) };
+                        set_object_property_ptr(
+                            "buildFromNode",
+                            widget,
+                            class_name,
+                            prop_name,
+                            other,
+                        )?;
                         return Ok(true);
                     }
                 }
@@ -2431,8 +2463,8 @@ mod linux_impl {
             init().expect("init gtk");
 
             let receiver = signal_stream().expect("signal stream");
-            let app_id =
-                app_new("integration-tests.menu-button-activation").expect("create GTK application");
+            let app_id = app_new("integration-tests.menu-button-activation")
+                .expect("create GTK application");
             let action_id = action_new("settings-ai").expect("create settings action");
             app_add_action(app_id, action_id).expect("attach settings action to app");
 
@@ -2490,7 +2522,10 @@ mod linux_impl {
                 );
                 let popover_prop = CString::new("popover").expect("popover property CString");
                 let popover = unsafe { gobject_get_ptr(button, &popover_prop) };
-                assert!(!popover.is_null(), "menu button should expose a backing popover");
+                assert!(
+                    !popover.is_null(),
+                    "menu button should expose a backing popover"
+                );
                 let mut descendants = Vec::new();
                 collect_widget_descendants(popover, &mut descendants);
                 descendants
@@ -2515,6 +2550,117 @@ mod linux_impl {
             }
 
             panic!("activating generated menu item widgets should reach settings-ai action");
+        }
+
+        #[test]
+        fn mounted_menu_button_custom_popover_activation_opens_popover() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let app_id = app_new("integration-tests.menu-button-custom-popover")
+                .expect("create GTK application");
+
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "custom-popover-host".to_string()),
+                    ("prop:title".to_string(), "Custom Popover Host".to_string()),
+                    ("prop:default-width".to_string(), "320".to_string()),
+                    ("prop:default-height".to_string(), "180".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "GtkBox".to_string())],
+                    children: vec![GtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ("class".to_string(), "GtkMenuButton".to_string()),
+                            ("id".to_string(), "custom-settings-button".to_string()),
+                            (
+                                "prop:icon-name".to_string(),
+                                "preferences-system-symbolic".to_string(),
+                            ),
+                        ],
+                        children: vec![GtkNode::Element {
+                            tag: "property".to_string(),
+                            attrs: vec![("name".to_string(), "popover".to_string())],
+                            children: vec![GtkNode::Element {
+                                tag: "object".to_string(),
+                                attrs: vec![("class".to_string(), "GtkPopover".to_string())],
+                                children: vec![GtkNode::Element {
+                                    tag: "object".to_string(),
+                                    attrs: vec![
+                                        ("class".to_string(), "GtkBox".to_string()),
+                                        ("prop:orientation".to_string(), "vertical".to_string()),
+                                    ],
+                                    children: vec![GtkNode::Element {
+                                        tag: "object".to_string(),
+                                        attrs: vec![
+                                            ("class".to_string(), "GtkButton".to_string()),
+                                            ("id".to_string(), "custom-settings-item".to_string()),
+                                            ("prop:label".to_string(), "AI settings".to_string()),
+                                            (
+                                                "signal:clicked".to_string(),
+                                                "settings-popover-item".to_string(),
+                                            ),
+                                        ],
+                                        children: vec![],
+                                    }],
+                                }],
+                            }],
+                        }],
+                    }],
+                }],
+            };
+
+            let result =
+                mount_app_window_with_bindings(app_id, &[window_node]).expect("mount window");
+            let button_id = *result
+                .named_widgets
+                .get("custom-settings-button")
+                .expect("menu button should be named");
+            let item_id = *result
+                .named_widgets
+                .get("custom-settings-item")
+                .expect("custom popover item should be named");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            let (button, item) = GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let button = widget_ptr(&state, button_id, "custom_menu_button_activation_test")
+                    .expect("button");
+                let item = widget_ptr(&state, item_id, "custom_menu_button_activation_test")
+                    .expect("item");
+                (button, item)
+            });
+            unsafe { gtk_menu_button_popup(button) };
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+
+            let active_prop = CString::new("active").expect("active property CString");
+            assert_ne!(
+                unsafe { gobject_get_bool(button, &active_prop) },
+                0,
+                "GtkMenuButton should become active after popping up its custom popover"
+            );
+            let popover_prop = CString::new("popover").expect("popover property CString");
+            let popover = unsafe { gobject_get_ptr(button, &popover_prop) };
+            assert!(
+                !popover.is_null(),
+                "menu button should expose its custom popover"
+            );
+            let mut descendants = Vec::new();
+            collect_widget_descendants(popover, &mut descendants);
+            assert!(
+                descendants.contains(&item),
+                "custom popover descendants should include the nested button"
+            );
         }
 
         #[test]
@@ -8948,12 +9094,7 @@ mod linux_impl {
                         child_raw,
                     )?;
                 }
-                let prop_c = CString::new(property_name).map_err(|_| {
-                    Gtk4Error::new(format!(
-                        "gtk4.{operation} invalid object property name `{property_name}`"
-                    ))
-                })?;
-                unsafe { gobject_set_ptr(raw, &prop_c, child_raw) };
+                set_object_property_ptr(operation, raw, class_name, property_name, child_raw)?;
                 live_children.push(LiveChild {
                     child_type: child.child_type.clone(),
                     property_name: child.property_name.clone(),
@@ -9277,12 +9418,13 @@ mod linux_impl {
         let parent_raw = widget_ptr(state, parent_id, "reconcile")?;
         let child_raw = widget_ptr(state, child_id, "reconcile")?;
         if let Some(property_name) = placement.property_name {
-            let prop_c = CString::new(property_name).map_err(|_| {
-                Gtk4Error::new(format!(
-                    "gtk4.reconcile invalid object property name `{property_name}`"
-                ))
-            })?;
-            unsafe { gobject_set_ptr(parent_raw, &prop_c, std::ptr::null_mut()) };
+            set_object_property_ptr(
+                "reconcileNode",
+                parent_raw,
+                parent_class_name,
+                property_name,
+                std::ptr::null_mut(),
+            )?;
             if let Some(live) = child_live {
                 let live_clone = live.clone();
                 cleanup_widget_state(state, &live_clone);
@@ -9345,12 +9487,13 @@ mod linux_impl {
                     child.raw,
                 )?;
             }
-            let prop_c = CString::new(property_name).map_err(|_| {
-                Gtk4Error::new(format!(
-                    "gtk4.reconcile invalid object property name `{property_name}`"
-                ))
-            })?;
-            unsafe { gobject_set_ptr(parent.raw, &prop_c, child.raw) };
+            set_object_property_ptr(
+                "reconcileNode",
+                parent.raw,
+                parent.info.class_name,
+                property_name,
+                child.raw,
+            )?;
             return Ok(());
         }
         if placement.child_type == Some("controller") {
@@ -10223,12 +10366,7 @@ mod linux_impl {
             if !prop_info.writable || prop_info.construct_only {
                 continue;
             }
-            let prop_c = CString::new(candidate).map_err(|_| {
-                Gtk4Error::new(format!(
-                    "gtk4.buildFromNode invalid child attachment property `{candidate}`"
-                ))
-            })?;
-            unsafe { gobject_set_ptr(parent, &prop_c, child) };
+            set_object_property_ptr("buildFromNode", parent, parent_class_name, candidate, child)?;
             return Ok(());
         }
         Err(Gtk4Error::new(format!(
