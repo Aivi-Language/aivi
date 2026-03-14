@@ -212,6 +212,27 @@ mount_app_window_accepts_multiple_live_roots = do Effect {
     _ <- windowClose win
 }
 
+@test "GtkMenuButton accepts nested GtkPopover property graphs"
+menu_button_accepts_nested_popover_property_graphs = do Effect {
+  view =
+    ~<gtk>
+      <GtkMenuButton id="settings-btn" iconName="preferences-system-symbolic">
+        <property name="popover">
+          <GtkPopover id="settings-popover">
+            <GtkBox id="settings-menu" orientation="vertical" spacing={4}>
+              <GtkButton id="settings-ai-btn" label="AI settings" />
+            </GtkBox>
+          </GtkPopover>
+        </property>
+      </GtkMenuButton>
+    </gtk>
+    _         <- buildWithIds view
+    buttonId  <- widgetById "settings-btn"
+    popoverId <- widgetById "settings-popover"
+    assertEq False (buttonId == 0)
+    assertEq False (popoverId == 0)
+}
+
 @test "GtkValueChanged carries widget name and float value"
 signal_value_changed = do Effect {
   assertEq (getValueTriple (GtkValueChanged 5 "slider" 0.75)) (5, "slider", 0.75)
