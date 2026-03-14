@@ -190,14 +190,16 @@ Uppercase or dotted non-`Gtk*`/`Adw*` tags are component calls:
 
 Component tags use record-based lowering: attributes become record fields and children become a `children` field. Signal sugar and `props` normalization do not apply there because the component function owns its own API.
 
-GTK sigils also support function-call tags for local lowerCamel helpers. A simple uppercase self-closing tag with positional arguments lowers to the same helper with a lowercased first letter:
+GTK sigils also support function-call tags for local lowerCamel helpers. A simple uppercase self-closing tag lowers to the same helper with a lowercased first letter:
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/block_01.aivi{aivi}
+
+When the self-closing helper tag has no attributes, children, or positional arguments, the sigil passes `Unit` automatically. For example, `<DetailsPane />` lowers like `detailsPane Unit`.
 
 Function-call tags:
 
 - only apply to simple non-`Gtk*`/`Adw*`/`Gsk*` tags
-- use positional arguments instead of attributes
+- use positional arguments instead of attributes, or `Unit` when there are none
 - must be self-closing
 - do not participate in component record lowering
 

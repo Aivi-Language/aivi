@@ -745,7 +745,9 @@ mod linux_impl {
         next_id: i64,
         apps: HashMap<i64, *mut c_void>,
         actions: HashMap<i64, ActionState>,
+        action_names: HashMap<String, i64>,
         menu_models: HashMap<i64, *mut c_void>,
+        menu_model_items: HashMap<i64, Vec<MenuModelItemState>>,
         windows: HashMap<i64, *mut c_void>,
         widgets: HashMap<i64, *mut c_void>,
         retained_widgets: HashMap<i64, *mut c_void>,
@@ -785,6 +787,12 @@ mod linux_impl {
 
     struct ActionState {
         raw: *mut c_void,
+    }
+
+    #[derive(Clone, Debug)]
+    struct MenuModelItemState {
+        label: String,
+        detailed_action: String,
     }
 
     #[derive(Clone, Debug)]
@@ -2553,6 +2561,188 @@ mod linux_impl {
         }
 
         #[test]
+        fn ui_debug_menu_button_select_reports_dialog_presentation_truthfully() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let receiver = signal_stream().expect("signal stream");
+            let app_id =
+                app_new("integration-tests.menu-button-ui-debug").expect("create GTK application");
+            let action_id = action_new("settings-ai").expect("create settings action");
+            app_add_action(app_id, action_id).expect("attach settings action to app");
+
+            let menu_id = menu_model_new().expect("create menu model");
+            menu_model_append_item(menu_id, "AI settings", "app.settings-ai")
+                .expect("append menu item");
+
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "menu-button-debug-host".to_string()),
+                    (
+                        "prop:title".to_string(),
+                        "Menu Button Debug Host".to_string(),
+                    ),
+                    ("prop:default-width".to_string(), "320".to_string()),
+                    ("prop:default-height".to_string(), "180".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "GtkBox".to_string())],
+                    children: vec![GtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ("class".to_string(), "GtkMenuButton".to_string()),
+                            ("id".to_string(), "menu-button-debug-settings".to_string()),
+                            (
+                                "prop:icon-name".to_string(),
+                                "preferences-system-symbolic".to_string(),
+                            ),
+                            ("prop:menu-model".to_string(), menu_id.to_string()),
+                        ],
+                        children: vec![],
+                    }],
+                }],
+            };
+            let dialog_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwPreferencesDialog".to_string()),
+                    ("id".to_string(), "menu-button-debug-dialog".to_string()),
+                    ("prop:title".to_string(), "Mounted Settings".to_string()),
+                    ("prop:open".to_string(), "false".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ("class".to_string(), "AdwPreferencesPage".to_string()),
+                        ("prop:title".to_string(), "General".to_string()),
+                    ],
+                    children: vec![],
+                }],
+            };
+
+            let result = mount_app_window_with_bindings(app_id, &[window_node, dialog_node])
+                .expect("mount window with dialog");
+            let dialog_id = *result
+                .named_widgets
+                .get("menu-button-debug-dialog")
+                .expect("dialog should be named");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            widget_set_opacity(dialog_id, 0.0).expect("hide dialog root");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            let button_params =
+                Map::from_iter([("name".to_string(), json!("menu-button-debug-settings"))]);
+            let dialog_params =
+                Map::from_iter([("name".to_string(), json!("menu-button-debug-dialog"))]);
+
+            let button_before = with_ui_debug_state_result(|state| {
+                ui_debug_inspect_widget_result(state, &button_params)
+            })
+            .expect("inspect menu button before select");
+            assert_eq!(
+                button_before["widget"]["capabilities"]["click"].as_bool(),
+                Some(true)
+            );
+            assert_eq!(
+                button_before["widget"]["capabilities"]["select"].as_bool(),
+                Some(true)
+            );
+            assert_eq!(
+                button_before["widget"]["state"]["options"][0]["label"].as_str(),
+                Some("AI settings")
+            );
+
+            let dialog_before = with_ui_debug_state_result(|state| {
+                ui_debug_inspect_widget_result(state, &dialog_params)
+            })
+            .expect("inspect dialog before opening");
+            assert_eq!(
+                dialog_before["widget"]["state"]["visible"].as_bool(),
+                Some(false)
+            );
+            assert_eq!(
+                dialog_before["widget"]["state"]["presented"].as_bool(),
+                Some(false)
+            );
+            assert_eq!(
+                dialog_before["widget"]["state"]["requestedOpen"].as_bool(),
+                Some(false)
+            );
+
+            let click_result = ui_debug_click_result(&button_params).expect("popup menu button");
+            assert_eq!(
+                click_result["widget"]["state"]["active"].as_bool(),
+                Some(true)
+            );
+
+            let select_params = Map::from_iter([
+                ("name".to_string(), json!("menu-button-debug-settings")),
+                ("value".to_string(), json!("AI settings")),
+            ]);
+            let select_result = ui_debug_select_result(&select_params).expect("select menu item");
+            assert_eq!(
+                select_result["emitted"][0]["handler"].as_str(),
+                Some("settings-ai")
+            );
+            assert_eq!(
+                select_result["emitted"][0]["label"].as_str(),
+                Some("AI settings")
+            );
+
+            let event = receiver
+                .recv_timeout(Duration::from_millis(100))
+                .expect("menu selection should emit an action event");
+            assert_eq!(event.signal, "action");
+            assert_eq!(event.handler, "settings-ai");
+
+            dialog_set_open(dialog_id, true).expect("present dialog after action");
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+
+            let dialog_open = with_ui_debug_state_result(|state| {
+                ui_debug_inspect_widget_result(state, &dialog_params)
+            })
+            .expect("inspect dialog after opening");
+            assert_eq!(
+                dialog_open["widget"]["state"]["visible"].as_bool(),
+                Some(true)
+            );
+            assert_eq!(
+                dialog_open["widget"]["state"]["presented"].as_bool(),
+                Some(true)
+            );
+            assert_eq!(
+                dialog_open["widget"]["state"]["presentedParentId"].as_i64(),
+                Some(result.root_id)
+            );
+
+            dialog_set_open(dialog_id, false).expect("close dialog");
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+
+            let dialog_closed = with_ui_debug_state_result(|state| {
+                ui_debug_inspect_widget_result(state, &dialog_params)
+            })
+            .expect("inspect dialog after closing");
+            assert_eq!(
+                dialog_closed["widget"]["state"]["visible"].as_bool(),
+                Some(false)
+            );
+            assert_eq!(
+                dialog_closed["widget"]["state"]["presented"].as_bool(),
+                Some(false)
+            );
+        }
+
+        #[test]
         fn mounted_menu_button_custom_popover_activation_opens_popover() {
             let _guard = gtk_state_test_guard();
             reset_test_gtk_state();
@@ -3004,6 +3194,35 @@ mod linux_impl {
         matches!(class_name, "GtkDropDown" | "GtkComboBoxText")
     }
 
+    fn is_live_dialog(live: &LiveNode) -> bool {
+        live.class_name.starts_with("Adw") && live.class_name.ends_with("Dialog")
+    }
+
+    fn dialog_requested_open(live: &LiveNode) -> Option<bool> {
+        live.props.get("open").map(|raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                false
+            } else {
+                parse_bool_text(trimmed).unwrap_or(false)
+            }
+        })
+    }
+
+    fn menu_button_model_id(live: &LiveNode) -> Option<i64> {
+        (live.class_name == "GtkMenuButton")
+            .then(|| {
+                live.props
+                    .get("menu-model")
+                    .and_then(|value| parse_i64_text(value))
+            })
+            .flatten()
+    }
+
+    fn is_menu_button_selectable(live: &LiveNode) -> bool {
+        menu_button_model_id(live).is_some()
+    }
+
     fn string_prop_lines(value: Option<&String>) -> Vec<String> {
         value
             .map(|text| {
@@ -3025,6 +3244,67 @@ mod linux_impl {
                     .iter()
                     .position(|option| option.eq_ignore_ascii_case(raw_value))
             })
+    }
+
+    fn action_name_from_detailed_action(detailed_action: &str) -> Option<String> {
+        let without_target = detailed_action
+            .split("::")
+            .next()
+            .unwrap_or(detailed_action)
+            .split('(')
+            .next()
+            .unwrap_or(detailed_action)
+            .trim();
+        if without_target.is_empty() {
+            return None;
+        }
+        let action_name = without_target
+            .rsplit_once('.')
+            .map(|(_, name)| name)
+            .unwrap_or(without_target)
+            .trim();
+        (!action_name.is_empty()).then(|| action_name.to_string())
+    }
+
+    fn menu_model_selection<'a>(
+        items: &'a [MenuModelItemState],
+        raw_value: &str,
+    ) -> Option<(usize, &'a MenuModelItemState)> {
+        parse_usize_text(raw_value)
+            .filter(|index| *index < items.len())
+            .map(|index| (index, &items[index]))
+            .or_else(|| {
+                items.iter().enumerate().find(|(_, item)| {
+                    item.label == raw_value || item.label.eq_ignore_ascii_case(raw_value)
+                })
+            })
+            .or_else(|| {
+                items
+                    .iter()
+                    .enumerate()
+                    .find(|(_, item)| item.detailed_action == raw_value)
+            })
+            .or_else(|| {
+                items.iter().enumerate().find(|(_, item)| {
+                    action_name_from_detailed_action(&item.detailed_action)
+                        .map(|name| name == raw_value || name.eq_ignore_ascii_case(raw_value))
+                        .unwrap_or(false)
+                })
+            })
+    }
+
+    fn menu_model_items_json(items: &[MenuModelItemState]) -> Value {
+        json!(items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                json!({
+                    "index": index,
+                    "label": item.label,
+                    "action": item.detailed_action,
+                })
+            })
+            .collect::<Vec<_>>())
     }
 
     fn text_slice_by_char_range(text: &str, start: usize, end: usize) -> String {
@@ -3275,12 +3555,14 @@ mod linux_impl {
         let click = live
             .signals
             .iter()
-            .any(|binding| matches!(binding.signal.as_str(), "clicked" | "activate"));
+            .any(|binding| matches!(binding.signal.as_str(), "clicked" | "activate"))
+            || live.class_name == "GtkMenuButton";
         let input = is_text_input_class(&live.class_name);
         let select = matches!(live.kind, CreatedWidgetKind::Stack)
             || is_toggle_class(&live.class_name)
             || is_choice_class(&live.class_name)
-            || is_range_class(&live.class_name);
+            || is_range_class(&live.class_name)
+            || is_menu_button_selectable(live);
         let focus = widget_ptr(state, live.widget_id, "uiDebugCapabilities")
             .ok()
             .and_then(|widget| widget_bool_property(widget, "focusable"))
@@ -3301,7 +3583,36 @@ mod linux_impl {
     fn widget_runtime_state_json(state: &RealGtkState, live: &LiveNode) -> Value {
         let mut runtime = Map::new();
         if let Ok(widget) = widget_ptr(state, live.widget_id, "uiDebugState") {
-            if let Some(visible) = widget_bool_property(widget, "visible") {
+            if is_live_dialog(live) {
+                let presented = dialog_actual_presented(widget);
+                runtime.insert("visible".to_string(), Value::Bool(presented));
+                runtime.insert("presented".to_string(), Value::Bool(presented));
+                runtime.insert(
+                    "trackedPresented".to_string(),
+                    Value::Bool(state.presented_dialogs.contains(&live.widget_id)),
+                );
+                if let Some(requested_open) = dialog_requested_open(live) {
+                    runtime.insert("requestedOpen".to_string(), Value::Bool(requested_open));
+                }
+                if let Some(gtk_visible) = widget_bool_property(widget, "visible") {
+                    runtime.insert("gtkVisible".to_string(), Value::Bool(gtk_visible));
+                }
+                let presented_parent_id = presented
+                    .then(|| unsafe { gtk_widget_get_parent(widget) })
+                    .and_then(|parent| widget_id_for_ptr(state, parent))
+                    .or_else(|| {
+                        live.props
+                            .get("present-for")
+                            .or_else(|| live.props.get("transient-for"))
+                            .and_then(|value| parse_i64_text(value))
+                    });
+                runtime.insert("presentedParentId".to_string(), json!(presented_parent_id));
+                runtime.insert(
+                    "presentedParentName".to_string(),
+                    json!(presented_parent_id
+                        .and_then(|id| state.widget_id_to_name.get(&id).cloned())),
+                );
+            } else if let Some(visible) = widget_bool_property(widget, "visible") {
                 runtime.insert("visible".to_string(), Value::Bool(visible));
             }
             if let Some(sensitive) = widget_bool_property(widget, "sensitive") {
@@ -3395,6 +3706,16 @@ mod linux_impl {
                 runtime.insert("selected".to_string(), json!(selected_index));
                 runtime.insert("selectedLabel".to_string(), json!(selected_label));
                 runtime.insert("options".to_string(), choice_options_json(live));
+            } else if live.class_name == "GtkMenuButton" {
+                if let Some(active) = widget_bool_property(widget, "active") {
+                    runtime.insert("active".to_string(), Value::Bool(active));
+                }
+                if let Some(model_id) = menu_button_model_id(live) {
+                    runtime.insert("menuModelId".to_string(), json!(model_id));
+                    if let Ok(items) = menu_model_items(state, model_id, "uiDebugState") {
+                        runtime.insert("options".to_string(), menu_model_items_json(items));
+                    }
+                }
             } else if matches!(live.kind, CreatedWidgetKind::ScrolledWindow) {
                 let hadj = unsafe { gtk_scrolled_window_get_hadjustment(widget) };
                 let vadj = unsafe { gtk_scrolled_window_get_vadjustment(widget) };
@@ -3679,6 +4000,21 @@ mod linux_impl {
             .ok_or_else(|| Gtk4Error::new(format!("gtk4.{fn_name} unknown action id {action_id}")))
     }
 
+    fn action_ptr_by_name(
+        state: &RealGtkState,
+        action_name: &str,
+        fn_name: &str,
+    ) -> Result<*mut c_void, Gtk4Error> {
+        let action_id = state
+            .action_names
+            .get(action_name)
+            .copied()
+            .ok_or_else(|| {
+                Gtk4Error::new(format!("gtk4.{fn_name} unknown action name {action_name}"))
+            })?;
+        action_ptr(state, action_id, fn_name)
+    }
+
     fn menu_model_ptr(
         state: &RealGtkState,
         model_id: i64,
@@ -3687,6 +4023,20 @@ mod linux_impl {
         state.menu_models.get(&model_id).copied().ok_or_else(|| {
             Gtk4Error::new(format!("gtk4.{fn_name} unknown menu model id {model_id}"))
         })
+    }
+
+    fn menu_model_items<'a>(
+        state: &'a RealGtkState,
+        model_id: i64,
+        fn_name: &str,
+    ) -> Result<&'a [MenuModelItemState], Gtk4Error> {
+        state
+            .menu_model_items
+            .get(&model_id)
+            .map(Vec::as_slice)
+            .ok_or_else(|| {
+                Gtk4Error::new(format!("gtk4.{fn_name} unknown menu model id {model_id}"))
+            })
     }
 
     fn update_live_prop(state: &mut RealGtkState, widget_id: i64, key: &str, value: String) {
@@ -4898,51 +5248,78 @@ mod linux_impl {
         )
     }
 
-    fn ui_debug_click_result(
-        state: &mut RealGtkState,
-        params: &Map<String, Value>,
-    ) -> Result<Value, Gtk4Error> {
-        let widget_id = resolve_widget_id(state, params)?;
-        let (root_id, bindings) = {
-            let (root_id, _, _, live) = find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} is not part of the live tree"
-                ))
-            })?;
-            let bindings = live
-                .signals
-                .iter()
-                .filter(|binding| matches!(binding.signal.as_str(), "clicked" | "activate"))
-                .cloned()
-                .collect::<Vec<_>>();
-            (root_id, bindings)
-        };
-        if bindings.is_empty() {
-            return Err(Gtk4Error::new(format!(
-                "gtk ui debug widget {widget_id} has no clickable signal bindings"
-            )));
-        }
-        let mut emitted = Vec::new();
-        for binding in &bindings {
-            enqueue_signal_event(state, widget_id, &binding.signal, &binding.handler, "")?;
-            emitted.push(json!({
-                "signal": binding.signal,
-                "handler": binding.handler
-            }));
-        }
-        let (_, parent_id, child_type, live) =
-            find_widget_context(state, widget_id).ok_or_else(|| {
-                Gtk4Error::new(format!(
-                    "gtk ui debug widget {widget_id} disappeared after click dispatch"
-                ))
-            })?;
-        Ok(json!({
-            "protocol": "aivi.gtk.debug.v1",
-            "rootId": root_id,
-            "focus": focus_summary_json(state),
-            "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
-            "emitted": emitted
-        }))
+    fn ui_debug_click_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
+        with_ui_debug_reentrant_result(
+            |state| {
+                let widget_id = resolve_widget_id(state, params)?;
+                let (root_id, class_name, bindings) = {
+                    let (root_id, _, _, live) =
+                        find_widget_context(state, widget_id).ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug widget {widget_id} is not part of the live tree"
+                            ))
+                        })?;
+                    (
+                        root_id,
+                        live.class_name.clone(),
+                        live.signals
+                            .iter()
+                            .filter(|binding| {
+                                matches!(binding.signal.as_str(), "clicked" | "activate")
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>(),
+                    )
+                };
+                if class_name != "GtkMenuButton" && bindings.is_empty() {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk ui debug widget {widget_id} has no clickable signal bindings"
+                    )));
+                }
+                let widget = widget_ptr(state, widget_id, "uiDebugClick")?;
+                Ok((widget_id, root_id, class_name, bindings, widget))
+            },
+            |(_, _, class_name, _, widget)| {
+                if class_name == "GtkMenuButton" {
+                    unsafe { gtk_menu_button_popup(*widget) };
+                    for _ in 0..5 {
+                        crate::pump_events();
+                    }
+                }
+                Ok(())
+            },
+            |state, (widget_id, root_id, class_name, bindings, _)| {
+                let mut emitted = Vec::new();
+                if class_name != "GtkMenuButton" {
+                    for binding in &bindings {
+                        enqueue_signal_event(
+                            state,
+                            widget_id,
+                            &binding.signal,
+                            &binding.handler,
+                            "",
+                        )?;
+                        emitted.push(json!({
+                            "signal": binding.signal,
+                            "handler": binding.handler
+                        }));
+                    }
+                }
+                let (_, parent_id, child_type, live) = find_widget_context(state, widget_id)
+                    .ok_or_else(|| {
+                        Gtk4Error::new(format!(
+                            "gtk ui debug widget {widget_id} disappeared after click dispatch"
+                        ))
+                    })?;
+                Ok(json!({
+                    "protocol": "aivi.gtk.debug.v1",
+                    "rootId": root_id,
+                    "focus": focus_summary_json(state),
+                    "widget": live_node_json(state, root_id, parent_id, child_type.as_deref(), live),
+                    "emitted": emitted
+                }))
+            },
+        )
     }
 
     fn ui_debug_type_result(params: &Map<String, Value>) -> Result<Value, Gtk4Error> {
@@ -5057,6 +5434,13 @@ mod linux_impl {
                 selected: f64,
                 payload: String,
             },
+            MenuButton {
+                action: *mut c_void,
+                item_index: usize,
+                item_label: String,
+                action_name: String,
+                detailed_action: String,
+            },
         }
 
         with_ui_debug_reentrant_result(
@@ -5162,6 +5546,42 @@ mod linux_impl {
                         selected,
                         payload: selected.to_string(),
                     }
+                } else if class_name == "GtkMenuButton" {
+                    let model_id = props
+                        .get("menu-model")
+                        .and_then(|raw| parse_i64_text(raw))
+                        .ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug select only supports GtkMenuButton widgets with a menu-model; widget {widget_id} does not expose one"
+                            ))
+                        })?;
+                    let items = menu_model_items(state, model_id, "uiDebugSelect")?;
+                    let (item_index, item) =
+                        menu_model_selection(items, &value).ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug select expected a menu item index or label for widget {widget_id}"
+                            ))
+                        })?;
+                    if item.detailed_action.contains("::") || item.detailed_action.contains('(') {
+                        return Err(Gtk4Error::new(format!(
+                            "gtk ui debug select does not yet support parameterized menu actions on widget {widget_id}"
+                        )));
+                    }
+                    let action_name = action_name_from_detailed_action(&item.detailed_action)
+                        .ok_or_else(|| {
+                            Gtk4Error::new(format!(
+                                "gtk ui debug select could not resolve an action from '{}' for widget {widget_id}",
+                                item.detailed_action
+                            ))
+                        })?;
+                    let action = action_ptr_by_name(state, &action_name, "uiDebugSelect")?;
+                    UiDebugSelectAction::MenuButton {
+                        action,
+                        item_index,
+                        item_label: item.label.clone(),
+                        action_name,
+                        detailed_action: item.detailed_action.clone(),
+                    }
                 } else {
                     return Err(Gtk4Error::new(format!(
                         "gtk ui debug widget {widget_id} does not support select"
@@ -5189,6 +5609,12 @@ mod linux_impl {
                     UiDebugSelectAction::SpinButton { selected, .. } => unsafe {
                         gtk_spin_button_set_value(*widget, *selected)
                     },
+                    UiDebugSelectAction::MenuButton { action, .. } => unsafe {
+                        g_action_activate(*action, null_mut())
+                    },
+                }
+                for _ in 0..5 {
+                    crate::pump_events();
                 }
                 Ok(())
             },
@@ -5314,6 +5740,21 @@ mod linux_impl {
                             }));
                         }
                     }
+                    UiDebugSelectAction::MenuButton {
+                        item_index,
+                        item_label,
+                        action_name,
+                        detailed_action,
+                        ..
+                    } => {
+                        emitted.push(json!({
+                            "signal": "action",
+                            "handler": action_name,
+                            "index": item_index,
+                            "label": item_label,
+                            "detailedAction": detailed_action
+                        }));
+                    }
                 }
 
                 let (_, parent_id, child_type, live) = find_widget_context(state, widget_id)
@@ -5411,7 +5852,7 @@ mod linux_impl {
             "inspectWidget" => {
                 with_ui_debug_state_result(|state| ui_debug_inspect_widget_result(state, params))
             }
-            "click" => with_ui_debug_state_result(|state| ui_debug_click_result(state, params)),
+            "click" => ui_debug_click_result(params),
             "type" => ui_debug_type_result(params),
             "focus" => ui_debug_focus_result(params),
             "moveFocus" => ui_debug_move_focus_result(params),
@@ -11304,6 +11745,7 @@ mod linux_impl {
             }
             let id = state.alloc_id();
             state.actions.insert(id, ActionState { raw });
+            state.action_names.insert(name.to_string(), id);
             Ok(id)
         })
     }
@@ -11393,6 +11835,7 @@ mod linux_impl {
             }
             let id = state.alloc_id();
             state.menu_models.insert(id, raw);
+            state.menu_model_items.insert(id, Vec::new());
             Ok(id)
         })
     }
@@ -11404,9 +11847,17 @@ mod linux_impl {
         let label_c = c_text(label, "gtk4.menuModelAppendItem invalid label")?;
         let action_c = c_text(action, "gtk4.menuModelAppendItem invalid action")?;
         GTK_STATE.with(|state| {
-            let state = state.borrow();
+            let mut state = state.borrow_mut();
             let menu = menu_model_ptr(&state, id, "menuModelAppendItem")?;
             unsafe { g_menu_append(menu, label_c.as_ptr(), action_c.as_ptr()) };
+            state
+                .menu_model_items
+                .entry(id)
+                .or_default()
+                .push(MenuModelItemState {
+                    label: label.to_string(),
+                    detailed_action: action.to_string(),
+                });
             Ok(())
         })
     }
