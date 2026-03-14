@@ -1856,6 +1856,7 @@ mod tests {
 
     use serde_json::json;
 
+    use super::super::concurrency::build_channel_record;
     use super::super::gtk4::{ResolvedGtkAttr, ResolvedGtkNode};
     use super::bridge::{
         execute_runtime_handler, make_signal_event_value, materialize_with_bindings,
@@ -1864,6 +1865,7 @@ mod tests {
     use crate::runtime::builtins::builtin;
     use crate::runtime::constructors::core_constructor_ordinals;
     use crate::runtime::environment::{Env, RuntimeContext};
+    use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend, ChannelSender};
     use crate::runtime::{format_runtime_error, CancelToken, EffectValue, Runtime, Value};
 
     fn test_ctx() -> Arc<RuntimeContext> {
@@ -1918,6 +1920,58 @@ mod tests {
             Ok(value) => value,
             Err(err) => panic!("{context}: {}", format_runtime_error(err)),
         }
+    }
+
+    fn record_field(record: &Value, field: &str) -> Value {
+        match record {
+            Value::Record(fields) => fields
+                .get(field)
+                .unwrap_or_else(|| panic!("missing field {field}"))
+                .clone(),
+            other => panic!("expected Record, got {other:?}"),
+        }
+    }
+
+    fn build_text_bound_entry(ctx: Arc<RuntimeContext>, initial_text: &str) -> (Runtime, Value, i64) {
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        let text = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text(initial_text.to_string())),
+            "create source text",
+        );
+        let derived = ok_or_panic(
+            runtime.reactive_derive_signal(
+                text.clone(),
+                builtin("test.deriveEntryText", 1, |mut args, _| Ok(args.remove(0))),
+            ),
+            "derive entry text",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkEntry".to_string(),
+                },
+                ResolvedGtkAttr::Id("entry".to_string()),
+                ResolvedGtkAttr::BoundProp {
+                    name: "text".to_string(),
+                    value: derived,
+                },
+            ],
+            children: Vec::new(),
+        };
+
+        let result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build entry");
+        let entry_id = *result
+            .named_widgets
+            .get("entry")
+            .expect("entry widget should be named");
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read initial entry text: {}", err.message)),
+            initial_text
+        );
+        (runtime, text, entry_id)
     }
 
     #[test]
@@ -2015,48 +2069,11 @@ mod tests {
     }
 
     #[test]
-    fn runtime_handler_callback_flushes_live_binding_updates_on_main_thread_tick() {
+    fn runtime_handler_callback_flushes_live_binding_updates_on_manual_deferred_flush() {
         let _gtk = gtk_test_guard();
         ensure_gtk();
         let ctx = test_ctx();
-        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
-        let text = ok_or_panic(
-            runtime.reactive_create_signal(Value::Text("before".to_string())),
-            "create source text",
-        );
-        let derived = ok_or_panic(
-            runtime.reactive_derive_signal(
-                text.clone(),
-                builtin("test.deriveEntryText", 1, |mut args, _| Ok(args.remove(0))),
-            ),
-            "derive entry text",
-        );
-        let node = ResolvedGtkNode::Element {
-            tag: "object".to_string(),
-            attrs: vec![
-                ResolvedGtkAttr::StaticAttr {
-                    name: "class".to_string(),
-                    value: "GtkEntry".to_string(),
-                },
-                ResolvedGtkAttr::Id("entry".to_string()),
-                ResolvedGtkAttr::BoundProp {
-                    name: "text".to_string(),
-                    value: derived,
-                },
-            ],
-            children: Vec::new(),
-        };
-
-        let result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build entry");
-        let entry_id = *result
-            .named_widgets
-            .get("entry")
-            .expect("entry widget should be named");
-        assert_eq!(
-            aivi_gtk4::entry_text(entry_id)
-                .unwrap_or_else(|err| panic!("read initial entry text: {}", err.message)),
-            "before"
-        );
+        let (mut runtime, text, entry_id) = build_text_bound_entry(ctx.clone(), "before");
 
         let text_for_handler = text.clone();
         let handler = builtin("test.gtkRuntimeHandlerDeferred", 1, move |mut args, runtime| {
@@ -2089,6 +2106,151 @@ mod tests {
                 .unwrap_or_else(|err| panic!("read flushed entry text: {}", err.message)),
             "after"
         );
+    }
+
+    #[test]
+    fn runtime_handler_callback_flushes_live_binding_updates_on_main_thread_tick() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let (mut runtime, text, entry_id) = build_text_bound_entry(ctx.clone(), "before");
+        let gtk4_record = super::super::gtk4::build_gtk4_record();
+        let init_effect = ok_or_panic(
+            runtime.apply(record_field(&gtk4_record, "init"), Value::Unit),
+            "apply gtk4.init",
+        );
+        ok_or_panic(runtime.run_effect_value(init_effect), "run gtk4.init");
+        let app = aivi_gtk4::app_new("com.aivi.main.loop.tick.flush.test")
+            .unwrap_or_else(|err| panic!("create tick test app: {}", err.message));
+        let host_window = present_stealth_host_window(app, "Tick Flush Host");
+
+        let text_for_handler = text.clone();
+        let handler = builtin("test.gtkRuntimeHandlerTick", 1, move |mut args, runtime| {
+            let _event = args.remove(0);
+            runtime.reactive_set_signal(text_for_handler.clone(), Value::Text("after".to_string()))
+        });
+        let handler_ctx = ctx.clone();
+        std::thread::spawn(move || {
+            ok_or_panic(
+                execute_runtime_handler(handler_ctx, handler, clicked_event()),
+                "run tick handler",
+            );
+        })
+        .join()
+        .expect("runtime handler thread should not panic");
+
+        assert_eq!(
+            runtime.reactive_graph.lock().deferred_flush,
+            true,
+            "background GTK update should defer until the main thread pump"
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read stale entry text: {}", err.message)),
+            "before"
+        );
+
+        let mut updated = false;
+        for _ in 0..60 {
+            super::pump_gtk_events();
+            if aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read tick-updated entry text: {}", err.message))
+                == "after"
+            {
+                updated = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert!(updated, "expected GTK main-loop tick to flush deferred bindings");
+        assert!(
+            !runtime.reactive_graph.lock().deferred_flush,
+            "main-loop tick should clear deferred flush state"
+        );
+        aivi_gtk4::window_close(host_window)
+            .unwrap_or_else(|err| panic!("close tick host window: {}", err.message));
+    }
+
+    #[test]
+    fn channel_recv_flushes_deferred_gtk_bindings_while_waiting() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let app = aivi_gtk4::app_new("com.aivi.channel.recv.flush.test")
+            .unwrap_or_else(|err| panic!("create recv test app: {}", err.message));
+        let host_window = present_stealth_host_window(app, "Recv Flush Host");
+        let (mut runtime, text, entry_id) = build_text_bound_entry(ctx.clone(), "before");
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let inner = Arc::new(ChannelInner {
+            sender: Mutex::new(Some(ChannelSender::Unbounded(sender))),
+            receiver: Mutex::new(receiver),
+            closed: std::sync::atomic::AtomicBool::new(false),
+        });
+        let send = Value::ChannelSend(Arc::new(ChannelSend {
+            inner: inner.clone(),
+        }));
+        let recv = Value::ChannelRecv(Arc::new(ChannelRecv { inner }));
+        let recv_effect = ok_or_panic(
+            runtime.apply(record_field(&build_channel_record(), "recv"), recv),
+            "apply channel.recv",
+        );
+
+        let handler_ctx = ctx.clone();
+        let text_for_handler = text.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(10));
+            let handler = builtin("test.gtkRuntimeHandlerRecv", 1, move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime.reactive_set_signal(
+                    text_for_handler.clone(),
+                    Value::Text("after".to_string()),
+                )
+            });
+            ok_or_panic(
+                execute_runtime_handler(handler_ctx, handler, clicked_event()),
+                "run recv handler",
+            );
+            std::thread::sleep(Duration::from_millis(50));
+            match send {
+                Value::ChannelSend(handle) => {
+                    let sender_guard = handle
+                        .inner
+                        .sender
+                        .lock()
+                        .expect("recv test channel sender lock should not be poisoned");
+                    let Some(ChannelSender::Unbounded(sender)) = sender_guard.as_ref() else {
+                        panic!("expected unbounded channel sender");
+                    };
+                    sender
+                        .send(Value::Text("done".to_string()))
+                        .expect("send recv test channel value");
+                }
+                other => panic!("expected channel send handle, got {other:?}"),
+            }
+        });
+
+        let recv_result = ok_or_panic(runtime.run_effect_value(recv_effect), "run channel.recv");
+        match recv_result {
+            Value::Constructor { name, args } => {
+                assert_eq!(name, "Ok");
+                assert_eq!(args.len(), 1);
+                assert!(matches!(args[0], Value::Text(ref text) if text == "done"));
+            }
+            other => panic!("expected Ok(done), got {other:?}"),
+        }
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read recv-flushed entry text: {}", err.message)),
+            "after"
+        );
+        assert!(
+            !runtime.reactive_graph.lock().deferred_flush,
+            "channel.recv should flush deferred bindings before returning"
+        );
+        aivi_gtk4::window_close(host_window)
+            .unwrap_or_else(|err| panic!("close recv host window: {}", err.message));
     }
 
     #[test]
@@ -3070,6 +3232,200 @@ mod tests {
         assert_eq!(
             aivi_gtk4::entry_text(entry_id)
                 .unwrap_or_else(|err| panic!("read persistent dialog entry: {}", err.message)),
+            "after"
+        );
+    }
+
+    #[test]
+    fn dialog_open_binding_background_updates_emit_close_signal_without_cleanup() {
+        let _gtk = gtk_test_guard();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let gtk4_record = super::super::gtk4::build_gtk4_record();
+        let app_effect = ok_or_panic(
+            runtime.apply(
+                record_field(&gtk4_record, "appNew"),
+                Value::Text("com.aivi.dialog.background.binding.test".to_string()),
+            ),
+            "apply gtk4.appNew",
+        );
+        let app_id = match ok_or_panic(runtime.run_effect_value(app_effect), "run gtk4.appNew") {
+            Value::Int(value) => value,
+            other => panic!("expected app id, got {other:?}"),
+        };
+        let dialog_open = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create dialog open signal",
+        );
+        let shared_text = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text("dialog".to_string())),
+            "create dialog text signal",
+        );
+        let signal_stream = aivi_gtk4::signal_stream()
+            .unwrap_or_else(|err| panic!("attach signal stream: {}", err.message));
+
+        let win = present_stealth_host_window(app_id, "Background Dialog Host");
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesDialog".to_string(),
+                },
+                ResolvedGtkAttr::Id("background-persistent-dialog".to_string()),
+                ResolvedGtkAttr::StaticProp {
+                    name: "present-for".to_string(),
+                    value: win.to_string(),
+                },
+                ResolvedGtkAttr::BoundProp {
+                    name: "open".to_string(),
+                    value: dialog_open.clone(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesPage".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![ResolvedGtkAttr::StaticAttr {
+                        name: "class".to_string(),
+                        value: "AdwPreferencesGroup".to_string(),
+                    }],
+                    children: vec![ResolvedGtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ResolvedGtkAttr::StaticAttr {
+                                name: "class".to_string(),
+                                value: "GtkEntry".to_string(),
+                            },
+                            ResolvedGtkAttr::Id("background-persistent-dialog-entry".to_string()),
+                            ResolvedGtkAttr::BoundProp {
+                                name: "text".to_string(),
+                                value: shared_text.clone(),
+                            },
+                        ],
+                        children: Vec::new(),
+                    }],
+                }],
+            }],
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build background persistent dialog",
+        );
+        aivi_gtk4::dialog_root_on_closed(result.root_id, "test-dialog-closed")
+            .unwrap_or_else(|err| panic!("bind background dialog close signal: {}", err.message));
+        make_test_widget_invisible(
+            result.root_id,
+            "make background persistent dialog transparent",
+        );
+        let entry_id = *result
+            .named_widgets
+            .get("background-persistent-dialog-entry")
+            .expect("background dialog entry should be named");
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list background dialog signals")["watcherCount"]
+                .as_u64(),
+            Some(2)
+        );
+
+        let open_ctx = ctx.clone();
+        let dialog_open_for_open = dialog_open.clone();
+        std::thread::spawn(move || {
+            let handler = builtin("test.backgroundDialogOpen", 1, move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime.reactive_set_signal(dialog_open_for_open.clone(), Value::Bool(true))
+            });
+            ok_or_panic(
+                execute_runtime_handler(open_ctx, handler, clicked_event()),
+                "open dialog from background thread",
+            );
+        })
+        .join()
+        .expect("background dialog open thread should not panic");
+
+        for _ in 0..60 {
+            super::pump_gtk_events();
+            if !runtime.reactive_graph.lock().deferred_flush {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !runtime.reactive_graph.lock().deferred_flush,
+            "opening the dialog from a background thread should flush on the GTK tick"
+        );
+
+        let close_ctx = ctx.clone();
+        let dialog_open_for_close = dialog_open.clone();
+        std::thread::spawn(move || {
+            let handler = builtin("test.backgroundDialogClose", 1, move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime.reactive_set_signal(dialog_open_for_close.clone(), Value::Bool(false))
+            });
+            ok_or_panic(
+                execute_runtime_handler(close_ctx, handler, clicked_event()),
+                "close dialog from background thread",
+            );
+        })
+        .join()
+        .expect("background dialog close thread should not panic");
+
+        let mut saw_close = false;
+        for _ in 0..80 {
+            super::pump_gtk_events();
+            loop {
+                match signal_stream.try_recv() {
+                    Ok(event)
+                        if event.widget_id == result.root_id && event.signal == "closed" =>
+                    {
+                        saw_close = true;
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        panic!("background dialog signal stream disconnected unexpectedly")
+                    }
+                }
+            }
+            if saw_close {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert!(
+            saw_close,
+            "expected the persistent dialog to emit `closed` after background close"
+        );
+        assert!(
+            aivi_gtk4::widget_exists(result.root_id)
+                .unwrap_or_else(|err| panic!("check background dialog root: {}", err.message))
+        );
+        assert!(
+            aivi_gtk4::widget_exists(entry_id)
+                .unwrap_or_else(|err| panic!("check background dialog entry: {}", err.message))
+        );
+        assert_eq!(
+            ui_debug_list_signals_json(ctx.as_ref())
+                .expect("list background dialog signals after close")["watcherCount"]
+                .as_u64(),
+            Some(2)
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(shared_text, Value::Text("after".to_string())),
+            "update background dialog text after close",
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read background dialog entry: {}", err.message)),
             "after"
         );
     }
