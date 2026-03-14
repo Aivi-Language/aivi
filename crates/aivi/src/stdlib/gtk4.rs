@@ -45,7 +45,7 @@ export notificationNew, notificationSetBody, appSendNotification, appWithdrawNot
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkBoundText, gtkShow, gtkEach, gtkEachKeyed
-export gtkStaticAttr, gtkBoundAttr, gtkStaticProp, gtkBoundProp, gtkEventAttr, gtkIdAttr, gtkRefAttr
+export gtkStaticAttr, gtkBoundAttr, gtkStaticProp, gtkBoundProp, gtkEventAttr, gtkEventSugarAttr, gtkIdAttr, gtkRefAttr
 export buildFromNode, buildWithIds, reconcileNode
 export signalPoll, signalEmit, signalStream, dbusServerStart
 export widgetById, widgetGetBoolProperty, widgetSetBoolProperty
@@ -98,6 +98,7 @@ GtkAttr =
   | GtkStaticProp Text Text
   | GtkBoundProp Text GtkBindingHandle
   | GtkEventProp Text GtkBindingHandle
+  | GtkEventSugarProp Text Text GtkBindingHandle
   | GtkIdAttr Text
   | GtkRefAttr Text
 
@@ -153,6 +154,9 @@ gtkBoundProp = name => value => GtkBoundProp name (gtk4.captureBinding value)
 
 gtkEventAttr : Text -> a -> GtkAttr
 gtkEventAttr = name => value => GtkEventProp name (gtk4.captureBinding value)
+
+gtkEventSugarAttr : Text -> Text -> a -> GtkAttr
+gtkEventSugarAttr = name => source => value => GtkEventSugarProp name source (gtk4.captureBinding value)
 
 gtkIdAttr : Text -> GtkAttr
 gtkIdAttr = name => GtkIdAttr name

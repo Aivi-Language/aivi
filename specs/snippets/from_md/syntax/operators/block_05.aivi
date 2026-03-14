@@ -4,9 +4,17 @@ save = _ => Unit
 onChange : Text -> Unit
 onChange = _ => Unit
 
+onToggle : Bool -> Unit
+onToggle = _ => Unit
+
+onSelect : Int -> Unit
+onSelect = _ => Unit
+
 ~<gtk>
   <object class="GtkButton" onClick={save} />
   <object class="GtkEntry" onInput={onChange} />
+  <object class="GtkSwitch" onToggle={onToggle} />
+  <object class="GtkDropDown" strings="One\nTwo" selected={0} onSelect={onSelect} />
   <object class="GtkButton">
     <signal name="clicked" on={save} />
   </object>

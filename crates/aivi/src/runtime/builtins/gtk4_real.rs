@@ -8,7 +8,10 @@ mod bridge {
 
     use serde_json::{json, Map as JsonMap, Value as JsonValue};
 
-    use super::super::gtk4::{resolve_gtk_node, resolve_reactive_attr_value, ResolvedGtkAttr, ResolvedGtkNode};
+    use super::super::gtk4::{
+        resolve_gtk_node, resolve_reactive_attr_value, GtkCallbackArgMode, ResolvedGtkAttr,
+        ResolvedGtkNode,
+    };
     use super::super::util::builtin;
     use crate::runtime::environment::RuntimeContext;
     use crate::runtime::values::{ChannelInner, ChannelRecv};
@@ -360,6 +363,100 @@ mod bridge {
         };
         let run = fields.get("run")?.clone();
         matches!(run, Value::Effect(_)).then_some(run)
+    }
+
+    fn callback_arg_context(arg_mode: GtkCallbackArgMode) -> &'static str {
+        match arg_mode {
+            GtkCallbackArgMode::Raw => "raw GTK callback",
+            GtkCallbackArgMode::Unit => "unit GTK callback",
+            GtkCallbackArgMode::Text => "text GTK callback",
+            GtkCallbackArgMode::Bool => "boolean GTK callback",
+            GtkCallbackArgMode::Float => "float GTK callback",
+            GtkCallbackArgMode::Int => "integer GTK callback",
+        }
+    }
+
+    fn callback_arg_from_event(
+        event: &Value,
+        arg_mode: GtkCallbackArgMode,
+    ) -> Result<Value, RuntimeError> {
+        let type_error = |expected: &str| RuntimeError::TypeError {
+            context: callback_arg_context(arg_mode).to_string(),
+            expected: expected.to_string(),
+            got: format_value(event),
+        };
+        match arg_mode {
+            GtkCallbackArgMode::Raw => Ok(event.clone()),
+            GtkCallbackArgMode::Unit => Ok(Value::Unit),
+            GtkCallbackArgMode::Text => match event {
+                Value::Constructor { name, args } if name == "GtkInputChanged" && args.len() == 3 => {
+                    match &args[2] {
+                        Value::Text(text) => Ok(Value::Text(text.clone())),
+                        _ => Err(type_error("GtkInputChanged text payload")),
+                    }
+                }
+                _ => Err(type_error("GtkInputChanged")),
+            },
+            GtkCallbackArgMode::Bool => match event {
+                Value::Constructor { name, args } if name == "GtkToggled" && args.len() == 3 => {
+                    match &args[2] {
+                        Value::Bool(value) => Ok(Value::Bool(*value)),
+                        _ => Err(type_error("GtkToggled bool payload")),
+                    }
+                }
+                Value::Constructor { name, args }
+                    if name == "GtkUnknownSignal" && args.len() == 5 =>
+                {
+                    let Value::Text(text) = &args[3] else {
+                        return Err(type_error("GtkUnknownSignal bool payload"));
+                    };
+                    parse_bool_text(text)
+                        .map(Value::Bool)
+                        .ok_or_else(|| type_error("boolean-like signal payload"))
+                }
+                _ => Err(type_error("GtkToggled or boolean-like GtkUnknownSignal")),
+            },
+            GtkCallbackArgMode::Float => match event {
+                Value::Constructor { name, args }
+                    if name == "GtkValueChanged" && args.len() == 3 =>
+                {
+                    match &args[2] {
+                        Value::Float(value) => Ok(Value::Float(*value)),
+                        Value::Int(value) => Ok(Value::Float(*value as f64)),
+                        _ => Err(type_error("GtkValueChanged float payload")),
+                    }
+                }
+                _ => Err(type_error("GtkValueChanged")),
+            },
+            GtkCallbackArgMode::Int => match event {
+                Value::Constructor { name, args }
+                    if name == "GtkUnknownSignal" && args.len() == 5 =>
+                {
+                    let Value::Text(text) = &args[3] else {
+                        return Err(type_error("GtkUnknownSignal integer payload"));
+                    };
+                    text.trim()
+                        .parse::<i64>()
+                        .map(Value::Int)
+                        .map_err(|_| type_error("integer-like signal payload"))
+                }
+                _ => Err(type_error("GtkUnknownSignal")),
+            },
+        }
+    }
+
+    pub(super) fn wrap_runtime_handler(handler: Value, arg_mode: GtkCallbackArgMode) -> Value {
+        builtin("gtk4.wrapRuntimeHandler", 1, move |mut args, runtime| {
+            let event = args.remove(0);
+            if let Some(run_effect) = event_handle_run_effect(&handler) {
+                return Ok(run_effect);
+            }
+            if matches!(&handler, Value::Effect(_)) {
+                return Ok(handler.clone());
+            }
+            let arg = callback_arg_from_event(&event, arg_mode)?;
+            runtime.apply(handler.clone(), arg)
+        })
     }
 
     #[derive(Clone)]
@@ -980,11 +1077,20 @@ mod bridge {
                     )?,
                 ))
             }
-            ResolvedGtkAttr::EventProp { name, handler } => {
+            ResolvedGtkAttr::EventProp {
+                name,
+                handler,
+                arg_mode,
+            } => {
                 let handler = runtime.force_value(handler.clone())?;
                 let handler = if let Some(handler) = static_handler_name(&handler) {
                     handler
                 } else {
+                    let handler = if *arg_mode == GtkCallbackArgMode::Raw {
+                        handler
+                    } else {
+                        wrap_runtime_handler(handler, *arg_mode)
+                    };
                     ensure_runtime_handler_dispatcher(runtime.ctx.clone());
                     runtime.ctx.register_gtk_runtime_handler(handler)
                 };
@@ -1857,10 +1963,12 @@ mod tests {
     use serde_json::json;
 
     use super::super::concurrency::build_channel_record;
-    use super::super::gtk4::{ResolvedGtkAttr, ResolvedGtkNode};
+    use super::super::gtk4::{GtkCallbackArgMode, ResolvedGtkAttr, ResolvedGtkNode};
     use super::bridge::{
-        execute_runtime_handler, make_signal_event_value, materialize_with_bindings,
+        execute_runtime_handler, make_signal_event_value, materialize_app_window_with_bindings,
+        materialize_with_bindings,
         ui_debug_inspect_signal_json, ui_debug_list_signals_json,
+        wrap_runtime_handler,
     };
     use crate::runtime::builtins::builtin;
     use crate::runtime::constructors::core_constructor_ordinals;
@@ -1882,6 +1990,20 @@ mod tests {
             signal: "clicked".to_string(),
             handler: String::new(),
             payload: String::new(),
+        }
+    }
+
+    fn signal_event(
+        widget_name: &str,
+        signal: &str,
+        payload: &str,
+    ) -> aivi_gtk4::SignalEvent {
+        aivi_gtk4::SignalEvent {
+            widget_id: 42,
+            widget_name: widget_name.to_string(),
+            signal: signal.to_string(),
+            handler: String::new(),
+            payload: payload.to_string(),
         }
     }
 
@@ -2066,6 +2188,137 @@ mod tests {
             Value::Int(value) => assert_eq!(value, 7),
             other => panic!("expected Int(7), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn runtime_handler_raw_callbacks_still_receive_typed_events() {
+        let ctx = test_ctx();
+        let seen = Arc::new(Mutex::new(String::new()));
+        let seen_for_handler = seen.clone();
+        let handler = builtin("test.rawGtkInputHandler", 1, move |mut args, _| {
+            let event = args.remove(0);
+            match event {
+                Value::Constructor { name, args }
+                    if name == "GtkInputChanged" && args.len() == 3 =>
+                {
+                    let Value::Text(text) = &args[2] else {
+                        panic!("expected GtkInputChanged text payload, got {:?}", args[2]);
+                    };
+                    *seen_for_handler
+                        .lock()
+                        .expect("raw callback lock should not be poisoned") = text.clone();
+                    Ok(Value::Unit)
+                }
+                other => panic!("expected GtkInputChanged, got {other:?}"),
+            }
+        });
+
+        ok_or_panic(
+            execute_runtime_handler(ctx, handler, signal_event("entry", "changed", "hello")),
+            "run raw input handler",
+        );
+
+        assert_eq!(
+            seen.lock()
+                .expect("raw callback result lock should not be poisoned")
+                .as_str(),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn wrapped_input_handler_receives_text_payload() {
+        let ctx = test_ctx();
+        let seen = Arc::new(Mutex::new(String::new()));
+        let seen_for_handler = seen.clone();
+        let handler = builtin("test.inputPayloadHandler", 1, move |mut args, _| {
+            let Value::Text(text) = args.remove(0) else {
+                panic!("expected Text payload");
+            };
+            *seen_for_handler
+                .lock()
+                .expect("text payload lock should not be poisoned") = text;
+            Ok(Value::Unit)
+        });
+        let wrapped = wrap_runtime_handler(handler, GtkCallbackArgMode::Text);
+
+        ok_or_panic(
+            execute_runtime_handler(ctx, wrapped, signal_event("entry", "changed", "hello")),
+            "run wrapped input handler",
+        );
+
+        assert_eq!(
+            seen.lock()
+                .expect("text payload result lock should not be poisoned")
+                .as_str(),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn wrapped_switch_toggle_handler_receives_bool_payload() {
+        let ctx = test_ctx();
+        let seen = Arc::new(Mutex::new(None::<bool>));
+        let seen_for_handler = seen.clone();
+        let handler = builtin("test.togglePayloadHandler", 1, move |mut args, _| {
+            let Value::Bool(active) = args.remove(0) else {
+                panic!("expected Bool payload");
+            };
+            *seen_for_handler
+                .lock()
+                .expect("bool payload lock should not be poisoned") = Some(active);
+            Ok(Value::Unit)
+        });
+        let wrapped = wrap_runtime_handler(handler, GtkCallbackArgMode::Bool);
+
+        ok_or_panic(
+            execute_runtime_handler(
+                ctx,
+                wrapped,
+                signal_event("switch", "notify::active", "true"),
+            ),
+            "run wrapped toggle handler",
+        );
+
+        assert_eq!(
+            *seen
+                .lock()
+                .expect("bool payload result lock should not be poisoned"),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn wrapped_dropdown_handler_receives_selected_index_payload() {
+        let ctx = test_ctx();
+        let seen = Arc::new(Mutex::new(None::<i64>));
+        let seen_for_handler = seen.clone();
+        let handler = builtin("test.selectPayloadHandler", 1, move |mut args, _| {
+            let Value::Int(index) = args.remove(0) else {
+                panic!("expected Int payload");
+            };
+            *seen_for_handler
+                .lock()
+                .expect("int payload lock should not be poisoned") = Some(index);
+            Ok(Value::Unit)
+        });
+        let wrapped = wrap_runtime_handler(handler, GtkCallbackArgMode::Int);
+
+        ok_or_panic(
+            execute_runtime_handler(
+                ctx,
+                wrapped,
+                signal_event("dropdown", "notify::selected", "2"),
+            ),
+            "run wrapped select handler",
+        );
+
+        assert_eq!(
+            *seen
+                .lock()
+                .expect("int payload result lock should not be poisoned"),
+            Some(2)
+        );
     }
 
     #[test]
@@ -3232,6 +3485,142 @@ mod tests {
             aivi_gtk4::entry_text(entry_id)
                 .unwrap_or_else(|err| panic!("read persistent dialog entry: {}", err.message)),
             "after"
+        );
+    }
+
+    #[test]
+    fn mount_app_window_installs_live_open_binding_for_persistent_dialog_root() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let dialog_open = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create mounted dialog open signal",
+        );
+
+        let Value::Signal(dialog_open_signal) = dialog_open.clone() else {
+            panic!("expected mounted dialog open signal");
+        };
+
+        let window_node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwApplicationWindow".to_string(),
+                },
+                ResolvedGtkAttr::Id("mounted-root-window".to_string()),
+                ResolvedGtkAttr::StaticAttr {
+                    name: "title".to_string(),
+                    value: "Mounted Root".to_string(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkBox".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "class".to_string(),
+                            value: "GtkLabel".to_string(),
+                        },
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "label".to_string(),
+                            value: "Host".to_string(),
+                        },
+                    ],
+                    children: Vec::new(),
+                }],
+            }],
+        };
+
+        let dialog_node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesDialog".to_string(),
+                },
+                ResolvedGtkAttr::Id("mounted-persistent-dialog".to_string()),
+                ResolvedGtkAttr::StaticAttr {
+                    name: "title".to_string(),
+                    value: "Mounted Persistent Dialog".to_string(),
+                },
+                ResolvedGtkAttr::BoundProp {
+                    name: "open".to_string(),
+                    value: dialog_open.clone(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesPage".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![ResolvedGtkAttr::StaticAttr {
+                        name: "class".to_string(),
+                        value: "AdwPreferencesGroup".to_string(),
+                    }],
+                    children: vec![ResolvedGtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ResolvedGtkAttr::StaticAttr {
+                                name: "class".to_string(),
+                                value: "GtkLabel".to_string(),
+                            },
+                            ResolvedGtkAttr::StaticAttr {
+                                name: "label".to_string(),
+                                value: "Dialog".to_string(),
+                            },
+                        ],
+                        children: Vec::new(),
+                    }],
+                }],
+            }],
+        };
+
+        let app = aivi_gtk4::app_new("com.aivi.mounted.dialog.open.binding.test")
+            .unwrap_or_else(|err| panic!("create app: {}", err.message));
+        let result = ok_or_panic(
+            materialize_app_window_with_bindings(app, &[window_node, dialog_node], &mut runtime),
+            "mount window plus persistent dialog",
+        );
+        let dialog_root_id = result
+            .mounted_roots
+            .iter()
+            .find(|root| root.root_class_name == "AdwPreferencesDialog")
+            .expect("mounted dialog root should be present")
+            .root_id;
+
+        assert!(
+            result
+                .binding_widgets
+                .values()
+                .any(|widget_id| *widget_id == dialog_root_id),
+            "mounted dialog root should be present in binding_widgets so open={{...}} installs a watcher"
+        );
+
+        let signal_json = ui_debug_inspect_signal_json(
+            ctx.as_ref(),
+            &serde_json::Map::from_iter([("signalId".to_string(), json!(dialog_open_signal.id))]),
+        )
+        .expect("inspect mounted dialog open signal");
+        assert_eq!(
+            signal_json["signal"]["watcherCount"].as_u64(),
+            Some(1),
+            "mounted dialog open signal should have one GTK watcher"
+        );
+        assert_eq!(
+            signal_json["signal"]["downstreamWidgetIds"].as_array(),
+            Some(&vec![json!(dialog_root_id)]),
+            "mounted dialog open signal should drive the dialog root"
         );
     }
 

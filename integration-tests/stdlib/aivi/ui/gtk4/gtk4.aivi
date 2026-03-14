@@ -43,6 +43,36 @@ signalDrivenView = title => visible => rows =>
     </GtkBox>
   </gtk>
 
+inputPayloadHandler : Text -> Unit
+inputPayloadHandler = _ => Unit
+
+togglePayloadHandler : Bool -> Unit
+togglePayloadHandler = _ => Unit
+
+selectPayloadHandler : Int -> Unit
+selectPayloadHandler = _ => Unit
+
+closedPayloadHandler : Unit -> Unit
+closedPayloadHandler = _ => Unit
+
+payloadCallbackView : GtkNode
+payloadCallbackView =
+  ~<gtk>
+    <GtkBox orientation="vertical" spacing="4">
+      <GtkEntry onInput={inputPayloadHandler} />
+      <GtkSwitch onToggle={togglePayloadHandler} />
+      <GtkDropDown strings="One\nTwo" selected={0} onSelect={selectPayloadHandler} />
+    </GtkBox>
+  </gtk>
+
+payloadClosedDialogView : GtkNode
+payloadClosedDialogView =
+  ~<gtk>
+    <AdwPreferencesDialog open={True} onClosed={closedPayloadHandler}>
+      <AdwPreferencesPage title="General" />
+    </AdwPreferencesDialog>
+  </gtk>
+
 @test "GtkClicked carries widget name"
 signal_clicked = do Effect {
   assertEq (getClickedPair (GtkClicked 1 "saveBtn")) (1, "saveBtn")
@@ -112,6 +142,13 @@ type_signatures = do Effect {
     | GtkElement _ _ children => List.length children
     | _                       => 0
     assertEq childCount 1
+}
+
+@test "gtk sugar callbacks compile with ergonomic payloads"
+gtk_sugar_callback_payloads = do Effect {
+  _ = payloadCallbackView
+  _ = payloadClosedDialogView
+  assertEq True True
 }
 
 @test "signal-first gtk sigils compile with show each and derived signals"

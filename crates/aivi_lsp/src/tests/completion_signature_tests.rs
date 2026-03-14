@@ -547,7 +547,7 @@ view = ~<gtk><GtkButton onC /></gtk>
     let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
         panic!("expected markdown docs");
     };
-    assert!(markup.value.contains("GtkClicked"));
+    assert!(markup.value.contains("Runtime callback payload: `Unit`"));
     assert!(markup.value.contains("runtime function"));
 }
 
@@ -576,6 +576,56 @@ view = ~<gtk><GtkBox onK /></gtk>
     };
     assert!(markup.value.contains("GtkKeyPressed"));
     assert!(markup.value.contains("keyboard-driven widgets"));
+}
+
+#[test]
+fn gtk_arch_completion_signal_sugar_documents_dropdown_selection_payload() {
+    let text = r#"@no_prelude
+module examples.gtk_signal_select_docs
+view = ~<gtk><GtkDropDown onS /></gtk>
+"#;
+    let uri = sample_uri();
+    let position = position_after(text, "onS");
+    let gtk_index =
+        GtkIndex::from_json(crate::gtk_index::GTK_INDEX_JSON).expect("embedded gtk index");
+    let items = Backend::build_completion_items(text, &uri, position, &HashMap::new(), &gtk_index);
+
+    let on_select = items
+        .iter()
+        .find(|item| item.label == "onSelect")
+        .expect("onSelect completion");
+    assert_eq!(on_select.detail.as_deref(), Some("signal:notify::selected"));
+    let docs = on_select.documentation.as_ref().expect("onSelect docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("Runtime callback payload: `Int`"));
+    assert!(markup.value.contains("selected index directly"));
+}
+
+#[test]
+fn gtk_arch_completion_signal_sugar_documents_dialog_close_payload() {
+    let text = r#"@no_prelude
+module examples.gtk_signal_closed_docs
+view = ~<gtk><AdwPreferencesDialog onCl /></gtk>
+"#;
+    let uri = sample_uri();
+    let position = position_after(text, "onCl");
+    let gtk_index =
+        GtkIndex::from_json(crate::gtk_index::GTK_INDEX_JSON).expect("embedded gtk index");
+    let items = Backend::build_completion_items(text, &uri, position, &HashMap::new(), &gtk_index);
+
+    let on_closed = items
+        .iter()
+        .find(|item| item.label == "onClosed")
+        .expect("onClosed completion");
+    assert_eq!(on_closed.detail.as_deref(), Some("signal:closed"));
+    let docs = on_closed.documentation.as_ref().expect("onClosed docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("Runtime callback payload: `Unit`"));
+    assert!(markup.value.contains("Dialog close callbacks"));
 }
 
 #[test]

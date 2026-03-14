@@ -171,6 +171,9 @@ Attributes on shorthand tags become properties automatically, except for pass-th
 | `ref="btnRef"` | widget reference |
 | `onClick={...}` | event binding |
 | `onInput={...}` | event binding |
+| `onToggle={...}` | toggle event binding |
+| `onSelect={...}` | selection event binding |
+| `onClosed={...}` | dialog close binding |
 | `onKeyPress={...}` | keyboard event binding |
 
 ### Which syntax to use
@@ -211,20 +214,25 @@ Signal sugar works on both shorthand and verbose tags:
 - `onInput={handler}` -> `signal:changed`
 - `onActivate={handler}` -> `signal:activate`
 - `onKeyPress={handler}` -> `signal:key-pressed`
-- `onToggle={handler}` -> `signal:toggled`
+- `onToggle={handler}` -> `signal:notify::active` for `GtkSwitch`, otherwise `signal:toggled`
+- `onSelect={handler}` -> `signal:notify::selected` for `GtkDropDown`
+- `onClosed={handler}` -> `signal:closed` for dialog widgets such as `AdwPreferencesDialog`
 - `onValueChanged={handler}` -> `signal:value-changed`
 - `onFocusIn={handler}` -> `signal:focus-enter`
 - `onFocusOut={handler}` -> `signal:focus-leave`
-- `<signal name="clicked" on={handler} />` -> the same binding path
+- `<signal name="clicked" on={handler} />` -> raw `GtkSignalEvent`
 - `GtkEventControllerMotion` uses explicit `<signal name="enter" ... />` / `<signal name="leave" ... />` children rather than sugar attrs
 
-Callback values may be either runtime functions or `Event` handles. For the common sugar attrs, the function receives the useful GTK payload when one exists:
+Callback values may be either runtime functions or `Event` handles. For the common sugar attrs, runtime functions receive the useful payload directly:
 
 - `onInput` -> current `Text`
 - `onKeyPress` -> `GtkKeyPressed WidgetId Text Text Text` (pattern match the `key` field in the callback)
 - `onToggle` -> current `Bool`
+- `onShowSidebarChanged` -> current `Bool`
+- `onSelect` -> current `Int` index
 - `onValueChanged` -> current `Float`
-- click/focus-style signals -> a unit-like or widget event payload, depending on the underlying signal
+- `onClick`, `onActivate`, `onFocusIn`, `onFocusOut`, `onClosed` -> `Unit`
+- explicit `<signal ... />` callbacks remain the raw escape hatch and receive `GtkSignalEvent`
 - raw motion-controller `enter` / `leave` bindings can ignore the payload or match them as `GtkUnknownSignal ... "enter" ...` and `GtkUnknownSignal ... "leave" ...` in lower-level event consumers
 
 Valid public shapes therefore include:
@@ -232,12 +240,14 @@ Valid public shapes therefore include:
 ```aivi
 <GtkButton onClick={_ => update state (patch { count: _ + 1 })} />
 <GtkEntry onInput={txt => set query txt} />
+<GtkDropDown strings="System\nLight\nDark" selected={themeIndex} onSelect={idx => applyThemeIndex idx} />
 <GtkBox onKeyPress={event =>
   event match
     | GtkKeyPressed _ _ key _ => handleKey key
     | _ => pure Unit
 } />
 <GtkSwitch onToggle={active => set enabled active} />
+<AdwPreferencesDialog onClosed={closeSettingsDialog} />
 <GtkButton onClick={saveEvent} />
 <GtkBox>
   <child type="controller">

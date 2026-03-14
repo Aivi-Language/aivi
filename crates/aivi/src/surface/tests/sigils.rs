@@ -427,11 +427,11 @@ x = ~<gtk><object class="GtkButton" onClick={ Msg.Save } /></gtk>
         })
         .expect("x def");
     assert!(
-        expr_contains_ident(&def.expr, "gtkEventAttr")
+        expr_contains_ident(&def.expr, "gtkEventSugarAttr")
             && expr_contains_string(&def.expr, "clicked")
             && expr_contains_ident(&def.expr, "Msg")
             && expr_contains_ident(&def.expr, "Save"),
-        "expected onClick sugar to lower into gtkEventAttr with Msg.Save handler"
+        "expected onClick sugar to lower into gtkEventSugarAttr with Msg.Save handler"
     );
 }
 
@@ -460,10 +460,103 @@ x = ~<gtk><object class="GtkBox" onKeyPress={ handleKey } /></gtk>
         })
         .expect("x def");
     assert!(
-        expr_contains_ident(&def.expr, "gtkEventAttr")
+        expr_contains_ident(&def.expr, "gtkEventSugarAttr")
             && expr_contains_string(&def.expr, "key-pressed")
             && expr_contains_ident(&def.expr, "handleKey"),
-        "expected onKeyPress sugar to lower into gtkEventAttr with key-pressed handler"
+        "expected onKeyPress sugar to lower into gtkEventSugarAttr with key-pressed handler"
+    );
+}
+
+#[test]
+fn gtk_sigil_onselect_lowers_to_dropdown_notify_signal() {
+    let src = r#"
+module Example
+
+handleSelect = idx => idx
+x = ~<gtk><GtkDropDown strings="A\nB" selected={0} onSelect={ handleSelect } /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEventSugarAttr")
+            && expr_contains_string(&def.expr, "notify::selected")
+            && expr_contains_ident(&def.expr, "handleSelect"),
+        "expected onSelect sugar to lower into gtkEventSugarAttr with notify::selected"
+    );
+}
+
+#[test]
+fn gtk_sigil_onswitch_toggle_uses_notify_active() {
+    let src = r#"
+module Example
+
+handleToggle = active => active
+x = ~<gtk><GtkSwitch onToggle={ handleToggle } /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEventSugarAttr")
+            && expr_contains_string(&def.expr, "notify::active")
+            && expr_contains_ident(&def.expr, "handleToggle"),
+        "expected GtkSwitch onToggle sugar to lower into notify::active"
+    );
+}
+
+#[test]
+fn gtk_sigil_onclosed_lowers_to_dialog_closed_signal() {
+    let src = r#"
+module Example
+
+closeDialog = _ => Unit
+x = ~<gtk><AdwPreferencesDialog open={True} onClosed={ closeDialog } /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEventSugarAttr")
+            && expr_contains_string(&def.expr, "closed")
+            && expr_contains_ident(&def.expr, "closeDialog"),
+        "expected onClosed sugar to lower into gtkEventSugarAttr with closed"
     );
 }
 
