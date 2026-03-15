@@ -75,17 +75,16 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Grammar Reference](syntax/grammar.md)
 
 ### Build Native Apps
-- [Mental Model](stdlib/ui/gtk4.md#mental-model)
-- [Your First Window](stdlib/ui/gtk4.md#your-first-window)
-- [State, Derivation, and Patching](stdlib/ui/gtk4.md#state-derivation-and-patching)
-- [Writing GTK Trees with Sugar](stdlib/ui/gtk4.md#writing-gtk-trees-with-sugar)
-- [Callback Sugar in Detail](stdlib/ui/gtk4.md#callback-sugar-in-detail)
-- [do Event in Detail](stdlib/ui/gtk4.md#do-event-in-detail)
-- [Structural UI with show and each](stdlib/ui/gtk4.md#structural-ui-with-show-and-each)
-- [App Lifecycle, Windows, and Lower-Level Helpers](stdlib/ui/gtk4.md#app-lifecycle-windows-and-lower-level-helpers)
-- [Debugging with the MCP Server](stdlib/ui/gtk4.md#debugging-a-native-app-with-the-mcp-server)
-- [Coverage, Boundaries, and Diagnostics](stdlib/ui/gtk4.md#coverage-boundaries-and-diagnostics)
-#### Reference & Building Blocks
+- [Mental Model](stdlib/ui/gtk4/mental_model.md)
+- [First Window](stdlib/ui/gtk4/first_window.md)
+- [State & Patches](stdlib/ui/gtk4/state_patches.md)
+- [GTK Sugar](stdlib/ui/gtk4/gtk_sugar.md)
+- [Callbacks](stdlib/ui/gtk4/callbacks.md)
+- [Events](stdlib/ui/gtk4/events.md)
+- [Structure](stdlib/ui/gtk4/structure.md)
+- [Lifecycle](stdlib/ui/gtk4/lifecycle.md)
+- [MCP Debugging](stdlib/ui/gtk4/mcp_debugging.md)
+#### Supporting Docs
 - [Signals](stdlib/ui/reactive_signals.md)
 - [Reactive Dataflow](stdlib/ui/reactive_dataflow.md)
 - [Forms](stdlib/ui/forms.md)
