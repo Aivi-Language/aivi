@@ -106,7 +106,7 @@ Use the table of contents below as a map once you know the kind of answer you ne
 
 ### Build Native Apps
 #### Getting Started
-- [GTK & libadwaita System Manual](stdlib/ui/gtk4)
+- [Writing Native Apps](stdlib/ui/gtk4)
 #### Reactive UI
 - [Signals](stdlib/ui/reactive_signals)
 - [Reactive Dataflow](stdlib/ui/reactive_dataflow)
