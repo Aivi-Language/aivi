@@ -742,6 +742,7 @@ impl Runtime {
             graph.flushing = true;
         }
         let result = (|| {
+            let mut first_error = None;
             for iteration in 0..MAX_FLUSH_ITERATIONS {
                 let dirty_ids = {
                     let graph = self.reactive_graph.lock();
@@ -752,7 +753,12 @@ impl Runtime {
                         .collect::<Vec<_>>()
                 };
                 for signal_id in dirty_ids {
-                    self.reactive_ensure_signal_fresh(signal_id, &mut Vec::new())?;
+                    if let Err(err) = self.reactive_ensure_signal_fresh(signal_id, &mut Vec::new()) {
+                        self.reactive_contain_failed_signal_branch(signal_id);
+                        if first_error.is_none() {
+                            first_error = Some(err);
+                        }
+                    }
                 }
 
                 let changed = {
@@ -823,10 +829,21 @@ impl Runtime {
                         .expect("watched signal exists")
                         .value
                         .clone();
-                    self.reactive_run_watcher_callback(callback, value)?;
+                    if let Err(err) = self.reactive_run_watcher_callback(callback.clone(), value) {
+                        self.reactive_dispose_watcher(watcher_id);
+                        if first_error.is_none() {
+                            first_error = Some(self.reactive_wrap_apply_error(
+                                err,
+                                self.reactive_watcher_error_context(watcher_id, signal_id, &callback),
+                            ));
+                        }
+                    }
                 }
             }
-            Ok(())
+            match first_error {
+                Some(err) => Err(err),
+                None => Ok(()),
+            }
         })();
         self.reactive_graph.lock().flushing = false;
         result
@@ -1449,6 +1466,113 @@ mod tests {
             }
             other => panic!("expected Some error, got {}", format_value(&other)),
         }
+    }
+
+    #[test]
+    fn reactive_flush_contains_failed_derived_signal_and_keeps_other_updates_alive() {
+        let mut runtime = test_runtime();
+        let bad_source = runtime
+            .reactive_create_signal(Value::Bool(false))
+            .unwrap_or_else(|err| panic!("bad source: {}", format_runtime_error(err)));
+        let good_source = runtime
+            .reactive_create_signal(Value::Int(0))
+            .unwrap_or_else(|err| panic!("good source: {}", format_runtime_error(err)));
+        let failing_branch = runtime
+            .reactive_derive_signal(
+                bad_source.clone(),
+                runtime_builtin("test.failSignal", 1, |mut args, _| match args.remove(0) {
+                    Value::Bool(false) => Ok(Value::Text("ok".to_string())),
+                    Value::Bool(true) => Err(RuntimeError::NonExhaustiveMatch { scrutinee: None }),
+                    other => Err(RuntimeError::TypeError {
+                        context: "test.failSignal".to_string(),
+                        expected: "Bool".to_string(),
+                        got: format_value(&other),
+                    }),
+                }),
+            )
+            .unwrap_or_else(|err| panic!("failing branch: {}", format_runtime_error(err)));
+        let failing_branch_id = expect_signal_id(&failing_branch);
+
+        let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen_values = Arc::new(std::sync::Mutex::new(Vec::<i64>::new()));
+        let callback_count_for_watch = callback_count.clone();
+        let seen_values_for_watch = seen_values.clone();
+        let callback = runtime_builtin("test.goodWatch", 1, move |mut args, _| {
+            let value = match args.remove(0) {
+                Value::Int(value) => value,
+                other => panic!("expected Int watcher value, got {other:?}"),
+            };
+            callback_count_for_watch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            seen_values_for_watch
+                .lock()
+                .expect("seen_values lock should not be poisoned")
+                .push(value);
+            Ok(Value::Unit)
+        });
+        runtime
+            .reactive_watch_signal(good_source.clone(), callback)
+            .unwrap_or_else(|err| panic!("good watcher: {}", format_runtime_error(err)));
+
+        let bad_source_for_batch = bad_source.clone();
+        let good_source_for_batch = good_source.clone();
+        let batch = runtime_builtin("test.errorBatch", 1, move |_args, runtime| {
+            runtime.reactive_set_signal(bad_source_for_batch.clone(), Value::Bool(true))?;
+            runtime.reactive_set_signal(good_source_for_batch.clone(), Value::Int(7))?;
+            Ok(Value::Unit)
+        });
+        let err = runtime
+            .reactive_batch(batch)
+            .expect_err("batch flush should surface the failing derived signal");
+        let rendered = format_runtime_error(err);
+        assert!(rendered.contains("while refreshing derived signal"));
+        assert!(rendered.contains("<builtin:test.failSignal>"));
+        assert_eq!(
+            expect_int(
+                runtime
+                    .reactive_get_signal(good_source.clone())
+                    .unwrap_or_else(|err| panic!("read good source: {}", format_runtime_error(err)))
+            ),
+            7
+        );
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the unrelated watcher should still run even when another branch fails"
+        );
+        assert_eq!(
+            seen_values
+                .lock()
+                .expect("seen_values lock should not be poisoned")
+                .as_slice(),
+            [7]
+        );
+        {
+            let graph = runtime.reactive_graph.lock();
+            assert!(graph.pending_notifications.is_empty());
+            assert!(
+                !graph
+                    .signals
+                    .get(&failing_branch_id)
+                    .expect("failing branch should exist")
+                    .dirty
+            );
+        }
+
+        runtime
+            .reactive_set_signal(good_source.clone(), Value::Int(8))
+            .unwrap_or_else(|err| panic!("second good update: {}", format_runtime_error(err)));
+        assert_eq!(
+            callback_count.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "subsequent healthy updates should keep flowing after containment"
+        );
+        assert_eq!(
+            seen_values
+                .lock()
+                .expect("seen_values lock should not be poisoned")
+                .as_slice(),
+            [7, 8]
+        );
     }
 
     /// Multiple background threads concurrently writing the same source signal.
