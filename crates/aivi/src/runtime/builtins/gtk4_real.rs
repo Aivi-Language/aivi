@@ -1079,7 +1079,7 @@ mod bridge {
                     };
                     if let Err(err) = execute_runtime_handler(ctx.clone(), handler, event) {
                         eprintln!(
-                            "AIVI GTK runtime handler error: {}",
+                            "AIVI GTK runtime handler error:\n{}",
                             format_runtime_error(err)
                         );
                     }
@@ -2039,7 +2039,9 @@ mod tests {
     use crate::runtime::constructors::core_constructor_ordinals;
     use crate::runtime::environment::{Env, RuntimeContext};
     use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend, ChannelSender};
-    use crate::runtime::{format_runtime_error, CancelToken, EffectValue, Runtime, Value};
+    use crate::runtime::{
+        format_runtime_error, format_value, CancelToken, EffectValue, Runtime, RuntimeError, Value,
+    };
 
     fn test_ctx() -> Arc<RuntimeContext> {
         Arc::new(RuntimeContext::new_with_constructor_ordinals(
@@ -2715,6 +2717,91 @@ mod tests {
         );
         aivi_gtk4::window_close(host_window)
             .unwrap_or_else(|err| panic!("close tick host window: {}", err.message));
+    }
+
+    #[test]
+    fn deferred_binding_failure_reports_signal_and_widget_context() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let source = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create failing source",
+        );
+        let derived = ok_or_panic(
+            runtime.reactive_derive_signal(
+                source.clone(),
+                builtin("test.failingGtkBinding", 1, |mut args, _| match args.remove(0) {
+                    Value::Bool(false) => Ok(Value::Text("before".to_string())),
+                    Value::Bool(true) => Err(RuntimeError::NonExhaustiveMatch { scrutinee: None }),
+                    other => Err(RuntimeError::TypeError {
+                        context: "test.failingGtkBinding".to_string(),
+                        expected: "Bool".to_string(),
+                        got: format_value(&other),
+                    }),
+                }),
+            ),
+            "derive failing binding",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkEntry".to_string(),
+                },
+                ResolvedGtkAttr::Id("failing-entry".to_string()),
+                ResolvedGtkAttr::BoundProp {
+                    name: "text".to_string(),
+                    value: derived,
+                },
+            ],
+            children: Vec::new(),
+        };
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build failing entry",
+        );
+        let entry_id = *result
+            .named_widgets
+            .get("failing-entry")
+            .expect("failing entry should be named");
+        let ctx_for_thread = ctx.clone();
+        let source_for_thread = source.clone();
+        std::thread::spawn(move || {
+            let mut bg_runtime = Runtime::new(ctx_for_thread, CancelToken::root());
+            ok_or_panic(
+                bg_runtime.reactive_set_signal(source_for_thread, Value::Bool(true)),
+                "background update failing source",
+            );
+        })
+        .join()
+        .expect("background update thread should not panic");
+
+        let err = runtime
+            .reactive_flush_deferred()
+            .expect_err("flush should report the failing GTK binding");
+        let rendered = format_runtime_error(err);
+        assert!(rendered.contains("while refreshing derived signal"));
+        assert!(rendered.contains("<builtin:test.failingGtkBinding>"));
+        assert!(
+            rendered.contains(&format!("widgets: [{entry_id}]")),
+            "expected the failing binding trace to mention widget id {entry_id}, got: {rendered}"
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(entry_id)
+                .unwrap_or_else(|err| panic!("read failing entry text after containment: {}", err.message)),
+            "before"
+        );
+        assert!(
+            !runtime.reactive_graph.lock().deferred_flush,
+            "contained failures should clear the deferred flush flag"
+        );
+        assert!(
+            runtime.reactive_graph.lock().pending_notifications.is_empty(),
+            "contained failures should not leave pending notifications behind"
+        );
     }
 
     #[test]

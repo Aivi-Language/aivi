@@ -6393,7 +6393,7 @@ mod linux_impl {
 
     unsafe extern "C" fn main_loop_tick_cb(_data: *mut c_void) -> c_int {
         if let Err(err) = call_main_loop_tick_handler() {
-            eprintln!("AIVI GTK main-loop tick error: {}", err);
+            eprintln!("AIVI GTK main-loop tick error:\n{}", err);
         }
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
