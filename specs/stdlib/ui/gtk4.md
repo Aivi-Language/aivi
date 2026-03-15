@@ -9,7 +9,7 @@
 
 This page is a chaptered guide. Read it top to bottom the first time, then use the later chapters as reference.
 
-## Chapter 1: Mental model
+## Mental model
 
 AIVI native apps are built from five pieces that fit together directly:
 
@@ -47,7 +47,7 @@ A good default is:
 | show or repeat dynamic child content | `<show>` and `<each key={...}>` |
 | debug or test below the sugar layer | `buildWithIds`, `signalStream`, `signalPoll`, `signalEmit` |
 
-## Chapter 2: Your first window
+## Your first window
 
 A minimal counter already shows the core style:
 
@@ -91,7 +91,7 @@ What to notice:
 - the label binds directly to a signal.
 - `id="incrementButton"` gives the widget a stable debug name for MCP and lower-level event matching.
 
-## Chapter 3: State, derivation, and patching
+## State, derivation, and patching
 
 Use ordinary data for defaults and pure transforms, then move into signals when the value must stay live.
 
@@ -137,7 +137,7 @@ canSave = combineAll (title, saveBusy) ((currentTitle, busy) =>
 
 Use `->>` for one signal, `combineAll` for several.
 
-## Chapter 4: Writing GTK trees with sugar
+## Writing GTK trees with sugar
 
 The GTK sigil is the main authoring surface:
 
@@ -240,7 +240,7 @@ Use nested `<property name="...">` when GTK expects another object rather than p
 
 Use `<child type="...">` when the underlying GTK or libadwaita widget has named child slots.
 
-## Chapter 5: Callback sugar in detail
+## Callback sugar in detail
 
 Common GTK signals have direct sugar attributes. Use them when you want readable app code and typed payloads.
 
@@ -372,7 +372,7 @@ view = ~<gtk>
 </gtk>
 ```
 
-## Chapter 6: `do Event` in detail
+## do Event in detail
 
 `do Event { ... }` creates an `EventHandle E A`. The body uses the same readable effect style as `do Effect { ... }`, but the resulting value carries lifecycle state as signals.
 
@@ -441,7 +441,7 @@ Prefer `do Event { ... }` when:
 
 A useful pattern is: callback functions gather payloads, signals hold live form state, and an event handle owns the actual submission effect.
 
-## Chapter 7: Structural UI with `<show>` and `<each>`
+## Structural UI with show and each
 
 Dynamic child structure uses mounted structural bindings rather than plain rerendering.
 
@@ -479,7 +479,7 @@ The public contract is:
 - keyed children move instead of being recreated when possible,
 - inserts and removals go through the owning GTK container.
 
-## Chapter 8: App lifecycle, windows, and lower-level helpers
+## App lifecycle, windows, and lower-level helpers
 
 ### 8.1 Root windows and app startup
 
@@ -577,7 +577,7 @@ main = do Effect {
 }
 ```
 
-## Chapter 9: Debugging a native app with the MCP server
+## Debugging a native app with the MCP server
 
 The MCP server is the best way to inspect a running AIVI GTK app from an editor agent or other local automation client.
 
@@ -659,7 +659,7 @@ When you build a GTK app that you expect to debug later, these habits help immed
 - derive display-only values with `->>` so they appear as first-class signals in inspection output,
 - keep low-level raw-signal usage localized so the inspectable graph stays easy to read.
 
-## Chapter 10: Coverage, boundaries, and diagnostics
+## Coverage, boundaries, and diagnostics
 
 ### 10.1 What the declarative surface covers
 
