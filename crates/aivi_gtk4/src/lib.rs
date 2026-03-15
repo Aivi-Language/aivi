@@ -242,6 +242,7 @@ mod linux_impl {
         fn gtk_password_entry_set_show_peek_icon(entry: *mut c_void, show_peek_icon: c_int);
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
+        fn gtk_editable_set_position(editable: *mut c_void, position: c_int);
         fn gtk_editable_get_selection_bounds(
             editable: *mut c_void,
             start_pos: *mut c_int,
@@ -1172,6 +1173,30 @@ mod linux_impl {
             let prop_c = CString::new(key).unwrap();
             unsafe { gobject_set_str(widget, &prop_c, &text_c) };
         }
+        Ok(())
+    }
+
+    fn editable_text_value(widget: *mut c_void) -> String {
+        let text_ptr = unsafe { gtk_editable_get_text(widget) };
+        if text_ptr.is_null() {
+            String::new()
+        } else {
+            unsafe { CStr::from_ptr(text_ptr) }
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
+    fn set_editable_text_if_needed(
+        widget: *mut c_void,
+        value: &str,
+        context: &str,
+    ) -> Result<(), Gtk4Error> {
+        if editable_text_value(widget) == value {
+            return Ok(());
+        }
+        let text_c = c_text(value, context)?;
+        unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
         Ok(())
     }
 
@@ -3322,6 +3347,96 @@ mod linux_impl {
                     "reconciled top bar should be attached to the toolbar view"
                 );
             });
+        }
+
+        #[test]
+        fn reconcile_identical_text_preserves_editable_cursor_position() {
+            let _guard = gtk_state_test_guard();
+            init().expect("init gtk");
+
+            for class_name in ["GtkEntry", "GtkSearchEntry", "AdwEntryRow"] {
+                reset_test_gtk_state();
+
+                let initial = GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ("class".to_string(), class_name.to_string()),
+                        ("id".to_string(), "editable-under-test".to_string()),
+                        ("prop:text".to_string(), "abcdef".to_string()),
+                    ],
+                    children: vec![],
+                };
+                let result = build_with_ids(&initial).expect("build editable widget");
+                let editable_id = *result
+                    .named_widgets
+                    .get("editable-under-test")
+                    .expect("editable widget should be named");
+
+                GTK_STATE.with(|state| {
+                    let state = state.borrow();
+                    let editable = widget_ptr(&state, editable_id, "editable_cursor_preserve_test")
+                        .expect("editable ptr");
+                    unsafe { gtk_editable_set_position(editable, 3) };
+                    assert_eq!(
+                        unsafe { gtk_editable_get_position(editable) },
+                        3,
+                        "{class_name} should accept an explicit cursor position before reconcile"
+                    );
+                });
+
+                let updated = GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ("class".to_string(), class_name.to_string()),
+                        ("id".to_string(), "editable-under-test".to_string()),
+                        ("prop:text".to_string(), "abcdef".to_string()),
+                        ("prop:tooltip-text".to_string(), "patched".to_string()),
+                    ],
+                    children: vec![],
+                };
+                reconcile_node_fn(result.root_id, &updated)
+                    .expect("reconcile editable widget with identical text");
+
+                GTK_STATE.with(|state| {
+                    let state = state.borrow();
+                    let editable = widget_ptr(&state, editable_id, "editable_cursor_preserve_test")
+                        .expect("editable ptr after reconcile");
+                    assert_eq!(
+                        editable_text_value(editable),
+                        "abcdef",
+                        "{class_name} should keep its text after reconcile"
+                    );
+                    assert_eq!(
+                        unsafe { gtk_editable_get_position(editable) },
+                        3,
+                        "{class_name} should preserve its cursor when text is unchanged"
+                    );
+                });
+
+                let changed = GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ("class".to_string(), class_name.to_string()),
+                        ("id".to_string(), "editable-under-test".to_string()),
+                        ("prop:text".to_string(), "abcdefg".to_string()),
+                        ("prop:tooltip-text".to_string(), "patched".to_string()),
+                    ],
+                    children: vec![],
+                };
+                reconcile_node_fn(result.root_id, &changed)
+                    .expect("reconcile editable widget with changed text");
+
+                GTK_STATE.with(|state| {
+                    let state = state.borrow();
+                    let editable = widget_ptr(&state, editable_id, "editable_cursor_preserve_test")
+                        .expect("editable ptr after changed reconcile");
+                    assert_eq!(
+                        editable_text_value(editable),
+                        "abcdefg",
+                        "{class_name} should still accept changed text values"
+                    );
+                });
+            }
         }
 
         #[test]
@@ -8230,8 +8345,11 @@ mod linux_impl {
             }
             "GtkEntry" | "GtkPasswordEntry" => {
                 if let Some(value) = props.get("text") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkEntry text")?;
-                    unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                    set_editable_text_if_needed(
+                        widget,
+                        value,
+                        "gtk4.buildFromNode invalid GtkEntry text",
+                    )?;
                 }
                 set_obj_str(widget, props, "placeholder-text", "GtkEntry")?;
                 if class_name == "GtkPasswordEntry" {
@@ -8476,8 +8594,11 @@ mod linux_impl {
             }
             "GtkSearchEntry" => {
                 if let Some(value) = props.get("text") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkSearchEntry text")?;
-                    unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                    set_editable_text_if_needed(
+                        widget,
+                        value,
+                        "gtk4.buildFromNode invalid GtkSearchEntry text",
+                    )?;
                 }
                 set_obj_str(widget, props, "placeholder-text", "GtkSearchEntry")?;
             }
@@ -8651,8 +8772,11 @@ mod linux_impl {
             "AdwEntryRow" | "AdwPasswordEntryRow" => {
                 set_obj_str(widget, props, "title", "AdwEntryRow")?;
                 if let Some(value) = props.get("text") {
-                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwEntryRow text")?;
-                    unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                    set_editable_text_if_needed(
+                        widget,
+                        value,
+                        "gtk4.buildFromNode invalid AdwEntryRow text",
+                    )?;
                 }
             }
             "AdwSwitchRow" => {
