@@ -471,6 +471,8 @@ mod linux_impl {
 
         // GtkCalendar (GTK 4)
         fn gtk_calendar_new() -> *mut c_void;
+        fn gtk_calendar_set_date(calendar: *mut c_void, datetime: *mut c_void);
+        fn gtk_calendar_get_date(calendar: *mut c_void) -> *mut c_void;
         fn gtk_calendar_set_show_heading(calendar: *mut c_void, value: c_int);
         fn gtk_calendar_set_show_day_names(calendar: *mut c_void, value: c_int);
         fn gtk_calendar_set_show_week_numbers(calendar: *mut c_void, value: c_int);
@@ -531,6 +533,18 @@ mod linux_impl {
             function: unsafe extern "C" fn(*mut c_void) -> c_int,
             data: *mut c_void,
         ) -> c_uint;
+        fn g_date_time_new_local(
+            year: c_int,
+            month: c_int,
+            day: c_int,
+            hour: c_int,
+            minute: c_int,
+            seconds: c_double,
+        ) -> *mut c_void;
+        fn g_date_time_get_year(datetime: *mut c_void) -> c_int;
+        fn g_date_time_get_month(datetime: *mut c_void) -> c_int;
+        fn g_date_time_get_day_of_month(datetime: *mut c_void) -> c_int;
+        fn g_date_time_unref(datetime: *mut c_void);
         fn g_free(ptr: *mut c_void);
     }
 
@@ -860,6 +874,7 @@ mod linux_impl {
         NotifyU32,
         SpinButtonValue,
         ComboBoxText,
+        CalendarDate,
         NotifyRgba,
         NotifyFontDesc,
     }
@@ -2302,6 +2317,15 @@ mod linux_impl {
         }
 
         #[test]
+        fn gtk_calendar_has_day_selected_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkCalendar", "day-selected"),
+                Some(SignalPayloadKind::CalendarDate)
+            );
+            assert_eq!(known_signals_for_class("GtkCalendar"), &["day-selected"]);
+        }
+
+        #[test]
         fn adw_preferences_dialog_uses_closed_and_close_attempt_signals() {
             assert_eq!(
                 signal_payload_kind_for("AdwPreferencesDialog", "closed"),
@@ -2358,6 +2382,49 @@ mod linux_impl {
             assert_eq!(event.signal, "enter");
             assert_eq!(event.handler, "HoverOpen");
             assert_eq!(event.payload, "");
+        }
+
+        #[test]
+        fn calendar_day_selected_callback_enqueues_iso_date_payload() {
+            let _guard = gtk_state_test_guard();
+            init().expect("init gtk");
+            GTK_STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                *state = RealGtkState::default();
+                state
+                    .widget_id_to_name
+                    .insert(88, "calendar-picker".to_string());
+            });
+
+            let receiver = signal_stream().expect("signal stream");
+            let callback_data = Box::new(SignalCallbackData {
+                widget_id: 88,
+                signal_name: "day-selected".to_string(),
+                handler: "PickDate".to_string(),
+                payload_kind: SignalPayloadKind::CalendarDate,
+            });
+            let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+            let calendar = unsafe { gtk_calendar_new() };
+            assert!(!calendar.is_null(), "calendar widget should be created");
+
+            unsafe {
+                let datetime = g_date_time_new_local(2024, 10, 15, 12, 0, 0.0);
+                assert!(!datetime.is_null(), "calendar date should be created");
+                gtk_calendar_set_date(calendar, datetime);
+                g_date_time_unref(datetime);
+                gtk_signal_callback(calendar, callback_ptr);
+                drop(Box::from_raw(callback_ptr as *mut SignalCallbackData));
+                g_object_unref(calendar);
+            }
+
+            let event = receiver
+                .recv_timeout(Duration::from_millis(100))
+                .expect("calendar selection should reach signal stream");
+            assert_eq!(event.widget_id, 88);
+            assert_eq!(event.widget_name, "calendar-picker");
+            assert_eq!(event.signal, "day-selected");
+            assert_eq!(event.handler, "PickDate");
+            assert_eq!(event.payload, "2024-10-15");
         }
 
         #[test]
@@ -2805,6 +2872,88 @@ mod linux_impl {
                 dialog_closed["widget"]["state"]["presented"].as_bool(),
                 Some(false)
             );
+        }
+
+        #[test]
+        fn ui_debug_select_sets_calendar_date_and_emits_day_selected() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let receiver = signal_stream().expect("signal stream");
+            let app_id =
+                app_new("integration-tests.calendar-ui-debug").expect("create GTK application");
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "calendar-debug-host".to_string()),
+                    ("prop:title".to_string(), "Calendar Debug Host".to_string()),
+                    ("prop:default-width".to_string(), "320".to_string()),
+                    ("prop:default-height".to_string(), "240".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "GtkBox".to_string())],
+                    children: vec![GtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ("class".to_string(), "GtkCalendar".to_string()),
+                            ("id".to_string(), "calendar-debug-picker".to_string()),
+                            (
+                                "signal:day-selected".to_string(),
+                                "calendar-picked".to_string(),
+                            ),
+                        ],
+                        children: vec![],
+                    }],
+                }],
+            };
+
+            let result =
+                mount_app_window_with_bindings(app_id, &[window_node]).expect("mount window");
+            let calendar_id = *result
+                .named_widgets
+                .get("calendar-debug-picker")
+                .expect("calendar should be named");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            let calendar_params =
+                Map::from_iter([("name".to_string(), json!("calendar-debug-picker"))]);
+            let calendar_before = with_ui_debug_state_result(|state| {
+                ui_debug_inspect_widget_result(state, &calendar_params)
+            })
+            .expect("inspect calendar before select");
+            assert_eq!(
+                calendar_before["widget"]["capabilities"]["select"].as_bool(),
+                Some(true)
+            );
+
+            let select_params = Map::from_iter([
+                ("name".to_string(), json!("calendar-debug-picker")),
+                ("value".to_string(), json!("2024-10-15")),
+            ]);
+            let select_result =
+                ui_debug_select_result(&select_params).expect("select calendar date");
+            assert_eq!(
+                select_result["emitted"][0]["handler"].as_str(),
+                Some("calendar-picked")
+            );
+
+            assert_eq!(
+                widget_get_calendar_date(calendar_id).expect("calendar date after select"),
+                "2024-10-15"
+            );
+
+            let event = receiver
+                .recv_timeout(Duration::from_millis(100))
+                .expect("calendar selection should emit day-selected");
+            assert_eq!(event.signal, "day-selected");
+            assert_eq!(event.handler, "calendar-picked");
+            assert_eq!(event.payload, "2024-10-15");
         }
 
         #[test]
@@ -3627,6 +3776,7 @@ mod linux_impl {
             || is_toggle_class(&live.class_name)
             || is_choice_class(&live.class_name)
             || is_range_class(&live.class_name)
+            || live.class_name == "GtkCalendar"
             || is_menu_button_selectable(live);
         let focus = widget_ptr(state, live.widget_id, "uiDebugCapabilities")
             .ok()
@@ -4018,6 +4168,46 @@ mod linux_impl {
         }
     }
 
+    fn record_signal_event(state: &mut RealGtkState, event: SignalEventState) {
+        let widget_name = state
+            .widget_id_to_name
+            .get(&event.widget_id)
+            .cloned()
+            .unwrap_or_default();
+        let root_id = find_widget_context(state, event.widget_id).map(|(root_id, _, _, _)| root_id);
+        let event_seq = state.next_event_seq();
+        let event_tick = state.current_tick();
+        let timestamp_ms = unix_timestamp_ms();
+        RealGtkState::push_log(
+            &mut state.signal_event_log,
+            json!({
+                "seq": event_seq,
+                "tick": event_tick,
+                "timestampMs": timestamp_ms,
+                "widgetId": event.widget_id,
+                "widgetName": widget_name,
+                "rootId": root_id,
+                "signal": &event.signal,
+                "handler": &event.handler,
+                "payload": &event.payload,
+            }),
+        );
+        let typed_event = make_signal_event(event.clone(), widget_name);
+        state
+            .signal_senders
+            .retain(|sender| sender.send(typed_event.clone()).is_ok());
+        state.signal_events.push_back(event);
+    }
+
+    fn try_record_signal_event(event: SignalEventState) {
+        GTK_STATE.with(|state| {
+            let Ok(mut state) = state.try_borrow_mut() else {
+                return;
+            };
+            record_signal_event(&mut state, event);
+        });
+    }
+
     fn enqueue_signal_event(
         state: &mut RealGtkState,
         widget_id: i64,
@@ -4034,34 +4224,7 @@ mod linux_impl {
             handler: handler.to_string(),
             payload: payload.to_string(),
         };
-        let widget_name = state
-            .widget_id_to_name
-            .get(&widget_id)
-            .cloned()
-            .unwrap_or_default();
-        let root_id = find_widget_context(state, widget_id).map(|(root_id, _, _, _)| root_id);
-        let event_seq = state.next_event_seq();
-        let event_tick = state.current_tick();
-        let timestamp_ms = unix_timestamp_ms();
-        RealGtkState::push_log(
-            &mut state.signal_event_log,
-            json!({
-                "seq": event_seq,
-                "tick": event_tick,
-                "timestampMs": timestamp_ms,
-                "widgetId": widget_id,
-                "widgetName": widget_name,
-                "rootId": root_id,
-                "signal": signal,
-                "handler": handler,
-                "payload": payload,
-            }),
-        );
-        let typed_event = make_signal_event(event.clone(), widget_name);
-        state
-            .signal_senders
-            .retain(|sender| sender.send(typed_event.clone()).is_ok());
-        state.signal_events.push_back(event);
+        record_signal_event(state, event);
         Ok(())
     }
 
@@ -5541,6 +5704,12 @@ mod linux_impl {
                 selected: f64,
                 payload: String,
             },
+            Calendar {
+                year: i32,
+                month: i32,
+                day: i32,
+                payload: String,
+            },
             MenuButton {
                 action: *mut c_void,
                 item_index: usize,
@@ -5653,6 +5822,14 @@ mod linux_impl {
                         selected,
                         payload: selected.to_string(),
                     }
+                } else if class_name == "GtkCalendar" {
+                    let (year, month, day) = parse_iso_calendar_date(&value)?;
+                    UiDebugSelectAction::Calendar {
+                        year,
+                        month,
+                        day,
+                        payload: value.clone(),
+                    }
                 } else if class_name == "GtkMenuButton" {
                     let model_id = props
                         .get("menu-model")
@@ -5715,6 +5892,19 @@ mod linux_impl {
                     },
                     UiDebugSelectAction::SpinButton { selected, .. } => unsafe {
                         gtk_spin_button_set_value(*widget, *selected)
+                    },
+                    UiDebugSelectAction::Calendar {
+                        year, month, day, ..
+                    } => unsafe {
+                        let datetime = g_date_time_new_local(*year, *month, *day, 12, 0, 0.0);
+                        if datetime.is_null() {
+                            return Err(Gtk4Error::new(format!(
+                                "gtk ui debug select invalid calendar date {:04}-{:02}-{:02}",
+                                year, month, day
+                            )));
+                        }
+                        gtk_calendar_set_date(*widget, datetime);
+                        g_date_time_unref(datetime);
                     },
                     UiDebugSelectAction::MenuButton { action, .. } => unsafe {
                         g_action_activate(*action, null_mut())
@@ -5833,6 +6023,24 @@ mod linux_impl {
                         for binding in bindings
                             .iter()
                             .filter(|binding| binding.signal == "value-changed")
+                        {
+                            enqueue_signal_event(
+                                state,
+                                widget_id,
+                                &binding.signal,
+                                &binding.handler,
+                                payload,
+                            )?;
+                            emitted.push(json!({
+                                "signal": binding.signal,
+                                "handler": binding.handler
+                            }));
+                        }
+                    }
+                    UiDebugSelectAction::Calendar { payload, .. } => {
+                        for binding in bindings
+                            .iter()
+                            .filter(|binding| binding.signal == "day-selected")
                         {
                             enqueue_signal_event(
                                 state,
@@ -6064,14 +6272,7 @@ mod linux_impl {
                 handler: action_name,
                 payload: coords,
             };
-            let typed_event = make_signal_event(event.clone(), String::new());
-            GTK_STATE.with(|state| {
-                let mut state = state.borrow_mut();
-                state
-                    .signal_senders
-                    .retain(|s| s.send(typed_event.clone()).is_ok());
-                state.signal_events.push_back(event);
-            });
+            try_record_signal_event(event);
         }
     }
 
@@ -6642,24 +6843,11 @@ mod linux_impl {
                 .to_string_lossy()
                 .into_owned()
         };
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let event = SignalEventState {
-                widget_id: binding.widget_id,
-                signal: "key-pressed".to_string(),
-                handler: String::new(),
-                payload: format!("{key_name}\n{keycode}"),
-            };
-            let widget_name = state
-                .widget_id_to_name
-                .get(&binding.widget_id)
-                .cloned()
-                .unwrap_or_default();
-            let typed_event = make_signal_event(event.clone(), widget_name);
-            state
-                .signal_senders
-                .retain(|s| s.send(typed_event.clone()).is_ok());
-            state.signal_events.push_back(event);
+        try_record_signal_event(SignalEventState {
+            widget_id: binding.widget_id,
+            signal: "key-pressed".to_string(),
+            handler: String::new(),
+            payload: format!("{key_name}\n{keycode}"),
         });
         0
     }
@@ -6683,24 +6871,11 @@ mod linux_impl {
                 .to_string_lossy()
                 .into_owned()
         };
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let event = SignalEventState {
-                widget_id: binding.widget_id,
-                signal: binding.signal_name.clone(),
-                handler: binding.handler.clone(),
-                payload: format!("{key_name}\n{keycode}"),
-            };
-            let widget_name = state
-                .widget_id_to_name
-                .get(&binding.widget_id)
-                .cloned()
-                .unwrap_or_default();
-            let typed_event = make_signal_event(event.clone(), widget_name);
-            state
-                .signal_senders
-                .retain(|s| s.send(typed_event.clone()).is_ok());
-            state.signal_events.push_back(event);
+        try_record_signal_event(SignalEventState {
+            widget_id: binding.widget_id,
+            signal: binding.signal_name.clone(),
+            handler: binding.handler.clone(),
+            payload: format!("{key_name}\n{keycode}"),
         });
         0
     }
@@ -6715,24 +6890,11 @@ mod linux_impl {
             return;
         }
         let binding = unsafe { &*(data as *const SignalCallbackData) };
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let event = SignalEventState {
-                widget_id: binding.widget_id,
-                signal: binding.signal_name.clone(),
-                handler: binding.handler.clone(),
-                payload: String::new(),
-            };
-            let widget_name = state
-                .widget_id_to_name
-                .get(&binding.widget_id)
-                .cloned()
-                .unwrap_or_default();
-            let typed_event = make_signal_event(event.clone(), widget_name);
-            state
-                .signal_senders
-                .retain(|s| s.send(typed_event.clone()).is_ok());
-            state.signal_events.push_back(event);
+        try_record_signal_event(SignalEventState {
+            widget_id: binding.widget_id,
+            signal: binding.signal_name.clone(),
+            handler: binding.handler.clone(),
+            payload: String::new(),
         });
     }
 
@@ -6782,6 +6944,7 @@ mod linux_impl {
                     s
                 }
             }
+            SignalPayloadKind::CalendarDate => calendar_date_string(instance).unwrap_or_default(),
             SignalPayloadKind::NotifyBool => {
                 let prop_name = binding
                     .signal_name
@@ -6847,29 +7010,24 @@ mod linux_impl {
         }
 
         let deferred: Vec<DeferredMutation> = GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let event = SignalEventState {
-                widget_id: binding.widget_id,
-                signal: binding.signal_name.clone(),
-                handler: binding.handler.clone(),
-                payload,
+            let Ok(mut state) = state.try_borrow_mut() else {
+                return Vec::new();
             };
-            // Broadcast to signalStream receivers (retain only live senders)
-            let widget_name = state
-                .widget_id_to_name
-                .get(&binding.widget_id)
-                .cloned()
-                .unwrap_or_default();
-            let typed_event = make_signal_event(event.clone(), widget_name);
-            state
-                .signal_senders
-                .retain(|s| s.send(typed_event.clone()).is_ok());
-            state.signal_events.push_back(event);
+            let actions = state.signal_action_bindings.get(&binding.handler).cloned();
+            record_signal_event(
+                &mut state,
+                SignalEventState {
+                    widget_id: binding.widget_id,
+                    signal: binding.signal_name.clone(),
+                    handler: binding.handler.clone(),
+                    payload,
+                },
+            );
 
             let mut mutations = Vec::new();
 
             // Collect all signal action bindings for this handler
-            if let Some(actions) = state.signal_action_bindings.get(&binding.handler) {
+            if let Some(actions) = actions {
                 for action in actions {
                     match action {
                         SignalAction::SetBool {
@@ -6877,12 +7035,12 @@ mod linux_impl {
                             property,
                             value,
                         } => {
-                            if let Some(&widget) = state.widgets.get(widget_id) {
-                                if let Ok(prop_c) = CString::new(property.as_str()) {
+                            if let Some(&widget) = state.widgets.get(&widget_id) {
+                                if let Ok(prop_c) = CString::new(property) {
                                     mutations.push(DeferredMutation::SetBool {
                                         widget,
                                         property: prop_c,
-                                        value: bool_to_c(*value),
+                                        value: bool_to_c(value),
                                     });
                                 }
                             }
@@ -6892,12 +7050,12 @@ mod linux_impl {
                             class_name,
                             add,
                         } => {
-                            if let Some(&widget) = state.widgets.get(widget_id) {
-                                if let Ok(class_c) = CString::new(class_name.as_str()) {
+                            if let Some(&widget) = state.widgets.get(&widget_id) {
+                                if let Ok(class_c) = CString::new(class_name) {
                                     mutations.push(DeferredMutation::CssClass {
                                         widget,
                                         class: class_c,
-                                        add: *add,
+                                        add,
                                     });
                                 }
                             }
@@ -6906,8 +7064,8 @@ mod linux_impl {
                             widget_id,
                             property,
                         } => {
-                            if let Some(&widget) = state.widgets.get(widget_id) {
-                                if let Ok(prop_c) = CString::new(property.as_str()) {
+                            if let Some(&widget) = state.widgets.get(&widget_id) {
+                                if let Ok(prop_c) = CString::new(property) {
                                     mutations.push(DeferredMutation::ToggleBool {
                                         widget,
                                         property: prop_c,
@@ -6919,8 +7077,8 @@ mod linux_impl {
                             widget_id,
                             class_name,
                         } => {
-                            if let Some(&widget) = state.widgets.get(widget_id) {
-                                if let Ok(class_c) = CString::new(class_name.as_str()) {
+                            if let Some(&widget) = state.widgets.get(&widget_id) {
+                                if let Ok(class_c) = CString::new(class_name) {
                                     mutations.push(DeferredMutation::ToggleCssClass {
                                         widget,
                                         class: class_c,
@@ -6933,20 +7091,20 @@ mod linux_impl {
                             parent_id,
                         } => {
                             if let (Some(&dialog), Some(&parent)) =
-                                (state.widgets.get(dialog_id), state.widgets.get(parent_id))
+                                (state.widgets.get(&dialog_id), state.widgets.get(&parent_id))
                             {
                                 mutations.push(DeferredMutation::PresentDialog { dialog, parent });
                             }
                         }
                         SignalAction::CleanupRoot { root_id } => {
-                            mutations.push(DeferredMutation::CleanupRoot { root_id: *root_id });
+                            mutations.push(DeferredMutation::CleanupRoot { root_id });
                         }
                         SignalAction::SetStackPage {
                             stack_id,
                             page_name,
                         } => {
-                            if let Some(&stack) = state.widgets.get(stack_id) {
-                                if let Ok(page_c) = CString::new(page_name.as_str()) {
+                            if let Some(&stack) = state.widgets.get(&stack_id) {
+                                if let Ok(page_c) = CString::new(page_name) {
                                     mutations.push(DeferredMutation::SetStackPage {
                                         stack,
                                         page: page_c,
@@ -7086,26 +7244,21 @@ mod linux_impl {
             })
             .unwrap_or_default();
         GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
+            let Ok(mut state) = state.try_borrow_mut() else {
+                return;
+            };
             if binding.signal_name == "closed" {
                 state.presented_dialogs.remove(&binding.widget_id);
             }
-            let event = SignalEventState {
-                widget_id: binding.widget_id,
-                signal: binding.signal_name.clone(),
-                handler: binding.handler.clone(),
-                payload,
-            };
-            let widget_name = state
-                .widget_id_to_name
-                .get(&binding.widget_id)
-                .cloned()
-                .unwrap_or_default();
-            let typed_event = make_signal_event(event.clone(), widget_name);
-            state
-                .signal_senders
-                .retain(|s| s.send(typed_event.clone()).is_ok());
-            state.signal_events.push_back(event);
+            record_signal_event(
+                &mut state,
+                SignalEventState {
+                    widget_id: binding.widget_id,
+                    signal: binding.signal_name.clone(),
+                    handler: binding.handler.clone(),
+                    payload,
+                },
+            );
         });
     }
 
@@ -7145,7 +7298,7 @@ mod linux_impl {
             ("AdwOverlaySplitView", "notify::show-sidebar") => Some(SignalPayloadKind::NotifyBool),
             ("GtkColorDialogButton", "notify::rgba") => Some(SignalPayloadKind::NotifyRgba),
             ("GtkFontDialogButton", "notify::font-desc") => Some(SignalPayloadKind::NotifyFontDesc),
-            ("GtkCalendar", "day-selected") => Some(SignalPayloadKind::None),
+            ("GtkCalendar", "day-selected") => Some(SignalPayloadKind::CalendarDate),
             _ if runtime_signal_known(class_name, signal_name) => Some(SignalPayloadKind::None),
             _ => None,
         }
@@ -11123,19 +11276,11 @@ mod linux_impl {
                 return 0;
             }
             let signal_name = unsafe { &*(data as *const String) };
-            GTK_STATE.with(|state| {
-                let mut state = state.borrow_mut();
-                let event = SignalEventState {
-                    widget_id: 0,
-                    signal: "close-request".to_string(),
-                    handler: signal_name.clone(),
-                    payload: String::new(),
-                };
-                let typed_event = make_signal_event(event.clone(), signal_name.clone());
-                state
-                    .signal_senders
-                    .retain(|s| s.send(typed_event.clone()).is_ok());
-                state.signal_events.push_back(event);
+            try_record_signal_event(SignalEventState {
+                widget_id: 0,
+                signal: "close-request".to_string(),
+                handler: signal_name.clone(),
+                payload: String::new(),
             });
             0
         }
@@ -11220,6 +11365,35 @@ mod linux_impl {
         })
     }
 
+    pub(super) fn widget_set_u32_property(
+        id: i64,
+        prop: &str,
+        value: u32,
+    ) -> Result<(), Gtk4Error> {
+        let prop_c = c_text(prop, "gtk4.widgetSetU32Property invalid property name")?;
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "widgetSetU32Property")?;
+            unsafe { gobject_set_u32(widget, &prop_c, value as c_uint) };
+            Ok(())
+        })
+    }
+
+    pub(super) fn widget_set_string_property(
+        id: i64,
+        prop: &str,
+        value: &str,
+    ) -> Result<(), Gtk4Error> {
+        let prop_c = c_text(prop, "gtk4.widgetSetStringProperty invalid property name")?;
+        let value_c = c_text(value, "gtk4.widgetSetStringProperty invalid property value")?;
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "widgetSetStringProperty")?;
+            unsafe { gobject_set_str(widget, &prop_c, &value_c) };
+            Ok(())
+        })
+    }
+
     pub(super) fn widget_get_bool_property(id: i64, prop: &str) -> Result<bool, Gtk4Error> {
         let prop_c = CString::new(prop)
             .map_err(|_| Gtk4Error::new("gtk4.widgetGetBoolProperty invalid prop"))?;
@@ -11227,6 +11401,74 @@ mod linux_impl {
             let state = state.borrow();
             let widget = widget_ptr(&state, id, "widgetGetBoolProperty")?;
             Ok(unsafe { gobject_get_bool(widget, &prop_c) != 0 })
+        })
+    }
+
+    fn parse_iso_calendar_date(value: &str) -> Result<(i32, i32, i32), Gtk4Error> {
+        let parts: Vec<_> = value.trim().split('-').collect();
+        if parts.len() != 3 {
+            return Err(Gtk4Error::new(format!(
+                "gtk4.widgetSetCalendarDate expected YYYY-MM-DD, got `{value}`"
+            )));
+        }
+        let year = parts[0].parse::<i32>().map_err(|_| {
+            Gtk4Error::new(format!(
+                "gtk4.widgetSetCalendarDate invalid year in `{value}`"
+            ))
+        })?;
+        let month = parts[1].parse::<i32>().map_err(|_| {
+            Gtk4Error::new(format!(
+                "gtk4.widgetSetCalendarDate invalid month in `{value}`"
+            ))
+        })?;
+        let day = parts[2].parse::<i32>().map_err(|_| {
+            Gtk4Error::new(format!(
+                "gtk4.widgetSetCalendarDate invalid day in `{value}`"
+            ))
+        })?;
+        Ok((year, month, day))
+    }
+
+    fn calendar_date_string(widget: *mut c_void) -> Option<String> {
+        unsafe {
+            let datetime = gtk_calendar_get_date(widget);
+            if datetime.is_null() {
+                return None;
+            }
+            let year = g_date_time_get_year(datetime);
+            let month = g_date_time_get_month(datetime);
+            let day = g_date_time_get_day_of_month(datetime);
+            g_date_time_unref(datetime);
+            Some(format!("{year:04}-{month:02}-{day:02}"))
+        }
+    }
+
+    pub(super) fn widget_get_calendar_date(id: i64) -> Result<String, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "widgetGetCalendarDate")?;
+            calendar_date_string(widget).ok_or_else(|| {
+                Gtk4Error::new("gtk4.widgetGetCalendarDate returned no selected date")
+            })
+        })
+    }
+
+    pub(super) fn widget_set_calendar_date(id: i64, value: &str) -> Result<(), Gtk4Error> {
+        let (year, month, day) = parse_iso_calendar_date(value)?;
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "widgetSetCalendarDate")?;
+            unsafe {
+                let datetime = g_date_time_new_local(year, month, day, 12, 0, 0.0);
+                if datetime.is_null() {
+                    return Err(Gtk4Error::new(format!(
+                        "gtk4.widgetSetCalendarDate invalid date `{value}`"
+                    )));
+                }
+                gtk_calendar_set_date(widget, datetime);
+                g_date_time_unref(datetime);
+            }
+            Ok(())
         })
     }
 
@@ -12938,24 +13180,11 @@ mod linux_impl {
     }
 
     unsafe extern "C" fn tick_timeout_cb(_data: *mut c_void) -> c_int {
-        let event = SignalEvent {
+        try_record_signal_event(SignalEventState {
             widget_id: 0,
-            widget_name: String::new(),
             signal: "tick".to_string(),
             handler: String::new(),
             payload: String::new(),
-        };
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            state
-                .signal_senders
-                .retain(|s| s.send(event.clone()).is_ok());
-            state.signal_events.push_back(SignalEventState {
-                widget_id: 0,
-                signal: "tick".to_string(),
-                handler: String::new(),
-                payload: String::new(),
-            });
         });
         1 // TRUE — keep repeating
     }
@@ -13011,7 +13240,11 @@ delegate!(window_set_decorated(win_id: i64, decorated: bool) -> Result<(), Gtk4E
 delegate!(widget_show(id: i64) -> Result<(), Gtk4Error>);
 delegate!(widget_hide(id: i64) -> Result<(), Gtk4Error>);
 delegate!(widget_set_bool_property(id: i64, prop: &str, value: bool) -> Result<(), Gtk4Error>);
+delegate!(widget_set_u32_property(id: i64, prop: &str, value: u32) -> Result<(), Gtk4Error>);
+delegate!(widget_set_string_property(id: i64, prop: &str, value: &str) -> Result<(), Gtk4Error>);
 delegate!(widget_get_bool_property(id: i64, prop: &str) -> Result<bool, Gtk4Error>);
+delegate!(widget_get_calendar_date(id: i64) -> Result<String, Gtk4Error>);
+delegate!(widget_set_calendar_date(id: i64, value: &str) -> Result<(), Gtk4Error>);
 delegate!(widget_set_size_request(id: i64, w: i32, h: i32) -> Result<(), Gtk4Error>);
 delegate!(widget_set_hexpand(id: i64, expand: bool) -> Result<(), Gtk4Error>);
 delegate!(widget_set_vexpand(id: i64, expand: bool) -> Result<(), Gtk4Error>);

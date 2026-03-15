@@ -48,7 +48,7 @@ export gtkElement, gtkTextNode, gtkBoundText, gtkShow, gtkEach, gtkEachKeyed
 export gtkStaticAttr, gtkBoundAttr, gtkStaticProp, gtkBoundProp, gtkEventAttr, gtkEventSugarAttr, gtkIdAttr, gtkRefAttr
 export buildFromNode, buildWithIds, reconcileNode
 export signalPoll, signalEmit, signalStream, dbusServerStart
-export widgetById, widgetGetBoolProperty, widgetSetBoolProperty
+export widgetById, widgetGetBoolProperty, widgetGetCalendarDate, widgetSetBoolProperty, widgetSetCalendarDate
 export trayNotifyPersonalEmail, traySetEmailSuggestions
 export gtkSetInterval
 
@@ -195,8 +195,14 @@ widgetById = gtk4.widgetById
 widgetGetBoolProperty : WidgetId -> Text -> Effect GtkError Bool
 widgetGetBoolProperty = gtk4.widgetGetBoolProperty
 
+widgetGetCalendarDate : WidgetId -> Effect GtkError Text
+widgetGetCalendarDate = gtk4.widgetGetCalendarDate
+
 widgetSetBoolProperty : WidgetId -> Text -> Bool -> Effect GtkError Unit
 widgetSetBoolProperty = gtk4.widgetSetBoolProperty
+
+widgetSetCalendarDate : WidgetId -> Text -> Effect GtkError Unit
+widgetSetCalendarDate = gtk4.widgetSetCalendarDate
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init

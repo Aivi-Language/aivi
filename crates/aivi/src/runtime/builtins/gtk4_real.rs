@@ -744,6 +744,21 @@ mod bridge {
             "label" if class_name == "GtkButton" || class_name == "GtkToggleButton" => {
                 aivi_gtk4::button_set_label(widget_id, value).map_err(gtk4_err_to_runtime)
             }
+            "label" if class_name == "GtkMenuButton" => {
+                aivi_gtk4::widget_set_string_property(widget_id, property, value)
+                    .map_err(gtk4_err_to_runtime)
+            }
+            "selected" if class_name == "GtkDropDown" => value
+                .parse::<u32>()
+                .map_err(|_| RuntimeError::TypeError {
+                    context: format!("gtk4 live binding {class_name}.{property}"),
+                    expected: "UInt".to_string(),
+                    got: value.to_string(),
+                })
+                .and_then(|selected| {
+                    aivi_gtk4::widget_set_u32_property(widget_id, property, selected)
+                        .map_err(gtk4_err_to_runtime)
+                }),
             "text"
                 if matches!(
                     class_name,
@@ -751,6 +766,18 @@ mod bridge {
                 ) =>
             {
                 aivi_gtk4::entry_set_text(widget_id, value).map_err(gtk4_err_to_runtime)
+            }
+            "text" if matches!(class_name, "AdwEntryRow" | "AdwPasswordEntryRow") => {
+                aivi_gtk4::widget_set_string_property(widget_id, property, value)
+                    .map_err(gtk4_err_to_runtime)
+            }
+            "icon-name" if class_name == "GtkImage" => {
+                aivi_gtk4::widget_set_string_property(widget_id, property, value)
+                    .map_err(gtk4_err_to_runtime)
+            }
+            "subtitle" if class_name == "AdwActionRow" => {
+                aivi_gtk4::widget_set_string_property(widget_id, property, value)
+                    .map_err(gtk4_err_to_runtime)
             }
             "title" if matches!(class_name, "GtkWindow" | "AdwWindow" | "AdwApplicationWindow") => {
                 aivi_gtk4::window_set_title(widget_id, value).map_err(gtk4_err_to_runtime)
@@ -1495,12 +1522,46 @@ mod bridge {
         bridge_unit_i!("widgetHide", aivi_gtk4::widget_hide);
         bridge_bool_it!("widgetGetBoolProperty", aivi_gtk4::widget_get_bool_property);
 
+        fields.insert(
+            "widgetGetCalendarDate".to_string(),
+            builtin("gtk4.widgetGetCalendarDate", 1, |mut args, _| {
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetGetCalendarDate expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let value = aivi_gtk4::widget_get_calendar_date(id)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Text(value))
+                }))
+            }),
+        );
+
         fields.insert("widgetSetBoolProperty".to_string(), builtin("gtk4.widgetSetBoolProperty", 3, |mut args, _| {
             let value = match args.remove(2) { Value::Bool(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Bool")) };
             let prop = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Text")) };
             let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Int")) };
             Ok(effect(move |_| { aivi_gtk4::widget_set_bool_property(id, &prop, value).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
         }));
+
+        fields.insert(
+            "widgetSetCalendarDate".to_string(),
+            builtin("gtk4.widgetSetCalendarDate", 2, |mut args, _| {
+                let value = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetCalendarDate expects Text")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetCalendarDate expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::widget_set_calendar_date(id, &value)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         fields.insert("widgetSetSizeRequest".to_string(), builtin("gtk4.widgetSetSizeRequest", 3, |mut args, _| {
             let h = match args.remove(2) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
