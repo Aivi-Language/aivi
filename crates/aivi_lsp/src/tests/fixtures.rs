@@ -419,6 +419,60 @@ run = SettingsView.llmStatusMessage"#;
 }
 
 #[test]
+fn build_definition_resolves_gtk_function_sugar_to_lower_camel_def() {
+    let text = r#"@no_prelude
+module examples.account_editor
+accountEditorIdentityGroup = _ => 1
+view = ~<gtk><AccountEditorIdentityGroup /></gtk>"#;
+    let uri = sample_uri();
+    let position = position_for(text, "AccountEditorIdentityGroup");
+
+    let location = Backend::build_definition(text, &uri, position).expect("definition found");
+
+    let expected_span = find_symbol_span(text, "accountEditorIdentityGroup");
+    let expected_range = Backend::span_to_range(expected_span);
+    assert_eq!(location.uri, uri);
+    assert_eq!(location.range, expected_range);
+}
+
+#[test]
+fn build_definition_resolves_imported_gtk_function_sugar_tag() {
+    let lib_text = r#"@no_prelude
+module examples.identity_group
+export accountEditorIdentityGroup
+accountEditorIdentityGroup = _ => 1"#;
+    let app_text = r#"@no_prelude
+module examples.account_editor
+use examples.identity_group (accountEditorIdentityGroup)
+view = ~<gtk><AccountEditorIdentityGroup /></gtk>"#;
+
+    let lib_uri = Url::parse("file:///identity_group.aivi").expect("valid uri");
+    let app_uri = Url::parse("file:///account_editor.aivi").expect("valid uri");
+
+    let mut workspace = HashMap::new();
+    let lib_path = PathBuf::from("identity_group.aivi");
+    let (lib_modules, _) = parse_modules(&lib_path, lib_text);
+    for module in &lib_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: lib_uri.clone(),
+                module: module.clone(),
+                text: Some(lib_text.to_string()),
+            },
+        );
+    }
+
+    let position = position_for(app_text, "AccountEditorIdentityGroup");
+    let location = Backend::build_definition_with_workspace(app_text, &app_uri, position, &workspace)
+        .expect("definition found");
+
+    let expected_range = Backend::span_to_range(find_symbol_span(lib_text, "accountEditorIdentityGroup"));
+    assert_eq!(location.uri, lib_uri);
+    assert_eq!(location.range, expected_range);
+}
+
+#[test]
 fn build_hover_reports_type_signature() {
     let text = sample_text();
     let uri = sample_uri();
