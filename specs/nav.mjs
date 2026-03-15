@@ -96,25 +96,22 @@ export const sidebar = [
     text: 'Build Native Apps',
     collapsed: true,
     items: [
+      { text: 'Mental Model', link: '/stdlib/ui/gtk4#mental-model' },
+      { text: 'Your First Window', link: '/stdlib/ui/gtk4#your-first-window' },
+      { text: 'State, Derivation, and Patching', link: '/stdlib/ui/gtk4#state-derivation-and-patching' },
+      { text: 'Writing GTK Trees with Sugar', link: '/stdlib/ui/gtk4#writing-gtk-trees-with-sugar' },
+      { text: 'Callback Sugar in Detail', link: '/stdlib/ui/gtk4#callback-sugar-in-detail' },
+      { text: 'do Event in Detail', link: '/stdlib/ui/gtk4#do-event-in-detail' },
+      { text: 'Structural UI with show and each', link: '/stdlib/ui/gtk4#structural-ui-with-show-and-each' },
+      { text: 'App Lifecycle, Windows, and Lower-Level Helpers', link: '/stdlib/ui/gtk4#app-lifecycle-windows-and-lower-level-helpers' },
+      { text: 'Debugging with the MCP Server', link: '/stdlib/ui/gtk4#debugging-a-native-app-with-the-mcp-server' },
+      { text: 'Coverage, Boundaries, and Diagnostics', link: '/stdlib/ui/gtk4#coverage-boundaries-and-diagnostics' },
       {
-        text: 'Getting Started',
-        collapsed: false,
-        items: [
-          { text: 'Writing Native Apps', link: '/stdlib/ui/gtk4' }
-        ]
-      },
-      {
-        text: 'Reactive UI',
+        text: 'Reference & Building Blocks',
         collapsed: true,
         items: [
           { text: 'Signals', link: '/stdlib/ui/reactive_signals' },
-          { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' }
-        ]
-      },
-      {
-        text: 'UI Building Blocks',
-        collapsed: true,
-        items: [
+          { text: 'Reactive Dataflow', link: '/stdlib/ui/reactive_dataflow' },
           { text: 'Forms', link: '/stdlib/ui/forms' },
           { text: 'Layout', link: '/stdlib/ui/layout' },
           { text: 'Color', link: '/stdlib/ui/color' },

@@ -2364,7 +2364,7 @@ mod linux_impl {
         fn dialog_open_transition_preserves_tracked_open_dialog() {
             assert_eq!(
                 dialog_open_transition(true, true, false),
-                (DialogOpenTransition::None, true)
+                (DialogOpenTransition::Present, true)
             );
             assert_eq!(
                 dialog_open_transition(true, false, true),
@@ -2451,6 +2451,71 @@ mod linux_impl {
                         .and_then(|value| parse_i64_text(value)),
                     Some(result.root_id)
                 );
+                assert!(dialog_actual_presented(dialog));
+            });
+        }
+
+        #[test]
+        fn dialog_set_open_recovers_from_stale_tracked_presentation() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let app_id =
+                app_new("integration-tests.stale-dialog-open").expect("create GTK application");
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "stale-dialog-host".to_string()),
+                    ("prop:title".to_string(), "Stale Dialog Host".to_string()),
+                    ("prop:default-width".to_string(), "480".to_string()),
+                    ("prop:default-height".to_string(), "320".to_string()),
+                ],
+                children: vec![],
+            };
+            let dialog_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwPreferencesDialog".to_string()),
+                    ("id".to_string(), "stale-settings-dialog".to_string()),
+                    ("prop:title".to_string(), "Stale Settings".to_string()),
+                    ("prop:open".to_string(), "false".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "AdwPreferencesPage".to_string())],
+                    children: vec![],
+                }],
+            };
+
+            let result = mount_app_window_with_bindings(app_id, &[window_node, dialog_node])
+                .expect("mount window with stale dialog");
+            let dialog_id = result
+                .mounted_roots
+                .iter()
+                .find(|root| root.root_id != result.root_id)
+                .map(|root| root.root_id)
+                .expect("mounted stale dialog root");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            widget_set_opacity(dialog_id, 0.0).expect("hide stale dialog");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            GTK_STATE.with(|state| {
+                state.borrow_mut().presented_dialogs.insert(dialog_id);
+            });
+
+            dialog_set_open(dialog_id, true).expect("reopen stale tracked dialog");
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+
+            GTK_STATE.with(|state| {
+                let state = state.borrow();
+                let dialog = widget_ptr(&state, dialog_id, "stale_dialog_present_test")
+                    .expect("stale dialog");
                 assert!(dialog_actual_presented(dialog));
             });
         }
@@ -6358,6 +6423,42 @@ mod linux_impl {
             let _ = unsafe { dlclose(handle) };
             break;
         }
+    }
+
+    fn call_adw_fn_p_ret(
+        fn_name: &str,
+        arg0: *mut c_void,
+        context: &str,
+    ) -> Result<*mut c_void, Gtk4Error> {
+        const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else {
+                continue;
+            };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
+            if handle.is_null() {
+                continue;
+            }
+            let Ok(sym) = CString::new(fn_name) else {
+                break;
+            };
+            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
+            let _ = unsafe { dlclose(handle) };
+            if !ptr.is_null() {
+                let f: unsafe extern "C" fn(*mut c_void) -> *mut c_void =
+                    unsafe { std::mem::transmute(ptr) };
+                let result = unsafe { f(arg0) };
+                if result.is_null() {
+                    return Err(Gtk4Error::new(format!("{context} {fn_name} returned null")));
+                }
+                return Ok(result);
+            }
+            break;
+        }
+        Err(Gtk4Error::new(format!(
+            "{context} could not call {fn_name} (libadwaita not available)"
+        )))
     }
 
     fn call_adw_fn_p_bool(fn_name: &str, arg0: *mut c_void) -> bool {
@@ -10742,54 +10843,39 @@ mod linux_impl {
         Ok(id)
     }
 
-    fn create_window_with_application(
-        class_name: &str,
-        app: *mut c_void,
-        context: &str,
-    ) -> Result<*mut c_void, Gtk4Error> {
-        let g_type = gtype_for_name(class_name, context)?;
-        let application_c = CString::new("application")
-            .map_err(|_| Gtk4Error::new(format!("{context} invalid application property name")))?;
-        let window = unsafe {
-            g_object_new(
-                g_type,
-                application_c.as_ptr(),
-                app,
-                std::ptr::null::<c_char>(),
-            )
-        };
-        if window.is_null() {
-            return Err(Gtk4Error::new(format!(
-                "{context} failed to create {class_name} with application"
-            )));
-        }
-        Ok(window)
-    }
-
     fn create_root_window_widget(
         app: *mut c_void,
         class_name: &str,
     ) -> Result<*mut c_void, Gtk4Error> {
         let window = match class_name {
             "GtkApplicationWindow" => unsafe { gtk_application_window_new(app) },
-            "GtkWindow" => create_window_with_application(
-                "GtkWindow",
-                app,
-                "gtk4.mountAppWindow invalid GtkWindow root",
-            )?,
-            "AdwApplicationWindow" | "AdwWindow" => {
+            "GtkWindow" => {
+                let window = unsafe { gtk_window_new() };
+                let application_c = CString::new("application").unwrap();
+                unsafe { gobject_set_ptr(window, &application_c, app) };
+                window
+            }
+            "AdwApplicationWindow" => {
                 try_adw_init();
-                create_window_with_application(
-                    class_name,
+                call_adw_fn_p_ret(
+                    "adw_application_window_new",
                     app,
-                    "gtk4.mountAppWindow invalid libadwaita window root",
+                    "gtk4.mountAppWindow invalid libadwaita application window root",
                 )?
             }
-            _ if class_is_window_subclass(class_name) => create_window_with_application(
-                class_name,
-                app,
-                "gtk4.mountAppWindow invalid window root",
-            )?,
+            "AdwWindow" => {
+                try_adw_init();
+                let window = call_adw_singleton("adw_window_new")?;
+                let application_c = CString::new("application").unwrap();
+                unsafe { gobject_set_ptr(window, &application_c, app) };
+                window
+            }
+            _ if class_is_window_subclass(class_name) => {
+                let window = create_generic_gtk_object(class_name)?;
+                let application_c = CString::new("application").unwrap();
+                unsafe { gobject_set_ptr(window, &application_c, app) };
+                window
+            }
             _ => {
                 return Err(Gtk4Error::new(format!(
                     "gtk4.mountAppWindow root must be a GtkWindow/libadwaita window subclass; got {class_name}"
@@ -12097,11 +12183,11 @@ mod linux_impl {
 
     fn dialog_open_transition(
         requested_open: bool,
-        tracked_presented: bool,
+        _tracked_presented: bool,
         actual_presented: bool,
     ) -> (DialogOpenTransition, bool) {
         if requested_open {
-            if tracked_presented || actual_presented {
+            if actual_presented {
                 (DialogOpenTransition::None, true)
             } else {
                 (DialogOpenTransition::Present, true)
