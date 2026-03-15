@@ -762,14 +762,14 @@ mod bridge {
             "text"
                 if matches!(
                     class_name,
-                    "GtkEntry" | "GtkPasswordEntry" | "GtkSearchEntry"
+                    "GtkEntry"
+                        | "GtkPasswordEntry"
+                        | "GtkSearchEntry"
+                        | "AdwEntryRow"
+                        | "AdwPasswordEntryRow"
                 ) =>
             {
-                aivi_gtk4::entry_set_text(widget_id, value).map_err(gtk4_err_to_runtime)
-            }
-            "text" if matches!(class_name, "AdwEntryRow" | "AdwPasswordEntryRow") => {
-                aivi_gtk4::widget_set_string_property(widget_id, property, value)
-                    .map_err(gtk4_err_to_runtime)
+                aivi_gtk4::editable_set_text(widget_id, value).map_err(gtk4_err_to_runtime)
             }
             "icon-name" if class_name == "GtkImage" => {
                 aivi_gtk4::widget_set_string_property(widget_id, property, value)
@@ -2121,7 +2121,11 @@ mod tests {
         }
     }
 
-    fn build_text_bound_entry(ctx: Arc<RuntimeContext>, initial_text: &str) -> (Runtime, Value, i64) {
+    fn build_text_bound_editable(
+        ctx: Arc<RuntimeContext>,
+        class_name: &str,
+        initial_text: &str,
+    ) -> (Runtime, Value, i64) {
         let mut runtime = Runtime::new(ctx, CancelToken::root());
         let text = ok_or_panic(
             runtime.reactive_create_signal(Value::Text(initial_text.to_string())),
@@ -2139,7 +2143,7 @@ mod tests {
             attrs: vec![
                 ResolvedGtkAttr::StaticAttr {
                     name: "class".to_string(),
-                    value: "GtkEntry".to_string(),
+                    value: class_name.to_string(),
                 },
                 ResolvedGtkAttr::Id("entry".to_string()),
                 ResolvedGtkAttr::BoundProp {
@@ -2156,11 +2160,15 @@ mod tests {
             .get("entry")
             .expect("entry widget should be named");
         assert_eq!(
-            aivi_gtk4::entry_text(entry_id)
+            aivi_gtk4::editable_text(entry_id)
                 .unwrap_or_else(|err| panic!("read initial entry text: {}", err.message)),
             initial_text
         );
         (runtime, text, entry_id)
+    }
+
+    fn build_text_bound_entry(ctx: Arc<RuntimeContext>, initial_text: &str) -> (Runtime, Value, i64) {
+        build_text_bound_editable(ctx, "GtkEntry", initial_text)
     }
 
     fn build_multihop_selection_bindings(
@@ -2717,6 +2725,298 @@ mod tests {
         );
         aivi_gtk4::window_close(host_window)
             .unwrap_or_else(|err| panic!("close tick host window: {}", err.message));
+    }
+
+    #[test]
+    fn text_input_runtime_handler_keeps_cursor_at_end_across_tick_flushes() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        for class_name in ["GtkEntry", "GtkSearchEntry", "AdwEntryRow"] {
+            let ctx = test_ctx();
+            let (mut runtime, text, entry_id) = build_text_bound_editable(ctx.clone(), class_name, "");
+            let gtk4_record = super::super::gtk4::build_gtk4_record();
+            let init_effect = ok_or_panic(
+                runtime.apply(record_field(&gtk4_record, "init"), Value::Unit),
+                "apply gtk4.init",
+            );
+            ok_or_panic(runtime.run_effect_value(init_effect), "run gtk4.init");
+            let app = aivi_gtk4::app_new("com.aivi.entry.cursor.tick.test")
+                .unwrap_or_else(|err| panic!("create cursor tick test app: {}", err.message));
+            let host_window = present_stealth_host_window(app, "Cursor Tick Host");
+
+            for typed in ["H", "He", "Hel", "Hell", "Hello"] {
+                aivi_gtk4::editable_set_text(entry_id, typed)
+                    .unwrap_or_else(|err| panic!("seed typed entry text {typed}: {}", err.message));
+                assert_eq!(
+                    aivi_gtk4::editable_cursor_position(entry_id)
+                        .unwrap_or_else(|err| panic!("read seeded cursor position {typed}: {}", err.message)),
+                    typed.chars().count() as i64,
+                    "expected seeded cursor to be at the end for {class_name} value {typed}"
+                );
+
+                let text_for_handler = text.clone();
+                let typed_value = typed.to_string();
+                let handler = builtin("test.gtkInputCursorTick", 1, move |mut args, runtime| {
+                    let _event = args.remove(0);
+                    runtime.reactive_set_signal(text_for_handler.clone(), Value::Text(typed_value.clone()))
+                });
+                let handler_ctx = ctx.clone();
+                std::thread::spawn(move || {
+                    ok_or_panic(
+                        execute_runtime_handler(
+                            handler_ctx,
+                            handler,
+                            signal_event("entry", "changed", typed),
+                        ),
+                        "run cursor tick handler",
+                    );
+                })
+                .join()
+                .expect("cursor tick handler thread should not panic");
+
+                assert!(
+                    runtime.reactive_graph.lock().deferred_flush,
+                    "typing {typed} into {class_name} should defer the GTK-bound update until the main thread tick"
+                );
+                assert_eq!(
+                    aivi_gtk4::editable_text(entry_id).unwrap_or_else(|err| panic!(
+                        "read pre-flush editable text {class_name} {typed}: {}",
+                        err.message
+                    )),
+                    typed,
+                    "expected typed text to remain in {class_name} before the GTK tick flush"
+                );
+                assert_eq!(
+                    aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                        "read pre-flush cursor position {class_name} {typed}: {}",
+                        err.message
+                    )),
+                    typed.chars().count() as i64,
+                    "expected typed cursor to remain at the end in {class_name} before the GTK tick flush"
+                );
+
+                let mut flushed = false;
+                for _ in 0..60 {
+                    super::pump_gtk_events();
+                    if !runtime.reactive_graph.lock().deferred_flush {
+                        flushed = true;
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+
+                assert!(flushed, "expected typing {typed} into {class_name} to flush on the GTK tick");
+                assert_eq!(
+                    aivi_gtk4::editable_text(entry_id).unwrap_or_else(|err| panic!(
+                        "read flushed editable text {class_name} {typed}: {}",
+                        err.message
+                    )),
+                    typed,
+                    "expected flushed editable text to stay in sync for {class_name} value {typed}"
+                );
+                let mut cursor_settled = false;
+                for _ in 0..10 {
+                    super::pump_gtk_events();
+                    if aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                        "read settled cursor position {class_name} {typed}: {}",
+                        err.message
+                    )) == typed.chars().count() as i64
+                    {
+                        cursor_settled = true;
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                assert!(
+                    cursor_settled,
+                    "expected flushed cursor to settle at the end for {class_name} value {typed}"
+                );
+                assert_eq!(
+                    aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                        "read flushed cursor position {class_name} {typed}: {}",
+                        err.message
+                    )),
+                    typed.chars().count() as i64,
+                    "expected flushed cursor to stay at the end for {class_name} value {typed}"
+                );
+            }
+
+            aivi_gtk4::window_close(host_window)
+                .unwrap_or_else(|err| panic!("close cursor tick host window: {}", err.message));
+        }
+    }
+
+    #[test]
+    fn mounted_adw_entry_row_keeps_cursor_at_end_across_tick_flushes() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let gtk4_record = super::super::gtk4::build_gtk4_record();
+        let init_effect = ok_or_panic(
+            runtime.apply(record_field(&gtk4_record, "init"), Value::Unit),
+            "apply gtk4.init",
+        );
+        ok_or_panic(runtime.run_effect_value(init_effect), "run gtk4.init");
+        let text = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text(String::new())),
+            "create mounted source text",
+        );
+        let derived = ok_or_panic(
+            runtime.reactive_derive_signal(
+                text.clone(),
+                builtin("test.deriveMountedAdwEntryText", 1, |mut args, _| Ok(args.remove(0))),
+            ),
+            "derive mounted entry text",
+        );
+        let window_node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwApplicationWindow".to_string(),
+                },
+                ResolvedGtkAttr::Id("cursor-window".to_string()),
+                ResolvedGtkAttr::StaticAttr {
+                    name: "title".to_string(),
+                    value: "Cursor Window".to_string(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesPage".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![ResolvedGtkAttr::StaticAttr {
+                        name: "class".to_string(),
+                        value: "AdwPreferencesGroup".to_string(),
+                    }],
+                    children: vec![ResolvedGtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ResolvedGtkAttr::StaticAttr {
+                                name: "class".to_string(),
+                                value: "AdwEntryRow".to_string(),
+                            },
+                            ResolvedGtkAttr::Id("mounted-entry-row".to_string()),
+                            ResolvedGtkAttr::BoundProp {
+                                name: "text".to_string(),
+                                value: derived,
+                            },
+                        ],
+                        children: Vec::new(),
+                    }],
+                }],
+            }],
+        };
+
+        let app = aivi_gtk4::app_new("com.aivi.mounted.adw.entry.cursor.test")
+            .unwrap_or_else(|err| panic!("create mounted adw entry test app: {}", err.message));
+        let result = ok_or_panic(
+            materialize_app_window_with_bindings(app, &[window_node], &mut runtime),
+            "mount adw entry row test window",
+        );
+        let entry_id = *result
+            .named_widgets
+            .get("mounted-entry-row")
+            .expect("mounted adw entry row should be named");
+        let window_id = *result
+            .named_widgets
+            .get("cursor-window")
+            .expect("cursor window should be named");
+        aivi_gtk4::window_present(window_id)
+            .unwrap_or_else(|err| panic!("present mounted adw entry test window: {}", err.message));
+        for _ in 0..10 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        aivi_gtk4::editable_grab_focus(entry_id)
+            .unwrap_or_else(|err| panic!("focus mounted adw entry row: {}", err.message));
+        for _ in 0..10 {
+            super::pump_gtk_events();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            aivi_gtk4::editable_has_focus(entry_id)
+                .unwrap_or_else(|err| panic!("read mounted adw entry focus state: {}", err.message)),
+            "expected mounted AdwEntryRow delegate to have focus before typing"
+        );
+
+        for typed in ["H", "He", "Hel", "Hell", "Hello"] {
+            aivi_gtk4::editable_set_text(entry_id, typed)
+                .unwrap_or_else(|err| panic!("seed mounted adw entry text {typed}: {}", err.message));
+            super::pump_gtk_events();
+            assert_eq!(
+                aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted seeded cursor position {typed}: {}",
+                    err.message
+                )),
+                typed.chars().count() as i64,
+                "expected mounted AdwEntryRow cursor to start at the end for {typed}"
+            );
+
+            let text_for_handler = text.clone();
+            let typed_value = typed.to_string();
+            let handler = builtin("test.mountedAdwEntryCursorTick", 1, move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime.reactive_set_signal(text_for_handler.clone(), Value::Text(typed_value.clone()))
+            });
+            let handler_ctx = ctx.clone();
+            std::thread::spawn(move || {
+                ok_or_panic(
+                    execute_runtime_handler(
+                        handler_ctx,
+                        handler,
+                        signal_event("mounted-entry-row", "changed", typed),
+                    ),
+                    "run mounted adw entry cursor handler",
+                );
+            })
+            .join()
+            .expect("mounted adw entry cursor handler thread should not panic");
+
+            let mut flushed = false;
+            for _ in 0..60 {
+                super::pump_gtk_events();
+                if !runtime.reactive_graph.lock().deferred_flush {
+                    flushed = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(flushed, "expected mounted AdwEntryRow typing {typed} to flush");
+            assert!(
+                aivi_gtk4::editable_has_focus(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted focus state after flush {typed}: {}",
+                    err.message
+                )),
+                "expected mounted AdwEntryRow delegate to keep focus after flushing {typed}"
+            );
+
+            let mut cursor_settled = false;
+            for _ in 0..10 {
+                super::pump_gtk_events();
+                if aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted settled cursor position {typed}: {}",
+                    err.message
+                )) == typed.chars().count() as i64
+                {
+                    cursor_settled = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(
+                cursor_settled,
+                "expected mounted AdwEntryRow cursor to settle at the end for {typed}"
+            );
+        }
+
+        aivi_gtk4::window_close(window_id)
+            .unwrap_or_else(|err| panic!("close mounted adw entry test window: {}", err.message));
     }
 
     #[test]
