@@ -498,6 +498,34 @@ val = Some 1 match
 }
 
 #[test]
+fn pattern_discipline_used_binding_in_unless_guard_no_s301() {
+    let text = r#"module demo
+
+Option A = None | Some A
+
+val = Some 1 match
+  | Some n unless n <= 0 => n
+  | _ => 0
+"#;
+    let diags = Backend::build_diagnostics_strict(
+        text,
+        &Url::parse("file:///strict_test.aivi").unwrap(),
+        &crate::strict::StrictConfig {
+            level: crate::strict::StrictLevel::LexicalStructural,
+            forbid_implicit_coercions: false,
+            warnings_as_errors: false,
+        },
+    );
+    let has_s301 = diags.iter().any(|d| {
+        matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "AIVI-S301")
+    });
+    assert!(
+        !has_s301,
+        "binding used in unless guard should not trigger S301"
+    );
+}
+
+#[test]
 fn pattern_discipline_block_unused_bind_in_do() {
     let text = "module demo\n\nval = do Effect {\n  unused <- pure 42\n  anotherUnused = 99\n  pure 1\n}\n";
     let diags = Backend::build_diagnostics_strict(

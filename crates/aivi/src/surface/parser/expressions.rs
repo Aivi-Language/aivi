@@ -9,11 +9,7 @@ impl Parser {
             let pattern = self
                 .parse_pattern()
                 .unwrap_or(Pattern::Wildcard(start.clone()));
-            let guard = if self.match_keyword("when") {
-                self.parse_guard_expr()
-            } else {
-                None
-            };
+            let (guard, guard_negated) = self.parse_optional_match_guard();
             self.expect_symbol("=>", arrow_message);
             let body = self.parse_expr().unwrap_or(Expr::Raw {
                 text: String::new(),
@@ -23,6 +19,7 @@ impl Parser {
             arms.push(MatchArm {
                 pattern,
                 guard,
+                guard_negated,
                 body,
                 span,
             });
@@ -97,11 +94,7 @@ impl Parser {
                 let pattern = self
                     .parse_pattern()
                     .unwrap_or(Pattern::Wildcard(or_span.clone()));
-                let guard = if self.match_keyword("when") {
-                    self.parse_guard_expr()
-                } else {
-                    None
-                };
+                let (guard, guard_negated) = self.parse_optional_match_guard();
                 self.expect_symbol("=>", "expected '=>' in or arm");
                 let body = self.parse_expr().unwrap_or(Expr::Raw {
                     text: String::new(),
@@ -111,6 +104,7 @@ impl Parser {
                 arms.push(MatchArm {
                     pattern,
                     guard,
+                    guard_negated,
                     body,
                     span,
                 });
@@ -172,6 +166,7 @@ impl Parser {
                 ok_value.span.clone(),
             ),
             guard: None,
+            guard_negated: false,
             body: Expr::Ident(ok_value.clone()),
             span: ok_value.span.clone(),
         };
@@ -186,6 +181,7 @@ impl Parser {
             out_arms.push(MatchArm {
                 pattern: err_pat,
                 guard: None,
+                guard_negated: false,
                 body: rhs,
                 span: or_span.clone(),
             });
@@ -267,11 +263,7 @@ impl Parser {
                 let pattern = self
                     .parse_pattern()
                     .unwrap_or(Pattern::Wildcard(expr_span(&expr)));
-                let guard = if self.match_keyword("when") {
-                    self.parse_guard_expr()
-                } else {
-                    None
-                };
+                let (guard, guard_negated) = self.parse_optional_match_guard();
                 self.expect_symbol("=>", "expected '=>' in match arm");
                 let body = self.parse_expr().unwrap_or(Expr::Raw {
                     text: String::new(),
@@ -281,6 +273,7 @@ impl Parser {
                 arms.push(MatchArm {
                     pattern,
                     guard,
+                    guard_negated,
                     body,
                     span,
                 });
@@ -313,11 +306,7 @@ impl Parser {
                 let pattern = self
                     .parse_pattern()
                     .unwrap_or(Pattern::Wildcard(expr_span(&expr)));
-                let guard = if self.match_keyword("when") {
-                    self.parse_guard_expr()
-                } else {
-                    None
-                };
+                let (guard, guard_negated) = self.parse_optional_match_guard();
                 self.expect_symbol("=>", "expected '=>' in match arm");
                 let body = self.parse_expr().unwrap_or(Expr::Raw {
                     text: String::new(),
@@ -327,6 +316,7 @@ impl Parser {
                 arms.push(MatchArm {
                     pattern,
                     guard,
+                    guard_negated,
                     body,
                     span,
                 });
@@ -372,6 +362,16 @@ impl Parser {
     fn parse_guard_expr(&mut self) -> Option<Expr> {
         self.consume_newlines();
         self.parse_binary(0)
+    }
+
+    fn parse_optional_match_guard(&mut self) -> (Option<Expr>, bool) {
+        if self.match_keyword("when") {
+            (self.parse_guard_expr(), false)
+        } else if self.match_keyword("unless") {
+            (self.parse_guard_expr(), true)
+        } else {
+            (None, false)
+        }
     }
 
     /// Returns `true` when `expr` is something that can syntactically appear

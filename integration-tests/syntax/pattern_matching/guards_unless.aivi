@@ -1,0 +1,31 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.guardsUnless
+
+use aivi
+use aivi.testing
+
+classify : Int -> Text
+classify =
+  | n when n < 0      => "negative"
+  | 0                 => "zero"
+  | n unless n >= 10  => "small"
+  | n unless n >= 100 => "medium"
+  | _                 => "large"
+
+describeOpt : Option Int -> Text
+describeOpt = value => value match
+  | Some n unless n <= 0 => "positive"
+  | Some _               => "non-positive"
+  | None                 => "absent"
+
+@test "unless guards work"
+unlessGuardsWork = do Effect {
+  assertEq (classify (-1)) "negative"
+  assertEq (classify 0) "zero"
+  assertEq (classify 7) "small"
+  assertEq (classify 42) "medium"
+  assertEq (classify 999) "large"
+  assertEq (describeOpt (Some 5)) "positive"
+  assertEq (describeOpt (Some 0)) "non-positive"
+  assertEq (describeOpt None) "absent"
+}

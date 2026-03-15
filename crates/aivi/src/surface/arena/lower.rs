@@ -421,6 +421,7 @@ impl ArenaBuilder {
         ArenaMatchArm {
             pattern: self.lower_pattern(&arm.pattern),
             guard: arm.guard.as_ref().map(|g| self.lower_expr(g)),
+            guard_negated: arm.guard_negated,
             body: self.lower_expr(&arm.body),
             span: arm.span.clone(),
         }

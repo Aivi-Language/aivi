@@ -551,6 +551,11 @@ impl Backend {
             "conditional effect (in do block)",
         ),
         (
+            "unless",
+            "unless ${1:condition} <- ${0:effect}",
+            "negated conditional effect (in do block)",
+        ),
+        (
             "given/or",
             "given ${1:condition} or fail ${0:errorExpr}",
             "given guard (in do block)",

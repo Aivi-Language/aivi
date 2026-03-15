@@ -190,6 +190,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
                 .map(|a| HirMatchArm {
                     pattern: a.pattern,
                     guard: a.guard.map(|g| desugar_expr(g, id_gen)),
+                    guard_negated: a.guard_negated,
                     body: desugar_expr(a.body, id_gen),
                 })
                 .collect(),
@@ -323,6 +324,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                     arms: vec![HirMatchArm {
                         pattern,
                         guard: None,
+                        guard_negated: false,
                         body: next,
                     }],
                     location: None,
@@ -350,6 +352,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                     arms: vec![HirMatchArm {
                         pattern: pattern.clone(),
                         guard: None,
+                        guard_negated: false,
                         body: next,
                     }],
                     location: None,
@@ -741,6 +744,7 @@ fn wrap_pattern_match(
             arms: vec![HirMatchArm {
                 pattern: pattern.clone(),
                 guard: None,
+                guard_negated: false,
                 body,
             }],
             location: None,

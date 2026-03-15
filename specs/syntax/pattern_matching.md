@@ -117,9 +117,11 @@ Here `profile` is bound to the full value of the `profile` field, and `name` / `
 
 ## 8.6 Guards
 
-Patterns can have guards using `when`.
+Patterns can have guards using `when` or `unless`.
 
-Use a guard when the shape matches, but you still need an extra boolean condition.
+Use `when` when the shape matches and you need an extra boolean condition.
+Use `unless` when the shape matches and you want the arm only when that condition is false.
+In both forms, the guard can refer to names bound by the pattern.
 
 <<< ../snippets/from_md/syntax/pattern_matching/guards.aivi{aivi}
 

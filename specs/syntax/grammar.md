@@ -216,11 +216,12 @@ PatParam       := lowerIdent [ "as" PatParam ]
 
 MatchExpr      := PipeExpr [ "match" MatchArms ] [ OrFallback ]
 MatchArms      := Sep? "|" Arm { Sep "|" Arm }
-Arm            := Pattern [ "when" Expr ] "=>" Expr
+Arm            := Pattern [ MatchGuard ] "=>" Expr
+MatchGuard     := ( "when" | "unless" ) Expr
 
 OrFallback     := "or" ( Expr | OrArms )
 OrArms         := Sep? "|" OrArm { Sep "|" OrArm }
-OrArm          := Pattern [ "when" Expr ] "=>" Expr
+OrArm          := Pattern [ MatchGuard ] "=>" Expr
 
 PipeExpr       := CoalesceExpr { ("|>" | "->>") PipeArg }
 PipeArg        := LambdaArgs "=>" Expr

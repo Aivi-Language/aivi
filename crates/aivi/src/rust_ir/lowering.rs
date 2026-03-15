@@ -224,6 +224,7 @@ pub enum RustIrPathSegment {
 pub struct RustIrMatchArm {
     pub pattern: RustIrPattern,
     pub guard: Option<RustIrExpr>,
+    pub guard_negated: bool,
     pub body: RustIrExpr,
 }
 

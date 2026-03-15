@@ -469,9 +469,14 @@ fn is_adjacent(left: &Span, right: &Span) -> bool {
     left.end.line == right.start.line && left.end.column + 1 == right.start.column
 }
 
-/// Desugar a pattern predicate `Pat (when Guard)?` to a lambda:
-/// `__pred => __pred match | Pat (when Guard)? => True | _ => False`
-fn build_pattern_predicate(pattern: Pattern, guard: Option<Expr>, span: Span) -> Expr {
+/// Desugar a pattern predicate `Pat ((when | unless) Guard)?` to a lambda:
+/// `__pred => __pred match | Pat ((when | unless) Guard)? => True | _ => False`
+fn build_pattern_predicate(
+    pattern: Pattern,
+    guard: Option<Expr>,
+    guard_negated: bool,
+    span: Span,
+) -> Expr {
     let param = SpannedName {
         name: "__pred".to_string(),
         span: span.clone(),
@@ -480,6 +485,7 @@ fn build_pattern_predicate(pattern: Pattern, guard: Option<Expr>, span: Span) ->
     let true_arm = MatchArm {
         pattern,
         guard,
+        guard_negated,
         body: Expr::Literal(Literal::Bool {
             value: true,
             span: span.clone(),
@@ -489,6 +495,7 @@ fn build_pattern_predicate(pattern: Pattern, guard: Option<Expr>, span: Span) ->
     let false_arm = MatchArm {
         pattern: Pattern::Wildcard(span.clone()),
         guard: None,
+        guard_negated: false,
         body: Expr::Literal(Literal::Bool {
             value: false,
             span: span.clone(),

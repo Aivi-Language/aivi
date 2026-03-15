@@ -199,6 +199,7 @@ impl Parser {
                             guard: arm
                                 .guard
                                 .map(|guard| rewrite_literal_template(guard, needle, param)),
+                            guard_negated: arm.guard_negated,
                             body: rewrite_literal_template(arm.body, needle, param),
                             span: arm.span,
                         })

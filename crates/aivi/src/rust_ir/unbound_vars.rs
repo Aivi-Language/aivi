@@ -348,6 +348,7 @@ fn rewrite_implicit_field_vars(
                     guard: arm
                         .guard
                         .map(|g| rewrite_implicit_field_vars(g, implicit_param, unbound)),
+                    guard_negated: arm.guard_negated,
                     body: rewrite_implicit_field_vars(arm.body, implicit_param, unbound),
                 })
                 .collect(),
@@ -462,6 +463,7 @@ fn lower_match_arm(
     Ok(RustIrMatchArm {
         pattern: lower_pattern(arm.pattern)?,
         guard,
+        guard_negated: arm.guard_negated,
         body,
     })
 }

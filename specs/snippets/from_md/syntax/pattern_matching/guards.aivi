@@ -1,6 +1,6 @@
 classify =
-  | n when n < 0   => "negative"
-  | 0              => "zero"
-  | n when n < 10  => "small"
-  | n when n < 100 => "medium"
-  | _              => "large"
+  | n when n < 0      => "negative"
+  | 0                 => "zero"
+  | n unless n >= 10  => "small"
+  | n unless n >= 100 => "medium"
+  | _                 => "large"

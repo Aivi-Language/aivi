@@ -494,6 +494,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                     guard: arm
                         .guard
                         .map(|guard| replace_holes_inner(guard, counter, params)),
+                    guard_negated: arm.guard_negated,
                     body: replace_holes_inner(arm.body, counter, params),
                     span: arm.span,
                 })

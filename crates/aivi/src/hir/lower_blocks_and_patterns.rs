@@ -482,6 +482,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                 .map(|arm| crate::surface::MatchArm {
                     pattern: arm.pattern,
                     guard: arm.guard.map(desugar_placeholder_lambdas),
+                    guard_negated: arm.guard_negated,
                     body: desugar_placeholder_lambdas(arm.body),
                     span: arm.span,
                 })
@@ -792,6 +793,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                     guard: arm
                         .guard
                         .map(|guard| replace_holes_inner(guard, counter, params)),
+                    guard_negated: arm.guard_negated,
                     body: replace_holes_inner(arm.body, counter, params),
                     span: arm.span,
                 })

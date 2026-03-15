@@ -377,6 +377,7 @@ pub enum PathSegment {
 pub struct MatchArm {
     pub pattern: Pattern,
     pub guard: Option<Expr>,
+    pub guard_negated: bool,
     pub body: Expr,
     pub span: Span,
 }
