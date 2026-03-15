@@ -633,6 +633,10 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "widgetGetCalendarDate".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
+            ),
+            (
                 "appRun".to_string(),
                 Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
             ),
@@ -1248,6 +1252,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                             Box::new(Type::con("Bool")),
                             Box::new(effect_text_unit.clone()),
                         )),
+                    )),
+                ),
+            ),
+            (
+                "widgetSetCalendarDate".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
                     )),
                 ),
             ),
