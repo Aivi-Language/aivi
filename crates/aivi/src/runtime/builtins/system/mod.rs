@@ -5,13 +5,15 @@ pub(super) use console::build_console_record;
 pub(super) use file::build_file_record;
 
 use std::collections::HashMap;
+use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value as JsonValue;
 
 use super::util::{
-    builtin, expect_text, make_decode_error, make_none, make_some, make_source_decode_error,
+    builtin, expect_list, expect_text, make_decode_error, make_none, make_some,
+    make_source_decode_error, value_type_name,
 };
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 
@@ -106,6 +108,18 @@ pub(super) fn build_system_record() -> Value {
             };
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| std::process::exit(code as i32)),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "run".to_string(),
+        builtin("system.run", 2, |mut args, _| {
+            let raw_args = expect_list(args.pop().unwrap(), "system.run")?;
+            let command = expect_text(args.pop().unwrap(), "system.run")?;
+            let command_args = text_args_from_values(raw_args, "system.run")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| run_command_effect(&command, &command_args)),
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),
@@ -346,8 +360,84 @@ fn env_decode_prefix(arg: Value, ctx: &str) -> Result<String, RuntimeError> {
     }
 }
 
+fn text_args_from_values(values: Arc<Vec<Value>>, ctx: &str) -> Result<Vec<String>, RuntimeError> {
+    values
+        .iter()
+        .map(|value| match value {
+            Value::Text(text) => Ok(text.clone()),
+            other => Err(RuntimeError::TypeError {
+                context: ctx.to_string(),
+                expected: "List Text".to_string(),
+                got: value_type_name(other).to_string(),
+            }),
+        })
+        .collect()
+}
+
+fn run_command_effect(command: &str, args: &[String]) -> Result<Value, RuntimeError> {
+    let output = Command::new(command)
+        .args(args)
+        .output()
+        .map_err(|err| RuntimeError::Error(Value::Text(format!(
+            "system.run failed for `{command}`: {err}"
+        ))))?;
+
+    let mut fields = HashMap::new();
+    fields.insert(
+        "status".to_string(),
+        Value::Int(output.status.code().unwrap_or(-1) as i64),
+    );
+    fields.insert(
+        "stdout".to_string(),
+        Value::Text(String::from_utf8_lossy(&output.stdout).to_string()),
+    );
+    fields.insert(
+        "stderr".to_string(),
+        Value::Text(String::from_utf8_lossy(&output.stderr).to_string()),
+    );
+    Ok(Value::Record(Arc::new(fields)))
+}
+
 pub(in crate::runtime::builtins) fn json_to_runtime(value: &JsonValue) -> Value {
     json_to_runtime_with_schema(value, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_command_effect;
+    use crate::runtime::Value;
+
+    #[test]
+    fn system_run_captures_stdout() {
+        let result = match run_command_effect("sh", &["-c".to_string(), "printf hello".to_string()]) {
+            Ok(value) => value,
+            Err(_) => panic!("command should run"),
+        };
+        let Value::Record(fields) = result else {
+            panic!("expected record result");
+        };
+        assert!(matches!(fields.get("status"), Some(Value::Int(0))));
+        assert!(matches!(fields.get("stdout"), Some(Value::Text(text)) if text == "hello"));
+        assert!(matches!(fields.get("stderr"), Some(Value::Text(text)) if text.is_empty()));
+    }
+
+    #[test]
+    fn system_run_captures_nonzero_status_and_stderr() {
+        let result = match run_command_effect(
+            "sh",
+            &["-c".to_string(), "printf fail >&2; exit 3".to_string()],
+        )
+        {
+            Ok(value) => value,
+            Err(_) => panic!("command should run"),
+        };
+        let Value::Record(fields) = result else {
+            panic!("expected record result");
+        };
+        assert!(matches!(fields.get("status"), Some(Value::Int(3))));
+        assert!(matches!(fields.get("stdout"), Some(Value::Text(text)) if text.is_empty()));
+        assert!(matches!(fields.get("stderr"), Some(Value::Text(text)) if text == "fail"));
+    }
 }
 
 /// Schema-aware JSON→Value conversion.  When a schema node is

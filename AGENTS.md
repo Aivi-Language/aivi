@@ -335,10 +335,49 @@ Before finishing any change:
  
 ---
 
-# Acceptance criteria
+### Definition of done
+A task is only done when:
+- the requested behavior is implemented end-to-end
+- all affected code paths are updated consistently
+- edge cases that are reasonably implied by the change are handled
+- obsolete code, broken references, dead branches, and misleading comments introduced by the change are cleaned up
+- the result is coherent with the existing architecture and conventions
+- validation has been performed proportionate to the change (tests, type checks, linting, build, or logical verification)
+- there are no known placeholders, TODOs, fake implementations, or “temporary” shortcuts left behind unless explicitly requested
 
-- Produce complete, working code.
-- Do not leave TODOs, placeholders, or stub functions.
-- Every function must contain a full implementation.
-- If something is complex, implement a simple working version rather than leaving a stub.
-- If the solution is long, continue generating until the implementation is complete.
+### Required agent behavior
+- Do not stop at the first superficially working patch. Work the issue down to a properly finished state.
+- Do not choose the path of least resistance when it produces a partial, brittle, or narrow fix.
+- Do not leave stubs, mocked behavior, hardcoded special cases, or incomplete refactors in place of a real solution.
+- Do not claim completion while knowingly leaving related code inconsistent.
+- When refactoring, carry the refactor through all impacted files and call sites, not just the local spot.
+- Prefer correct structural fixes over minimal patching when the task clearly requires a broader change.
+- If you discover the requested fix touches multiple layers, continue through those layers until the feature or fix is actually complete.
+
+### Delivery rules
+- Before declaring completion, explicitly verify what was changed, what was validated, and what remains.
+- If something cannot be completed, state exactly what blocks completion and mark the work as incomplete.
+- Never present partial work as finished work.
+- Never leave “obvious next steps” undone unless the user asked for a partial solution.
+- Completion requires implementation, integration, and verification — not just code edits.
+
+### Quality threshold
+Agents are expected to act like a responsible senior engineer:
+- always choose the state of the art solution in computer science.
+- finish the job cleanly
+- preserve maintainability
+- avoid quick hacks
+- reduce future cleanup burden rather than creating it
+- surface uncertainty honestly, but do not use uncertainty as an excuse to avoid doing the necessary work
+
+### Anti-patterns to avoid
+The following are considered failures:
+- leaving TODOs instead of implementing the real change
+- fixing only one happy-path call site when the change affects a shared abstraction
+- adding a narrow workaround instead of correcting the root cause
+- stopping after syntax-level edits without validating behavior
+- claiming something is “basically done” or “should work”
+- avoiding a necessary refactor because it is more work
+
+### Default expectation
+Unless the user explicitly asks for a prototype, sketch, or partial implementation, always produce a complete, production-worthy result.

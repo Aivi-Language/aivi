@@ -610,6 +610,35 @@ fn crate_native_bridge_codegen() {
     // Should NOT reference internal types
     assert!(!source.contains("RuntimeError"));
     assert!(!source.contains("use aivi::runtime"));
+    assert!(
+        source.contains("Ok::<CrateNativeValue, String>"),
+        "Result bridge code should emit typed Ok wrappers. Source:\n{source}"
+    );
+}
+
+#[test]
+fn crate_native_bridge_codegen_result_unit_annotates_ok_type() {
+    let bindings = vec![aivi::native_bridge::CrateNativeBinding {
+        aivi_name: "storeToken".to_string(),
+        rust_path: "mailfox_keyring::store_token".to_string(),
+        crate_name: "mailfox_keyring".to_string(),
+        global_name: "__crate_native__mailfox_keyring__store_token".to_string(),
+        param_types: vec![
+            aivi::native_bridge::AiviType::Text,
+            aivi::native_bridge::AiviType::Text,
+            aivi::native_bridge::AiviType::Text,
+        ],
+        return_type: aivi::native_bridge::AiviType::Result(
+            Box::new(aivi::native_bridge::AiviType::Text),
+            Box::new(aivi::native_bridge::AiviType::Unit),
+        ),
+    }];
+
+    let source = aivi::native_bridge::generate_native_bridge_source(&bindings);
+    assert!(
+        source.contains("Ok::<CrateNativeValue, String>(CrateNativeValue::Unit)"),
+        "Result<Unit> bridge code should emit typed Ok wrappers. Source:\n{source}"
+    );
 }
 
 // ---------------------------------------------------------------------------

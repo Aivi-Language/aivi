@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.system";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.system
-export env, args, exit, localeTag
+export env, args, exit, localeTag, run
 
 use aivi
 
@@ -22,4 +22,7 @@ localeTag = system.localeTag Unit
 
 exit : Int -> Effect Text Unit
 exit = code => system.exit code
+
+run : Text -> List Text -> Effect Text { status: Int, stdout: Text, stderr: Text }
+run = command args => system.run command args
 "#;
