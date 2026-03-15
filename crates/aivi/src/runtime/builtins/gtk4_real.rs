@@ -380,6 +380,16 @@ mod bridge {
         event: &Value,
         arg_mode: GtkCallbackArgMode,
     ) -> Result<Value, RuntimeError> {
+        fn unknown_signal_payload_text(args: &[Value]) -> Option<&str> {
+            match (args.get(4), args.get(3)) {
+                (Some(Value::Text(text)), _) if !text.is_empty() => Some(text),
+                (_, Some(Value::Text(text))) if !text.is_empty() => Some(text),
+                (Some(Value::Text(text)), _) => Some(text),
+                (_, Some(Value::Text(text))) => Some(text),
+                _ => None,
+            }
+        }
+
         let type_error = |expected: &str| RuntimeError::TypeError {
             context: callback_arg_context(arg_mode).to_string(),
             expected: expected.to_string(),
@@ -407,9 +417,8 @@ mod bridge {
                 Value::Constructor { name, args }
                     if name == "GtkUnknownSignal" && args.len() == 5 =>
                 {
-                    let Value::Text(text) = &args[3] else {
-                        return Err(type_error("GtkUnknownSignal bool payload"));
-                    };
+                    let text = unknown_signal_payload_text(args)
+                        .ok_or_else(|| type_error("GtkUnknownSignal bool payload"))?;
                     parse_bool_text(text)
                         .map(Value::Bool)
                         .ok_or_else(|| type_error("boolean-like signal payload"))
@@ -432,9 +441,8 @@ mod bridge {
                 Value::Constructor { name, args }
                     if name == "GtkUnknownSignal" && args.len() == 5 =>
                 {
-                    let Value::Text(text) = &args[3] else {
-                        return Err(type_error("GtkUnknownSignal integer payload"));
-                    };
+                    let text = unknown_signal_payload_text(args)
+                        .ok_or_else(|| type_error("GtkUnknownSignal integer payload"))?;
                     text.trim()
                         .parse::<i64>()
                         .map(Value::Int)
@@ -1328,13 +1336,6 @@ mod bridge {
             "focus-leave" => Value::Constructor { name: "GtkFocusOut".to_string(), args: vec![wid, name] },
             "close-request" => Value::Constructor { name: "GtkWindowClosed".to_string(), args: vec![wid, name] },
             "tick" => Value::Constructor { name: "GtkTick".to_string(), args: vec![] },
-            signal if signal.starts_with("notify::") => {
-                let (cname, _) = parse_constructor_handler(&event.handler);
-                Value::Constructor {
-                    name: "GtkUnknownSignal".to_string(),
-                    args: vec![wid, name, Value::Text(cname), Value::Text(event.payload), Value::Text(String::new())],
-                }
-            }
             _ => Value::Constructor {
                 name: "GtkUnknownSignal".to_string(),
                 args: vec![wid, name, Value::Text(event.signal), Value::Text(event.handler), Value::Text(event.payload)],
@@ -2319,6 +2320,78 @@ mod tests {
                 .expect("int payload result lock should not be poisoned"),
             Some(2)
         );
+    }
+
+    #[test]
+    fn wrapped_dialog_close_handler_receives_unit_payload() {
+        let ctx = test_ctx();
+        let seen = Arc::new(Mutex::new(0usize));
+        let seen_for_handler = seen.clone();
+        let handler = builtin("test.closedPayloadHandler", 1, move |mut args, _| {
+            let Value::Unit = args.remove(0) else {
+                panic!("expected Unit payload");
+            };
+            *seen_for_handler
+                .lock()
+                .expect("unit payload lock should not be poisoned") += 1;
+            Ok(Value::Unit)
+        });
+        let wrapped = wrap_runtime_handler(handler, GtkCallbackArgMode::Unit);
+
+        ok_or_panic(
+            execute_runtime_handler(ctx, wrapped, signal_event("dialog", "closed", "")),
+            "run wrapped closed handler",
+        );
+
+        assert_eq!(
+            *seen
+                .lock()
+                .expect("unit payload result lock should not be poisoned"),
+            1
+        );
+    }
+
+    #[test]
+    fn runtime_handler_raw_notify_callbacks_preserve_signal_details() {
+        let ctx = test_ctx();
+        let seen = Arc::new(Mutex::new((String::new(), String::new())));
+        let seen_for_handler = seen.clone();
+        let handler = builtin("test.rawGtkNotifyHandler", 1, move |mut args, _| {
+            let event = args.remove(0);
+            match event {
+                Value::Constructor { name, args }
+                    if name == "GtkUnknownSignal" && args.len() == 5 =>
+                {
+                    let Value::Text(signal_name) = &args[2] else {
+                        panic!("expected GtkUnknownSignal signal name, got {:?}", args[2]);
+                    };
+                    let Value::Text(payload) = &args[4] else {
+                        panic!("expected GtkUnknownSignal payload, got {:?}", args[4]);
+                    };
+                    *seen_for_handler
+                        .lock()
+                        .expect("raw notify callback lock should not be poisoned") =
+                        (signal_name.clone(), payload.clone());
+                    Ok(Value::Unit)
+                }
+                other => panic!("expected GtkUnknownSignal, got {other:?}"),
+            }
+        });
+
+        ok_or_panic(
+            execute_runtime_handler(
+                ctx,
+                handler,
+                signal_event("dropdown", "notify::selected", "2"),
+            ),
+            "run raw notify handler",
+        );
+
+        let seen = seen
+            .lock()
+            .expect("raw notify callback result lock should not be poisoned");
+        assert_eq!(seen.0, "notify::selected");
+        assert_eq!(seen.1, "2");
     }
 
     #[test]

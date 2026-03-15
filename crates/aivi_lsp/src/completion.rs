@@ -1305,6 +1305,7 @@ impl Backend {
             "key-pressed" => true,
             "notify::active" => tag_name == "GtkSwitch",
             "notify::selected" => tag_name == "GtkDropDown",
+            "notify::show-sidebar" => tag_name == "AdwOverlaySplitView",
             "closed" => tag_name.starts_with("Adw") && tag_name.ends_with("Dialog"),
             _ => widget.signals.iter().any(|s| s.name == signal_name),
         }
@@ -1334,6 +1335,9 @@ impl Backend {
             }
             "onClosed" => {
                 "Dialog close callbacks receive `Unit`, so ordinary `_ => ...` handlers work without an explicit `<signal name=\"closed\" ... />` child."
+            }
+            "onShowSidebarChanged" => {
+                "Use this with `AdwOverlaySplitView` to receive the current sidebar visibility as a `Bool` and bind it directly to a signal setter or an `Event` handle."
             }
             "onFocusOut" => {
                 "Use this to mark blur/touch state directly from a callback or lower-level signal handler."

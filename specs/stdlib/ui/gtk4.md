@@ -171,10 +171,15 @@ Attributes on shorthand tags become properties automatically, except for pass-th
 | `ref="btnRef"` | widget reference |
 | `onClick={...}` | event binding |
 | `onInput={...}` | event binding |
+| `onActivate={...}` | activate event binding |
 | `onToggle={...}` | toggle event binding |
 | `onSelect={...}` | selection event binding |
 | `onClosed={...}` | dialog close binding |
 | `onKeyPress={...}` | keyboard event binding |
+| `onValueChanged={...}` | value-change event binding |
+| `onFocusIn={...}` | focus-enter event binding |
+| `onFocusOut={...}` | focus-leave event binding |
+| `onShowSidebarChanged={...}` | overlay split-view sidebar event binding |
 
 ### Which syntax to use
 
@@ -220,6 +225,7 @@ Signal sugar works on both shorthand and verbose tags:
 - `onValueChanged={handler}` -> `signal:value-changed`
 - `onFocusIn={handler}` -> `signal:focus-enter`
 - `onFocusOut={handler}` -> `signal:focus-leave`
+- `onShowSidebarChanged={handler}` -> `signal:notify::show-sidebar` for `AdwOverlaySplitView`
 - `<signal name="clicked" on={handler} />` -> raw `GtkSignalEvent`
 - `GtkEventControllerMotion` uses explicit `<signal name="enter" ... />` / `<signal name="leave" ... />` children rather than sugar attrs
 
@@ -425,7 +431,7 @@ addPoint = point => batch (_ =>
 
 - `E1612`: invalid `props` shape (must be a record literal the sigil can inspect)
 - `E1613`: unsupported `props` field value in a position that requires static inspection
-- `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onKeyPress`, `onToggle`, `onValueChanged`, `onFocusIn`, `onFocusOut`, and `<signal ... on={...}>` require a function or an `Event` handle with a compatible payload shape)
+- `E1614`: invalid signal binding (`onClick`, `onInput`, `onActivate`, `onKeyPress`, `onToggle`, `onSelect`, `onClosed`, `onValueChanged`, `onFocusIn`, `onFocusOut`, `onShowSidebarChanged`, and `<signal ... on={...}>` require a function or an `Event` handle with a compatible payload shape)
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node; keyed iteration is the recommended contract)
 - `E1616`: bare `<child>` without a `type` attribute (nest `<object>` elements directly inside the parent instead)
 - `E1617`: invalid GTK function-call tag usage (function-call sugar must use positional arguments on a self-closing tag and cannot mix with attributes)

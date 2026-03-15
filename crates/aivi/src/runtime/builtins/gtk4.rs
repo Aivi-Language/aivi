@@ -692,7 +692,7 @@ fn auto_to_msg_builtin() -> Value {
             Value::Constructor { name, args } if name == "GtkUnknownSignal" && args.len() == 5 => (
                 decode_text(&args[2]).unwrap_or_default(),
                 decode_text(&args[1]).unwrap_or_default(),
-                decode_text(&args[3]),
+                decode_text(&args[3]).filter(|text| !text.is_empty()),
                 decode_text(&args[4])
                     .filter(|text| !text.is_empty())
                     .map(Value::Text),
@@ -900,8 +900,9 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use super::{collect_auto_bindings_into, ResolvedGtkNode};
+    use super::{auto_to_msg_builtin, collect_auto_bindings_into, ResolvedGtkNode};
     use crate::runtime::builtins::util::builtin;
+    use crate::runtime::environment::GtkAutoBindingsState;
     use crate::runtime::{build_runtime_base, Value};
 
     #[test]
@@ -963,5 +964,45 @@ mod tests {
             unique_handlers_by_signal.get("clicked"),
             Some(&Some("Save".to_string()))
         );
+    }
+
+    #[test]
+    fn auto_to_msg_uses_named_handler_for_unknown_signal_when_event_handler_is_empty() {
+        let mut runtime = build_runtime_base();
+        *runtime.ctx.gtk_auto_bindings.write() = GtkAutoBindingsState {
+            named_handlers: HashMap::from([(
+                ("themeDropdown".to_string(), "notify::selected".to_string()),
+                "ThemeSelected".to_string(),
+            )]),
+            unique_handlers_by_signal: HashMap::new(),
+        };
+
+        let result = runtime
+            .apply(
+                auto_to_msg_builtin(),
+                Value::Constructor {
+                    name: "GtkUnknownSignal".to_string(),
+                    args: vec![
+                        Value::Int(42),
+                        Value::Text("themeDropdown".to_string()),
+                        Value::Text("notify::selected".to_string()),
+                        Value::Text(String::new()),
+                        Value::Text("2".to_string()),
+                    ],
+                },
+            )
+            .unwrap_or_else(|error| panic!("autoToMsg failed: {}", error));
+
+        match result {
+            Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+                match &args[0] {
+                    Value::Constructor { name, args }
+                        if name == "ThemeSelected"
+                            && matches!(args.as_slice(), [Value::Text(payload)] if payload == "2") => {}
+                    other => panic!("expected Some (ThemeSelected \"2\"), got {other:?}"),
+                }
+            }
+            other => panic!("expected Some message, got {other:?}"),
+        }
     }
 }

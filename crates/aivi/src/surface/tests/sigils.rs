@@ -561,6 +561,37 @@ x = ~<gtk><AdwPreferencesDialog open={True} onClosed={ closeDialog } /></gtk>
 }
 
 #[test]
+fn gtk_sigil_onshowsidebarchanged_lowers_to_overlay_split_view_signal() {
+    let src = r#"
+module Example
+
+handleSidebar = visible => visible
+x = ~<gtk><AdwOverlaySplitView onShowSidebarChanged={ handleSidebar } /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+    assert!(
+        expr_contains_ident(&def.expr, "gtkEventSugarAttr")
+            && expr_contains_string(&def.expr, "notify::show-sidebar")
+            && expr_contains_ident(&def.expr, "handleSidebar"),
+        "expected onShowSidebarChanged sugar to lower into gtkEventSugarAttr with notify::show-sidebar"
+    );
+}
+
+#[test]
 fn gtk_sigil_signal_on_accepts_runtime_handler_value() {
     let src = r#"
 module Example
