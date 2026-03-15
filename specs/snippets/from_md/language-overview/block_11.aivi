@@ -5,6 +5,6 @@ activeUserNames = do Effect {
   users <- load (file.csv "users.csv")
   pure (users
     |> filter active
-    |> map.name
+    |> map .name
   )
 }

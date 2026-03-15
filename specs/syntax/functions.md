@@ -92,7 +92,7 @@ is equivalent to:
 <<< ../snippets/from_md/syntax/functions/block_10.aivi{aivi}
 
 
-In the example above, `filter active` uses predicate lifting and `map.name` uses accessor sugar. See [Predicates](predicates.md) and [Operators and Context](operators.md) for those shorthand forms.
+In the example above, `filter active` uses predicate lifting and `map .name` uses accessor sugar. See [Predicates](predicates.md) and [Operators and Context](operators.md) for those shorthand forms.
 
 Pipe right-hand sides also count as unary-function positions, so hole-based mappers and direct lambda syntax both work there without extra wrapping:
 
@@ -141,7 +141,7 @@ Pipelines are especially useful when a transformation would otherwise become dee
 
 <<< ../snippets/from_md/syntax/functions/block_pipelines.aivi{aivi}
 
-This example relies on the same shorthands from Section 2.3: `filter active` treats `active` as a predicate on each element, and `map.name` builds an accessor from `.name`.
+This example relies on the same shorthands from Section 2.3: `filter active` treats `active` as a predicate on each element, and `map .name` builds an accessor from `.name`.
 
 ### Expressive Logic: Point-Free Style
 
