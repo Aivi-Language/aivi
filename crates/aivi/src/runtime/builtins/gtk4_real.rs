@@ -630,6 +630,9 @@ mod bridge {
                     aivi_gtk4::widget_hide(widget_id).map_err(gtk4_err_to_runtime)
                 }
             }
+            "css-class" => {
+                aivi_gtk4::widget_set_css_classes(widget_id, value).map_err(gtk4_err_to_runtime)
+            }
             "sensitive" => {
                 let flag = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
                     context: format!("gtk4 live binding {class_name}.{property}"),
@@ -2703,6 +2706,82 @@ mod tests {
             aivi_gtk4::entry_text(entry_id)
                 .unwrap_or_else(|err| panic!("read entry text: {}", err.message)),
             "second"
+        );
+    }
+
+    #[test]
+    fn live_css_class_binding_updates_widget_style() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        let classes = ok_or_panic(
+            runtime.reactive_create_signal(Value::Text("flat account-list-item".to_string())),
+            "create css-class signal",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkButton".to_string(),
+                },
+                ResolvedGtkAttr::StaticAttr {
+                    name: "label".to_string(),
+                    value: "Account".to_string(),
+                },
+                ResolvedGtkAttr::Id("account-card".to_string()),
+                ResolvedGtkAttr::BoundProp {
+                    name: "css-class".to_string(),
+                    value: classes.clone(),
+                },
+            ],
+            children: Vec::new(),
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build css-class bound button",
+        );
+        let button_id = *result
+            .named_widgets
+            .get("account-card")
+            .expect("account card button should be named");
+        assert!(
+            aivi_gtk4::widget_has_css_class(button_id, "flat")
+                .unwrap_or_else(|err| panic!("read flat class: {}", err.message))
+        );
+        assert!(
+            aivi_gtk4::widget_has_css_class(button_id, "account-list-item")
+                .unwrap_or_else(|err| panic!("read account-list-item class: {}", err.message))
+        );
+        assert!(
+            !aivi_gtk4::widget_has_css_class(button_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read selected class before update: {}", err.message))
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(
+                classes.clone(),
+                Value::Text("flat account-list-item account-list-item-selected".to_string()),
+            ),
+            "set selected css classes",
+        );
+        assert!(
+            aivi_gtk4::widget_has_css_class(button_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read selected class after update: {}", err.message))
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(
+                classes,
+                Value::Text("flat account-list-item".to_string()),
+            ),
+            "clear selected css classes",
+        );
+        assert!(
+            !aivi_gtk4::widget_has_css_class(button_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read selected class after clear: {}", err.message))
         );
     }
 
