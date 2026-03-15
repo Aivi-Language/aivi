@@ -1196,7 +1196,11 @@ mod linux_impl {
             return Ok(());
         }
         let text_c = c_text(value, context)?;
-        unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+        let end_position = value.chars().count().min(c_int::MAX as usize) as c_int;
+        unsafe {
+            gtk_editable_set_text(widget, text_c.as_ptr());
+            gtk_editable_set_position(widget, end_position);
+        };
         Ok(())
     }
 
@@ -3434,6 +3438,11 @@ mod linux_impl {
                         editable_text_value(editable),
                         "abcdefg",
                         "{class_name} should still accept changed text values"
+                    );
+                    assert_eq!(
+                        unsafe { gtk_editable_get_position(editable) },
+                        7,
+                        "{class_name} should place its cursor at the end when text changes"
                     );
                 });
             }
@@ -11972,7 +11981,6 @@ mod linux_impl {
     }
 
     pub(super) fn entry_set_text(id: i64, text: &str) -> Result<(), Gtk4Error> {
-        let c = c_text(text, "gtk4.entrySetText invalid text")?;
         GTK_STATE.with(|state| {
             let state = state.borrow();
             let e = state
@@ -11980,8 +11988,7 @@ mod linux_impl {
                 .get(&id)
                 .copied()
                 .ok_or_else(|| Gtk4Error::new(format!("unknown entry id {id}")))?;
-            unsafe { gtk_editable_set_text(e, c.as_ptr()) };
-            Ok(())
+            set_editable_text_if_needed(e, text, "gtk4.entrySetText invalid text")
         })
     }
 
