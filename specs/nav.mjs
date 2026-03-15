@@ -100,7 +100,7 @@ export const sidebar = [
         text: 'Getting Started',
         collapsed: false,
         items: [
-          { text: 'GTK & libadwaita System Manual', link: '/stdlib/ui/gtk4' }
+          { text: 'Writing Native Apps', link: '/stdlib/ui/gtk4' }
         ]
       },
       {
