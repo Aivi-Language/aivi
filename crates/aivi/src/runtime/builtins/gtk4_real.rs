@@ -2161,6 +2161,162 @@ mod tests {
         (runtime, text, entry_id)
     }
 
+    fn build_multihop_selection_bindings(
+        ctx: Arc<RuntimeContext>,
+    ) -> (Runtime, Value, i64, i64, i64) {
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        let selected = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create selected signal",
+        );
+        let selection_state = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selected.clone(),
+                builtin("test.selectionState", 1, |mut args, _| Ok(args.remove(0))),
+            ),
+            "derive selection state",
+        );
+        let placeholder_visible = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selection_state.clone(),
+                builtin("test.placeholderVisible", 1, |mut args, _| {
+                    let is_selected = match args.remove(0) {
+                        Value::Bool(flag) => flag,
+                        other => panic!("expected Bool selection state, got {other:?}"),
+                    };
+                    Ok(Value::Bool(!is_selected))
+                }),
+            ),
+            "derive placeholder visibility",
+        );
+        let row_css = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selection_state.clone(),
+                builtin("test.selectedRowCss", 1, |mut args, _| {
+                    let is_selected = match args.remove(0) {
+                        Value::Bool(flag) => flag,
+                        other => panic!("expected Bool selection state, got {other:?}"),
+                    };
+                    Ok(Value::Text(if is_selected {
+                        "flat account-list-item account-list-item-selected".to_string()
+                    } else {
+                        "flat account-list-item".to_string()
+                    }))
+                }),
+            ),
+            "derive row css",
+        );
+        let editor_text = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selection_state,
+                builtin("test.selectionEditorText", 1, |mut args, _| {
+                    let is_selected = match args.remove(0) {
+                        Value::Bool(flag) => flag,
+                        other => panic!("expected Bool selection state, got {other:?}"),
+                    };
+                    Ok(Value::Text(if is_selected {
+                        "selected".to_string()
+                    } else {
+                        "".to_string()
+                    }))
+                }),
+            ),
+            "derive editor text",
+        );
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkBox".to_string(),
+                },
+                ResolvedGtkAttr::Id("selection-root".to_string()),
+            ],
+            children: vec![
+                ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "class".to_string(),
+                            value: "GtkBox".to_string(),
+                        },
+                        ResolvedGtkAttr::Id("selection-placeholder".to_string()),
+                        ResolvedGtkAttr::BoundProp {
+                            name: "visible".to_string(),
+                            value: placeholder_visible,
+                        },
+                    ],
+                    children: Vec::new(),
+                },
+                ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "class".to_string(),
+                            value: "GtkButton".to_string(),
+                        },
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "label".to_string(),
+                            value: "Account".to_string(),
+                        },
+                        ResolvedGtkAttr::Id("selection-account-card".to_string()),
+                        ResolvedGtkAttr::BoundProp {
+                            name: "css-class".to_string(),
+                            value: row_css,
+                        },
+                    ],
+                    children: Vec::new(),
+                },
+                ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "class".to_string(),
+                            value: "GtkEntry".to_string(),
+                        },
+                        ResolvedGtkAttr::Id("selection-editor".to_string()),
+                        ResolvedGtkAttr::BoundProp {
+                            name: "text".to_string(),
+                            value: editor_text,
+                        },
+                    ],
+                    children: Vec::new(),
+                },
+            ],
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build multihop selection widgets",
+        );
+        let placeholder_id = *result
+            .named_widgets
+            .get("selection-placeholder")
+            .expect("placeholder widget should be named");
+        let account_card_id = *result
+            .named_widgets
+            .get("selection-account-card")
+            .expect("account card widget should be named");
+        let editor_id = *result
+            .named_widgets
+            .get("selection-editor")
+            .expect("selection editor widget should be named");
+        assert!(
+            aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
+                .unwrap_or_else(|err| panic!("read initial placeholder visibility: {}", err.message))
+        );
+        assert!(
+            !aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read initial selected class: {}", err.message))
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(editor_id)
+                .unwrap_or_else(|err| panic!("read initial editor text: {}", err.message)),
+            ""
+        );
+        (runtime, selected, placeholder_id, account_card_id, editor_id)
+    }
+
     #[test]
     fn ui_debug_signal_snapshot_reports_dependencies_and_watchers() {
         let ctx = test_ctx();
@@ -2559,6 +2715,48 @@ mod tests {
         );
         aivi_gtk4::window_close(host_window)
             .unwrap_or_else(|err| panic!("close tick host window: {}", err.message));
+    }
+
+    #[test]
+    fn runtime_handler_updates_multihop_live_bindings() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let (mut runtime, selected, placeholder_id, account_card_id, editor_id) =
+            build_multihop_selection_bindings(ctx.clone());
+
+        let selected_for_handler = selected.clone();
+        let handler = builtin("test.multiHopGtkRuntimeHandler", 1, move |mut args, runtime| {
+            let _event = args.remove(0);
+            runtime.reactive_set_signal(selected_for_handler.clone(), Value::Bool(true))
+        });
+
+        ok_or_panic(
+            execute_runtime_handler(ctx, handler, clicked_event()),
+            "run multihop selection handler",
+        );
+
+        match ok_or_panic(runtime.reactive_get_signal(selected), "read updated selected signal") {
+            Value::Bool(value) => assert!(value),
+            other => panic!("expected Bool(true), got {other:?}"),
+        }
+        assert!(
+            runtime.reactive_graph.lock().pending_notifications.is_empty(),
+            "handler flush should drain pending notifications"
+        );
+        assert!(
+            !aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
+                .unwrap_or_else(|err| panic!("read updated placeholder visibility: {}", err.message))
+        );
+        assert!(
+            aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read updated selected class: {}", err.message))
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(editor_id)
+                .unwrap_or_else(|err| panic!("read updated editor text: {}", err.message)),
+            "selected"
+        );
     }
 
     #[test]
@@ -4029,6 +4227,240 @@ mod tests {
                 .unwrap_or_else(|err| panic!("read background dialog entry: {}", err.message)),
             "after"
         );
+    }
+
+    #[test]
+    fn persistent_dialog_runtime_handler_updates_multihop_live_bindings() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let gtk4_record = super::super::gtk4::build_gtk4_record();
+        let app_effect = ok_or_panic(
+            runtime.apply(
+                record_field(&gtk4_record, "appNew"),
+                Value::Text("com.aivi.dialog.multihop.binding.test".to_string()),
+            ),
+            "apply gtk4.appNew",
+        );
+        let app_id = match ok_or_panic(runtime.run_effect_value(app_effect), "run gtk4.appNew") {
+            Value::Int(value) => value,
+            other => panic!("expected app id, got {other:?}"),
+        };
+        let host_window = present_stealth_host_window(app_id, "Multihop Dialog Host");
+        let dialog_open = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(true)),
+            "create dialog open signal",
+        );
+        let selected = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create selected signal",
+        );
+        let selection_state = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selected.clone(),
+                builtin("test.dialogSelectionState", 1, |mut args, _| Ok(args.remove(0))),
+            ),
+            "derive dialog selection state",
+        );
+        let placeholder_visible = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selection_state.clone(),
+                builtin("test.dialogPlaceholderVisible", 1, |mut args, _| {
+                    let is_selected = match args.remove(0) {
+                        Value::Bool(flag) => flag,
+                        other => panic!("expected Bool selection state, got {other:?}"),
+                    };
+                    Ok(Value::Bool(!is_selected))
+                }),
+            ),
+            "derive dialog placeholder visibility",
+        );
+        let row_css = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selection_state.clone(),
+                builtin("test.dialogSelectedRowCss", 1, |mut args, _| {
+                    let is_selected = match args.remove(0) {
+                        Value::Bool(flag) => flag,
+                        other => panic!("expected Bool selection state, got {other:?}"),
+                    };
+                    Ok(Value::Text(if is_selected {
+                        "flat account-list-item account-list-item-selected".to_string()
+                    } else {
+                        "flat account-list-item".to_string()
+                    }))
+                }),
+            ),
+            "derive dialog row css",
+        );
+        let editor_text = ok_or_panic(
+            runtime.reactive_derive_signal(
+                selection_state,
+                builtin("test.dialogEditorText", 1, |mut args, _| {
+                    let is_selected = match args.remove(0) {
+                        Value::Bool(flag) => flag,
+                        other => panic!("expected Bool selection state, got {other:?}"),
+                    };
+                    Ok(Value::Text(if is_selected {
+                        "selected".to_string()
+                    } else {
+                        "".to_string()
+                    }))
+                }),
+            ),
+            "derive dialog editor text",
+        );
+
+        let node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesDialog".to_string(),
+                },
+                ResolvedGtkAttr::Id("multihop-dialog".to_string()),
+                ResolvedGtkAttr::StaticProp {
+                    name: "present-for".to_string(),
+                    value: host_window.to_string(),
+                },
+                ResolvedGtkAttr::BoundProp {
+                    name: "open".to_string(),
+                    value: dialog_open,
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwPreferencesPage".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![ResolvedGtkAttr::StaticAttr {
+                        name: "class".to_string(),
+                        value: "AdwPreferencesGroup".to_string(),
+                    }],
+                    children: vec![
+                        ResolvedGtkNode::Element {
+                            tag: "object".to_string(),
+                            attrs: vec![
+                                ResolvedGtkAttr::StaticAttr {
+                                    name: "class".to_string(),
+                                    value: "GtkBox".to_string(),
+                                },
+                                ResolvedGtkAttr::Id("dialog-selection-placeholder".to_string()),
+                                ResolvedGtkAttr::BoundProp {
+                                    name: "visible".to_string(),
+                                    value: placeholder_visible,
+                                },
+                            ],
+                            children: Vec::new(),
+                        },
+                        ResolvedGtkNode::Element {
+                            tag: "object".to_string(),
+                            attrs: vec![
+                                ResolvedGtkAttr::StaticAttr {
+                                    name: "class".to_string(),
+                                    value: "GtkButton".to_string(),
+                                },
+                                ResolvedGtkAttr::StaticAttr {
+                                    name: "label".to_string(),
+                                    value: "Account".to_string(),
+                                },
+                                ResolvedGtkAttr::Id("dialog-selection-account-card".to_string()),
+                                ResolvedGtkAttr::BoundProp {
+                                    name: "css-class".to_string(),
+                                    value: row_css,
+                                },
+                            ],
+                            children: Vec::new(),
+                        },
+                        ResolvedGtkNode::Element {
+                            tag: "object".to_string(),
+                            attrs: vec![
+                                ResolvedGtkAttr::StaticAttr {
+                                    name: "class".to_string(),
+                                    value: "GtkEntry".to_string(),
+                                },
+                                ResolvedGtkAttr::Id("dialog-selection-editor".to_string()),
+                                ResolvedGtkAttr::BoundProp {
+                                    name: "text".to_string(),
+                                    value: editor_text,
+                                },
+                            ],
+                            children: Vec::new(),
+                        },
+                    ],
+                }],
+            }],
+        };
+
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build multihop dialog",
+        );
+        make_test_widget_invisible(result.root_id, "make multihop dialog transparent");
+        let placeholder_id = *result
+            .named_widgets
+            .get("dialog-selection-placeholder")
+            .expect("dialog placeholder widget should be named");
+        let account_card_id = *result
+            .named_widgets
+            .get("dialog-selection-account-card")
+            .expect("dialog account card widget should be named");
+        let editor_id = *result
+            .named_widgets
+            .get("dialog-selection-editor")
+            .expect("dialog editor widget should be named");
+
+        assert!(
+            aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
+                .unwrap_or_else(|err| panic!("read initial dialog placeholder visibility: {}", err.message))
+        );
+        assert!(
+            !aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read initial dialog selected class: {}", err.message))
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(editor_id)
+                .unwrap_or_else(|err| panic!("read initial dialog editor text: {}", err.message)),
+            ""
+        );
+
+        let selected_for_handler = selected.clone();
+        let handler = builtin("test.dialogMultihopSelectionHandler", 1, move |mut args, runtime| {
+            let _event = args.remove(0);
+            runtime.reactive_set_signal(selected_for_handler.clone(), Value::Bool(true))
+        });
+
+        ok_or_panic(
+            execute_runtime_handler(ctx, handler, clicked_event()),
+            "run dialog multihop handler",
+        );
+
+        match ok_or_panic(runtime.reactive_get_signal(selected), "read updated dialog selected signal") {
+            Value::Bool(value) => assert!(value),
+            other => panic!("expected Bool(true), got {other:?}"),
+        }
+        assert!(
+            runtime.reactive_graph.lock().pending_notifications.is_empty(),
+            "dialog handler flush should drain pending notifications"
+        );
+        assert!(
+            !aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
+                .unwrap_or_else(|err| panic!("read updated dialog placeholder visibility: {}", err.message))
+        );
+        assert!(
+            aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
+                .unwrap_or_else(|err| panic!("read updated dialog selected class: {}", err.message))
+        );
+        assert_eq!(
+            aivi_gtk4::entry_text(editor_id)
+                .unwrap_or_else(|err| panic!("read updated dialog editor text: {}", err.message)),
+            "selected"
+        );
+        aivi_gtk4::window_close(host_window)
+            .unwrap_or_else(|err| panic!("close multihop dialog host window: {}", err.message));
     }
 }
 
