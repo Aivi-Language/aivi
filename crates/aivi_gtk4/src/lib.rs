@@ -3834,6 +3834,18 @@ mod linux_impl {
         }
     }
 
+    fn find_live_node(live: &LiveNode, widget_id: i64) -> Option<&LiveNode> {
+        if live.widget_id == widget_id {
+            return Some(live);
+        }
+        for child in &live.children {
+            if let Some(found) = find_live_node(&child.node, widget_id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
     fn find_live_node_mut(live: &mut LiveNode, widget_id: i64) -> Option<&mut LiveNode> {
         if live.widget_id == widget_id {
             return Some(live);
@@ -4065,6 +4077,36 @@ mod linux_impl {
         if let Some(mutation) = mutation {
             state.record_mutation(mutation);
         }
+    }
+
+    fn live_prop_value(state: &RealGtkState, widget_id: i64, key: &str) -> Option<String> {
+        state.live_trees.values().find_map(|live| {
+            find_live_node(live, widget_id).and_then(|node| node.props.get(key).cloned())
+        })
+    }
+
+    fn normalize_css_classes_text(raw: &str) -> String {
+        let raw = raw.to_string();
+        split_css_classes(Some(&raw)).join(" ")
+    }
+
+    fn merged_css_classes_text(current: Option<String>, class: &str, add: bool) -> String {
+        let current = current.unwrap_or_default();
+        let mut classes = if current.is_empty() {
+            Vec::new()
+        } else {
+            split_css_classes(Some(&current))
+        };
+        if add {
+            if !class.is_empty() && !classes.iter().any(|existing| existing == class) {
+                classes.push(class.to_string());
+            }
+        } else {
+            classes.retain(|existing| existing != class);
+        }
+        classes.sort();
+        classes.dedup();
+        classes.join(" ")
     }
 
     fn ui_debug_limit_param(params: &Map<String, Value>, default: usize) -> usize {
@@ -10700,30 +10742,54 @@ mod linux_impl {
         Ok(id)
     }
 
+    fn create_window_with_application(
+        class_name: &str,
+        app: *mut c_void,
+        context: &str,
+    ) -> Result<*mut c_void, Gtk4Error> {
+        let g_type = gtype_for_name(class_name, context)?;
+        let application_c = CString::new("application")
+            .map_err(|_| Gtk4Error::new(format!("{context} invalid application property name")))?;
+        let window = unsafe {
+            g_object_new(
+                g_type,
+                application_c.as_ptr(),
+                app,
+                std::ptr::null::<c_char>(),
+            )
+        };
+        if window.is_null() {
+            return Err(Gtk4Error::new(format!(
+                "{context} failed to create {class_name} with application"
+            )));
+        }
+        Ok(window)
+    }
+
     fn create_root_window_widget(
         app: *mut c_void,
         class_name: &str,
     ) -> Result<*mut c_void, Gtk4Error> {
         let window = match class_name {
             "GtkApplicationWindow" => unsafe { gtk_application_window_new(app) },
-            "GtkWindow" => {
-                let window = unsafe { gtk_window_new() };
-                let application_c = CString::new("application").unwrap();
-                unsafe { gobject_set_ptr(window, &application_c, app) };
-                window
-            }
+            "GtkWindow" => create_window_with_application(
+                "GtkWindow",
+                app,
+                "gtk4.mountAppWindow invalid GtkWindow root",
+            )?,
             "AdwApplicationWindow" | "AdwWindow" => {
-                let window = create_adw_widget_type(class_name)?;
-                let application_c = CString::new("application").unwrap();
-                unsafe { gobject_set_ptr(window, &application_c, app) };
-                window
+                try_adw_init();
+                create_window_with_application(
+                    class_name,
+                    app,
+                    "gtk4.mountAppWindow invalid libadwaita window root",
+                )?
             }
-            _ if class_is_window_subclass(class_name) => {
-                let window = create_generic_gtk_object(class_name)?;
-                let application_c = CString::new("application").unwrap();
-                unsafe { gobject_set_ptr(window, &application_c, app) };
-                window
-            }
+            _ if class_is_window_subclass(class_name) => create_window_with_application(
+                class_name,
+                app,
+                "gtk4.mountAppWindow invalid window root",
+            )?,
             _ => {
                 return Err(Gtk4Error::new(format!(
                     "gtk4.mountAppWindow root must be a GtkWindow/libadwaita window subclass; got {class_name}"
@@ -11159,23 +11225,58 @@ mod linux_impl {
         })
     }
 
+    pub(super) fn widget_set_css_classes(id: i64, classes: &str) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let widget = widget_ptr(&state, id, "widgetSetCssClasses")?;
+            let normalized = normalize_css_classes_text(classes);
+            let old_css = live_prop_value(&state, id, "css-class");
+            patch_css_classes(widget, old_css.as_ref(), Some(&normalized))?;
+            update_live_prop(&mut state, id, "css-class", normalized);
+            Ok(())
+        })
+    }
+
     pub(super) fn widget_add_css_class(id: i64, class: &str) -> Result<(), Gtk4Error> {
+        let class = class.trim();
+        if class.is_empty() {
+            return Ok(());
+        }
         let c = c_text(class, "gtk4.widgetAddCssClass invalid class")?;
         GTK_STATE.with(|state| {
-            let state = state.borrow();
+            let mut state = state.borrow_mut();
             let w = widget_ptr(&state, id, "widgetAddCssClass")?;
             unsafe { gtk_widget_add_css_class(w, c.as_ptr()) };
+            let next =
+                merged_css_classes_text(live_prop_value(&state, id, "css-class"), class, true);
+            update_live_prop(&mut state, id, "css-class", next);
             Ok(())
         })
     }
 
     pub(super) fn widget_remove_css_class(id: i64, class: &str) -> Result<(), Gtk4Error> {
+        let class = class.trim();
+        if class.is_empty() {
+            return Ok(());
+        }
         let c = c_text(class, "gtk4.widgetRemoveCssClass invalid class")?;
         GTK_STATE.with(|state| {
-            let state = state.borrow();
+            let mut state = state.borrow_mut();
             let w = widget_ptr(&state, id, "widgetRemoveCssClass")?;
             unsafe { gtk_widget_remove_css_class(w, c.as_ptr()) };
+            let next =
+                merged_css_classes_text(live_prop_value(&state, id, "css-class"), class, false);
+            update_live_prop(&mut state, id, "css-class", next);
             Ok(())
+        })
+    }
+
+    pub(super) fn widget_has_css_class(id: i64, class: &str) -> Result<bool, Gtk4Error> {
+        let c = c_text(class, "gtk4.widgetHasCssClass invalid class")?;
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let w = widget_ptr(&state, id, "widgetHasCssClass")?;
+            Ok(unsafe { gtk_widget_has_css_class(w, c.as_ptr()) != 0 })
         })
     }
 
@@ -12834,8 +12935,10 @@ delegate!(widget_set_margin_start(id: i64, margin: i32) -> Result<(), Gtk4Error>
 delegate!(widget_set_margin_end(id: i64, margin: i32) -> Result<(), Gtk4Error>);
 delegate!(widget_set_margin_top(id: i64, margin: i32) -> Result<(), Gtk4Error>);
 delegate!(widget_set_margin_bottom(id: i64, margin: i32) -> Result<(), Gtk4Error>);
+delegate!(widget_set_css_classes(id: i64, classes: &str) -> Result<(), Gtk4Error>);
 delegate!(widget_add_css_class(id: i64, class: &str) -> Result<(), Gtk4Error>);
 delegate!(widget_remove_css_class(id: i64, class: &str) -> Result<(), Gtk4Error>);
+delegate!(widget_has_css_class(id: i64, class: &str) -> Result<bool, Gtk4Error>);
 delegate!(widget_set_tooltip_text(id: i64, text: &str) -> Result<(), Gtk4Error>);
 delegate!(widget_set_opacity(id: i64, opacity: f64) -> Result<(), Gtk4Error>);
 delegate!(widget_set_css(id: i64, css: &str) -> Result<(), Gtk4Error>);
