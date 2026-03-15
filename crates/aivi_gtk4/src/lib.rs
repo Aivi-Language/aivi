@@ -242,6 +242,7 @@ mod linux_impl {
         fn gtk_password_entry_set_show_peek_icon(entry: *mut c_void, show_peek_icon: c_int);
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
+        fn gtk_editable_select_region(editable: *mut c_void, start_pos: c_int, end_pos: c_int);
         fn gtk_editable_set_position(editable: *mut c_void, position: c_int);
         fn gtk_editable_get_selection_bounds(
             editable: *mut c_void,
@@ -249,6 +250,7 @@ mod linux_impl {
             end_pos: *mut c_int,
         ) -> c_int;
         fn gtk_editable_get_position(editable: *mut c_void) -> c_int;
+        fn gtk_editable_get_delegate(editable: *mut c_void) -> *mut c_void;
         fn gtk_check_button_get_active(check_button: *mut c_void) -> c_int;
         fn gtk_range_get_value(range: *mut c_void) -> f64;
         fn gtk_range_set_value(range: *mut c_void, value: f64);
@@ -529,6 +531,10 @@ mod linux_impl {
         fn g_main_context_default() -> *mut c_void;
         fn g_main_context_pending(context: *mut c_void) -> c_int;
         fn g_main_context_iteration(context: *mut c_void, may_block: c_int) -> c_int;
+        fn g_idle_add(
+            function: unsafe extern "C" fn(*mut c_void) -> c_int,
+            data: *mut c_void,
+        ) -> c_uint;
         fn g_timeout_add(
             interval: c_uint,
             function: unsafe extern "C" fn(*mut c_void) -> c_int,
@@ -1177,7 +1183,7 @@ mod linux_impl {
     }
 
     fn editable_text_value(widget: *mut c_void) -> String {
-        let text_ptr = unsafe { gtk_editable_get_text(widget) };
+        let text_ptr = unsafe { gtk_editable_get_text(editable_delegate_or_self(widget)) };
         if text_ptr.is_null() {
             String::new()
         } else {
@@ -1187,20 +1193,60 @@ mod linux_impl {
         }
     }
 
+    fn editable_delegate_or_self(widget: *mut c_void) -> *mut c_void {
+        let delegate = unsafe { gtk_editable_get_delegate(widget) };
+        if delegate.is_null() {
+            widget
+        } else {
+            delegate
+        }
+    }
+
+    struct DeferredEditableCursor {
+        editable: *mut c_void,
+        position: c_int,
+    }
+
+    unsafe extern "C" fn restore_editable_cursor_cb(data: *mut c_void) -> c_int {
+        if data.is_null() {
+            return 0;
+        }
+        let boxed = unsafe { Box::from_raw(data as *mut DeferredEditableCursor) };
+        unsafe {
+            gtk_editable_select_region(boxed.editable, boxed.position, boxed.position);
+            gtk_editable_set_position(boxed.editable, boxed.position);
+            g_object_unref(boxed.editable);
+        }
+        0
+    }
+
+    fn schedule_editable_cursor_restore(editable: *mut c_void, position: c_int) {
+        unsafe {
+            g_object_ref(editable);
+            let data = Box::into_raw(Box::new(DeferredEditableCursor { editable, position }))
+                as *mut c_void;
+            g_idle_add(restore_editable_cursor_cb, data);
+        }
+    }
+
     fn set_editable_text_if_needed(
         widget: *mut c_void,
         value: &str,
         context: &str,
     ) -> Result<(), Gtk4Error> {
-        if editable_text_value(widget) == value {
+        let current_text = editable_text_value(widget);
+        let cursor_target = editable_delegate_or_self(widget);
+        if current_text == value {
             return Ok(());
         }
         let text_c = c_text(value, context)?;
         let end_position = value.chars().count().min(c_int::MAX as usize) as c_int;
         unsafe {
             gtk_editable_set_text(widget, text_c.as_ptr());
-            gtk_editable_set_position(widget, end_position);
+            gtk_editable_select_region(cursor_target, end_position, end_position);
+            gtk_editable_set_position(cursor_target, end_position);
         };
+        schedule_editable_cursor_restore(cursor_target, end_position);
         Ok(())
     }
 
@@ -3382,7 +3428,7 @@ mod linux_impl {
                         .expect("editable ptr");
                     unsafe { gtk_editable_set_position(editable, 3) };
                     assert_eq!(
-                        unsafe { gtk_editable_get_position(editable) },
+                        unsafe { gtk_editable_get_position(editable_delegate_or_self(editable)) },
                         3,
                         "{class_name} should accept an explicit cursor position before reconcile"
                     );
@@ -3411,7 +3457,7 @@ mod linux_impl {
                         "{class_name} should keep its text after reconcile"
                     );
                     assert_eq!(
-                        unsafe { gtk_editable_get_position(editable) },
+                        unsafe { gtk_editable_get_position(editable_delegate_or_self(editable)) },
                         3,
                         "{class_name} should preserve its cursor when text is unchanged"
                     );
@@ -3440,7 +3486,7 @@ mod linux_impl {
                         "{class_name} should still accept changed text values"
                     );
                     assert_eq!(
-                        unsafe { gtk_editable_get_position(editable) },
+                        unsafe { gtk_editable_get_position(editable_delegate_or_self(editable)) },
                         7,
                         "{class_name} should place its cursor at the end when text changes"
                     );
@@ -3964,7 +4010,8 @@ mod linux_impl {
                 runtime.insert("focused".to_string(), Value::Bool(focused));
             }
             if is_text_input_class(&live.class_name) {
-                let text_ptr = unsafe { gtk_editable_get_text(widget) };
+                let editable = editable_delegate_or_self(widget);
+                let text_ptr = unsafe { gtk_editable_get_text(editable) };
                 let text = if text_ptr.is_null() {
                     String::new()
                 } else {
@@ -3975,13 +4022,13 @@ mod linux_impl {
                 runtime.insert("text".to_string(), Value::String(text.clone()));
                 runtime.insert(
                     "cursorPosition".to_string(),
-                    json!(unsafe { gtk_editable_get_position(widget) }),
+                    json!(unsafe { gtk_editable_get_position(editable) }),
                 );
                 let mut selection_start: c_int = 0;
                 let mut selection_end: c_int = 0;
                 let has_selection = unsafe {
                     gtk_editable_get_selection_bounds(
-                        widget,
+                        editable,
                         &mut selection_start as *mut c_int,
                         &mut selection_end as *mut c_int,
                     ) != 0
@@ -11992,6 +12039,14 @@ mod linux_impl {
         })
     }
 
+    pub(super) fn editable_set_text(id: i64, text: &str) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "gtk4.editableSetText")?;
+            set_editable_text_if_needed(widget, text, "gtk4.editableSetText invalid text")
+        })
+    }
+
     pub(super) fn entry_text(id: i64) -> Result<String, Gtk4Error> {
         GTK_STATE.with(|state| {
             let state = state.borrow();
@@ -12007,6 +12062,60 @@ mod linux_impl {
             Ok(unsafe { CStr::from_ptr(text_ptr) }
                 .to_string_lossy()
                 .into_owned())
+        })
+    }
+
+    pub(super) fn editable_text(id: i64) -> Result<String, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "gtk4.editableText")?;
+            Ok(editable_text_value(widget))
+        })
+    }
+
+    pub(super) fn entry_cursor_position(id: i64) -> Result<i64, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let entry = state
+                .entries
+                .get(&id)
+                .copied()
+                .ok_or_else(|| Gtk4Error::new(format!("unknown entry id {id}")))?;
+            Ok(unsafe { gtk_editable_get_position(editable_delegate_or_self(entry)) } as i64)
+        })
+    }
+
+    pub(super) fn editable_cursor_position(id: i64) -> Result<i64, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "gtk4.editableCursorPosition")?;
+            Ok(unsafe { gtk_editable_get_position(editable_delegate_or_self(widget)) } as i64)
+        })
+    }
+
+    pub(super) fn editable_grab_focus(id: i64) -> Result<(), Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "gtk4.editableGrabFocus")?;
+            let target = editable_delegate_or_self(widget);
+            if unsafe { gtk_widget_grab_focus(target) } == 0 {
+                Err(Gtk4Error::new(format!(
+                    "gtk4.editableGrabFocus failed for widget id {id}"
+                )))
+            } else {
+                Ok(())
+            }
+        })
+    }
+
+    pub(super) fn editable_has_focus(id: i64) -> Result<bool, Gtk4Error> {
+        GTK_STATE.with(|state| {
+            let state = state.borrow();
+            let widget = widget_ptr(&state, id, "gtk4.editableHasFocus")?;
+            Ok(
+                widget_bool_property(editable_delegate_or_self(widget), "has-focus")
+                    .unwrap_or(false),
+            )
         })
     }
 
@@ -13411,7 +13520,13 @@ delegate!(label_set_xalign(id: i64, xalign: f32) -> Result<(), Gtk4Error>);
 delegate!(label_set_max_width_chars(id: i64, n: i32) -> Result<(), Gtk4Error>);
 delegate!(entry_new() -> Result<i64, Gtk4Error>);
 delegate!(entry_set_text(id: i64, text: &str) -> Result<(), Gtk4Error>);
+delegate!(editable_set_text(id: i64, text: &str) -> Result<(), Gtk4Error>);
 delegate!(entry_text(id: i64) -> Result<String, Gtk4Error>);
+delegate!(editable_text(id: i64) -> Result<String, Gtk4Error>);
+delegate!(entry_cursor_position(id: i64) -> Result<i64, Gtk4Error>);
+delegate!(editable_cursor_position(id: i64) -> Result<i64, Gtk4Error>);
+delegate!(editable_grab_focus(id: i64) -> Result<(), Gtk4Error>);
+delegate!(editable_has_focus(id: i64) -> Result<bool, Gtk4Error>);
 delegate!(scroll_area_new() -> Result<i64, Gtk4Error>);
 delegate!(scroll_area_set_child(scroll_id: i64, child_id: i64) -> Result<(), Gtk4Error>);
 delegate!(scroll_area_set_policy(scroll_id: i64, h: i32, v: i32) -> Result<(), Gtk4Error>);
