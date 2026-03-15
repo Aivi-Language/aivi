@@ -275,6 +275,7 @@ fn lower_expr_inner_ctx(
                             guard: arm
                                 .guard
                                 .map(|guard| lower_expr_ctx(guard, id_gen, ctx, false)),
+                            guard_negated: arm.guard_negated,
                             body: lower_expr_ctx(arm.body, id_gen, ctx, false),
                         })
                         .collect(),
@@ -296,6 +297,7 @@ fn lower_expr_inner_ctx(
                         guard: arm
                             .guard
                             .map(|guard| lower_expr_ctx(guard, id_gen, ctx, false)),
+                        guard_negated: arm.guard_negated,
                         body: lower_expr_ctx(arm.body, id_gen, ctx, false),
                     })
                     .collect(),
@@ -702,6 +704,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     arms: vec![HirMatchArm {
                         pattern: lower_pattern(other, id_gen),
                         guard: None,
+                        guard_negated: false,
                         body: acc,
                     }],
                     location: None,
@@ -1043,6 +1046,7 @@ fn make_pattern_lambda(
                 arms: vec![HirMatchArm {
                     pattern: lower_pattern(pattern, id_gen),
                     guard: None,
+                    guard_negated: false,
                     body,
                 }],
                 location: None,

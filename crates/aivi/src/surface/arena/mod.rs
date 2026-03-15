@@ -164,6 +164,7 @@ pub enum ArenaPathSegment {
 pub struct ArenaMatchArm {
     pub pattern: PatternId,
     pub guard: Option<ExprId>,
+    pub guard_negated: bool,
     pub body: ExprId,
     pub span: Span,
 }

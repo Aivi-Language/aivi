@@ -48,6 +48,7 @@ fn qualify_expr(
                     MatchArm {
                         pattern: arm.pattern,
                         guard: arm.guard.map(|g| qualify_expr(g, import_map, &inner)),
+                        guard_negated: arm.guard_negated,
                         body: qualify_expr(arm.body, import_map, &inner),
                         span: arm.span,
                     }

@@ -1013,10 +1013,15 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     guard_int,
                     0,
                 );
+                let guard_passes = if arm.guard_negated {
+                    builder.ins().bxor_imm(guard_bool, 1)
+                } else {
+                    guard_bool
+                };
                 let guard_pass_block = builder.create_block();
                 builder
                     .ins()
-                    .brif(guard_bool, guard_pass_block, &[], arm_next_block, &[]);
+                    .brif(guard_passes, guard_pass_block, &[], arm_next_block, &[]);
                 builder.switch_to_block(guard_pass_block);
                 builder.seal_block(guard_pass_block);
             }

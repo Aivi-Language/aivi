@@ -355,6 +355,7 @@ fn syntax_remaining_batch_one_files_execute_without_failures() {
         "integration-tests/syntax/operators/domain_operator_resolution.aivi",
         "integration-tests/syntax/patching/record_patch_basic.aivi",
         "integration-tests/syntax/pattern_matching/guards_when.aivi",
+        "integration-tests/syntax/pattern_matching/guards_unless.aivi",
         "integration-tests/syntax/predicates/implicit_and_explicit.aivi",
         "integration-tests/syntax/sigils/collections_structured.aivi",
         "integration-tests/syntax/bidirectional_class_members.aivi",

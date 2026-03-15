@@ -509,6 +509,7 @@ impl TypeChecker {
                     new_arms.push(crate::surface::MatchArm {
                         pattern: arm.pattern,
                         guard,
+                        guard_negated: arm.guard_negated,
                         body,
                         span: arm.span,
                     });

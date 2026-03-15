@@ -3098,6 +3098,30 @@ fn lower_match_with_guard_to_arena() {
 }
 
 #[test]
+fn lower_match_with_unless_guard_to_arena() {
+    let src =
+        "module Example\n\nx = y match\n  | n unless n <= 0 => \"positive\"\n  | _ => \"other\"\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match arena.expr(def.expr) {
+        ArenaExpr::Match { arms, .. } => {
+            assert!(arms[0].guard.is_some());
+            assert!(arms[0].guard_negated);
+        }
+        other => panic!("expected Match, got {other:?}"),
+    }
+}
+
+#[test]
 fn lower_block_recurse_item_to_arena() {
     let src = "module Example\n\nx = generate {\n  recurse 1\n}\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);

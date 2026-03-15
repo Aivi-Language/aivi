@@ -341,6 +341,7 @@ fn expand_module_aliases(modules: &mut [Module]) {
                     .map(|arm| MatchArm {
                         pattern: arm.pattern,
                         guard: arm.guard.map(|g| rewrite_expr(g, aliases)),
+                        guard_negated: arm.guard_negated,
                         body: rewrite_expr(arm.body, aliases),
                         span: arm.span,
                     })

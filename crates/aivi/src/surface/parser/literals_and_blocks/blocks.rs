@@ -211,6 +211,7 @@ impl Parser {
                         arms.push(MatchArm {
                             pattern,
                             guard: None,
+                            guard_negated: false,
                             body,
                             span,
                         });
@@ -303,19 +304,26 @@ impl Parser {
                 }
                 if self.consume_symbol("->") {
                     let guard_start = self.pos;
-                    // Try pattern predicate: Pat (when Guard)?
+                    // Try pattern predicate: Pat ((when|unless) Guard)?
                     let expr = if let Some(pat) = self.parse_pattern() {
-                        if self.match_keyword("when") {
+                        let guard_style = if self.match_keyword("when") {
+                            Some(false)
+                        } else if self.match_keyword("unless") {
+                            Some(true)
+                        } else {
+                            None
+                        };
+                        if let Some(guard_negated) = guard_style {
                             let guard = self.parse_expr().unwrap_or(Expr::Raw {
                                 text: String::new(),
                                 span: pattern_span(&pat),
                             });
                             let span = merge_span(pattern_span(&pat), expr_span(&guard));
-                            build_pattern_predicate(pat, Some(guard), span)
+                            build_pattern_predicate(pat, Some(guard), guard_negated, span)
                         } else if matches!(pat, Pattern::Constructor { .. }) {
                             // Bare constructor pattern predicate (e.g. `x -> Some _`)
                             let span = pattern_span(&pat);
-                            build_pattern_predicate(pat, None, span)
+                            build_pattern_predicate(pat, None, false, span)
                         } else {
                             // Not a pattern predicate — backtrack and parse as expr
                             self.pos = guard_start;
@@ -443,6 +451,7 @@ impl Parser {
                 ok_value.span.clone(),
             ),
             guard: None,
+            guard_negated: false,
             body: self.build_call_expr(
                 self.build_ident_expr("pure", ok_value.span.clone()),
                 vec![Expr::Ident(ok_value.clone())],
@@ -467,6 +476,7 @@ impl Parser {
             match_arms.push(MatchArm {
                 pattern: err_pat,
                 guard: None,
+                guard_negated: false,
                 body,
                 span: or_span.clone(),
             });
@@ -482,6 +492,7 @@ impl Parser {
                 match_arms.push(MatchArm {
                     pattern: err_pat,
                     guard: None,
+                    guard_negated: false,
                     body,
                     span: or_span.clone(),
                 });
@@ -505,6 +516,7 @@ impl Parser {
             match_arms.push(MatchArm {
                 pattern: err_pat,
                 guard: None,
+                guard_negated: false,
                 body: err_body,
                 span: or_span.clone(),
             });
@@ -571,6 +583,7 @@ fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
                 .map(|arm| MatchArm {
                     pattern: arm.pattern,
                     guard: arm.guard.map(|g| replace_recurse_in_expr(g, fn_name)),
+                    guard_negated: arm.guard_negated,
                     body: replace_recurse_in_expr(arm.body, fn_name),
                     span: arm.span,
                 })

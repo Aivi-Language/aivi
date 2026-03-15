@@ -23,7 +23,7 @@ items |> filter (.price > 70)
 ```
 :::
 
-Pattern predicates such as `Some _` or `Ok { value } when value > 10` are match tests: they succeed if the current value matches the pattern, and the optional `when` guard can refer to names bound by that pattern. In expression positions they are usually parenthesized; generator guards accept the same idea directly. See [Pattern Matching](pattern_matching.md) for the pattern syntax itself.
+Pattern predicates such as `Some _`, `Ok { value } when value > 10`, or `Ok { value } unless value <= 10` are match tests: they succeed if the current value matches the pattern, and the optional `when` / `unless` guard can refer to names bound by that pattern. In expression positions they are usually parenthesized; generator guards accept the same idea directly. See [Pattern Matching](pattern_matching.md) for the pattern syntax itself.
 
 ## 4.1.1 Predicate combinators
 

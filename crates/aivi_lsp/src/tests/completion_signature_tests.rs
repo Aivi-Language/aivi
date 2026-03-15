@@ -390,6 +390,7 @@ fn completion_includes_aivi_snippets() {
     assert!(labels.contains(&"do Query"), "'do Query' snippet should appear");
     assert!(labels.contains(&"match"), "'match' snippet should appear");
     assert!(labels.contains(&"lambda"), "'lambda' snippet should appear");
+    assert!(labels.contains(&"unless"), "'unless' snippet should appear");
 }
 
 #[test]

@@ -419,6 +419,7 @@ fn inline_children(
                 .map(|a| RustIrMatchArm {
                     pattern: a.pattern,
                     guard: a.guard.map(|g| inline_expr(g, candidates, id_gen, depth)),
+                    guard_negated: a.guard_negated,
                     body: inline_expr(a.body, candidates, id_gen, depth),
                 })
                 .collect(),

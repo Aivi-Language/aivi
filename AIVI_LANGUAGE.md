@@ -92,7 +92,7 @@ value match
 
 - `match` consumes the expression immediately to its left.
 - Must be exhaustive; use `_` as catch-all.
-- Guards use `when`.
+- Guards use `when` or `unless`.
 - Whole-value binding works inside patterns with `as`.
 
 ## 6. Types

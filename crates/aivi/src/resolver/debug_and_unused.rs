@@ -1096,6 +1096,30 @@ classify = x =>
     }
 
     #[test]
+    fn resolver_unless_guard_in_match_scope() {
+        let source = r#"
+module test.guard_scope
+
+classify = x =>
+  x match
+    | n unless n <= 0 => "positive"
+    | 0 => "zero"
+    | _ => "negative"
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
     fn debug_decorator_on_lambda_def_fires_e2010() {
         let source = r#"
 module test.debug_lambda

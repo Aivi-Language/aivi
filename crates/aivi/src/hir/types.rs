@@ -208,6 +208,7 @@ pub enum HirPathSegment {
 pub struct HirMatchArm {
     pub pattern: HirPattern,
     pub guard: Option<HirExpr>,
+    pub guard_negated: bool,
     pub body: HirExpr,
 }
 
