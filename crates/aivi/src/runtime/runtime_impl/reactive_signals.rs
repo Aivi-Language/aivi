@@ -6,6 +6,18 @@ fn unix_timestamp_ms() -> u64 {
         .min(u128::from(u64::MAX)) as u64
 }
 
+fn reactive_brief_value(value: &Value) -> String {
+    const MAX_CHARS: usize = 120;
+    let rendered = format_value(value);
+    let mut chars = rendered.chars();
+    let brief = chars.by_ref().take(MAX_CHARS).collect::<String>();
+    if chars.next().is_some() {
+        format!("{brief}…")
+    } else {
+        brief
+    }
+}
+
 impl Default for ReactiveGraphState {
     fn default() -> Self {
         Self {
@@ -564,7 +576,13 @@ impl Runtime {
                 stack.push(signal_id);
                 let mut values = Vec::with_capacity(dependencies.len());
                 for dependency in dependencies {
-                    self.reactive_ensure_signal_fresh(dependency, stack)?;
+                    self.reactive_ensure_signal_fresh(dependency, stack)
+                        .map_err(|err| {
+                            self.reactive_wrap_error_context(
+                                err,
+                                self.reactive_signal_error_context(signal_id),
+                            )
+                        })?;
                     let value = self
                         .reactive_graph
                         .lock()
@@ -577,7 +595,12 @@ impl Runtime {
                 }
                 let mut value = compute;
                 for dependency in values {
-                    value = self.apply(value, dependency)?;
+                    value = self.apply(value, dependency).map_err(|err| {
+                        self.reactive_wrap_apply_error(
+                            err,
+                            self.reactive_signal_error_context(signal_id),
+                        )
+                    })?;
                 }
                 stack.pop();
 
@@ -614,7 +637,13 @@ impl Runtime {
                 stack.push(signal_id);
                 let mut items = Vec::with_capacity(dependencies.len());
                 for dependency in dependencies {
-                    self.reactive_ensure_signal_fresh(dependency, stack)?;
+                    self.reactive_ensure_signal_fresh(dependency, stack)
+                        .map_err(|err| {
+                            self.reactive_wrap_error_context(
+                                err,
+                                self.reactive_signal_error_context(signal_id),
+                            )
+                        })?;
                     let dep_value = self
                         .reactive_graph
                         .lock()
@@ -625,7 +654,9 @@ impl Runtime {
                         .clone();
                     items.push(dep_value);
                 }
-                let value = self.apply(compute, Value::Tuple(items))?;
+                let value = self.apply(compute, Value::Tuple(items)).map_err(|err| {
+                    self.reactive_wrap_apply_error(err, self.reactive_signal_error_context(signal_id))
+                })?;
                 stack.pop();
 
                 let mut changed = false;
@@ -843,6 +874,149 @@ impl Runtime {
             if watcher_ids.is_empty() {
                 graph.watchers_by_signal.remove(&watcher.signal_id);
             }
+        }
+    }
+
+    fn reactive_wrap_error_context(
+        &self,
+        err: RuntimeError,
+        context: impl Into<String>,
+    ) -> RuntimeError {
+        RuntimeError::Context {
+            context: context.into(),
+            source: Box::new(err),
+        }
+    }
+
+    fn reactive_wrap_apply_error(
+        &self,
+        err: RuntimeError,
+        context: impl Into<String>,
+    ) -> RuntimeError {
+        let err = match err {
+            RuntimeError::NonExhaustiveMatch {
+                scrutinee: Some(_),
+            } => err,
+            other => {
+                let mut wrapped = other;
+                if let Some(location) = self.jit_current_loc.as_deref() {
+                    wrapped = self.reactive_wrap_error_context(wrapped, format!("at {location}"));
+                }
+                if let Some(function_name) = self.jit_current_fn.as_deref() {
+                    wrapped =
+                        self.reactive_wrap_error_context(wrapped, format!("in `{function_name}`"));
+                }
+                wrapped
+            }
+        };
+        self.reactive_wrap_error_context(err, context)
+    }
+
+    fn reactive_signal_error_context(&self, signal_id: usize) -> String {
+        let (kind_label, dependencies, compute, mut watcher_ids) = {
+            let graph = self.reactive_graph.lock();
+            let Some(entry) = graph.signals.get(&signal_id) else {
+                return format!("while refreshing missing signal {signal_id}");
+            };
+            let watcher_ids = graph
+                .watchers_by_signal
+                .get(&signal_id)
+                .map(|ids| ids.iter().copied().collect::<Vec<_>>())
+                .unwrap_or_default();
+            match &entry.kind {
+                ReactiveCellKind::Source => ("source", Vec::new(), None, watcher_ids),
+                ReactiveCellKind::Derived {
+                    dependencies,
+                    compute,
+                } => (
+                    "derived",
+                    dependencies.clone(),
+                    Some(compute.clone()),
+                    watcher_ids,
+                ),
+                ReactiveCellKind::DerivedTuple {
+                    dependencies,
+                    compute,
+                } => (
+                    "derived tuple",
+                    dependencies.clone(),
+                    Some(compute.clone()),
+                    watcher_ids,
+                ),
+            }
+        };
+        watcher_ids.sort_unstable();
+        let mut widget_ids = watcher_ids
+            .iter()
+            .flat_map(|watcher_id| self.ctx.gtk_binding_widgets_for_watcher(*watcher_id))
+            .collect::<Vec<_>>();
+        widget_ids.sort_unstable();
+        widget_ids.dedup();
+
+        let deps = if dependencies.is_empty() {
+            String::new()
+        } else {
+            format!("; deps: {dependencies:?}")
+        };
+        let watchers = if watcher_ids.is_empty() {
+            String::new()
+        } else {
+            format!("; watchers: {watcher_ids:?}")
+        };
+        let widgets = if widget_ids.is_empty() {
+            String::new()
+        } else {
+            format!("; widgets: {widget_ids:?}")
+        };
+        let compute = compute
+            .as_ref()
+            .map(|value| format!("; compute: {}", reactive_brief_value(value)))
+            .unwrap_or_default();
+        format!(
+            "while refreshing {kind_label} signal {signal_id}{deps}{watchers}{widgets}{compute}"
+        )
+    }
+
+    fn reactive_watcher_error_context(
+        &self,
+        watcher_id: usize,
+        signal_id: usize,
+        callback: &Value,
+    ) -> String {
+        let mut widget_ids = self.ctx.gtk_binding_widgets_for_watcher(watcher_id);
+        widget_ids.sort_unstable();
+        widget_ids.dedup();
+        let callback = reactive_brief_value(callback);
+        if widget_ids.is_empty() {
+            format!(
+                "while running watcher {watcher_id} for signal {signal_id} (callback: {callback})"
+            )
+        } else {
+            format!(
+                "while running GTK watcher {watcher_id} for signal {signal_id} on widget ids {widget_ids:?} (callback: {callback})"
+            )
+        }
+    }
+
+    fn reactive_contain_failed_signal_branch(&mut self, signal_id: usize) {
+        let mut graph = self.reactive_graph.lock();
+        let mut stack = vec![signal_id];
+        let mut affected = Vec::new();
+        let mut seen = HashSet::new();
+        while let Some(current) = stack.pop() {
+            if !seen.insert(current) {
+                continue;
+            }
+            affected.push(current);
+            if let Some(entry) = graph.signals.get(&current) {
+                stack.extend(entry.dependents.iter().copied());
+            }
+        }
+        for current in affected {
+            if let Some(entry) = graph.signals.get_mut(&current) {
+                entry.dirty = false;
+            }
+            graph.pending_notifications.remove(&current);
         }
     }
 
