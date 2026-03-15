@@ -105,17 +105,16 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Grammar Reference](syntax/grammar)
 
 ### Build Native Apps
-- [Mental Model](stdlib/ui/gtk4#mental-model)
-- [Your First Window](stdlib/ui/gtk4#your-first-window)
-- [State, Derivation, and Patching](stdlib/ui/gtk4#state-derivation-and-patching)
-- [Writing GTK Trees with Sugar](stdlib/ui/gtk4#writing-gtk-trees-with-sugar)
-- [Callback Sugar in Detail](stdlib/ui/gtk4#callback-sugar-in-detail)
-- [do Event in Detail](stdlib/ui/gtk4#do-event-in-detail)
-- [Structural UI with show and each](stdlib/ui/gtk4#structural-ui-with-show-and-each)
-- [App Lifecycle, Windows, and Lower-Level Helpers](stdlib/ui/gtk4#app-lifecycle-windows-and-lower-level-helpers)
-- [Debugging with the MCP Server](stdlib/ui/gtk4#debugging-a-native-app-with-the-mcp-server)
-- [Coverage, Boundaries, and Diagnostics](stdlib/ui/gtk4#coverage-boundaries-and-diagnostics)
-#### Reference & Building Blocks
+- [Mental Model](stdlib/ui/gtk4/mental_model)
+- [First Window](stdlib/ui/gtk4/first_window)
+- [State & Patches](stdlib/ui/gtk4/state_patches)
+- [GTK Sugar](stdlib/ui/gtk4/gtk_sugar)
+- [Callbacks](stdlib/ui/gtk4/callbacks)
+- [Events](stdlib/ui/gtk4/events)
+- [Structure](stdlib/ui/gtk4/structure)
+- [Lifecycle](stdlib/ui/gtk4/lifecycle)
+- [MCP Debugging](stdlib/ui/gtk4/mcp_debugging)
+#### Supporting Docs
 - [Signals](stdlib/ui/reactive_signals)
 - [Reactive Dataflow](stdlib/ui/reactive_dataflow)
 - [Forms](stdlib/ui/forms)
