@@ -518,28 +518,34 @@ fn value_to_rust_conversion(ty: &AiviType, var_name: &str) -> String {
 #[allow(clippy::only_used_in_recursion)]
 fn rust_to_value_conversion(ty: &AiviType, expr: &str, collector: &StructCollector) -> String {
     match ty {
-        AiviType::Text => format!("Ok(CrateNativeValue::Text({expr}.to_string()))"),
-        AiviType::Int => format!("Ok(CrateNativeValue::Int({expr}))"),
-        AiviType::Float => format!("Ok(CrateNativeValue::Float({expr}))"),
-        AiviType::Bool => format!("Ok(CrateNativeValue::Bool({expr}))"),
-        AiviType::Unit => format!("{{ let _ = {expr}; Ok(CrateNativeValue::Unit) }}"),
+        AiviType::Text => {
+            format!("Ok::<CrateNativeValue, String>(CrateNativeValue::Text({expr}.to_string()))")
+        }
+        AiviType::Int => format!("Ok::<CrateNativeValue, String>(CrateNativeValue::Int({expr}))"),
+        AiviType::Float => {
+            format!("Ok::<CrateNativeValue, String>(CrateNativeValue::Float({expr}))")
+        }
+        AiviType::Bool => format!("Ok::<CrateNativeValue, String>(CrateNativeValue::Bool({expr}))"),
+        AiviType::Unit => {
+            format!("{{ let _ = {expr}; Ok::<CrateNativeValue, String>(CrateNativeValue::Unit) }}")
+        }
         AiviType::Option(inner) => {
             let some_conv = rust_to_value_conversion(inner, "__inner", collector);
             format!(
-                "match {expr} {{ Some(__inner) => {{ let __val = {{ {some_conv} }}?; Ok(CrateNativeValue::Constructor(\"Some\".to_string(), vec![__val])) }}, None => Ok(CrateNativeValue::Constructor(\"None\".to_string(), vec![])) }}"
+                "match {expr} {{ Some(__inner) => {{ let __val = {{ {some_conv} }}?; Ok::<CrateNativeValue, String>(CrateNativeValue::Constructor(\"Some\".to_string(), vec![__val])) }}, None => Ok::<CrateNativeValue, String>(CrateNativeValue::Constructor(\"None\".to_string(), vec![])) }}"
             )
         }
         AiviType::Result(err_ty, ok_ty) => {
             let ok_conv = rust_to_value_conversion(ok_ty, "__ok_val", collector);
             let _ = err_ty;
             format!(
-                "match {expr} {{ Ok(__ok_val) => {{ let __val = {{ {ok_conv} }}?; Ok(CrateNativeValue::Constructor(\"Ok\".to_string(), vec![__val])) }}, Err(__err) => Ok(CrateNativeValue::Constructor(\"Err\".to_string(), vec![CrateNativeValue::Text(format!(\"{{__err}}\"))])) }}"
+                "match {expr} {{ Ok(__ok_val) => {{ let __val = {{ {ok_conv} }}?; Ok::<CrateNativeValue, String>(CrateNativeValue::Constructor(\"Ok\".to_string(), vec![__val])) }}, Err(__err) => Ok::<CrateNativeValue, String>(CrateNativeValue::Constructor(\"Err\".to_string(), vec![CrateNativeValue::Text(format!(\"{{__err}}\"))])) }}"
             )
         }
         AiviType::List(inner) => {
             let item_conv = rust_to_value_conversion(inner, "__item", collector);
             format!(
-                "{{ let __items: Result<Vec<CrateNativeValue>, String> = {expr}.into_iter().map(|__item| {{ {item_conv} }}).collect(); Ok(CrateNativeValue::List(__items?)) }}"
+                "{{ let __items: Result<Vec<CrateNativeValue>, String> = {expr}.into_iter().map(|__item| {{ {item_conv} }}).collect(); Ok::<CrateNativeValue, String>(CrateNativeValue::List(__items?)) }}"
             )
         }
         AiviType::Record(fields) => {
@@ -554,11 +560,11 @@ fn rust_to_value_conversion(ty: &AiviType, expr: &str, collector: &StructCollect
                 ));
             }
             format!(
-                "{{ let mut __fields: Vec<(String, CrateNativeValue)> = Vec::new();\n{field_lines}    Ok(CrateNativeValue::Record(__fields)) }}"
+                "{{ let mut __fields: Vec<(String, CrateNativeValue)> = Vec::new();\n{field_lines}    Ok::<CrateNativeValue, String>(CrateNativeValue::Record(__fields)) }}"
             )
         }
         AiviType::Opaque(name) => {
-            format!("Ok(CrateNativeValue::Text(format!(\"{{:?}}\", {expr}))) // opaque type {name}")
+            format!("Ok::<CrateNativeValue, String>(CrateNativeValue::Text(format!(\"{{:?}}\", {expr}))) // opaque type {name}")
         }
     }
 }

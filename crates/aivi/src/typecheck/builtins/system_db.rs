@@ -122,6 +122,15 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert("i18n".to_string(), Scheme::mono(i18n_record));
 
     let option_text_ty = Type::con("Option").app(vec![text_ty.clone()]);
+    let command_output_ty = Type::Record {
+        fields: vec![
+            ("status".to_string(), int_ty.clone()),
+            ("stdout".to_string(), text_ty.clone()),
+            ("stderr".to_string(), text_ty.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
     let system_env_decode_a = checker.fresh_var_id();
     let system_env_decode_arg = checker.fresh_var_id();
     let env_record = Type::Record {
@@ -233,6 +242,25 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(
                     Box::new(int_ty.clone()),
                     Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "localeTag".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(
+                        Type::con("Effect").app(vec![text_ty.clone(), option_text_ty.clone()]),
+                    ),
+                ),
+            ),
+            (
+                "run".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("List").app(vec![text_ty.clone()])),
+                        Box::new(Type::con("Effect").app(vec![text_ty.clone(), command_output_ty])),
+                    )),
                 ),
             ),
         ]
