@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use aivi::cg_type::CgType;
 use aivi::{
@@ -18,6 +18,13 @@ use aivi::{
 use std::os::unix::net::{UnixListener, UnixStream};
 
 const DAEMON_PROTOCOL_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct DaemonIdentity {
+    exe_path: PathBuf,
+    exe_len: u64,
+    exe_modified_ms: u64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PreparedCompileArtifacts {
@@ -53,7 +60,16 @@ impl From<AiviError> for PrepareCompileFailure {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Envelope<T> {
     version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    identity: Option<DaemonIdentity>,
     payload: T,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DaemonIdentityState {
+    Compatible,
+    Missing,
+    Mismatch,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +106,14 @@ struct ProjectDaemonPaths {
     root: PathBuf,
     socket: PathBuf,
     pid: PathBuf,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Clone)]
+enum ProjectDaemonState {
+    Compatible,
+    Incompatible(Option<DaemonIdentity>),
+    Stopped,
 }
 
 pub(crate) fn compile_target_in_fresh_session(
@@ -288,6 +312,76 @@ fn compile_summary_from_stats(stats: &AssemblyStats) -> CompileSummary {
     }
 }
 
+fn current_daemon_identity() -> Option<DaemonIdentity> {
+    let exe_path = env::current_exe().ok()?;
+    let exe_path = fs::canonicalize(&exe_path).unwrap_or(exe_path);
+    let metadata = fs::metadata(&exe_path).ok()?;
+    let exe_modified_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|timestamp| timestamp.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+        .unwrap_or(0);
+    Some(DaemonIdentity {
+        exe_path,
+        exe_len: metadata.len(),
+        exe_modified_ms,
+    })
+}
+
+fn daemon_envelope<T>(payload: T) -> Envelope<T> {
+    Envelope {
+        version: DAEMON_PROTOCOL_VERSION,
+        identity: current_daemon_identity(),
+        payload,
+    }
+}
+
+fn daemon_identity_state(
+    expected: Option<&DaemonIdentity>,
+    actual: Option<&DaemonIdentity>,
+) -> DaemonIdentityState {
+    match (expected, actual) {
+        (Some(expected), Some(actual)) if expected == actual => DaemonIdentityState::Compatible,
+        (Some(_), Some(_)) => DaemonIdentityState::Mismatch,
+        (Some(_), None) => DaemonIdentityState::Missing,
+        (None, _) => DaemonIdentityState::Compatible,
+    }
+}
+
+fn current_daemon_identity_state(actual: Option<&DaemonIdentity>) -> DaemonIdentityState {
+    let expected = current_daemon_identity();
+    daemon_identity_state(expected.as_ref(), actual)
+}
+
+fn format_daemon_identity(identity: Option<&DaemonIdentity>) -> String {
+    match identity {
+        Some(identity) => format!(
+            "{} (len={}, mtime_ms={})",
+            identity.exe_path.display(),
+            identity.exe_len,
+            identity.exe_modified_ms
+        ),
+        None => "<missing identity>".to_string(),
+    }
+}
+
+fn daemon_identity_mismatch_message(actual: Option<&DaemonIdentity>) -> Option<String> {
+    let expected = current_daemon_identity();
+    match daemon_identity_state(expected.as_ref(), actual) {
+        DaemonIdentityState::Compatible => None,
+        DaemonIdentityState::Missing => Some(format!(
+            "project daemon did not report its executable identity; current binary is {}",
+            format_daemon_identity(expected.as_ref())
+        )),
+        DaemonIdentityState::Mismatch => Some(format!(
+            "project daemon is using {}, but current binary is {}",
+            format_daemon_identity(actual),
+            format_daemon_identity(expected.as_ref())
+        )),
+    }
+}
+
 fn diagnostics_have_errors(diagnostics: &[aivi::FileDiagnostic]) -> bool {
     diagnostics
         .iter()
@@ -376,10 +470,15 @@ fn cmd_daemon_status() -> Result<(), AiviError> {
     {
         let root = current_project_root()?;
         let paths = daemon_paths_for_root(&root)?;
-        if daemon_is_running(&paths) {
-            println!("running {}", paths.socket.display());
-        } else {
-            println!("stopped {}", paths.socket.display());
+        match project_daemon_state(&paths) {
+            ProjectDaemonState::Compatible => println!("running {}", paths.socket.display()),
+            ProjectDaemonState::Incompatible(identity) => {
+                println!("running {} (stale)", paths.socket.display());
+                if let Some(message) = daemon_identity_mismatch_message(identity.as_ref()) {
+                    println!("  {message}");
+                }
+            }
+            ProjectDaemonState::Stopped => println!("stopped {}", paths.socket.display()),
         }
         Ok(())
     }
@@ -397,13 +496,16 @@ fn cmd_daemon_stop() -> Result<(), AiviError> {
     {
         let root = current_project_root()?;
         let paths = daemon_paths_for_root(&root)?;
-        if !daemon_is_running(&paths) {
-            println!("stopped {}", paths.socket.display());
-            Ok(())
-        } else {
-            let _ = send_daemon_request(&paths, &DaemonRequest::Shutdown)?;
-            println!("stopped {}", paths.socket.display());
-            Ok(())
+        match project_daemon_state(&paths) {
+            ProjectDaemonState::Stopped => {
+                println!("stopped {}", paths.socket.display());
+                Ok(())
+            }
+            ProjectDaemonState::Compatible | ProjectDaemonState::Incompatible(_) => {
+                shutdown_project_daemon(&paths);
+                println!("stopped {}", paths.socket.display());
+                Ok(())
+            }
         }
     }
 
@@ -479,38 +581,23 @@ fn handle_connection(
     if request.version != DAEMON_PROTOCOL_VERSION {
         write_json_line(
             &mut stream,
-            &Envelope {
-                version: DAEMON_PROTOCOL_VERSION,
-                payload: DaemonResponse::Error {
-                    message: format!(
-                        "protocol mismatch: client {}, daemon {}",
-                        request.version, DAEMON_PROTOCOL_VERSION
-                    ),
-                },
-            },
+            &daemon_envelope(DaemonResponse::Error {
+                message: format!(
+                    "protocol mismatch: client {}, daemon {}",
+                    request.version, DAEMON_PROTOCOL_VERSION
+                ),
+            }),
         )?;
         return Ok(true);
     }
 
     match request.payload {
         DaemonRequest::Ping => {
-            write_json_line(
-                &mut stream,
-                &Envelope {
-                    version: DAEMON_PROTOCOL_VERSION,
-                    payload: DaemonResponse::Pong,
-                },
-            )?;
+            write_json_line(&mut stream, &daemon_envelope(DaemonResponse::Pong))?;
             Ok(true)
         }
         DaemonRequest::Shutdown => {
-            write_json_line(
-                &mut stream,
-                &Envelope {
-                    version: DAEMON_PROTOCOL_VERSION,
-                    payload: DaemonResponse::Ack,
-                },
-            )?;
+            write_json_line(&mut stream, &daemon_envelope(DaemonResponse::Ack))?;
             Ok(false)
         }
         DaemonRequest::CompileProject {
@@ -535,13 +622,7 @@ fn handle_connection(
                     message: err.to_string(),
                 },
             };
-            write_json_line(
-                &mut stream,
-                &Envelope {
-                    version: DAEMON_PROTOCOL_VERSION,
-                    payload,
-                },
-            )?;
+            write_json_line(&mut stream, &daemon_envelope(payload))?;
             Ok(true)
         }
     }
@@ -573,13 +654,19 @@ fn write_json_line<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<(
 #[cfg(unix)]
 fn ensure_project_daemon(project_root: &Path) -> Result<ProjectDaemonPaths, AiviError> {
     let paths = daemon_paths_for_root(project_root)?;
-    if daemon_is_running(&paths) {
-        return Ok(paths);
+    match project_daemon_state(&paths) {
+        ProjectDaemonState::Compatible => return Ok(paths),
+        ProjectDaemonState::Incompatible(identity) => {
+            if let Some(message) = daemon_identity_mismatch_message(identity.as_ref()) {
+                eprintln!("[daemon] restarting stale project daemon: {message}");
+            }
+            shutdown_project_daemon(&paths);
+        }
+        ProjectDaemonState::Stopped => cleanup_stale_daemon_files(&paths),
     }
-    cleanup_stale_daemon_files(&paths);
     spawn_project_daemon(&paths)?;
     for _ in 0..40 {
-        if daemon_is_running(&paths) {
+        if matches!(project_daemon_state(&paths), ProjectDaemonState::Compatible) {
             return Ok(paths);
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -595,30 +682,59 @@ fn send_daemon_request(
     paths: &ProjectDaemonPaths,
     payload: &DaemonRequest,
 ) -> Result<DaemonResponse, AiviError> {
-    let mut stream = UnixStream::connect(&paths.socket)?;
-    write_json_line(
-        &mut stream,
-        &Envelope {
-            version: DAEMON_PROTOCOL_VERSION,
-            payload: payload.clone(),
-        },
-    )?;
-    let response: Envelope<DaemonResponse> = read_json_line(&mut stream)?;
+    let response = send_daemon_request_raw(paths, payload)?;
     if response.version != DAEMON_PROTOCOL_VERSION {
         return Err(AiviError::Runtime(format!(
             "protocol mismatch: daemon {}, client {}",
             response.version, DAEMON_PROTOCOL_VERSION
         )));
     }
+    if let Some(message) = daemon_identity_mismatch_message(response.identity.as_ref()) {
+        return Err(AiviError::Runtime(message));
+    }
     Ok(response.payload)
 }
 
 #[cfg(unix)]
-fn daemon_is_running(paths: &ProjectDaemonPaths) -> bool {
-    matches!(
-        send_daemon_request(paths, &DaemonRequest::Ping),
-        Ok(DaemonResponse::Pong)
-    )
+fn send_daemon_request_raw(
+    paths: &ProjectDaemonPaths,
+    payload: &DaemonRequest,
+) -> Result<Envelope<DaemonResponse>, AiviError> {
+    let mut stream = UnixStream::connect(&paths.socket)?;
+    write_json_line(&mut stream, &daemon_envelope(payload.clone()))?;
+    read_json_line(&mut stream)
+}
+
+#[cfg(unix)]
+fn project_daemon_state(paths: &ProjectDaemonPaths) -> ProjectDaemonState {
+    let response = match send_daemon_request_raw(paths, &DaemonRequest::Ping) {
+        Ok(response) => response,
+        Err(_) => return ProjectDaemonState::Stopped,
+    };
+    if response.version != DAEMON_PROTOCOL_VERSION {
+        return ProjectDaemonState::Incompatible(response.identity);
+    }
+    if !matches!(response.payload, DaemonResponse::Pong) {
+        return ProjectDaemonState::Stopped;
+    }
+    match current_daemon_identity_state(response.identity.as_ref()) {
+        DaemonIdentityState::Compatible => ProjectDaemonState::Compatible,
+        DaemonIdentityState::Missing | DaemonIdentityState::Mismatch => {
+            ProjectDaemonState::Incompatible(response.identity)
+        }
+    }
+}
+
+#[cfg(unix)]
+fn shutdown_project_daemon(paths: &ProjectDaemonPaths) {
+    let _ = send_daemon_request_raw(paths, &DaemonRequest::Shutdown);
+    for _ in 0..20 {
+        if !paths.socket.exists() && !paths.pid.exists() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    cleanup_stale_daemon_files(paths);
 }
 
 #[cfg(unix)]
@@ -685,6 +801,14 @@ impl Drop for DaemonCleanup {
 mod tests {
     use super::*;
 
+    fn test_identity(path: &str, len: u64, modified_ms: u64) -> DaemonIdentity {
+        DaemonIdentity {
+            exe_path: PathBuf::from(path),
+            exe_len: len,
+            exe_modified_ms: modified_ms,
+        }
+    }
+
     #[test]
     fn compile_summary_prefers_reinferred_modules() {
         let summary = compile_summary_from_stats(&AssemblyStats {
@@ -730,5 +854,33 @@ mod tests {
         assert!(second_summary
             .reused_modules
             .contains(&"daemonTest.main".to_string()));
+    }
+
+    #[test]
+    fn daemon_identity_state_accepts_matching_identity() {
+        let identity = test_identity("/tmp/aivi", 42, 1234);
+        assert_eq!(
+            daemon_identity_state(Some(&identity), Some(&identity)),
+            DaemonIdentityState::Compatible
+        );
+    }
+
+    #[test]
+    fn daemon_identity_state_rejects_missing_identity() {
+        let identity = test_identity("/tmp/aivi", 42, 1234);
+        assert_eq!(
+            daemon_identity_state(Some(&identity), None),
+            DaemonIdentityState::Missing
+        );
+    }
+
+    #[test]
+    fn daemon_identity_state_rejects_mismatched_identity() {
+        let expected = test_identity("/tmp/aivi-debug", 42, 1234);
+        let actual = test_identity("/home/me/.cargo/bin/aivi", 24, 4321);
+        assert_eq!(
+            daemon_identity_state(Some(&expected), Some(&actual)),
+            DaemonIdentityState::Mismatch
+        );
     }
 }

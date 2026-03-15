@@ -7,7 +7,7 @@ export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaI
 export GtkBindingHandle
 export GtkNode, GtkAttr
 export GtkElement, GtkTextNode, GtkBoundText, GtkShowNode, GtkEachNode
-export GtkStaticAttr, GtkBoundAttr, GtkStaticProp, GtkBoundProp, GtkEventProp, GtkIdAttr, GtkRefAttr
+export GtkStaticAttr, GtkBoundAttr, GtkStaticProp, GtkBoundProp, GtkEventProp, GtkEventSugarProp, GtkIdAttr, GtkRefAttr
 export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkWindowClosed, GtkUnknownSignal, GtkTick
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated, displayHeight

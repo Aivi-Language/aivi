@@ -69,6 +69,23 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
             _ => None,
         })
         .collect();
+    let export_names: Vec<&str> = gtk4.exports.iter().map(|e| e.name.name.as_str()).collect();
+
+    for expected in [
+        "GtkStaticAttr",
+        "GtkBoundAttr",
+        "GtkStaticProp",
+        "GtkBoundProp",
+        "GtkEventProp",
+        "GtkEventSugarProp",
+        "GtkIdAttr",
+        "GtkRefAttr",
+    ] {
+        assert!(
+            export_names.contains(&expected),
+            "expected aivi.ui.gtk4 to export {expected}, exports={export_names:?}"
+        );
+    }
 
     for expected in [
         "gtkBoundText",
@@ -93,12 +110,8 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "gtkSetInterval",
     ] {
         assert!(
-            gtk4.exports.iter().any(|e| e.name.name == expected),
-            "expected aivi.ui.gtk4 to export {expected}, exports={:?}",
-            gtk4.exports
-                .iter()
-                .map(|e| e.name.name.as_str())
-                .collect::<Vec<_>>()
+            export_names.contains(&expected),
+            "expected aivi.ui.gtk4 to export {expected}, exports={export_names:?}"
         );
         assert!(
             def_names.contains(&expected),
@@ -121,12 +134,8 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "signalToggleCssClass",
     ] {
         assert!(
-            !gtk4.exports.iter().any(|e| e.name.name == removed),
-            "did not expect aivi.ui.gtk4 to export {removed}, exports={:?}",
-            gtk4.exports
-                .iter()
-                .map(|e| e.name.name.as_str())
-                .collect::<Vec<_>>()
+            !export_names.contains(&removed),
+            "did not expect aivi.ui.gtk4 to export {removed}, exports={export_names:?}"
         );
     }
 }

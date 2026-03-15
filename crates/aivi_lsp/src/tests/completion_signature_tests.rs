@@ -579,6 +579,32 @@ view = ~<gtk><GtkBox onK /></gtk>
 }
 
 #[test]
+fn gtk_arch_completion_signal_sugar_documents_switch_toggle_notify_active() {
+    let text = r#"@no_prelude
+module examples.gtk_signal_toggle_docs
+view = ~<gtk><GtkSwitch onT /></gtk>
+"#;
+    let uri = sample_uri();
+    let position = position_after(text, "onT");
+    let gtk_index =
+        GtkIndex::from_json(crate::gtk_index::GTK_INDEX_JSON).expect("embedded gtk index");
+    let items = Backend::build_completion_items(text, &uri, position, &HashMap::new(), &gtk_index);
+
+    let on_toggle = items
+        .iter()
+        .find(|item| item.label == "onToggle")
+        .expect("onToggle completion");
+    assert_eq!(on_toggle.detail.as_deref(), Some("signal:notify::active"));
+    let docs = on_toggle.documentation.as_ref().expect("onToggle docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("Runtime callback payload: `Bool`"));
+    assert!(markup.value.contains("GtkSwitch"));
+    assert!(markup.value.contains("notify::active"));
+}
+
+#[test]
 fn gtk_arch_completion_signal_sugar_documents_dropdown_selection_payload() {
     let text = r#"@no_prelude
 module examples.gtk_signal_select_docs
@@ -626,6 +652,35 @@ view = ~<gtk><AdwPreferencesDialog onCl /></gtk>
     };
     assert!(markup.value.contains("Runtime callback payload: `Unit`"));
     assert!(markup.value.contains("Dialog close callbacks"));
+}
+
+#[test]
+fn gtk_arch_completion_signal_sugar_documents_overlay_split_view_payload() {
+    let text = r#"@no_prelude
+module examples.gtk_signal_sidebar_docs
+view = ~<gtk><AdwOverlaySplitView onSh /></gtk>
+"#;
+    let uri = sample_uri();
+    let position = position_after(text, "onSh");
+    let gtk_index =
+        GtkIndex::from_json(crate::gtk_index::GTK_INDEX_JSON).expect("embedded gtk index");
+    let items = Backend::build_completion_items(text, &uri, position, &HashMap::new(), &gtk_index);
+
+    let on_sidebar = items
+        .iter()
+        .find(|item| item.label == "onShowSidebarChanged")
+        .expect("onShowSidebarChanged completion");
+    assert_eq!(on_sidebar.detail.as_deref(), Some("signal:notify::show-sidebar"));
+    let docs = on_sidebar
+        .documentation
+        .as_ref()
+        .expect("onShowSidebarChanged docs");
+    let tower_lsp::lsp_types::Documentation::MarkupContent(markup) = docs else {
+        panic!("expected markdown docs");
+    };
+    assert!(markup.value.contains("Runtime callback payload: `Bool`"));
+    assert!(markup.value.contains("AdwOverlaySplitView"));
+    assert!(markup.value.contains("sidebar visibility"));
 }
 
 #[test]
