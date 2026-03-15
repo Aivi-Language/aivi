@@ -75,12 +75,19 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Grammar Reference](syntax/grammar.md)
 
 ### Build Native Apps
-#### Getting Started
-- [Writing Native Apps](stdlib/ui/gtk4.md)
-#### Reactive UI
+- [Mental Model](stdlib/ui/gtk4.md#mental-model)
+- [Your First Window](stdlib/ui/gtk4.md#your-first-window)
+- [State, Derivation, and Patching](stdlib/ui/gtk4.md#state-derivation-and-patching)
+- [Writing GTK Trees with Sugar](stdlib/ui/gtk4.md#writing-gtk-trees-with-sugar)
+- [Callback Sugar in Detail](stdlib/ui/gtk4.md#callback-sugar-in-detail)
+- [do Event in Detail](stdlib/ui/gtk4.md#do-event-in-detail)
+- [Structural UI with show and each](stdlib/ui/gtk4.md#structural-ui-with-show-and-each)
+- [App Lifecycle, Windows, and Lower-Level Helpers](stdlib/ui/gtk4.md#app-lifecycle-windows-and-lower-level-helpers)
+- [Debugging with the MCP Server](stdlib/ui/gtk4.md#debugging-a-native-app-with-the-mcp-server)
+- [Coverage, Boundaries, and Diagnostics](stdlib/ui/gtk4.md#coverage-boundaries-and-diagnostics)
+#### Reference & Building Blocks
 - [Signals](stdlib/ui/reactive_signals.md)
 - [Reactive Dataflow](stdlib/ui/reactive_dataflow.md)
-#### UI Building Blocks
 - [Forms](stdlib/ui/forms.md)
 - [Layout](stdlib/ui/layout.md)
 - [Color](stdlib/ui/color.md)

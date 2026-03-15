@@ -105,12 +105,19 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Grammar Reference](syntax/grammar)
 
 ### Build Native Apps
-#### Getting Started
-- [Writing Native Apps](stdlib/ui/gtk4)
-#### Reactive UI
+- [Mental Model](stdlib/ui/gtk4#mental-model)
+- [Your First Window](stdlib/ui/gtk4#your-first-window)
+- [State, Derivation, and Patching](stdlib/ui/gtk4#state-derivation-and-patching)
+- [Writing GTK Trees with Sugar](stdlib/ui/gtk4#writing-gtk-trees-with-sugar)
+- [Callback Sugar in Detail](stdlib/ui/gtk4#callback-sugar-in-detail)
+- [do Event in Detail](stdlib/ui/gtk4#do-event-in-detail)
+- [Structural UI with show and each](stdlib/ui/gtk4#structural-ui-with-show-and-each)
+- [App Lifecycle, Windows, and Lower-Level Helpers](stdlib/ui/gtk4#app-lifecycle-windows-and-lower-level-helpers)
+- [Debugging with the MCP Server](stdlib/ui/gtk4#debugging-a-native-app-with-the-mcp-server)
+- [Coverage, Boundaries, and Diagnostics](stdlib/ui/gtk4#coverage-boundaries-and-diagnostics)
+#### Reference & Building Blocks
 - [Signals](stdlib/ui/reactive_signals)
 - [Reactive Dataflow](stdlib/ui/reactive_dataflow)
-#### UI Building Blocks
 - [Forms](stdlib/ui/forms)
 - [Layout](stdlib/ui/layout)
 - [Color](stdlib/ui/color)
