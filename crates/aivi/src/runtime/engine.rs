@@ -260,6 +260,10 @@ pub(crate) enum RuntimeError {
         context: String,
         input: String,
     },
+    Context {
+        context: String,
+        source: Box<RuntimeError>,
+    },
 }
 
 impl std::fmt::Display for RuntimeError {
@@ -642,11 +646,11 @@ fn build_runtime_from_program_scoped(
     Ok(Runtime::new(ctx, cancel))
 }
 
-pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
+fn format_runtime_error_leaf(err: &RuntimeError) -> String {
     match err {
         RuntimeError::Cancelled => "execution cancelled".to_string(),
-        RuntimeError::Message(message) => message,
-        RuntimeError::Error(value) => format!("runtime error: {}", format_value(&value)),
+        RuntimeError::Message(message) => message.clone(),
+        RuntimeError::Error(value) => format!("runtime error: {}", format_value(value)),
         RuntimeError::TypeError {
             context,
             expected,
@@ -679,7 +683,32 @@ pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
         RuntimeError::ParseError { context, input } => {
             format!("{context}: failed to parse \"{input}\"")
         }
+        RuntimeError::Context { source, .. } => format_runtime_error_leaf(source),
     }
+}
+
+pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
+    fn collect_contexts<'a>(err: &'a RuntimeError, contexts: &mut Vec<String>) -> &'a RuntimeError {
+        match err {
+            RuntimeError::Context { context, source } => {
+                contexts.push(context.clone());
+                collect_contexts(source, contexts)
+            }
+            other => other,
+        }
+    }
+
+    let mut contexts = Vec::new();
+    let leaf = collect_contexts(&err, &mut contexts);
+    let mut rendered = format_runtime_error_leaf(leaf);
+    if !contexts.is_empty() {
+        rendered.push_str("\ntrace:");
+        for context in contexts {
+            rendered.push_str("\n  - ");
+            rendered.push_str(&context);
+        }
+    }
+    rendered
 }
 
 #[cfg(test)]
