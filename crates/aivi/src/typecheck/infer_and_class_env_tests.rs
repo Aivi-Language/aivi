@@ -208,6 +208,56 @@ writeCount = set count 2
 }
 
 #[test]
+fn check_types_accepts_cross_module_unannotated_signal_exports() {
+    let (mut lib_modules, lib_diags) = parse_modules(
+        Path::new("signal_lib.aivi"),
+        r#"
+module test.signal_lib
+export state
+
+use aivi
+use aivi.reactive
+
+state = signal 1
+"#,
+    );
+    assert!(
+        !has_errors(&lib_diags),
+        "unexpected parse errors in signal_lib: {lib_diags:?}"
+    );
+
+    let (mut app_modules, app_diags) = parse_modules(
+        Path::new("signal_app.aivi"),
+        r#"
+module test.signal_app
+
+use aivi
+use aivi.reactive
+use test.signal_lib (state)
+
+write = _ => state <<- 2
+"#,
+    );
+    assert!(
+        !has_errors(&app_diags),
+        "unexpected parse errors in signal_app: {app_diags:?}"
+    );
+
+    let mut modules = crate::stdlib::embedded_stdlib_modules();
+    modules.append(&mut lib_modules);
+    modules.append(&mut app_modules);
+
+    let diagnostics: Vec<_> = check_types(&modules)
+        .into_iter()
+        .filter(|diag| !diag.path.starts_with("<embedded:"))
+        .collect();
+    assert!(
+        !has_errors(&diagnostics),
+        "unexpected type errors: {diagnostics:?}"
+    );
+}
+
+#[test]
 fn infer_value_types_tuple_convenience_form() {
     let (modules, _) = parse_modules(
         Path::new("test.aivi"),

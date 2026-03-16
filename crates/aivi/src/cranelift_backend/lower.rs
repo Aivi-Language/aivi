@@ -294,6 +294,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_leave_fn: FuncRef,
     // Source location tracking for diagnostics
     pub(crate) rt_set_location: FuncRef,
+    pub(crate) rt_prepare_call_location: FuncRef,
     // Snapshot mock helpers
     pub(crate) rt_snapshot_mock_install: FuncRef,
     pub(crate) rt_snapshot_mock_flush: FuncRef,
@@ -438,6 +439,12 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
             [PTR, PTR, PTR, PTR, PTR, PTR, PTR, PTR],
             []
         ),
+        // (ctx, path_ptr, path_len, start_line, start_col, end_line, end_col, kind) -> void
+        rt_prepare_call_location: decl!(
+            "rt_prepare_call_location",
+            [PTR, PTR, PTR, PTR, PTR, PTR, PTR, PTR],
+            []
+        ),
         // (ctx, path_ptr, path_len) -> ptr (old global value)
         rt_snapshot_mock_install: decl!("rt_snapshot_mock_install", [PTR, PTR, PTR], [PTR]),
         // (ctx, path_ptr, path_len) -> void
@@ -515,6 +522,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_leave_fn: cranelift_module::FuncId,
     // Source location tracking for diagnostics
     pub(crate) rt_set_location: cranelift_module::FuncId,
+    pub(crate) rt_prepare_call_location: cranelift_module::FuncId,
     // Snapshot mock helpers
     pub(crate) rt_snapshot_mock_install: cranelift_module::FuncId,
     pub(crate) rt_snapshot_mock_flush: cranelift_module::FuncId,
@@ -586,6 +594,7 @@ impl DeclaredHelpers {
             rt_enter_fn: imp!(rt_enter_fn),
             rt_leave_fn: imp!(rt_leave_fn),
             rt_set_location: imp!(rt_set_location),
+            rt_prepare_call_location: imp!(rt_prepare_call_location),
             rt_snapshot_mock_install: imp!(rt_snapshot_mock_install),
             rt_snapshot_mock_flush: imp!(rt_snapshot_mock_flush),
         }
@@ -725,10 +734,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         }
     }
 
-    /// Emit a call to `rt_set_location` to record the current source location for diagnostics.
-    pub(crate) fn emit_set_location(
+    fn emit_location_helper(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        helper: FuncRef,
         location: &SourceOrigin,
     ) {
         let (ptr, len) = self.embed_str(builder, location.path.as_bytes());
@@ -738,7 +747,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let end_col = builder.ins().iconst(PTR, location.span.end.column as i64);
         let kind = builder.ins().iconst(PTR, location.source_kind.as_i64());
         builder.ins().call(
-            self.helpers.rt_set_location,
+            helper,
             &[
                 self.ctx_param,
                 ptr,
@@ -750,6 +759,25 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 kind,
             ],
         );
+    }
+
+    /// Emit a call to `rt_set_location` to record the current source location for diagnostics.
+    pub(crate) fn emit_set_location(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        location: &SourceOrigin,
+    ) {
+        self.emit_location_helper(builder, self.helpers.rt_set_location, location);
+    }
+
+    /// Emit a call to `rt_prepare_call_location` so the next JIT frame inherits
+    /// a concrete call-site origin.
+    pub(crate) fn emit_prepare_call_location(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        location: &SourceOrigin,
+    ) {
+        self.emit_location_helper(builder, self.helpers.rt_prepare_call_location, location);
     }
 
     /// Emit a call to `rt_enter_fn` to record the current function name for diagnostics.

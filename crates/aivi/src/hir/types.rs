@@ -48,6 +48,8 @@ pub enum HirExpr {
     Var {
         id: u32,
         name: String,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     LitNumber {
         id: u32,
@@ -535,6 +537,8 @@ fn lower_expr_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pip
                 body: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: param,
+                
+                    location: None,
                 }),
             };
         }

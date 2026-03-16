@@ -70,6 +70,40 @@ pub(super) struct TypeChecker {
 }
 
 impl TypeChecker {
+    pub(super) fn with_ephemeral_state_rollback<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let next_var = self.next_var;
+        let subst = self.subst.clone();
+        let var_names = self.var_names.clone();
+        let checked_defs = self.checked_defs.clone();
+        let assumed_class_constraints = self.assumed_class_constraints.clone();
+        let extra_diagnostics = self.extra_diagnostics.clone();
+        let constraints = self.constraints.clone();
+        let query_cache = self.query_cache.clone();
+        let poly_instantiations = self.poly_instantiations.clone();
+        let span_types = self.span_types.clone();
+        let current_def_name = self.current_def_name.clone();
+        let load_source_schemas = self.load_source_schemas.clone();
+        let in_call_arg = self.in_call_arg;
+
+        let result = f(self);
+
+        self.next_var = next_var;
+        self.subst = subst;
+        self.var_names = var_names;
+        self.checked_defs = checked_defs;
+        self.assumed_class_constraints = assumed_class_constraints;
+        self.extra_diagnostics = extra_diagnostics;
+        self.constraints = constraints;
+        self.query_cache = query_cache;
+        self.poly_instantiations = poly_instantiations;
+        self.span_types = span_types;
+        self.current_def_name = current_def_name;
+        self.load_source_schemas = load_source_schemas;
+        self.in_call_arg = in_call_arg;
+
+        result
+    }
+
     pub(super) fn new() -> Self {
         let mut checker = Self {
             next_var: 0,
@@ -189,9 +223,11 @@ impl TypeChecker {
         // form even without an explicit import.  Per-module imports registered by
         // `register_imported_type_names` may further override these defaults.
         for (bare, qualified) in &self.bare_to_global_qualified.clone() {
-            self.type_name_bindings.insert(bare.clone(), qualified.clone());
+            self.type_name_bindings
+                .insert(bare.clone(), qualified.clone());
             // Keep the short bare name as the display name for error messages.
-            self.type_display_names.insert(qualified.clone(), bare.clone());
+            self.type_display_names
+                .insert(qualified.clone(), bare.clone());
         }
         self.register_builtin_aliases();
         self.type_constructors
@@ -344,7 +380,10 @@ impl TypeChecker {
         match ty {
             Type::Var(var) => Type::Var(*var),
             Type::Con(name, args) => {
-                let rewritten_args = args.iter().map(|arg| self.rewrite_type_names(arg)).collect();
+                let rewritten_args = args
+                    .iter()
+                    .map(|arg| self.rewrite_type_names(arg))
+                    .collect();
                 let resolved = if name.contains('.') {
                     name.as_str()
                 } else {
@@ -354,15 +393,20 @@ impl TypeChecker {
             }
             Type::App(base, args) => Type::App(
                 Box::new(self.rewrite_type_names(base)),
-                args.iter().map(|arg| self.rewrite_type_names(arg)).collect(),
+                args.iter()
+                    .map(|arg| self.rewrite_type_names(arg))
+                    .collect(),
             ),
             Type::Func(arg, ret) => Type::Func(
                 Box::new(self.rewrite_type_names(arg)),
                 Box::new(self.rewrite_type_names(ret)),
             ),
-            Type::Tuple(items) => {
-                Type::Tuple(items.iter().map(|item| self.rewrite_type_names(item)).collect())
-            }
+            Type::Tuple(items) => Type::Tuple(
+                items
+                    .iter()
+                    .map(|item| self.rewrite_type_names(item))
+                    .collect(),
+            ),
             Type::Record { fields } => Type::Record {
                 fields: fields
                     .iter()
@@ -375,7 +419,11 @@ impl TypeChecker {
     pub(super) fn rewrite_env_type_names(&self, env: &mut TypeEnv) {
         env.map_schemes(|scheme| {
             let new_ty = self.rewrite_type_names(&scheme.ty);
-            Scheme { vars: scheme.vars.clone(), ty: new_ty, origin: scheme.origin.clone() }
+            Scheme {
+                vars: scheme.vars.clone(),
+                ty: new_ty,
+                origin: scheme.origin.clone(),
+            }
         });
     }
 

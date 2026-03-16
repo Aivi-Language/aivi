@@ -309,6 +309,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: "__asGenerator".to_string(),
+                    
+                        location: None,
                     }),
                     arg: Box::new(raw_src),
                 };
@@ -317,6 +319,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                 let param_var = HirExpr::Var {
                     id: id_gen.next(),
                     name: param_name.clone(),
+                
+                    location: None,
                 };
                 let body = HirExpr::Match {
                     id: id_gen.next(),
@@ -345,6 +349,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                 let param_var = HirExpr::Var {
                     id: id_gen.next(),
                     name: param_name.clone(),
+                
+                    location: None,
                 };
                 let body = HirExpr::Match {
                     id: id_gen.next(),
@@ -376,6 +382,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         func: Box::new(HirExpr::Var {
                             id: id_gen.next(),
                             name: "__fix".to_string(),
+                        
+                            location: None,
                         }),
                         arg: Box::new(fix_body),
                     }
@@ -405,6 +413,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: "__asGenerator".to_string(),
+                
+                    location: None,
                 }),
                 arg: Box::new(raw),
             };
@@ -440,6 +450,8 @@ fn gen_empty(id_gen: &mut IdGen) -> HirExpr {
             body: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: z,
+            
+                location: None,
             }),
         }),
     }
@@ -452,10 +464,14 @@ fn gen_yield(val: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     let k = HirExpr::Var {
         id: id_gen.next(),
         name: k_name.clone(),
+    
+        location: None,
     };
     let z = HirExpr::Var {
         id: id_gen.next(),
         name: z_name.clone(),
+    
+        location: None,
     };
 
     // k z val
@@ -488,10 +504,14 @@ fn gen_append(g1: HirExpr, g2: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     let k = HirExpr::Var {
         id: id_gen.next(),
         name: k_name.clone(),
+    
+        location: None,
     };
     let z = HirExpr::Var {
         id: id_gen.next(),
         name: z_name.clone(),
+    
+        location: None,
     };
 
     // g1 k z
@@ -536,10 +556,14 @@ fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     let k = HirExpr::Var {
         id: id_gen.next(),
         name: k_name.clone(),
+    
+        location: None,
     };
     let z = HirExpr::Var {
         id: id_gen.next(),
         name: z_name.clone(),
+    
+        location: None,
     };
 
     // next k z
@@ -594,6 +618,8 @@ fn lower_do_effect_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExp
         func: Box::new(HirExpr::Var {
             id: id_gen.next(),
             name: "__withResourceScope".to_string(),
+        
+            location: None,
         }),
         args: vec![chain],
     }
@@ -623,6 +649,8 @@ fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen)
                     HirExpr::Var {
                         id: id_gen.next(),
                         name: param.clone(),
+                    
+                        location: None,
                     },
                     id_gen,
                 );
@@ -740,6 +768,8 @@ fn wrap_pattern_match(
             scrutinee: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: param,
+            
+                location: None,
             }),
             arms: vec![HirMatchArm {
                 pattern: pattern.clone(),
@@ -761,6 +791,8 @@ fn effect_bind(expr: HirExpr, func: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             func: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: "bind".to_string(),
+            
+                location: None,
             }),
             arg: Box::new(expr),
         }),
@@ -775,6 +807,8 @@ fn effect_pure(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         func: Box::new(HirExpr::Var {
             id: id_gen.next(),
             name: "pure".to_string(),
+        
+            location: None,
         }),
         arg: Box::new(expr),
     }
@@ -786,6 +820,8 @@ fn effect_pure_unit(id_gen: &mut IdGen) -> HirExpr {
         HirExpr::Var {
             id: id_gen.next(),
             name: "Unit".to_string(),
+        
+            location: None,
         },
         id_gen,
     )
@@ -832,6 +868,8 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
         func: Box::new(HirExpr::Var {
             id: id_gen.next(),
             name: "__makeResource".to_string(),
+        
+            location: None,
         }),
         args: vec![acquire_lambda, cleanup_lambda],
     }
@@ -846,6 +884,8 @@ fn lower_plain_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
         return HirExpr::Var {
             id: id_gen.next(),
             name: "Unit".to_string(),
+        
+            location: None,
         };
     }
     lower_plain_items(&items, 0, id_gen)
@@ -856,6 +896,8 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
         return HirExpr::Var {
             id: id_gen.next(),
             name: "Unit".to_string(),
+        
+            location: None,
         };
     }
 
@@ -907,6 +949,8 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                 HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 }
             } else {
                 lower_plain_items(items, idx + 1, id_gen)
@@ -918,6 +962,8 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                 else_branch: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 }),
             }
         }

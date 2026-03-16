@@ -6,7 +6,9 @@ use crate::surface::{Def, DomainItem, Expr, Module, ModuleItem};
 use super::checker::TypeChecker;
 use super::global::collect_global_type_info;
 use super::ordering::ordered_module_indices;
-use super::{module_interface_from_setup, setup_module, ModuleInterface, ModuleInterfaceMaps};
+use super::{
+    build_module_interface, checked_module_env, setup_module, ModuleInterface, ModuleInterfaceMaps,
+};
 
 pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
@@ -165,22 +167,29 @@ fn elaborate_modules(
             &state.module_instance_exports,
             diagnostics,
         );
+        let elaboration_env = if is_embedded {
+            setup.env.clone()
+        } else {
+            checked_module_env(module, checker, &setup)
+        };
 
         // Rewrite user modules only. Embedded stdlib modules are not guaranteed to typecheck in v0.1,
         // but we still want their type signatures, classes, and instances in scope for elaboration.
-        if !module.path.starts_with("<embedded:") {
+        if !is_embedded {
             let mut elab_errors = Vec::new();
             for item in module.items.iter_mut() {
                 match item {
                     ModuleItem::Def(def) => {
-                        if let Err(err) = checker.elaborate_def_expr(def, &setup.sigs, &setup.env) {
+                        if let Err(err) =
+                            checker.elaborate_def_expr(def, &setup.sigs, &elaboration_env)
+                        {
                             elab_errors.push(err);
                         }
                     }
                     ModuleItem::InstanceDecl(instance) => {
                         for def in instance.defs.iter_mut() {
                             if let Err(err) =
-                                checker.elaborate_def_expr(def, &setup.sigs, &setup.env)
+                                checker.elaborate_def_expr(def, &setup.sigs, &elaboration_env)
                             {
                                 elab_errors.push(err);
                             }
@@ -190,9 +199,11 @@ fn elaborate_modules(
                         for domain_item in domain.items.iter_mut() {
                             match domain_item {
                                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                    if let Err(err) =
-                                        checker.elaborate_def_expr(def, &setup.sigs, &setup.env)
-                                    {
+                                    if let Err(err) = checker.elaborate_def_expr(
+                                        def,
+                                        &setup.sigs,
+                                        &elaboration_env,
+                                    ) {
                                         elab_errors.push(err);
                                     }
                                 }
@@ -210,7 +221,7 @@ fn elaborate_modules(
             diagnostics.extend(check_reactive_signal_cycles(module));
         }
 
-        let interface = module_interface_from_setup(module, checker, &setup);
+        let interface = build_module_interface(module, checker, &setup.sigs, &elaboration_env);
         state.apply_module_interface(&module.name.name, &interface);
         module_results.push(ElaboratedModule {
             module_name: module.name.name.clone(),

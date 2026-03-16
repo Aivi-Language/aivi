@@ -170,11 +170,12 @@ fn rewrite_implicit_field_vars(
     unbound: &HashSet<String>,
 ) -> HirExpr {
     match expr {
-        HirExpr::Var { id, name } if unbound.contains(&name) => HirExpr::FieldAccess {
+        HirExpr::Var { id, name, .. } if unbound.contains(&name) => HirExpr::FieldAccess {
             id,
             base: Box::new(HirExpr::Var {
                 id,
                 name: implicit_param.to_string(),
+                location: None,
             }),
             field: name,
         },

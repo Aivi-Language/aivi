@@ -27,6 +27,15 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         )
     }
 
+    fn callable_location(expr: &RustIrExpr) -> Option<&crate::SourceOrigin> {
+        match expr {
+            RustIrExpr::Local { location, .. }
+            | RustIrExpr::Global { location, .. }
+            | RustIrExpr::Builtin { location, .. } => location.as_ref(),
+            _ => None,
+        }
+    }
+
     /// Lower a `RustIrExpr` to a typed Cranelift value.
     pub(crate) fn lower_expr(
         &mut self,
@@ -71,9 +80,15 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             }
 
             // ----- Variables -----
-            RustIrExpr::Local { name, .. } => self.lower_local(builder, name),
-            RustIrExpr::Global { name, .. } => self.lower_global(builder, name),
-            RustIrExpr::Builtin { builtin, .. } => self.lower_global(builder, builtin),
+            RustIrExpr::Local { name, location, .. } => {
+                self.lower_local(builder, name, location.as_ref())
+            }
+            RustIrExpr::Global { name, location, .. } => {
+                self.lower_global(builder, name, location.as_ref())
+            }
+            RustIrExpr::Builtin {
+                builtin, location, ..
+            } => self.lower_global(builder, builtin, location.as_ref()),
             RustIrExpr::ConstructorValue { name, .. } => {
                 self.lower_constructor_value(builder, name)
             }
@@ -196,19 +211,32 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     // Variable lowering
     // -----------------------------------------------------------------------
 
-    fn lower_local(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+    fn lower_local(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        name: &str,
+        location: Option<&crate::SourceOrigin>,
+    ) -> TypedValue {
         if let Some(tv) = self.locals.get(name) {
             tv.clone()
         } else {
             // Fallback: treat as global lookup
-            self.lower_global(builder, name)
+            self.lower_global(builder, name, location)
         }
     }
 
-    fn lower_global(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+    fn lower_global(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        name: &str,
+        location: Option<&crate::SourceOrigin>,
+    ) -> TypedValue {
         // For bare (unqualified) names, prefer the qualified form
         // `module_name.name` to avoid cross-module name collisions
         // (e.g. `init` in aivi.ui.gtk4 vs aivi.path).
+        if let Some(loc) = location {
+            self.emit_set_location(builder, loc);
+        }
         let resolved = if !name.contains('.') && !self.module_name.is_empty() {
             let qualified = format!("{}.{}", self.module_name, name);
             qualified
@@ -245,7 +273,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 saved.push((&sub.path, Some(old_val)));
             } else {
                 // Regular mock: save old, install new.
-                let old_val = self.lower_global(builder, &sub.path);
+                let old_val = self.lower_global(builder, &sub.path, None);
                 saved.push((&sub.path, Some(old_val)));
                 if let Some(ref value_expr) = sub.value {
                     let mock_val = self.lower_expr(builder, value_expr);
@@ -317,13 +345,13 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let key = *id as usize;
         if let Some(cl) = self.compiled_lambdas.get(&key) {
             // Look up the pre-compiled function from globals
-            let mut result = self.lower_global(builder, cl.global_name);
+            let mut result = self.lower_global(builder, cl.global_name, None);
             // Partially apply captured values one by one via rt_apply
             for var_name in &cl.captured_vars {
                 let tv = if let Some(v) = self.locals.get(var_name) {
                     v.clone()
                 } else {
-                    self.lower_global(builder, var_name)
+                    self.lower_global(builder, var_name, None)
                 };
                 let func_ptr = self.ensure_boxed(builder, result);
                 let arg_ptr = self.ensure_boxed(builder, tv);
@@ -353,6 +381,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         func: &RustIrExpr,
         arg: &RustIrExpr,
     ) -> TypedValue {
+        let call_location = Self::callable_location(func).cloned();
         // Check for direct call: App(Global(name), arg) where name is a JIT function with arity 1
         if let RustIrExpr::Global { name, .. } = func {
             // Try qualified name first for bare names to resolve cross-module collisions
@@ -376,12 +405,21 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                         let arg_tvs = [arg_tv];
                         if let Some(spec_name) = self.find_matching_spec(&spec_names, &arg_tvs) {
                             if let Some(si) = self.jit_funcs.get(spec_name.as_str()).cloned() {
+                                if let Some(loc) = call_location.as_ref() {
+                                    self.emit_prepare_call_location(builder, loc);
+                                }
                                 return self.emit_direct_call_typed(builder, &si, &arg_tvs);
                             }
+                        }
+                        if let Some(loc) = call_location.as_ref() {
+                            self.emit_prepare_call_location(builder, loc);
                         }
                         return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                     }
                     let arg_tv = self.lower_expr(builder, arg);
+                    if let Some(loc) = call_location.as_ref() {
+                        self.emit_prepare_call_location(builder, loc);
+                    }
                     return self.emit_direct_call_typed(builder, &info, &[arg_tv]);
                 }
             }
@@ -389,6 +427,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
 
         let func_tv = self.lower_expr(builder, func);
         let arg_tv = self.lower_expr(builder, arg);
+        if let Some(loc) = call_location.as_ref() {
+            self.emit_set_location(builder, loc);
+        }
         let func_val = self.ensure_boxed(builder, func_tv);
         let arg_val = self.ensure_boxed(builder, arg_tv);
         let call = builder
@@ -403,6 +444,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         func: &RustIrExpr,
         args: &[RustIrExpr],
     ) -> TypedValue {
+        let call_location = Self::callable_location(func).cloned();
         // Check for direct call: Call(Global(name), args) where name is a
         // JIT function with matching arity.
         if let RustIrExpr::Global { name, .. } = func {
@@ -428,14 +470,23 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                             args.iter().map(|a| self.lower_expr(builder, a)).collect();
                         if let Some(spec_name) = self.find_matching_spec(&spec_names, &arg_tvs) {
                             if let Some(si) = self.jit_funcs.get(spec_name.as_str()).cloned() {
+                                if let Some(loc) = call_location.as_ref() {
+                                    self.emit_prepare_call_location(builder, loc);
+                                }
                                 return self.emit_direct_call_typed(builder, &si, &arg_tvs);
                             }
                         }
                         // No matching specialization; use the args we already lowered
+                        if let Some(loc) = call_location.as_ref() {
+                            self.emit_prepare_call_location(builder, loc);
+                        }
                         return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                     }
                     let arg_tvs: Vec<TypedValue> =
                         args.iter().map(|a| self.lower_expr(builder, a)).collect();
+                    if let Some(loc) = call_location.as_ref() {
+                        self.emit_prepare_call_location(builder, loc);
+                    }
                     return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                 }
             }
@@ -445,6 +496,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let mut result = self.lower_expr(builder, func);
         for arg in args {
             let arg_tv = self.lower_expr(builder, arg);
+            if let Some(loc) = call_location.as_ref() {
+                self.emit_set_location(builder, loc);
+            }
             let func_val = self.ensure_boxed(builder, result);
             let arg_val = self.ensure_boxed(builder, arg_tv);
             let call = builder

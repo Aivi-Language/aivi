@@ -357,6 +357,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 name: format!("__jit|cranelift|{}", def_name),
                 arity: 0,
                 func: Arc::new(move |_args: Vec<Value>, runtime: &mut Runtime| {
+                    runtime.jit_pending_call_loc = runtime.jit_current_loc.clone();
                     let ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };
                     let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
                     let call_args = [ctx_ptr as i64];
@@ -384,6 +385,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 // Clear any stale pending error before entering JIT code
                 runtime.clear_pending_runtime_error();
                 runtime.clear_match_failure();
+                runtime.jit_pending_call_loc = runtime.jit_current_loc.clone();
 
                 // Construct JitRuntimeCtx and call the compiled function
                 let ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };

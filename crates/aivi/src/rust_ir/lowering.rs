@@ -48,14 +48,20 @@ pub enum RustIrExpr {
     Local {
         id: u32,
         name: String,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Global {
         id: u32,
         name: String,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Builtin {
         id: u32,
         builtin: BuiltinName,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     ConstructorValue {
         id: u32,
@@ -330,13 +336,17 @@ fn lower_expr(
     locals: &mut Vec<String>,
 ) -> Result<RustIrExpr, AiviError> {
     Ok(match expr {
-        HirExpr::Var { id, name } => {
+        HirExpr::Var { id, name, location } => {
             if locals.iter().rev().any(|local| local == &name) {
-                RustIrExpr::Local { id, name }
+                RustIrExpr::Local { id, name, location }
             } else if let Some(builtin) = resolve_builtin(&name) {
-                RustIrExpr::Builtin { id, builtin }
+                RustIrExpr::Builtin {
+                    id,
+                    builtin,
+                    location,
+                }
             } else if globals.iter().any(|g| g == &name) {
-                RustIrExpr::Global { id, name }
+                RustIrExpr::Global { id, name, location }
             } else if is_constructor_name(&name) {
                 // Qualified constructor references (e.g. `aivi.database.IntType`) are allowed;
                 // constructors are matched by their unqualified name at runtime.
@@ -344,7 +354,7 @@ fn lower_expr(
                 RustIrExpr::ConstructorValue { id, name: ctor }
             } else {
                 // Not in locals or this module's defs, but if it passed typechecking, it's likely an imported global.
-                RustIrExpr::Global { id, name }
+                RustIrExpr::Global { id, name, location }
             }
         }
         HirExpr::LitNumber { id, text } => RustIrExpr::LitNumber { id, text },
@@ -574,7 +584,7 @@ fn lower_path_segment(
         HirPathSegment::Index(expr) => {
             // A bare unbound name `items[active]` is shorthand for patching elements where
             // `item.active == True`.
-            if let HirExpr::Var { id, name } = &expr {
+            if let HirExpr::Var { id, name, location } = &expr {
                 let reserved = is_reserved_selector_name(name);
                 let is_bound = locals.iter().rev().any(|local| local == name)
                     || (!reserved && globals.iter().any(|g| g == name))
@@ -586,6 +596,7 @@ fn lower_path_segment(
                     HirExpr::Var {
                         id: *id,
                         name: name.clone(),
+                        location: location.clone(),
                     },
                     globals,
                     locals,

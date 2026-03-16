@@ -533,6 +533,37 @@ mod tests {
         assert!(formatted.contains("  x <- foo"));
     }
 
+    #[test]
+    fn format_indents_multiclause_arms_after_lambda_arrow() {
+        let input = "\
+module demo
+
+move : Pixel -> Direction -> Pixel
+move = (x, y) =>
+| Up => (x, y - 1)
+| Down => (x, y + 1)
+| Left => (x - 1, y)
+| Right => (x + 1, y)
+";
+        let expected = "\
+module demo
+
+move : Pixel -> Direction -> Pixel
+move = (x, y) =>
+  | Up    => (x, y - 1)
+  | Down  => (x, y + 1)
+  | Left  => (x - 1, y)
+  | Right => (x + 1, y)
+";
+        let formatted = format_text(input);
+        assert_eq!(formatted, expected);
+        assert_eq!(
+            format_text(&formatted),
+            expected,
+            "formatting should be idempotent"
+        );
+    }
+
     /// Regression test: `;` between non-operator tokens must not insert a phantom
     /// space that the second pass then removes (non-idempotency).
     #[test]

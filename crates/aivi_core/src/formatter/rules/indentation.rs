@@ -899,7 +899,7 @@
         let should_start_pipe_block = starts_with_pipe
             && matches!(
                 prev_non_blank_last_token.as_deref(),
-                Some("=") | Some("?") | Some("match") | Some("|>") | Some("->>")
+                Some("=") | Some("=>") | Some("?") | Some("match") | Some("|>") | Some("->>")
             );
         let should_start_pipeop_block = starts_with_pipeop
             && (pipeop_seed_match

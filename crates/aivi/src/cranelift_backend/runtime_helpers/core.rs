@@ -14,7 +14,7 @@ const RT_BOLD: &str = "\x1b[1m";
 
 /// Print a formatted runtime warning to stderr.
 fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
-    let (fn_ctx, loc_ctx, suppress) = unsafe {
+    let (warning_line, hint_line, suppress, capture_ctx) = unsafe {
         let runtime = (*ctx).runtime_mut();
         runtime.jit_rt_warning_count += 1;
         let suppress = runtime.jit_binary_op_dispatching || runtime.jit_suppress_warnings;
@@ -28,14 +28,22 @@ fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
             .as_ref()
             .map(|origin| format!(" {RT_GRAY}at {}{RT_RESET}", origin.start_position_text()))
             .unwrap_or_default();
-        (fn_part, loc_part, suppress)
+        let warning_line = format!(
+            "{RT_YELLOW}warning[RT]{RT_RESET}{fn_part}{loc_part} {RT_BOLD}{category}{RT_RESET}: {message}"
+        );
+        let hint_line = (!hint.is_empty()).then(|| format!("  {RT_CYAN}hint{RT_RESET}: {hint}"));
+        (warning_line, hint_line, suppress, runtime.ctx.clone())
     };
     if suppress {
         return;
     }
-    eprintln!("{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx}{loc_ctx} {RT_BOLD}{category}{RT_RESET}: {message}");
-    if !hint.is_empty() {
-        eprintln!("  {RT_CYAN}hint{RT_RESET}: {hint}");
+    if !capture_ctx.capture_stderr(&warning_line, true) {
+        eprintln!("{warning_line}");
+    }
+    if let Some(hint_line) = hint_line {
+        if !capture_ctx.capture_stderr(&hint_line, true) {
+            eprintln!("{hint_line}");
+        }
     }
 }
 
@@ -44,7 +52,9 @@ fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
 unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
     let runtime = (*ctx).runtime_mut();
     if runtime.jit_pending_error.is_none() {
-        runtime.jit_pending_snapshot = Some(runtime.capture_runtime_snapshot());
+        if runtime.jit_pending_snapshot.is_none() {
+            runtime.jit_pending_snapshot = Some(runtime.capture_runtime_snapshot());
+        }
         runtime.jit_pending_error = Some(e);
     }
 }
@@ -171,12 +181,13 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
         return;
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
+    let inherited_origin = runtime.jit_pending_call_loc.take();
     runtime.jit_current_fn = Some(name.clone().into_boxed_str());
-    runtime.jit_current_loc = None;
+    runtime.jit_current_loc = inherited_origin.clone();
     runtime.jit_frame_stack.push(RuntimeFrame {
         kind: RuntimeFrameKind::Function,
         name: name.clone(),
-        origin: None,
+        origin: inherited_origin,
     });
     FN_HISTORY.with(|h| {
         let mut h = h.borrow_mut();
@@ -241,13 +252,45 @@ pub extern "C" fn rt_set_location(
     }
 }
 
+#[no_mangle]
+pub extern "C" fn rt_prepare_call_location(
+    ctx: *mut JitRuntimeCtx,
+    ptr: *const u8,
+    len: usize,
+    start_line: i64,
+    start_col: i64,
+    end_line: i64,
+    end_col: i64,
+    kind: i64,
+) {
+    if ctx.is_null() {
+        return;
+    }
+    let Some(path) = decode_utf8_owned(ctx, ptr, len, "rt_prepare_call_location") else {
+        return;
+    };
+    let span = Span {
+        start: crate::diagnostics::Position {
+            line: start_line.max(1) as usize,
+            column: start_col.max(1) as usize,
+        },
+        end: crate::diagnostics::Position {
+            line: end_line.max(1) as usize,
+            column: end_col.max(1) as usize,
+        },
+    };
+    let origin = SourceOrigin::with_kind(path, span, SourceKind::from_i64(kind));
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.jit_pending_call_loc = Some(origin);
+}
+
 #[cfg(test)]
 mod core_tests {
     use crate::cranelift_backend::abi::JitRuntimeCtx;
     use crate::runtime::Runtime;
     use crate::{Position, SourceOrigin, Span};
 
-    use super::{rt_enter_fn, rt_leave_fn, rt_set_location};
+    use super::{rt_enter_fn, rt_leave_fn, rt_prepare_call_location, rt_set_location};
 
     fn test_runtime() -> Runtime {
         crate::runtime::build_runtime_base()
@@ -273,6 +316,44 @@ mod core_tests {
         assert_eq!(runtime.jit_current_fn.as_deref(), Some("test.fn"));
         assert!(runtime.jit_current_loc.is_none());
         assert_eq!(runtime.jit_frame_stack.len(), 1);
+    }
+
+    #[test]
+    fn pending_call_location_is_consumed_on_enter_fn() {
+        let mut runtime = test_runtime();
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+
+        rt_prepare_call_location(
+            &mut ctx,
+            b"src/main.aivi".as_ptr(),
+            "src/main.aivi".len(),
+            12,
+            4,
+            12,
+            18,
+            0,
+        );
+        rt_enter_fn(&mut ctx, b"test.fn".as_ptr(), "test.fn".len());
+
+        assert_eq!(runtime.jit_current_fn.as_deref(), Some("test.fn"));
+        assert_eq!(
+            runtime
+                .jit_current_loc
+                .as_ref()
+                .expect("current location")
+                .start_position_text(),
+            "src/main.aivi:12:4"
+        );
+        assert_eq!(
+            runtime
+                .jit_frame_stack
+                .last()
+                .and_then(|frame| frame.origin.clone())
+                .expect("frame origin")
+                .start_position_text(),
+            "src/main.aivi:12:4"
+        );
+        assert!(runtime.jit_pending_call_loc.is_none());
     }
 
     #[test]

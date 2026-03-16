@@ -16,8 +16,7 @@ mod bridge {
     use crate::runtime::environment::RuntimeContext;
     use crate::runtime::values::{ChannelInner, ChannelRecv};
     use crate::runtime::{
-        CancelToken, EffectValue, ReactiveCellKind, Runtime, RuntimeError, Value,
-        format_runtime_error, format_value,
+        CancelToken, EffectValue, ReactiveCellKind, Runtime, RuntimeError, Value, format_value,
     };
 
     fn effect<F>(f: F) -> Value
@@ -295,7 +294,12 @@ mod bridge {
             let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
             runtime
                 .reactive_flush_deferred()
-                .map_err(|err| aivi_gtk4::Gtk4Error::new(format_runtime_error(err)))
+                .map_err(|err| {
+                    aivi_gtk4::Gtk4Error::new(aivi_driver::render_runtime_report(
+                        &runtime.runtime_report(err),
+                        false,
+                    ))
+                })
         });
         aivi_gtk4::set_main_loop_tick_handler(Some(handler));
     }
@@ -895,7 +899,9 @@ mod bridge {
             }
             Ok(Value::Unit)
         });
-        let token = runtime.ctx.register_gtk_runtime_handler(handler);
+        let token = runtime
+            .ctx
+            .register_gtk_runtime_handler(handler, Some(runtime.capture_runtime_snapshot()));
         let _ = token_holder.set(token.clone());
         aivi_gtk4::signal_bind_cleanup_root(&token, root_id).map_err(gtk4_err_to_runtime)?;
         aivi_gtk4::dialog_root_on_closed(root_id, &token).map_err(gtk4_err_to_runtime)?;
@@ -1050,12 +1056,11 @@ mod bridge {
         }
     }
 
-    pub(super) fn execute_runtime_handler(
-        ctx: Arc<RuntimeContext>,
+    fn run_runtime_handler(
+        runtime: &mut Runtime,
         handler: Value,
         event: aivi_gtk4::SignalEvent,
     ) -> Result<(), RuntimeError> {
-        let mut runtime = Runtime::new(ctx, CancelToken::root());
         if let Some(run_effect) = event_handle_run_effect(&handler) {
             runtime.run_effect_value(run_effect)?;
             if let Some(err) = runtime.jit_pending_error.take() {
@@ -1081,6 +1086,54 @@ mod bridge {
         Ok(())
     }
 
+    fn seed_runtime_snapshot(
+        runtime: &mut Runtime,
+        snapshot: &crate::runtime::RuntimeSnapshot,
+    ) {
+        runtime.jit_frame_stack = snapshot.frames.clone();
+        runtime.jit_current_fn = runtime
+            .jit_frame_stack
+            .last()
+            .map(|frame| frame.name.clone().into_boxed_str());
+        runtime.jit_current_loc = snapshot
+            .origin
+            .clone()
+            .or_else(|| runtime.jit_frame_stack.last().and_then(|frame| frame.origin.clone()));
+    }
+
+    #[cfg(test)]
+    pub(super) fn execute_runtime_handler(
+        ctx: Arc<RuntimeContext>,
+        handler: Value,
+        event: aivi_gtk4::SignalEvent,
+    ) -> Result<(), RuntimeError> {
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        run_runtime_handler(&mut runtime, handler, event)
+    }
+
+    #[cfg(test)]
+    pub(super) fn execute_runtime_handler_report(
+        ctx: Arc<RuntimeContext>,
+        handler: Value,
+        event: aivi_gtk4::SignalEvent,
+    ) -> Result<(), Box<aivi_driver::RuntimeReport>> {
+        execute_runtime_handler_report_with_snapshot(ctx, handler, event, None)
+    }
+
+    pub(super) fn execute_runtime_handler_report_with_snapshot(
+        ctx: Arc<RuntimeContext>,
+        handler: Value,
+        event: aivi_gtk4::SignalEvent,
+        snapshot: Option<crate::runtime::RuntimeSnapshot>,
+    ) -> Result<(), Box<aivi_driver::RuntimeReport>> {
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        if let Some(snapshot) = snapshot.as_ref() {
+            seed_runtime_snapshot(&mut runtime, snapshot);
+        }
+        run_runtime_handler(&mut runtime, handler, event)
+            .map_err(|err| Box::new(runtime.runtime_report(err)))
+    }
+
     fn ensure_runtime_handler_dispatcher(ctx: Arc<RuntimeContext>) {
         if !ctx.mark_gtk_runtime_dispatcher_started() {
             return;
@@ -1104,10 +1157,15 @@ mod bridge {
                     let Some(handler) = ctx.resolve_gtk_runtime_handler(&event.handler) else {
                         continue;
                     };
-                    if let Err(err) = execute_runtime_handler(ctx.clone(), handler, event) {
+                    if let Err(report) = execute_runtime_handler_report_with_snapshot(
+                        ctx.clone(),
+                        handler.handler,
+                        event,
+                        handler.snapshot,
+                    ) {
                         eprintln!(
                             "AIVI GTK runtime handler error:\n{}",
-                            format_runtime_error(err)
+                            aivi_driver::render_runtime_report(report.as_ref(), false)
                         );
                     }
                 }
@@ -1153,7 +1211,10 @@ mod bridge {
                         wrap_runtime_handler(handler, *arg_mode)
                     };
                     ensure_runtime_handler_dispatcher(runtime.ctx.clone());
-                    runtime.ctx.register_gtk_runtime_handler(handler)
+                    runtime.ctx.register_gtk_runtime_handler(
+                        handler,
+                        Some(runtime.capture_runtime_snapshot()),
+                    )
                 };
                 Ok((format!("signal:{name}"), handler))
             }
@@ -2618,9 +2679,10 @@ mod tests {
     use super::super::concurrency::build_channel_record;
     use super::super::gtk4::{GtkCallbackArgMode, ResolvedGtkAttr, ResolvedGtkNode};
     use super::bridge::{
-        execute_runtime_handler, make_signal_event_value, materialize_app_window_with_bindings,
-        materialize_with_bindings, ui_debug_inspect_signal_json, ui_debug_list_signals_json,
-        wrap_runtime_handler,
+        execute_runtime_handler, execute_runtime_handler_report,
+        execute_runtime_handler_report_with_snapshot, make_signal_event_value,
+        materialize_app_window_with_bindings, materialize_with_bindings,
+        ui_debug_inspect_signal_json, ui_debug_list_signals_json, wrap_runtime_handler,
     };
     use crate::runtime::builtins::builtin;
     use crate::runtime::constructors::core_constructor_ordinals;
@@ -2629,6 +2691,8 @@ mod tests {
     use crate::runtime::{
         CancelToken, EffectValue, Runtime, RuntimeError, Value, format_runtime_error, format_value,
     };
+    use crate::{Position, SourceOrigin, Span};
+    use aivi_driver::{RuntimeFrame, RuntimeFrameKind};
 
     fn test_ctx() -> Arc<RuntimeContext> {
         Arc::new(RuntimeContext::new_with_constructor_ordinals(
@@ -3027,6 +3091,103 @@ mod tests {
             Value::Int(value) => assert_eq!(value, 7),
             other => panic!("expected Int(7), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn runtime_handler_report_preserves_match_failure_location() {
+        let ctx = test_ctx();
+        let handler = builtin("test.failingGtkRuntimeHandler", 1, move |mut args, runtime| {
+            let _event = args.remove(0);
+            let origin = SourceOrigin::new(
+                "src/mailfox/ui/windows/account_setup.aivi",
+                Span {
+                    start: Position {
+                        line: 87,
+                        column: 21,
+                    },
+                    end: Position {
+                        line: 87,
+                        column: 34,
+                    },
+                },
+            );
+            runtime.jit_current_fn = Some("mailfox.ui.windows.account_setup.onSubmit".into());
+            runtime.jit_current_loc = Some(origin.clone());
+            runtime.jit_frame_stack.push(RuntimeFrame {
+                kind: RuntimeFrameKind::Function,
+                name: "mailfox.ui.windows.account_setup.onSubmit".to_string(),
+                origin: Some(origin),
+            });
+            runtime.capture_match_failure();
+            Err(RuntimeError::NonExhaustiveMatch { scrutinee: None })
+        });
+
+        let report = execute_runtime_handler_report(ctx, handler, clicked_event())
+            .expect_err("runtime handler should report match failure");
+        let rendered = aivi_driver::render_runtime_report(&report, false);
+
+        assert_eq!(report.code, "RT1208");
+        assert_eq!(
+            report.primary.as_ref().map(|origin| origin.path.as_str()),
+            Some("src/mailfox/ui/windows/account_setup.aivi")
+        );
+        assert!(rendered.contains("src/mailfox/ui/windows/account_setup.aivi:87:21"));
+        assert!(rendered.contains("0: mailfox.ui.windows.account_setup.onSubmit"));
+    }
+
+    #[test]
+    fn runtime_handler_report_falls_back_to_registration_snapshot() {
+        let ctx = test_ctx();
+        let mut registration_runtime = Runtime::new(ctx.clone(), CancelToken::root());
+        let origin = SourceOrigin::new(
+            "src/mailfox/ui/windows/account_setup.aivi",
+            Span {
+                start: Position {
+                    line: 91,
+                    column: 17,
+                },
+                end: Position {
+                    line: 91,
+                    column: 29,
+                },
+            },
+        );
+        registration_runtime.jit_current_fn =
+            Some("mailfox.ui.windows.account_setup.onSubmit".into());
+        registration_runtime.jit_current_loc = Some(origin.clone());
+        registration_runtime.jit_frame_stack.push(RuntimeFrame {
+            kind: RuntimeFrameKind::Function,
+            name: "mailfox.ui.windows.account_setup.onSubmit".to_string(),
+            origin: Some(origin.clone()),
+        });
+
+        let handler = builtin("test.fallbackGtkRuntimeHandler", 1, |_args, _runtime| {
+            Err(RuntimeError::NonExhaustiveMatch { scrutinee: None })
+        });
+        let token = registration_runtime.ctx.register_gtk_runtime_handler(
+            handler,
+            Some(registration_runtime.capture_runtime_snapshot()),
+        );
+        let stored = ctx
+            .resolve_gtk_runtime_handler(&token)
+            .expect("stored runtime handler");
+
+        let report = execute_runtime_handler_report_with_snapshot(
+            ctx,
+            stored.handler,
+            clicked_event(),
+            stored.snapshot,
+        )
+        .expect_err("runtime handler should report match failure");
+        let rendered = aivi_driver::render_runtime_report(&report, false);
+
+        assert_eq!(report.code, "RT1208");
+        assert_eq!(
+            report.primary.as_ref().map(|origin| origin.path.as_str()),
+            Some("src/mailfox/ui/windows/account_setup.aivi")
+        );
+        assert!(rendered.contains("src/mailfox/ui/windows/account_setup.aivi:91:17"));
+        assert!(rendered.contains("0: mailfox.ui.windows.account_setup.onSubmit"));
     }
 
     #[test]

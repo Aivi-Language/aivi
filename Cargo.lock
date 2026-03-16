@@ -51,6 +51,7 @@ dependencies = [
  "aivi_gtk4",
  "aivi_http_server",
  "aivi_mcp",
+ "base64",
  "bcrypt",
  "chrono",
  "chrono-tz",

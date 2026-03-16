@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use parking_lot::{Mutex, RwLock};
 
-use super::{values::Value, ReactiveGraphState};
+use super::{values::Value, ReactiveGraphState, RuntimeSnapshot};
 
 #[derive(Clone)]
 pub(crate) struct Env {
@@ -37,6 +37,11 @@ impl Env {
 
     pub(crate) fn set(&self, name: String, value: Value) {
         self.inner.values.write().insert(name, value);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn remove(&self, name: &str) {
+        self.inner.values.write().remove(name);
     }
 
     #[cfg(test)]
@@ -81,7 +86,13 @@ struct GtkBindingStore {
 struct GtkRuntimeHandlerStore {
     next_handle: usize,
     dispatcher_started: bool,
-    handlers: HashMap<String, Value>,
+    handlers: HashMap<String, GtkRuntimeHandler>,
+}
+
+#[derive(Clone)]
+pub(crate) struct GtkRuntimeHandler {
+    pub(crate) handler: Value,
+    pub(crate) snapshot: Option<RuntimeSnapshot>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -191,16 +202,20 @@ impl RuntimeContext {
             .unwrap_or_default()
     }
 
-    pub(crate) fn register_gtk_runtime_handler(&self, handler: Value) -> String {
+    pub(crate) fn register_gtk_runtime_handler(
+        &self,
+        handler: Value,
+        snapshot: Option<RuntimeSnapshot>,
+    ) -> String {
         let mut store = self.gtk_runtime_handler_store.lock();
         let handle = store.next_handle;
         store.next_handle = store.next_handle.saturating_add(1);
         let token = format!("__aivi_runtime_handler_{handle}");
-        store.handlers.insert(token.clone(), handler);
+        store.handlers.insert(token.clone(), GtkRuntimeHandler { handler, snapshot });
         token
     }
 
-    pub(crate) fn resolve_gtk_runtime_handler(&self, token: &str) -> Option<Value> {
+    pub(crate) fn resolve_gtk_runtime_handler(&self, token: &str) -> Option<GtkRuntimeHandler> {
         self.gtk_runtime_handler_store.lock().handlers.get(token).cloned()
     }
 
