@@ -767,20 +767,16 @@ pub(crate) fn register_builtins(env: &Env) {
         }),
     );
 
-    // __makeResource : (Unit -> Effect a) -> (Unit -> Effect Unit) -> Resource a
-    // Creates a Resource value from an acquire closure and a cleanup closure.
+    // __makeResource : (Unit -> Effect (a, Unit -> Effect Unit)) -> Resource a
+    // Creates a Resource value from an acquire closure that returns the yielded
+    // value together with a cleanup closure built inside the acquire scope.
     env.set(
         "__makeResource".to_string(),
-        builtin("__makeResource", 2, |mut args, _runtime| {
-            let cleanup_fn = args.pop().unwrap();
+        builtin("__makeResource", 1, |mut args, _runtime| {
             let acquire_fn = args.pop().unwrap();
             let resource = crate::runtime::values::ResourceValue {
                 acquire: Arc::new(move |runtime: &mut crate::runtime::Runtime| {
                     let result = runtime.apply(acquire_fn.clone(), Value::Unit)?;
-                    runtime.run_effect_value(result)
-                }),
-                cleanup: Arc::new(move |runtime: &mut crate::runtime::Runtime| {
-                    let result = runtime.apply(cleanup_fn.clone(), Value::Unit)?;
                     runtime.run_effect_value(result)
                 }),
             };

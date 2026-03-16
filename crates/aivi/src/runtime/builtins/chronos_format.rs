@@ -112,13 +112,14 @@ pub(super) fn zoned_date_time_from_value_ref(
 pub(super) fn maybe_iso_text(value: &Value) -> Option<String> {
     maybe_date_from_value(value)
         .map(format_date_iso)
-        .or_else(|| maybe_zoned_date_time_from_value(value).map(|zdt| format_zoned_date_time_iso(&zdt)))
+        .or_else(|| {
+            maybe_zoned_date_time_from_value(value).map(|zdt| format_zoned_date_time_iso(&zdt))
+        })
 }
 
 pub(super) fn format_date_iso(date: NaiveDate) -> String {
-    format_date_pattern(date, ISO_DATE_PATTERN, "calendar.format").unwrap_or_else(|_| {
-        unreachable!("built-in ISO date pattern must stay valid")
-    })
+    format_date_pattern(date, ISO_DATE_PATTERN, "calendar.format")
+        .unwrap_or_else(|_| unreachable!("built-in ISO date pattern must stay valid"))
 }
 
 pub(super) fn format_zoned_date_time_iso(value: &ZonedDateTimeParts) -> String {
@@ -250,7 +251,11 @@ enum FormatInput<'a> {
     ZonedDateTime(&'a ZonedDateTimeParts),
 }
 
-fn format_pattern(input: FormatInput<'_>, pattern: &str, ctx: &str) -> Result<String, RuntimeError> {
+fn format_pattern(
+    input: FormatInput<'_>,
+    pattern: &str,
+    ctx: &str,
+) -> Result<String, RuntimeError> {
     let mut chars = pattern.chars().peekable();
     let mut out = String::new();
 
@@ -313,17 +318,60 @@ fn push_token(
 ) -> Result<(), RuntimeError> {
     match token {
         'y' => out.push_str(&format_year(value_date(input).year(), count)),
-        'M' => out.push_str(&format_numeric_token(value_date(input).month(), count, token, pattern, ctx)?),
-        'd' => out.push_str(&format_numeric_token(value_date(input).day(), count, token, pattern, ctx)?),
-        'H' => out.push_str(&format_numeric_token(value_time(input, token, pattern, ctx)?.hour(), count, token, pattern, ctx)?),
-        'm' => out.push_str(&format_numeric_token(value_time(input, token, pattern, ctx)?.minute(), count, token, pattern, ctx)?),
-        's' => out.push_str(&format_numeric_token(value_time(input, token, pattern, ctx)?.second(), count, token, pattern, ctx)?),
-        'X' => out.push_str(&format_offset(offset_millis(input, token, pattern, ctx)?, count, pattern, ctx)?),
-        'V' => out.push_str(&format_zone(zone_id(input, token, pattern, ctx)?, count, pattern, ctx)?),
+        'M' => out.push_str(&format_numeric_token(
+            value_date(input).month(),
+            count,
+            token,
+            pattern,
+            ctx,
+        )?),
+        'd' => out.push_str(&format_numeric_token(
+            value_date(input).day(),
+            count,
+            token,
+            pattern,
+            ctx,
+        )?),
+        'H' => out.push_str(&format_numeric_token(
+            value_time(input, token, pattern, ctx)?.hour(),
+            count,
+            token,
+            pattern,
+            ctx,
+        )?),
+        'm' => out.push_str(&format_numeric_token(
+            value_time(input, token, pattern, ctx)?.minute(),
+            count,
+            token,
+            pattern,
+            ctx,
+        )?),
+        's' => out.push_str(&format_numeric_token(
+            value_time(input, token, pattern, ctx)?.second(),
+            count,
+            token,
+            pattern,
+            ctx,
+        )?),
+        'X' => out.push_str(&format_offset(
+            offset_millis(input, token, pattern, ctx)?,
+            count,
+            pattern,
+            ctx,
+        )?),
+        'V' => out.push_str(&format_zone(
+            zone_id(input, token, pattern, ctx)?,
+            count,
+            pattern,
+            ctx,
+        )?),
         _ => {
             return Err(RuntimeError::InvalidArgument {
                 context: ctx.to_string(),
-                reason: format!("unsupported format token '{}' in pattern '{pattern}'", token.to_string().repeat(count)),
+                reason: format!(
+                    "unsupported format token '{}' in pattern '{pattern}'",
+                    token.to_string().repeat(count)
+                ),
             });
         }
     }
@@ -418,7 +466,12 @@ fn format_numeric_token(
     }
 }
 
-fn format_offset(offset_millis: i64, count: usize, pattern: &str, ctx: &str) -> Result<String, RuntimeError> {
+fn format_offset(
+    offset_millis: i64,
+    count: usize,
+    pattern: &str,
+    ctx: &str,
+) -> Result<String, RuntimeError> {
     if offset_millis % 1000 != 0 {
         return Err(RuntimeError::InvalidArgument {
             context: ctx.to_string(),
@@ -459,17 +512,28 @@ fn format_offset(offset_millis: i64, count: usize, pattern: &str, ctx: &str) -> 
         3 => Ok(format!("{sign}{hours:02}:{minutes:02}")),
         _ => Err(RuntimeError::InvalidArgument {
             context: ctx.to_string(),
-            reason: format!("unsupported format token '{}' in pattern '{pattern}'", "X".repeat(count)),
+            reason: format!(
+                "unsupported format token '{}' in pattern '{pattern}'",
+                "X".repeat(count)
+            ),
         }),
     }
 }
 
-fn format_zone(zone_id: &str, count: usize, pattern: &str, ctx: &str) -> Result<String, RuntimeError> {
+fn format_zone(
+    zone_id: &str,
+    count: usize,
+    pattern: &str,
+    ctx: &str,
+) -> Result<String, RuntimeError> {
     match count {
         1 | 2 => Ok(zone_id.to_string()),
         _ => Err(RuntimeError::InvalidArgument {
             context: ctx.to_string(),
-            reason: format!("unsupported format token '{}' in pattern '{pattern}'", "V".repeat(count)),
+            reason: format!(
+                "unsupported format token '{}' in pattern '{pattern}'",
+                "V".repeat(count)
+            ),
         }),
     }
 }

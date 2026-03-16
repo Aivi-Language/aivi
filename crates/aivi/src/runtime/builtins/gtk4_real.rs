@@ -4,19 +4,19 @@ use crate::runtime::Value;
 mod bridge {
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
-    use std::sync::{Arc, Mutex, mpsc};
+    use std::sync::{mpsc, Arc, Mutex};
 
-    use serde_json::{Map as JsonMap, Value as JsonValue, json};
+    use serde_json::{json, Map as JsonMap, Value as JsonValue};
 
     use super::super::gtk4::{
-        GtkCallbackArgMode, ResolvedGtkAttr, ResolvedGtkNode, resolve_gtk_node,
-        resolve_reactive_attr_value,
+        resolve_gtk_node, resolve_reactive_attr_value, GtkCallbackArgMode, ResolvedGtkAttr,
+        ResolvedGtkNode,
     };
     use super::super::util::builtin;
     use crate::runtime::environment::RuntimeContext;
     use crate::runtime::values::{ChannelInner, ChannelRecv};
     use crate::runtime::{
-        CancelToken, EffectValue, ReactiveCellKind, Runtime, RuntimeError, Value, format_value,
+        format_value, CancelToken, EffectValue, ReactiveCellKind, Runtime, RuntimeError, Value,
     };
 
     fn effect<F>(f: F) -> Value
@@ -292,14 +292,12 @@ mod bridge {
     fn install_main_loop_tick_handler(ctx: Arc<RuntimeContext>) {
         let handler: Arc<aivi_gtk4::MainLoopTickHandler> = Arc::new(move || {
             let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
-            runtime
-                .reactive_flush_deferred()
-                .map_err(|err| {
-                    aivi_gtk4::Gtk4Error::new(aivi_driver::render_runtime_report(
-                        &runtime.runtime_report(err),
-                        false,
-                    ))
-                })
+            runtime.reactive_flush_deferred().map_err(|err| {
+                aivi_gtk4::Gtk4Error::new(aivi_driver::render_runtime_report(
+                    &runtime.runtime_report(err),
+                    false,
+                ))
+            })
         });
         aivi_gtk4::set_main_loop_tick_handler(Some(handler));
     }
@@ -1086,19 +1084,18 @@ mod bridge {
         Ok(())
     }
 
-    fn seed_runtime_snapshot(
-        runtime: &mut Runtime,
-        snapshot: &crate::runtime::RuntimeSnapshot,
-    ) {
+    fn seed_runtime_snapshot(runtime: &mut Runtime, snapshot: &crate::runtime::RuntimeSnapshot) {
         runtime.jit_frame_stack = snapshot.frames.clone();
         runtime.jit_current_fn = runtime
             .jit_frame_stack
             .last()
             .map(|frame| frame.name.clone().into_boxed_str());
-        runtime.jit_current_loc = snapshot
-            .origin
-            .clone()
-            .or_else(|| runtime.jit_frame_stack.last().and_then(|frame| frame.origin.clone()));
+        runtime.jit_current_loc = snapshot.origin.clone().or_else(|| {
+            runtime
+                .jit_frame_stack
+                .last()
+                .and_then(|frame| frame.origin.clone())
+        });
     }
 
     #[cfg(test)]
@@ -2425,20 +2422,18 @@ mod bridge {
                     let (value_sender, value_receiver) = mpsc::sync_channel(512);
                     std::thread::Builder::new()
                         .name("gtk4-signal-bridge".to_string())
-                        .spawn(move || {
-                            loop {
-                                match receiver.recv() {
-                                    Ok(event) => {
-                                        let value = make_signal_event_value(event);
-                                        if value_sender.send(value).is_err() {
-                                            eprintln!("[bridge] value_sender.send FAILED, exiting");
-                                            break;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("[bridge] receiver.recv error: {:?}, exiting", e);
+                        .spawn(move || loop {
+                            match receiver.recv() {
+                                Ok(event) => {
+                                    let value = make_signal_event_value(event);
+                                    if value_sender.send(value).is_err() {
+                                        eprintln!("[bridge] value_sender.send FAILED, exiting");
                                         break;
                                     }
+                                }
+                                Err(e) => {
+                                    eprintln!("[bridge] receiver.recv error: {:?}, exiting", e);
+                                    break;
                                 }
                             }
                         })
@@ -2689,7 +2684,7 @@ mod tests {
     use crate::runtime::environment::{Env, RuntimeContext};
     use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend, ChannelSender};
     use crate::runtime::{
-        CancelToken, EffectValue, Runtime, RuntimeError, Value, format_runtime_error, format_value,
+        format_runtime_error, format_value, CancelToken, EffectValue, Runtime, RuntimeError, Value,
     };
     use crate::{Position, SourceOrigin, Span};
     use aivi_driver::{RuntimeFrame, RuntimeFrameKind};
@@ -3096,31 +3091,35 @@ mod tests {
     #[test]
     fn runtime_handler_report_preserves_match_failure_location() {
         let ctx = test_ctx();
-        let handler = builtin("test.failingGtkRuntimeHandler", 1, move |mut args, runtime| {
-            let _event = args.remove(0);
-            let origin = SourceOrigin::new(
-                "src/mailfox/ui/windows/account_setup.aivi",
-                Span {
-                    start: Position {
-                        line: 87,
-                        column: 21,
+        let handler = builtin(
+            "test.failingGtkRuntimeHandler",
+            1,
+            move |mut args, runtime| {
+                let _event = args.remove(0);
+                let origin = SourceOrigin::new(
+                    "src/mailfox/ui/windows/account_setup.aivi",
+                    Span {
+                        start: Position {
+                            line: 87,
+                            column: 21,
+                        },
+                        end: Position {
+                            line: 87,
+                            column: 34,
+                        },
                     },
-                    end: Position {
-                        line: 87,
-                        column: 34,
-                    },
-                },
-            );
-            runtime.jit_current_fn = Some("mailfox.ui.windows.account_setup.onSubmit".into());
-            runtime.jit_current_loc = Some(origin.clone());
-            runtime.jit_frame_stack.push(RuntimeFrame {
-                kind: RuntimeFrameKind::Function,
-                name: "mailfox.ui.windows.account_setup.onSubmit".to_string(),
-                origin: Some(origin),
-            });
-            runtime.capture_match_failure();
-            Err(RuntimeError::NonExhaustiveMatch { scrutinee: None })
-        });
+                );
+                runtime.jit_current_fn = Some("mailfox.ui.windows.account_setup.onSubmit".into());
+                runtime.jit_current_loc = Some(origin.clone());
+                runtime.jit_frame_stack.push(RuntimeFrame {
+                    kind: RuntimeFrameKind::Function,
+                    name: "mailfox.ui.windows.account_setup.onSubmit".to_string(),
+                    origin: Some(origin),
+                });
+                runtime.capture_match_failure();
+                Err(RuntimeError::NonExhaustiveMatch { scrutinee: None })
+            },
+        );
 
         let report = execute_runtime_handler_report(ctx, handler, clicked_event())
             .expect_err("runtime handler should report match failure");
@@ -3781,6 +3780,27 @@ mod tests {
             .join()
             .expect("mounted adw entry cursor handler thread should not panic");
 
+            assert!(
+                runtime.reactive_graph.lock().deferred_flush,
+                "typing {typed} into mounted AdwEntryRow should defer the GTK-bound update until the main thread tick"
+            );
+            assert_eq!(
+                aivi_gtk4::editable_text(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted pre-flush editable text {typed}: {}",
+                    err.message
+                )),
+                typed,
+                "expected typed text to remain in mounted AdwEntryRow before the GTK tick flush for {typed}"
+            );
+            assert_eq!(
+                aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted pre-flush cursor position {typed}: {}",
+                    err.message
+                )),
+                typed.chars().count() as i64,
+                "expected mounted AdwEntryRow cursor to remain at the end before the GTK tick flush for {typed}"
+            );
+
             let mut flushed = false;
             for _ in 0..60 {
                 super::pump_gtk_events();
@@ -3794,12 +3814,13 @@ mod tests {
                 flushed,
                 "expected mounted AdwEntryRow typing {typed} to flush"
             );
-            assert!(
-                aivi_gtk4::editable_has_focus(entry_id).unwrap_or_else(|err| panic!(
-                    "read mounted focus state after flush {typed}: {}",
+            assert_eq!(
+                aivi_gtk4::editable_text(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted flushed editable text {typed}: {}",
                     err.message
                 )),
-                "expected mounted AdwEntryRow delegate to keep focus after flushing {typed}"
+                typed,
+                "expected flushed mounted AdwEntryRow text to stay in sync for {typed}"
             );
 
             let mut cursor_settled = false;
@@ -3820,6 +3841,14 @@ mod tests {
             assert!(
                 cursor_settled,
                 "expected mounted AdwEntryRow cursor to settle at the end for {typed}"
+            );
+            assert_eq!(
+                aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                    "read mounted flushed cursor position {typed}: {}",
+                    err.message
+                )),
+                typed.chars().count() as i64,
+                "expected flushed mounted AdwEntryRow cursor to stay at the end for {typed}"
             );
         }
 
@@ -4227,10 +4256,8 @@ mod tests {
             .named_widgets
             .get("account-card")
             .expect("account card button should be named");
-        assert!(
-            aivi_gtk4::widget_has_css_class(button_id, "flat")
-                .unwrap_or_else(|err| panic!("read flat class: {}", err.message))
-        );
+        assert!(aivi_gtk4::widget_has_css_class(button_id, "flat")
+            .unwrap_or_else(|err| panic!("read flat class: {}", err.message)));
         assert!(
             aivi_gtk4::widget_has_css_class(button_id, "account-list-item")
                 .unwrap_or_else(|err| panic!("read account-list-item class: {}", err.message))
@@ -4302,19 +4329,15 @@ mod tests {
             .named_widgets
             .get("show-entry")
             .expect("show entry should be named");
-        assert!(
-            !aivi_gtk4::widget_get_bool_property(entry_id, "visible")
-                .unwrap_or_else(|err| panic!("read visible: {}", err.message))
-        );
+        assert!(!aivi_gtk4::widget_get_bool_property(entry_id, "visible")
+            .unwrap_or_else(|err| panic!("read visible: {}", err.message)));
 
         ok_or_panic(
             runtime.reactive_set_signal(visible, Value::Bool(true)),
             "set visible",
         );
-        assert!(
-            aivi_gtk4::widget_get_bool_property(entry_id, "visible")
-                .unwrap_or_else(|err| panic!("read visible: {}", err.message))
-        );
+        assert!(aivi_gtk4::widget_get_bool_property(entry_id, "visible")
+            .unwrap_or_else(|err| panic!("read visible: {}", err.message)));
     }
 
     #[test]
@@ -4468,10 +4491,8 @@ mod tests {
             aivi_gtk4::pump_events();
         }
 
-        assert!(
-            !aivi_gtk4::widget_get_bool_property(button_id, "active")
-                .unwrap_or_else(|err| panic!("read initial menu button active: {}", err.message))
-        );
+        assert!(!aivi_gtk4::widget_get_bool_property(button_id, "active")
+            .unwrap_or_else(|err| panic!("read initial menu button active: {}", err.message)));
 
         ok_or_panic(
             runtime.reactive_set_signal(active.clone(), Value::Bool(true)),
@@ -4480,10 +4501,8 @@ mod tests {
         for _ in 0..20 {
             aivi_gtk4::pump_events();
         }
-        assert!(
-            aivi_gtk4::widget_get_bool_property(button_id, "active")
-                .unwrap_or_else(|err| panic!("read opened menu button active: {}", err.message))
-        );
+        assert!(aivi_gtk4::widget_get_bool_property(button_id, "active")
+            .unwrap_or_else(|err| panic!("read opened menu button active: {}", err.message)));
 
         ok_or_panic(
             runtime.reactive_set_signal(active, Value::Bool(false)),
@@ -4492,10 +4511,8 @@ mod tests {
         for _ in 0..20 {
             aivi_gtk4::pump_events();
         }
-        assert!(
-            !aivi_gtk4::widget_get_bool_property(button_id, "active")
-                .unwrap_or_else(|err| panic!("read closed menu button active: {}", err.message))
-        );
+        assert!(!aivi_gtk4::widget_get_bool_property(button_id, "active")
+            .unwrap_or_else(|err| panic!("read closed menu button active: {}", err.message)));
     }
 
     #[test]
@@ -4969,10 +4986,8 @@ mod tests {
             runtime.reactive_set_signal(items, Value::List(Arc::new(vec![Value::Int(1)]))),
             "shrink keyed items",
         );
-        assert!(
-            !aivi_gtk4::widget_exists(removed_entry_id)
-                .unwrap_or_else(|err| panic!("check removed widget exists: {}", err.message))
-        );
+        assert!(!aivi_gtk4::widget_exists(removed_entry_id)
+            .unwrap_or_else(|err| panic!("check removed widget exists: {}", err.message)));
         assert!(
             ctx.take_gtk_binding_watchers(removed_entry_id).is_empty(),
             "removed widget watchers should be disposed"
@@ -5102,14 +5117,10 @@ mod tests {
             ctx.take_gtk_binding_watchers(entry_id).is_empty(),
             "dialog entry watchers should be disposed on close"
         );
-        assert!(
-            !aivi_gtk4::widget_exists(result.root_id)
-                .unwrap_or_else(|err| panic!("check cleanup dialog root: {}", err.message))
-        );
-        assert!(
-            !aivi_gtk4::widget_exists(entry_id)
-                .unwrap_or_else(|err| panic!("check cleanup dialog entry: {}", err.message))
-        );
+        assert!(!aivi_gtk4::widget_exists(result.root_id)
+            .unwrap_or_else(|err| panic!("check cleanup dialog root: {}", err.message)));
+        assert!(!aivi_gtk4::widget_exists(entry_id)
+            .unwrap_or_else(|err| panic!("check cleanup dialog entry: {}", err.message)));
     }
 
     #[test]
@@ -5219,14 +5230,10 @@ mod tests {
                 .as_u64(),
             Some(2)
         );
-        assert!(
-            aivi_gtk4::widget_exists(result.root_id)
-                .unwrap_or_else(|err| panic!("check persistent dialog root: {}", err.message))
-        );
-        assert!(
-            aivi_gtk4::widget_exists(entry_id)
-                .unwrap_or_else(|err| panic!("check persistent dialog entry: {}", err.message))
-        );
+        assert!(aivi_gtk4::widget_exists(result.root_id)
+            .unwrap_or_else(|err| panic!("check persistent dialog root: {}", err.message)));
+        assert!(aivi_gtk4::widget_exists(entry_id)
+            .unwrap_or_else(|err| panic!("check persistent dialog entry: {}", err.message)));
 
         ok_or_panic(
             runtime.reactive_set_signal(dialog_open.clone(), Value::Bool(true)),
@@ -5564,14 +5571,10 @@ mod tests {
             saw_close,
             "expected the persistent dialog to emit `closed` after background close"
         );
-        assert!(
-            aivi_gtk4::widget_exists(result.root_id)
-                .unwrap_or_else(|err| panic!("check background dialog root: {}", err.message))
-        );
-        assert!(
-            aivi_gtk4::widget_exists(entry_id)
-                .unwrap_or_else(|err| panic!("check background dialog entry: {}", err.message))
-        );
+        assert!(aivi_gtk4::widget_exists(result.root_id)
+            .unwrap_or_else(|err| panic!("check background dialog root: {}", err.message)));
+        assert!(aivi_gtk4::widget_exists(entry_id)
+            .unwrap_or_else(|err| panic!("check background dialog entry: {}", err.message)));
         assert_eq!(
             ui_debug_list_signals_json(ctx.as_ref())
                 .expect("list background dialog signals after close")["watcherCount"]

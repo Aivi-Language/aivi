@@ -560,11 +560,10 @@ pub(super) fn build_heap_record() -> Value {
 }
 
 fn key_from_value(value: &Value, ctx: &str) -> Result<KeyValue, RuntimeError> {
-    KeyValue::try_from_value(value)
-        .ok_or_else(|| RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "value is not hashable".to_string(),
-        })
+    KeyValue::try_from_value(value).ok_or_else(|| RuntimeError::InvalidArgument {
+        context: ctx.to_string(),
+        reason: "value is not hashable".to_string(),
+    })
 }
 
 fn expect_map(value: Value, ctx: &str) -> Result<Arc<ImHashMap<KeyValue, Value>>, RuntimeError> {

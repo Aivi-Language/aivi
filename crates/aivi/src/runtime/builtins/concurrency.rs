@@ -128,11 +128,10 @@ pub(super) fn build_channel_record() -> Value {
                             super::gtk4_real::pump_gtk_events();
                             runtime.reactive_flush_deferred()?;
                         }
-                        let recv_guard = receiver
-                            .inner
-                            .receiver
-                            .lock()
-                            .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
+                        let recv_guard =
+                            receiver.inner.receiver.lock().map_err(|_| {
+                                RuntimeError::Message("channel poisoned".to_string())
+                            })?;
                         match recv_guard.recv_timeout(timeout) {
                             Ok(value) => {
                                 return Ok(Value::Constructor {

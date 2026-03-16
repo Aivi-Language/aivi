@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 
 use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 use num_bigint::BigInt;
@@ -195,10 +195,10 @@ pub(crate) enum EffectValue {
 }
 
 pub(crate) struct ResourceValue {
-    /// Runs the acquire phase (everything before `yield`), returning the yielded value.
+    /// Runs the acquire phase (everything before `yield`), returning a tuple of
+    /// `(yielded value, cleanup closure)`. The cleanup closure is created at
+    /// acquire time so it can capture bindings introduced before `yield`.
     pub(crate) acquire: Arc<ThunkFunc>,
-    /// Runs the cleanup phase (everything after `yield`).
-    pub(crate) cleanup: Arc<ThunkFunc>,
 }
 
 pub(crate) struct ThunkValue {

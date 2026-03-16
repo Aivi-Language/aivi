@@ -56,7 +56,6 @@ impl Env {
         }
         names
     }
-
 }
 
 pub(crate) struct RuntimeContext {
@@ -191,7 +190,9 @@ impl RuntimeContext {
         self.gtk_binding_scopes
             .lock()
             .iter()
-            .filter_map(|(widget_id, watcher_ids)| watcher_ids.contains(&watcher_id).then_some(*widget_id))
+            .filter_map(|(widget_id, watcher_ids)| {
+                watcher_ids.contains(&watcher_id).then_some(*widget_id)
+            })
             .collect()
     }
 
@@ -211,12 +212,18 @@ impl RuntimeContext {
         let handle = store.next_handle;
         store.next_handle = store.next_handle.saturating_add(1);
         let token = format!("__aivi_runtime_handler_{handle}");
-        store.handlers.insert(token.clone(), GtkRuntimeHandler { handler, snapshot });
+        store
+            .handlers
+            .insert(token.clone(), GtkRuntimeHandler { handler, snapshot });
         token
     }
 
     pub(crate) fn resolve_gtk_runtime_handler(&self, token: &str) -> Option<GtkRuntimeHandler> {
-        self.gtk_runtime_handler_store.lock().handlers.get(token).cloned()
+        self.gtk_runtime_handler_store
+            .lock()
+            .handlers
+            .get(token)
+            .cloned()
     }
 
     pub(crate) fn unregister_gtk_runtime_handler(&self, token: &str) {
@@ -233,10 +240,7 @@ impl RuntimeContext {
         }
     }
 
-    pub(crate) fn merge_constructor_ordinals(
-        &mut self,
-        ordinals: HashMap<String, Option<usize>>,
-    ) {
+    pub(crate) fn merge_constructor_ordinals(&mut self, ordinals: HashMap<String, Option<usize>>) {
         for (name, ordinal) in ordinals {
             self.constructor_ordinals.entry(name).or_insert(ordinal);
         }

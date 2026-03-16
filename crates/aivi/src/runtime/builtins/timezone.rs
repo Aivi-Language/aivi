@@ -133,10 +133,7 @@ fn get_zone_id(val: Value, ctx: &str) -> Result<String, RuntimeError> {
     expect_text(id_val.clone(), ctx)
 }
 
-fn parse_datetime_value(
-    val: &Value,
-    ctx: &str,
-) -> Result<chrono::NaiveDateTime, RuntimeError> {
+fn parse_datetime_value(val: &Value, ctx: &str) -> Result<chrono::NaiveDateTime, RuntimeError> {
     parse_local_datetime_value(val, ctx)
 }
 

@@ -375,12 +375,11 @@ fn text_args_from_values(values: Arc<Vec<Value>>, ctx: &str) -> Result<Vec<Strin
 }
 
 fn run_command_effect(command: &str, args: &[String]) -> Result<Value, RuntimeError> {
-    let output = Command::new(command)
-        .args(args)
-        .output()
-        .map_err(|err| RuntimeError::Error(Value::Text(format!(
+    let output = Command::new(command).args(args).output().map_err(|err| {
+        RuntimeError::Error(Value::Text(format!(
             "system.run failed for `{command}`: {err}"
-        ))))?;
+        )))
+    })?;
 
     let mut fields = HashMap::new();
     fields.insert(
@@ -409,7 +408,8 @@ mod tests {
 
     #[test]
     fn system_run_captures_stdout() {
-        let result = match run_command_effect("sh", &["-c".to_string(), "printf hello".to_string()]) {
+        let result = match run_command_effect("sh", &["-c".to_string(), "printf hello".to_string()])
+        {
             Ok(value) => value,
             Err(_) => panic!("command should run"),
         };
@@ -426,8 +426,7 @@ mod tests {
         let result = match run_command_effect(
             "sh",
             &["-c".to_string(), "printf fail >&2; exit 3".to_string()],
-        )
-        {
+        ) {
             Ok(value) => value,
             Err(_) => panic!("command should run"),
         };
@@ -472,8 +471,10 @@ pub(in crate::runtime::builtins) fn json_to_runtime_with_schema(
         }
         JsonValue::String(s) if matches!(schema, Some(JsonSchema::Enum(_))) => {
             let constructor_name = match schema {
-                Some(JsonSchema::Enum(variants)) => crate::runtime::json_schema::constructor_name_for_enum_value(variants, s)
-                    .unwrap_or(s.as_str()),
+                Some(JsonSchema::Enum(variants)) => {
+                    crate::runtime::json_schema::constructor_name_for_enum_value(variants, s)
+                        .unwrap_or(s.as_str())
+                }
                 _ => s.as_str(),
             };
             Value::Constructor {

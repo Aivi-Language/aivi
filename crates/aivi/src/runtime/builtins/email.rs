@@ -410,10 +410,7 @@ fn build_smtp_config(record: &HashMap<String, Value>) -> Result<SmtpConfig, Runt
     })
 }
 
-fn extract_auth(
-    record: &HashMap<String, Value>,
-    ctx: &str,
-) -> Result<EmailAuth, RuntimeError> {
+fn extract_auth(record: &HashMap<String, Value>, ctx: &str) -> Result<EmailAuth, RuntimeError> {
     let value = record
         .get("auth")
         .cloned()
@@ -446,10 +443,7 @@ fn expect_imap_session(value: Value, ctx: &str) -> Result<ImapSession, RuntimeEr
 
 fn expect_int_list(value: Value, ctx: &str) -> Result<Vec<i64>, RuntimeError> {
     match value {
-        Value::List(items) => items
-            .iter()
-            .map(|v| expect_int(v.clone(), ctx))
-            .collect(),
+        Value::List(items) => items.iter().map(|v| expect_int(v.clone(), ctx)).collect(),
         other => Err(RuntimeError::Message(format!(
             "{ctx} expected List Int, got {}",
             crate::runtime::format_value(&other)
@@ -459,10 +453,7 @@ fn expect_int_list(value: Value, ctx: &str) -> Result<Vec<i64>, RuntimeError> {
 
 fn expect_text_list(value: Value, ctx: &str) -> Result<Vec<String>, RuntimeError> {
     match value {
-        Value::List(items) => items
-            .iter()
-            .map(|v| expect_text(v.clone(), ctx))
-            .collect(),
+        Value::List(items) => items.iter().map(|v| expect_text(v.clone(), ctx)).collect(),
         other => Err(RuntimeError::Message(format!(
             "{ctx} expected List Text, got {}",
             crate::runtime::format_value(&other)
@@ -576,10 +567,7 @@ fn optional_text_list(
         return Ok(Vec::new());
     };
     match value {
-        Value::List(items) => items
-            .iter()
-            .map(|v| expect_text(v.clone(), ctx))
-            .collect(),
+        Value::List(items) => items.iter().map(|v| expect_text(v.clone(), ctx)).collect(),
         Value::Constructor { name, mut args } if name == "Some" && args.len() == 1 => {
             expect_text_list(args.remove(0), ctx)
         }
@@ -697,10 +685,13 @@ mod tests {
                 "cc".to_string(),
                 some(Value::List(Arc::new(vec![text("cc@example.com")]))),
             ),
-            ("bcc".to_string(), Value::Constructor {
-                name: "None".to_string(),
-                args: vec![],
-            }),
+            (
+                "bcc".to_string(),
+                Value::Constructor {
+                    name: "None".to_string(),
+                    args: vec![],
+                },
+            ),
             ("subject".to_string(), text("hello")),
             ("body".to_string(), text("world")),
             ("port".to_string(), some(Value::Int(2525))),

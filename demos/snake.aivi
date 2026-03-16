@@ -26,19 +26,15 @@ initial = {
   mode: Running
 }
 
-snakeState : Signal (List Pixel)
 snakeState = signal initial.snake
-foodState : Signal Pixel
-foodState = signal initial.food
-dirState : Signal Direction
-dirState = signal initial.dir
-scoreState : Signal Int
+foodState  = signal initial.food
+dirState   = signal initial.dir
 scoreState = signal initial.score
 seedState  = signal initial.seed
 modeState  = signal initial.mode
 
 opposite: Pixel -> Direction -> Pixel
-move = (x, y) => 
+move = (x, y) =>
   | Up    => (x, y - 1)
   | Down  => (x, y + 1)
   | Left  => (x - 1, y)

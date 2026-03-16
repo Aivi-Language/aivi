@@ -18,6 +18,25 @@ fn reactive_brief_value(value: &Value) -> String {
     }
 }
 
+fn reactive_snapshot_diagnostic_label(snapshot: &RuntimeSnapshot) -> Option<String> {
+    let frame = snapshot.frames.last()?;
+    let mut label = frame.name.clone();
+    if let Some(origin) = snapshot.origin.as_ref().or(frame.origin.as_ref()) {
+        label.push_str(" at ");
+        label.push_str(&origin.start_position_text());
+    }
+    Some(label)
+}
+
+fn reactive_capture_diagnostic_label(runtime: &Runtime) -> Option<String> {
+    let snapshot = runtime.capture_runtime_snapshot();
+    if snapshot.origin.is_none() && snapshot.frames.is_empty() {
+        None
+    } else {
+        reactive_snapshot_diagnostic_label(&snapshot)
+    }
+}
+
 impl Default for ReactiveGraphState {
     fn default() -> Self {
         Self {
@@ -171,6 +190,7 @@ impl Runtime {
     ) -> Result<(usize, Value), RuntimeError> {
         let signal_id = self.reactive_signal_id_from_value(signal, "reactive.watch")?;
         let revision = self.reactive_current_revision(signal_id)?;
+        let callback_label = reactive_capture_diagnostic_label(self);
         let watcher_id = {
             let mut graph = self.reactive_graph.lock();
             let watcher_id = graph.next_watcher_id;
@@ -180,6 +200,7 @@ impl Runtime {
                 ReactiveWatcherEntry {
                     signal_id,
                     callback,
+                    callback_label,
                     last_revision: revision,
                 },
             );
@@ -335,6 +356,7 @@ impl Runtime {
             }
         }
         let signal_id = self.reactive_alloc_signal_id();
+        let compute_label = reactive_capture_diagnostic_label(self);
         {
             let mut graph = self.reactive_graph.lock();
             graph.signals.insert(
@@ -343,6 +365,7 @@ impl Runtime {
                     kind: ReactiveCellKind::Derived {
                         dependencies: dependencies.clone(),
                         compute,
+                        compute_label,
                     },
                     value: Value::Unit,
                     revision: 0,
@@ -378,6 +401,7 @@ impl Runtime {
             }
         }
         let signal_id = self.reactive_alloc_signal_id();
+        let compute_label = reactive_capture_diagnostic_label(self);
         {
             let mut graph = self.reactive_graph.lock();
             graph.signals.insert(
@@ -386,6 +410,7 @@ impl Runtime {
                     kind: ReactiveCellKind::DerivedTuple {
                         dependencies: dependencies.clone(),
                         compute,
+                        compute_label,
                     },
                     value: Value::Unit,
                     revision: 0,
@@ -541,16 +566,20 @@ impl Runtime {
                 ReactiveCellKind::Derived {
                     dependencies,
                     compute,
+                    compute_label,
                 } => ReactiveCellKind::Derived {
                     dependencies: dependencies.clone(),
                     compute: compute.clone(),
+                    compute_label: compute_label.clone(),
                 },
                 ReactiveCellKind::DerivedTuple {
                     dependencies,
                     compute,
+                    compute_label,
                 } => ReactiveCellKind::DerivedTuple {
                     dependencies: dependencies.clone(),
                     compute: compute.clone(),
+                    compute_label: compute_label.clone(),
                 },
             };
             (entry.dirty, kind)
@@ -572,6 +601,7 @@ impl Runtime {
             ReactiveCellKind::Derived {
                 dependencies,
                 compute,
+                ..
             } => {
                 stack.push(signal_id);
                 let mut values = Vec::with_capacity(dependencies.len());
@@ -609,7 +639,10 @@ impl Runtime {
                     let mut graph = self.reactive_graph.lock();
                     let change_seq = graph.next_change_seq;
                     let timestamp_ms = unix_timestamp_ms();
-                    let entry = graph.signals.get_mut(&signal_id).expect("derived signal exists");
+                    let entry = graph
+                        .signals
+                        .get_mut(&signal_id)
+                        .expect("derived signal exists");
                     if !reactive_values_match(&entry.value, &value) {
                         entry.value = value;
                         entry.revision = entry.revision.saturating_add(1).max(1);
@@ -633,6 +666,7 @@ impl Runtime {
             ReactiveCellKind::DerivedTuple {
                 dependencies,
                 compute,
+                ..
             } => {
                 stack.push(signal_id);
                 let mut items = Vec::with_capacity(dependencies.len());
@@ -655,7 +689,10 @@ impl Runtime {
                     items.push(dep_value);
                 }
                 let value = self.apply(compute, Value::Tuple(items)).map_err(|err| {
-                    self.reactive_wrap_apply_error(err, self.reactive_signal_error_context(signal_id))
+                    self.reactive_wrap_apply_error(
+                        err,
+                        self.reactive_signal_error_context(signal_id),
+                    )
                 })?;
                 stack.pop();
 
@@ -664,7 +701,10 @@ impl Runtime {
                     let mut graph = self.reactive_graph.lock();
                     let change_seq = graph.next_change_seq;
                     let timestamp_ms = unix_timestamp_ms();
-                    let entry = graph.signals.get_mut(&signal_id).expect("derived signal exists");
+                    let entry = graph
+                        .signals
+                        .get_mut(&signal_id)
+                        .expect("derived signal exists");
                     if !reactive_values_match(&entry.value, &value) {
                         entry.value = value;
                         entry.revision = entry.revision.saturating_add(1).max(1);
@@ -753,7 +793,8 @@ impl Runtime {
                         .collect::<Vec<_>>()
                 };
                 for signal_id in dirty_ids {
-                    if let Err(err) = self.reactive_ensure_signal_fresh(signal_id, &mut Vec::new()) {
+                    if let Err(err) = self.reactive_ensure_signal_fresh(signal_id, &mut Vec::new())
+                    {
                         self.reactive_contain_failed_signal_branch(signal_id);
                         if first_error.is_none() {
                             first_error = Some(err);
@@ -834,7 +875,9 @@ impl Runtime {
                         if first_error.is_none() {
                             first_error = Some(self.reactive_wrap_apply_error(
                                 err,
-                                self.reactive_watcher_error_context(watcher_id, signal_id, &callback),
+                                self.reactive_watcher_error_context(
+                                    watcher_id, signal_id, &callback,
+                                ),
                             ));
                         }
                     }
@@ -911,20 +954,20 @@ impl Runtime {
         context: impl Into<String>,
     ) -> RuntimeError {
         let err = match err {
-            RuntimeError::NonExhaustiveMatch {
-                scrutinee: Some(_),
-            } => err,
+            RuntimeError::NonExhaustiveMatch { scrutinee: Some(_) } => err,
             other => {
                 let mut wrapped = other;
-                if let Some(location) = self.jit_current_loc.as_ref() {
-                    wrapped = self.reactive_wrap_error_context(
-                        wrapped,
-                        format!("at {}", location.start_position_text()),
-                    );
-                }
-                if let Some(function_name) = self.jit_current_fn.as_deref() {
-                    wrapped =
-                        self.reactive_wrap_error_context(wrapped, format!("in `{function_name}`"));
+                if !runtime_error_has_renderable_context(&wrapped) {
+                    if let Some(location) = self.jit_current_loc.as_ref() {
+                        wrapped = self.reactive_wrap_error_context(
+                            wrapped,
+                            format!("at {}", location.start_position_text()),
+                        );
+                    }
+                    if let Some(function_name) = self.jit_current_fn.as_deref() {
+                        wrapped = self
+                            .reactive_wrap_error_context(wrapped, format!("in `{function_name}`"));
+                    }
                 }
                 wrapped
             }
@@ -933,7 +976,7 @@ impl Runtime {
     }
 
     fn reactive_signal_error_context(&self, signal_id: usize) -> String {
-        let (kind_label, dependencies, compute, mut watcher_ids) = {
+        let (kind_label, dependencies, compute, compute_label, mut watcher_ids) = {
             let graph = self.reactive_graph.lock();
             let Some(entry) = graph.signals.get(&signal_id) else {
                 return format!("while refreshing missing signal {signal_id}");
@@ -944,23 +987,27 @@ impl Runtime {
                 .map(|ids| ids.iter().copied().collect::<Vec<_>>())
                 .unwrap_or_default();
             match &entry.kind {
-                ReactiveCellKind::Source => ("source", Vec::new(), None, watcher_ids),
+                ReactiveCellKind::Source => ("source", Vec::new(), None, None, watcher_ids),
                 ReactiveCellKind::Derived {
                     dependencies,
                     compute,
+                    compute_label,
                 } => (
                     "derived",
                     dependencies.clone(),
                     Some(compute.clone()),
+                    compute_label.clone(),
                     watcher_ids,
                 ),
                 ReactiveCellKind::DerivedTuple {
                     dependencies,
                     compute,
+                    compute_label,
                 } => (
                     "derived tuple",
                     dependencies.clone(),
                     Some(compute.clone()),
+                    compute_label.clone(),
                     watcher_ids,
                 ),
             }
@@ -988,10 +1035,14 @@ impl Runtime {
         } else {
             format!("; widgets: {widget_ids:?}")
         };
-        let compute = compute
-            .as_ref()
-            .map(|value| format!("; compute: {}", reactive_brief_value(value)))
-            .unwrap_or_default();
+        let compute = if let Some(label) = compute_label.as_deref() {
+            format!("; compute: {label}")
+        } else {
+            compute
+                .as_ref()
+                .map(|value| format!("; compute: {}", reactive_brief_value(value)))
+                .unwrap_or_default()
+        };
         format!(
             "while refreshing {kind_label} signal {signal_id}{deps}{watchers}{widgets}{compute}"
         )
@@ -1003,10 +1054,16 @@ impl Runtime {
         signal_id: usize,
         callback: &Value,
     ) -> String {
+        let callback_label = self
+            .reactive_graph
+            .lock()
+            .watchers
+            .get(&watcher_id)
+            .and_then(|watcher| watcher.callback_label.clone());
         let mut widget_ids = self.ctx.gtk_binding_widgets_for_watcher(watcher_id);
         widget_ids.sort_unstable();
         widget_ids.dedup();
-        let callback = reactive_brief_value(callback);
+        let callback = callback_label.unwrap_or_else(|| reactive_brief_value(callback));
         if widget_ids.is_empty() {
             format!(
                 "while running watcher {watcher_id} for signal {signal_id} (callback: {callback})"
@@ -1165,10 +1222,7 @@ mod tests {
             .reactive_get_signal(sum)
             .unwrap_or_else(|err| panic!("sum value: {}", format_runtime_error(err)));
         assert_eq!(expect_int(sum_value), 7);
-        assert_eq!(
-            notifications.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(notifications.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -1210,7 +1264,9 @@ mod tests {
             let mut bg_runtime = Runtime::new(ctx, CancelToken::root());
             bg_runtime
                 .reactive_set_signal(source_for_thread, Value::Int(7))
-                .unwrap_or_else(|err| panic!("background set signal: {}", format_runtime_error(err)));
+                .unwrap_or_else(|err| {
+                    panic!("background set signal: {}", format_runtime_error(err))
+                });
         })
         .join()
         .expect("background runtime should not panic");
@@ -1219,7 +1275,10 @@ mod tests {
             expect_int(
                 runtime
                     .reactive_get_signal(source.clone())
-                    .unwrap_or_else(|err| panic!("source value after background set: {}", format_runtime_error(err)))
+                    .unwrap_or_else(|err| panic!(
+                        "source value after background set: {}",
+                        format_runtime_error(err)
+                    ))
             ),
             7
         );
@@ -1238,30 +1297,25 @@ mod tests {
             );
         }
         assert_eq!(watcher_last_revision(&runtime, watcher_id), 1);
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            0
-        );
-        assert!(
-            callback_threads
-                .lock()
-                .expect("callback thread log lock should not be poisoned")
-                .is_empty()
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(callback_threads
+            .lock()
+            .expect("callback thread log lock should not be poisoned")
+            .is_empty());
 
-        runtime
-            .reactive_flush_deferred()
-            .unwrap_or_else(|err| panic!("flush deferred source watcher: {}", format_runtime_error(err)));
+        runtime.reactive_flush_deferred().unwrap_or_else(|err| {
+            panic!(
+                "flush deferred source watcher: {}",
+                format_runtime_error(err)
+            )
+        });
         {
             let graph = runtime.reactive_graph.lock();
             assert!(!graph.deferred_flush);
             assert!(graph.pending_notifications.is_empty());
         }
         assert_eq!(watcher_last_revision(&runtime, watcher_id), 2);
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(
             callback_threads
                 .lock()
@@ -1273,10 +1327,7 @@ mod tests {
         runtime
             .reactive_flush_deferred()
             .unwrap_or_else(|err| panic!("second deferred flush: {}", format_runtime_error(err)));
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -1299,7 +1350,9 @@ mod tests {
                     let [left, right] = items.as_slice() else {
                         panic!("expected two tuple items");
                     };
-                    Ok(Value::Int(expect_int(left.clone()) + expect_int(right.clone())))
+                    Ok(Value::Int(
+                        expect_int(left.clone()) + expect_int(right.clone()),
+                    ))
                 }),
             )
             .unwrap_or_else(|err| panic!("sum signal: {}", format_runtime_error(err)));
@@ -1327,7 +1380,10 @@ mod tests {
             expect_int(
                 runtime
                     .reactive_get_signal(sum.clone())
-                    .unwrap_or_else(|err| panic!("initial sum value: {}", format_runtime_error(err)))
+                    .unwrap_or_else(|err| panic!(
+                        "initial sum value: {}",
+                        format_runtime_error(err)
+                    ))
             ),
             3
         );
@@ -1337,11 +1393,12 @@ mod tests {
         let second_for_batch = second.clone();
         std::thread::spawn(move || {
             let mut bg_runtime = Runtime::new(ctx, CancelToken::root());
-            let batch_callback = runtime_builtin("test.background_batch", 1, move |_args, runtime| {
-                runtime.reactive_set_signal(first_for_batch.clone(), Value::Int(3))?;
-                runtime.reactive_set_signal(second_for_batch.clone(), Value::Int(4))?;
-                Ok(Value::Unit)
-            });
+            let batch_callback =
+                runtime_builtin("test.background_batch", 1, move |_args, runtime| {
+                    runtime.reactive_set_signal(first_for_batch.clone(), Value::Int(3))?;
+                    runtime.reactive_set_signal(second_for_batch.clone(), Value::Int(4))?;
+                    Ok(Value::Unit)
+                });
             bg_runtime
                 .reactive_batch(batch_callback)
                 .unwrap_or_else(|err| panic!("background batch: {}", format_runtime_error(err)));
@@ -1362,20 +1419,23 @@ mod tests {
             );
         }
         assert_eq!(watcher_last_revision(&runtime, watcher_id), 1);
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            0
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 0);
 
-        runtime
-            .reactive_flush_deferred()
-            .unwrap_or_else(|err| panic!("flush deferred derived watcher: {}", format_runtime_error(err)));
+        runtime.reactive_flush_deferred().unwrap_or_else(|err| {
+            panic!(
+                "flush deferred derived watcher: {}",
+                format_runtime_error(err)
+            )
+        });
 
         assert_eq!(
             expect_int(
                 runtime
                     .reactive_get_signal(sum.clone())
-                    .unwrap_or_else(|err| panic!("flushed sum value: {}", format_runtime_error(err)))
+                    .unwrap_or_else(|err| panic!(
+                        "flushed sum value: {}",
+                        format_runtime_error(err)
+                    ))
             ),
             7
         );
@@ -1391,10 +1451,7 @@ mod tests {
             assert_eq!(sum_entry.revision, 2);
         }
         assert_eq!(watcher_last_revision(&runtime, watcher_id), 2);
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(
             callback_threads
                 .lock()
@@ -1403,13 +1460,13 @@ mod tests {
             [owner_thread.as_str()]
         );
 
-        runtime
-            .reactive_flush_deferred()
-            .unwrap_or_else(|err| panic!("second derived deferred flush: {}", format_runtime_error(err)));
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        runtime.reactive_flush_deferred().unwrap_or_else(|err| {
+            panic!(
+                "second derived deferred flush: {}",
+                format_runtime_error(err)
+            )
+        });
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -1443,8 +1500,14 @@ mod tests {
         should_succeed.store(false, std::sync::atomic::Ordering::SeqCst);
         match runtime.run_effect_value(run) {
             Err(RuntimeError::Error(Value::Text(text))) => assert_eq!(text, "boom"),
-            Err(err) => panic!("second run failed unexpectedly: {}", format_runtime_error(err)),
-            Ok(value) => panic!("second run unexpectedly succeeded: {}", format_value(&value)),
+            Err(err) => panic!(
+                "second run failed unexpectedly: {}",
+                format_runtime_error(err)
+            ),
+            Ok(value) => panic!(
+                "second run unexpectedly succeeded: {}",
+                format_value(&value)
+            ),
         }
 
         match runtime
@@ -1474,6 +1537,26 @@ mod tests {
     #[test]
     fn reactive_flush_contains_failed_derived_signal_and_keeps_other_updates_alive() {
         let mut runtime = test_runtime();
+        let registration_origin = SourceOrigin::new(
+            "src/demo/reactive.aivi",
+            Span {
+                start: Position {
+                    line: 12,
+                    column: 9,
+                },
+                end: Position {
+                    line: 12,
+                    column: 10,
+                },
+            },
+        );
+        runtime.jit_current_fn = Some("demo.ui.render".into());
+        runtime.jit_current_loc = Some(registration_origin.clone());
+        runtime.jit_frame_stack.push(RuntimeFrame {
+            kind: RuntimeFrameKind::Function,
+            name: "demo.ui.render".to_string(),
+            origin: Some(registration_origin.clone()),
+        });
         let bad_source = runtime
             .reactive_create_signal(Value::Bool(false))
             .unwrap_or_else(|err| panic!("bad source: {}", format_runtime_error(err)));
@@ -1494,6 +1577,9 @@ mod tests {
                 }),
             )
             .unwrap_or_else(|err| panic!("failing branch: {}", format_runtime_error(err)));
+        runtime.jit_current_fn = None;
+        runtime.jit_current_loc = None;
+        runtime.jit_frame_stack.clear();
         let failing_branch_id = expect_signal_id(&failing_branch);
 
         let callback_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -1528,12 +1614,15 @@ mod tests {
             .expect_err("batch flush should surface the failing derived signal");
         let rendered = format_runtime_error(err);
         assert!(rendered.contains("while refreshing derived signal"));
-        assert!(rendered.contains("<builtin:test.failSignal>"));
+        assert!(rendered.contains("compute: demo.ui.render at src/demo/reactive.aivi:12:9"));
         assert_eq!(
             expect_int(
                 runtime
                     .reactive_get_signal(good_source.clone())
-                    .unwrap_or_else(|err| panic!("read good source: {}", format_runtime_error(err)))
+                    .unwrap_or_else(|err| panic!(
+                        "read good source: {}",
+                        format_runtime_error(err)
+                    ))
             ),
             7
         );
@@ -1768,7 +1857,9 @@ mod tests {
             .collect();
 
         for handle in threads {
-            handle.join().expect("source writer thread should not panic");
+            handle
+                .join()
+                .expect("source writer thread should not panic");
         }
 
         // Each source ends at 20, so sum = 4 * 20 = 80
@@ -1814,19 +1905,13 @@ mod tests {
         .expect("rapid writer should not panic");
 
         // No callbacks yet — everything is deferred
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            0
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 0);
 
         // Single flush should deliver exactly one notification
         runtime
             .reactive_flush_deferred()
             .unwrap_or_else(|err| panic!("flush deferred: {}", format_runtime_error(err)));
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 1);
 
         let final_val = expect_int(
             runtime
@@ -1937,7 +2022,9 @@ mod tests {
                     let [left, right] = items.as_slice() else {
                         panic!("expected 2 items");
                     };
-                    Ok(Value::Int(expect_int(left.clone()) + expect_int(right.clone())))
+                    Ok(Value::Int(
+                        expect_int(left.clone()) + expect_int(right.clone()),
+                    ))
                 }),
             )
             .unwrap_or_else(|err| panic!("sum: {}", format_runtime_error(err)));
@@ -1992,10 +2079,7 @@ mod tests {
         handle_b.join().expect("thread B should not panic");
 
         // No callbacks yet
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            0
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 0);
 
         runtime
             .reactive_flush_deferred()
@@ -2048,18 +2132,12 @@ mod tests {
                 .reactive_set_signal(source.clone(), Value::Int(42))
                 .unwrap_or_else(|err| panic!("set same: {}", format_runtime_error(err)));
         }
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            0
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 0);
 
         // Now write a different value — should trigger once
         runtime
             .reactive_set_signal(source.clone(), Value::Int(43))
             .unwrap_or_else(|err| panic!("set different: {}", format_runtime_error(err)));
-        assert_eq!(
-            callback_count.load(std::sync::atomic::Ordering::SeqCst),
-            1
-        );
+        assert_eq!(callback_count.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }

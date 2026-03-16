@@ -32,12 +32,13 @@ pub(super) fn build_calendar_record() -> Value {
         builtin("calendar.endOfMonth", 1, |mut args, _| {
             let date = date_from_value(args.pop().unwrap(), "calendar.endOfMonth")?;
             let max_day = days_in_month(date.year(), date.month(), "calendar.endOfMonth")?;
-            let end = NaiveDate::from_ymd_opt(date.year(), date.month(), max_day).ok_or_else(
-                || RuntimeError::InvalidArgument {
-                    context: "calendar.endOfMonth".to_string(),
-                    reason: "resulting date is invalid".to_string(),
-                },
-            )?;
+            let end =
+                NaiveDate::from_ymd_opt(date.year(), date.month(), max_day).ok_or_else(|| {
+                    RuntimeError::InvalidArgument {
+                        context: "calendar.endOfMonth".to_string(),
+                        reason: "resulting date is invalid".to_string(),
+                    }
+                })?;
             Ok(date_to_value(end))
         }),
     );
@@ -48,7 +49,9 @@ pub(super) fn build_calendar_record() -> Value {
             let date = date_from_value(args.pop().unwrap(), "calendar.addDays")?;
             let next = date
                 .checked_add_signed(ChronoDuration::days(days))
-                .ok_or_else(|| RuntimeError::Overflow { context: "calendar.addDays".to_string() })?;
+                .ok_or_else(|| RuntimeError::Overflow {
+                    context: "calendar.addDays".to_string(),
+                })?;
             Ok(date_to_value(next))
         }),
     );
@@ -98,11 +101,12 @@ fn add_months(date: NaiveDate, months: i64, ctx: &str) -> Result<NaiveDate, Runt
         .ok_or_else(|| RuntimeError::Overflow {
             context: ctx.to_string(),
         })?;
-    let year = base_year
-        .checked_add(total.div_euclid(12))
-        .ok_or_else(|| RuntimeError::Overflow {
-            context: ctx.to_string(),
-        })?;
+    let year =
+        base_year
+            .checked_add(total.div_euclid(12))
+            .ok_or_else(|| RuntimeError::Overflow {
+                context: ctx.to_string(),
+            })?;
     let month = total.rem_euclid(12) + 1;
     let year_i32 = i32::try_from(year).map_err(|_| RuntimeError::Overflow {
         context: ctx.to_string(),
@@ -153,10 +157,11 @@ fn days_in_month(year: i32, month: u32, ctx: &str) -> Result<u32, RuntimeError> 
     } else {
         (year, month + 1)
     };
-    let first_next =
-        NaiveDate::from_ymd_opt(next_year, next_month, 1).ok_or_else(|| RuntimeError::Overflow {
+    let first_next = NaiveDate::from_ymd_opt(next_year, next_month, 1).ok_or_else(|| {
+        RuntimeError::Overflow {
             context: ctx.to_string(),
-        })?;
+        }
+    })?;
     let prev = first_next
         .pred_opt()
         .ok_or_else(|| RuntimeError::Overflow {

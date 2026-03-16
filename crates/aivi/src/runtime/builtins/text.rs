@@ -358,12 +358,11 @@ pub(super) fn build_text_record() -> Value {
         builtin("text.toBytes", 2, |mut args, _| {
             let value = expect_text(args.pop().unwrap(), "text.toBytes")?;
             let encoding = args.pop().unwrap();
-            let encoding = encoding_kind(&encoding)
-                .ok_or_else(|| RuntimeError::TypeError {
-                    context: "text.toBytes".to_string(),
-                    expected: "Encoding".to_string(),
-                    got: "other".to_string(),
-                })?;
+            let encoding = encoding_kind(&encoding).ok_or_else(|| RuntimeError::TypeError {
+                context: "text.toBytes".to_string(),
+                expected: "Encoding".to_string(),
+                got: "other".to_string(),
+            })?;
             let bytes = encode_text(encoding, &value);
             Ok(Value::Bytes(Arc::new(bytes)))
         }),
@@ -373,12 +372,11 @@ pub(super) fn build_text_record() -> Value {
         builtin("text.fromBytes", 2, |mut args, _| {
             let bytes = expect_bytes(args.pop().unwrap(), "text.fromBytes")?;
             let encoding = args.pop().unwrap();
-            let encoding = encoding_kind(&encoding)
-                .ok_or_else(|| RuntimeError::TypeError {
-                    context: "text.fromBytes".to_string(),
-                    expected: "Encoding".to_string(),
-                    got: "other".to_string(),
-                })?;
+            let encoding = encoding_kind(&encoding).ok_or_else(|| RuntimeError::TypeError {
+                context: "text.fromBytes".to_string(),
+                expected: "Encoding".to_string(),
+                got: "other".to_string(),
+            })?;
             match decode_bytes(encoding, &bytes) {
                 Ok(text) => Ok(make_ok(Value::Text(text))),
                 Err(_) => Ok(make_err(Value::Text("InvalidEncoding".to_string()))),
@@ -389,8 +387,8 @@ pub(super) fn build_text_record() -> Value {
         "toText".to_string(),
         builtin("text.toText", 1, |mut args, _| {
             let value = args.pop().unwrap();
-            let text =
-                super::chronos_format::maybe_iso_text(&value).unwrap_or_else(|| format_value(&value));
+            let text = super::chronos_format::maybe_iso_text(&value)
+                .unwrap_or_else(|| format_value(&value));
             Ok(Value::Text(text))
         }),
     );

@@ -362,11 +362,19 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                     let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
                     let call_args = [ctx_ptr as i64];
                     let result_ptr = unsafe { call_jit_function(func_ptr, &call_args) };
-                    if result_ptr == 0 {
+                    let result = if result_ptr == 0 {
                         eprintln!("aivi: JIT function '{}' returned null pointer", def_name);
-                        Ok(Value::Unit)
+                        Value::Unit
                     } else {
-                        Ok(unsafe { super::abi::unbox_value(result_ptr as *mut Value) })
+                        unsafe { super::abi::unbox_value(result_ptr as *mut Value) }
+                    };
+                    if let Some(err) = runtime.jit_pending_error.take() {
+                        let snapshot = runtime.take_snapshot_for_error(&err);
+                        Err(crate::runtime::wrap_runtime_error_with_snapshot(
+                            err, snapshot,
+                        ))
+                    } else {
+                        Ok(result)
                     }
                 }),
             }),
@@ -408,6 +416,8 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 // Check if the JIT function signalled a non-exhaustive match.
                 // This lets apply_multi_clause try the next clause.
                 if runtime.jit_match_failed {
+                    let err = RuntimeError::NonExhaustiveMatch { scrutinee: None };
+                    let snapshot = runtime.take_snapshot_for_error(&err);
                     runtime.jit_match_failed = false;
                     runtime.clear_pending_runtime_error();
                     // Clean up boxed arguments
@@ -421,7 +431,9 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                             drop(Box::from_raw(result_ptr as *mut Value));
                         }
                     }
-                    return Err(RuntimeError::NonExhaustiveMatch { scrutinee: None });
+                    return Err(crate::runtime::wrap_runtime_error_with_snapshot(
+                        err, snapshot,
+                    ));
                 }
 
                 // Clone the result from the pointer (don't take ownership — the
@@ -451,7 +463,10 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
 
                 // Propagate any error that occurred inside JIT code
                 if let Some(err) = runtime.jit_pending_error.take() {
-                    return Err(err);
+                    let snapshot = runtime.take_snapshot_for_error(&err);
+                    return Err(crate::runtime::wrap_runtime_error_with_snapshot(
+                        err, snapshot,
+                    ));
                 }
 
                 Ok(result)
@@ -471,125 +486,65 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
     let code = func_ptr as *const u8;
     match args.len() {
         1 => {
-            let f: extern "C" fn(
-                i64,
-            ) -> i64 = std::mem::transmute(code);
+            let f: extern "C" fn(i64) -> i64 = std::mem::transmute(code);
             f(args[0])
         }
         2 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
+            let f: extern "C" fn(i64, i64) -> i64 = std::mem::transmute(code);
             f(args[0], args[1])
         }
         3 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
+            let f: extern "C" fn(i64, i64, i64) -> i64 = std::mem::transmute(code);
             f(args[0], args[1], args[2])
         }
         4 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
+            let f: extern "C" fn(i64, i64, i64, i64) -> i64 = std::mem::transmute(code);
             f(args[0], args[1], args[2], args[3])
         }
         5 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
+            let f: extern "C" fn(i64, i64, i64, i64, i64) -> i64 = std::mem::transmute(code);
             f(args[0], args[1], args[2], args[3], args[4])
         }
         6 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64) -> i64 = std::mem::transmute(code);
             f(args[0], args[1], args[2], args[3], args[4], args[5])
         }
         7 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+            )
         }
         8 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7],
+            )
         }
         9 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+            )
         }
         10 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9])
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9],
+            )
         }
         11 => {
-            let f: extern "C" fn(
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-            ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10])
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10],
+            )
         }
         12 => {
             let f: extern "C" fn(
@@ -606,7 +561,10 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11],
+            )
         }
         13 => {
             let f: extern "C" fn(
@@ -624,7 +582,10 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12],
+            )
         }
         14 => {
             let f: extern "C" fn(
@@ -643,7 +604,10 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13],
+            )
         }
         15 => {
             let f: extern "C" fn(
@@ -663,7 +627,10 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14],
+            )
         }
         16 => {
             let f: extern "C" fn(
@@ -684,7 +651,10 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15],
+            )
         }
         17 => {
             let f: extern "C" fn(
@@ -706,7 +676,10 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+            )
         }
         18 => {
             let f: extern "C" fn(
@@ -729,7 +702,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17],
+            )
         }
         19 => {
             let f: extern "C" fn(
@@ -753,7 +730,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18],
+            )
         }
         20 => {
             let f: extern "C" fn(
@@ -778,7 +759,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19],
+            )
         }
         21 => {
             let f: extern "C" fn(
@@ -804,7 +789,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20],
+            )
         }
         22 => {
             let f: extern "C" fn(
@@ -831,7 +820,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21],
+            )
         }
         23 => {
             let f: extern "C" fn(
@@ -859,7 +852,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22],
+            )
         }
         24 => {
             let f: extern "C" fn(
@@ -888,7 +885,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23],
+            )
         }
         25 => {
             let f: extern "C" fn(
@@ -918,7 +919,11 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+            )
         }
         26 => {
             let f: extern "C" fn(
@@ -949,7 +954,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25],
+            )
         }
         27 => {
             let f: extern "C" fn(
@@ -981,7 +991,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26],
+            )
         }
         28 => {
             let f: extern "C" fn(
@@ -1014,7 +1029,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26], args[27])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26], args[27],
+            )
         }
         29 => {
             let f: extern "C" fn(
@@ -1048,7 +1068,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26], args[27], args[28])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26], args[27], args[28],
+            )
         }
         30 => {
             let f: extern "C" fn(
@@ -1083,7 +1108,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26], args[27], args[28], args[29])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26], args[27], args[28], args[29],
+            )
         }
         31 => {
             let f: extern "C" fn(
@@ -1119,7 +1149,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26], args[27], args[28], args[29], args[30])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26], args[27], args[28], args[29], args[30],
+            )
         }
         32 => {
             let f: extern "C" fn(
@@ -1156,7 +1191,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26], args[27], args[28], args[29], args[30], args[31])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26], args[27], args[28], args[29], args[30], args[31],
+            )
         }
         33 => {
             let f: extern "C" fn(
@@ -1194,7 +1234,12 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 i64,
                 i64,
             ) -> i64 = std::mem::transmute(code);
-            f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24], args[25], args[26], args[27], args[28], args[29], args[30], args[31], args[32])
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16],
+                args[17], args[18], args[19], args[20], args[21], args[22], args[23], args[24],
+                args[25], args[26], args[27], args[28], args[29], args[30], args[31], args[32],
+            )
         }
         n => {
             eprintln!(

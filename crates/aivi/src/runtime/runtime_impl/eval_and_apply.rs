@@ -130,12 +130,32 @@ impl Runtime {
             match step {
                 Step::Eval(current) => match current {
                     Value::Resource(resource) => {
-                        let cleanup = resource.cleanup.clone();
                         match (resource.acquire)(self) {
-                            Ok(result) => {
+                            Ok(Value::Tuple(mut items)) if items.len() == 2 => {
+                                let cleanup_fn = items.pop().unwrap();
+                                let result = items.pop().unwrap();
+                                let cleanup = Arc::new(
+                                    move |runtime: &mut crate::runtime::Runtime| {
+                                        let cleanup_effect =
+                                            runtime.apply(cleanup_fn.clone(), Value::Unit)?;
+                                        runtime.run_effect_value(cleanup_effect)
+                                    },
+                                );
                                 self.resource_cleanups
                                     .push(ResourceCleanupEntry::Cleanup { cleanup });
                                 step = Step::Return(result);
+                            }
+                            Ok(other) => {
+                                return unwind_effect_error(
+                                    self,
+                                    &mut continuations,
+                                    RuntimeError::TypeError {
+                                        context: "resource acquisition".to_string(),
+                                        expected:
+                                            "Tuple (yielded value, cleanup closure)".to_string(),
+                                        got: format_value(&other),
+                                    },
+                                );
                             }
                             Err(err) => {
                                 return unwind_effect_error(self, &mut continuations, err);
