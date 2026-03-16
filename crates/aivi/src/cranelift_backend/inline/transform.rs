@@ -307,19 +307,31 @@ fn inline_children(
             body: Box::new(inline_expr(*body, candidates, id_gen, depth)),
         },
 
-        RustIrExpr::App { id, func, arg } => RustIrExpr::App {
+        RustIrExpr::App {
+            id,
+            func,
+            arg,
+            location,
+        } => RustIrExpr::App {
             id,
             func: Box::new(inline_expr(*func, candidates, id_gen, depth)),
             arg: Box::new(inline_expr(*arg, candidates, id_gen, depth)),
+            location,
         },
 
-        RustIrExpr::Call { id, func, args } => RustIrExpr::Call {
+        RustIrExpr::Call {
+            id,
+            func,
+            args,
+            location,
+        } => RustIrExpr::Call {
             id,
             func: Box::new(inline_expr(*func, candidates, id_gen, depth)),
             args: args
                 .into_iter()
                 .map(|a| inline_expr(a, candidates, id_gen, depth))
                 .collect(),
+            location,
         },
 
         RustIrExpr::Pipe {
@@ -330,6 +342,7 @@ fn inline_children(
             log_time,
             func,
             arg,
+            location,
         } => RustIrExpr::Pipe {
             id,
             pipe_id,
@@ -338,6 +351,7 @@ fn inline_children(
             log_time,
             func: Box::new(inline_expr(*func, candidates, id_gen, depth)),
             arg: Box::new(inline_expr(*arg, candidates, id_gen, depth)),
+            location,
         },
 
         RustIrExpr::DebugFn {
@@ -388,10 +402,16 @@ fn inline_children(
             fields: inline_record_fields(fields, candidates, id_gen, depth),
         },
 
-        RustIrExpr::FieldAccess { id, base, field } => RustIrExpr::FieldAccess {
+        RustIrExpr::FieldAccess {
+            id,
+            base,
+            field,
+            location,
+        } => RustIrExpr::FieldAccess {
             id,
             base: Box::new(inline_expr(*base, candidates, id_gen, depth)),
             field,
+            location,
         },
 
         RustIrExpr::Index {
@@ -431,11 +451,13 @@ fn inline_children(
             cond,
             then_branch,
             else_branch,
+            location,
         } => RustIrExpr::If {
             id,
             cond: Box::new(inline_expr(*cond, candidates, id_gen, depth)),
             then_branch: Box::new(inline_expr(*then_branch, candidates, id_gen, depth)),
             else_branch: Box::new(inline_expr(*else_branch, candidates, id_gen, depth)),
+            location,
         },
 
         RustIrExpr::Binary {

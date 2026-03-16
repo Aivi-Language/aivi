@@ -95,8 +95,18 @@ impl<'a, M: Module> LowerCtx<'a, M> {
 
             // ----- Functions -----
             RustIrExpr::Lambda { .. } => self.lower_lambda_expr(builder, expr),
-            RustIrExpr::App { func, arg, .. } => self.lower_app(builder, func, arg),
-            RustIrExpr::Call { func, args, .. } => self.lower_call(builder, func, args),
+            RustIrExpr::App {
+                func,
+                arg,
+                location,
+                ..
+            } => self.lower_app(builder, func, arg, location.as_ref()),
+            RustIrExpr::Call {
+                func,
+                args,
+                location,
+                ..
+            } => self.lower_call(builder, func, args, location.as_ref()),
 
             // ----- Data structures -----
             RustIrExpr::List { items, .. } => self.lower_list(builder, items),
@@ -105,9 +115,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             RustIrExpr::Patch { target, fields, .. } => self.lower_patch(builder, target, fields),
 
             // ----- Access -----
-            RustIrExpr::FieldAccess { base, field, .. } => {
-                self.lower_field_access(builder, base, field)
-            }
+            RustIrExpr::FieldAccess {
+                base,
+                field,
+                location,
+                ..
+            } => self.lower_field_access(builder, base, field, location.as_ref()),
             RustIrExpr::Index {
                 base,
                 index,
@@ -120,8 +133,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 cond,
                 then_branch,
                 else_branch,
+                location,
                 ..
-            } => self.lower_if(builder, cond, then_branch, else_branch),
+            } => self.lower_if(builder, cond, then_branch, else_branch, location.as_ref()),
             RustIrExpr::Match {
                 scrutinee, arms, location, ..
             } => self.lower_match(builder, scrutinee, arms, location.as_ref()),
@@ -129,7 +143,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 op, left, right, location, ..
             } => self.lower_binary(builder, op, left, right, location.as_ref()),
 
-            RustIrExpr::Pipe { func, arg, .. } => self.lower_app(builder, func, arg),
+            RustIrExpr::Pipe {
+                func,
+                arg,
+                location,
+                ..
+            } => self.lower_app(builder, func, arg, location.as_ref()),
 
             // ----- Special -----
             RustIrExpr::DebugFn { body, .. } => self.lower_expr(builder, body),
@@ -380,8 +399,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         func: &RustIrExpr,
         arg: &RustIrExpr,
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
-        let call_location = Self::callable_location(func).cloned();
+        let call_location = location.or_else(|| Self::callable_location(func)).cloned();
         // Check for direct call: App(Global(name), arg) where name is a JIT function with arity 1
         if let RustIrExpr::Global { name, .. } = func {
             // Try qualified name first for bare names to resolve cross-module collisions
@@ -443,8 +463,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         func: &RustIrExpr,
         args: &[RustIrExpr],
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
-        let call_location = Self::callable_location(func).cloned();
+        let call_location = location.or_else(|| Self::callable_location(func)).cloned();
         // Check for direct call: Call(Global(name), args) where name is a
         // JIT function with matching arity.
         if let RustIrExpr::Global { name, .. } = func {
@@ -873,7 +894,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         base: &RustIrExpr,
         field: &str,
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
+        if let Some(loc) = location {
+            self.emit_set_location(builder, loc);
+        }
         let base_tv = self.lower_expr(builder, base);
         let base_val = self.ensure_boxed(builder, base_tv);
         let (name_ptr, name_len) = self.embed_str(builder, field.as_bytes());
@@ -924,7 +949,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         cond: &RustIrExpr,
         then_branch: &RustIrExpr,
         else_branch: &RustIrExpr,
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
+        if let Some(loc) = location {
+            self.emit_set_location(builder, loc);
+        }
         let cond_tv = self.lower_expr(builder, cond);
         // Get a bool condition — if already unboxed Bool, use directly
         let cond_int = if matches!(cond_tv.ty, Some(CgType::Bool)) {

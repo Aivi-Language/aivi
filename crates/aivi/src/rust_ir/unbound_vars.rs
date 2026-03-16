@@ -178,6 +178,7 @@ fn rewrite_implicit_field_vars(
                 location: None,
             }),
             field: name,
+            location: None,
         },
         HirExpr::Lambda { id, param, body } => HirExpr::Lambda {
             id,
@@ -196,18 +197,30 @@ fn rewrite_implicit_field_vars(
                 }
             },
         },
-        HirExpr::App { id, func, arg } => HirExpr::App {
+        HirExpr::App {
+            id,
+            func,
+            arg,
+            location,
+        } => HirExpr::App {
             id,
             func: Box::new(rewrite_implicit_field_vars(*func, implicit_param, unbound)),
             arg: Box::new(rewrite_implicit_field_vars(*arg, implicit_param, unbound)),
+            location,
         },
-        HirExpr::Call { id, func, args } => HirExpr::Call {
+        HirExpr::Call {
+            id,
+            func,
+            args,
+            location,
+        } => HirExpr::Call {
             id,
             func: Box::new(rewrite_implicit_field_vars(*func, implicit_param, unbound)),
             args: args
                 .into_iter()
                 .map(|a| rewrite_implicit_field_vars(a, implicit_param, unbound))
                 .collect(),
+            location,
         },
         HirExpr::DebugFn {
             id,
@@ -234,6 +247,7 @@ fn rewrite_implicit_field_vars(
             log_time,
             func,
             arg,
+            location,
         } => HirExpr::Pipe {
             id,
             pipe_id,
@@ -242,6 +256,7 @@ fn rewrite_implicit_field_vars(
             log_time,
             func: Box::new(rewrite_implicit_field_vars(*func, implicit_param, unbound)),
             arg: Box::new(rewrite_implicit_field_vars(*arg, implicit_param, unbound)),
+            location,
         },
         HirExpr::List { id, items } => HirExpr::List {
             id,
@@ -319,10 +334,16 @@ fn rewrite_implicit_field_vars(
                 })
                 .collect(),
         },
-        HirExpr::FieldAccess { id, base, field } => HirExpr::FieldAccess {
+        HirExpr::FieldAccess {
+            id,
+            base,
+            field,
+            location,
+        } => HirExpr::FieldAccess {
             id,
             base: Box::new(rewrite_implicit_field_vars(*base, implicit_param, unbound)),
             field,
+            location,
         },
         HirExpr::Index { id, base, index, location } => HirExpr::Index {
             id,
@@ -360,6 +381,7 @@ fn rewrite_implicit_field_vars(
             cond,
             then_branch,
             else_branch,
+            location,
         } => HirExpr::If {
             id,
             cond: Box::new(rewrite_implicit_field_vars(*cond, implicit_param, unbound)),
@@ -373,6 +395,7 @@ fn rewrite_implicit_field_vars(
                 implicit_param,
                 unbound,
             )),
+            location,
         },
         HirExpr::Binary {
             id,

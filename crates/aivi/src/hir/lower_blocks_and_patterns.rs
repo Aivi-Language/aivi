@@ -74,6 +74,7 @@ fn lower_block_item_ctx(
                         location: None,
                     }),
                     args: vec![lowered_expr],
+                    location: None,
                 }
             } else {
                 // Plain blocks, generate blocks, resource blocks — just use the expression.
@@ -123,6 +124,7 @@ fn lower_block_item_ctx(
                 
                     location: None,
                 }],
+                location: None,
             };
             HirBlockItem::Bind {
                 pattern: HirPattern::Wildcard { id: id_gen.next() },
@@ -131,6 +133,7 @@ fn lower_block_item_ctx(
                     cond: Box::new(cond_hir),
                     then_branch: Box::new(eff_hir),
                     else_branch: Box::new(pure_unit),
+                    location: None,
                 },
                 is_monadic: true,
             }
@@ -153,6 +156,7 @@ fn lower_block_item_ctx(
                 
                     location: None,
                 }],
+                location: None,
             };
             // Negate the condition: `!cond` desugars to `if cond then False else True`
             // (AIVI has no `not` function; `!` is syntactic sugar for an if expression)
@@ -167,6 +171,7 @@ fn lower_block_item_ctx(
                     id: id_gen.next(),
                     value: true,
                 }),
+                location: None,
             };
             HirBlockItem::Bind {
                 pattern: HirPattern::Wildcard { id: id_gen.next() },
@@ -175,6 +180,7 @@ fn lower_block_item_ctx(
                     cond: Box::new(negated_cond),
                     then_branch: Box::new(eff_hir),
                     else_branch: Box::new(pure_unit),
+                    location: None,
                 },
                 is_monadic: true,
             }
@@ -197,6 +203,7 @@ fn lower_block_item_ctx(
                 
                     location: None,
                 }],
+                location: None,
             };
             HirBlockItem::Bind {
                 pattern: HirPattern::Wildcard { id: id_gen.next() },
@@ -205,6 +212,7 @@ fn lower_block_item_ctx(
                     cond: Box::new(cond_hir),
                     then_branch: Box::new(pure_unit),
                     else_branch: Box::new(fail_hir),
+                    location: None,
                 },
                 is_monadic: true,
             }

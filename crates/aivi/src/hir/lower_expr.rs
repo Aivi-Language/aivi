@@ -93,6 +93,7 @@ fn lower_expr_inner_ctx(
                             id: id_gen.next(),
                             text: number,
                         }),
+                        location: None,
                     };
                 }
 
@@ -133,6 +134,7 @@ fn lower_expr_inner_ctx(
                     location: None,
                 }),
                 arg: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
+                location: None,
             }
         }
         Expr::List { items, .. } => HirExpr::List {
@@ -218,12 +220,15 @@ fn lower_expr_inner_ctx(
                 body: Box::new(patch),
             }
         }
-        Expr::FieldAccess { base, field, .. } => HirExpr::FieldAccess {
+        Expr::FieldAccess { base, field, span } => HirExpr::FieldAccess {
             id: id_gen.next(),
             base: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
             field: field.name,
+            location: ctx
+                .source_path
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
         },
-        Expr::FieldSection { field, .. } => {
+        Expr::FieldSection { field, span } => {
             let param = "_arg0".to_string();
             let var = HirExpr::Var {
                 id: id_gen.next(),
@@ -235,6 +240,9 @@ fn lower_expr_inner_ctx(
                 id: id_gen.next(),
                 base: Box::new(var),
                 field: field.name,
+                location: ctx
+                    .source_path
+                    .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
             };
             HirExpr::Lambda {
                 id: id_gen.next(),
@@ -250,13 +258,16 @@ fn lower_expr_inner_ctx(
                 .source_path
                 .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())),
         },
-        Expr::Call { func, args, .. } => HirExpr::Call {
+        Expr::Call { func, args, span } => HirExpr::Call {
             id: id_gen.next(),
             func: Box::new(lower_expr_ctx(*func, id_gen, ctx, false)),
             args: args
                 .into_iter()
                 .map(|arg| lower_expr_ctx(arg, id_gen, ctx, false))
                 .collect(),
+            location: ctx
+                .source_path
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
         },
         Expr::Lambda { params, body, .. } => {
             let body = lower_expr_ctx(*body, id_gen, ctx, false);
@@ -320,12 +331,15 @@ fn lower_expr_inner_ctx(
             cond,
             then_branch,
             else_branch,
-            ..
+            span,
         } => HirExpr::If {
             id: id_gen.next(),
             cond: Box::new(lower_expr_ctx(*cond, id_gen, ctx, false)),
             then_branch: Box::new(lower_expr_ctx(*then_branch, id_gen, ctx, false)),
             else_branch: Box::new(lower_expr_ctx(*else_branch, id_gen, ctx, false)),
+            location: ctx
+                .source_path
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
         },
         Expr::Binary {
             op, left, right, span,
@@ -342,6 +356,9 @@ fn lower_expr_inner_ctx(
                     cond: Box::new(cond),
                     then_branch: Box::new(then_branch),
                     else_branch: Box::new(else_branch),
+                    location: ctx.source_path.map(|path| {
+                        crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())
+                    }),
                 };
             }
             if op == "||" {
@@ -356,6 +373,9 @@ fn lower_expr_inner_ctx(
                     cond: Box::new(cond),
                     then_branch: Box::new(then_branch),
                     else_branch: Box::new(else_branch),
+                    location: ctx.source_path.map(|path| {
+                        crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())
+                    }),
                 };
             }
             if op == "|>" {
@@ -369,6 +389,9 @@ fn lower_expr_inner_ctx(
                     id: id_gen.next(),
                     func: Box::new(right),
                     arg: Box::new(left),
+                    location: ctx.source_path.map(|path| {
+                        crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())
+                    }),
                 };
             }
             if op == "<|" {
@@ -477,8 +500,10 @@ fn lower_expr_inner_ctx(
                                 location: None,
                             }),
                             field: "event".to_string(),
+                            location: None,
                         }),
                         args: vec![effect_block],
+                        location: None,
                     };
                 }
             }
@@ -617,6 +642,7 @@ fn lower_pipe_chain(
     id_gen: &mut IdGen,
     ctx: &mut LowerCtx<'_>,
 ) -> HirExpr {
+    let right_span = surface_expr_span(&right);
     let Some(_) = ctx.debug.as_ref() else {
         let left = lower_expr_ctx(left, id_gen, ctx, true);
         let right = lower_expr_ctx(right, id_gen, ctx, false);
@@ -624,10 +650,12 @@ fn lower_pipe_chain(
             id: id_gen.next(),
             func: Box::new(right),
             arg: Box::new(left),
+            location: ctx
+                .source_path
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), right_span)),
         };
     };
 
-    let right_span = surface_expr_span(&right);
     let mut steps: Vec<(Expr, crate::diagnostics::Span)> = vec![(right, right_span)];
     let mut base = left;
     while let Expr::Binary {
@@ -654,12 +682,15 @@ fn lower_pipe_chain(
 
     let Some(debug) = ctx.debug.as_mut() else {
         let mut acc = lower_expr_ctx(base, id_gen, ctx, false);
-        for (step_expr, _) in steps {
+        for (step_expr, step_span) in steps {
             let func = lower_expr_ctx(step_expr, id_gen, ctx, false);
             acc = HirExpr::App {
                 id: id_gen.next(),
                 func: Box::new(func),
                 arg: Box::new(acc),
+                location: ctx.source_path.map(|path| {
+                    crate::diagnostics::SourceOrigin::new(path.to_string(), step_span)
+                }),
             };
         }
         return acc;
@@ -680,6 +711,9 @@ fn lower_pipe_chain(
             log_time,
             func: Box::new(func),
             arg: Box::new(acc),
+            location: ctx.source_path.map(|path| {
+                crate::diagnostics::SourceOrigin::new(path.to_string(), step_span)
+            }),
         };
     }
     acc
@@ -760,6 +794,7 @@ fn desugar_applicative_do_block(
             
                 location: None,
             }],
+            location: None,
         };
     }
 
@@ -801,6 +836,7 @@ fn desugar_applicative_do_block(
                     id: id_gen.next(),
                     func: Box::new(make_pattern_lambda(pattern.clone(), body, &param, id_gen)),
                     arg: Box::new(rhs),
+                    location: None,
                 };
             }
             _ => {
@@ -824,6 +860,7 @@ fn desugar_applicative_do_block(
                 location: None,
             }),
             args: vec![body],
+            location: None,
         };
     }
 
@@ -837,6 +874,7 @@ fn desugar_applicative_do_block(
             location: None,
         }),
         args: vec![body, applicative_inputs_rev[0].clone()],
+        location: None,
     };
     for expr in applicative_inputs_rev.into_iter().skip(1) {
         acc = HirExpr::Call {
@@ -848,6 +886,7 @@ fn desugar_applicative_do_block(
                 location: None,
             }),
             args: vec![acc, expr],
+            location: None,
         };
     }
     acc
@@ -889,6 +928,7 @@ fn desugar_generic_do_block(
             
                 location: None,
             }],
+            location: None,
         };
     }
 
@@ -960,6 +1000,7 @@ fn desugar_do_items(
                         location: None,
                     }),
                     args: vec![body],
+                    location: None,
                 };
                 let continuation = make_pattern_lambda(pattern.clone(), wrapped, &param, id_gen);
                 // chain continuation rhs
@@ -972,6 +1013,7 @@ fn desugar_do_items(
                         location: None,
                     }),
                     args: vec![continuation, rhs],
+                    location: None,
                 }
             } else {
                 let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, ops, id_gen, ctx);
@@ -987,6 +1029,7 @@ fn desugar_do_items(
                         location: None,
                     }),
                     args: vec![continuation, rhs],
+                    location: None,
                 }
             }
         }
@@ -1005,6 +1048,7 @@ fn desugar_do_items(
                         location: None,
                     }),
                     args: vec![rhs],
+                    location: None,
                 }
             } else {
                 let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, ops, id_gen, ctx);
@@ -1015,6 +1059,7 @@ fn desugar_do_items(
                     id: id_gen.next(),
                     func: Box::new(body),
                     arg: Box::new(rhs),
+                    location: None,
                 }
             }
         }
@@ -1042,6 +1087,7 @@ fn desugar_do_items(
                         location: None,
                     }),
                     args: vec![continuation, rhs],
+                    location: None,
                 }
             }
         }
@@ -1140,6 +1186,7 @@ fn maybe_lower_query_expr(
                     location: None,
                 }),
                 args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
+                location: None,
             })
         }
         Expr::Call { func, args, .. } if is_database_helper(func, "exists") && args.len() == 1 => {
@@ -1152,6 +1199,7 @@ fn maybe_lower_query_expr(
                     location: None,
                 }),
                 args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
+                location: None,
             })
         }
         _ => None,
@@ -1200,6 +1248,7 @@ fn build_static_query_hir(
             },
             sources,
         ],
+        location: None,
     }
 }
 
@@ -1216,6 +1265,7 @@ fn build_query_error_hir(message: String, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             text: message,
         }],
+        location: None,
     }
 }
 

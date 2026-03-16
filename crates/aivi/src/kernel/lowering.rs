@@ -37,18 +37,21 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         id: id_gen.next(),
         func: Box::new(f),
         arg: Box::new(x),
+        location: None,
     };
     // f(x) k
     let fx_k = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(fx),
         arg: Box::new(k.clone()),
+        location: None,
     };
     // f(x) k acc
     let fx_k_acc = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(fx_k),
         arg: Box::new(acc),
+        location: None,
     };
 
     let step_fn = HirExpr::Lambda {
@@ -66,11 +69,13 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         id: id_gen.next(),
         func: Box::new(g),
         arg: Box::new(step_fn),
+        location: None,
     };
     let g_step_z = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(g_step),
         arg: Box::new(z),
+        location: None,
     };
 
     HirExpr::Lambda {
@@ -123,14 +128,14 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             }
             find_max_id_expr(body, max);
         }
-        HirExpr::App { id, func, arg } => {
+        HirExpr::App { id, func, arg, .. } => {
             if *id > *max {
                 *max = *id;
             }
             find_max_id_expr(func, max);
             find_max_id_expr(arg, max);
         }
-        HirExpr::Call { id, func, args } => {
+        HirExpr::Call { id, func, args, .. } => {
             if *id > *max {
                 *max = *id;
             }
@@ -222,6 +227,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             cond,
             then_branch,
             else_branch,
+            ..
         } => {
             if *id > *max {
                 *max = *id;

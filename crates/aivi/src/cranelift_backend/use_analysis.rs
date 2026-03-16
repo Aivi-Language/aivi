@@ -441,6 +441,7 @@ mod tests {
             id: 0,
             func: Box::new(local(1, "x")),
             arg: Box::new(local(2, "x")),
+            location: None,
         };
         let map = analyze_uses(&expr);
         assert!(!map.is_last_use(1, "x"));
@@ -454,6 +455,7 @@ mod tests {
             id: 0,
             func: Box::new(local(1, "f")),
             arg: Box::new(local(2, "x")),
+            location: None,
         };
         let map = analyze_uses(&expr);
         assert!(map.is_last_use(1, "f"));
@@ -467,6 +469,7 @@ mod tests {
             id: 0,
             func: Box::new(local(1, "x")),
             args: vec![local(2, "x"), local(3, "x")],
+            location: None,
         };
         let map = analyze_uses(&expr);
         assert!(!map.is_last_use(1, "x"));
