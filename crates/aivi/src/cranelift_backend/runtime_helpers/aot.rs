@@ -493,6 +493,10 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_leave_fn", rt_leave_fn as *const u8),
         // Source location tracking for diagnostics
         ("rt_set_location", rt_set_location as *const u8),
+        (
+            "rt_prepare_call_location",
+            rt_prepare_call_location as *const u8,
+        ),
         // Snapshot mock helpers
         (
             "rt_snapshot_mock_install",

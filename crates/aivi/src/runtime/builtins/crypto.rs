@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha384, Sha512};
 use subtle::ConstantTimeEq;
@@ -200,6 +202,14 @@ pub(super) fn build_crypto_record() -> Value {
         builtin("crypto.toHex", 1, |mut args, _| {
             let bytes = expect_bytes(args.pop().unwrap(), "crypto.toHex")?;
             Ok(Value::Text(hex::encode(&*bytes)))
+        }),
+    );
+
+    fields.insert(
+        "toBase64Url".to_string(),
+        builtin("crypto.toBase64Url", 1, |mut args, _| {
+            let bytes = expect_bytes(args.pop().unwrap(), "crypto.toBase64Url")?;
+            Ok(Value::Text(URL_SAFE_NO_PAD.encode(&*bytes)))
         }),
     );
 

@@ -101,6 +101,10 @@ pub(crate) struct Runtime {
     /// Source location of the most recently instrumented expression, set by
     /// `rt_set_location` before potentially-failing operations.
     pub(crate) jit_current_loc: Option<SourceOrigin>,
+    /// Source location queued for the next JIT frame entry. This lets call
+    /// sites attach a concrete origin to a callee frame without clobbering the
+    /// caller's own current location.
+    pub(crate) jit_pending_call_loc: Option<SourceOrigin>,
     /// Live JIT stack used for runtime reports and warnings.
     pub(crate) jit_frame_stack: Vec<RuntimeFrame>,
     /// Warning counter incremented by `rt_warn`. Used by `rt_binary_op` to

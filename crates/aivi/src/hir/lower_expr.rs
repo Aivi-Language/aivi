@@ -11,6 +11,9 @@ fn lower_expr_inner_ctx(
         Expr::Ident(name) => HirExpr::Var {
             id: id_gen.next(),
             name: name.name,
+            location: ctx
+                .source_path
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), name.span)),
         },
         Expr::UnaryNeg { expr, .. } => HirExpr::Binary {
             id: id_gen.next(),
@@ -83,6 +86,8 @@ fn lower_expr_inner_ctx(
                         func: Box::new(HirExpr::Var {
                             id: id_gen.next(),
                             name: template_name,
+                        
+                            location: None,
                         }),
                         arg: Box::new(HirExpr::LitNumber {
                             id: id_gen.next(),
@@ -124,6 +129,8 @@ fn lower_expr_inner_ctx(
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: template_name,
+                
+                    location: None,
                 }),
                 arg: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
             }
@@ -178,6 +185,8 @@ fn lower_expr_inner_ctx(
             let target = HirExpr::Var {
                 id: id_gen.next(),
                 name: param.clone(),
+            
+                location: None,
             };
             let patch = HirExpr::Patch {
                 id: id_gen.next(),
@@ -219,6 +228,8 @@ fn lower_expr_inner_ctx(
             let var = HirExpr::Var {
                 id: id_gen.next(),
                 name: param.clone(),
+            
+                location: None,
             };
             let body = HirExpr::FieldAccess {
                 id: id_gen.next(),
@@ -264,6 +275,7 @@ fn lower_expr_inner_ctx(
                 let var = HirExpr::Var {
                     id: id_gen.next(),
                     name: param.clone(),
+                    location: None,
                 };
                 let match_expr = HirExpr::Match {
                     id: id_gen.next(),
@@ -461,6 +473,8 @@ fn lower_expr_inner_ctx(
                             base: Box::new(HirExpr::Var {
                                 id: id_gen.next(),
                                 name: "reactive".to_string(),
+                            
+                                location: None,
                             }),
                             field: "event".to_string(),
                         }),
@@ -703,6 +717,8 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     scrutinee: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: param_name.clone(),
+                    
+                        location: None,
                     }),
                     arms: vec![HirMatchArm {
                         pattern: lower_pattern(other, id_gen),
@@ -735,10 +751,14 @@ fn desugar_applicative_do_block(
             func: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: "of".to_string(),
+            
+                location: None,
             }),
             args: vec![HirExpr::Var {
                 id: id_gen.next(),
                 name: "Unit".to_string(),
+            
+                location: None,
             }],
         };
     }
@@ -751,6 +771,8 @@ fn desugar_applicative_do_block(
         return HirExpr::Var {
             id: id_gen.next(),
             name: "Unit".to_string(),
+        
+            location: None,
         };
     };
 
@@ -785,6 +807,8 @@ fn desugar_applicative_do_block(
                 return HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 };
             }
         }
@@ -796,6 +820,8 @@ fn desugar_applicative_do_block(
             func: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: "of".to_string(),
+            
+                location: None,
             }),
             args: vec![body],
         };
@@ -807,6 +833,8 @@ fn desugar_applicative_do_block(
         func: Box::new(HirExpr::Var {
             id: id_gen.next(),
             name: "map".to_string(),
+        
+            location: None,
         }),
         args: vec![body, applicative_inputs_rev[0].clone()],
     };
@@ -816,6 +844,8 @@ fn desugar_applicative_do_block(
             func: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: "ap".to_string(),
+            
+                location: None,
             }),
             args: vec![acc, expr],
         };
@@ -850,10 +880,14 @@ fn desugar_generic_do_block(
             func: Box::new(HirExpr::Var {
                 id: id_gen.next(),
                 name: ops.of.to_string(),
+            
+                location: None,
             }),
             args: vec![HirExpr::Var {
                 id: id_gen.next(),
                 name: "Unit".to_string(),
+            
+                location: None,
             }],
         };
     }
@@ -913,6 +947,8 @@ fn desugar_do_items(
                 let body = HirExpr::Var {
                     id: id_gen.next(),
                     name: param.clone(),
+                
+                    location: None,
                 };
                 // Wrap in `of` for final bind: `chain (λx. of x) e`
                 let wrapped = HirExpr::Call {
@@ -920,6 +956,8 @@ fn desugar_do_items(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: ops.of.to_string(),
+                    
+                        location: None,
                     }),
                     args: vec![body],
                 };
@@ -930,6 +968,8 @@ fn desugar_do_items(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: ops.chain.to_string(),
+                    
+                        location: None,
                     }),
                     args: vec![continuation, rhs],
                 }
@@ -943,6 +983,8 @@ fn desugar_do_items(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: ops.chain.to_string(),
+                    
+                        location: None,
                     }),
                     args: vec![continuation, rhs],
                 }
@@ -959,6 +1001,8 @@ fn desugar_do_items(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: ops.of.to_string(),
+                    
+                        location: None,
                     }),
                     args: vec![rhs],
                 }
@@ -994,6 +1038,8 @@ fn desugar_do_items(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: ops.chain.to_string(),
+                    
+                        location: None,
                     }),
                     args: vec![continuation, rhs],
                 }
@@ -1009,6 +1055,8 @@ fn desugar_do_items(
                 _ => HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 },
             }
         }
@@ -1045,6 +1093,8 @@ fn make_pattern_lambda(
                 scrutinee: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: fallback_param.to_string(),
+                
+                    location: None,
                 }),
                 arms: vec![HirMatchArm {
                     pattern: lower_pattern(pattern, id_gen),
@@ -1086,6 +1136,8 @@ fn maybe_lower_query_expr(
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: DB_QUERY_COUNT_BUILTIN.to_string(),
+                
+                    location: None,
                 }),
                 args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
             })
@@ -1096,6 +1148,8 @@ fn maybe_lower_query_expr(
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: DB_QUERY_EXISTS_BUILTIN.to_string(),
+                
+                    location: None,
                 }),
                 args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
             })
@@ -1136,6 +1190,8 @@ fn build_static_query_hir(
         func: Box::new(HirExpr::Var {
             id: id_gen.next(),
             name: DB_QUERY_COMPILED_BUILTIN.to_string(),
+        
+            location: None,
         }),
         args: vec![
             HirExpr::LitString {
@@ -1153,6 +1209,8 @@ fn build_query_error_hir(message: String, id_gen: &mut IdGen) -> HirExpr {
         func: Box::new(HirExpr::Var {
             id: id_gen.next(),
             name: DB_QUERY_ERROR_BUILTIN.to_string(),
+        
+            location: None,
         }),
         args: vec![HirExpr::LitString {
             id: id_gen.next(),

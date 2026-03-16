@@ -34,16 +34,15 @@ dirState : Signal Direction
 dirState = signal initial.dir
 scoreState : Signal Int
 scoreState = signal initial.score
-seedState : Signal Int
-seedState = signal initial.seed
-modeState : Signal Mode
-modeState = signal initial.mode
+seedState  = signal initial.seed
+modeState  = signal initial.mode
 
-move = (x, y) =>
-| Up    => (x, y - 1)
-| Down  => (x, y + 1)
-| Left  => (x - 1, y)
-| Right => (x + 1, y)
+opposite: Pixel -> Direction -> Pixel
+move = (x, y) => 
+  | Up    => (x, y - 1)
+  | Down  => (x, y + 1)
+  | Left  => (x - 1, y)
+  | Right => (x + 1, y)
 
 opposite : Direction -> Direction
 opposite =

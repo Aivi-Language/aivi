@@ -7,7 +7,10 @@ use crate::surface::{DomainDecl, DomainItem, Module, ModuleItem, ScopeItemKind};
 use super::checker::TypeChecker;
 use super::class_env::{ClassDeclInfo, InstanceDeclInfo};
 use super::types::Scheme;
-use super::{module_interface_from_setup, setup_module, ModuleInterface, ModuleInterfaceMaps};
+use super::{
+    build_module_interface, module_interface_from_setup, setup_module, ModuleInterface,
+    ModuleInterfaceMaps,
+};
 
 use super::global::collect_global_type_info;
 use super::ordering::ordered_modules;
@@ -129,10 +132,10 @@ pub fn check_types_with_checkpoint_incremental(
             &state.module_instance_exports,
             &mut diagnostics,
         );
-        let mut module_diags =
-            checker.check_module_defs(module, &setup.sigs, &mut setup.env.clone());
+        let mut checked_env = setup.env.clone();
+        let mut module_diags = checker.check_module_defs(module, &setup.sigs, &mut checked_env);
         diagnostics.append(&mut module_diags);
-        let interface = module_interface_from_setup(module, &checker, &setup);
+        let interface = build_module_interface(module, &checker, &setup.sigs, &checked_env);
         state.apply_module_interface(&module.name.name, &interface);
         module_results.push(CheckedModule {
             module_name: module.name.name.clone(),
@@ -369,16 +372,20 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
             &module_instance_exports,
             &mut diagnostics,
         );
+        let interface_env = if check_embedded_stdlib || !module.path.starts_with("<embedded:") {
+            let mut checked_env = setup.env.clone();
 
-        // v0.1 embedded stdlib is allowed to be incomplete; typechecking its bodies can hang/crash.
-        // Still collect its signatures/classes/instances so user modules can typecheck.
-        if check_embedded_stdlib || !module.path.starts_with("<embedded:") {
-            let mut module_diags =
-                checker.check_module_defs(module, &setup.sigs, &mut setup.env.clone());
+            // v0.1 embedded stdlib is allowed to be incomplete; typechecking its bodies can
+            // hang/crash. Still collect its signatures/classes/instances so user modules can
+            // typecheck.
+            let mut module_diags = checker.check_module_defs(module, &setup.sigs, &mut checked_env);
             diagnostics.append(&mut module_diags);
-        }
+            checked_env
+        } else {
+            setup.env.clone()
+        };
 
-        let interface = module_interface_from_setup(module, &checker, &setup);
+        let interface = build_module_interface(module, &checker, &setup.sigs, &interface_env);
         module_exports.insert(module.name.name.clone(), interface.exports.clone());
         module_type_exports.insert(module.name.name.clone(), interface.type_exports.clone());
         module_domain_exports.insert(module.name.name.clone(), interface.domain_exports.clone());

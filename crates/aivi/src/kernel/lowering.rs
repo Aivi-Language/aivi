@@ -6,10 +6,14 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     let k = HirExpr::Var {
         id: id_gen.next(),
         name: k_name.clone(),
+    
+        location: None,
     };
     let z = HirExpr::Var {
         id: id_gen.next(),
         name: z_name.clone(),
+    
+        location: None,
     };
 
     // \acc -> \x -> ...
@@ -18,10 +22,14 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     let acc = HirExpr::Var {
         id: id_gen.next(),
         name: acc_name.clone(),
+    
+        location: None,
     };
     let x = HirExpr::Var {
         id: id_gen.next(),
         name: x_name.clone(),
+    
+        location: None,
     };
 
     // f(x)

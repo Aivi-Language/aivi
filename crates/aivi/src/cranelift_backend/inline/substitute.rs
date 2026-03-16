@@ -526,6 +526,7 @@ mod tests {
         RustIrExpr::Local {
             id,
             name: name.to_string(),
+            location: None,
         }
     }
 
@@ -533,6 +534,7 @@ mod tests {
         RustIrExpr::Global {
             id,
             name: name.to_string(),
+            location: None,
         }
     }
 

@@ -1175,6 +1175,7 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
                     func: Box::new(RustIrExpr::Global {
                         id: 0,
                         name: "__set_source_schema".to_string(),
+                        location: None,
                     }),
                     args: vec![
                         RustIrExpr::LitString {
@@ -1193,3 +1194,241 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
 include!("compile/support.rs");
 include!("compile/body.rs");
 include!("compile/aot.rs");
+
+#[cfg(test)]
+mod runtime_warning_tests {
+    use std::collections::{HashMap, HashSet};
+
+    use super::*;
+    use crate::hir::{HirDef, HirExpr, HirModule, HirProgram};
+    use crate::{Position, SourceOrigin, Span};
+
+    fn origin(path: &str, line: usize, column: usize) -> SourceOrigin {
+        SourceOrigin::new(
+            path.to_string(),
+            Span {
+                start: Position { line, column },
+                end: Position {
+                    line,
+                    column: column + 1,
+                },
+            },
+        )
+    }
+
+    #[test]
+    fn missing_global_warning_reports_source_location() {
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "demo.main".to_string(),
+                defs: vec![
+                    HirDef {
+                        name: "helper".to_string(),
+                        expr: HirExpr::LitBool { id: 1, value: true },
+                    },
+                    HirDef {
+                        name: "main".to_string(),
+                        expr: HirExpr::Binary {
+                            id: 2,
+                            op: "+".to_string(),
+                            left: Box::new(HirExpr::Var {
+                                id: 3,
+                                name: "helper".to_string(),
+                                location: Some(origin("src/demo/main.aivi", 7, 11)),
+                            }),
+                            right: Box::new(HirExpr::LitNumber {
+                                id: 4,
+                                text: "1".to_string(),
+                            }),
+                            location: None,
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        runtime.ctx.globals.remove("demo.main.helper");
+        runtime.ctx.begin_console_capture();
+        let value = runtime
+            .ctx
+            .globals
+            .get("demo.main.main")
+            .expect("main binding should exist");
+        let _ = runtime.force_value(value).unwrap_or_else(|err| {
+            panic!(
+                "force main binding: {}",
+                crate::runtime::format_runtime_error(err)
+            )
+        });
+        let capture = runtime.ctx.take_console_capture();
+
+        assert!(
+            capture.stderr.contains("warning[RT]"),
+            "expected runtime warning, got stderr:\n{}",
+            capture.stderr
+        );
+        assert!(
+            capture.stderr.contains("src/demo/main.aivi:7:11"),
+            "expected source location in warning, got stderr:\n{}",
+            capture.stderr
+        );
+
+        drop(module);
+    }
+
+    fn lit_int(id: u32, text: &str) -> HirExpr {
+        HirExpr::LitNumber {
+            id,
+            text: text.to_string(),
+        }
+    }
+
+    fn tuple_else_branch(start_id: u32) -> HirExpr {
+        HirExpr::Tuple {
+            id: start_id,
+            items: vec![
+                lit_int(start_id + 1, "2"),
+                lit_int(start_id + 2, "3"),
+                lit_int(start_id + 3, "4"),
+                lit_int(start_id + 4, "5"),
+                lit_int(start_id + 5, "6"),
+                lit_int(start_id + 6, "7"),
+                lit_int(start_id + 7, "8"),
+                lit_int(start_id + 8, "9"),
+            ],
+        }
+    }
+
+    #[test]
+    fn runtime_stack_frames_inherit_pending_call_locations() {
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "demo.main".to_string(),
+                defs: vec![
+                    HirDef {
+                        name: "helper".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 10,
+                            param: "ignored".to_string(),
+                            body: Box::new(HirExpr::If {
+                                id: 11,
+                                cond: Box::new(HirExpr::LitBool {
+                                    id: 12,
+                                    value: true,
+                                }),
+                                then_branch: Box::new(HirExpr::App {
+                                    id: 13,
+                                    func: Box::new(HirExpr::LitBool {
+                                        id: 14,
+                                        value: true,
+                                    }),
+                                    arg: Box::new(lit_int(15, "1")),
+                                }),
+                                else_branch: Box::new(tuple_else_branch(20)),
+                            }),
+                        },
+                    },
+                    HirDef {
+                        name: "apply".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 40,
+                            param: "f".to_string(),
+                            body: Box::new(HirExpr::If {
+                                id: 41,
+                                cond: Box::new(HirExpr::LitBool {
+                                    id: 42,
+                                    value: true,
+                                }),
+                                then_branch: Box::new(HirExpr::App {
+                                    id: 43,
+                                    func: Box::new(HirExpr::Var {
+                                        id: 44,
+                                        name: "f".to_string(),
+                                        location: Some(origin("src/demo/main.aivi", 5, 11)),
+                                    }),
+                                    arg: Box::new(lit_int(45, "1")),
+                                }),
+                                else_branch: Box::new(tuple_else_branch(50)),
+                            }),
+                        },
+                    },
+                    HirDef {
+                        name: "entry".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 70,
+                            param: "_".to_string(),
+                            body: Box::new(HirExpr::App {
+                                id: 71,
+                                func: Box::new(HirExpr::Var {
+                                    id: 72,
+                                    name: "apply".to_string(),
+                                    location: Some(origin("src/demo/main.aivi", 8, 5)),
+                                }),
+                                arg: Box::new(HirExpr::Lambda {
+                                    id: 73,
+                                    param: "x".to_string(),
+                                    body: Box::new(HirExpr::App {
+                                        id: 74,
+                                        func: Box::new(HirExpr::Var {
+                                            id: 75,
+                                            name: "helper".to_string(),
+                                            location: Some(origin("src/demo/main.aivi", 8, 22)),
+                                        }),
+                                        arg: Box::new(HirExpr::LitBool {
+                                            id: 76,
+                                            value: true,
+                                        }),
+                                    }),
+                                }),
+                            }),
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        let value = runtime
+            .ctx
+            .globals
+            .get("demo.main.entry")
+            .expect("entry binding should exist")
+            .clone();
+        let err = runtime
+            .apply(value, Value::Unit)
+            .expect_err("entry should fail");
+        let rendered = aivi_driver::render_runtime_report(&runtime.runtime_report(err), false);
+
+        assert!(
+            rendered.contains("demo.main.helper at src/demo/main.aivi:8:22"),
+            "expected helper frame location, got:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("demo.main.entry (lambda) at src/demo/main.aivi:"),
+            "expected lambda frame location, got:\n{rendered}"
+        );
+
+        drop(module);
+    }
+}

@@ -7,7 +7,7 @@ export sha256, sha384, sha512
 export hmacSha256, hmacSha512, hmacVerify
 export hashPassword, verifyPassword
 export randomUuid, randomBytes
-export secureEquals, fromHex, toHex
+export secureEquals, fromHex, toHex, toBase64Url
 
 use aivi
 
@@ -49,4 +49,7 @@ fromHex = hex => crypto.fromHex hex
 
 toHex : Bytes -> Text
 toHex = bytes => crypto.toHex bytes
+
+toBase64Url : Bytes -> Text
+toBase64Url = bytes => crypto.toBase64Url bytes
 "#;

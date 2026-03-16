@@ -414,6 +414,7 @@ mod tests {
         RustIrExpr::Local {
             id,
             name: name.to_string(),
+            location: None,
         }
     }
 

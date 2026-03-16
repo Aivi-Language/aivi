@@ -159,6 +159,14 @@ fn module_interface_from_setup(
     build_module_interface(module, checker, &setup.sigs, &setup.env)
 }
 
+fn checked_module_env(module: &Module, checker: &mut TypeChecker, setup: &ModuleSetup) -> TypeEnv {
+    checker.with_ephemeral_state_rollback(|checker| {
+        let mut env = setup.env.clone();
+        let _ = checker.check_module_defs(module, &setup.sigs, &mut env);
+        env
+    })
+}
+
 fn build_module_interface(
     module: &Module,
     checker: &TypeChecker,

@@ -70,6 +70,8 @@ fn lower_block_item_ctx(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: "pure".to_string(),
+                    
+                        location: None,
                     }),
                     args: vec![lowered_expr],
                 }
@@ -112,10 +114,14 @@ fn lower_block_item_ctx(
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: "pure".to_string(),
+                
+                    location: None,
                 }),
                 args: vec![HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 }],
             };
             HirBlockItem::Bind {
@@ -138,10 +144,14 @@ fn lower_block_item_ctx(
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: "pure".to_string(),
+                
+                    location: None,
                 }),
                 args: vec![HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 }],
             };
             // Negate the condition: `!cond` desugars to `if cond then False else True`
@@ -178,10 +188,14 @@ fn lower_block_item_ctx(
                 func: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: "pure".to_string(),
+                
+                    location: None,
                 }),
                 args: vec![HirExpr::Var {
                     id: id_gen.next(),
                     name: "Unit".to_string(),
+                
+                    location: None,
                 }],
             };
             HirBlockItem::Bind {

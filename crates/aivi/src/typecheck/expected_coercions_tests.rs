@@ -356,6 +356,50 @@ patchState = state <<- (current => current <| { count: _ + 1, enabled: True })
 }
 
 #[test]
+fn elaborates_signal_write_with_unannotated_top_level_signal() {
+    let source = r#"
+module test.signal_unannotated
+
+use aivi
+use aivi.reactive
+
+count = signal 1
+setCount = count <<- 5
+"#;
+
+    let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut all_modules = crate::stdlib::embedded_stdlib_modules();
+    all_modules.append(&mut modules);
+
+    let diags = without_embedded_errors(crate::resolver::check_modules(&all_modules));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let diags = without_embedded_errors(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let program = crate::hir::desugar_modules(&all_modules);
+    let module = program
+        .modules
+        .iter()
+        .find(|m| m.name == "test.signal_unannotated")
+        .expect("expected test.signal_unannotated module");
+    let def = module
+        .defs
+        .iter()
+        .find(|d| d.name == "setCount")
+        .expect("expected setCount def");
+
+    assert!(
+        hir_contains_reactive_call(&def.expr, "set"),
+        "expected unannotated signal write sugar to elaborate to reactive.set"
+    );
+}
+
+#[test]
 fn elaborates_signal_sugar_inside_effect_blocks() {
     let source = r#"
 module test.signal_block
