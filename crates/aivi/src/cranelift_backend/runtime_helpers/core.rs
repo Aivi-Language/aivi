@@ -167,6 +167,7 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_fn = Some(name.clone().into_boxed_str());
+    runtime.jit_current_loc = None;
     FN_HISTORY.with(|h| {
         let mut h = h.borrow_mut();
         h.push(name);
@@ -188,6 +189,30 @@ pub extern "C" fn rt_set_location(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: 
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_loc = Some(loc.into_boxed_str());
+}
+
+#[cfg(test)]
+mod core_tests {
+    use crate::cranelift_backend::abi::JitRuntimeCtx;
+    use crate::runtime::Runtime;
+
+    use super::rt_enter_fn;
+
+    fn test_runtime() -> Runtime {
+        crate::runtime::build_runtime_base()
+    }
+
+    #[test]
+    fn enter_fn_clears_stale_source_location() {
+        let mut runtime = test_runtime();
+        runtime.jit_current_loc = Some("<embedded:old>:99:1".into());
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+
+        rt_enter_fn(&mut ctx, b"test.fn".as_ptr(), "test.fn".len());
+
+        assert_eq!(runtime.jit_current_fn.as_deref(), Some("test.fn"));
+        assert!(runtime.jit_current_loc.is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -112,6 +112,13 @@ mod linux_impl {
     }
 
     #[repr(C)]
+    struct GError {
+        domain: c_uint,
+        code: c_int,
+        message: *mut c_char,
+    }
+
+    #[repr(C)]
     #[derive(Debug, Clone, Copy, Default)]
     pub struct GraphenePoint {
         pub x: f32,
@@ -332,6 +339,7 @@ mod linux_impl {
         fn gtk_menu_button_set_menu_model(button: *mut c_void, menu_model: *mut c_void);
         fn gtk_menu_button_set_popover(button: *mut c_void, popover: *mut c_void);
         fn gtk_menu_button_popup(button: *mut c_void);
+        fn gtk_menu_button_popdown(button: *mut c_void);
 
         fn gtk_revealer_new() -> *mut c_void;
         fn gtk_revealer_set_child(revealer: *mut c_void, child: *mut c_void);
@@ -520,6 +528,11 @@ mod linux_impl {
         fn g_simple_action_set_enabled(action: *mut c_void, enabled: c_int);
         fn g_action_map_add_action(action_map: *mut c_void, action: *mut c_void);
         fn g_action_activate(action: *mut c_void, parameter: *mut c_void);
+        fn g_app_info_launch_default_for_uri(
+            uri: *const c_char,
+            context: *mut c_void,
+            error: *mut *mut c_void,
+        ) -> c_int;
         fn g_menu_new() -> *mut c_void;
         fn g_menu_append(menu: *mut c_void, label: *const c_char, detailed_action: *const c_char);
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
@@ -552,6 +565,7 @@ mod linux_impl {
         fn g_date_time_get_month(datetime: *mut c_void) -> c_int;
         fn g_date_time_get_day_of_month(datetime: *mut c_void) -> c_int;
         fn g_date_time_unref(datetime: *mut c_void);
+        fn g_error_free(error: *mut c_void);
         fn g_free(ptr: *mut c_void);
     }
 
@@ -1076,6 +1090,37 @@ mod linux_impl {
         g_object_set(widget, prop.as_ptr(), val, std::ptr::null::<c_char>());
     }
 
+    unsafe fn set_widget_bool_property(
+        widget: *mut c_void,
+        class_name: &str,
+        prop: &CStr,
+        val: c_int,
+    ) {
+        if class_name == "GtkMenuButton" && prop.to_bytes() == b"active" {
+            if val != 0 {
+                gtk_menu_button_popup(widget);
+            } else {
+                gtk_menu_button_popdown(widget);
+            }
+        } else {
+            gobject_set_bool(widget, prop, val);
+        }
+    }
+
+    unsafe fn gerror_message(error: *mut c_void, fallback: &str) -> String {
+        if error.is_null() {
+            return fallback.to_string();
+        }
+        let gerror = &*(error as *const GError);
+        if gerror.message.is_null() {
+            fallback.to_string()
+        } else {
+            CStr::from_ptr(gerror.message)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
     /// Set a GObject string property.
     unsafe fn gobject_set_str(widget: *mut c_void, prop: &CStr, val: &CStr) {
         g_object_set(
@@ -1251,10 +1296,15 @@ mod linux_impl {
     }
 
     /// Set a GObject boolean property from a props map entry.
-    fn set_obj_bool(widget: *mut c_void, props: &HashMap<String, String>, key: &str) {
+    fn set_obj_bool(
+        widget: *mut c_void,
+        class_name: &str,
+        props: &HashMap<String, String>,
+        key: &str,
+    ) {
         if let Some(value) = props.get(key).and_then(|v| parse_bool_text(v)) {
             let prop_c = CString::new(key).unwrap();
-            unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
+            unsafe { set_widget_bool_property(widget, class_name, &prop_c, bool_to_c(value)) };
         }
     }
 
@@ -1311,7 +1361,9 @@ mod linux_impl {
             }
             "gboolean" => {
                 if let Some(value) = parse_bool_text(raw_value) {
-                    unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
+                    unsafe {
+                        set_widget_bool_property(widget, class_name, &prop_c, bool_to_c(value))
+                    };
                     return Ok(true);
                 }
                 Ok(false)
@@ -1391,7 +1443,9 @@ mod linux_impl {
                     return Ok(true);
                 }
                 if let Some(value) = parse_bool_text(raw_value) {
-                    unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
+                    unsafe {
+                        set_widget_bool_property(widget, class_name, &prop_c, bool_to_c(value))
+                    };
                     return Ok(true);
                 }
                 Ok(false)
@@ -1567,7 +1621,7 @@ mod linux_impl {
             "AdwEntryRow" | "AdwPasswordEntryRow" => &["changed"],
             "GtkCheckButton" | "AdwSwitchRow" => &["toggled"],
             "GtkToggleButton" => &["toggled"],
-            "GtkSwitch" => &["notify::active"],
+            "GtkSwitch" | "GtkMenuButton" => &["notify::active"],
             "GtkRange" | "GtkScale" => &["value-changed"],
             "GtkSpinButton" => &["value-changed"],
             "GtkSearchEntry" => &["changed", "search-changed"],
@@ -2376,6 +2430,18 @@ mod linux_impl {
         }
 
         #[test]
+        fn gtk_menu_button_has_notify_active_signal_support() {
+            assert_eq!(
+                signal_payload_kind_for("GtkMenuButton", "notify::active"),
+                Some(SignalPayloadKind::NotifyBool)
+            );
+            assert_eq!(
+                known_signals_for_class("GtkMenuButton"),
+                &["notify::active"]
+            );
+        }
+
+        #[test]
         fn gtk_event_controller_motion_has_enter_leave_signal_support() {
             assert_eq!(
                 signal_payload_kind_for("GtkEventControllerMotion", "enter"),
@@ -3139,6 +3205,108 @@ mod linux_impl {
             assert!(
                 descendants.contains(&item),
                 "custom popover descendants should include the nested button"
+            );
+        }
+
+        #[test]
+        fn gtk_menu_button_active_property_uses_popup_and_popdown() {
+            let _guard = gtk_state_test_guard();
+            reset_test_gtk_state();
+            init().expect("init gtk");
+
+            let app_id = app_new("integration-tests.menu-button-active-property")
+                .expect("create GTK application");
+
+            let window_node = GtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![
+                    ("class".to_string(), "AdwApplicationWindow".to_string()),
+                    ("id".to_string(), "menu-button-active-host".to_string()),
+                    (
+                        "prop:title".to_string(),
+                        "Menu Button Active Host".to_string(),
+                    ),
+                    ("prop:default-width".to_string(), "320".to_string()),
+                    ("prop:default-height".to_string(), "180".to_string()),
+                ],
+                children: vec![GtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![("class".to_string(), "GtkBox".to_string())],
+                    children: vec![GtkNode::Element {
+                        tag: "object".to_string(),
+                        attrs: vec![
+                            ("class".to_string(), "GtkMenuButton".to_string()),
+                            ("id".to_string(), "active-settings-button".to_string()),
+                            (
+                                "prop:icon-name".to_string(),
+                                "preferences-system-symbolic".to_string(),
+                            ),
+                        ],
+                        children: vec![GtkNode::Element {
+                            tag: "property".to_string(),
+                            attrs: vec![("name".to_string(), "popover".to_string())],
+                            children: vec![GtkNode::Element {
+                                tag: "object".to_string(),
+                                attrs: vec![("class".to_string(), "GtkPopover".to_string())],
+                                children: vec![GtkNode::Element {
+                                    tag: "object".to_string(),
+                                    attrs: vec![
+                                        ("class".to_string(), "GtkBox".to_string()),
+                                        ("prop:orientation".to_string(), "vertical".to_string()),
+                                    ],
+                                    children: vec![],
+                                }],
+                            }],
+                        }],
+                    }],
+                }],
+            };
+
+            let result =
+                mount_app_window_with_bindings(app_id, &[window_node]).expect("mount window");
+            let button_id = *result
+                .named_widgets
+                .get("active-settings-button")
+                .expect("menu button should be named");
+
+            widget_set_opacity(result.root_id, 0.0).expect("hide host window");
+            window_present(result.root_id).expect("present host window");
+            crate::pump_events();
+
+            let button = GTK_STATE.with(|state| {
+                let state = state.borrow();
+                widget_ptr(&state, button_id, "menu_button_active_property_test").expect("button")
+            });
+            let active_prop = CString::new("active").expect("active property CString");
+
+            widget_set_bool_property(button_id, "active", true).expect("open menu button");
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+            assert_ne!(
+                unsafe { gobject_get_bool(button, &active_prop) },
+                0,
+                "GtkMenuButton active=true should open its popover"
+            );
+
+            widget_set_bool_property(button_id, "active", false).expect("close menu button");
+            for _ in 0..20 {
+                crate::pump_events();
+            }
+            assert_eq!(
+                unsafe { gobject_get_bool(button, &active_prop) },
+                0,
+                "GtkMenuButton active=false should close its popover"
+            );
+        }
+
+        #[test]
+        fn os_open_uri_rejects_empty_uri() {
+            let err = os_open_uri(0, "").expect_err("empty URI should fail");
+            assert!(
+                err.message.contains("gtk4.osOpenUri failed to open"),
+                "unexpected osOpenUri error: {}",
+                err.message
             );
         }
 
@@ -7151,11 +7319,13 @@ mod linux_impl {
         enum DeferredMutation {
             SetBool {
                 widget: *mut c_void,
+                class_name: String,
                 property: CString,
                 value: c_int,
             },
             ToggleBool {
                 widget: *mut c_void,
+                class_name: String,
                 property: CString,
             },
             CssClass {
@@ -7208,8 +7378,12 @@ mod linux_impl {
                         } => {
                             if let Some(&widget) = state.widgets.get(&widget_id) {
                                 if let Ok(prop_c) = CString::new(property) {
+                                    let class_name = find_widget_context(&state, widget_id)
+                                        .map(|(_, _, _, live)| live.class_name.clone())
+                                        .unwrap_or_default();
                                     mutations.push(DeferredMutation::SetBool {
                                         widget,
+                                        class_name,
                                         property: prop_c,
                                         value: bool_to_c(value),
                                     });
@@ -7237,8 +7411,12 @@ mod linux_impl {
                         } => {
                             if let Some(&widget) = state.widgets.get(&widget_id) {
                                 if let Ok(prop_c) = CString::new(property) {
+                                    let class_name = find_widget_context(&state, widget_id)
+                                        .map(|(_, _, _, live)| live.class_name.clone())
+                                        .unwrap_or_default();
                                     mutations.push(DeferredMutation::ToggleBool {
                                         widget,
+                                        class_name,
                                         property: prop_c,
                                     });
                                 }
@@ -7295,14 +7473,24 @@ mod linux_impl {
             match m {
                 DeferredMutation::SetBool {
                     widget,
+                    class_name,
                     property,
                     value,
                 } => unsafe {
-                    gobject_set_bool(widget, &property, value);
+                    set_widget_bool_property(widget, &class_name, &property, value);
                 },
-                DeferredMutation::ToggleBool { widget, property } => unsafe {
+                DeferredMutation::ToggleBool {
+                    widget,
+                    class_name,
+                    property,
+                } => unsafe {
                     let current = gobject_get_bool(widget, &property);
-                    gobject_set_bool(widget, &property, if current != 0 { 0 } else { 1 });
+                    set_widget_bool_property(
+                        widget,
+                        &class_name,
+                        &property,
+                        if current != 0 { 0 } else { 1 },
+                    );
                 },
                 DeferredMutation::CssClass { widget, class, add } => unsafe {
                     if add {
@@ -7459,7 +7647,9 @@ mod linux_impl {
                 Some(SignalPayloadKind::ToggleActive)
             }
             ("GtkToggleButton", "toggled") => Some(SignalPayloadKind::ToggleActive),
-            ("GtkSwitch", "notify::active") => Some(SignalPayloadKind::NotifyBool),
+            ("GtkSwitch", "notify::active") | ("GtkMenuButton", "notify::active") => {
+                Some(SignalPayloadKind::NotifyBool)
+            }
             ("GtkRange", "value-changed") | ("GtkScale", "value-changed") => {
                 Some(SignalPayloadKind::FloatValue)
             }
@@ -8505,8 +8695,8 @@ mod linux_impl {
                     let prop_c = CString::new("sidebar-position").unwrap();
                     unsafe { gobject_set_bool(widget, &prop_c, pos) };
                 }
-                set_obj_bool(widget, props, "collapsed");
-                set_obj_bool(widget, props, "show-sidebar");
+                set_obj_bool(widget, "AdwOverlaySplitView", props, "collapsed");
+                set_obj_bool(widget, "AdwOverlaySplitView", props, "show-sidebar");
                 set_obj_f64(widget, props, "max-sidebar-width");
                 set_obj_f64(widget, props, "min-sidebar-width");
                 set_obj_f64(widget, props, "sidebar-width-fraction");
@@ -8602,6 +8792,7 @@ mod linux_impl {
                         }
                     }
                 }
+                set_obj_bool(widget, "GtkMenuButton", props, "active");
             }
             "GtkCheckButton" => {
                 if let Some(value) = props.get("active").and_then(|v| parse_bool_text(v)) {
@@ -8610,11 +8801,11 @@ mod linux_impl {
                 set_obj_str(widget, props, "label", "GtkCheckButton")?;
             }
             "GtkToggleButton" => {
-                set_obj_bool(widget, props, "active");
+                set_obj_bool(widget, "GtkToggleButton", props, "active");
                 set_obj_str(widget, props, "label", "GtkToggleButton")?;
             }
             "GtkSwitch" => {
-                set_obj_bool(widget, props, "active");
+                set_obj_bool(widget, "GtkSwitch", props, "active");
             }
             "GtkSpinner" => {
                 if let Some(spinning) = props.get("spinning").and_then(|v| parse_bool_text(v)) {
@@ -8667,22 +8858,22 @@ mod linux_impl {
                     let prop_c = CString::new("position").unwrap();
                     unsafe { gobject_set_i32(widget, &prop_c, value) };
                 }
-                set_obj_bool(widget, props, "wide-handle");
+                set_obj_bool(widget, "GtkPaned", props, "wide-handle");
             }
             "GtkFrame" => {
                 set_obj_str(widget, props, "label", "GtkFrame")?;
             }
             "GtkExpander" => {
                 set_obj_str(widget, props, "label", "GtkExpander")?;
-                set_obj_bool(widget, props, "expanded");
+                set_obj_bool(widget, "GtkExpander", props, "expanded");
             }
             "GtkNotebook" => {
                 if let Some(page) = props.get("current-page").and_then(|v| parse_i32_text(v)) {
                     // deferred until children added; stored in props for post-child apply
                     let _ = page;
                 }
-                set_obj_bool(widget, props, "show-tabs");
-                set_obj_bool(widget, props, "show-border");
+                set_obj_bool(widget, "GtkNotebook", props, "show-tabs");
+                set_obj_bool(widget, "GtkNotebook", props, "show-border");
                 if let Some(pos) = props.get("tab-pos") {
                     let p: c_int = match pos.as_str() {
                         "top" => 0,
@@ -8807,8 +8998,13 @@ mod linux_impl {
             }
             "AdwPreferencesDialog" => {
                 set_obj_str(widget, props, "title", "AdwPreferencesDialog")?;
-                set_obj_bool(widget, props, "search-enabled");
-                set_obj_bool(widget, props, "follows-content-size");
+                set_obj_bool(widget, "AdwPreferencesDialog", props, "search-enabled");
+                set_obj_bool(
+                    widget,
+                    "AdwPreferencesDialog",
+                    props,
+                    "follows-content-size",
+                );
                 set_obj_i32(widget, props, "content-width");
                 set_obj_i32(widget, props, "content-height");
             }
@@ -8838,7 +9034,7 @@ mod linux_impl {
             "AdwSwitchRow" => {
                 set_obj_str(widget, props, "title", "AdwSwitchRow")?;
                 set_obj_str(widget, props, "subtitle", "AdwSwitchRow")?;
-                set_obj_bool(widget, props, "active");
+                set_obj_bool(widget, "AdwSwitchRow", props, "active");
             }
             "GtkColorDialogButton" => {
                 if let Some(rgba_str) = props.get("rgba") {
@@ -11537,12 +11733,21 @@ mod linux_impl {
         value: bool,
     ) -> Result<(), Gtk4Error> {
         let prop_c = c_text(prop, "gtk4.widgetSetBoolProperty invalid property name")?;
-        GTK_STATE.with(|state| {
+        let (widget, class_name) = GTK_STATE.with(|state| {
             let state = state.borrow();
             let widget = widget_ptr(&state, id, "widgetSetBoolProperty")?;
-            unsafe { gobject_set_bool(widget, &prop_c, bool_to_c(value)) };
-            Ok(())
-        })
+            let class_name = find_widget_context(&state, id)
+                .map(|(_, _, _, live)| live.class_name.clone())
+                .unwrap_or_default();
+            Ok((widget, class_name))
+        })?;
+        unsafe { set_widget_bool_property(widget, &class_name, &prop_c, bool_to_c(value)) };
+        GTK_STATE.with(|state| {
+            if let Ok(mut state) = state.try_borrow_mut() {
+                update_live_prop(&mut state, id, prop, value.to_string());
+            }
+        });
+        Ok(())
     }
 
     pub(super) fn widget_set_u32_property(
@@ -11551,12 +11756,17 @@ mod linux_impl {
         value: u32,
     ) -> Result<(), Gtk4Error> {
         let prop_c = c_text(prop, "gtk4.widgetSetU32Property invalid property name")?;
-        GTK_STATE.with(|state| {
+        let widget = GTK_STATE.with(|state| {
             let state = state.borrow();
-            let widget = widget_ptr(&state, id, "widgetSetU32Property")?;
-            unsafe { gobject_set_u32(widget, &prop_c, value as c_uint) };
-            Ok(())
-        })
+            widget_ptr(&state, id, "widgetSetU32Property")
+        })?;
+        unsafe { gobject_set_u32(widget, &prop_c, value as c_uint) };
+        GTK_STATE.with(|state| {
+            if let Ok(mut state) = state.try_borrow_mut() {
+                update_live_prop(&mut state, id, prop, value.to_string());
+            }
+        });
+        Ok(())
     }
 
     pub(super) fn widget_set_string_property(
@@ -11566,12 +11776,17 @@ mod linux_impl {
     ) -> Result<(), Gtk4Error> {
         let prop_c = c_text(prop, "gtk4.widgetSetStringProperty invalid property name")?;
         let value_c = c_text(value, "gtk4.widgetSetStringProperty invalid property value")?;
-        GTK_STATE.with(|state| {
+        let widget = GTK_STATE.with(|state| {
             let state = state.borrow();
-            let widget = widget_ptr(&state, id, "widgetSetStringProperty")?;
-            unsafe { gobject_set_str(widget, &prop_c, &value_c) };
-            Ok(())
-        })
+            widget_ptr(&state, id, "widgetSetStringProperty")
+        })?;
+        unsafe { gobject_set_str(widget, &prop_c, &value_c) };
+        GTK_STATE.with(|state| {
+            if let Ok(mut state) = state.try_borrow_mut() {
+                update_live_prop(&mut state, id, prop, value.to_string());
+            }
+        });
+        Ok(())
     }
 
     pub(super) fn widget_get_bool_property(id: i64, prop: &str) -> Result<bool, Gtk4Error> {
@@ -12876,8 +13091,22 @@ mod linux_impl {
         Ok(())
     }
 
-    pub(super) fn os_open_uri(_app_id: i64, _uri: &str) -> Result<(), Gtk4Error> {
-        Ok(())
+    pub(super) fn os_open_uri(_app_id: i64, uri: &str) -> Result<(), Gtk4Error> {
+        let uri_c = c_text(uri, "gtk4.osOpenUri invalid URI")?;
+        let mut err = null_mut();
+        let launched =
+            unsafe { g_app_info_launch_default_for_uri(uri_c.as_ptr(), null_mut(), &mut err) };
+        if launched != 0 {
+            Ok(())
+        } else {
+            let message = unsafe { gerror_message(err, "URI launch failed.") };
+            if !err.is_null() {
+                unsafe { g_error_free(err) };
+            }
+            Err(Gtk4Error::new(format!(
+                "gtk4.osOpenUri failed to open {uri}: {message}"
+            )))
+        }
     }
     pub(super) fn os_show_in_file_manager(_path: &str) -> Result<(), Gtk4Error> {
         Ok(())
