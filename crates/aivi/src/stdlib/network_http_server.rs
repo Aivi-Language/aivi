@@ -24,13 +24,13 @@ ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
 
 listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource HttpError Server
 listen = config handler => resource {
-  server <- httpServer.listen config handler
-  yield server
-  _ <- httpServer.stop server
+  runningServer <- httpServer.listen config handler
+  yield runningServer
+  _ <- httpServer.stop runningServer
 }
 
 stop : Server -> Effect HttpError Unit
-stop = server => httpServer.stop server
+stop = runningServer => httpServer.stop runningServer
 
 wsRecv : WebSocket -> Effect WsError WsMessage
 wsRecv = socket => httpServer.ws_recv socket
