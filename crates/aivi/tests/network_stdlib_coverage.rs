@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -11,7 +11,7 @@ use aivi::{
     check_modules, desugar_modules, elaborate_expected_coercions, load_modules_from_paths,
     run_test_suite,
 };
-use tokio_tungstenite::tungstenite::{Message, connect};
+use tokio_tungstenite::tungstenite::{connect, Message};
 
 #[path = "test_support.rs"]
 mod test_support;

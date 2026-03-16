@@ -15,7 +15,7 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use tokio::net::TcpListener;
 use tokio::runtime::{Handle, Runtime};
-use tokio::sync::{Mutex as TokioMutex, oneshot};
+use tokio::sync::{oneshot, Mutex as TokioMutex};
 
 pub struct AiviRequest {
     pub method: String,

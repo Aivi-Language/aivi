@@ -155,6 +155,7 @@ pub enum HirExpr {
         op: String,
         left: Box<HirExpr>,
         right: Box<HirExpr>,
+        #[serde(skip)]
         location: Option<SourceOrigin>,
     },
     Block {

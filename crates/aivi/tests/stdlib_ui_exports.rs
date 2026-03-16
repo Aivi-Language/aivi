@@ -1,4 +1,4 @@
-use aivi::{ModuleItem, embedded_stdlib_modules};
+use aivi::{embedded_stdlib_modules, ModuleItem};
 
 #[test]
 fn stdlib_ui_exports_v_element() {

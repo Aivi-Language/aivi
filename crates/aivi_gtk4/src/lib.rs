@@ -82,13 +82,13 @@ mod linux_impl {
     use std::os::raw::{c_char, c_double, c_int, c_uint, c_ulong, c_void};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
-    use std::sync::{Arc, Mutex, OnceLock, mpsc};
+    use std::sync::{mpsc, Arc, Mutex, OnceLock};
     use std::thread::{self, ThreadId};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use base64::Engine;
     use image::{ImageBuffer, ImageEncoder, Rgba};
-    use serde_json::{Map, Value, json};
+    use serde_json::{json, Map, Value};
 
     use super::{
         BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, MountedRootInfo, SignalEvent,
@@ -576,7 +576,7 @@ mod linux_impl {
         fn g_type_is_a(type_: usize, is_a_type: usize) -> c_int;
         fn g_type_check_instance_is_a(instance: *mut c_void, iface_type: usize) -> c_int;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
-        -> *mut c_void;
+            -> *mut c_void;
         fn g_object_ref(object: *mut c_void) -> *mut c_void;
         fn g_object_unref(object: *mut c_void);
         fn g_object_ref_sink(object: *mut c_void) -> *mut c_void;
@@ -1084,7 +1084,11 @@ mod linux_impl {
     }
 
     fn bool_to_c(val: bool) -> c_int {
-        if val { 1 } else { 0 }
+        if val {
+            1
+        } else {
+            0
+        }
     }
 
     const GTK_DIR_TAB_FORWARD: c_int = 0;
@@ -1249,7 +1253,11 @@ mod linux_impl {
 
     fn editable_delegate_or_self(widget: *mut c_void) -> *mut c_void {
         let delegate = unsafe { gtk_editable_get_delegate(widget) };
-        if delegate.is_null() { widget } else { delegate }
+        if delegate.is_null() {
+            widget
+        } else {
+            delegate
+        }
     }
 
     struct DeferredEditableCursor {
@@ -1904,15 +1912,13 @@ mod linux_impl {
                 None,
                 &binding,
             );
-            assert!(
-                err.message
-                    .contains("widget #12 (GtkBox id=settings-panel)")
-            );
+            assert!(err
+                .message
+                .contains("widget #12 (GtkBox id=settings-panel)"));
             assert!(err.message.contains("bound to `Save`"));
-            assert!(
-                err.message
-                    .contains("Known supported signals for this class: key-pressed.")
-            );
+            assert!(err
+                .message
+                .contains("Known supported signals for this class: key-pressed."));
         }
 
         fn write_test_source(name: &str, contents: &str) -> PathBuf {
@@ -1990,14 +1996,12 @@ mod linux_impl {
                 },
             )
             .expect_err("expected invalid child mismatch");
-            assert!(
-                err.message
-                    .contains("expected a child with class `AdwPreferencesGroup`")
-            );
-            assert!(
-                err.message
-                    .contains("widget #9 (GtkBox id=account-connection)")
-            );
+            assert!(err
+                .message
+                .contains("expected a child with class `AdwPreferencesGroup`"));
+            assert!(err
+                .message
+                .contains("widget #9 (GtkBox id=account-connection)"));
         }
         #[test]
         fn adw_abstract_animation_gives_helpful_error() {
@@ -3879,19 +3883,17 @@ mod linux_impl {
     }
 
     fn menu_model_items_json(items: &[MenuModelItemState]) -> Value {
-        json!(
-            items
-                .iter()
-                .enumerate()
-                .map(|(index, item)| {
-                    json!({
-                        "index": index,
-                        "label": item.label,
-                        "action": item.detailed_action,
-                    })
+        json!(items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                json!({
+                    "index": index,
+                    "label": item.label,
+                    "action": item.detailed_action,
                 })
-                .collect::<Vec<_>>()
-        )
+            })
+            .collect::<Vec<_>>())
     }
 
     fn text_slice_by_char_range(text: &str, start: usize, end: usize) -> String {
@@ -4197,10 +4199,8 @@ mod linux_impl {
                 runtime.insert("presentedParentId".to_string(), json!(presented_parent_id));
                 runtime.insert(
                     "presentedParentName".to_string(),
-                    json!(
-                        presented_parent_id
-                            .and_then(|id| state.widget_id_to_name.get(&id).cloned())
-                    ),
+                    json!(presented_parent_id
+                        .and_then(|id| state.widget_id_to_name.get(&id).cloned())),
                 );
             } else if let Some(visible) = widget_bool_property(widget, "visible") {
                 runtime.insert("visible".to_string(), Value::Bool(visible));
@@ -8499,11 +8499,9 @@ mod linux_impl {
             ("widgetId".to_string(), json!(root_id)),
             (
                 "widgetName".to_string(),
-                json!(
-                    id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == root_id).then_some(name.clone()))
-                ),
+                json!(id_map
+                    .iter()
+                    .find_map(|(name, wid)| (*wid == root_id).then_some(name.clone()))),
             ),
         ]));
     }
@@ -13291,11 +13289,9 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(
-                        id_map
-                            .iter()
-                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
-                    ),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
                 ),
             ]));
             Ok(id)
@@ -13327,11 +13323,9 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(
-                        id_map
-                            .iter()
-                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
-                    ),
+                    json!(id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
                 ),
             ]));
             Ok(BuildResult {

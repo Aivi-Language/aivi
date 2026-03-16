@@ -17,7 +17,9 @@ use aivi::{
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 
-const DAEMON_PROTOCOL_VERSION: u32 = 1;
+// Bump this whenever the JSON wire format changes so stale daemons are restarted
+// before their responses are decoded as the current schema.
+const DAEMON_PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct DaemonIdentity {
@@ -882,5 +884,54 @@ mod tests {
             daemon_identity_state(Some(&expected), Some(&actual)),
             DaemonIdentityState::Mismatch
         );
+    }
+
+    #[test]
+    fn compile_ok_ignores_legacy_binary_location_strings() {
+        let response: Envelope<DaemonResponse> = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "payload": {
+                "CompileOk": {
+                    "artifacts": {
+                        "program": {
+                            "modules": [{
+                                "name": "app.main",
+                                "defs": [{
+                                    "name": "main",
+                                    "expr": {
+                                        "kind": "Binary",
+                                        "id": 1,
+                                        "op": "+",
+                                        "left": { "kind": "LitNumber", "id": 2, "text": "1" },
+                                        "right": { "kind": "LitNumber", "id": 3, "text": "2" },
+                                        "location": "<embedded:aivi.generator>:34:6"
+                                    }
+                                }]
+                            }]
+                        },
+                        "cg_types": {},
+                        "monomorph_plan": {},
+                        "source_schemas": {},
+                        "constructor_ordinals": {},
+                        "crate_natives": []
+                    },
+                    "summary": {
+                        "compiled_modules": [],
+                        "reused_modules": []
+                    }
+                }
+            }
+        }))
+        .expect("deserialize legacy compile response");
+
+        let DaemonResponse::CompileOk { artifacts, .. } = response.payload else {
+            panic!("expected compile response");
+        };
+        let aivi::hir::HirExpr::Binary { location, .. } =
+            &artifacts.program.modules[0].defs[0].expr
+        else {
+            panic!("expected binary expr");
+        };
+        assert!(location.is_none());
     }
 }

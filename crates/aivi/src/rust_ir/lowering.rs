@@ -169,6 +169,7 @@ pub enum RustIrExpr {
         op: String,
         left: Box<RustIrExpr>,
         right: Box<RustIrExpr>,
+        #[serde(skip)]
         location: Option<SourceOrigin>,
     },
     Raw {
