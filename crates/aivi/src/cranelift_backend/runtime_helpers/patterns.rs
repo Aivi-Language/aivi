@@ -490,10 +490,13 @@ pub extern "C" fn rt_binary_op(
                     let wc = runtime.jit_rt_warning_count;
                     // Save global state so each clause trial starts clean.
                     let saved_pending = runtime.jit_pending_error.take();
+                    let saved_pending_snapshot = runtime.jit_pending_snapshot.take();
                     let saved_match_failed = runtime.jit_match_failed;
+                    let saved_match_snapshot = runtime.jit_match_snapshot.take();
                     let saved_fn = runtime.jit_current_fn.clone();
                     let saved_loc = runtime.jit_current_loc.clone();
                     runtime.jit_match_failed = false;
+                    runtime.jit_match_snapshot = None;
                     if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
                         if let Ok(result) = runtime.apply(applied, rhs.clone()) {
                             let warns = runtime.jit_rt_warning_count - wc;
@@ -525,7 +528,9 @@ pub extern "C" fn rt_binary_op(
                                     // Clean match — accept.
                                     runtime.jit_binary_op_dispatching = false;
                                     runtime.jit_pending_error = saved_pending;
+                                    runtime.jit_pending_snapshot = saved_pending_snapshot;
                                     runtime.jit_match_failed = saved_match_failed;
+                                    runtime.jit_match_snapshot = saved_match_snapshot;
                                     return abi::box_value(result);
                                 }
                             } else if fallback_result.is_none() && !runtime.jit_match_failed {
@@ -536,7 +541,9 @@ pub extern "C" fn rt_binary_op(
                     }
                     // Restore global state for next clause trial.
                     runtime.jit_pending_error = saved_pending;
+                    runtime.jit_pending_snapshot = saved_pending_snapshot;
                     runtime.jit_match_failed = saved_match_failed;
+                    runtime.jit_match_snapshot = saved_match_snapshot;
                     runtime.jit_current_fn = saved_fn;
                     runtime.jit_current_loc = saved_loc;
                     runtime.jit_rt_warning_count = wc;
@@ -587,6 +594,7 @@ mod patterns_tests {
     use crate::runtime::values::{BuiltinImpl, BuiltinValue};
     use crate::runtime::values::Value;
     use crate::runtime::{Runtime, RuntimeError};
+    use crate::{Position, SourceOrigin, Span};
 
     use super::rt_binary_op;
 
@@ -613,14 +621,31 @@ mod patterns_tests {
     fn rejected_multiclause_restores_stale_location() {
         let mut runtime = test_runtime();
         runtime.jit_current_fn = Some("caller".into());
-        runtime.jit_current_loc = Some("caller:1:1".into());
+        runtime.jit_current_loc = Some(SourceOrigin::new(
+            "caller",
+            Span {
+                start: Position { line: 1, column: 1 },
+                end: Position { line: 1, column: 2 },
+            },
+        ));
         runtime.ctx.globals.set(
             "(+)".to_string(),
             Value::MultiClause(vec![
                 builtin2("bad-clause", |_args, runtime| {
                     runtime.jit_current_fn = Some("aivi.number.quaternion.(+)".into());
-                    runtime.jit_current_loc =
-                        Some("<embedded:aivi.number.quaternion>:40:63".into());
+                    runtime.jit_current_loc = Some(SourceOrigin::new(
+                        "<embedded:aivi.number.quaternion>",
+                        Span {
+                            start: Position {
+                                line: 40,
+                                column: 63,
+                            },
+                            end: Position {
+                                line: 40,
+                                column: 64,
+                            },
+                        },
+                    ));
                     runtime.jit_pending_error = Some(RuntimeError::Message(
                         "field `w` does not exist on this record".to_string(),
                     ));
@@ -638,7 +663,14 @@ mod patterns_tests {
 
         assert!(matches!(result, Value::Int(7)));
         assert_eq!(runtime.jit_current_fn.as_deref(), Some("caller"));
-        assert_eq!(runtime.jit_current_loc.as_deref(), Some("caller:1:1"));
+        assert_eq!(
+            runtime
+                .jit_current_loc
+                .as_ref()
+                .expect("restored location")
+                .start_position_text(),
+            "caller:1:1"
+        );
         assert!(runtime.jit_pending_error.is_none());
     }
 }

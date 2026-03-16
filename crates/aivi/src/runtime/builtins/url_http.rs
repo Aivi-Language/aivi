@@ -1,13 +1,15 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use serde_json::Value as JsonValue;
 use url::Url;
 
 use super::json::json_value_to_text;
-use super::system::json_to_runtime;
+use super::system::{json_to_runtime, json_to_runtime_with_schema};
 use super::util::{
-    builtin, expect_int, expect_list, expect_record, expect_text, list_value, make_err, make_none,
-    make_ok, make_some,
+    builtin, expect_int, expect_list, expect_record, expect_text, json_mismatch_to_decode_error,
+    list_value, make_decode_error, make_err, make_none, make_ok, make_some,
+    make_source_decode_error, make_source_io_error,
 };
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 fn url_from_value(value: Value, ctx: &str) -> Result<Url, RuntimeError> {
@@ -42,7 +44,7 @@ fn url_from_value(value: Value, ctx: &str) -> Result<Url, RuntimeError> {
             _ => {
                 return Err(RuntimeError::Message(format!(
                     "{ctx} expects Url.port Option"
-                )))
+                )));
             }
         }
     }
@@ -81,7 +83,7 @@ fn url_from_value(value: Value, ctx: &str) -> Result<Url, RuntimeError> {
             _ => {
                 return Err(RuntimeError::Message(format!(
                     "{ctx} expects Url.hash Option"
-                )))
+                )));
             }
         }
     }
@@ -167,6 +169,15 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
         "get".to_string(),
         builtin("http.get", 1, move |mut args, _| {
             let url = args.pop().unwrap();
+            let rest_url = url.clone();
+            let request = move || {
+                let url = url_from_value(rest_url.clone(), "http.get")?;
+                ensure_http_scheme(&url, mode, "http.get")?;
+                http_request("GET", &url, Vec::new(), None, None, 0, None, false)
+            };
+            if matches!(mode, HttpClientMode::RestApi) {
+                return Ok(make_rest_source("http.get".to_string(), request));
+            }
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let url = url_from_value(url.clone(), "http.get")?;
@@ -186,6 +197,17 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
         builtin("http.post", 2, move |mut args, _| {
             let body = args.pop().unwrap();
             let url = args.pop().unwrap();
+            let rest_url = url.clone();
+            let rest_body = body.clone();
+            let request = move || {
+                let url = url_from_value(rest_url.clone(), "http.post")?;
+                ensure_http_scheme(&url, mode, "http.post")?;
+                let body = expect_text(rest_body.clone(), "http.post")?;
+                http_request("POST", &url, Vec::new(), Some(body), None, 0, None, false)
+            };
+            if matches!(mode, HttpClientMode::RestApi) {
+                return Ok(make_rest_source("http.post".to_string(), request));
+            }
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let url = url_from_value(url.clone(), "http.post")?;
@@ -205,6 +227,63 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
         "fetch".to_string(),
         builtin("http.fetch", 1, move |mut args, _| {
             let request = args.pop().unwrap();
+            let rest_request = request.clone();
+            let request_impl = move || {
+                let record = expect_record(rest_request.clone(), "http.fetch expects Request")?;
+                let method = match record.get("method") {
+                    Some(Value::Text(text)) => text.clone(),
+                    _ => {
+                        return Err(RuntimeError::Message(
+                            "http.fetch expects Request.method Text".to_string(),
+                        ))
+                    }
+                };
+                let url_value = record.get("url").cloned().ok_or_else(|| {
+                    RuntimeError::Message("http.fetch expects Request.url".to_string())
+                })?;
+                let url = url_from_value(url_value, "http.fetch")?;
+                ensure_http_scheme(&url, mode, "http.fetch")?;
+                let headers = match record.get("headers") {
+                    Some(value) => headers_from_value(value, "http.fetch")?,
+                    None => Vec::new(),
+                };
+                let raw_body = record.get("body").cloned();
+                let is_json_body = matches!(
+                    &raw_body,
+                    Some(Value::Constructor { name, args })
+                        if name == "Some" && args.len() == 1
+                            && matches!(&args[0], Value::Constructor { name: n, .. } if n == "Json")
+                );
+                let mut headers = headers;
+                if is_json_body
+                    && !headers
+                        .iter()
+                        .any(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+                {
+                    headers.push(("content-type".to_string(), "application/json".to_string()));
+                }
+                let body = match raw_body {
+                    Some(value) => body_option_from_value(value, "http.fetch")?,
+                    None => None,
+                };
+                let timeout_ms = optional_int_field(&record, "timeoutMs")?;
+                let retry_count = optional_int_field(&record, "retryCount")?.unwrap_or(0);
+                let bearer_token = optional_text_field(&record, "bearerToken")?;
+                let strict_status = optional_bool_field(&record, "strictStatus")?.unwrap_or(false);
+                http_request(
+                    &method,
+                    &url,
+                    headers,
+                    body,
+                    timeout_ms,
+                    retry_count.max(0) as usize,
+                    bearer_token,
+                    strict_status,
+                )
+            };
+            if matches!(mode, HttpClientMode::RestApi) {
+                return Ok(make_rest_source("http.fetch".to_string(), request_impl));
+            }
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let record = expect_record(request.clone(), "http.fetch expects Request")?;
@@ -277,19 +356,114 @@ fn ensure_http_scheme(url: &Url, mode: HttpClientMode, ctx: &str) -> Result<(), 
             if url.scheme() == "https" {
                 Ok(())
             } else {
-                Err(RuntimeError::Message(format!("{ctx} expects an https URL")))
+                Err(RuntimeError::Error(Value::Text(format!(
+                    "{ctx} expects an https URL"
+                ))))
             }
         }
         HttpClientMode::RestApi => {
             if url.scheme() == "http" || url.scheme() == "https" {
                 Ok(())
             } else {
-                Err(RuntimeError::Message(format!(
+                Err(RuntimeError::Error(Value::Text(format!(
                     "{ctx} expects an http or https URL"
-                )))
+                ))))
             }
         }
     }
+}
+
+fn make_rest_source<F>(context: String, request: F) -> Value
+where
+    F: Fn() -> Result<Value, RuntimeError> + Send + Sync + 'static,
+{
+    let schema_slot: Arc<Mutex<Option<crate::runtime::json_schema::JsonSchema>>> =
+        Arc::new(Mutex::new(None));
+    let raw_text_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let schema_ref = schema_slot.clone();
+    let raw_ref = raw_text_slot.clone();
+    let effect = EffectValue::Thunk {
+        func: Arc::new(move |_| match request() {
+            Ok(raw_result) => decode_rest_result(raw_result, &context, &schema_ref, &raw_ref),
+            Err(RuntimeError::Error(Value::Text(message))) => Err(RuntimeError::Error(
+                rest_transport_error(&context, &message),
+            )),
+            Err(err) => Err(err),
+        }),
+    };
+    let mut source = SourceValue::new("RestApi".to_string(), Arc::new(effect));
+    source.schema = schema_slot;
+    source.raw_text = raw_text_slot;
+    Value::Source(Arc::new(source))
+}
+
+fn decode_rest_result(
+    raw_result: Value,
+    context: &str,
+    schema_slot: &Arc<Mutex<Option<crate::runtime::json_schema::JsonSchema>>>,
+    raw_text_slot: &Arc<Mutex<Option<String>>>,
+) -> Result<Value, RuntimeError> {
+    match raw_result {
+        Value::Constructor { name, args } if name == "Ok" && args.len() == 1 => {
+            let response = expect_record(args[0].clone(), "rest source expects Response")?;
+            let body_text = match response.get("body") {
+                Some(Value::Text(text)) => text.clone(),
+                _ => {
+                    return Err(RuntimeError::Message(
+                        "rest source expects Response.body Text".to_string(),
+                    ));
+                }
+            };
+            if let Ok(mut guard) = raw_text_slot.lock() {
+                *guard = Some(body_text.clone());
+            }
+            let parsed: JsonValue = serde_json::from_str(&body_text).map_err(|err| {
+                RuntimeError::Error(make_source_decode_error(vec![make_decode_error(
+                    Vec::new(),
+                    format!(
+                        "failed to parse JSON response for {context} at line {}, column {}: {err}",
+                        err.line(),
+                        err.column()
+                    ),
+                )]))
+            })?;
+
+            let schema_opt = schema_slot.lock().ok().and_then(|guard| guard.clone());
+            if let Some(ref schema) = schema_opt {
+                let mut errors = Vec::new();
+                crate::runtime::json_schema::validate_json(&parsed, schema, "$", &mut errors);
+                if !errors.is_empty() {
+                    let decode_errors = errors.iter().map(json_mismatch_to_decode_error).collect();
+                    return Err(RuntimeError::Error(make_source_decode_error(decode_errors)));
+                }
+            }
+
+            Ok(json_to_runtime_with_schema(&parsed, schema_opt.as_ref()))
+        }
+        Value::Constructor { name, args } if name == "Err" && args.len() == 1 => {
+            let message = http_error_message(&args[0]);
+            Err(RuntimeError::Error(rest_transport_error(context, &message)))
+        }
+        other => Err(RuntimeError::Message(format!(
+            "rest source expected Result Error Response, got {}",
+            crate::runtime::format_value(&other)
+        ))),
+    }
+}
+
+fn http_error_message(value: &Value) -> String {
+    match value {
+        Value::Text(text) => text.clone(),
+        Value::Record(fields) => match fields.get("message") {
+            Some(Value::Text(message)) => message.clone(),
+            _ => crate::runtime::format_value(value),
+        },
+        _ => crate::runtime::format_value(value),
+    }
+}
+
+fn rest_transport_error(context: &str, message: &str) -> Value {
+    make_source_io_error(format!("rest transport error [{context}]: {message}"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -323,7 +497,7 @@ fn http_request(
                 _ => {
                     return Err(RuntimeError::Message(format!(
                         "http.fetch does not support body for method {method}"
-                    )))
+                    )));
                 }
             };
             let builder = headers
@@ -439,7 +613,7 @@ fn headers_from_value(value: &Value, ctx: &str) -> Result<Vec<(String, String)>,
         _ => {
             return Err(RuntimeError::Message(format!(
                 "{ctx} expects Request.headers List"
-            )))
+            )));
         }
     };
     let mut headers = Vec::with_capacity(list.len());
@@ -449,7 +623,7 @@ fn headers_from_value(value: &Value, ctx: &str) -> Result<Vec<(String, String)>,
             _ => {
                 return Err(RuntimeError::Message(format!(
                     "{ctx} expects header records"
-                )))
+                )));
             }
         };
         let name = match record.get("name") {
@@ -457,7 +631,7 @@ fn headers_from_value(value: &Value, ctx: &str) -> Result<Vec<(String, String)>,
             _ => {
                 return Err(RuntimeError::Message(format!(
                     "{ctx} expects header.name Text"
-                )))
+                )));
             }
         };
         let value = match record.get("value") {
@@ -465,7 +639,7 @@ fn headers_from_value(value: &Value, ctx: &str) -> Result<Vec<(String, String)>,
             _ => {
                 return Err(RuntimeError::Message(format!(
                     "{ctx} expects header.value Text"
-                )))
+                )));
             }
         };
         headers.push((name, value));
@@ -486,26 +660,28 @@ fn headers_to_value(entries: Vec<(String, String)>) -> Value {
 
 fn body_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, RuntimeError> {
     match value {
-        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
-            match &args[0] {
-                Value::Constructor { name, args } if name == "Plain" && args.len() == 1 => {
-                    Ok(Some(expect_text(args[0].clone(), ctx)?))
-                }
-                Value::Constructor { name, args } if name == "Form" && args.len() == 1 => {
-                    let pairs = headers_from_value(&args[0], ctx)?;
-                    let encoded = url::form_urlencoded::Serializer::new(String::new())
-                        .extend_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
-                        .finish();
-                    Ok(Some(encoded))
-                }
-                Value::Constructor { name, args } if name == "Json" && args.len() == 1 => {
-                    Ok(Some(json_value_to_text(&args[0])?))
-                }
-                _ => Err(RuntimeError::Message(format!("{ctx} expects body Option Body (Plain Text, Form, or Json JsonValue)"))),
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => match &args[0] {
+            Value::Constructor { name, args } if name == "Plain" && args.len() == 1 => {
+                Ok(Some(expect_text(args[0].clone(), ctx)?))
             }
-        }
+            Value::Constructor { name, args } if name == "Form" && args.len() == 1 => {
+                let pairs = headers_from_value(&args[0], ctx)?;
+                let encoded = url::form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                    .finish();
+                Ok(Some(encoded))
+            }
+            Value::Constructor { name, args } if name == "Json" && args.len() == 1 => {
+                Ok(Some(json_value_to_text(&args[0])?))
+            }
+            _ => Err(RuntimeError::Message(format!(
+                "{ctx} expects body Option Body (Plain Text, Form, or Json JsonValue)"
+            ))),
+        },
         Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(None),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects body Option Body"))),
+        _ => Err(RuntimeError::Message(format!(
+            "{ctx} expects body Option Body"
+        ))),
     }
 }
 
@@ -708,7 +884,9 @@ fn openapi_call_impl(
     }
 
     // If method supports body and there are unclassified params, use them as JSON body
-    let body = if has_request_body || (!body_fields.is_empty() && matches!(method.as_str(), "POST" | "PUT" | "PATCH")) {
+    let body = if has_request_body
+        || (!body_fields.is_empty() && matches!(method.as_str(), "POST" | "PUT" | "PATCH"))
+    {
         has_request_body = true;
         let body_value = Value::Record(Arc::new(body_fields));
         Some(super::json::json_value_to_text(&body_value)?)

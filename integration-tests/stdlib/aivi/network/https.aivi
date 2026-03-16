@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.network.https.tests
 use aivi
 use aivi.testing
 use aivi.net.https
+use aivi.text as text
 
 // -- Request construction (mirrors http) --
 
@@ -25,14 +26,14 @@ buildSecurePostRequest = do Effect {
       headers: [{ name: "Authorization", value: "Bearer token" }]
       body: Some "data"
     }
-    assertEq req.method "POST"
+    _ <- assertEq req.method "POST"
     assertEq (List.length req.headers) 1
 }
 
 @test "response fields"
 responseFields = do Effect {
   resp = { status: 200, headers: [], body: "ok" }
-  assertEq resp.status 200
+  _ <- assertEq resp.status 200
   assertEq resp.body "ok"
 }
 
@@ -40,4 +41,37 @@ responseFields = do Effect {
 errorFields = do Effect {
   err = { message: "tls handshake failed" }
   assertEq err.message "tls handshake failed"
+}
+
+// -- HTTPS-specific runtime behavior --
+
+@test "secure get rejects non https urls"
+secureGetRejectsNonHttpsUrls = do Effect {
+  result <- attempt (get ~u(http://127.0.0.1:39081/plain))
+  result match
+    | Err err => assert (text.contains "https URL" err)
+    | Ok _    => fail "expected https url error"
+}
+
+@test "secure post rejects non https urls"
+securePostRejectsNonHttpsUrls = do Effect {
+  result <- attempt (post ~u(http://127.0.0.1:39082/plain) "payload")
+  result match
+    | Err err => assert (text.contains "https URL" err)
+    | Ok _    => fail "expected https url error"
+}
+
+@test "secure fetch rejects non https urls"
+secureFetchRejectsNonHttpsUrls = do Effect {
+  result <- attempt (
+    fetch {
+      method: "POST"
+      url: ~u(http://127.0.0.1:39083/form)
+      headers: []
+      body: Some (Form [{ name: "name", value: "Ada" }])
+    }
+  )
+  result match
+    | Err err => assert (text.contains "https URL" err)
+    | Ok _    => fail "expected https url error"
 }

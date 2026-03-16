@@ -4,22 +4,61 @@ module integrationTests.stdlib.aivi.ui.tests
 use aivi
 use aivi.testing
 use aivi.ui
+use aivi.ui.layout (Px)
 
-len = xs => xs match
-  | []           => 0
-  | [_, ...rest] => 1 + len rest
-
-@test "render html"
-renderHtml_functional = do Effect {
-  node = vElement "p" [vAttr "data-x" "1"] [vText "hi"]
+@test "html sigil render lowers attributes and handlers"
+html_sigil_render_functional = do Effect {
+  label = "Run"
+  node  =
+    ~<html>
+      <button
+        key="save"
+        class="primary"
+        id="save-btn"
+        data-count={ "3" }
+        disabled
+        style={ { color: { r: 255, g: 0, b: 16 }, width: Px 12 } }
+        onClick={ Unit }>
+        { label }
+      </button>
+    </html>
   html = renderHtml node
-  assert (text.length html > 0)
+  assert (text.contains html "<button")
+  assert (text.contains html "data-aivi-key=\"save\"")
+  assert (text.contains html "class=\"primary\"")
+  assert (text.contains html "id=\"save-btn\"")
+  assert (text.contains html "data-count=\"3\"")
+  assert (text.contains html "disabled=\"true\"")
+  assert (text.contains html "style=\"color: #ff0010; width: 12px\"")
+  assert (text.contains html "data-aivi-hid-click")
+  assert (text.contains html "Run")
 }
 
-@test "diff"
+@test "diff from html sigil produces exact patch ops"
 diff_functional = do Effect {
-  old = vElement "p" [vAttr "data-x" "1"] [vText "hi"]
-  neu = vElement "p" [vAttr "data-x" "2"] [vText "hi"]
+  old = ~<html><div class="card" data-x="1">Hello</div></html>
+  neu = ~<html><div data-x="2">World</div></html>
   ops = diff old neu
-  assert (len ops >= 0)
+  assertEq ops [
+    SetAttr "root" "data-x" "2"
+    RemoveAttr "root" "class"
+    SetText "root/0" "World"
+  ]
+}
+
+@test "patchToJson encodes all patch variants"
+patchToJson_functional = do Effect {
+  ops = [
+    SetAttr "root" "data-x" "2"
+    RemoveAttr "root" "class"
+    SetText "root/0" "World"
+    Replace "root/1" "<span>done</span>"
+  ]
+  json = patchToJson ops
+  assert (text.contains json "\"setAttr\"")
+  assert (text.contains json "\"removeAttr\"")
+  assert (text.contains json "\"setText\"")
+  assert (text.contains json "\"replace\"")
+  assert (text.contains json "\"root/1\"")
+  assert (text.contains json "<span>done</span>")
 }

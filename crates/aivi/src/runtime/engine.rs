@@ -8,8 +8,11 @@ use parking_lot::Mutex as ParkingMutex;
 use regex::RegexBuilder;
 use url::Url;
 
+use aivi_driver::{RuntimeFrame, RuntimeFrameKind, RuntimeLabel, RuntimeNoteKind, RuntimeReport};
+
 use crate::hir::{HirExpr, HirProgram};
 use crate::i18n::{parse_message_template, validate_key_text, MessagePart};
+use crate::{Position, SourceOrigin, Span};
 use crate::AiviError;
 
 mod builtins;
@@ -84,16 +87,22 @@ pub(crate) struct Runtime {
     /// Flag set by JIT match fallthrough to signal "non-exhaustive match" to
     /// `make_jit_builtin`, enabling `apply_multi_clause` to try the next clause.
     pub(crate) jit_match_failed: bool,
+    /// Captured JIT stack/origin for the most recent non-exhaustive match.
+    pub(crate) jit_match_snapshot: Option<RuntimeSnapshot>,
     /// Pending error from JIT-compiled code. Set by `rt_apply` / `rt_run_effect`
     /// when a builtin or effect fails inside JIT code, so that the enclosing
     /// closure wrapper can propagate it as `Err` instead of swallowing it.
     pub(crate) jit_pending_error: Option<RuntimeError>,
+    /// Captured JIT stack/origin at the moment `jit_pending_error` was set.
+    pub(crate) jit_pending_snapshot: Option<RuntimeSnapshot>,
     /// Name of the currently executing JIT-compiled function, set by
     /// `rt_enter_fn` at the start of each compiled function body.
     pub(crate) jit_current_fn: Option<Box<str>>,
     /// Source location of the most recently instrumented expression, set by
     /// `rt_set_location` before potentially-failing operations.
-    pub(crate) jit_current_loc: Option<Box<str>>,
+    pub(crate) jit_current_loc: Option<SourceOrigin>,
+    /// Live JIT stack used for runtime reports and warnings.
+    pub(crate) jit_frame_stack: Vec<RuntimeFrame>,
     /// Warning counter incremented by `rt_warn`. Used by `rt_binary_op` to
     /// detect when a MultiClause operator clause produced warnings (e.g. wrong
     /// field access) so the next clause can be tried instead.
@@ -126,6 +135,12 @@ pub(crate) struct Runtime {
     pub(crate) resource_cleanups: Vec<ResourceCleanupEntry>,
     pub(crate) reactive_host: Option<ReactiveHostState>,
     pub(crate) reactive_graph: Arc<ParkingMutex<ReactiveGraphState>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RuntimeSnapshot {
+    pub(crate) origin: Option<SourceOrigin>,
+    pub(crate) frames: Vec<RuntimeFrame>,
 }
 
 pub(crate) enum ResourceCleanupEntry {
@@ -272,20 +287,97 @@ impl std::fmt::Display for RuntimeError {
     }
 }
 
+impl Runtime {
+    pub(crate) fn capture_runtime_snapshot(&self) -> RuntimeSnapshot {
+        RuntimeSnapshot {
+            origin: self
+                .jit_current_loc
+                .clone()
+                .or_else(|| self.jit_frame_stack.last().and_then(|frame| frame.origin.clone())),
+            frames: self.jit_frame_stack.clone(),
+        }
+    }
+
+    pub(crate) fn capture_match_failure(&mut self) {
+        self.jit_match_failed = true;
+        self.jit_match_snapshot = Some(self.capture_runtime_snapshot());
+    }
+
+    pub(crate) fn clear_match_failure(&mut self) {
+        self.jit_match_failed = false;
+        self.jit_match_snapshot = None;
+    }
+
+    pub(crate) fn clear_pending_runtime_error(&mut self) {
+        self.jit_pending_error = None;
+        self.jit_pending_snapshot = None;
+    }
+
+    pub(crate) fn take_pending_runtime_error(
+        &mut self,
+    ) -> Option<(RuntimeError, Option<RuntimeSnapshot>)> {
+        let err = self.jit_pending_error.take()?;
+        let snapshot = self
+            .jit_pending_snapshot
+            .take()
+            .or_else(|| Some(self.capture_runtime_snapshot()));
+        Some((err, snapshot))
+    }
+
+    fn take_snapshot_for_error(&mut self, err: &RuntimeError) -> Option<RuntimeSnapshot> {
+        let pending = self.jit_pending_snapshot.take();
+        let match_snapshot = match runtime_error_leaf(err) {
+            RuntimeError::NonExhaustiveMatch { .. } => self.jit_match_snapshot.take(),
+            _ => None,
+        };
+        pending.or(match_snapshot).or_else(|| {
+            if self.jit_current_loc.is_none() && self.jit_frame_stack.is_empty() {
+                None
+            } else {
+                Some(self.capture_runtime_snapshot())
+            }
+        })
+    }
+
+    pub(crate) fn runtime_report(&mut self, err: RuntimeError) -> RuntimeReport {
+        let snapshot = self.take_snapshot_for_error(&err);
+        self.runtime_report_with_snapshot(err, snapshot)
+    }
+
+    pub(crate) fn runtime_report_with_snapshot(
+        &mut self,
+        err: RuntimeError,
+        snapshot: Option<RuntimeSnapshot>,
+    ) -> RuntimeReport {
+        runtime_error_report(err, snapshot)
+    }
+
+    pub(crate) fn take_pending_aivi_error(&mut self) -> Option<AiviError> {
+        let (err, snapshot) = self.take_pending_runtime_error()?;
+        Some(AiviError::Runtime(Box::new(
+            self.runtime_report_with_snapshot(err, snapshot),
+        )))
+    }
+
+    pub(crate) fn aivi_runtime_error(&mut self, err: RuntimeError) -> AiviError {
+        AiviError::Runtime(Box::new(self.runtime_report(err)))
+    }
+}
+
 pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     let main = runtime
         .ctx
         .globals
         .get("main")
-        .ok_or_else(|| AiviError::Runtime("missing main definition".to_string()))?;
+        .ok_or_else(|| AiviError::runtime_message("missing main definition"))?;
     let main_value = match runtime.force_value(main) {
         Ok(value) => value,
-        Err(err) => return Err(AiviError::Runtime(format_runtime_error(err))),
+        Err(err) => return Err(runtime.aivi_runtime_error(err)),
     };
     let effect = match main_value {
         Value::Effect(effect) => Value::Effect(effect),
         other => {
-            return Err(AiviError::Runtime(format!(
+            return Err(AiviError::runtime_message(format!(
                 "main must be an Effect value, got {}",
                 format_value(&other)
             )))
@@ -296,19 +388,19 @@ pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
         Ok(_) => {
             // Surface any errors that JIT runtime helpers caught but couldn't
             // propagate through native code boundaries (e.g. assertEq failures).
-            if let Some(err) = runtime.jit_pending_error.take() {
-                Err(AiviError::Runtime(format_runtime_error(err)))
+            if let Some(err) = runtime.take_pending_aivi_error() {
+                Err(err)
             } else {
                 Ok(())
             }
         }
-        Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
+        Err(err) => Err(runtime.aivi_runtime_error(err)),
     }
 }
 
 pub(crate) fn build_runtime_from_program(program: &HirProgram) -> Result<Runtime, AiviError> {
     if program.modules.is_empty() {
-        return Err(AiviError::Runtime("no modules to run".to_string()));
+        return Err(AiviError::runtime_message("no modules to run"));
     }
 
     // With the interpreter removed, we can't create Thunks wrapping HIR expressions.
@@ -344,7 +436,7 @@ pub(crate) fn build_runtime_from_program_with_cancel(
     cancel: Arc<CancelToken>,
 ) -> Result<Runtime, AiviError> {
     if program.modules.is_empty() {
-        return Err(AiviError::Runtime("no modules to run".to_string()));
+        return Err(AiviError::runtime_message("no modules to run"));
     }
 
     let mut grouped: HashMap<String, usize> = HashMap::new();
@@ -387,7 +479,7 @@ fn build_runtime_from_program_scoped(
     surface_modules: &[crate::surface::Module],
 ) -> Result<Runtime, AiviError> {
     if program.modules.is_empty() {
-        return Err(AiviError::Runtime("no modules to run".to_string()));
+        return Err(AiviError::runtime_message("no modules to run"));
     }
 
     let globals = Env::new(None);
@@ -646,69 +738,294 @@ fn build_runtime_from_program_scoped(
     Ok(Runtime::new(ctx, cancel))
 }
 
-fn format_runtime_error_leaf(err: &RuntimeError) -> String {
+fn runtime_error_leaf(err: &RuntimeError) -> &RuntimeError {
     match err {
-        RuntimeError::Cancelled => "execution cancelled".to_string(),
-        RuntimeError::Message(message) => message.clone(),
-        RuntimeError::Error(value) => format!("runtime error: {}", format_value(value)),
+        RuntimeError::Context { source, .. } => runtime_error_leaf(source),
+        other => other,
+    }
+}
+
+fn collect_runtime_contexts<'a>(err: &'a RuntimeError, contexts: &mut Vec<String>) -> &'a RuntimeError {
+    match err {
+        RuntimeError::Context { context, source } => {
+            contexts.push(context.clone());
+            collect_runtime_contexts(source, contexts)
+        }
+        other => other,
+    }
+}
+
+fn parse_origin_text(text: &str) -> Option<SourceOrigin> {
+    let mut parts = text.rsplitn(3, ':');
+    let column = parts.next()?.parse().ok()?;
+    let line = parts.next()?.parse().ok()?;
+    let path = parts.next()?;
+    Some(SourceOrigin::new(
+        path.to_string(),
+        Span {
+            start: Position { line, column },
+            end: Position {
+                line,
+                column: column.saturating_add(1),
+            },
+        },
+    ))
+}
+
+fn parse_context_origin(context: &str) -> Option<SourceOrigin> {
+    let rest = context.strip_prefix("at ")?;
+    let location = rest.split(" in `").next().unwrap_or(rest).trim();
+    parse_origin_text(location)
+}
+
+fn parse_context_frame(context: &str) -> Option<RuntimeFrame> {
+    let (_, tail) = context.split_once("in `")?;
+    let name = tail.strip_suffix('`')?;
+    Some(RuntimeFrame {
+        kind: RuntimeFrameKind::Function,
+        name: name.to_string(),
+        origin: None,
+    })
+}
+
+fn push_unique_frame(frames: &mut Vec<RuntimeFrame>, frame: RuntimeFrame) {
+    if frames
+        .last()
+        .is_some_and(|prev| prev.name == frame.name && prev.origin == frame.origin)
+    {
+        return;
+    }
+    frames.push(frame);
+}
+
+fn display_runtime_name(name: &str) -> &str {
+    name.strip_prefix("aivi.").unwrap_or(name)
+}
+
+fn text_join_help() -> &'static str {
+    "pass a `List Text` to `text.join`, or convert the items first with `map text.toText`"
+}
+
+fn preview_text(value: &str) -> String {
+    const LIMIT: usize = 60;
+    let mut chars = value.chars();
+    let preview: String = chars.by_ref().take(LIMIT).collect();
+    if chars.next().is_some() {
+        format!("{preview}…")
+    } else {
+        preview
+    }
+}
+
+fn build_runtime_frames(
+    snapshot: Option<&RuntimeSnapshot>,
+    contexts: &[String],
+    scrutinee: Option<&str>,
+) -> Vec<RuntimeFrame> {
+    let mut frames = Vec::new();
+    if let Some(snapshot) = snapshot {
+        for frame in snapshot.frames.iter().rev() {
+            push_unique_frame(&mut frames, frame.clone());
+        }
+    }
+    for context in contexts.iter().rev() {
+        if let Some(frame) = parse_context_frame(context) {
+            push_unique_frame(&mut frames, frame);
+        }
+    }
+    if let Some(scrutinee) = scrutinee {
+        if let Some(frame) = parse_context_frame(scrutinee) {
+            push_unique_frame(&mut frames, frame);
+        }
+    }
+    frames
+}
+
+fn select_primary_origin(
+    snapshot: Option<&RuntimeSnapshot>,
+    contexts: &[String],
+    scrutinee: Option<&str>,
+) -> Option<SourceOrigin> {
+    let context_origins = || {
+        contexts
+            .iter()
+            .rev()
+            .filter_map(|context| parse_context_origin(context))
+            .chain(scrutinee.into_iter().filter_map(parse_context_origin))
+    };
+
+    if let Some(snapshot) = snapshot {
+        if let Some(origin) = snapshot
+            .origin
+            .clone()
+            .filter(|origin| origin.source_kind == aivi_core::SourceKind::User)
+        {
+            return Some(origin);
+        }
+        if let Some(origin) = snapshot
+            .frames
+            .iter()
+            .rev()
+            .filter_map(|frame| frame.origin.clone())
+            .find(|origin| origin.source_kind == aivi_core::SourceKind::User)
+        {
+            return Some(origin);
+        }
+    }
+    if let Some(origin) = context_origins().find(|origin| origin.source_kind == aivi_core::SourceKind::User) {
+        return Some(origin);
+    }
+    if let Some(snapshot) = snapshot {
+        if let Some(origin) = snapshot.origin.clone() {
+            return Some(origin);
+        }
+        if let Some(origin) = snapshot
+            .frames
+            .iter()
+            .rev()
+            .filter_map(|frame| frame.origin.clone())
+            .next()
+        {
+            return Some(origin);
+        }
+    }
+    context_origins().next()
+}
+
+fn runtime_error_report(err: RuntimeError, snapshot: Option<RuntimeSnapshot>) -> RuntimeReport {
+    let mut contexts = Vec::new();
+    let leaf = collect_runtime_contexts(&err, &mut contexts);
+    let scrutinee = match leaf {
+        RuntimeError::NonExhaustiveMatch { scrutinee } => scrutinee.as_deref(),
+        _ => None,
+    };
+    let frames = build_runtime_frames(snapshot.as_ref(), &contexts, scrutinee);
+    let primary = select_primary_origin(snapshot.as_ref(), &contexts, scrutinee);
+    let active_frame_name = frames.first().map(|frame| frame.name.as_str());
+
+    let mut report = match leaf {
+        RuntimeError::Cancelled => RuntimeReport::new("RT1000", "execution cancelled"),
+        RuntimeError::Message(message) => RuntimeReport::new("RT1001", message.clone()),
+        RuntimeError::Error(value) => RuntimeReport::new("RT1002", "runtime error")
+            .with_note(format!("value: {}", format_value(value))),
         RuntimeError::TypeError {
             context,
             expected,
             got,
-        } => format!("{context}: expected {expected}, got {got}"),
-        RuntimeError::DivisionByZero { context } => {
-            format!("{context}: division by zero")
-        }
-        RuntimeError::Overflow { context } => {
-            format!("{context}: arithmetic overflow")
-        }
+        } if context == "text.join" => RuntimeReport::new("RT1203", "`text.join` expected a list of `Text`")
+            .with_note(format!("received `{got}`"))
+            .with_hint(text_join_help()),
+        RuntimeError::TypeError {
+            context,
+            expected,
+            got,
+        } => RuntimeReport::new(
+            "RT1200",
+            format!("`{context}` expected `{expected}`, got `{got}`"),
+        ),
+        RuntimeError::DivisionByZero { context } => RuntimeReport::new(
+            "RT1204",
+            format!("`{context}` attempted to divide by zero"),
+        )
+        .with_hint("check that the divisor is non-zero before dividing"),
+        RuntimeError::Overflow { context } => RuntimeReport::new(
+            "RT1205",
+            format!("`{context}` overflowed during arithmetic"),
+        ),
         RuntimeError::IndexOutOfBounds {
             context,
             index,
             length,
-        } => format!("{context}: index {index} out of bounds (length {length})"),
-        RuntimeError::NonExhaustiveMatch { scrutinee } => match scrutinee {
-            Some(val) => format!("non-exhaustive match: no pattern matched {val}"),
-            None => "non-exhaustive match".to_string(),
-        },
-        RuntimeError::StackOverflow { depth } => {
-            format!("stack overflow: exceeded maximum call depth of {depth}")
+        } => RuntimeReport::new(
+            "RT1206",
+            format!("`{context}` index {index} is out of bounds for length {length}"),
+        )
+        .with_hint("guard the index with a length check before indexing"),
+        RuntimeError::NonExhaustiveMatch { scrutinee } => {
+            let in_text_join = active_frame_name.is_some_and(|name| name.ends_with("text.join"));
+            let mut report = if in_text_join {
+                RuntimeReport::new("RT1203", "`text.join` expected a list of `Text`")
+                    .with_hint(text_join_help())
+            } else {
+                RuntimeReport::new("RT1208", "non-exhaustive match: no pattern matched")
+                    .with_hint("add a wildcard (`_`) arm or cover the missing cases explicitly")
+            };
+            if let Some(value) = scrutinee {
+                if parse_context_origin(value).is_none() && parse_context_frame(value).is_none() {
+                    let label = if in_text_join {
+                        "received value".to_string()
+                    } else {
+                        "unmatched value".to_string()
+                    };
+                    report = report.with_note(format!("{label}: {value}"));
+                }
+            }
+            if !in_text_join {
+                if let Some(name) = active_frame_name {
+                    report = report.with_note(format!(
+                        "while evaluating `{}`",
+                        display_runtime_name(name)
+                    ));
+                }
+            }
+            report
         }
+        RuntimeError::StackOverflow { depth } => RuntimeReport::new(
+            "RT1209",
+            format!("stack overflow: exceeded maximum call depth of {depth}"),
+        ),
         RuntimeError::IOError { context, cause } => {
-            format!("{context}: {cause}")
+            RuntimeReport::new("RT1210", format!("`{context}` failed")).with_note(cause.clone())
+        }
+        RuntimeError::InvalidArgument { context, reason } if context == "text.join" => {
+            RuntimeReport::new("RT1203", "`text.join` expected a list of `Text`")
+                .with_note(reason.clone())
+                .with_hint(text_join_help())
         }
         RuntimeError::InvalidArgument { context, reason } => {
-            format!("{context}: {reason}")
+            RuntimeReport::new("RT1211", format!("`{context}` rejected its arguments"))
+                .with_note(reason.clone())
         }
-        RuntimeError::ParseError { context, input } => {
-            format!("{context}: failed to parse \"{input}\"")
+        RuntimeError::ParseError { context, input } => RuntimeReport::new(
+            "RT1212",
+            format!("`{context}` failed to parse the input"),
+        )
+        .with_note(format!("input: {:?}", preview_text(input))),
+        RuntimeError::Context { .. } => unreachable!("context wrappers are stripped above"),
+    };
+
+    if let Some(primary_origin) = primary {
+        report.primary = Some(primary_origin.clone());
+        if let Some(snapshot) = snapshot.as_ref() {
+            if let Some(inner_frame) = snapshot.frames.last() {
+                if let Some(inner_origin) = inner_frame.origin.clone() {
+                    if inner_origin != primary_origin {
+                        report.labels.push(RuntimeLabel {
+                            message: format!("runtime raised inside `{}`", inner_frame.name),
+                            origin: inner_origin,
+                        });
+                    }
+                }
+            }
         }
-        RuntimeError::Context { source, .. } => format_runtime_error_leaf(source),
     }
+
+    report.frames = frames;
+
+    for context in contexts {
+        if parse_context_origin(&context).is_none() && parse_context_frame(&context).is_none() {
+            report.notes.push(aivi_driver::RuntimeNote {
+                kind: RuntimeNoteKind::Note,
+                message: context,
+            });
+        }
+    }
+
+    report
 }
 
 pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
-    fn collect_contexts<'a>(err: &'a RuntimeError, contexts: &mut Vec<String>) -> &'a RuntimeError {
-        match err {
-            RuntimeError::Context { context, source } => {
-                contexts.push(context.clone());
-                collect_contexts(source, contexts)
-            }
-            other => other,
-        }
-    }
-
-    let mut contexts = Vec::new();
-    let leaf = collect_contexts(&err, &mut contexts);
-    let mut rendered = format_runtime_error_leaf(leaf);
-    if !contexts.is_empty() {
-        rendered.push_str("\ntrace:");
-        for context in contexts {
-            rendered.push_str("\n  - ");
-            rendered.push_str(&context);
-        }
-    }
-    rendered
+    aivi_driver::render_runtime_report(&runtime_error_report(err, None), false)
 }
 
 #[cfg(test)]
@@ -726,6 +1043,92 @@ fn runtime_builtin(
         args: Vec::new(),
         tagged_args: Some(Vec::new()),
     })
+}
+
+#[cfg(test)]
+mod runtime_report_tests {
+    use super::*;
+
+    fn origin(path: &str, line: usize, column: usize) -> SourceOrigin {
+        SourceOrigin::new(
+            path.to_string(),
+            Span {
+                start: Position { line, column },
+                end: Position {
+                    line,
+                    column: column + 1,
+                },
+            },
+        )
+    }
+
+    #[test]
+    fn non_exhaustive_text_join_prefers_user_callsite_and_keeps_stdlib_frame() {
+        let user_origin = origin("src/app.aivi", 42, 15);
+        let stdlib_origin = origin("<embedded:aivi.text>", 173, 14);
+        let snapshot = RuntimeSnapshot {
+            origin: Some(stdlib_origin.clone()),
+            frames: vec![
+                RuntimeFrame {
+                    kind: RuntimeFrameKind::Function,
+                    name: "app.main.renderNames".to_string(),
+                    origin: Some(user_origin.clone()),
+                },
+                RuntimeFrame {
+                    kind: RuntimeFrameKind::Function,
+                    name: "aivi.text.join".to_string(),
+                    origin: Some(stdlib_origin.clone()),
+                },
+            ],
+        };
+
+        let report = runtime_error_report(
+            RuntimeError::NonExhaustiveMatch { scrutinee: None },
+            Some(snapshot),
+        );
+        let rendered = aivi_driver::render_runtime_report(&report, false);
+
+        assert_eq!(report.code, "RT1203");
+        assert_eq!(report.primary.as_ref().map(|origin| origin.path.as_str()), Some("src/app.aivi"));
+        assert_eq!(report.frames.first().map(|frame| frame.name.as_str()), Some("aivi.text.join"));
+        assert!(
+            report
+                .labels
+                .iter()
+                .any(|label| label.origin.path == "<embedded:aivi.text>"),
+            "expected embedded stdlib label, got {report:#?}"
+        );
+        assert!(rendered.contains("error[RT1203]: `text.join` expected a list of `Text`"));
+        assert!(rendered.contains("src/app.aivi:42:15"));
+        assert!(rendered.contains("runtime raised inside `aivi.text.join`"));
+        assert!(rendered.contains("0: aivi.text.join at <embedded:aivi.text>:173:14"));
+    }
+
+    #[test]
+    fn text_join_item_error_surfaces_index_and_help() {
+        let user_origin = origin("src/app.aivi", 42, 15);
+        let snapshot = RuntimeSnapshot {
+            origin: Some(user_origin.clone()),
+            frames: vec![RuntimeFrame {
+                kind: RuntimeFrameKind::Function,
+                name: "app.main.renderNames".to_string(),
+                origin: Some(user_origin),
+            }],
+        };
+
+        let report = runtime_error_report(
+            RuntimeError::InvalidArgument {
+                context: "text.join".to_string(),
+                reason: "list item at index 2 has type `Int`".to_string(),
+            },
+            Some(snapshot),
+        );
+        let rendered = aivi_driver::render_runtime_report(&report, false);
+
+        assert_eq!(report.code, "RT1203");
+        assert!(rendered.contains("note: list item at index 2 has type `Int`"));
+        assert!(rendered.contains("help: pass a `List Text` to `text.join`"));
+    }
 }
 
 include!("runtime_impl/lifecycle_and_cancel.rs");

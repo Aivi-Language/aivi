@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use super::values::{BuiltinValue, TaggedValue, Value};
-use super::{format_runtime_error, format_value, Runtime, RuntimeError};
+use super::{format_value, Runtime, RuntimeError};
 use crate::hir::HirProgram;
 use crate::AiviError;
+use aivi_driver::render_runtime_report;
 
 #[derive(Debug, Clone)]
 pub struct TestFailure {
@@ -61,7 +62,7 @@ pub fn run_test_suite(
                 report.failures.push(TestFailure {
                     name: name.clone(),
                     description: description.clone(),
-                    message: format_runtime_error(err),
+                    message: render_runtime_report(&runtime.runtime_report(err), false),
                 });
                 continue;
             }
@@ -93,7 +94,7 @@ pub fn run_test_suite(
                 report.failures.push(TestFailure {
                     name: name.clone(),
                     description: description.clone(),
-                    message: format_runtime_error(err),
+                    message: render_runtime_report(&runtime.runtime_report(err), false),
                 });
             }
         }

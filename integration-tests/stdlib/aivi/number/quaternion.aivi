@@ -1,0 +1,58 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.quaternion.tests
+
+use aivi
+use aivi.testing
+use aivi.math
+use aivi.number.quaternion
+
+@test "quaternion domain arithmetic"
+quaternion_domain_arithmetic = do Effect {
+  halfTurnX = fromAxisAngle { x: 1.0, y: 0.0, z: 0.0 } pi
+  doubled   = halfTurnX + halfTurnX
+  restored  = doubled - halfTurnX
+  squared   = halfTurnX * halfTurnX
+  scaled    = doubled / 2.0
+
+  assert (abs doubled.w < 0.0001)
+  assert (abs (doubled.x - 2.0) < 0.0001)
+  assert (abs doubled.y < 0.0001)
+  assert (abs doubled.z < 0.0001)
+
+  assert (abs restored.w < 0.0001)
+  assert (abs (restored.x - 1.0) < 0.0001)
+  assert (abs restored.y < 0.0001)
+  assert (abs restored.z < 0.0001)
+
+  assert (abs (squared.w + 1.0) < 0.0001)
+  assert (abs squared.x < 0.0001)
+  assert (abs squared.y < 0.0001)
+  assert (abs squared.z < 0.0001)
+
+  assert (abs scaled.w < 0.0001)
+  assert (abs (scaled.x - 1.0) < 0.0001)
+  assert (abs scaled.y < 0.0001)
+  assert (abs scaled.z < 0.0001)
+}
+
+@test "quaternion helpers"
+quaternion_helpers = do Effect {
+  axisTurn = fromAxisAngle { x: 0.0, y: 2.0, z: 0.0 } pi
+  zero     = axisTurn - axisTurn
+  unit     = normalize axisTurn
+  conj     = conjugate axisTurn
+
+  assert (abs axisTurn.w < 0.0001)
+  assert (abs axisTurn.x < 0.0001)
+  assert (abs (axisTurn.y - 1.0) < 0.0001)
+  assert (abs axisTurn.z < 0.0001)
+
+  assert (abs conj.w < 0.0001)
+  assert (abs conj.x < 0.0001)
+  assert (abs (conj.y + 1.0) < 0.0001)
+  assert (abs conj.z < 0.0001)
+
+  assert (abs (magnitude axisTurn - 1.0) < 0.0001)
+  assert (abs (magnitude unit - 1.0) < 0.0001)
+  assertEq (normalize zero) zero
+}

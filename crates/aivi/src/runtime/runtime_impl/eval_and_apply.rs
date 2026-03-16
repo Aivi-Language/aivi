@@ -206,13 +206,14 @@ impl Runtime {
         // Save any pending JIT error so cleanup code doesn't clear it
         // (make_jit_builtin resets jit_pending_error on entry).
         let saved_error = self.jit_pending_error.take();
+        let saved_snapshot = self.jit_pending_snapshot.take();
         while let Some(entry) = self.resource_cleanups.pop() {
             match entry {
                 ResourceCleanupEntry::ScopeBoundary => break,
                 ResourceCleanupEntry::Cleanup { cleanup } => {
                     self.uncancelable(|runtime| {
                         let _ = cleanup(runtime);
-                        runtime.jit_pending_error = None;
+                        runtime.clear_pending_runtime_error();
                     });
                 }
             }
@@ -220,6 +221,7 @@ impl Runtime {
         // Restore the original pending error
         if saved_error.is_some() {
             self.jit_pending_error = saved_error;
+            self.jit_pending_snapshot = saved_snapshot;
         }
     }
 }

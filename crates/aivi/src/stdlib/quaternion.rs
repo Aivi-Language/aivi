@@ -26,7 +26,7 @@ fromAxisAngle = axis theta => {
 }
 
 conjugate : Quaternion -> Quaternion
-conjugate = q => { w: q.w, x: -q.x, y: -q.y, z: -q.z }
+conjugate = q => { w: q.w, x: 0.0 - q.x, y: 0.0 - q.y, z: 0.0 - q.z }
 
 magnitude : Quaternion -> Float
 magnitude = q => sqrt (q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
@@ -34,7 +34,7 @@ magnitude = q => sqrt (q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
 normalize : Quaternion -> Quaternion
 normalize = q => {
   m = magnitude q
-  if m == 0.0 then q else q / m
+  if m == 0.0 then q else { w: q.w / m, x: q.x / m, y: q.y / m, z: q.z / m }
 }
 
 domain Quaternion over Quaternion = {

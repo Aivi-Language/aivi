@@ -82,12 +82,13 @@ mod linux_impl {
     use std::os::raw::{c_char, c_double, c_int, c_uint, c_ulong, c_void};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::ptr::null_mut;
-    use std::sync::{mpsc, Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex, OnceLock, mpsc};
+    use std::thread::{self, ThreadId};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use base64::Engine;
     use image::{ImageBuffer, ImageEncoder, Rgba};
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
 
     use super::{
         BuildResult, BuildWithBindingsResult, Gtk4Error, GtkNode, MountedRootInfo, SignalEvent,
@@ -575,7 +576,7 @@ mod linux_impl {
         fn g_type_is_a(type_: usize, is_a_type: usize) -> c_int;
         fn g_type_check_instance_is_a(instance: *mut c_void, iface_type: usize) -> c_int;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
-            -> *mut c_void;
+        -> *mut c_void;
         fn g_object_ref(object: *mut c_void) -> *mut c_void;
         fn g_object_unref(object: *mut c_void);
         fn g_object_ref_sink(object: *mut c_void) -> *mut c_void;
@@ -606,6 +607,7 @@ mod linux_impl {
         static GTK_PUMP_ACTIVE: RefCell<bool> = const { RefCell::new(false) };
     }
 
+    static GTK_MAIN_THREAD_ID: OnceLock<ThreadId> = OnceLock::new();
     static PENDING_TRAY_ACTIONS: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
     fn pending_tray_actions() -> &'static Mutex<VecDeque<String>> {
         PENDING_TRAY_ACTIONS.get_or_init(|| Mutex::new(VecDeque::new()))
@@ -650,6 +652,17 @@ mod linux_impl {
         *main_loop_tick_handler()
             .lock()
             .expect("main loop tick handler lock poisoned") = handler;
+    }
+
+    fn remember_gtk_main_thread() {
+        let _ = GTK_MAIN_THREAD_ID.set(thread::current().id());
+    }
+
+    fn is_gtk_main_thread() -> bool {
+        GTK_MAIN_THREAD_ID
+            .get()
+            .map(|id| *id == thread::current().id())
+            .unwrap_or(true)
     }
 
     fn call_ui_debug_request_handler(
@@ -1071,11 +1084,7 @@ mod linux_impl {
     }
 
     fn bool_to_c(val: bool) -> c_int {
-        if val {
-            1
-        } else {
-            0
-        }
+        if val { 1 } else { 0 }
     }
 
     const GTK_DIR_TAB_FORWARD: c_int = 0;
@@ -1240,11 +1249,7 @@ mod linux_impl {
 
     fn editable_delegate_or_self(widget: *mut c_void) -> *mut c_void {
         let delegate = unsafe { gtk_editable_get_delegate(widget) };
-        if delegate.is_null() {
-            widget
-        } else {
-            delegate
-        }
+        if delegate.is_null() { widget } else { delegate }
     }
 
     struct DeferredEditableCursor {
@@ -1899,13 +1904,15 @@ mod linux_impl {
                 None,
                 &binding,
             );
-            assert!(err
-                .message
-                .contains("widget #12 (GtkBox id=settings-panel)"));
+            assert!(
+                err.message
+                    .contains("widget #12 (GtkBox id=settings-panel)")
+            );
             assert!(err.message.contains("bound to `Save`"));
-            assert!(err
-                .message
-                .contains("Known supported signals for this class: key-pressed."));
+            assert!(
+                err.message
+                    .contains("Known supported signals for this class: key-pressed.")
+            );
         }
 
         fn write_test_source(name: &str, contents: &str) -> PathBuf {
@@ -1983,12 +1990,14 @@ mod linux_impl {
                 },
             )
             .expect_err("expected invalid child mismatch");
-            assert!(err
-                .message
-                .contains("expected a child with class `AdwPreferencesGroup`"));
-            assert!(err
-                .message
-                .contains("widget #9 (GtkBox id=account-connection)"));
+            assert!(
+                err.message
+                    .contains("expected a child with class `AdwPreferencesGroup`")
+            );
+            assert!(
+                err.message
+                    .contains("widget #9 (GtkBox id=account-connection)")
+            );
         }
         #[test]
         fn adw_abstract_animation_gives_helpful_error() {
@@ -3311,6 +3320,30 @@ mod linux_impl {
         }
 
         #[test]
+        fn os_open_uri_rejects_empty_uri_from_background_thread() {
+            let _guard = gtk_state_test_guard();
+            let _app_id =
+                app_new("app.mailfox.os-open-uri-background-test").expect("create GTK app");
+            let handle = std::thread::spawn(|| os_open_uri(0, ""));
+            for _ in 0..20 {
+                crate::pump_events();
+                if handle.is_finished() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let err = handle
+                .join()
+                .expect("background osOpenUri thread should finish")
+                .expect_err("empty URI should fail");
+            assert!(
+                err.message.contains("gtk4.osOpenUri failed to open"),
+                "unexpected background osOpenUri error: {}",
+                err.message
+            );
+        }
+
+        #[test]
         fn gtk_scale_has_value_changed_signal_support() {
             assert_eq!(
                 signal_payload_kind_for("GtkScale", "value-changed"),
@@ -3846,17 +3879,19 @@ mod linux_impl {
     }
 
     fn menu_model_items_json(items: &[MenuModelItemState]) -> Value {
-        json!(items
-            .iter()
-            .enumerate()
-            .map(|(index, item)| {
-                json!({
-                    "index": index,
-                    "label": item.label,
-                    "action": item.detailed_action,
+        json!(
+            items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    json!({
+                        "index": index,
+                        "label": item.label,
+                        "action": item.detailed_action,
+                    })
                 })
-            })
-            .collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+        )
     }
 
     fn text_slice_by_char_range(text: &str, start: usize, end: usize) -> String {
@@ -4162,8 +4197,10 @@ mod linux_impl {
                 runtime.insert("presentedParentId".to_string(), json!(presented_parent_id));
                 runtime.insert(
                     "presentedParentName".to_string(),
-                    json!(presented_parent_id
-                        .and_then(|id| state.widget_id_to_name.get(&id).cloned())),
+                    json!(
+                        presented_parent_id
+                            .and_then(|id| state.widget_id_to_name.get(&id).cloned())
+                    ),
                 );
             } else if let Some(visible) = widget_bool_property(widget, "visible") {
                 runtime.insert("visible".to_string(), Value::Bool(visible));
@@ -8462,9 +8499,11 @@ mod linux_impl {
             ("widgetId".to_string(), json!(root_id)),
             (
                 "widgetName".to_string(),
-                json!(id_map
-                    .iter()
-                    .find_map(|(name, wid)| (*wid == root_id).then_some(name.clone()))),
+                json!(
+                    id_map
+                        .iter()
+                        .find_map(|(name, wid)| (*wid == root_id).then_some(name.clone()))
+                ),
             ),
         ]));
     }
@@ -11246,6 +11285,7 @@ mod linux_impl {
     pub(super) fn init() -> Result<(), Gtk4Error> {
         unsafe { gtk_init() };
         try_adw_init();
+        remember_gtk_main_thread();
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
             if !state.resources_registered {
@@ -11261,6 +11301,7 @@ mod linux_impl {
         let app_id_c = c_text(id, "gtk4.appNew invalid application id")?;
         unsafe { gtk_init() };
         try_adw_init();
+        remember_gtk_main_thread();
         let raw = unsafe { gtk_application_new(app_id_c.as_ptr(), 0) };
         if raw.is_null() {
             return Err(Gtk4Error::new(
@@ -12056,14 +12097,6 @@ mod linux_impl {
         })
     }
 
-    pub(super) fn widget_add_shortcut(_widget_id: i64, _shortcut_id: i64) -> Result<(), Gtk4Error> {
-        Ok(()) // stub
-    }
-
-    pub(super) fn widget_set_layout_manager(_widget_id: i64, _lm_id: i64) -> Result<(), Gtk4Error> {
-        Ok(()) // stub
-    }
-
     pub(super) fn box_new(orientation: i64, spacing: i32) -> Result<i64, Gtk4Error> {
         let ori: i32 = if orientation == 1 { 1 } else { 0 };
         let id = GTK_STATE.with(|state| {
@@ -12589,20 +12622,6 @@ mod linux_impl {
         })
     }
 
-    pub(super) fn clipboard_default() -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-
-    pub(super) fn clipboard_set_text(_id: i64, _text: &str) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-    pub(super) fn clipboard_text(_id: i64) -> Result<String, Gtk4Error> {
-        Ok(String::new())
-    }
-
     pub(super) fn action_new(name: &str) -> Result<i64, Gtk4Error> {
         let name_c = c_text(name, "gtk4.actionNew invalid action name")?;
         let activate_signal = CString::new("activate")
@@ -12652,60 +12671,6 @@ mod linux_impl {
             unsafe { g_action_map_add_action(app, action) };
             Ok(())
         })
-    }
-
-    pub(super) fn shortcut_new(_accel: &str, _action: &str) -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-
-    pub(super) fn notification_new(_title: &str, _body: &str) -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-
-    pub(super) fn notification_set_body(_id: i64, _body: &str) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-    pub(super) fn app_send_notification(
-        _app_id: i64,
-        _tag: &str,
-        _notif_id: i64,
-    ) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-    pub(super) fn app_withdraw_notification(_app_id: i64, _tag: &str) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-
-    pub(super) fn layout_manager_new(_name: &str) -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-
-    pub(super) fn drag_source_new(_widget_id: i64) -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-    pub(super) fn drag_source_set_text(_id: i64, _text: &str) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-    pub(super) fn drop_target_new(_widget_id: i64) -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-    pub(super) fn drop_target_last_text(_id: i64) -> Result<String, Gtk4Error> {
-        Ok(String::new())
     }
 
     pub(super) fn menu_model_new() -> Result<i64, Gtk4Error> {
@@ -13050,49 +13015,7 @@ mod linux_impl {
         })
     }
 
-    pub(super) fn file_dialog_new() -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-    pub(super) fn file_dialog_select_file(_id: i64) -> Result<String, Gtk4Error> {
-        Ok(String::new())
-    }
-
-    pub(super) fn list_store_new() -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-    pub(super) fn list_store_append_text(_id: i64, _text: &str) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-    pub(super) fn list_store_items(_id: i64) -> Result<Vec<String>, Gtk4Error> {
-        Ok(Vec::new())
-    }
-    pub(super) fn list_view_new() -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-    pub(super) fn list_view_set_model(_view_id: i64, _store_id: i64) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-    pub(super) fn tree_view_new() -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut s = state.borrow_mut();
-            Ok(s.alloc_id())
-        })
-    }
-    pub(super) fn tree_view_set_model(_view_id: i64, _store_id: i64) -> Result<(), Gtk4Error> {
-        Ok(())
-    }
-
-    pub(super) fn os_open_uri(_app_id: i64, uri: &str) -> Result<(), Gtk4Error> {
-        let uri_c = c_text(uri, "gtk4.osOpenUri invalid URI")?;
+    fn launch_default_uri(uri_c: &CString, uri: &str) -> Result<(), Gtk4Error> {
         let mut err = null_mut();
         let launched =
             unsafe { g_app_info_launch_default_for_uri(uri_c.as_ptr(), null_mut(), &mut err) };
@@ -13108,10 +13031,55 @@ mod linux_impl {
             )))
         }
     }
-    pub(super) fn os_show_in_file_manager(_path: &str) -> Result<(), Gtk4Error> {
-        Ok(())
+
+    struct DeferredUriLaunch {
+        sender: mpsc::Sender<Result<(), Gtk4Error>>,
+        uri: CString,
+        uri_text: String,
     }
 
+    unsafe extern "C" fn launch_default_uri_cb(data: *mut c_void) -> c_int {
+        if data.is_null() {
+            return 0;
+        }
+        let boxed = unsafe { Box::from_raw(data as *mut DeferredUriLaunch) };
+        let result = launch_default_uri(&boxed.uri, &boxed.uri_text);
+        let _ = boxed.sender.send(result);
+        0
+    }
+
+    fn launch_default_uri_on_main_thread(uri_c: CString, uri: &str) -> Result<(), Gtk4Error> {
+        let (sender, receiver) = mpsc::channel();
+        let payload = Box::new(DeferredUriLaunch {
+            sender,
+            uri: uri_c,
+            uri_text: uri.to_string(),
+        });
+        let payload_ptr = Box::into_raw(payload) as *mut c_void;
+        let source_id = unsafe { g_idle_add(launch_default_uri_cb, payload_ptr) };
+        if source_id == 0 {
+            unsafe {
+                drop(Box::from_raw(payload_ptr as *mut DeferredUriLaunch));
+            }
+            return Err(Gtk4Error::new(format!(
+                "gtk4.osOpenUri failed to schedule URI launch for {uri}"
+            )));
+        }
+        receiver.recv().unwrap_or_else(|_| {
+            Err(Gtk4Error::new(format!(
+                "gtk4.osOpenUri failed to receive URI launch result for {uri}"
+            )))
+        })
+    }
+
+    pub(super) fn os_open_uri(_app_id: i64, uri: &str) -> Result<(), Gtk4Error> {
+        let uri_c = c_text(uri, "gtk4.osOpenUri invalid URI")?;
+        if is_gtk_main_thread() {
+            launch_default_uri(&uri_c, uri)
+        } else {
+            launch_default_uri_on_main_thread(uri_c, uri)
+        }
+    }
     pub(super) fn os_set_badge_count(_app_id: i64, count: i64) -> Result<(), Gtk4Error> {
         if let Ok(mut q) = pending_badge_updates().lock() {
             q.push_back(count);
@@ -13323,9 +13291,11 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                    json!(
+                        id_map
+                            .iter()
+                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
+                    ),
                 ),
             ]));
             Ok(id)
@@ -13357,9 +13327,11 @@ mod linux_impl {
                 ("widgetId".to_string(), json!(id)),
                 (
                     "widgetName".to_string(),
-                    json!(id_map
-                        .iter()
-                        .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))),
+                    json!(
+                        id_map
+                            .iter()
+                            .find_map(|(name, wid)| (*wid == id).then_some(name.clone()))
+                    ),
                 ),
             ]));
             Ok(BuildResult {
@@ -13732,8 +13704,6 @@ delegate!(widget_set_opacity(id: i64, opacity: f64) -> Result<(), Gtk4Error>);
 delegate!(widget_set_css(id: i64, css: &str) -> Result<(), Gtk4Error>);
 delegate!(widget_by_id(name: &str) -> Result<i64, Gtk4Error>);
 delegate!(widget_add_controller(widget_id: i64, controller_id: i64) -> Result<(), Gtk4Error>);
-delegate!(widget_add_shortcut(widget_id: i64, shortcut_id: i64) -> Result<(), Gtk4Error>);
-delegate!(widget_set_layout_manager(widget_id: i64, lm_id: i64) -> Result<(), Gtk4Error>);
 delegate!(box_new(orientation: i64, spacing: i32) -> Result<i64, Gtk4Error>);
 delegate!(box_append(box_id: i64, child_id: i64) -> Result<(), Gtk4Error>);
 delegate!(box_set_homogeneous(box_id: i64, homogeneous: bool) -> Result<(), Gtk4Error>);
@@ -13775,23 +13745,10 @@ delegate!(image_set_pixel_size(id: i64, size: i32) -> Result<(), Gtk4Error>);
 delegate!(icon_theme_add_search_path(path: &str) -> Result<(), Gtk4Error>);
 delegate!(gesture_click_new(widget_id: i64) -> Result<i64, Gtk4Error>);
 delegate!(gesture_click_last_button(id: i64) -> Result<i64, Gtk4Error>);
-delegate!(clipboard_default() -> Result<i64, Gtk4Error>);
-delegate!(clipboard_set_text(id: i64, text: &str) -> Result<(), Gtk4Error>);
-delegate!(clipboard_text(id: i64) -> Result<String, Gtk4Error>);
 delegate!(action_new(name: &str) -> Result<i64, Gtk4Error>);
 delegate!(action_set_enabled(id: i64, enabled: bool) -> Result<(), Gtk4Error>);
 delegate!(app_add_action(app_id: i64, action_id: i64) -> Result<(), Gtk4Error>);
-delegate!(shortcut_new(accel: &str, action: &str) -> Result<i64, Gtk4Error>);
-delegate!(notification_new(title: &str, body: &str) -> Result<i64, Gtk4Error>);
-delegate!(notification_set_body(id: i64, body: &str) -> Result<(), Gtk4Error>);
-delegate!(app_send_notification(app_id: i64, tag: &str, notif_id: i64) -> Result<(), Gtk4Error>);
-delegate!(app_withdraw_notification(app_id: i64, tag: &str) -> Result<(), Gtk4Error>);
-delegate!(layout_manager_new(name: &str) -> Result<i64, Gtk4Error>);
 delegate!(dbus_server_start() -> Result<(), Gtk4Error>);
-delegate!(drag_source_new(widget_id: i64) -> Result<i64, Gtk4Error>);
-delegate!(drag_source_set_text(id: i64, text: &str) -> Result<(), Gtk4Error>);
-delegate!(drop_target_new(widget_id: i64) -> Result<i64, Gtk4Error>);
-delegate!(drop_target_last_text(id: i64) -> Result<String, Gtk4Error>);
 delegate!(menu_model_new() -> Result<i64, Gtk4Error>);
 delegate!(menu_model_append_item(id: i64, label: &str, action: &str) -> Result<(), Gtk4Error>);
 delegate!(menu_button_new(label: &str) -> Result<i64, Gtk4Error>);
@@ -13807,17 +13764,7 @@ delegate!(adw_dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4E
 delegate!(dialog_root_is_persistent(root_id: i64) -> Result<bool, Gtk4Error>);
 delegate!(dialog_set_open(root_id: i64, open: bool) -> Result<(), Gtk4Error>);
 delegate!(dialog_sync_open_state(root_id: i64) -> Result<(), Gtk4Error>);
-delegate!(file_dialog_new() -> Result<i64, Gtk4Error>);
-delegate!(file_dialog_select_file(id: i64) -> Result<String, Gtk4Error>);
-delegate!(list_store_new() -> Result<i64, Gtk4Error>);
-delegate!(list_store_append_text(id: i64, text: &str) -> Result<(), Gtk4Error>);
-delegate!(list_store_items(id: i64) -> Result<Vec<String>, Gtk4Error>);
-delegate!(list_view_new() -> Result<i64, Gtk4Error>);
-delegate!(list_view_set_model(view_id: i64, store_id: i64) -> Result<(), Gtk4Error>);
-delegate!(tree_view_new() -> Result<i64, Gtk4Error>);
-delegate!(tree_view_set_model(view_id: i64, store_id: i64) -> Result<(), Gtk4Error>);
 delegate!(os_open_uri(app_id: i64, uri: &str) -> Result<(), Gtk4Error>);
-delegate!(os_show_in_file_manager(path: &str) -> Result<(), Gtk4Error>);
 delegate!(os_set_badge_count(app_id: i64, count: i64) -> Result<(), Gtk4Error>);
 delegate!(os_theme_preference() -> Result<String, Gtk4Error>);
 delegate!(signal_poll() -> Result<Option<SignalEvent>, Gtk4Error>);

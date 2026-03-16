@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::SourceOrigin;
 use crate::surface::{
     BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern,
     SpannedName, TextPart,
@@ -134,14 +135,14 @@ pub enum HirExpr {
         base: Box<HirExpr>,
         index: Box<HirExpr>,
         #[serde(skip)]
-        location: Option<String>,
+        location: Option<SourceOrigin>,
     },
     Match {
         id: u32,
         scrutinee: Box<HirExpr>,
         arms: Vec<HirMatchArm>,
         #[serde(skip)]
-        location: Option<String>,
+        location: Option<SourceOrigin>,
     },
     If {
         id: u32,
@@ -154,7 +155,7 @@ pub enum HirExpr {
         op: String,
         left: Box<HirExpr>,
         right: Box<HirExpr>,
-        location: Option<String>,
+        location: Option<SourceOrigin>,
     },
     Block {
         id: u32,

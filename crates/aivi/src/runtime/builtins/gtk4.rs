@@ -103,9 +103,8 @@ pub(super) fn resolve_reactive_attr_value(
         .map(|state| state.current_model.clone())
         .ok_or_else(|| RuntimeError::InvalidArgument {
             context: "gtk4 reactive binding".to_string(),
-            reason:
-                "derived values inside gtk sigils require an initialized reactive host"
-                    .to_string(),
+            reason: "derived values inside gtk sigils require an initialized reactive host"
+                .to_string(),
         })?;
     runtime.apply(value, model)
 }
@@ -180,10 +179,22 @@ fn serialize_signal_builtin() -> Value {
 
 #[derive(Clone)]
 pub(super) enum ResolvedGtkAttr {
-    StaticAttr { name: String, value: String },
-    BoundAttr { name: String, value: Value },
-    StaticProp { name: String, value: String },
-    BoundProp { name: String, value: Value },
+    StaticAttr {
+        name: String,
+        value: String,
+    },
+    BoundAttr {
+        name: String,
+        value: Value,
+    },
+    StaticProp {
+        name: String,
+        value: String,
+    },
+    BoundProp {
+        name: String,
+        value: Value,
+    },
     EventProp {
         name: String,
         handler: Value,
@@ -387,7 +398,7 @@ pub(super) fn resolve_gtk_node(
                         context: "gtk4 each key".to_string(),
                         expected: "Option GtkBindingHandle".to_string(),
                         got: crate::runtime::format_value(other),
-                    })
+                    });
                 }
             };
             Ok(ResolvedGtkNode::Each {
@@ -701,7 +712,7 @@ fn auto_to_msg_builtin() -> Value {
                 return Ok(Value::Constructor {
                     name: "None".to_string(),
                     args: vec![],
-                })
+                });
             }
         };
 
@@ -786,8 +797,6 @@ fn build_gtk4_stubs() -> Value {
         ("widgetSetOpacity", 2),
         ("widgetSetCss", 2),
         ("widgetAddController", 2),
-        ("widgetAddShortcut", 2),
-        ("widgetSetLayoutManager", 2),
         ("boxNew", 2),
         ("boxAppend", 2),
         ("boxSetHomogeneous", 2),
@@ -814,10 +823,6 @@ fn build_gtk4_stubs() -> Value {
         ("drawAreaNew", 2),
         ("drawAreaSetContentSize", 3),
         ("drawAreaQueueDraw", 1),
-        ("dragSourceNew", 1),
-        ("dragSourceSetText", 2),
-        ("dropTargetNew", 1),
-        ("dropTargetLastText", 1),
         ("menuModelNew", 1),
         ("menuModelAppendItem", 3),
         ("menuButtonNew", 1),
@@ -827,8 +832,6 @@ fn build_gtk4_stubs() -> Value {
         ("dialogSetChild", 2),
         ("dialogPresent", 2),
         ("dialogClose", 1),
-        ("fileDialogNew", 1),
-        ("fileDialogSelectFile", 1),
         ("imageNewFromFile", 1),
         ("imageSetFile", 2),
         ("imageNewFromResource", 1),
@@ -836,29 +839,12 @@ fn build_gtk4_stubs() -> Value {
         ("imageNewFromIconName", 1),
         ("imageSetPixelSize", 2),
         ("iconThemeAddSearchPath", 1),
-        ("listStoreNew", 1),
-        ("listStoreAppendText", 2),
-        ("listStoreItems", 1),
-        ("listViewNew", 1),
-        ("listViewSetModel", 2),
-        ("treeViewNew", 1),
-        ("treeViewSetModel", 2),
         ("gestureClickNew", 1),
         ("gestureClickLastButton", 1),
-        ("clipboardDefault", 1),
-        ("clipboardSetText", 2),
-        ("clipboardText", 1),
         ("actionNew", 1),
         ("actionSetEnabled", 2),
         ("appAddAction", 2),
-        ("shortcutNew", 2),
-        ("notificationNew", 2),
-        ("notificationSetBody", 2),
-        ("appSendNotification", 3),
-        ("appWithdrawNotification", 2),
-        ("layoutManagerNew", 1),
         ("osOpenUri", 2),
-        ("osShowInFileManager", 1),
         ("osSetBadgeCount", 2),
         ("osThemePreference", 1),
         ("widgetById", 1),
@@ -902,10 +888,10 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use super::{auto_to_msg_builtin, collect_auto_bindings_into, ResolvedGtkNode};
+    use super::{ResolvedGtkNode, auto_to_msg_builtin, collect_auto_bindings_into};
     use crate::runtime::builtins::util::builtin;
     use crate::runtime::environment::GtkAutoBindingsState;
-    use crate::runtime::{build_runtime_base, Value};
+    use crate::runtime::{Value, build_runtime_base};
 
     #[test]
     fn auto_bindings_collect_handlers_inside_each_templates() {
@@ -1000,7 +986,8 @@ mod tests {
                 match &args[0] {
                     Value::Constructor { name, args }
                         if name == "ThemeSelected"
-                            && matches!(args.as_slice(), [Value::Text(payload)] if payload == "2") => {}
+                            && matches!(args.as_slice(), [Value::Text(payload)] if payload == "2") =>
+                        {}
                     other => panic!("expected Some (ThemeSelected \"2\"), got {other:?}"),
                 }
             }

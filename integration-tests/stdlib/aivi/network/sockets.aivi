@@ -4,31 +4,71 @@ module integrationTests.stdlib.aivi.network.sockets.tests
 use aivi
 use aivi.testing
 use aivi.net.sockets
+use aivi (
+  system (env)
+  text (parseInt)
+)
 
-// -- Address type --
-
-@test "address fields"
-addressFields = do Effect {
-  addr = { host: "127.0.0.1", port: 8080 }
-  assertEq addr.host "127.0.0.1"
-  assertEq addr.port 8080
+withEnvPort = key run => do Effect {
+  portResult <- attempt (env.get key)
+  portResult match
+    | Err _     => pure Unit
+    | Ok raw    => parseInt raw match
+      | Some port => run port
+      | None      => pure Unit
 }
 
+@test "connect send recv close exercises a real socket roundtrip"
+connect_send_recv_close_roundtrip = withEnvPort "AIVI_TEST_SOCKET_SERVER_PORT" (port => do Effect {
+    roundtrip <- attempt (do Effect {
+        conn      <- connect { host: "127.0.0.1", port: port }
+        _         <- send conn [112, 105, 110, 103]
+        first     <- recv conn
+        second    <- recv conn
+        _         <- close conn
+        pure { first: first, second: second }
+    })
+    payload <- assertOk roundtrip
+    _       <- assertEq payload.first [112, 111, 110, 103]
+    assertEq payload.second []
+})
+
+@test "listen accept recv send close exercises a real socket roundtrip"
+listen_accept_recv_send_close_roundtrip = withEnvPort "AIVI_TEST_SOCKET_LISTEN_PORT" (port => do Effect {
+    requestResult <- attempt (do Effect {
+        listener      <- listen { host: "127.0.0.1", port: port }
+        conn          <- accept listener
+        request       <- recv conn
+        _             <- send conn [119, 111, 114, 108, 100]
+        _             <- close conn
+        pure request
+    })
+    request <- assertOk requestResult
+    assertEq request [104, 101, 108, 108, 111]
+})
+
 @test "socket error fields"
-socketErrorFields = do Effect {
+socket_error_fields = do Effect {
   err = { message: "connection refused" }
   assertEq err.message "connection refused"
 }
 
+@test "address fields"
+address_fields = do Effect {
+  addr = { host: "127.0.0.1", port: 8080 }
+  _ <- assertEq addr.host "127.0.0.1"
+  assertEq addr.port 8080
+}
+
 @test "address zero port"
-addressZeroPort = do Effect {
+address_zero_port = do Effect {
   addr = { host: "0.0.0.0", port: 0 }
   assertEq addr.port 0
   assertEq addr.host "0.0.0.0"
 }
 
 @test "address ipv6"
-addressIpv6 = do Effect {
+address_ipv6 = do Effect {
   addr = { host: "::1", port: 443 }
   assertEq addr.host "::1"
   assertEq addr.port 443

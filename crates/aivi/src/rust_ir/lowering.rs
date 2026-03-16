@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::rust_ir::cg_type::CgType;
+use crate::SourceOrigin;
 
 use crate::hir::{
     HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirModule, HirPathSegment, HirPattern,
@@ -148,14 +149,14 @@ pub enum RustIrExpr {
         base: Box<RustIrExpr>,
         index: Box<RustIrExpr>,
         #[serde(skip)]
-        location: Option<String>,
+        location: Option<SourceOrigin>,
     },
     Match {
         id: u32,
         scrutinee: Box<RustIrExpr>,
         arms: Vec<RustIrMatchArm>,
         #[serde(skip)]
-        location: Option<String>,
+        location: Option<SourceOrigin>,
     },
     If {
         id: u32,
@@ -168,7 +169,7 @@ pub enum RustIrExpr {
         op: String,
         left: Box<RustIrExpr>,
         right: Box<RustIrExpr>,
-        location: Option<String>,
+        location: Option<SourceOrigin>,
     },
     Raw {
         id: u32,

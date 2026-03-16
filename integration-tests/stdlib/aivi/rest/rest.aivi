@@ -3,28 +3,200 @@ module integrationTests.stdlib.aivi.rest.tests
 
 use aivi
 use aivi.testing
-use aivi.rest as restLib
+use aivi.rest
+use aivi.net.httpServer (Http)
+use aivi.concurrency (sleep)
+use aivi.reactive as reactive
+use aivi.text as text
+use aivi.url (Url)
 
-@test "rest.post compilation and structure"
-rest_post_test = do Effect {
-  url = ~u(https://example.com)
-  _ <- attempt (restLib.post url "body")
-  assert True
+User          = { id: Int, name: Text }
+Ping          = { ping: Bool }
+AttemptStatus = { attempt: Int }
+ErrorPayload  = { error: Text }
+
+loadUser : Url -> Effect Text User
+loadUser = url => get url
+
+loadPing : Request -> Effect Text Ping
+loadPing = request => fetch request
+
+loadAttemptStatus : Request -> Effect Text AttemptStatus
+loadAttemptStatus = request => fetch request
+
+loadErrorPayload : Request -> Effect Text ErrorPayload
+loadErrorPayload = request => fetch request
+
+startServer = address => handler => do Effect {
+  result <- attempt (httpServer.listen { address: address } handler)
+  server <- assertOk result
+  _      <- sleep 25
+  pure server
 }
 
-@test "rest.fetch compilation and structure"
-rest_fetch_test = do Effect {
-  url = ~u(https://example.com)
-  req = {
+stopServer = server => do Effect {
+  result <- attempt (httpServer.stop server)
+  _      <- assertOk result
+  pure Unit
+}
+
+headerValue = name => headers => headers match
+  | []                => None
+  | [header, ...rest] =>
+    if text.toLower header.name == text.toLower name
+      then Some header.value
+      else headerValue name rest
+
+jsonReply = status => body => Http {
+  status: status
+  headers: [{ name: "Content-Type", value: "application/json" }]
+  body: body
+}
+
+isEchoPost = request =>
+  request.method == "POST"
+  && (request.path == "/echo" || request.path == "/echo?")
+  && headerValue "authorization" request.headers == Some "Bearer secret"
+  && headerValue "content-type" request.headers == Some "application/json"
+
+userJson       = [123, 34, 105, 100, 34, 58, 52, 50, 44, 34, 110, 97, 109, 101, 34, 58, 34, 65, 100, 97, 34, 125]
+missingJson    = [123, 34, 101, 114, 114, 111, 114, 34, 58, 34, 109, 105, 115, 115, 105, 110, 103, 34, 125]
+attemptOneJson = [123, 34, 97, 116, 116, 101, 109, 112, 116, 34, 58, 49, 125]
+
+@test "rest get decodes json response"
+restGetDecodesJsonResponse = do Effect {
+  handler = _ => pure (jsonReply 200 userJson)
+
+  server <- startServer "127.0.0.1:39101" handler
+  user   <- loadUser ~u(http://127.0.0.1:39101/user)
+  _      <- stopServer server
+  _      <- assertEq user.id 42
+  assertEq user.name "Ada"
+}
+
+@test "rest fetch uses bearer token and decodes body"
+restFetchUsesBearerTokenAndDecodesBody = do Effect {
+  handler = request => pure (
+    if isEchoPost request
+      then jsonReply 200 request.body
+      else jsonReply 401 missingJson
+  )
+
+  server <- startServer "127.0.0.1:39102" handler
+  ping   <- loadPing {
     method: "POST"
-    url: url
+    url: ~u(http://127.0.0.1:39102/echo)
+    headers: [{ name: "Content-Type", value: "application/json" }]
+    body: Some (Plain "\{\"ping\":true}")
+    timeoutMs: None
+    retryCount: None
+    bearerToken: Some "secret"
+    strictStatus: None
+  }
+  _ <- stopServer server
+  assertEq ping.ping True
+}
+
+@test "rest fetch strict status returns io error"
+restFetchStrictStatusReturnsIoError = do Effect {
+  handler = _ => pure (jsonReply 404 missingJson)
+
+  server <- startServer "127.0.0.1:39103" handler
+  result <- attempt (
+    loadPing {
+      method: "GET"
+      url: ~u(http://127.0.0.1:39103/missing)
+      headers: []
+      body: None
+      timeoutMs: None
+      retryCount: None
+      bearerToken: None
+      strictStatus: Some True
+    }
+  )
+  _ <- stopServer server
+  result match
+    | Err err => do Effect {
+        _ <- assertEq (constructorName err) "IOError"
+        assertEq (List.length (source.decodeErrors err)) 0
+      }
+    | Ok _ => fail "expected strict status failure"
+}
+
+@test "rest fetch decodes non 2xx body when strict status is disabled"
+restFetchDecodesNon2xxBodyWhenStrictStatusIsDisabled = do Effect {
+  handler = _ => pure (jsonReply 404 missingJson)
+
+  server  <- startServer "127.0.0.1:39104" handler
+  payload <- loadErrorPayload {
+    method: "GET"
+    url: ~u(http://127.0.0.1:39104/missing)
     headers: []
-    body: Some (restLib.Plain "body")
+    body: None
     timeoutMs: None
     retryCount: None
     bearerToken: None
     strictStatus: None
   }
-  _ <- attempt (restLib.fetch req)
-  assert True
+  _ <- stopServer server
+  assertEq payload.error "missing"
+}
+
+@test "rest fetch timeout returns io error"
+restFetchTimeoutReturnsIoError = do Effect {
+  handler = request => do Effect {
+    _ <- attempt (sleep 80)
+    pure (jsonReply 200 request.body)
+  }
+
+  server <- startServer "127.0.0.1:39105" handler
+  result <- attempt (
+    loadPing {
+      method: "POST"
+      url: ~u(http://127.0.0.1:39105/timeout)
+      headers: [{ name: "Content-Type", value: "application/json" }]
+      body: Some (Plain "\{\"ping\":true}")
+      timeoutMs: Some 20
+      retryCount: None
+      bearerToken: None
+      strictStatus: None
+    }
+  )
+  _ <- stopServer server
+  result match
+    | Err err => do Effect {
+        _ <- assertEq (constructorName err) "IOError"
+        assertEq (List.length (source.decodeErrors err)) 0
+      }
+    | Ok _ => fail "expected timeout failure"
+}
+
+@test "rest fetch retries after timeout"
+restFetchRetriesAfterTimeout = do Effect {
+  attempts = reactive.signal 0
+  handler  = request => do Effect {
+    _       = reactive.update attempts (_ + 1)
+    current = reactive.get attempts
+    current match
+      | 1 => do Effect {
+          _ <- attempt (sleep 80)
+          pure (jsonReply 200 attemptOneJson)
+        }
+      | _ => pure (jsonReply 200 request.body)
+  }
+
+  server <- startServer "127.0.0.1:39106" handler
+  value  <- loadAttemptStatus {
+    method: "POST"
+    url: ~u(http://127.0.0.1:39106/retry)
+    headers: [{ name: "Content-Type", value: "application/json" }]
+    body: Some (Plain "\{\"attempt\":2}")
+    timeoutMs: Some 20
+    retryCount: Some 1
+    bearerToken: None
+    strictStatus: None
+  }
+  _ <- stopServer server
+  _ <- assertEq value.attempt 2
+  assertEq (reactive.get attempts) 2
 }

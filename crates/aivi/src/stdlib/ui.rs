@@ -20,6 +20,7 @@ export vOnFocus, vOnBlur, vOnTransitionEnd, vOnAnimationEnd
 export renderHtml, diff, patchToJson
 
 use aivi
+use aivi.text
 
 // Short aliases for event payload records (re-exported for convenience).
 Click = ClickEvent

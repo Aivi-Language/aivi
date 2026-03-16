@@ -8,16 +8,97 @@ pub enum DiagnosticSeverity {
     Hint,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Span {
     pub start: Position,
     pub end: Position,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceKind {
+    User,
+    EmbeddedStdlib,
+    Generated,
+    Synthetic,
+}
+
+impl SourceKind {
+    pub fn as_i64(self) -> i64 {
+        match self {
+            SourceKind::User => 0,
+            SourceKind::EmbeddedStdlib => 1,
+            SourceKind::Generated => 2,
+            SourceKind::Synthetic => 3,
+        }
+    }
+
+    pub fn from_i64(raw: i64) -> Self {
+        match raw {
+            1 => SourceKind::EmbeddedStdlib,
+            2 => SourceKind::Generated,
+            3 => SourceKind::Synthetic,
+            _ => SourceKind::User,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SourceOrigin {
+    pub path: String,
+    pub span: Span,
+    pub source_kind: SourceKind,
+}
+
+impl SourceOrigin {
+    pub fn new(path: impl Into<String>, span: Span) -> Self {
+        let path = path.into();
+        let source_kind = classify_source_kind(&path);
+        Self {
+            path,
+            span,
+            source_kind,
+        }
+    }
+
+    pub fn with_kind(path: impl Into<String>, span: Span, source_kind: SourceKind) -> Self {
+        Self {
+            path: path.into(),
+            span,
+            source_kind,
+        }
+    }
+
+    pub fn start_position_text(&self) -> String {
+        format!(
+            "{}:{}:{}",
+            self.path, self.span.start.line, self.span.start.column
+        )
+    }
+
+    pub fn embedded_module_name(&self) -> Option<&str> {
+        self.path
+            .strip_prefix("<embedded:")
+            .and_then(|rest| rest.strip_suffix('>'))
+    }
+}
+
+pub fn classify_source_kind(path: &str) -> SourceKind {
+    if path.starts_with("<embedded:") && path.ends_with('>') {
+        SourceKind::EmbeddedStdlib
+    } else if path.starts_with("<generated:") && path.ends_with('>') {
+        SourceKind::Generated
+    } else if path.starts_with('<') && path.ends_with('>') {
+        SourceKind::Synthetic
+    } else {
+        SourceKind::User
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -203,7 +284,12 @@ fn severity_label(severity: DiagnosticSeverity) -> &'static str {
     }
 }
 
-fn render_diagnostic_with_source(
+pub fn render_diagnostic(path: &str, diagnostic: &Diagnostic, use_color: bool) -> String {
+    let source = std::fs::read_to_string(path).ok();
+    render_diagnostic_with_source(path, diagnostic, source.as_deref(), use_color)
+}
+
+pub fn render_diagnostic_with_source(
     path: &str,
     diagnostic: &Diagnostic,
     source: Option<&str>,

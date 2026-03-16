@@ -17,8 +17,8 @@ use crate::runtime::json_schema::cg_type_to_json_schema;
 use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel,
-    collect_surface_constructor_ordinals, format_runtime_error, format_value, run_main_effect,
-    CancelToken, ReactiveCellKind, Runtime, RuntimeError,
+    collect_surface_constructor_ordinals, format_value, run_main_effect, CancelToken,
+    ReactiveCellKind, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
@@ -128,14 +128,15 @@ fn jit_compile_into_runtime(
     // Create JIT module with runtime helpers registered
     let mut module = timed!(
         "cranelift jit init",
-        create_jit_module().map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?
+        create_jit_module()
+            .map_err(|e| AiviError::runtime_message(format!("cranelift jit init: {e}")))?
     );
 
     // Declare runtime helper imports in the module
     let helpers = timed!(
         "declare_helpers",
         declare_helpers(&mut module)
-            .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?
+            .map_err(|e| AiviError::runtime_message(format!("cranelift declare helpers: {e}")))?
     );
 
     // Two-pass compilation for direct calls between JIT functions.
@@ -182,7 +183,7 @@ fn jit_compile_into_runtime(
                 if is_stdlib_module {
                     continue;
                 }
-                return Err(AiviError::Runtime(format!(
+                return Err(AiviError::runtime_message(format!(
                     "cranelift compile {}: unsupported arity {} (max {})",
                     qualified,
                     params.len(),
@@ -193,7 +194,7 @@ fn jit_compile_into_runtime(
                 if is_stdlib_module {
                     continue;
                 }
-                return Err(AiviError::Runtime(format!(
+                return Err(AiviError::runtime_message(format!(
                     "cranelift compile {}: unsupported expression shape",
                     qualified
                 )));
@@ -221,7 +222,7 @@ fn jit_compile_into_runtime(
 
             let func_id = module
                 .declare_function(&func_name, Linkage::Local, &sig)
-                .map_err(|e| AiviError::Runtime(format!("declare {}: {e}", func_name)))?;
+                .map_err(|e| AiviError::runtime_message(format!("declare {}: {e}", func_name)))?;
 
             // Extract typed param/return info from CgType
             let (param_types, return_type) = if let Some(cg_ty) = &def.cg_type {
@@ -321,7 +322,7 @@ fn jit_compile_into_runtime(
                 });
             }
             Err(e) => {
-                return Err(AiviError::Runtime(format!(
+                return Err(AiviError::runtime_message(format!(
                     "cranelift compile {}: {e}",
                     dd.qualified
                 )))
@@ -341,7 +342,7 @@ fn jit_compile_into_runtime(
         "finalize_definitions",
         module
             .finalize_definitions()
-            .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?
+            .map_err(|e| AiviError::runtime_message(format!("cranelift finalize: {e}")))?
     );
 
     for pending_lambda in &pending_lambdas {
@@ -666,17 +667,17 @@ impl ReplJitSession {
         )?;
         let result = (|| {
             restore_repl_source_signals(&mut runtime, &module_names, &self.source_signal_values)
-                .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-            runtime.jit_pending_error = None;
+                .map_err(|err| runtime.aivi_runtime_error(err))?;
+            runtime.clear_pending_runtime_error();
 
             let value = runtime.ctx.globals.get(binding_name).ok_or_else(|| {
-                AiviError::Runtime(format!("missing evaluated binding `{binding_name}`"))
+                AiviError::runtime_message(format!("missing evaluated binding `{binding_name}`"))
             })?;
             let value = runtime
                 .force_value(value)
-                .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
-            if let Some(err) = runtime.jit_pending_error.take() {
-                return Err(AiviError::Runtime(format_runtime_error(err)));
+                .map_err(|err| runtime.aivi_runtime_error(err))?;
+            if let Some(err) = runtime.take_pending_aivi_error() {
+                return Err(err);
             }
 
             let was_effect = matches!(value, Value::Effect(_));
@@ -684,10 +685,10 @@ impl ReplJitSession {
                 runtime.ctx.begin_console_capture();
                 let result = runtime
                     .run_effect_value(value)
-                    .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+                    .map_err(|err| runtime.aivi_runtime_error(err))?;
                 let capture = runtime.ctx.take_console_capture();
-                if let Some(err) = runtime.jit_pending_error.take() {
-                    return Err(AiviError::Runtime(format_runtime_error(err)));
+                if let Some(err) = runtime.take_pending_aivi_error() {
+                    return Err(err);
                 }
                 let binding = EvaluatedBinding {
                     value_text: format_value(&result),
@@ -698,7 +699,7 @@ impl ReplJitSession {
                 };
                 self.source_signal_values =
                     capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
-                        .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+                        .map_err(|err| runtime.aivi_runtime_error(err))?;
                 Ok(binding)
             } else {
                 let binding = EvaluatedBinding {
@@ -710,7 +711,7 @@ impl ReplJitSession {
                 };
                 self.source_signal_values =
                     capture_repl_source_signals(&mut runtime, &module_names, capture_binding_names)
-                        .map_err(|err| AiviError::Runtime(format_runtime_error(err)))?;
+                        .map_err(|err| runtime.aivi_runtime_error(err))?;
                 Ok(binding)
             }
         })();
@@ -915,9 +916,7 @@ pub fn run_test_suite_jit(
     update_snapshots: bool,
     project_root: Option<std::path::PathBuf>,
 ) -> Result<crate::runtime::TestReport, AiviError> {
-    use crate::runtime::{
-        format_runtime_error, format_value, TestFailure, TestReport, TestSuccess,
-    };
+    use crate::runtime::{format_value, TestFailure, TestReport, TestSuccess};
 
     let infer_result = aivi_core::infer_value_types_full(surface_modules);
     let mut runtime = build_runtime_from_program(&program)?;
@@ -939,7 +938,7 @@ pub fn run_test_suite_jit(
         &mut runtime,
         &HashSet::new(),
     )?;
-    runtime.jit_pending_error = None;
+    runtime.clear_pending_runtime_error();
 
     const TEST_FUEL_BUDGET: u64 = 500_000;
     let mut report = TestReport {
@@ -965,7 +964,7 @@ pub fn run_test_suite_jit(
             continue;
         };
 
-        runtime.jit_pending_error = None;
+        runtime.clear_pending_runtime_error();
 
         let value = match runtime.force_value(value) {
             Ok(value) => value,
@@ -974,7 +973,10 @@ pub fn run_test_suite_jit(
                 report.failures.push(TestFailure {
                     name: name.clone(),
                     description: description.clone(),
-                    message: format_runtime_error(err),
+                    message: aivi_driver::render_runtime_report(
+                        &runtime.runtime_report(err),
+                        false,
+                    ),
                 });
                 continue;
             }
@@ -993,24 +995,27 @@ pub fn run_test_suite_jit(
             }
         };
 
-        runtime.jit_pending_error = None;
+        runtime.clear_pending_runtime_error();
 
         match runtime.run_effect_value(effect) {
             Ok(_) => {
                 if let Some(msg) = runtime.snapshot_failure.take() {
-                    runtime.jit_pending_error = None;
+                    runtime.clear_pending_runtime_error();
                     report.failed += 1;
                     report.failures.push(TestFailure {
                         name: name.clone(),
                         description: description.clone(),
                         message: msg,
                     });
-                } else if let Some(err) = runtime.jit_pending_error.take() {
+                } else if let Some((err, snapshot)) = runtime.take_pending_runtime_error() {
                     report.failed += 1;
                     report.failures.push(TestFailure {
                         name: name.clone(),
                         description: description.clone(),
-                        message: format_runtime_error(err),
+                        message: aivi_driver::render_runtime_report(
+                            &runtime.runtime_report_with_snapshot(err, snapshot),
+                            false,
+                        ),
                     });
                 } else {
                     report.passed += 1;
@@ -1021,12 +1026,15 @@ pub fn run_test_suite_jit(
                 }
             }
             Err(err) => {
-                runtime.jit_pending_error = None;
+                runtime.clear_pending_runtime_error();
                 report.failed += 1;
                 report.failures.push(TestFailure {
                     name: name.clone(),
                     description: description.clone(),
-                    message: format_runtime_error(err),
+                    message: aivi_driver::render_runtime_report(
+                        &runtime.runtime_report(err),
+                        false,
+                    ),
                 });
             }
         }

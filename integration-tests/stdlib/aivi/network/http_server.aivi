@@ -4,86 +4,163 @@ module integrationTests.stdlib.aivi.network.http_server.tests
 use aivi
 use aivi.testing
 use aivi.net.httpServer
+use aivi.net.http (get, post)
+use aivi.concurrency
+use aivi.system (env)
+use aivi.text as text
+use aivi.url (parse)
 
-// -- Type construction --
+withEnvPort = key run => do Effect {
+  portResult <- attempt (env.get key)
+  portResult match
+    | Err _     => pure Unit
+    | Ok raw    => text.parseInt raw match
+      | Some port => run port
+      | None      => pure Unit
+}
+
+addressAt = port => text.concat ["127.0.0.1:", text.debugText port]
+
+urlAt = port path => assertOk (parse (text.concat ["http://", addressAt port, path]))
+
+isEchoPost = request =>
+  request.method == "POST"
+  && request.path == "/echo"
+  && request.body == [99, 108, 105, 101, 110, 116, 45, 98, 111, 100, 121]
+  && (request.remoteAddr match
+    | Some _ => True
+    | None   => False
+  )
+
+httpHandler = request => pure (
+  if isEchoPost request
+    then Http {
+      status: 200
+      headers: [{ name: "Content-Type", value: "text/plain" }]
+      body: [111, 107]
+    }
+    else Http {
+      status: 400
+      headers: [{ name: "Content-Type", value: "text/plain" }]
+      body: [98, 97, 100]
+    }
+)
+
+wsEcho = tx => socket => do Effect {
+  message <- wsRecv socket
+  message match
+    | TextMsg text => do Effect {
+        _ <- wsSend socket (TextMsg text)
+        _ <- send tx text
+        wsClose socket
+      }
+    | _ => do Effect {
+        _ <- send tx "unexpected"
+        wsClose socket
+      }
+}
+
+wsHandler = tx => request =>
+  if request.path == "/ws" then pure (Ws (wsEcho tx))
+  else pure (Http { status: 404, headers: [], body: [] })
+
+@test "listen and stop handle a real http request"
+listen_and_stop_handle_http_requests = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" (port => do Effect {
+    requestUrl     <- urlAt port "/echo"
+    workflowResult <- attempt (do Effect {
+        server         <- listen { address: addressAt port } httpHandler
+        responseResult <- attempt (post requestUrl "client-body")
+        _              <- stop server
+        stoppedResult  <- attempt (get requestUrl)
+        pure { responseResult: responseResult, stoppedResult: stoppedResult }
+    })
+    workflow        <- assertOk workflowResult
+    responseResult  <- assertOk workflow.responseResult
+    response        <- assertOk responseResult
+    _               <- assertEq response.status 200
+    _               <- assertEq response.body "ok"
+    stoppedResponse <- assertOk workflow.stoppedResult
+    _               <- assertErr stoppedResponse
+    pure Unit
+})
+
+@test "websocket receive send and close echo a real client message"
+websocket_receive_send_and_close_echo = withEnvPort "AIVI_TEST_HTTP_WS_PORT" (port => do Effect {
+    wsResult <- attempt (do Effect {
+        (tx, rx) <- make ""
+        server   <- listen { address: addressAt port } (wsHandler tx)
+        result   <- attempt (timeoutWith 2000 "missing websocket message" (recv rx))
+        _        <- close tx
+        _        <- stop server
+        pure result
+    })
+    received <- assertOk wsResult
+    result   <- assertOk received
+    result match
+      | Ok value => assertEq value "hello websocket"
+      | Err _    => assert False
+})
 
 @test "server config"
-serverConfig = do Effect {
+server_config = do Effect {
   cfg = { address: "127.0.0.1:0" }
   assertEq cfg.address "127.0.0.1:0"
 }
 
 @test "request fields"
-requestFields = do Effect {
-  req =
-    {
-      method: "GET"
-      path: "/health"
-      headers: []
-      body: []
-      remoteAddr: Some "127.0.0.1"
-    }
-    assertEq req.method "GET"
-    assertEq req.path "/health"
-    assertEq req.remoteAddr (Some "127.0.0.1")
+request_fields = do Effect {
+  req = {
+    method: "GET"
+    path: "/health"
+    headers: []
+    body: []
+    remoteAddr: Some "127.0.0.1"
+  }
+  _ <- assertEq req.method "GET"
+  _ <- assertEq req.path "/health"
+  assertEq req.remoteAddr (Some "127.0.0.1")
 }
 
 @test "response construction"
-responseConstruction = do Effect {
-  responseBody = [72, 101, 108, 108, 111]
-  resp         =
-    {
-      status: 200
-      headers: [{ name: "Content-Type", value: "text/plain" }]
-      body: responseBody
-    }
-    assertEq resp.status 200
-    assertEq (List.length resp.body) 5
+response_construction = do Effect {
+  resp = {
+    status: 200
+    headers: [{ name: "Content-Type", value: "text/plain" }]
+    body: [72, 101, 108, 108, 111]
+  }
+  _ <- assertEq resp.status 200
+  assertEq (List.length resp.body) 5
 }
 
-@test "ws message text variant"
-wsMsgText = do Effect {
-  msg = TextMsg "hello ws"
-  msg match
-    | TextMsg t => assertEq t "hello ws"
-    | _         => assert False
-}
-
-@test "ws message binary variant"
-wsMsgBinary = do Effect {
-  msg = BinaryMsg [1, 2, 3]
-  msg match
-    | BinaryMsg b => assertEq (List.length b) 3
-    | _           => assert False
-}
-
-@test "ws message ping pong close"
-wsMsgPingPong = do Effect {
-  ping     = Ping
-  pong     = Pong
-  closeMsg = Close
-  assertEq ping Ping
-  assertEq pong Pong
-  assertEq closeMsg Close
+@test "ws message variants"
+ws_message_variants = do Effect {
+  textMsg   = TextMsg "hello ws"
+  binaryMsg = BinaryMsg [1, 2, 3]
+  _ <- (textMsg match
+    | TextMsg text => assertEq text "hello ws"
+    | _            => assert False
+  )
+  _ <- (binaryMsg match
+    | BinaryMsg bytes => assertEq (List.length bytes) 3
+    | _               => assert False
+  )
+  _ <- assertEq Ping Ping
+  _ <- assertEq Pong Pong
+  assertEq Close Close
 }
 
 @test "server reply http variant"
-serverReplyHttp = do Effect {
-  resp  = { status: 404, headers: [], body: [] }
-  reply = Http resp
+server_reply_http = do Effect {
+  reply = Http { status: 404, headers: [], body: [] }
   reply match
-    | Http r => assertEq r.status 404
-    | _      => assert False
+    | Http response => assertEq response.status 404
+    | _             => assert False
 }
 
-@test "http error fields"
-httpErrorFields = do Effect {
-  err = { message: "internal server error" }
-  assertEq err.message "internal server error"
-}
-
-@test "ws error fields"
-wsErrorFields = do Effect {
-  err = { message: "connection closed" }
-  assertEq err.message "connection closed"
+@test "http and ws error fields"
+http_and_ws_error_fields = do Effect {
+  httpErr = { message: "internal server error" }
+  wsErr   = { message: "connection closed" }
+  _ <- assertEq httpErr.message "internal server error"
+  assertEq wsErr.message "connection closed"
 }

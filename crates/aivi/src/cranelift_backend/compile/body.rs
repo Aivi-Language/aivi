@@ -177,6 +177,7 @@ fn compile_definition_body<M: Module>(
 
             let result = lower_ctx.lower_expr(&mut builder, body);
             let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
+            lower_ctx.emit_leave_fn(&mut builder);
             builder
                 .ins()
                 .call(helper_refs.rt_dec_call_depth, &[ctx_param]);
@@ -356,6 +357,7 @@ fn compile_definition_body<M: Module>(
 
         let result = lower_ctx.lower_expr(&mut builder, body);
         let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
+        lower_ctx.emit_leave_fn(&mut builder);
         builder
             .ins()
             .call(helper_refs.rt_dec_call_depth, &[ctx_param]);

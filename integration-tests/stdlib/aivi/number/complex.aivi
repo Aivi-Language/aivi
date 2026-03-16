@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.complex.tests
+
+use aivi
+use aivi.testing
+use aivi.number.complex
+
+@test "complex domain and constant"
+complex_domain_and_constant = do Effect {
+  z       = { re: 3.0, im: 4.0 }
+  shifted = z + i
+  diff    = shifted - i
+  product = i * i
+  scaled  = { re: 6.0, im: -8.0 } / 2.0
+
+  assertEq shifted { re: 3.0, im: 5.0 }
+  assertEq diff z
+  assertEq product { re: -1.0, im: 0.0 }
+  assertEq scaled { re: 3.0, im: -4.0 }
+}

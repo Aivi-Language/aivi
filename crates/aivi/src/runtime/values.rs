@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 use num_bigint::BigInt;
@@ -117,7 +117,7 @@ pub(crate) enum Value {
     Signal(Arc<ReactiveSignalValue>),
     ChannelSend(Arc<ChannelSend>),
     ChannelRecv(Arc<ChannelRecv>),
-    FileHandle(Arc<Mutex<std::fs::File>>),
+    FileHandle(Arc<Mutex<Option<std::fs::File>>>),
     Listener(Arc<Mutex<Option<TcpListener>>>),
     Connection(Arc<Mutex<TcpStream>>),
     Stream(Arc<StreamHandle>),

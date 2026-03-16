@@ -5,7 +5,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use super::util::{
     builtin, expect_bytes, expect_char, expect_int, expect_list, expect_text, list_value, make_err,
-    make_none, make_ok, make_some,
+    make_none, make_ok, make_some, value_type_name,
 };
 use crate::runtime::{format_value, RuntimeError, Value};
 
@@ -424,7 +424,18 @@ pub(super) fn build_text_record() -> Value {
                 if i > 0 {
                     out.push_str(&sep);
                 }
-                out.push_str(&expect_text(item.clone(), "text.join")?);
+                match item {
+                    Value::Text(text) => out.push_str(text),
+                    other => {
+                        return Err(RuntimeError::InvalidArgument {
+                            context: "text.join".to_string(),
+                            reason: format!(
+                                "list item at index {i} has type `{}`",
+                                value_type_name(other)
+                            ),
+                        })
+                    }
+                }
             }
             Ok(Value::Text(out))
         }),

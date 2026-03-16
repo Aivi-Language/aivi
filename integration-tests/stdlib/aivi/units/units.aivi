@@ -2,22 +2,30 @@
 module integrationTests.stdlib.aivi.units.tests
 
 use aivi
+use aivi (
+  math (abs)
+  units (convert, defineUnit, sameUnit, domain Units)
+)
 use aivi.testing
-use aivi.math
-use aivi.units
 
-@test "quantity"
+@test "quantity operators"
 quantity_functional = do Effect {
-  m = defineUnit "m" 1.0
-  a = { value: 2.0, unit: m }
-  b = { value: 3.0, unit: m }
-  // Avoid `Units.(+)`/`Units.(*)` operator projection: native backend doesn't support it yet.
-  sumVal    = math.sum [a.value, b.value]
-  scaledVal = math.sum [a.value, a.value, a.value, a.value]
-  sum       = { value: sumVal, unit: a.unit }
-  scaled    = { value: scaledVal, unit: a.unit }
-  assert (abs (sum.value - 5.0) < 0.0000001)
-  assert (abs (scaled.value - 8.0) < 0.0000001)
+  meter     = defineUnit "m" 1.0
+  kilometer = defineUnit "km" 1000.0
+  base      = { value: 750.0, unit: meter }
+  relay     = convert { value: 2.0, unit: kilometer } meter
+  total     = base + relay
+  remain    = total - base
+  doubled   = remain * 2.0
+  halved    = doubled / 4.0
+  assert (abs (total.value - 2750.0) < 0.0000001)
+  assertEq total.unit.name "m"
+  assert (abs (remain.value - 2000.0) < 0.0000001)
+  assertEq remain.unit.name "m"
+  assert (abs (doubled.value - 4000.0) < 0.0000001)
+  assertEq doubled.unit.name "m"
+  assert (abs (halved.value - 1000.0) < 0.0000001)
+  assertEq halved.unit.name "m"
 }
 
 @test "unit"

@@ -1,4 +1,4 @@
-use aivi::{embedded_stdlib_modules, ModuleItem};
+use aivi::{ModuleItem, embedded_stdlib_modules};
 
 #[test]
 fn stdlib_ui_exports_v_element() {
@@ -132,6 +132,57 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "signalBindCssClass",
         "signalBindToggleBoolProperty",
         "signalToggleCssClass",
+    ] {
+        assert!(
+            !export_names.contains(&removed),
+            "did not expect aivi.ui.gtk4 to export {removed}, exports={export_names:?}"
+        );
+    }
+
+    for removed in [
+        "DragSourceId",
+        "DropTargetId",
+        "FileDialogId",
+        "ListStoreId",
+        "ListViewId",
+        "TreeViewId",
+        "ClipboardId",
+        "ShortcutId",
+        "NotificationId",
+        "LayoutManagerId",
+    ] {
+        assert!(
+            !export_names.contains(&removed),
+            "did not expect aivi.ui.gtk4 to export {removed}, exports={export_names:?}"
+        );
+    }
+
+    for removed in [
+        "dragSourceNew",
+        "dragSourceSetText",
+        "dropTargetNew",
+        "dropTargetLastText",
+        "fileDialogNew",
+        "fileDialogSelectFile",
+        "listStoreNew",
+        "listStoreAppendText",
+        "listStoreItems",
+        "listViewNew",
+        "listViewSetModel",
+        "treeViewNew",
+        "treeViewSetModel",
+        "clipboardDefault",
+        "clipboardSetText",
+        "clipboardText",
+        "shortcutNew",
+        "widgetAddShortcut",
+        "notificationNew",
+        "notificationSetBody",
+        "appSendNotification",
+        "appWithdrawNotification",
+        "layoutManagerNew",
+        "widgetSetLayoutManager",
+        "osShowInFileManager",
     ] {
         assert!(
             !export_names.contains(&removed),

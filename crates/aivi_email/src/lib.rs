@@ -453,6 +453,7 @@ pub fn imap_idle(timeout_secs: u64, session: &ImapSession) -> Result<IdleResult,
     })?;
     let mut idle = s.idle();
     idle.timeout(Duration::from_secs(timeout_secs));
+    idle.keepalive(false);
     let outcome = idle
         .wait_while(|_response| {
             // Return false to stop waiting on any server response
@@ -467,7 +468,7 @@ pub fn imap_idle(timeout_secs: u64, session: &ImapSession) -> Result<IdleResult,
     }
 }
 
-pub fn send_smtp_message(config: SmtpConfig) -> Result<(), AiviEmailError> {
+fn build_smtp_message(config: &SmtpConfig) -> Result<Message, AiviEmailError> {
     let mut builder = Message::builder().from(config.from.parse().map_err(|e| AiviEmailError {
         message: format!("Invalid from address: {e}"),
     })?);
@@ -489,21 +490,27 @@ pub fn send_smtp_message(config: SmtpConfig) -> Result<(), AiviEmailError> {
     }
 
     let email = builder
-        .subject(config.subject)
-        .body(config.body)
+        .subject(config.subject.clone())
+        .body(config.body.clone())
         .map_err(|e| AiviEmailError {
             message: format!("Failed to build email: {e}"),
         })?;
+    Ok(email)
+}
 
-    let creds = match &config.auth {
+fn smtp_credentials(config: &SmtpConfig) -> Credentials {
+    match &config.auth {
         EmailAuth::Password(password) => Credentials::new(config.user.clone(), password.clone()),
         EmailAuth::OAuth2(token) => {
             // lettre doesn't natively support XOAUTH2, use the token as password
             // with the access_token mechanism
             Credentials::new(config.user.clone(), token.clone())
         }
-    };
+    }
+}
 
+fn build_smtp_transport(config: &SmtpConfig) -> Result<SmtpTransport, AiviEmailError> {
+    let creds = smtp_credentials(config);
     let mailer = if config.starttls {
         SmtpTransport::starttls_relay(&config.host)
             .map_err(|e| AiviEmailError {
@@ -521,12 +528,29 @@ pub fn send_smtp_message(config: SmtpConfig) -> Result<(), AiviEmailError> {
             .credentials(creds)
             .build()
     };
+    Ok(mailer)
+}
 
-    mailer.send(&email).map_err(|e| AiviEmailError {
-        message: format!("SMTP send failed: {e}"),
-    })?;
+fn send_smtp_message_with_transport<T>(
+    config: &SmtpConfig,
+    transport: &T,
+) -> Result<(), AiviEmailError>
+where
+    T: Transport,
+    T::Error: std::fmt::Display,
+{
+    let email = build_smtp_message(config)?;
+    transport
+        .send(&email)
+        .map(|_| ())
+        .map_err(|e| AiviEmailError {
+            message: format!("SMTP send failed: {e}"),
+        })
+}
 
-    Ok(())
+pub fn send_smtp_message(config: SmtpConfig) -> Result<(), AiviEmailError> {
+    let mailer = build_smtp_transport(&config)?;
+    send_smtp_message_with_transport(&config, &mailer)
 }
 
 pub fn parse_mime_parts(raw: &str) -> Result<Vec<MimePart>, AiviEmailError> {
@@ -565,4 +589,345 @@ fn uid_set_string(uids: &[u32]) -> String {
         .map(|u| u.to_string())
         .collect::<Vec<_>>()
         .join(",")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use imap::extensions::idle::SetReadTimeout;
+    use lettre::transport::stub::StubTransport;
+    use std::io::{self, Read, Write};
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Debug, Default)]
+    struct RecordingState {
+        read_buf: Vec<u8>,
+        read_pos: usize,
+        written_buf: Vec<u8>,
+        read_timeouts: Vec<Option<Duration>>,
+        on_done: Option<Vec<u8>>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingImapStream {
+        state: Arc<Mutex<RecordingState>>,
+    }
+
+    impl RecordingImapStream {
+        fn scripted(
+            script: impl Into<Vec<u8>>,
+            on_done: Option<Vec<u8>>,
+        ) -> (Self, Arc<Mutex<RecordingState>>) {
+            let state = Arc::new(Mutex::new(RecordingState {
+                read_buf: script.into(),
+                read_pos: 0,
+                written_buf: Vec::new(),
+                read_timeouts: Vec::new(),
+                on_done,
+            }));
+            (
+                Self {
+                    state: state.clone(),
+                },
+                state,
+            )
+        }
+    }
+
+    impl Read for RecordingImapStream {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let mut state = self.state.lock().unwrap();
+            if state.read_pos >= state.read_buf.len() {
+                if state
+                    .read_timeouts
+                    .last()
+                    .is_some_and(|timeout| timeout.is_some())
+                {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, "timed out"));
+                }
+                return Ok(0);
+            }
+
+            let count = (state.read_buf.len() - state.read_pos).min(buf.len());
+            buf[..count].copy_from_slice(&state.read_buf[state.read_pos..state.read_pos + count]);
+            state.read_pos += count;
+            Ok(count)
+        }
+    }
+
+    impl Write for RecordingImapStream {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let mut state = self.state.lock().unwrap();
+            state.written_buf.extend_from_slice(buf);
+            if state.written_buf.ends_with(b"DONE\r\n") {
+                if let Some(extra) = state.on_done.take() {
+                    state.read_buf.extend(extra);
+                }
+            }
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SetReadTimeout for RecordingImapStream {
+        fn set_read_timeout(&mut self, timeout: Option<Duration>) -> imap::Result<()> {
+            self.state.lock().unwrap().read_timeouts.push(timeout);
+            Ok(())
+        }
+    }
+
+    fn login_script(extra: &str) -> String {
+        format!("* OK ready\r\na1 OK LOGIN completed\r\n{extra}")
+    }
+
+    fn scripted_session(
+        extra: &str,
+        on_done: Option<&str>,
+    ) -> (ImapSession, Arc<Mutex<RecordingState>>) {
+        let (stream, state) = RecordingImapStream::scripted(
+            login_script(extra).into_bytes(),
+            on_done.map(|value| value.as_bytes().to_vec()),
+        );
+        let mut client = imap::Client::new(Box::new(stream) as Box<dyn imap::ImapConnection>);
+        client.read_greeting().expect("read greeting");
+        let session = client.login("user", "pass").expect("login");
+        (Arc::new(Mutex::new(session)), state)
+    }
+
+    fn written(state: &Arc<Mutex<RecordingState>>) -> String {
+        String::from_utf8(state.lock().unwrap().written_buf.clone()).expect("utf8 commands")
+    }
+
+    fn smtp_config() -> SmtpConfig {
+        SmtpConfig {
+            host: "smtp.example.com".to_string(),
+            user: "user".to_string(),
+            auth: EmailAuth::Password("secret".to_string()),
+            from: "from@example.com".to_string(),
+            to: vec!["to@example.com".to_string()],
+            cc: vec!["cc@example.com".to_string()],
+            bcc: vec!["bcc@example.com".to_string()],
+            subject: "hello".to_string(),
+            body: "body text".to_string(),
+            port: 465,
+            starttls: false,
+        }
+    }
+
+    #[test]
+    fn smtp_send_with_stub_transport_logs_envelope_and_body() {
+        let config = smtp_config();
+        let transport = StubTransport::new_ok();
+
+        send_smtp_message_with_transport(&config, &transport).expect("send succeeds");
+
+        let messages = transport.messages();
+        assert_eq!(messages.len(), 1);
+        let (envelope, raw) = &messages[0];
+        assert_eq!(
+            envelope.from().map(ToString::to_string),
+            Some(config.from.clone())
+        );
+        assert_eq!(
+            envelope
+                .to()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            vec![
+                "to@example.com".to_string(),
+                "cc@example.com".to_string(),
+                "bcc@example.com".to_string(),
+            ]
+        );
+        assert!(raw.contains("Subject: hello"));
+        assert!(raw.contains("To: to@example.com"));
+        assert!(raw.contains("Cc: cc@example.com"));
+        assert!(!raw.contains("Bcc:"));
+        assert!(raw.contains("\r\n\r\nbody text"));
+    }
+
+    #[test]
+    fn smtp_send_with_stub_transport_surfaces_transport_errors() {
+        let err = send_smtp_message_with_transport(&smtp_config(), &StubTransport::new_error())
+            .expect_err("stub send should fail");
+        assert!(err.message.contains("SMTP send failed"));
+    }
+
+    #[test]
+    fn imap_select_and_examine_return_mailbox_info() {
+        let (select_session, select_state) = scripted_session(
+            "* FLAGS (\\Seen \\Deleted)\r\n* 2 EXISTS\r\n* 0 RECENT\r\na2 OK [READ-WRITE] SELECT completed\r\n",
+            None,
+        );
+        let selected = imap_select("INBOX", &select_session).expect("select succeeds");
+        assert_eq!(selected.name, "INBOX");
+        assert!(!selected.attributes.is_empty());
+        assert!(written(&select_state).contains("a2 SELECT \"INBOX\"\r\n"));
+
+        let (examine_session, examine_state) = scripted_session(
+            "* FLAGS (\\Seen)\r\n* 2 EXISTS\r\n* 0 RECENT\r\na2 OK [READ-ONLY] EXAMINE completed\r\n",
+            None,
+        );
+        let examined = imap_examine("Archive", &examine_session).expect("examine succeeds");
+        assert_eq!(examined.name, "Archive");
+        assert!(!examined.attributes.is_empty());
+        assert!(written(&examine_state).contains("a2 EXAMINE \"Archive\"\r\n"));
+    }
+
+    #[test]
+    fn imap_search_and_fetch_decode_messages() {
+        let raw_message = concat!(
+            "Subject: hello\r\n",
+            "From: from@example.com\r\n",
+            "To: to@example.com\r\n",
+            "Date: Tue, 1 Jan 2024 00:00:00 +0000\r\n",
+            "\r\n",
+            "Body text\r\n"
+        );
+        let fetch_response = format!(
+            "* SEARCH 9 3 5\r\n\
+             a2 OK SEARCH completed\r\n\
+             * 1 FETCH (UID 5 RFC822 {{{}}}\r\n{}\r\n)\r\n\
+             a3 OK FETCH completed\r\n",
+            raw_message.len(),
+            raw_message.trim_end_matches("\r\n")
+        );
+        let (session, state) = scripted_session(&fetch_response, None);
+
+        let uids = imap_search("UNSEEN", &session).expect("search succeeds");
+        assert_eq!(uids, vec![3, 5, 9]);
+
+        let messages = imap_fetch(&[5], &session).expect("fetch succeeds");
+        assert_eq!(messages.len(), 1);
+        let message = &messages[0];
+        assert_eq!(message.uid, Some(5));
+        assert_eq!(message.subject.as_deref(), Some("hello"));
+        assert_eq!(message.from.as_deref(), Some("from@example.com"));
+        assert_eq!(message.to.as_deref(), Some("to@example.com"));
+        assert_eq!(
+            message.date.as_deref(),
+            Some("Tue, 1 Jan 2024 00:00:00 +0000")
+        );
+        assert_eq!(message.body.trim(), "Body text");
+
+        let commands = written(&state);
+        assert!(commands.contains("a2 UID SEARCH UNSEEN\r\n"));
+        assert!(commands.contains("a3 UID FETCH 5 UID RFC822\r\n"));
+    }
+
+    #[test]
+    fn imap_flag_mutations_issue_distinct_uid_store_commands() {
+        let (session, state) = scripted_session(
+            "* 5 FETCH (FLAGS (\\Seen))\r\na2 OK STORE completed\r\n\
+             * 5 FETCH (FLAGS (\\Seen \\Flagged))\r\na3 OK STORE completed\r\n\
+             * 5 FETCH (FLAGS (\\Seen))\r\na4 OK STORE completed\r\n",
+            None,
+        );
+
+        imap_set_flags(&[5], &[r"\Seen".to_string()], &session).expect("set flags");
+        imap_add_flags(&[5], &[r"\Flagged".to_string()], &session).expect("add flags");
+        imap_remove_flags(&[5], &[r"\Flagged".to_string()], &session).expect("remove flags");
+
+        let commands = written(&state);
+        assert!(commands.contains("a2 UID STORE 5 FLAGS (\\Seen)\r\n"));
+        assert!(commands.contains("a3 UID STORE 5 +FLAGS (\\Flagged)\r\n"));
+        assert!(commands.contains("a4 UID STORE 5 -FLAGS (\\Flagged)\r\n"));
+    }
+
+    #[test]
+    fn imap_lists_and_manages_mailboxes() {
+        let (session, state) = scripted_session(
+            "* LIST (\\HasNoChildren) \"/\" \"INBOX\"\r\n\
+             * LIST (\\HasNoChildren \\Sent) \"/\" \"Archive\"\r\n\
+             a2 OK LIST completed\r\n\
+             a3 OK CREATE completed\r\n\
+             a4 OK RENAME completed\r\n\
+             a5 OK DELETE completed\r\n",
+            None,
+        );
+
+        let mailboxes = imap_list_mailboxes(&session).expect("list mailboxes");
+        assert_eq!(mailboxes.len(), 2);
+        assert_eq!(mailboxes[0].name, "INBOX");
+        assert_eq!(mailboxes[0].separator.as_deref(), Some("/"));
+
+        imap_create_mailbox("Projects", &session).expect("create");
+        imap_rename_mailbox("Projects", "Projects-2024", &session).expect("rename");
+        imap_delete_mailbox("Projects-2024", &session).expect("delete");
+
+        let commands = written(&state);
+        assert!(commands.contains("a2 LIST \"\" *\r\n"));
+        assert!(commands.contains("a3 CREATE \"Projects\"\r\n"));
+        assert!(commands.contains("a4 RENAME \"Projects\" \"Projects-2024\"\r\n"));
+        assert!(commands.contains("a5 DELETE \"Projects-2024\"\r\n"));
+    }
+
+    #[test]
+    fn imap_copy_move_expunge_append_and_close_issue_commands() {
+        let raw_append = concat!(
+            "Subject: appended\r\n",
+            "From: from@example.com\r\n",
+            "To: to@example.com\r\n",
+            "\r\n",
+            "New body"
+        );
+        let (session, state) = scripted_session(
+            "a2 OK COPY completed\r\n\
+             * OK [COPYUID 1 5 6] Moved UIDs.\r\n* 1 EXPUNGE\r\na3 OK Move completed\r\n\
+             * 1 EXPUNGE\r\na4 OK EXPUNGE completed\r\n\
+             + Ready for literal data\r\n\
+             a5 OK APPEND completed\r\n\
+             * BYE Logging out\r\na6 OK LOGOUT completed\r\n",
+            None,
+        );
+
+        imap_copy(&[5], "Archive", &session).expect("copy");
+        imap_move(&[5], "Processed", &session).expect("move");
+        imap_expunge(&session).expect("expunge");
+        imap_append("INBOX", raw_append, &session).expect("append");
+        imap_close(&session).expect("close");
+
+        let commands = written(&state);
+        let append_prefix = format!("a5 APPEND \"INBOX\" () {{{}}}\r\n", raw_append.len());
+        assert!(commands.contains("a2 UID COPY 5 Archive\r\n"));
+        assert!(commands.contains("a3 UID MOVE 5 \"Processed\"\r\n"));
+        assert!(commands.contains("a4 EXPUNGE\r\n"));
+        assert!(commands.contains(&append_prefix));
+        assert!(commands.contains(raw_append));
+        assert!(commands.contains("a6 LOGOUT\r\n"));
+    }
+
+    #[test]
+    fn imap_idle_reports_timeout_without_keepalive_loop() {
+        let (session, state) = scripted_session("+ idling\r\n", Some("a2 OK IDLE terminated\r\n"));
+
+        let result = imap_idle(1, &session).expect("idle succeeds");
+        assert_eq!(result, IdleResult::TimedOut);
+
+        let state = state.lock().unwrap();
+        assert!(state.read_timeouts.contains(&Some(Duration::from_secs(1))));
+        assert!(state.read_timeouts.contains(&None));
+        let written = String::from_utf8(state.written_buf.clone()).expect("utf8");
+        assert!(written.contains("a2 IDLE\r\n"));
+        assert!(written.contains("DONE\r\n"));
+    }
+
+    #[test]
+    fn imap_idle_reports_mailbox_changes() {
+        let (session, state) = scripted_session(
+            "+ idling\r\n* 4 EXISTS\r\n",
+            Some("a2 OK IDLE terminated\r\n"),
+        );
+
+        let result = imap_idle(1, &session).expect("idle succeeds");
+        assert_eq!(result, IdleResult::MailboxChanged);
+
+        let written = written(&state);
+        assert!(written.contains("a2 IDLE\r\n"));
+        assert!(written.contains("DONE\r\n"));
+    }
 }

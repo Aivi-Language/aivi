@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use aivi::{diagnostics::DiagnosticSeverity, Expr, FileDiagnostic, Literal, Module, ModuleItem};
+use aivi::{Expr, FileDiagnostic, Literal, Module, ModuleItem, diagnostics::DiagnosticSeverity};
 
 #[allow(dead_code)]
 pub fn workspace_root() -> PathBuf {

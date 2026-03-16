@@ -224,24 +224,27 @@ Direct mode is the easiest way to experiment with one file or folder before you 
 **Project mode**:
 
 ```bash
-aivi run [--watch|-w]
+aivi run [--watch|-w] [--color] [--no-color]
 ```
 
 - runs the current project described by `aivi.toml`
 - uses the Cranelift JIT pipeline for a fast edit/run loop
 - `--watch` re-runs when source files change
+- `--color`: force ANSI colors for runtime diagnostics and other terminal diagnostics
+- `--no-color`: disable ANSI colors even in a terminal
 - `--release` and extra Cargo arguments are not supported in project mode; use `aivi build --release` when you need an optimized binary
 
 **Direct mode**:
 
 ```bash
-aivi run <path|dir/...> [--debug-trace] [--target native] [--watch|-w]
+aivi run <path|dir/...> [--debug-trace] [--target native] [--watch|-w] [--color] [--no-color]
 ```
 
 - uses the Cranelift JIT runtime, meaning it compiles to native code in memory and runs it immediately instead of producing a standalone binary first
 - `--target native` is the supported direct-run target
 - `--debug-trace` enables verbose compiler tracing
 - `--watch` recompiles and re-runs when `.aivi` files change
+- `--color` / `--no-color` control runtime diagnostic ANSI rendering
 
 Direct `run` is great for quick experiments and examples. For distributable applications and repeatable builds, prefer `aivi build`.
 
@@ -276,7 +279,7 @@ aivi check [--debug-trace] [--check-stdlib] [<path|dir/...>]
 Runs top-level definitions decorated with `@test`.
 
 ```bash
-aivi test [<path|dir/...>] [--check-stdlib] [--only <name>...] [--update-snapshots]
+aivi test [<path|dir/...>] [--check-stdlib] [--only <name>...] [--update-snapshots] [--color] [--no-color]
 ```
 
 - inside a project, omitting the target uses the source tree derived from `aivi.toml`
@@ -289,6 +292,7 @@ aivi test [<path|dir/...>] [--check-stdlib] [--only <name>...] [--update-snapsho
 - writes file lists to `target/aivi-test-passed-files.txt` and `target/aivi-test-failed-files.txt`
 - `--only` may be repeated and accepts either qualified or unqualified test names
 - `--update-snapshots` records or refreshes snapshot files used by snapshot assertions
+- `--color` / `--no-color` control runtime diagnostic ANSI rendering for failing tests
 
 See also [Testing Module](../stdlib/core/testing.md) for assertion helpers and snapshot semantics, and [`@test`](../syntax/decorators/test.md) for decorator syntax and `mock ... in` rules.
 
@@ -398,4 +402,6 @@ aivi i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>
 
 ## Diagnostics output
 
-CLI diagnostics use ANSI colors when stderr is attached to a terminal. When output is piped or redirected, colors are disabled automatically so the text stays readable in logs and scripts.
+CLI diagnostics use ANSI colors when stderr is attached to a terminal by default. Commands that emit runtime diagnostics should also support explicit `--color` and `--no-color` flags so users can override automatic detection in CI, logs, and snapshot-oriented workflows.
+
+See also [Runtime Diagnostics](runtime_diagnostics.md) for the user-facing contract for runtime failures, including source frames, stack traces, hints, value previews, and color policy.

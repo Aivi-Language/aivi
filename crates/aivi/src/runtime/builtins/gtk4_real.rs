@@ -4,20 +4,20 @@ use crate::runtime::Value;
 mod bridge {
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
-    use std::sync::{mpsc, Arc, Mutex};
+    use std::sync::{Arc, Mutex, mpsc};
 
-    use serde_json::{json, Map as JsonMap, Value as JsonValue};
+    use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
     use super::super::gtk4::{
-        resolve_gtk_node, resolve_reactive_attr_value, GtkCallbackArgMode, ResolvedGtkAttr,
-        ResolvedGtkNode,
+        GtkCallbackArgMode, ResolvedGtkAttr, ResolvedGtkNode, resolve_gtk_node,
+        resolve_reactive_attr_value,
     };
     use super::super::util::builtin;
     use crate::runtime::environment::RuntimeContext;
     use crate::runtime::values::{ChannelInner, ChannelRecv};
     use crate::runtime::{
-        format_runtime_error, format_value, CancelToken, EffectValue, ReactiveCellKind, Runtime,
-        RuntimeError, Value,
+        CancelToken, EffectValue, ReactiveCellKind, Runtime, RuntimeError, Value,
+        format_runtime_error, format_value,
     };
 
     fn effect<F>(f: F) -> Value
@@ -220,7 +220,9 @@ mod bridge {
         }))
     }
 
-    fn ui_debug_signal_id_param(params: &JsonMap<String, JsonValue>) -> Result<usize, aivi_gtk4::Gtk4Error> {
+    fn ui_debug_signal_id_param(
+        params: &JsonMap<String, JsonValue>,
+    ) -> Result<usize, aivi_gtk4::Gtk4Error> {
         let signal_id = params
             .get("signalId")
             .and_then(JsonValue::as_u64)
@@ -278,14 +280,13 @@ mod bridge {
     }
 
     fn install_ui_debug_request_handler(ctx: Arc<RuntimeContext>) {
-        let handler: Arc<aivi_gtk4::UiDebugRequestHandler> = Arc::new(move |method, params| {
-            match method {
+        let handler: Arc<aivi_gtk4::UiDebugRequestHandler> =
+            Arc::new(move |method, params| match method {
                 "listSignals" => Some(ui_debug_list_signals_json(ctx.as_ref())),
                 "inspectSignal" => Some(ui_debug_inspect_signal_json(ctx.as_ref(), params)),
                 "explainSignal" => Some(ui_debug_explain_signal_json(ctx.as_ref(), params)),
                 _ => None,
-            }
-        });
+            });
         aivi_gtk4::set_ui_debug_request_handler(Some(handler));
     }
 
@@ -399,7 +400,9 @@ mod bridge {
             GtkCallbackArgMode::Raw => Ok(event.clone()),
             GtkCallbackArgMode::Unit => Ok(Value::Unit),
             GtkCallbackArgMode::Text => match event {
-                Value::Constructor { name, args } if name == "GtkInputChanged" && args.len() == 3 => {
+                Value::Constructor { name, args }
+                    if name == "GtkInputChanged" && args.len() == 3 =>
+                {
                     match &args[2] {
                         Value::Text(text) => Ok(Value::Text(text.clone())),
                         _ => Err(type_error("GtkInputChanged text payload")),
@@ -522,9 +525,10 @@ mod bridge {
 
     fn find_static_attr<'a>(attrs: &'a [ResolvedGtkAttr], name: &str) -> Option<&'a str> {
         attrs.iter().find_map(|attr| match attr {
-            ResolvedGtkAttr::StaticAttr { name: attr_name, value } if attr_name == name => {
-                Some(value.as_str())
-            }
+            ResolvedGtkAttr::StaticAttr {
+                name: attr_name,
+                value,
+            } if attr_name == name => Some(value.as_str()),
             _ => None,
         })
     }
@@ -797,7 +801,12 @@ mod bridge {
                 aivi_gtk4::widget_set_string_property(widget_id, property, value)
                     .map_err(gtk4_err_to_runtime)
             }
-            "title" if matches!(class_name, "GtkWindow" | "AdwWindow" | "AdwApplicationWindow") => {
+            "title"
+                if matches!(
+                    class_name,
+                    "GtkWindow" | "AdwWindow" | "AdwApplicationWindow"
+                ) =>
+            {
                 aivi_gtk4::window_set_title(widget_id, value).map_err(gtk4_err_to_runtime)
             }
             _ => Ok(()),
@@ -817,15 +826,13 @@ mod bridge {
             let property = binding.property.clone();
             let parts = binding.parts.clone();
             let callback = builtin("gtk4.liveBinding", 1, move |_args, runtime| {
-                let value = resolve_binding_parts_text(
-                    &parts,
-                    runtime,
-                    "gtk4 live property binding",
-                )?;
+                let value =
+                    resolve_binding_parts_text(&parts, runtime, "gtk4 live property binding")?;
                 apply_live_property(widget_id, &class_name, &property, &value)?;
                 Ok(Value::Unit)
             });
-            let (watcher_id, _) = runtime.reactive_watch_signal_main_thread(binding.signal, callback)?;
+            let (watcher_id, _) =
+                runtime.reactive_watch_signal_main_thread(binding.signal, callback)?;
             runtime.ctx.push_gtk_binding_watcher(widget_id, watcher_id);
         }
         Ok(())
@@ -835,11 +842,12 @@ mod bridge {
         runtime: &mut crate::runtime::Runtime,
         widget_id: i64,
     ) -> Result<(), RuntimeError> {
-        let scoped_widget_ids = if aivi_gtk4::widget_exists(widget_id).map_err(gtk4_err_to_runtime)? {
-            aivi_gtk4::binding_widget_ids(widget_id).map_err(gtk4_err_to_runtime)?
-        } else {
-            vec![widget_id]
-        };
+        let scoped_widget_ids =
+            if aivi_gtk4::widget_exists(widget_id).map_err(gtk4_err_to_runtime)? {
+                aivi_gtk4::binding_widget_ids(widget_id).map_err(gtk4_err_to_runtime)?
+            } else {
+                vec![widget_id]
+            };
         for scoped_widget_id in scoped_widget_ids {
             for watcher_id in runtime.ctx.take_gtk_binding_watchers(scoped_widget_id) {
                 runtime.reactive_dispose_watcher(watcher_id);
@@ -967,14 +975,15 @@ mod bridge {
                 // execution, and reactive_flush handles missing watchers gracefully.
                 // The new watchers installed below replace the disposed ones.
                 cleanup_binding_scope(runtime, widget_id)?;
-                let binding_widgets =
-                    aivi_gtk4::reconcile_widget(widget_id, &materialized).map_err(gtk4_err_to_runtime)?;
+                let binding_widgets = aivi_gtk4::reconcile_widget(widget_id, &materialized)
+                    .map_err(gtk4_err_to_runtime)?;
                 install_live_bindings(runtime, &binding_widgets, prop_bindings)?;
                 install_structural_bindings(runtime, &binding_widgets, structural_bindings)?;
                 Ok(Value::Unit)
             });
             for signal in binding.signals {
-                let (watcher_id, _) = runtime.reactive_watch_signal_main_thread(signal, callback.clone())?;
+                let (watcher_id, _) =
+                    runtime.reactive_watch_signal_main_thread(signal, callback.clone())?;
                 runtime.ctx.push_gtk_binding_watcher(widget_id, watcher_id);
             }
         }
@@ -1126,11 +1135,7 @@ mod bridge {
                 push_live_property_bindings(target, class_name, name, &parts, runtime, bindings)?;
                 Ok((
                     format!("prop:{name}"),
-                    resolve_binding_parts_text(
-                        &parts,
-                        runtime,
-                        "gtk4.buildFromNode bound prop",
-                    )?,
+                    resolve_binding_parts_text(&parts, runtime, "gtk4.buildFromNode bound prop")?,
                 ))
             }
             ResolvedGtkAttr::EventProp {
@@ -1209,12 +1214,16 @@ mod bridge {
                                     context: "gtk4.buildFromNode show binding".to_string(),
                                     expected: "Bool".to_string(),
                                     got: crate::runtime::format_value(&other),
-                                })
+                                });
                             }
                         }
                     }
                 }
-                ResolvedGtkNode::Each { items, template, _key } => {
+                ResolvedGtkNode::Each {
+                    items,
+                    template,
+                    _key,
+                } => {
                     let items = resolve_reactive_attr_value(items.clone(), runtime)?;
                     let items = runtime.force_value(items)?;
                     let Value::List(items) = items else {
@@ -1228,7 +1237,10 @@ mod bridge {
                         let key = if let Some(key_fn) = _key {
                             let key_value = runtime.apply(key_fn.clone(), item.clone())?;
                             let key_value = runtime.force_value(key_value)?;
-                            Some(value_to_static_text(&key_value, "gtk4.buildFromNode each key")?)
+                            Some(value_to_static_text(
+                                &key_value,
+                                "gtk4.buildFromNode each key",
+                            )?)
                         } else {
                             None
                         };
@@ -1287,7 +1299,9 @@ mod bridge {
                 let target = alloc_binding_target(next_binding_id);
                 let mut materialized_attrs = attrs
                     .iter()
-                    .map(|attr| materialize_attr(attr, runtime, &target, class_name, &mut local_bindings))
+                    .map(|attr| {
+                        materialize_attr(attr, runtime, &target, class_name, &mut local_bindings)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut materialized_children = Vec::new();
                 for child in children {
@@ -1345,14 +1359,29 @@ mod bridge {
         let name = Value::Text(event.widget_name);
         match event.signal.as_str() {
             "clicked" => {
-                if event.handler.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                if event
+                    .handler
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
                     let (cname, arg) = parse_constructor_handler(&event.handler);
                     Value::Constructor {
                         name: "GtkUnknownSignal".to_string(),
-                        args: vec![wid, name, Value::Text(cname), Value::Text(arg), Value::Text(String::new())],
+                        args: vec![
+                            wid,
+                            name,
+                            Value::Text(cname),
+                            Value::Text(arg),
+                            Value::Text(String::new()),
+                        ],
                     }
                 } else {
-                    Value::Constructor { name: "GtkClicked".to_string(), args: vec![wid, name] }
+                    Value::Constructor {
+                        name: "GtkClicked".to_string(),
+                        args: vec![wid, name],
+                    }
                 }
             }
             "changed" => Value::Constructor {
@@ -1365,11 +1394,17 @@ mod bridge {
             },
             "toggled" => {
                 let active = event.payload == "true";
-                Value::Constructor { name: "GtkToggled".to_string(), args: vec![wid, name, Value::Bool(active)] }
+                Value::Constructor {
+                    name: "GtkToggled".to_string(),
+                    args: vec![wid, name, Value::Bool(active)],
+                }
             }
             "value-changed" => {
                 let val = event.payload.parse::<f64>().unwrap_or(0.0);
-                Value::Constructor { name: "GtkValueChanged".to_string(), args: vec![wid, name, Value::Float(val)] }
+                Value::Constructor {
+                    name: "GtkValueChanged".to_string(),
+                    args: vec![wid, name, Value::Float(val)],
+                }
             }
             "key-pressed" => {
                 let mut parts = event.payload.splitn(2, '\n');
@@ -1380,13 +1415,31 @@ mod bridge {
                     args: vec![wid, name, Value::Text(key), Value::Text(detail)],
                 }
             }
-            "focus-enter" => Value::Constructor { name: "GtkFocusIn".to_string(), args: vec![wid, name] },
-            "focus-leave" => Value::Constructor { name: "GtkFocusOut".to_string(), args: vec![wid, name] },
-            "close-request" => Value::Constructor { name: "GtkWindowClosed".to_string(), args: vec![wid, name] },
-            "tick" => Value::Constructor { name: "GtkTick".to_string(), args: vec![] },
+            "focus-enter" => Value::Constructor {
+                name: "GtkFocusIn".to_string(),
+                args: vec![wid, name],
+            },
+            "focus-leave" => Value::Constructor {
+                name: "GtkFocusOut".to_string(),
+                args: vec![wid, name],
+            },
+            "close-request" => Value::Constructor {
+                name: "GtkWindowClosed".to_string(),
+                args: vec![wid, name],
+            },
+            "tick" => Value::Constructor {
+                name: "GtkTick".to_string(),
+                args: vec![],
+            },
             _ => Value::Constructor {
                 name: "GtkUnknownSignal".to_string(),
-                args: vec![wid, name, Value::Text(event.signal), Value::Text(event.handler), Value::Text(event.payload)],
+                args: vec![
+                    wid,
+                    name,
+                    Value::Text(event.signal),
+                    Value::Text(event.handler),
+                    Value::Text(event.payload),
+                ],
             },
         }
     }
@@ -1401,122 +1454,254 @@ mod bridge {
         }
     }
 
-    pub(in super::super) fn build_from_mock(mut fields: HashMap<String, Value>) -> HashMap<String, Value> {
+    pub(in super::super) fn build_from_mock(
+        mut fields: HashMap<String, Value>,
+    ) -> HashMap<String, Value> {
         // ── init ──
-        fields.insert("init".to_string(), builtin("gtk4.init", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("gtk4.init expects Unit")) }
-            Ok(effect(move |runtime| {
-                install_gtk_runtime_hooks(runtime.ctx.clone());
-                aivi_gtk4::init().map_err(gtk4_err_to_runtime)?;
-                Ok(Value::Unit)
-            }))
-        }));
+        fields.insert(
+            "init".to_string(),
+            builtin("gtk4.init", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.init expects Unit")),
+                }
+                Ok(effect(move |runtime| {
+                    install_gtk_runtime_hooks(runtime.ctx.clone());
+                    aivi_gtk4::init().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         // ── appNew ──
-        fields.insert("appNew".to_string(), builtin("gtk4.appNew", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("gtk4.appNew expects Text")) };
-            Ok(effect(move |runtime| {
-                install_gtk_runtime_hooks(runtime.ctx.clone());
-                let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?;
-                Ok(Value::Int(r))
-            }))
-        }));
+        fields.insert(
+            "appNew".to_string(),
+            builtin("gtk4.appNew", 1, |mut args, _| {
+                let id = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.appNew expects Text")),
+                };
+                Ok(effect(move |runtime| {
+                    install_gtk_runtime_hooks(runtime.ctx.clone());
+                    let r = aivi_gtk4::app_new(&id).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
 
         // ── appRun ──
-        fields.insert("appRun".to_string(), builtin("gtk4.appRun", 1, |mut args, _| {
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.appRun expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::app_run(app_id).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "appRun".to_string(),
+            builtin("gtk4.appRun", 1, |mut args, _| {
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.appRun expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::app_run(app_id).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         // ── appSetCss ──
-        fields.insert("appSetCss".to_string(), builtin("gtk4.appSetCss", 2, |mut args, _| {
-            let css_text = match args.remove(1) {
-                Value::Text(v) => v,
-                Value::Record(_) => return Ok(effect(|_| Ok(Value::Unit))),
-                _ => return Err(invalid("gtk4.appSetCss expects Text or Record")),
-            };
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.appSetCss expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::app_set_css(app_id, &css_text).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "appSetCss".to_string(),
+            builtin("gtk4.appSetCss", 2, |mut args, _| {
+                let css_text = match args.remove(1) {
+                    Value::Text(v) => v,
+                    Value::Record(_) => return Ok(effect(|_| Ok(Value::Unit))),
+                    _ => return Err(invalid("gtk4.appSetCss expects Text or Record")),
+                };
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.appSetCss expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::app_set_css(app_id, &css_text).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         // ── windowNew ──
-        fields.insert("windowNew".to_string(), builtin("gtk4.windowNew", 4, |mut args, _| {
-            let height = match args.remove(3) { Value::Int(v) => v as i32, _ => return Err(invalid("gtk4.windowNew expects Int height")) };
-            let width = match args.remove(2) { Value::Int(v) => v as i32, _ => return Err(invalid("gtk4.windowNew expects Int width")) };
-            let title = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("gtk4.windowNew expects Text title")) };
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.windowNew expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::window_new(app_id, &title, width, height).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("mountAppWindow".to_string(), builtin("gtk4.mountAppWindow", 2, |mut args, _| {
-            let nodes = args.remove(1);
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.mountAppWindow expects Int")) };
-            Ok(effect(move |runtime| {
-                let nodes = runtime.force_value(nodes.clone())?;
-                let decoded = resolve_gtk_node_list(&nodes, runtime)?;
-                let result = materialize_app_window_with_bindings(app_id, &decoded, runtime)?;
-                Ok(Value::Int(result.root_id))
-            }))
-        }));
-        fields.insert("displayHeight".to_string(), builtin("gtk4.displayHeight", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("gtk4.displayHeight expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::display_height().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "windowNew".to_string(),
+            builtin("gtk4.windowNew", 4, |mut args, _| {
+                let height = match args.remove(3) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("gtk4.windowNew expects Int height")),
+                };
+                let width = match args.remove(2) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("gtk4.windowNew expects Int width")),
+                };
+                let title = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.windowNew expects Text title")),
+                };
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowNew expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::window_new(app_id, &title, width, height)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
+        fields.insert(
+            "mountAppWindow".to_string(),
+            builtin("gtk4.mountAppWindow", 2, |mut args, _| {
+                let nodes = args.remove(1);
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.mountAppWindow expects Int")),
+                };
+                Ok(effect(move |runtime| {
+                    let nodes = runtime.force_value(nodes.clone())?;
+                    let decoded = resolve_gtk_node_list(&nodes, runtime)?;
+                    let result = materialize_app_window_with_bindings(app_id, &decoded, runtime)?;
+                    Ok(Value::Int(result.root_id))
+                }))
+            }),
+        );
+        fields.insert(
+            "displayHeight".to_string(),
+            builtin("gtk4.displayHeight", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.displayHeight expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::display_height().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
 
         macro_rules! bridge_unit_ii {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
-                    let b = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
-                    let a = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
-                    Ok(effect(move |_| { $fn(a, b).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 2, |mut args, _| {
+                        let b = match args.remove(1) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))),
+                        };
+                        let a = match args.remove(0) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))),
+                        };
+                        Ok(effect(move |_| {
+                            $fn(a, b).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Unit)
+                        }))
+                    }),
+                );
             };
         }
 
         macro_rules! bridge_unit_it {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
-                    let t = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))) };
-                    let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
-                    Ok(effect(move |_| { $fn(id, &t).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 2, |mut args, _| {
+                        let t = match args.remove(1) {
+                            Value::Text(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))),
+                        };
+                        let id = match args.remove(0) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))),
+                        };
+                        Ok(effect(move |_| {
+                            $fn(id, &t).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Unit)
+                        }))
+                    }),
+                );
             };
         }
 
         macro_rules! bridge_bool_it {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
-                    let t = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))) };
-                    let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
-                    Ok(effect(move |_| { let r = $fn(id, &t).map_err(gtk4_err_to_runtime)?; Ok(Value::Bool(r)) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 2, |mut args, _| {
+                        let t = match args.remove(1) {
+                            Value::Text(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))),
+                        };
+                        let id = match args.remove(0) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))),
+                        };
+                        Ok(effect(move |_| {
+                            let r = $fn(id, &t).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Bool(r))
+                        }))
+                    }),
+                );
             };
         }
 
         macro_rules! bridge_unit_ib {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
-                    let b = match args.remove(1) { Value::Bool(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Bool"))) };
-                    let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
-                    Ok(effect(move |_| { $fn(id, b).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 2, |mut args, _| {
+                        let b = match args.remove(1) {
+                            Value::Bool(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Bool"))),
+                        };
+                        let id = match args.remove(0) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))),
+                        };
+                        Ok(effect(move |_| {
+                            $fn(id, b).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Unit)
+                        }))
+                    }),
+                );
             };
         }
 
         macro_rules! bridge_unit_i {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 1, |mut args, _| {
-                    let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))) };
-                    Ok(effect(move |_| { $fn(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 1, |mut args, _| {
+                        let id = match args.remove(0) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Int"))),
+                        };
+                        Ok(effect(move |_| {
+                            $fn(id).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Unit)
+                        }))
+                    }),
+                );
             };
         }
 
         macro_rules! bridge_int_t {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 1, |mut args, _| {
-                    let t = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))) };
-                    Ok(effect(move |_| { let r = $fn(&t).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 1, |mut args, _| {
+                        let t = match args.remove(0) {
+                            Value::Text(v) => v,
+                            _ => return Err(invalid(concat!("gtk4.", $name, " expects Text"))),
+                        };
+                        Ok(effect(move |_| {
+                            let r = $fn(&t).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Int(r))
+                        }))
+                    }),
+                );
             };
         }
 
@@ -1529,11 +1714,23 @@ mod bridge {
         bridge_unit_ib!("windowSetHideOnClose", aivi_gtk4::window_set_hide_on_close);
         bridge_unit_ib!("windowSetDecorated", aivi_gtk4::window_set_decorated);
 
-        fields.insert("windowOnClose".to_string(), builtin("gtk4.windowOnClose", 2, |mut args, _| {
-            let sig = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("gtk4.windowOnClose expects Text")) };
-            let win_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.windowOnClose expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::window_on_close(win_id, &sig).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "windowOnClose".to_string(),
+            builtin("gtk4.windowOnClose", 2, |mut args, _| {
+                let sig = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.windowOnClose expects Text")),
+                };
+                let win_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowOnClose expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::window_on_close(win_id, &sig).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         // ── Widget ops ──
         bridge_unit_i!("widgetShow", aivi_gtk4::widget_show);
@@ -1548,19 +1745,35 @@ mod bridge {
                     _ => return Err(invalid("gtk4.widgetGetCalendarDate expects Int")),
                 };
                 Ok(effect(move |_| {
-                    let value = aivi_gtk4::widget_get_calendar_date(id)
-                        .map_err(gtk4_err_to_runtime)?;
+                    let value =
+                        aivi_gtk4::widget_get_calendar_date(id).map_err(gtk4_err_to_runtime)?;
                     Ok(Value::Text(value))
                 }))
             }),
         );
 
-        fields.insert("widgetSetBoolProperty".to_string(), builtin("gtk4.widgetSetBoolProperty", 3, |mut args, _| {
-            let value = match args.remove(2) { Value::Bool(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Bool")) };
-            let prop = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Text")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::widget_set_bool_property(id, &prop, value).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "widgetSetBoolProperty".to_string(),
+            builtin("gtk4.widgetSetBoolProperty", 3, |mut args, _| {
+                let value = match args.remove(2) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Bool")),
+                };
+                let prop = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Text")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::widget_set_bool_property(id, &prop, value)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         fields.insert(
             "widgetSetCalendarDate".to_string(),
@@ -1574,42 +1787,92 @@ mod bridge {
                     _ => return Err(invalid("gtk4.widgetSetCalendarDate expects Int")),
                 };
                 Ok(effect(move |_| {
-                    aivi_gtk4::widget_set_calendar_date(id, &value)
-                        .map_err(gtk4_err_to_runtime)?;
+                    aivi_gtk4::widget_set_calendar_date(id, &value).map_err(gtk4_err_to_runtime)?;
                     Ok(Value::Unit)
                 }))
             }),
         );
 
-        fields.insert("widgetSetSizeRequest".to_string(), builtin("gtk4.widgetSetSizeRequest", 3, |mut args, _| {
-            let h = match args.remove(2) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let w = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::widget_set_size_request(id, w, h).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "widgetSetSizeRequest".to_string(),
+            builtin("gtk4.widgetSetSizeRequest", 3, |mut args, _| {
+                let h = match args.remove(2) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let w = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::widget_set_size_request(id, w, h).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         bridge_unit_ib!("widgetSetHexpand", aivi_gtk4::widget_set_hexpand);
         bridge_unit_ib!("widgetSetVexpand", aivi_gtk4::widget_set_vexpand);
 
-        fields.insert("widgetSetHalign".to_string(), builtin("gtk4.widgetSetHalign", 2, |mut args, _| {
-            let a = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::widget_set_halign(id, a).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "widgetSetHalign".to_string(),
+            builtin("gtk4.widgetSetHalign", 2, |mut args, _| {
+                let a = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::widget_set_halign(id, a).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("widgetSetValign".to_string(), builtin("gtk4.widgetSetValign", 2, |mut args, _| {
-            let a = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::widget_set_valign(id, a).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "widgetSetValign".to_string(),
+            builtin("gtk4.widgetSetValign", 2, |mut args, _| {
+                let a = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::widget_set_valign(id, a).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         macro_rules! bridge_margin {
             ($name:expr, $fn:path) => {
-                fields.insert($name.to_string(), builtin(concat!("gtk4.", $name), 2, |mut args, _| {
-                    let m = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-                    let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-                    Ok(effect(move |_| { $fn(id, m).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-                }));
+                fields.insert(
+                    $name.to_string(),
+                    builtin(concat!("gtk4.", $name), 2, |mut args, _| {
+                        let m = match args.remove(1) {
+                            Value::Int(v) => v as i32,
+                            _ => return Err(invalid("expects Int")),
+                        };
+                        let id = match args.remove(0) {
+                            Value::Int(v) => v,
+                            _ => return Err(invalid("expects Int")),
+                        };
+                        Ok(effect(move |_| {
+                            $fn(id, m).map_err(gtk4_err_to_runtime)?;
+                            Ok(Value::Unit)
+                        }))
+                    }),
+                );
             };
         }
         bridge_margin!("widgetSetMarginStart", aivi_gtk4::widget_set_margin_start);
@@ -1621,31 +1884,56 @@ mod bridge {
         bridge_unit_it!("widgetRemoveCssClass", aivi_gtk4::widget_remove_css_class);
         bridge_unit_it!("widgetSetTooltipText", aivi_gtk4::widget_set_tooltip_text);
 
-        fields.insert("widgetSetOpacity".to_string(), builtin("gtk4.widgetSetOpacity", 2, |mut args, _| {
-            let opacity = match args.remove(1) { Value::Int(v) => v as f64 / 100.0, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::widget_set_opacity(id, opacity).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "widgetSetOpacity".to_string(),
+            builtin("gtk4.widgetSetOpacity", 2, |mut args, _| {
+                let opacity = match args.remove(1) {
+                    Value::Int(v) => v as f64 / 100.0,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::widget_set_opacity(id, opacity).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         bridge_unit_it!("widgetSetCss", aivi_gtk4::widget_set_css);
         bridge_int_t!("widgetById", aivi_gtk4::widget_by_id);
         bridge_unit_ii!("widgetAddController", aivi_gtk4::widget_add_controller);
-        bridge_unit_ii!("widgetAddShortcut", aivi_gtk4::widget_add_shortcut);
-        bridge_unit_ii!("widgetSetLayoutManager", aivi_gtk4::widget_set_layout_manager);
 
         // ── Box ──
-        fields.insert("boxNew".to_string(), builtin("gtk4.boxNew", 2, |mut args, _| {
-            let spacing = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let ori = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::box_new(ori, spacing).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "boxNew".to_string(),
+            builtin("gtk4.boxNew", 2, |mut args, _| {
+                let spacing = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let ori = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::box_new(ori, spacing).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
         bridge_unit_ii!("boxAppend", aivi_gtk4::box_append);
         bridge_unit_ib!("boxSetHomogeneous", aivi_gtk4::box_set_homogeneous);
 
         // ── Button ──
         bridge_int_t!("buttonNew", aivi_gtk4::button_new);
         bridge_unit_it!("buttonSetLabel", aivi_gtk4::button_set_label);
-        bridge_int_t!("buttonNewFromIconName", aivi_gtk4::button_new_from_icon_name);
+        bridge_int_t!(
+            "buttonNewFromIconName",
+            aivi_gtk4::button_new_from_icon_name
+        );
         bridge_unit_ii!("buttonSetChild", aivi_gtk4::button_set_child);
 
         // ── Label ──
@@ -1653,23 +1941,56 @@ mod bridge {
         bridge_unit_it!("labelSetText", aivi_gtk4::label_set_text);
         bridge_unit_ib!("labelSetWrap", aivi_gtk4::label_set_wrap);
         bridge_margin!("labelSetEllipsize", aivi_gtk4::label_set_ellipsize);
-        fields.insert("labelSetXalign".to_string(), builtin("gtk4.labelSetXalign", 2, |mut args, _| {
-            let x = match args.remove(1) { Value::Int(v) => v as f32 / 100.0, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::label_set_xalign(id, x).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        bridge_margin!("labelSetMaxWidthChars", aivi_gtk4::label_set_max_width_chars);
+        fields.insert(
+            "labelSetXalign".to_string(),
+            builtin("gtk4.labelSetXalign", 2, |mut args, _| {
+                let x = match args.remove(1) {
+                    Value::Int(v) => v as f32 / 100.0,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::label_set_xalign(id, x).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+        bridge_margin!(
+            "labelSetMaxWidthChars",
+            aivi_gtk4::label_set_max_width_chars
+        );
 
         // ── Entry ──
-        fields.insert("entryNew".to_string(), builtin("gtk4.entryNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::entry_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "entryNew".to_string(),
+            builtin("gtk4.entryNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::entry_new().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
         bridge_unit_it!("entrySetText", aivi_gtk4::entry_set_text);
-        fields.insert("entryText".to_string(), builtin("gtk4.entryText", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::entry_text(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
-        }));
+        fields.insert(
+            "entryText".to_string(),
+            builtin("gtk4.entryText", 1, |mut args, _| {
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::entry_text(id).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Text(r))
+                }))
+            }),
+        );
 
         // ── Image ──
         bridge_int_t!("imageNewFromFile", aivi_gtk4::image_new_from_file);
@@ -1680,357 +2001,606 @@ mod bridge {
         bridge_margin!("imageSetPixelSize", aivi_gtk4::image_set_pixel_size);
 
         // ── Icon theme ──
-        fields.insert("iconThemeAddSearchPath".to_string(), builtin("gtk4.iconThemeAddSearchPath", 1, |mut args, _| {
-            let path = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::icon_theme_add_search_path(&path).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "iconThemeAddSearchPath".to_string(),
+            builtin("gtk4.iconThemeAddSearchPath", 1, |mut args, _| {
+                let path = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::icon_theme_add_search_path(&path).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         // ── Scroll, separator, overlay, draw area ──
-        fields.insert("scrollAreaNew".to_string(), builtin("gtk4.scrollAreaNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::scroll_area_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "scrollAreaNew".to_string(),
+            builtin("gtk4.scrollAreaNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::scroll_area_new().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
         bridge_unit_ii!("scrollAreaSetChild", aivi_gtk4::scroll_area_set_child);
-        fields.insert("scrollAreaSetPolicy".to_string(), builtin("gtk4.scrollAreaSetPolicy", 3, |mut args, _| {
-            let vp = match args.remove(2) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let hp = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::scroll_area_set_policy(id, hp, vp).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "scrollAreaSetPolicy".to_string(),
+            builtin("gtk4.scrollAreaSetPolicy", 3, |mut args, _| {
+                let vp = match args.remove(2) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let hp = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::scroll_area_set_policy(id, hp, vp).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("separatorNew".to_string(), builtin("gtk4.separatorNew", 1, |mut args, _| {
-            let ori = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::separator_new(ori).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "separatorNew".to_string(),
+            builtin("gtk4.separatorNew", 1, |mut args, _| {
+                let ori = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::separator_new(ori).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
 
-        fields.insert("overlayNew".to_string(), builtin("gtk4.overlayNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::overlay_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "overlayNew".to_string(),
+            builtin("gtk4.overlayNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::overlay_new().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
         bridge_unit_ii!("overlaySetChild", aivi_gtk4::overlay_set_child);
         bridge_unit_ii!("overlayAddOverlay", aivi_gtk4::overlay_add_overlay);
 
-        fields.insert("drawAreaNew".to_string(), builtin("gtk4.drawAreaNew", 2, |mut args, _| {
-            let h = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let w = match args.remove(0) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::draw_area_new(w, h).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("drawAreaSetContentSize".to_string(), builtin("gtk4.drawAreaSetContentSize", 3, |mut args, _| {
-            let h = match args.remove(2) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let w = match args.remove(1) { Value::Int(v) => v as i32, _ => return Err(invalid("expects Int")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::draw_area_set_content_size(id, w, h).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "drawAreaNew".to_string(),
+            builtin("gtk4.drawAreaNew", 2, |mut args, _| {
+                let h = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let w = match args.remove(0) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::draw_area_new(w, h).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
+        fields.insert(
+            "drawAreaSetContentSize".to_string(),
+            builtin("gtk4.drawAreaSetContentSize", 3, |mut args, _| {
+                let h = match args.remove(2) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let w = match args.remove(1) {
+                    Value::Int(v) => v as i32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::draw_area_set_content_size(id, w, h).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
         bridge_unit_i!("drawAreaQueueDraw", aivi_gtk4::draw_area_queue_draw);
 
-        // ── Gesture, clipboard ──
-        fields.insert("gestureClickNew".to_string(), builtin("gtk4.gestureClickNew", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::gesture_click_new(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("gestureClickLastButton".to_string(), builtin("gtk4.gestureClickLastButton", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::gesture_click_last_button(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        // ── Gesture ──
+        fields.insert(
+            "gestureClickNew".to_string(),
+            builtin("gtk4.gestureClickNew", 1, |mut args, _| {
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::gesture_click_new(id).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
+        fields.insert(
+            "gestureClickLastButton".to_string(),
+            builtin("gtk4.gestureClickLastButton", 1, |mut args, _| {
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let r =
+                        aivi_gtk4::gesture_click_last_button(id).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
 
-        fields.insert("clipboardDefault".to_string(), builtin("gtk4.clipboardDefault", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::clipboard_default().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_it!("clipboardSetText", aivi_gtk4::clipboard_set_text);
-        fields.insert("clipboardText".to_string(), builtin("gtk4.clipboardText", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::clipboard_text(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
-        }));
-
-        // ── Action, shortcut, notification ──
+        // ── Action ──
         bridge_int_t!("actionNew", aivi_gtk4::action_new);
         bridge_unit_ib!("actionSetEnabled", aivi_gtk4::action_set_enabled);
         bridge_unit_ii!("appAddAction", aivi_gtk4::app_add_action);
-        fields.insert("shortcutNew".to_string(), builtin("gtk4.shortcutNew", 2, |mut args, _| {
-            let action = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let accel = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::shortcut_new(&accel, &action).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("notificationNew".to_string(), builtin("gtk4.notificationNew", 2, |mut args, _| {
-            let body = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let title = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::notification_new(&title, &body).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_it!("notificationSetBody", aivi_gtk4::notification_set_body);
-        fields.insert("appSendNotification".to_string(), builtin("gtk4.appSendNotification", 3, |mut args, _| {
-            let nid = match args.remove(2) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let tag = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::app_send_notification(app_id, &tag, nid).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        fields.insert("appWithdrawNotification".to_string(), builtin("gtk4.appWithdrawNotification", 2, |mut args, _| {
-            let tag = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::app_withdraw_notification(app_id, &tag).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        bridge_int_t!("layoutManagerNew", aivi_gtk4::layout_manager_new);
-
-        // ── Drag/drop stubs ──
-        fields.insert("dragSourceNew".to_string(), builtin("gtk4.dragSourceNew", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::drag_source_new(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_it!("dragSourceSetText", aivi_gtk4::drag_source_set_text);
-        fields.insert("dropTargetNew".to_string(), builtin("gtk4.dropTargetNew", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::drop_target_new(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("dropTargetLastText".to_string(), builtin("gtk4.dropTargetLastText", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::drop_target_last_text(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
-        }));
 
         // ── Menu, dialog ──
-        fields.insert("menuModelNew".to_string(), builtin("gtk4.menuModelNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::menu_model_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("menuModelAppendItem".to_string(), builtin("gtk4.menuModelAppendItem", 3, |mut args, _| {
-            let action = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let label = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::menu_model_append_item(id, &label, &action).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "menuModelNew".to_string(),
+            builtin("gtk4.menuModelNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::menu_model_new().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
+        fields.insert(
+            "menuModelAppendItem".to_string(),
+            builtin("gtk4.menuModelAppendItem", 3, |mut args, _| {
+                let action = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let label = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::menu_model_append_item(id, &label, &action)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
         bridge_int_t!("menuButtonNew", aivi_gtk4::menu_button_new);
-        bridge_unit_ii!("menuButtonSetMenuModel", aivi_gtk4::menu_button_set_menu_model);
+        bridge_unit_ii!(
+            "menuButtonSetMenuModel",
+            aivi_gtk4::menu_button_set_menu_model
+        );
 
-        fields.insert("dialogNew".to_string(), builtin("gtk4.dialogNew", 1, |mut args, _| {
-            let _ = args.remove(0);
-            Ok(effect(move |_| { let r = aivi_gtk4::dialog_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
+        fields.insert(
+            "dialogNew".to_string(),
+            builtin("gtk4.dialogNew", 1, |mut args, _| {
+                let _ = args.remove(0);
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::dialog_new().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(r))
+                }))
+            }),
+        );
         bridge_unit_it!("dialogSetTitle", aivi_gtk4::dialog_set_title);
         bridge_unit_ii!("dialogSetChild", aivi_gtk4::dialog_set_child);
         bridge_unit_ii!("dialogPresent", aivi_gtk4::dialog_present);
         bridge_unit_i!("dialogClose", aivi_gtk4::dialog_close);
         bridge_unit_ii!("adwDialogPresent", aivi_gtk4::adw_dialog_present);
 
-        // ── File dialog stubs ──
-        fields.insert("fileDialogNew".to_string(), builtin("gtk4.fileDialogNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::file_dialog_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        fields.insert("fileDialogSelectFile".to_string(), builtin("gtk4.fileDialogSelectFile", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let r = aivi_gtk4::file_dialog_select_file(id).map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
-        }));
-
-        // ── List/tree view stubs ──
-        fields.insert("listStoreNew".to_string(), builtin("gtk4.listStoreNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::list_store_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_it!("listStoreAppendText", aivi_gtk4::list_store_append_text);
-        fields.insert("listStoreItems".to_string(), builtin("gtk4.listStoreItems", 1, |mut args, _| {
-            let id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { let _r = aivi_gtk4::list_store_items(id).map_err(gtk4_err_to_runtime)?; Ok(Value::List(Arc::new(Vec::new()))) }))
-        }));
-        fields.insert("listViewNew".to_string(), builtin("gtk4.listViewNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::list_view_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_ii!("listViewSetModel", aivi_gtk4::list_view_set_model);
-        fields.insert("treeViewNew".to_string(), builtin("gtk4.treeViewNew", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::tree_view_new().map_err(gtk4_err_to_runtime)?; Ok(Value::Int(r)) }))
-        }));
-        bridge_unit_ii!("treeViewSetModel", aivi_gtk4::tree_view_set_model);
-
         // ── OS ──
-        fields.insert("osOpenUri".to_string(), builtin("gtk4.osOpenUri", 2, |mut args, _| {
-            let uri = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::os_open_uri(app_id, &uri).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        fields.insert("osShowInFileManager".to_string(), builtin("gtk4.osShowInFileManager", 1, |mut args, _| {
-            let path = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::os_show_in_file_manager(&path).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        fields.insert("osSetBadgeCount".to_string(), builtin("gtk4.osSetBadgeCount", 2, |mut args, _| {
-            let count = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let app_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::os_set_badge_count(app_id, count).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
-        fields.insert("osThemePreference".to_string(), builtin("gtk4.osThemePreference", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| { let r = aivi_gtk4::os_theme_preference().map_err(gtk4_err_to_runtime)?; Ok(Value::Text(r)) }))
-        }));
+        fields.insert(
+            "osOpenUri".to_string(),
+            builtin("gtk4.osOpenUri", 2, |mut args, _| {
+                let uri = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::os_open_uri(app_id, &uri).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+        fields.insert(
+            "osSetBadgeCount".to_string(),
+            builtin("gtk4.osSetBadgeCount", 2, |mut args, _| {
+                let count = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::os_set_badge_count(app_id, count).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+        fields.insert(
+            "osThemePreference".to_string(),
+            builtin("gtk4.osThemePreference", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let r = aivi_gtk4::os_theme_preference().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Text(r))
+                }))
+            }),
+        );
 
         // ── Build / reconcile ──
-        fields.insert("buildFromNode".to_string(), builtin("gtk4.buildFromNode", 1, |mut args, _| {
-            let node = args.remove(0);
-            Ok(effect(move |runtime| {
-                let node = runtime.force_value(node.clone())?;
-                let decoded = resolve_gtk_node(&node, runtime)?;
-                let result = materialize_with_bindings(&decoded, runtime)?;
-                Ok(Value::Int(result.root_id))
-            }))
-        }));
+        fields.insert(
+            "buildFromNode".to_string(),
+            builtin("gtk4.buildFromNode", 1, |mut args, _| {
+                let node = args.remove(0);
+                Ok(effect(move |runtime| {
+                    let node = runtime.force_value(node.clone())?;
+                    let decoded = resolve_gtk_node(&node, runtime)?;
+                    let result = materialize_with_bindings(&decoded, runtime)?;
+                    Ok(Value::Int(result.root_id))
+                }))
+            }),
+        );
 
-        fields.insert("buildWithIds".to_string(), builtin("gtk4.buildWithIds", 1, |mut args, _| {
-            let node = args.remove(0);
-            Ok(effect(move |runtime| {
-                let node = runtime.force_value(node.clone())?;
-                let decoded = resolve_gtk_node(&node, runtime)?;
-                let result = materialize_with_bindings(&decoded, runtime)?;
-                let mut widgets_map = im::HashMap::new();
-                for (name, wid) in result.named_widgets {
-                    widgets_map.insert(crate::runtime::values::KeyValue::Text(name), Value::Int(wid));
-                }
-                let mut record = HashMap::new();
-                record.insert("root".to_string(), Value::Int(result.root_id));
-                record.insert("widgets".to_string(), Value::Map(Arc::new(widgets_map)));
-                Ok(Value::Record(Arc::new(record)))
-            }))
-        }));
+        fields.insert(
+            "buildWithIds".to_string(),
+            builtin("gtk4.buildWithIds", 1, |mut args, _| {
+                let node = args.remove(0);
+                Ok(effect(move |runtime| {
+                    let node = runtime.force_value(node.clone())?;
+                    let decoded = resolve_gtk_node(&node, runtime)?;
+                    let result = materialize_with_bindings(&decoded, runtime)?;
+                    let mut widgets_map = im::HashMap::new();
+                    for (name, wid) in result.named_widgets {
+                        widgets_map.insert(
+                            crate::runtime::values::KeyValue::Text(name),
+                            Value::Int(wid),
+                        );
+                    }
+                    let mut record = HashMap::new();
+                    record.insert("root".to_string(), Value::Int(result.root_id));
+                    record.insert("widgets".to_string(), Value::Map(Arc::new(widgets_map)));
+                    Ok(Value::Record(Arc::new(record)))
+                }))
+            }),
+        );
 
-        fields.insert("reconcileNode".to_string(), builtin("gtk4.reconcileNode", 2, |mut args, _| {
-            let new_node_val = args.remove(1);
-            let root_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |runtime| {
-                let node = runtime.force_value(new_node_val.clone())?;
-                let decoded = resolve_gtk_node(&node, runtime)?;
-                let mut next_binding_id = 1;
-                let mut bindings = Vec::new();
-                let mut structural_bindings = Vec::new();
-                let decoded = materialize_node(
-                    &decoded,
-                    runtime,
-                    &mut next_binding_id,
-                    &mut bindings,
-                    &mut structural_bindings,
-                )?;
-                let result_id = aivi_gtk4::reconcile_node(root_id, &decoded).map_err(gtk4_err_to_runtime)?;
-                Ok(Value::Int(result_id))
-            }))
-        }));
+        fields.insert(
+            "reconcileNode".to_string(),
+            builtin("gtk4.reconcileNode", 2, |mut args, _| {
+                let new_node_val = args.remove(1);
+                let root_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |runtime| {
+                    let node = runtime.force_value(new_node_val.clone())?;
+                    let decoded = resolve_gtk_node(&node, runtime)?;
+                    let mut next_binding_id = 1;
+                    let mut bindings = Vec::new();
+                    let mut structural_bindings = Vec::new();
+                    let decoded = materialize_node(
+                        &decoded,
+                        runtime,
+                        &mut next_binding_id,
+                        &mut bindings,
+                        &mut structural_bindings,
+                    )?;
+                    let result_id = aivi_gtk4::reconcile_node(root_id, &decoded)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Int(result_id))
+                }))
+            }),
+        );
 
         // ── Signal ──
-        fields.insert("signalPoll".to_string(), builtin("gtk4.signalPoll", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| {
-                match aivi_gtk4::signal_poll().map_err(gtk4_err_to_runtime)? {
-                    Some(event) => Ok(Value::Constructor {
-                        name: "Some".to_string(),
-                        args: vec![make_signal_event_value(event)],
-                    }),
-                    None => Ok(Value::Constructor { name: "None".to_string(), args: Vec::new() }),
+        fields.insert(
+            "signalPoll".to_string(),
+            builtin("gtk4.signalPoll", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
                 }
-            }))
-        }));
+                Ok(effect(move |_| {
+                    match aivi_gtk4::signal_poll().map_err(gtk4_err_to_runtime)? {
+                        Some(event) => Ok(Value::Constructor {
+                            name: "Some".to_string(),
+                            args: vec![make_signal_event_value(event)],
+                        }),
+                        None => Ok(Value::Constructor {
+                            name: "None".to_string(),
+                            args: Vec::new(),
+                        }),
+                    }
+                }))
+            }),
+        );
 
-        fields.insert("signalStream".to_string(), builtin("gtk4.signalStream", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| {
-                let receiver = aivi_gtk4::signal_stream().map_err(gtk4_err_to_runtime)?;
-                // Convert SignalEvent receiver to Value receiver
-                let (value_sender, value_receiver) = mpsc::sync_channel(512);
-                std::thread::Builder::new()
-                    .name("gtk4-signal-bridge".to_string())
-                    .spawn(move || {
-                        loop {
-                            match receiver.recv() {
-                                Ok(event) => {
-                                    let value = make_signal_event_value(event);
-                                    if value_sender.send(value).is_err() {
-                                        eprintln!("[bridge] value_sender.send FAILED, exiting");
+        fields.insert(
+            "signalStream".to_string(),
+            builtin("gtk4.signalStream", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let receiver = aivi_gtk4::signal_stream().map_err(gtk4_err_to_runtime)?;
+                    // Convert SignalEvent receiver to Value receiver
+                    let (value_sender, value_receiver) = mpsc::sync_channel(512);
+                    std::thread::Builder::new()
+                        .name("gtk4-signal-bridge".to_string())
+                        .spawn(move || {
+                            loop {
+                                match receiver.recv() {
+                                    Ok(event) => {
+                                        let value = make_signal_event_value(event);
+                                        if value_sender.send(value).is_err() {
+                                            eprintln!("[bridge] value_sender.send FAILED, exiting");
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("[bridge] receiver.recv error: {:?}, exiting", e);
                                         break;
                                     }
                                 }
-                                Err(e) => {
-                                    eprintln!("[bridge] receiver.recv error: {:?}, exiting", e);
-                                    break;
-                                }
                             }
-                        }
-
-                    })
-                    .ok();
-                let inner = Arc::new(ChannelInner {
-                    sender: Mutex::new(None),
-                    receiver: Mutex::new(value_receiver),
-                    closed: AtomicBool::new(false),
-                });
-                Ok(Value::ChannelRecv(Arc::new(ChannelRecv { inner })))
-            }))
-        }));
-
+                        })
+                        .ok();
+                    let inner = Arc::new(ChannelInner {
+                        sender: Mutex::new(None),
+                        receiver: Mutex::new(value_receiver),
+                        closed: AtomicBool::new(false),
+                    });
+                    Ok(Value::ChannelRecv(Arc::new(ChannelRecv { inner })))
+                }))
+            }),
+        );
 
         // dbusServerStart : Unit -> Effect GtkError Unit
-        fields.insert("dbusServerStart".to_string(), builtin("gtk4.dbusServerStart", 1, |mut args, _| {
-            match args.remove(0) { Value::Unit => {} _ => return Err(invalid("expects Unit")) }
-            Ok(effect(move |_| {
-                aivi_gtk4::dbus_server_start().map_err(gtk4_err_to_runtime)?;
-                Ok(Value::Unit)
-            }))
-        }));
-        fields.insert("signalEmit".to_string(), builtin("gtk4.signalEmit", 4, |mut args, _| {
-            let payload = match args.remove(3) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let handler = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let signal = match args.remove(1) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let widget_id = match args.remove(0) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_emit(widget_id, &signal, &handler, &payload).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "dbusServerStart".to_string(),
+            builtin("gtk4.dbusServerStart", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    aivi_gtk4::dbus_server_start().map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+        fields.insert(
+            "signalEmit".to_string(),
+            builtin("gtk4.signalEmit", 4, |mut args, _| {
+                let payload = match args.remove(3) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let handler = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let signal = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_emit(widget_id, &signal, &handler, &payload)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("setInterval".to_string(), builtin("gtk4.setInterval", 1, |mut args, _| {
-            let ms = match args.remove(0) { Value::Int(v) => v as u32, _ => return Err(invalid("expects Int")) };
-            Ok(effect(move |_| { aivi_gtk4::set_interval(ms).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "setInterval".to_string(),
+            builtin("gtk4.setInterval", 1, |mut args, _| {
+                let ms = match args.remove(0) {
+                    Value::Int(v) => v as u32,
+                    _ => return Err(invalid("expects Int")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::set_interval(ms).map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
         // ── Signal bindings ──
-        fields.insert("signalBindBoolProperty".to_string(), builtin("gtk4.signalBindBoolProperty", 4, |mut args, _| {
-            let value = match args.remove(3) { Value::Bool(v) => v, _ => return Err(invalid("expects Bool")) };
-            let prop = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let wid = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let handler = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_bind_bool_property(&handler, wid, &prop, value).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "signalBindBoolProperty".to_string(),
+            builtin("gtk4.signalBindBoolProperty", 4, |mut args, _| {
+                let value = match args.remove(3) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("expects Bool")),
+                };
+                let prop = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let wid = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let handler = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_bind_bool_property(&handler, wid, &prop, value)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("signalBindCssClass".to_string(), builtin("gtk4.signalBindCssClass", 4, |mut args, _| {
-            let add = match args.remove(3) { Value::Bool(v) => v, _ => return Err(invalid("expects Bool")) };
-            let class = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let wid = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let handler = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_bind_css_class(&handler, wid, &class, add).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "signalBindCssClass".to_string(),
+            builtin("gtk4.signalBindCssClass", 4, |mut args, _| {
+                let add = match args.remove(3) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("expects Bool")),
+                };
+                let class = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let wid = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let handler = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_bind_css_class(&handler, wid, &class, add)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("signalBindToggleBoolProperty".to_string(), builtin("gtk4.signalBindToggleBoolProperty", 3, |mut args, _| {
-            let prop = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let wid = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let handler = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_bind_toggle_bool_property(&handler, wid, &prop).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "signalBindToggleBoolProperty".to_string(),
+            builtin("gtk4.signalBindToggleBoolProperty", 3, |mut args, _| {
+                let prop = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let wid = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let handler = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_bind_toggle_bool_property(&handler, wid, &prop)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("signalToggleCssClass".to_string(), builtin("gtk4.signalToggleCssClass", 3, |mut args, _| {
-            let class = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let wid = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let handler = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_toggle_css_class(&handler, wid, &class).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "signalToggleCssClass".to_string(),
+            builtin("gtk4.signalToggleCssClass", 3, |mut args, _| {
+                let class = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let wid = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let handler = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_toggle_css_class(&handler, wid, &class)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("signalBindDialogPresent".to_string(), builtin("gtk4.signalBindDialogPresent", 3, |mut args, _| {
-            let parent_id = match args.remove(2) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let dialog_id = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let handler = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_bind_dialog_present(&handler, dialog_id, parent_id).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "signalBindDialogPresent".to_string(),
+            builtin("gtk4.signalBindDialogPresent", 3, |mut args, _| {
+                let parent_id = match args.remove(2) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let dialog_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let handler = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_bind_dialog_present(&handler, dialog_id, parent_id)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("signalBindStackPage".to_string(), builtin("gtk4.signalBindStackPage", 3, |mut args, _| {
-            let page = match args.remove(2) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            let stack_id = match args.remove(1) { Value::Int(v) => v, _ => return Err(invalid("expects Int")) };
-            let handler = match args.remove(0) { Value::Text(v) => v, _ => return Err(invalid("expects Text")) };
-            Ok(effect(move |_| { aivi_gtk4::signal_bind_stack_page(&handler, stack_id, &page).map_err(gtk4_err_to_runtime)?; Ok(Value::Unit) }))
-        }));
+        fields.insert(
+            "signalBindStackPage".to_string(),
+            builtin("gtk4.signalBindStackPage", 3, |mut args, _| {
+                let page = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                let stack_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("expects Int")),
+                };
+                let handler = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("expects Text")),
+                };
+                Ok(effect(move |_| {
+                    aivi_gtk4::signal_bind_stack_page(&handler, stack_id, &page)
+                        .map_err(gtk4_err_to_runtime)?;
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
 
-        fields.insert("serializeSignal".to_string(), builtin("gtk4.serializeSignal", 1, |mut args, _| {
-            let val = args.pop().unwrap();
-            Ok(Value::Text(serialize_signal_value(&val)))
-        }));
+        fields.insert(
+            "serializeSignal".to_string(),
+            builtin("gtk4.serializeSignal", 1, |mut args, _| {
+                let val = args.pop().unwrap();
+                Ok(Value::Text(serialize_signal_value(&val)))
+            }),
+        );
 
         fields
     }
@@ -2049,8 +2619,7 @@ mod tests {
     use super::super::gtk4::{GtkCallbackArgMode, ResolvedGtkAttr, ResolvedGtkNode};
     use super::bridge::{
         execute_runtime_handler, make_signal_event_value, materialize_app_window_with_bindings,
-        materialize_with_bindings,
-        ui_debug_inspect_signal_json, ui_debug_list_signals_json,
+        materialize_with_bindings, ui_debug_inspect_signal_json, ui_debug_list_signals_json,
         wrap_runtime_handler,
     };
     use crate::runtime::builtins::builtin;
@@ -2058,7 +2627,7 @@ mod tests {
     use crate::runtime::environment::{Env, RuntimeContext};
     use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend, ChannelSender};
     use crate::runtime::{
-        format_runtime_error, format_value, CancelToken, EffectValue, Runtime, RuntimeError, Value,
+        CancelToken, EffectValue, Runtime, RuntimeError, Value, format_runtime_error, format_value,
     };
 
     fn test_ctx() -> Arc<RuntimeContext> {
@@ -2078,11 +2647,7 @@ mod tests {
         }
     }
 
-    fn signal_event(
-        widget_name: &str,
-        signal: &str,
-        payload: &str,
-    ) -> aivi_gtk4::SignalEvent {
+    fn signal_event(widget_name: &str, signal: &str, payload: &str) -> aivi_gtk4::SignalEvent {
         aivi_gtk4::SignalEvent {
             widget_id: 42,
             widget_name: widget_name.to_string(),
@@ -2172,7 +2737,10 @@ mod tests {
             children: Vec::new(),
         };
 
-        let result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build entry");
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build entry",
+        );
         let entry_id = *result
             .named_widgets
             .get("entry")
@@ -2185,7 +2753,10 @@ mod tests {
         (runtime, text, entry_id)
     }
 
-    fn build_text_bound_entry(ctx: Arc<RuntimeContext>, initial_text: &str) -> (Runtime, Value, i64) {
+    fn build_text_bound_entry(
+        ctx: Arc<RuntimeContext>,
+        initial_text: &str,
+    ) -> (Runtime, Value, i64) {
         build_text_bound_editable(ctx, "GtkEntry", initial_text)
     }
 
@@ -2330,8 +2901,9 @@ mod tests {
             .get("selection-editor")
             .expect("selection editor widget should be named");
         assert!(
-            aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
-                .unwrap_or_else(|err| panic!("read initial placeholder visibility: {}", err.message))
+            aivi_gtk4::widget_get_bool_property(placeholder_id, "visible").unwrap_or_else(
+                |err| panic!("read initial placeholder visibility: {}", err.message)
+            )
         );
         assert!(
             !aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
@@ -2342,14 +2914,23 @@ mod tests {
                 .unwrap_or_else(|err| panic!("read initial editor text: {}", err.message)),
             ""
         );
-        (runtime, selected, placeholder_id, account_card_id, editor_id)
+        (
+            runtime,
+            selected,
+            placeholder_id,
+            account_card_id,
+            editor_id,
+        )
     }
 
     #[test]
     fn ui_debug_signal_snapshot_reports_dependencies_and_watchers() {
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
-        let count = ok_or_panic(runtime.reactive_create_signal(Value::Int(1)), "create signal");
+        let count = ok_or_panic(
+            runtime.reactive_create_signal(Value::Int(1)),
+            "create signal",
+        );
         let mapper = builtin("test.signalMapper", 1, |mut args, _| {
             let value = match args.remove(0) {
                 Value::Int(value) => value,
@@ -2376,8 +2957,14 @@ mod tests {
             Value::Signal(signal) => signal.id,
             other => panic!("expected derived signal, got {:?}", other),
         };
-        let detail = ui_debug_inspect_signal_json(ctx.as_ref(), &json!({ "signalId": derived_id }).as_object().cloned().expect("params"))
-            .expect("inspect signal");
+        let detail = ui_debug_inspect_signal_json(
+            ctx.as_ref(),
+            &json!({ "signalId": derived_id })
+                .as_object()
+                .cloned()
+                .expect("params"),
+        )
+        .expect("inspect signal");
         let signal = &detail["signal"];
         assert_eq!(signal["id"].as_u64(), Some(derived_id as u64));
         assert_eq!(
@@ -2421,7 +3008,10 @@ mod tests {
     fn runtime_handler_callback_updates_shared_signal_graph() {
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
-        let count = ok_or_panic(runtime.reactive_create_signal(Value::Int(0)), "create signal");
+        let count = ok_or_panic(
+            runtime.reactive_create_signal(Value::Int(0)),
+            "create signal",
+        );
         let count_for_handler = count.clone();
         let handler = builtin("test.gtkRuntimeHandler", 1, move |mut args, runtime| {
             let _event = args.remove(0);
@@ -2650,10 +3240,15 @@ mod tests {
         let (mut runtime, text, entry_id) = build_text_bound_entry(ctx.clone(), "before");
 
         let text_for_handler = text.clone();
-        let handler = builtin("test.gtkRuntimeHandlerDeferred", 1, move |mut args, runtime| {
-            let _event = args.remove(0);
-            runtime.reactive_set_signal(text_for_handler.clone(), Value::Text("after".to_string()))
-        });
+        let handler = builtin(
+            "test.gtkRuntimeHandlerDeferred",
+            1,
+            move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime
+                    .reactive_set_signal(text_for_handler.clone(), Value::Text("after".to_string()))
+            },
+        );
         let handler_ctx = ctx.clone();
         std::thread::spawn(move || {
             ok_or_panic(
@@ -2664,7 +3259,10 @@ mod tests {
         .join()
         .expect("runtime handler thread should not panic");
 
-        match ok_or_panic(runtime.reactive_get_signal(text), "read updated source text") {
+        match ok_or_panic(
+            runtime.reactive_get_signal(text),
+            "read updated source text",
+        ) {
             Value::Text(value) => assert_eq!(value, "after"),
             other => panic!("expected updated Text, got {other:?}"),
         }
@@ -2736,7 +3334,10 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
 
-        assert!(updated, "expected GTK main-loop tick to flush deferred bindings");
+        assert!(
+            updated,
+            "expected GTK main-loop tick to flush deferred bindings"
+        );
         assert!(
             !runtime.reactive_graph.lock().deferred_flush,
             "main-loop tick should clear deferred flush state"
@@ -2751,7 +3352,8 @@ mod tests {
         ensure_gtk();
         for class_name in ["GtkEntry", "GtkSearchEntry", "AdwEntryRow"] {
             let ctx = test_ctx();
-            let (mut runtime, text, entry_id) = build_text_bound_editable(ctx.clone(), class_name, "");
+            let (mut runtime, text, entry_id) =
+                build_text_bound_editable(ctx.clone(), class_name, "");
             let gtk4_record = super::super::gtk4::build_gtk4_record();
             let init_effect = ok_or_panic(
                 runtime.apply(record_field(&gtk4_record, "init"), Value::Unit),
@@ -2766,8 +3368,10 @@ mod tests {
                 aivi_gtk4::editable_set_text(entry_id, typed)
                     .unwrap_or_else(|err| panic!("seed typed entry text {typed}: {}", err.message));
                 assert_eq!(
-                    aivi_gtk4::editable_cursor_position(entry_id)
-                        .unwrap_or_else(|err| panic!("read seeded cursor position {typed}: {}", err.message)),
+                    aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
+                        "read seeded cursor position {typed}: {}",
+                        err.message
+                    )),
                     typed.chars().count() as i64,
                     "expected seeded cursor to be at the end for {class_name} value {typed}"
                 );
@@ -2776,7 +3380,10 @@ mod tests {
                 let typed_value = typed.to_string();
                 let handler = builtin("test.gtkInputCursorTick", 1, move |mut args, runtime| {
                     let _event = args.remove(0);
-                    runtime.reactive_set_signal(text_for_handler.clone(), Value::Text(typed_value.clone()))
+                    runtime.reactive_set_signal(
+                        text_for_handler.clone(),
+                        Value::Text(typed_value.clone()),
+                    )
                 });
                 let handler_ctx = ctx.clone();
                 std::thread::spawn(move || {
@@ -2823,7 +3430,10 @@ mod tests {
                     std::thread::sleep(Duration::from_millis(10));
                 }
 
-                assert!(flushed, "expected typing {typed} into {class_name} to flush on the GTK tick");
+                assert!(
+                    flushed,
+                    "expected typing {typed} into {class_name} to flush on the GTK tick"
+                );
                 assert_eq!(
                     aivi_gtk4::editable_text(entry_id).unwrap_or_else(|err| panic!(
                         "read flushed editable text {class_name} {typed}: {}",
@@ -2835,10 +3445,12 @@ mod tests {
                 let mut cursor_settled = false;
                 for _ in 0..10 {
                     super::pump_gtk_events();
-                    if aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
-                        "read settled cursor position {class_name} {typed}: {}",
-                        err.message
-                    )) == typed.chars().count() as i64
+                    if aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| {
+                        panic!(
+                            "read settled cursor position {class_name} {typed}: {}",
+                            err.message
+                        )
+                    }) == typed.chars().count() as i64
                     {
                         cursor_settled = true;
                         break;
@@ -2883,7 +3495,9 @@ mod tests {
         let derived = ok_or_panic(
             runtime.reactive_derive_signal(
                 text.clone(),
-                builtin("test.deriveMountedAdwEntryText", 1, |mut args, _| Ok(args.remove(0))),
+                builtin("test.deriveMountedAdwEntryText", 1, |mut args, _| {
+                    Ok(args.remove(0))
+                }),
             ),
             "derive mounted entry text",
         );
@@ -2958,14 +3572,17 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(
-            aivi_gtk4::editable_has_focus(entry_id)
-                .unwrap_or_else(|err| panic!("read mounted adw entry focus state: {}", err.message)),
+            aivi_gtk4::editable_has_focus(entry_id).unwrap_or_else(|err| panic!(
+                "read mounted adw entry focus state: {}",
+                err.message
+            )),
             "expected mounted AdwEntryRow delegate to have focus before typing"
         );
 
         for typed in ["H", "He", "Hel", "Hell", "Hello"] {
-            aivi_gtk4::editable_set_text(entry_id, typed)
-                .unwrap_or_else(|err| panic!("seed mounted adw entry text {typed}: {}", err.message));
+            aivi_gtk4::editable_set_text(entry_id, typed).unwrap_or_else(|err| {
+                panic!("seed mounted adw entry text {typed}: {}", err.message)
+            });
             super::pump_gtk_events();
             assert_eq!(
                 aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
@@ -2978,10 +3595,17 @@ mod tests {
 
             let text_for_handler = text.clone();
             let typed_value = typed.to_string();
-            let handler = builtin("test.mountedAdwEntryCursorTick", 1, move |mut args, runtime| {
-                let _event = args.remove(0);
-                runtime.reactive_set_signal(text_for_handler.clone(), Value::Text(typed_value.clone()))
-            });
+            let handler = builtin(
+                "test.mountedAdwEntryCursorTick",
+                1,
+                move |mut args, runtime| {
+                    let _event = args.remove(0);
+                    runtime.reactive_set_signal(
+                        text_for_handler.clone(),
+                        Value::Text(typed_value.clone()),
+                    )
+                },
+            );
             let handler_ctx = ctx.clone();
             std::thread::spawn(move || {
                 ok_or_panic(
@@ -3005,7 +3629,10 @@ mod tests {
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
-            assert!(flushed, "expected mounted AdwEntryRow typing {typed} to flush");
+            assert!(
+                flushed,
+                "expected mounted AdwEntryRow typing {typed} to flush"
+            );
             assert!(
                 aivi_gtk4::editable_has_focus(entry_id).unwrap_or_else(|err| panic!(
                     "read mounted focus state after flush {typed}: {}",
@@ -3017,10 +3644,12 @@ mod tests {
             let mut cursor_settled = false;
             for _ in 0..10 {
                 super::pump_gtk_events();
-                if aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| panic!(
-                    "read mounted settled cursor position {typed}: {}",
-                    err.message
-                )) == typed.chars().count() as i64
+                if aivi_gtk4::editable_cursor_position(entry_id).unwrap_or_else(|err| {
+                    panic!(
+                        "read mounted settled cursor position {typed}: {}",
+                        err.message
+                    )
+                }) == typed.chars().count() as i64
                 {
                     cursor_settled = true;
                     break;
@@ -3050,14 +3679,18 @@ mod tests {
         let derived = ok_or_panic(
             runtime.reactive_derive_signal(
                 source.clone(),
-                builtin("test.failingGtkBinding", 1, |mut args, _| match args.remove(0) {
-                    Value::Bool(false) => Ok(Value::Text("before".to_string())),
-                    Value::Bool(true) => Err(RuntimeError::NonExhaustiveMatch { scrutinee: None }),
-                    other => Err(RuntimeError::TypeError {
-                        context: "test.failingGtkBinding".to_string(),
-                        expected: "Bool".to_string(),
-                        got: format_value(&other),
-                    }),
+                builtin("test.failingGtkBinding", 1, |mut args, _| {
+                    match args.remove(0) {
+                        Value::Bool(false) => Ok(Value::Text("before".to_string())),
+                        Value::Bool(true) => {
+                            Err(RuntimeError::NonExhaustiveMatch { scrutinee: None })
+                        }
+                        other => Err(RuntimeError::TypeError {
+                            context: "test.failingGtkBinding".to_string(),
+                            expected: "Bool".to_string(),
+                            got: format_value(&other),
+                        }),
+                    }
                 }),
             ),
             "derive failing binding",
@@ -3108,8 +3741,10 @@ mod tests {
             "expected the failing binding trace to mention widget id {entry_id}, got: {rendered}"
         );
         assert_eq!(
-            aivi_gtk4::entry_text(entry_id)
-                .unwrap_or_else(|err| panic!("read failing entry text after containment: {}", err.message)),
+            aivi_gtk4::entry_text(entry_id).unwrap_or_else(|err| panic!(
+                "read failing entry text after containment: {}",
+                err.message
+            )),
             "before"
         );
         assert!(
@@ -3117,7 +3752,11 @@ mod tests {
             "contained failures should clear the deferred flush flag"
         );
         assert!(
-            runtime.reactive_graph.lock().pending_notifications.is_empty(),
+            runtime
+                .reactive_graph
+                .lock()
+                .pending_notifications
+                .is_empty(),
             "contained failures should not leave pending notifications behind"
         );
     }
@@ -3131,27 +3770,39 @@ mod tests {
             build_multihop_selection_bindings(ctx.clone());
 
         let selected_for_handler = selected.clone();
-        let handler = builtin("test.multiHopGtkRuntimeHandler", 1, move |mut args, runtime| {
-            let _event = args.remove(0);
-            runtime.reactive_set_signal(selected_for_handler.clone(), Value::Bool(true))
-        });
+        let handler = builtin(
+            "test.multiHopGtkRuntimeHandler",
+            1,
+            move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime.reactive_set_signal(selected_for_handler.clone(), Value::Bool(true))
+            },
+        );
 
         ok_or_panic(
             execute_runtime_handler(ctx, handler, clicked_event()),
             "run multihop selection handler",
         );
 
-        match ok_or_panic(runtime.reactive_get_signal(selected), "read updated selected signal") {
+        match ok_or_panic(
+            runtime.reactive_get_signal(selected),
+            "read updated selected signal",
+        ) {
             Value::Bool(value) => assert!(value),
             other => panic!("expected Bool(true), got {other:?}"),
         }
         assert!(
-            runtime.reactive_graph.lock().pending_notifications.is_empty(),
+            runtime
+                .reactive_graph
+                .lock()
+                .pending_notifications
+                .is_empty(),
             "handler flush should drain pending notifications"
         );
         assert!(
-            !aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
-                .unwrap_or_else(|err| panic!("read updated placeholder visibility: {}", err.message))
+            !aivi_gtk4::widget_get_bool_property(placeholder_id, "visible").unwrap_or_else(
+                |err| panic!("read updated placeholder visibility: {}", err.message)
+            )
         );
         assert!(
             aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
@@ -3195,10 +3846,8 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
             let handler = builtin("test.gtkRuntimeHandlerRecv", 1, move |mut args, runtime| {
                 let _event = args.remove(0);
-                runtime.reactive_set_signal(
-                    text_for_handler.clone(),
-                    Value::Text("after".to_string()),
-                )
+                runtime
+                    .reactive_set_signal(text_for_handler.clone(), Value::Text("after".to_string()))
             });
             ok_or_panic(
                 execute_runtime_handler(handler_ctx, handler, clicked_event()),
@@ -3249,7 +3898,10 @@ mod tests {
     fn runtime_event_handle_runs_shared_effect() {
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
-        let count = ok_or_panic(runtime.reactive_create_signal(Value::Int(0)), "create signal");
+        let count = ok_or_panic(
+            runtime.reactive_create_signal(Value::Int(0)),
+            "create signal",
+        );
         let count_for_effect = count.clone();
         let run = Value::Effect(Arc::new(EffectValue::Thunk {
             func: Arc::new(move |runtime| {
@@ -3297,7 +3949,10 @@ mod tests {
             children: Vec::new(),
         };
 
-        let result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build entry");
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build entry",
+        );
         let entry_id = *result
             .named_widgets
             .get("entry")
@@ -3437,10 +4092,7 @@ mod tests {
         );
 
         ok_or_panic(
-            runtime.reactive_set_signal(
-                classes,
-                Value::Text("flat account-list-item".to_string()),
-            ),
+            runtime.reactive_set_signal(classes, Value::Text("flat account-list-item".to_string())),
             "clear selected css classes",
         );
         assert!(
@@ -3810,9 +4462,11 @@ mod tests {
                             name: "GtkBoundProp".to_string(),
                             args: vec![
                                 Value::Text("text".to_string()),
-                                Value::Int(runtime.ctx.capture_gtk_binding(
-                                    shared_text_for_template.clone(),
-                                )),
+                                Value::Int(
+                                    runtime
+                                        .ctx
+                                        .capture_gtk_binding(shared_text_for_template.clone()),
+                                ),
                             ],
                         },
                     ])),
@@ -3840,8 +4494,8 @@ mod tests {
             materialize_with_bindings(&node, &mut runtime),
             "build dynamic each",
         );
-        let first_entry_id =
-            aivi_gtk4::widget_by_id("entry-1").unwrap_or_else(|err| panic!("lookup entry-1: {}", err.message));
+        let first_entry_id = aivi_gtk4::widget_by_id("entry-1")
+            .unwrap_or_else(|err| panic!("lookup entry-1: {}", err.message));
         assert_eq!(
             aivi_gtk4::entry_text(first_entry_id)
                 .unwrap_or_else(|err| panic!("read entry-1: {}", err.message)),
@@ -3855,8 +4509,8 @@ mod tests {
             ),
             "grow items",
         );
-        let second_entry_id =
-            aivi_gtk4::widget_by_id("entry-2").unwrap_or_else(|err| panic!("lookup entry-2: {}", err.message));
+        let second_entry_id = aivi_gtk4::widget_by_id("entry-2")
+            .unwrap_or_else(|err| panic!("lookup entry-2: {}", err.message));
         assert_eq!(
             aivi_gtk4::entry_text(second_entry_id)
                 .unwrap_or_else(|err| panic!("read entry-2: {}", err.message)),
@@ -3974,7 +4628,8 @@ mod tests {
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx, CancelToken::root());
         let items = ok_or_panic(
-            runtime.reactive_create_signal(Value::List(Arc::new(vec![Value::Int(1), Value::Int(2)]))),
+            runtime
+                .reactive_create_signal(Value::List(Arc::new(vec![Value::Int(1), Value::Int(2)]))),
             "create keyed items signal",
         );
         let template = builtin("test.keyedEachTemplate", 1, |mut args, _runtime| {
@@ -4027,7 +4682,10 @@ mod tests {
             }],
         };
 
-        let result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build keyed each");
+        let result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build keyed each",
+        );
         let root_id = *result
             .named_widgets
             .get("root-keyed")
@@ -4038,7 +4696,10 @@ mod tests {
             .unwrap_or_else(|err| panic!("lookup keyed-entry-2: {}", err.message));
 
         ok_or_panic(
-            runtime.reactive_set_signal(items, Value::List(Arc::new(vec![Value::Int(2), Value::Int(1)]))),
+            runtime.reactive_set_signal(
+                items,
+                Value::List(Arc::new(vec![Value::Int(2), Value::Int(1)])),
+            ),
             "reorder keyed items",
         );
 
@@ -4066,7 +4727,8 @@ mod tests {
         let ctx = test_ctx();
         let mut runtime = Runtime::new(ctx.clone(), CancelToken::root());
         let items = ok_or_panic(
-            runtime.reactive_create_signal(Value::List(Arc::new(vec![Value::Int(1), Value::Int(2)]))),
+            runtime
+                .reactive_create_signal(Value::List(Arc::new(vec![Value::Int(1), Value::Int(2)]))),
             "create items signal",
         );
         let shared_text = ok_or_panic(
@@ -4100,9 +4762,11 @@ mod tests {
                             name: "GtkBoundProp".to_string(),
                             args: vec![
                                 Value::Text("text".to_string()),
-                                Value::Int(runtime.ctx.capture_gtk_binding(
-                                    shared_text_for_template.clone(),
-                                )),
+                                Value::Int(
+                                    runtime
+                                        .ctx
+                                        .capture_gtk_binding(shared_text_for_template.clone()),
+                                ),
                             ],
                         },
                     ])),
@@ -4133,7 +4797,10 @@ mod tests {
             }],
         };
 
-        let _result = ok_or_panic(materialize_with_bindings(&node, &mut runtime), "build cleanup each");
+        let _result = ok_or_panic(
+            materialize_with_bindings(&node, &mut runtime),
+            "build cleanup each",
+        );
         let removed_entry_id = aivi_gtk4::widget_by_id("cleanup-entry-2")
             .unwrap_or_else(|err| panic!("lookup cleanup-entry-2: {}", err.message));
 
@@ -4238,8 +4905,7 @@ mod tests {
             .get("cleanup-dialog-entry")
             .expect("cleanup dialog entry should be named");
         assert_eq!(
-            ui_debug_list_signals_json(ctx.as_ref())
-                .expect("list dialog signals")["watcherCount"]
+            ui_debug_list_signals_json(ctx.as_ref()).expect("list dialog signals")["watcherCount"]
                 .as_u64(),
             Some(1)
         );
@@ -4257,8 +4923,8 @@ mod tests {
         for _ in 0..50 {
             super::pump_gtk_events();
             std::thread::sleep(Duration::from_millis(10));
-            if ui_debug_list_signals_json(ctx.as_ref())
-                .expect("list signals after dialog close")["watcherCount"]
+            if ui_debug_list_signals_json(ctx.as_ref()).expect("list signals after dialog close")
+                ["watcherCount"]
                 .as_u64()
                 == Some(0)
             {
@@ -4267,8 +4933,7 @@ mod tests {
         }
 
         assert_eq!(
-            ui_debug_list_signals_json(ctx.as_ref())
-                .expect("final dialog signals")["watcherCount"]
+            ui_debug_list_signals_json(ctx.as_ref()).expect("final dialog signals")["watcherCount"]
                 .as_u64(),
             Some(0)
         );
@@ -4363,8 +5028,8 @@ mod tests {
             .get("persistent-dialog-entry")
             .expect("persistent dialog entry should be named");
         assert_eq!(
-            ui_debug_list_signals_json(ctx.as_ref())
-                .expect("list persistent dialog signals")["watcherCount"]
+            ui_debug_list_signals_json(ctx.as_ref()).expect("list persistent dialog signals")
+                ["watcherCount"]
                 .as_u64(),
             Some(2)
         );
@@ -4664,8 +5329,8 @@ mod tests {
             .get("background-persistent-dialog-entry")
             .expect("background dialog entry should be named");
         assert_eq!(
-            ui_debug_list_signals_json(ctx.as_ref())
-                .expect("list background dialog signals")["watcherCount"]
+            ui_debug_list_signals_json(ctx.as_ref()).expect("list background dialog signals")
+                ["watcherCount"]
                 .as_u64(),
             Some(2)
         );
@@ -4717,9 +5382,7 @@ mod tests {
             super::pump_gtk_events();
             loop {
                 match signal_stream.try_recv() {
-                    Ok(event)
-                        if event.widget_id == result.root_id && event.signal == "closed" =>
-                    {
+                    Ok(event) if event.widget_id == result.root_id && event.signal == "closed" => {
                         saw_close = true;
                         break;
                     }
@@ -4796,7 +5459,9 @@ mod tests {
         let selection_state = ok_or_panic(
             runtime.reactive_derive_signal(
                 selected.clone(),
-                builtin("test.dialogSelectionState", 1, |mut args, _| Ok(args.remove(0))),
+                builtin("test.dialogSelectionState", 1, |mut args, _| {
+                    Ok(args.remove(0))
+                }),
             ),
             "derive dialog selection state",
         );
@@ -4951,12 +5616,19 @@ mod tests {
             .expect("dialog editor widget should be named");
 
         assert!(
-            aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
-                .unwrap_or_else(|err| panic!("read initial dialog placeholder visibility: {}", err.message))
+            aivi_gtk4::widget_get_bool_property(placeholder_id, "visible").unwrap_or_else(
+                |err| panic!(
+                    "read initial dialog placeholder visibility: {}",
+                    err.message
+                )
+            )
         );
         assert!(
             !aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
-                .unwrap_or_else(|err| panic!("read initial dialog selected class: {}", err.message))
+                .unwrap_or_else(|err| panic!(
+                    "read initial dialog selected class: {}",
+                    err.message
+                ))
         );
         assert_eq!(
             aivi_gtk4::entry_text(editor_id)
@@ -4965,31 +5637,49 @@ mod tests {
         );
 
         let selected_for_handler = selected.clone();
-        let handler = builtin("test.dialogMultihopSelectionHandler", 1, move |mut args, runtime| {
-            let _event = args.remove(0);
-            runtime.reactive_set_signal(selected_for_handler.clone(), Value::Bool(true))
-        });
+        let handler = builtin(
+            "test.dialogMultihopSelectionHandler",
+            1,
+            move |mut args, runtime| {
+                let _event = args.remove(0);
+                runtime.reactive_set_signal(selected_for_handler.clone(), Value::Bool(true))
+            },
+        );
 
         ok_or_panic(
             execute_runtime_handler(ctx, handler, clicked_event()),
             "run dialog multihop handler",
         );
 
-        match ok_or_panic(runtime.reactive_get_signal(selected), "read updated dialog selected signal") {
+        match ok_or_panic(
+            runtime.reactive_get_signal(selected),
+            "read updated dialog selected signal",
+        ) {
             Value::Bool(value) => assert!(value),
             other => panic!("expected Bool(true), got {other:?}"),
         }
         assert!(
-            runtime.reactive_graph.lock().pending_notifications.is_empty(),
+            runtime
+                .reactive_graph
+                .lock()
+                .pending_notifications
+                .is_empty(),
             "dialog handler flush should drain pending notifications"
         );
         assert!(
-            !aivi_gtk4::widget_get_bool_property(placeholder_id, "visible")
-                .unwrap_or_else(|err| panic!("read updated dialog placeholder visibility: {}", err.message))
+            !aivi_gtk4::widget_get_bool_property(placeholder_id, "visible").unwrap_or_else(
+                |err| panic!(
+                    "read updated dialog placeholder visibility: {}",
+                    err.message
+                )
+            )
         );
         assert!(
             aivi_gtk4::widget_has_css_class(account_card_id, "account-list-item-selected")
-                .unwrap_or_else(|err| panic!("read updated dialog selected class: {}", err.message))
+                .unwrap_or_else(|err| panic!(
+                    "read updated dialog selected class: {}",
+                    err.message
+                ))
         );
         assert_eq!(
             aivi_gtk4::entry_text(editor_id)

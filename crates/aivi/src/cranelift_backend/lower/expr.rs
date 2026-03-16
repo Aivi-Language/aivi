@@ -98,7 +98,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 index,
                 location,
                 ..
-            } => self.lower_index(builder, base, index, location.as_deref()),
+            } => self.lower_index(builder, base, index, location.as_ref()),
 
             // ----- Control flow -----
             RustIrExpr::If {
@@ -109,10 +109,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             } => self.lower_if(builder, cond, then_branch, else_branch),
             RustIrExpr::Match {
                 scrutinee, arms, location, ..
-            } => self.lower_match(builder, scrutinee, arms, location.as_deref()),
+            } => self.lower_match(builder, scrutinee, arms, location.as_ref()),
             RustIrExpr::Binary {
                 op, left, right, location, ..
-            } => self.lower_binary(builder, op, left, right, location.as_deref()),
+            } => self.lower_binary(builder, op, left, right, location.as_ref()),
 
             RustIrExpr::Pipe { func, arg, .. } => self.lower_app(builder, func, arg),
 
@@ -835,7 +835,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         base: &RustIrExpr,
         index: &RustIrExpr,
-        location: Option<&str>,
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
         if let Some(loc) = location {
             self.emit_set_location(builder, loc);
@@ -924,7 +924,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         scrutinee: &RustIrExpr,
         arms: &[RustIrMatchArm],
-        location: Option<&str>,
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
         if let Some(loc) = location {
             self.emit_set_location(builder, loc);

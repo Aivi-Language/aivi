@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -14,7 +15,7 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
 use tokio::net::TcpListener;
 use tokio::runtime::{Handle, Runtime};
-use tokio::sync::{oneshot, Mutex as TokioMutex};
+use tokio::sync::{Mutex as TokioMutex, oneshot};
 
 pub struct AiviRequest {
     pub method: String,
@@ -153,6 +154,7 @@ pub fn start_server(addr: SocketAddr, handler: Handler) -> Result<ServerHandle, 
             })?,
     );
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let (ready_tx, ready_rx) = mpsc::sync_channel(1);
 
     let runtime_clone = runtime.clone();
     let join_handle = thread::spawn(move || {
@@ -160,8 +162,16 @@ pub fn start_server(addr: SocketAddr, handler: Handler) -> Result<ServerHandle, 
         let runtime_handle = runtime_clone.handle().clone();
         let server_future = async move {
             let listener = match TcpListener::bind(addr).await {
-                Ok(value) => value,
-                Err(_) => return,
+                Ok(value) => {
+                    let _ = ready_tx.send(Ok(()));
+                    value
+                }
+                Err(err) => {
+                    let _ = ready_tx.send(Err(AiviHttpError {
+                        message: err.to_string(),
+                    }));
+                    return;
+                }
             };
             let mut shutdown_rx = shutdown_rx;
 
@@ -193,6 +203,20 @@ pub fn start_server(addr: SocketAddr, handler: Handler) -> Result<ServerHandle, 
 
         runtime_clone.block_on(server_future);
     });
+
+    match ready_rx.recv() {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            let _ = join_handle.join();
+            return Err(err);
+        }
+        Err(_) => {
+            let _ = join_handle.join();
+            return Err(AiviHttpError {
+                message: "server failed to report readiness".to_string(),
+            });
+        }
+    }
 
     Ok(ServerHandle {
         runtime,

@@ -120,8 +120,20 @@ pub(super) fn build_secrets_record() -> Value {
         "validateBlob".to_string(),
         builtin("secrets.validateBlob", 1, |mut args, _| {
             let record = expect_record(args.pop().unwrap(), "secrets.validateBlob")?;
-            let has_key_id = record.contains_key("keyId");
-            let has_algorithm = record.contains_key("algorithm");
+            let has_key_id = record
+                .get("keyId")
+                .and_then(|value| match value {
+                    Value::Text(text) => Some(!text.is_empty()),
+                    _ => None,
+                })
+                .unwrap_or(false);
+            let has_algorithm = record
+                .get("algorithm")
+                .and_then(|value| match value {
+                    Value::Text(text) => Some(!text.is_empty()),
+                    _ => None,
+                })
+                .unwrap_or(false);
             let has_ciphertext = record
                 .get("ciphertext")
                 .map(|value| matches!(value, Value::Bytes(_)))

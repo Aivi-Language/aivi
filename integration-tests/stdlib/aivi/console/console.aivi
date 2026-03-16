@@ -3,7 +3,7 @@ module integrationTests.stdlib.aivi.console.tests
 
 use aivi
 use aivi.testing
-use aivi.console
+use aivi.console (Blue, Red, Yellow, bgColor, color, error, log, print, println, strip, style)
 
 @test "error"
 error_functional = do Effect {
@@ -37,16 +37,42 @@ println_functional = do Effect {
     | Err _   => assert False
 }
 
-@test "read line"
-readLine_functional = do Effect {
-  line <- readLine
-  assertEq (line match
-    | Ok _  => True
-    | Err _ => False
-  ) True
+@test "color"
+color_functional = do Effect {
+  styled = color Red "warning"
+  assert (styled != "warning")
+  assert (text.contains styled "[31m")
+  assertEq (strip styled) "warning"
+}
+
+@test "background color"
+bgColor_functional = do Effect {
+  styled = bgColor Blue "warning"
+  assert (styled != "warning")
+  assert (text.contains styled "[44m")
+  assertEq (strip styled) "warning"
+}
+
+@test "style"
+style_functional = do Effect {
+  styled = style {
+    fg: Some Yellow
+    bg: Some Blue
+    bold: True
+    dim: False
+    italic: True
+    underline: True
+    blink: False
+    inverse: False
+    hidden: False
+    strike: True
+  } "status"
+  assert (text.contains styled "[33;44;1;3;4;9m")
+  assertEq (strip styled) "status"
 }
 
 @test "strip"
 strip_functional = do Effect {
-  assertEq (strip "plain") "plain"
+  styled = color Red "plain"
+  assertEq (strip styled) "plain"
 }

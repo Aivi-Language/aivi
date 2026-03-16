@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -121,7 +122,8 @@ pub(crate) fn run_watch(
                     eprintln!("\x1b[1;31m[watch]\x1b[0m compile errors — waiting for changes…");
                 }
                 Ok(Err(err)) => {
-                    eprintln!("\x1b[1;31m[watch]\x1b[0m error: {err}");
+                    eprintln!("\x1b[1;31m[watch]\x1b[0m error:");
+                    eprintln!("{}", err.render(std::io::stderr().is_terminal()));
                 }
                 Err(()) => {
                     eprintln!("\x1b[1;31m[watch]\x1b[0m program panicked — waiting for changes…");

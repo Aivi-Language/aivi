@@ -14,7 +14,8 @@ impl TypeChecker {
             }
             Type::App(base, args) => match &*base {
                 Type::Con(name, existing)
-                    if self.type_name_matches(name, "Signal") && existing.len() + args.len() == 1 =>
+                    if self.type_name_matches(name, "Signal")
+                        && existing.len() + args.len() == 1 =>
                 {
                     args.last().cloned().or_else(|| existing.last().cloned())
                 }
@@ -106,15 +107,28 @@ impl TypeChecker {
             let arg_ty = self.infer_expr(left, env)?;
             let right = self.normalize_pipe_transformer(right, env);
             if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
-                eprintln!("[PIPE_INNER] |> right after normalize: disc={:?}", std::mem::discriminant(&right));
+                eprintln!(
+                    "[PIPE_INNER] |> right after normalize: disc={:?}",
+                    std::mem::discriminant(&right)
+                );
             }
             // Special case: if the RHS is a partially-applied class method call, collect all
             // arguments including the piped LHS value so instance dispatch sees the full picture.
             // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
-            if let Expr::Call { func, args: partial_args, .. } = &right {
+            if let Expr::Call {
+                func,
+                args: partial_args,
+                ..
+            } = &right
+            {
                 if let Expr::Ident(name) = func.as_ref() {
                     if debug_pipe {
-                        eprintln!("[PIPE_DEBUG] |> right=Call({}) in_env={} in_methods={}", name.name, env.get(&name.name).is_some(), self.method_to_classes.contains_key(&name.name));
+                        eprintln!(
+                            "[PIPE_DEBUG] |> right=Call({}) in_env={} in_methods={}",
+                            name.name,
+                            env.get(&name.name).is_some(),
+                            self.method_to_classes.contains_key(&name.name)
+                        );
                     }
                     if env.get(&name.name).is_none()
                         && self.method_to_classes.contains_key(&name.name)
@@ -139,7 +153,10 @@ impl TypeChecker {
             let arg_ty = self.infer_expr(left, env)?;
             let right = self.normalize_pipe_transformer(right, env);
             if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
-                eprintln!("[SIG_PIPE] right after normalize: disc={:?}", std::mem::discriminant(&right));
+                eprintln!(
+                    "[SIG_PIPE] right after normalize: disc={:?}",
+                    std::mem::discriminant(&right)
+                );
             }
             if let Some(signal_item_ty) = self.extract_signal_item_type(arg_ty.clone()) {
                 return self.infer_signal_pipe_result(left, &right, signal_item_ty, env);
@@ -222,11 +239,15 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
                 let both_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let both_bigint = matches!(left_applied, Type::Con(ref name, _) if name == "BigInt")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "BigInt");
                 let both_text = matches!(left_applied, Type::Con(ref name, _) if name == "Text")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Text");
                 // Check if either operand is Float (the other might be a type variable)
-                let left_is_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float");
-                let right_is_float = matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let left_is_float =
+                    matches!(left_applied, Type::Con(ref name, _) if name == "Float");
+                let right_is_float =
+                    matches!(right_applied, Type::Con(ref name, _) if name == "Float");
                 let either_float = left_is_float || right_is_float;
 
                 // Text comparison is built-in (lexicographic / Unicode codepoint order)
@@ -236,6 +257,10 @@ impl TypeChecker {
 
                 // Float comparison is built-in like Int
                 if both_float {
+                    return Ok(Type::con("Bool"));
+                }
+
+                if both_bigint {
                     return Ok(Type::con("Bool"));
                 }
 
@@ -306,9 +331,14 @@ impl TypeChecker {
                                 continue;
                             }
 
-                            let key_ty = Type::Func(Box::new(right_ty_for_unify), Box::new(Type::con("Bool")));
+                            let key_ty = Type::Func(
+                                Box::new(right_ty_for_unify),
+                                Box::new(Type::con("Bool")),
+                            );
                             let key = self.type_to_string(&key_ty);
-                            if let Some((existing_key, existing_origin, existing_sig, _)) = &selected {
+                            if let Some((existing_key, existing_origin, existing_sig, _)) =
+                                &selected
+                            {
                                 if *existing_key != key {
                                     // Check if the operand is a type variable - if so, suggest adding a type annotation
                                     let left_ty_resolved = self.apply(left_ty.clone());
@@ -371,9 +401,14 @@ impl TypeChecker {
                 let both_float = allow_int_fallback
                     && matches!(left_applied, Type::Con(ref name, _) if name == "Float")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let both_bigint = allow_int_fallback
+                    && matches!(left_applied, Type::Con(ref name, _) if name == "BigInt")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "BigInt");
                 // Check if either operand is Float (the other might be a type variable)
-                let left_is_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float");
-                let right_is_float = matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let left_is_float =
+                    matches!(left_applied, Type::Con(ref name, _) if name == "Float");
+                let right_is_float =
+                    matches!(right_applied, Type::Con(ref name, _) if name == "Float");
                 let either_float = allow_int_fallback && (left_is_float || right_is_float);
                 // Float shortcut only applies when the non-Float operand is a type variable or also
                 // Float/Int. If the non-Float operand is a concrete domain type (e.g. Vec4), domain
@@ -399,6 +434,10 @@ impl TypeChecker {
                     return Ok(Type::con("Float"));
                 }
 
+                if both_bigint && matches!(op, "+" | "-" | "*") {
+                    return Ok(Type::con("BigInt"));
+                }
+
                 // If one operand is Float and the other is a type variable, unify with Float.
                 // Skip if the non-Float side is a concrete domain type — domain operators must
                 // be resolved first.
@@ -415,11 +454,6 @@ impl TypeChecker {
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(candidates) = env.get_all(&op_name) {
                         let candidates: Vec<Scheme> = candidates.to_vec();
-
-                        // Debug: show all candidates
-                        if std::env::var("AIVI_DEBUG_DOMAIN").is_ok() {
-                            eprintln!("DEBUG: {} candidates for '{}' operator", candidates.len(), op);
-                        }
 
                         // Use subst_after_operands as base so operand types are already constrained
                         let base_subst = subst_after_operands.clone();
@@ -455,7 +489,10 @@ impl TypeChecker {
                                     eprintln!("DEBUG: subst has {} mappings", self.subst.len());
                                     if let Type::Var(v) = &left_ty {
                                         let mapped = self.subst.get(v).cloned();
-                                        eprintln!("DEBUG: left_ty var {:?} maps to {:?}", v, mapped);
+                                        eprintln!(
+                                            "DEBUG: left_ty var {:?} maps to {:?}",
+                                            v, mapped
+                                        );
                                     }
                                 }
                             }
@@ -466,11 +503,17 @@ impl TypeChecker {
                                 let op_param_expanded = self.expand_alias((**op_param).clone());
                                 // Check if operator expects more fields than operand has
                                 if let (
-                                    Type::Record { fields: op_fields, .. },
-                                    Type::Record { fields: val_fields, .. }
-                                ) = (&op_param_expanded, &left_ty_expanded) {
+                                    Type::Record {
+                                        fields: op_fields, ..
+                                    },
+                                    Type::Record {
+                                        fields: val_fields, ..
+                                    },
+                                ) = (&op_param_expanded, &left_ty_expanded)
+                                {
                                     // If operator expects fields that operand doesn't have, skip
-                                    let has_extra_fields = op_fields.keys().any(|k| !val_fields.contains_key(k));
+                                    let has_extra_fields =
+                                        op_fields.keys().any(|k| !val_fields.contains_key(k));
                                     if has_extra_fields {
                                         continue;
                                     }
@@ -478,13 +521,13 @@ impl TypeChecker {
                                     // overload is for a different carrier type — skip it.
                                     // This prevents Mat4 from spuriously matching Mat2 overloads
                                     // because open record unification would otherwise succeed.
-                                    let val_has_extra = val_fields.keys().any(|k| !op_fields.contains_key(k));
+                                    let val_has_extra =
+                                        val_fields.keys().any(|k| !op_fields.contains_key(k));
                                     if val_has_extra {
                                         continue;
                                     }
                                 }
                             }
-
 
                             let rest_ty = self.fresh_var();
                             if self
@@ -516,16 +559,24 @@ impl TypeChecker {
                                 // Mat4) should not unify — but open-record unification would
                                 // accept them both. Apply exact-field-set matching to skip the
                                 // structurally incompatible overloads.
-                                let expected_rhs_expanded = self.expand_alias(expected_rhs_ty.clone());
+                                let expected_rhs_expanded =
+                                    self.expand_alias(expected_rhs_ty.clone());
                                 let right_ty_raw = self.apply(right_ty.clone());
                                 let right_ty_expanded = self.expand_alias(right_ty_raw);
                                 if let (
-                                    Type::Record { fields: exp_fields, .. },
-                                    Type::Record { fields: actual_fields, .. },
+                                    Type::Record {
+                                        fields: exp_fields, ..
+                                    },
+                                    Type::Record {
+                                        fields: actual_fields,
+                                        ..
+                                    },
                                 ) = (&expected_rhs_expanded, &right_ty_expanded)
                                 {
-                                    let exp_has_extra = exp_fields.keys().any(|k| !actual_fields.contains_key(k));
-                                    let actual_has_extra = actual_fields.keys().any(|k| !exp_fields.contains_key(k));
+                                    let exp_has_extra =
+                                        exp_fields.keys().any(|k| !actual_fields.contains_key(k));
+                                    let actual_has_extra =
+                                        actual_fields.keys().any(|k| !exp_fields.contains_key(k));
                                     if exp_has_extra || actual_has_extra {
                                         continue;
                                     }
@@ -598,7 +649,8 @@ impl TypeChecker {
                                 // Duplicate overload (typically from repeated imports); ignore.
                                 continue;
                             }
-                            selected = Some((match_key, origin, sig, result_ty, self.subst.clone()));
+                            selected =
+                                Some((match_key, origin, sig, result_ty, self.subst.clone()));
                         }
 
                         if let Some((_, _, _, result, subst)) = selected {
@@ -670,13 +722,13 @@ impl TypeChecker {
             BlockKind::Do { monad } if monad.name == "Effect" => {
                 self.infer_effect_block(items, env)
             }
-            BlockKind::Do { monad } if monad.name == "Event" => {
-                self.infer_event_block(items, env)
-            }
+            BlockKind::Do { monad } if monad.name == "Event" => self.infer_event_block(items, env),
             BlockKind::Do { monad } if monad.name == "Applicative" => {
                 self.infer_applicative_do_block(&monad.span, items, env)
             }
-            BlockKind::Do { monad } => self.infer_generic_do_block(&monad.name, &monad.span, items, env),
+            BlockKind::Do { monad } => {
+                self.infer_generic_do_block(&monad.name, &monad.span, items, env)
+            }
             BlockKind::Generate => self.infer_generate_block(items, env),
             BlockKind::Resource => self.infer_resource_block(items, env),
         }
@@ -696,7 +748,8 @@ impl TypeChecker {
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
-                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
+                    self.span_types
+                        .push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Let { pattern, expr, .. } => {
                     // Compiler-generated let bindings (e.g. __loop from
@@ -710,7 +763,8 @@ impl TypeChecker {
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     let pat_ty_for_span = pat_ty.clone();
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
-                    self.span_types.push((pattern_span(pattern), pat_ty_for_span));
+                    self.span_types
+                        .push((pattern_span(pattern), pat_ty_for_span));
                 }
                 BlockItem::Filter { expr, .. }
                 | BlockItem::Yield { expr, .. }
@@ -718,12 +772,13 @@ impl TypeChecker {
                 | BlockItem::Expr { expr, .. } => {
                     last_ty = self.infer_expr(expr, &mut local_env)?;
                 }
-                BlockItem::When { cond, effect, .. }
-                | BlockItem::Unless { cond, effect, .. } => {
+                BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(effect, &mut local_env)?;
                 }
-                BlockItem::Given { cond, fail_expr, .. } => {
+                BlockItem::Given {
+                    cond, fail_expr, ..
+                } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
                 }

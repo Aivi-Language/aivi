@@ -366,10 +366,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let css_record_ty = Type::Record {
         fields: vec![].into_iter().collect(),
     };
-    let effect_text_list_text = Type::con("Effect").app(vec![
-        text_ty.clone(),
-        Type::con("List").app(vec![text_ty.clone()]),
-    ]);
     let reactive_signal_a = checker.fresh_var_id();
     let reactive_signal_b = checker.fresh_var_id();
     let reactive_signal_c = checker.fresh_var_id();
@@ -810,28 +806,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "dragSourceNew".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
-            ),
-            (
-                "dragSourceSetText".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "dropTargetNew".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
-            ),
-            (
-                "dropTargetLastText".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
-            ),
-            (
                 "menuModelNew".to_string(),
                 Type::Func(
                     Box::new(Type::con("Unit")),
@@ -908,17 +882,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "fileDialogNew".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect_text_int.clone()),
-                ),
-            ),
-            (
-                "fileDialogSelectFile".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
-            ),
-            (
                 "imageNewFromFile".to_string(),
                 Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
             ),
@@ -947,64 +910,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "listStoreNew".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect_text_int.clone()),
-                ),
-            ),
-            (
-                "listStoreAppendText".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "listStoreItems".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(effect_text_list_text.clone()),
-                ),
-            ),
-            (
-                "listViewNew".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect_text_int.clone()),
-                ),
-            ),
-            (
-                "listViewSetModel".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "treeViewNew".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect_text_int.clone()),
-                ),
-            ),
-            (
-                "treeViewSetModel".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
                 "gestureClickNew".to_string(),
                 Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
             ),
@@ -1023,27 +928,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "clipboardDefault".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect_text_int.clone()),
-                ),
-            ),
-            (
-                "clipboardSetText".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "clipboardText".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
-            ),
-            (
                 "actionNew".to_string(),
                 Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
             ),
@@ -1059,83 +943,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "appAddAction".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "shortcutNew".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_int.clone()),
-                    )),
-                ),
-            ),
-            (
-                "widgetAddShortcut".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "notificationNew".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_int.clone()),
-                    )),
-                ),
-            ),
-            (
-                "notificationSetBody".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "appSendNotification".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(Type::Func(
-                            Box::new(int_ty.clone()),
-                            Box::new(effect_text_unit.clone()),
-                        )),
-                    )),
-                ),
-            ),
-            (
-                "appWithdrawNotification".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "layoutManagerNew".to_string(),
-                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
-            ),
-            (
-                "widgetSetLayoutManager".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
@@ -1219,13 +1026,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(text_ty.clone()),
                         Box::new(effect_text_unit.clone()),
                     )),
-                ),
-            ),
-            (
-                "osShowInFileManager".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(effect_text_unit.clone()),
                 ),
             ),
             (

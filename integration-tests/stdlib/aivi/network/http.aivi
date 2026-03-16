@@ -4,42 +4,127 @@ module integrationTests.stdlib.aivi.network.http.tests
 use aivi
 use aivi.testing
 use aivi.net.http
+use aivi.net.httpServer (Http)
+use aivi (
+  concurrency (sleep)
+)
+use aivi.json
+use aivi.text as text
+
+startServer = address => handler => do Effect {
+  result <- attempt (httpServer.listen { address: address } handler)
+  server <- assertOk result
+  _      <- sleep 25
+  pure server
+}
+
+stopServer = server => do Effect {
+  result <- attempt (httpServer.stop server)
+  _      <- assertOk result
+  pure Unit
+}
+
+headerValue = name => headers => headers match
+  | []                => None
+  | [header, ...rest] =>
+    if text.toLower header.name == text.toLower name
+      then Some header.value
+      else headerValue name rest
+
+textReply = status => body => Http {
+  status: status
+  headers: [{ name: "Content-Type", value: "text/plain" }]
+  body: body
+}
+
+jsonReply = status => body => Http {
+  status: status
+  headers: [{ name: "Content-Type", value: "application/json" }]
+  body: body
+}
 
 // -- Request construction --
 
-@test "build get request"
-buildGetRequest = do Effect {
-  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/get", query: [], hash: None }
-  req    = { method: "GET", url: reqUrl, headers: [], body: None }
-  assertEq req.method "GET"
-  assertEq req.body None
+@test "get performs request and exposes response"
+getPerformsRequest = do Effect {
+  handler = request => do Effect {
+    matchesRequest = request.method == "GET" && request.path == "/echo?lang=aivi"
+    if matchesRequest
+      then textReply 200 [111, 107]
+      else textReply 404 [98, 97, 100]
+  }
+
+  server   <- startServer "127.0.0.1:39081" handler
+  result   <- get ~u(http://127.0.0.1:39081/echo?lang=aivi)
+  _        <- stopServer server
+  response <- assertOk result
+  _        <- assertEq response.status 200
+  _        <- assertEq response.body "ok"
+  assertEq (headerValue "content-type" response.headers) (Some "text/plain")
 }
 
-@test "build post request with body"
-buildPostRequest = do Effect {
-  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
-  req    =
-    {
-      method: "POST"
-      url: reqUrl
-      headers: [{ name: "Content-Type", value: "application/json" }]
-      body: Some "{}"
-    }
-    assertEq req.method "POST"
-    assertEq req.body (Some "{}")
-    assertEq (List.length req.headers) 1
+@test "post sends plain text body"
+postSendsPlainTextBody = do Effect {
+  handler = request => do Effect {
+    matchesRequest = request.method == "POST" && (request.path == "/submit" || request.path == "/submit?")
+    if matchesRequest
+      then textReply 200 request.body
+      else textReply 405 [110, 111]
+  }
+
+  server   <- startServer "127.0.0.1:39082" handler
+  result   <- post ~u(http://127.0.0.1:39082/submit) "hello world"
+  _        <- stopServer server
+  response <- assertOk result
+  _        <- assertEq response.status 200
+  assertEq response.body "hello world"
 }
 
-@test "response fields"
-responseFields = do Effect {
-  resp = { status: 200, headers: [{ name: "Content-Type", value: "text/plain" }], body: "hello" }
-  assertEq resp.status 200
-  assertEq resp.body "hello"
-  assertEq (List.length resp.headers) 1
+@test "fetch json body adds application json header"
+fetchJsonBodyAddsApplicationJsonHeader = do Effect {
+  handler = request => do Effect {
+    matchesRequest = request.method == "PATCH" && (request.path == "/json" || request.path == "/json?") && headerValue "content-type" request.headers == Some "application/json"
+    if matchesRequest
+      then jsonReply 200 request.body
+      else textReply 400 [98, 97, 100]
+  }
+
+  server <- startServer "127.0.0.1:39083" handler
+  result <- fetch {
+    method: "PATCH"
+    url: ~u(http://127.0.0.1:39083/json)
+    headers: []
+    body: Some (Json (toJson { name: "Ada", age: 42 }))
+  }
+  _        <- stopServer server
+  response <- assertOk result
+  _        <- assertEq response.status 200
+  assertEq response.body "\{\"age\":42,\"name\":\"Ada\"}"
 }
 
-@test "error fields"
-errorFields = do Effect {
-  err = { message: "not found" }
-  assertEq err.message "not found"
+@test "fetch form body percent encodes pairs"
+fetchFormBodyPercentEncodesPairs = do Effect {
+  handler = request => do Effect {
+    matchesRequest = request.method == "POST" && (request.path == "/form" || request.path == "/form?") && headerValue "content-type" request.headers == Some "application/x-www-form-urlencoded"
+    if matchesRequest
+      then textReply 200 request.body
+      else textReply 400 [98, 97, 100]
+  }
+
+  server <- startServer "127.0.0.1:39084" handler
+  result <- fetch {
+    method: "POST"
+    url: ~u(http://127.0.0.1:39084/form)
+    headers: [{ name: "Content-Type", value: "application/x-www-form-urlencoded" }]
+    body: Some (
+      Form [
+        { name: "name", value: "Ada Lovelace" }
+        { name: "city", value: "Paris" }
+      ]
+    )
+  }
+  _        <- stopServer server
+  response <- assertOk result
+  _        <- assertEq response.status 200
+  assertEq response.body "name=Ada+Lovelace&city=Paris"
 }
