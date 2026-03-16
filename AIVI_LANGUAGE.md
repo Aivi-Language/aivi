@@ -549,6 +549,8 @@ generate { x <- src; x -> pred; yield f x }
 - No `~` as bitwise-not.
 - Prefer interpolation over string concat operators.
 - Keep opening `{` on same line as keyword.
+- do not chain if/else statements, prefer pattern matching
+- using ADT.func if func is not ambigeous. Ie: Prefer isSome to Option.isSome
 
 ## 24. Minimal generation checklist
 
