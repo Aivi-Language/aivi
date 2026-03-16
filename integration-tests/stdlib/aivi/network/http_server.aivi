@@ -84,6 +84,25 @@ listen_and_stop_handle_http_requests = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" 
     pure Unit
 })
 
+@test "listen resource cleanup stops the http server on scope exit"
+listen_resource_cleanup_stops_the_http_server_on_scope_exit = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" (port => do Effect {
+    requestUrl     <- urlAt port "/echo"
+    workflowResult <- attempt (do Effect {
+        _              <- listen { address: addressAt port } httpHandler
+        responseResult <- attempt (post requestUrl "client-body")
+        pure { responseResult: responseResult }
+    })
+    workflow        <- assertOk workflowResult
+    responseResult  <- assertOk workflow.responseResult
+    response        <- assertOk responseResult
+    _               <- assertEq response.status 200
+    _               <- assertEq response.body "ok"
+    stoppedResult   <- attempt (get requestUrl)
+    stoppedResponse <- assertOk stoppedResult
+    _               <- assertErr stoppedResponse
+    pure Unit
+})
+
 @test "websocket receive send and close echo a real client message"
 websocket_receive_send_and_close_echo = withEnvPort "AIVI_TEST_HTTP_WS_PORT" (port => do Effect {
     wsResult <- attempt (do Effect {

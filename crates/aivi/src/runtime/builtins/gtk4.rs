@@ -888,10 +888,10 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use super::{ResolvedGtkNode, auto_to_msg_builtin, collect_auto_bindings_into};
+    use super::{auto_to_msg_builtin, collect_auto_bindings_into, ResolvedGtkNode};
     use crate::runtime::builtins::util::builtin;
     use crate::runtime::environment::GtkAutoBindingsState;
-    use crate::runtime::{Value, build_runtime_base};
+    use crate::runtime::{build_runtime_base, Value};
 
     #[test]
     fn auto_bindings_collect_handlers_inside_each_templates() {

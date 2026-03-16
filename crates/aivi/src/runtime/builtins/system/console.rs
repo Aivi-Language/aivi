@@ -132,7 +132,10 @@ fn stdin_is_ready(stdin: &std::io::Stdin) -> bool {
             events: libc::POLLIN,
             revents: 0,
         };
-        unsafe { libc::poll(&mut poll_fd, 1, 0) > 0 && (poll_fd.revents & (libc::POLLIN | libc::POLLHUP)) != 0 }
+        unsafe {
+            libc::poll(&mut poll_fd, 1, 0) > 0
+                && (poll_fd.revents & (libc::POLLIN | libc::POLLHUP)) != 0
+        }
     }
 
     #[cfg(not(unix))]

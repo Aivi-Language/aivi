@@ -109,24 +109,30 @@ fn edge_from_value(value: Value, ctx: &str) -> Result<(i64, i64, f64), RuntimeEr
     let record = expect_record(value, ctx)?;
     let from = match record.get("from") {
         Some(value) => expect_int(value.clone(), ctx)?,
-        None => return Err(RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'from' on Edge".to_string(),
-        }),
+        None => {
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'from' on Edge".to_string(),
+            })
+        }
     };
     let to = match record.get("to") {
         Some(value) => expect_int(value.clone(), ctx)?,
-        None => return Err(RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'to' on Edge".to_string(),
-        }),
+        None => {
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'to' on Edge".to_string(),
+            })
+        }
     };
     let weight = match record.get("weight") {
         Some(value) => expect_float(value.clone(), ctx)?,
-        None => return Err(RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'weight' on Edge".to_string(),
-        }),
+        None => {
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'weight' on Edge".to_string(),
+            })
+        }
     };
     Ok((from, to, weight))
 }
@@ -139,17 +145,21 @@ fn graph_from_value(
     let record = expect_record(value, ctx)?;
     let nodes_list = match record.get("nodes") {
         Some(value) => expect_list(value.clone(), ctx)?,
-        None => return Err(RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'nodes' on Graph".to_string(),
-        }),
+        None => {
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'nodes' on Graph".to_string(),
+            })
+        }
     };
     let edges_list = match record.get("edges") {
         Some(value) => expect_list(value.clone(), ctx)?,
-        None => return Err(RuntimeError::InvalidArgument {
-            context: ctx.to_string(),
-            reason: "missing field 'edges' on Graph".to_string(),
-        }),
+        None => {
+            return Err(RuntimeError::InvalidArgument {
+                context: ctx.to_string(),
+                reason: "missing field 'edges' on Graph".to_string(),
+            })
+        }
     };
     let nodes = list_ints(&nodes_list, ctx)?;
     let mut edges = Vec::with_capacity(edges_list.len());

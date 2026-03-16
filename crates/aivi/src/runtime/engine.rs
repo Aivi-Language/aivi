@@ -12,8 +12,8 @@ use aivi_driver::{RuntimeFrame, RuntimeFrameKind, RuntimeLabel, RuntimeNoteKind,
 
 use crate::hir::{HirExpr, HirProgram};
 use crate::i18n::{parse_message_template, validate_key_text, MessagePart};
-use crate::{Position, SourceOrigin, Span};
 use crate::AiviError;
+use crate::{Position, SourceOrigin, Span};
 
 mod builtins;
 mod constructors;
@@ -30,8 +30,8 @@ use self::values::{
     BuiltinImpl, BuiltinValue, EffectValue, SourceValue, ThunkFunc, ThunkValue, Value,
 };
 
-pub use self::constructors::{TestFailure, TestReport, TestSuccess};
 pub(crate) use self::constructors::collect_surface_constructor_ordinals;
+pub use self::constructors::{TestFailure, TestReport, TestSuccess};
 
 #[derive(Debug)]
 pub(crate) struct CancelToken {
@@ -226,16 +226,19 @@ pub(crate) enum ReactiveCellKind {
     Derived {
         dependencies: Vec<usize>,
         compute: Value,
+        compute_label: Option<String>,
     },
     DerivedTuple {
         dependencies: Vec<usize>,
         compute: Value,
+        compute_label: Option<String>,
     },
 }
 
 pub(crate) struct ReactiveWatcherEntry {
     pub(crate) signal_id: usize,
     pub(crate) callback: Value,
+    pub(crate) callback_label: Option<String>,
     pub(crate) last_revision: u64,
 }
 
@@ -294,10 +297,11 @@ impl std::fmt::Display for RuntimeError {
 impl Runtime {
     pub(crate) fn capture_runtime_snapshot(&self) -> RuntimeSnapshot {
         RuntimeSnapshot {
-            origin: self
-                .jit_current_loc
-                .clone()
-                .or_else(|| self.jit_frame_stack.last().and_then(|frame| frame.origin.clone())),
+            origin: self.jit_current_loc.clone().or_else(|| {
+                self.jit_frame_stack
+                    .last()
+                    .and_then(|frame| frame.origin.clone())
+            }),
             frames: self.jit_frame_stack.clone(),
         }
     }
@@ -328,7 +332,10 @@ impl Runtime {
         Some((err, snapshot))
     }
 
-    fn take_snapshot_for_error(&mut self, err: &RuntimeError) -> Option<RuntimeSnapshot> {
+    pub(crate) fn take_snapshot_for_error(
+        &mut self,
+        err: &RuntimeError,
+    ) -> Option<RuntimeSnapshot> {
         let pending = self.jit_pending_snapshot.take();
         let match_snapshot = match runtime_error_leaf(err) {
             RuntimeError::NonExhaustiveMatch { .. } => self.jit_match_snapshot.take(),
@@ -749,7 +756,10 @@ fn runtime_error_leaf(err: &RuntimeError) -> &RuntimeError {
     }
 }
 
-fn collect_runtime_contexts<'a>(err: &'a RuntimeError, contexts: &mut Vec<String>) -> &'a RuntimeError {
+fn collect_runtime_contexts<'a>(
+    err: &'a RuntimeError,
+    contexts: &mut Vec<String>,
+) -> &'a RuntimeError {
     match err {
         RuntimeError::Context { context, source } => {
             contexts.push(context.clone());
@@ -788,8 +798,49 @@ fn parse_context_frame(context: &str) -> Option<RuntimeFrame> {
     Some(RuntimeFrame {
         kind: RuntimeFrameKind::Function,
         name: name.to_string(),
-        origin: None,
+        origin: parse_context_origin(context),
     })
+}
+
+fn runtime_snapshot_frame_context(frame: &RuntimeFrame) -> String {
+    match frame.origin.as_ref() {
+        Some(origin) => format!("at {} in `{}`", origin.start_position_text(), frame.name),
+        None => format!("in `{}`", frame.name),
+    }
+}
+
+pub(crate) fn wrap_runtime_error_with_snapshot(
+    err: RuntimeError,
+    snapshot: Option<RuntimeSnapshot>,
+) -> RuntimeError {
+    let Some(snapshot) = snapshot else {
+        return err;
+    };
+    let mut wrapped = err;
+    if let Some(origin) = snapshot.origin.as_ref() {
+        wrapped = RuntimeError::Context {
+            context: format!("at {}", origin.start_position_text()),
+            source: Box::new(wrapped),
+        };
+    }
+    for frame in snapshot.frames.iter().rev() {
+        wrapped = RuntimeError::Context {
+            context: runtime_snapshot_frame_context(frame),
+            source: Box::new(wrapped),
+        };
+    }
+    wrapped
+}
+
+fn runtime_error_has_renderable_context(err: &RuntimeError) -> bool {
+    match err {
+        RuntimeError::Context { context, source } => {
+            parse_context_origin(context).is_some()
+                || parse_context_frame(context).is_some()
+                || runtime_error_has_renderable_context(source)
+        }
+        _ => false,
+    }
 }
 
 fn push_unique_frame(frames: &mut Vec<RuntimeFrame>, frame: RuntimeFrame) {
@@ -876,7 +927,9 @@ fn select_primary_origin(
             return Some(origin);
         }
     }
-    if let Some(origin) = context_origins().find(|origin| origin.source_kind == aivi_core::SourceKind::User) {
+    if let Some(origin) =
+        context_origins().find(|origin| origin.source_kind == aivi_core::SourceKind::User)
+    {
         return Some(origin);
     }
     if let Some(snapshot) = snapshot {
@@ -916,9 +969,11 @@ fn runtime_error_report(err: RuntimeError, snapshot: Option<RuntimeSnapshot>) ->
             context,
             expected,
             got,
-        } if context == "text.join" => RuntimeReport::new("RT1203", "`text.join` expected a list of `Text`")
-            .with_note(format!("received `{got}`"))
-            .with_hint(text_join_help()),
+        } if context == "text.join" => {
+            RuntimeReport::new("RT1203", "`text.join` expected a list of `Text`")
+                .with_note(format!("received `{got}`"))
+                .with_hint(text_join_help())
+        }
         RuntimeError::TypeError {
             context,
             expected,
@@ -927,11 +982,10 @@ fn runtime_error_report(err: RuntimeError, snapshot: Option<RuntimeSnapshot>) ->
             "RT1200",
             format!("`{context}` expected `{expected}`, got `{got}`"),
         ),
-        RuntimeError::DivisionByZero { context } => RuntimeReport::new(
-            "RT1204",
-            format!("`{context}` attempted to divide by zero"),
-        )
-        .with_hint("check that the divisor is non-zero before dividing"),
+        RuntimeError::DivisionByZero { context } => {
+            RuntimeReport::new("RT1204", format!("`{context}` attempted to divide by zero"))
+                .with_hint("check that the divisor is non-zero before dividing")
+        }
         RuntimeError::Overflow { context } => RuntimeReport::new(
             "RT1205",
             format!("`{context}` overflowed during arithmetic"),
@@ -966,10 +1020,8 @@ fn runtime_error_report(err: RuntimeError, snapshot: Option<RuntimeSnapshot>) ->
             }
             if !in_text_join {
                 if let Some(name) = active_frame_name {
-                    report = report.with_note(format!(
-                        "while evaluating `{}`",
-                        display_runtime_name(name)
-                    ));
+                    report = report
+                        .with_note(format!("while evaluating `{}`", display_runtime_name(name)));
                 }
             }
             report
@@ -990,11 +1042,10 @@ fn runtime_error_report(err: RuntimeError, snapshot: Option<RuntimeSnapshot>) ->
             RuntimeReport::new("RT1211", format!("`{context}` rejected its arguments"))
                 .with_note(reason.clone())
         }
-        RuntimeError::ParseError { context, input } => RuntimeReport::new(
-            "RT1212",
-            format!("`{context}` failed to parse the input"),
-        )
-        .with_note(format!("input: {:?}", preview_text(input))),
+        RuntimeError::ParseError { context, input } => {
+            RuntimeReport::new("RT1212", format!("`{context}` failed to parse the input"))
+                .with_note(format!("input: {:?}", preview_text(input)))
+        }
         RuntimeError::Context { .. } => unreachable!("context wrappers are stripped above"),
     };
 
@@ -1093,8 +1144,14 @@ mod runtime_report_tests {
         let rendered = aivi_driver::render_runtime_report(&report, false);
 
         assert_eq!(report.code, "RT1203");
-        assert_eq!(report.primary.as_ref().map(|origin| origin.path.as_str()), Some("src/app.aivi"));
-        assert_eq!(report.frames.first().map(|frame| frame.name.as_str()), Some("aivi.text.join"));
+        assert_eq!(
+            report.primary.as_ref().map(|origin| origin.path.as_str()),
+            Some("src/app.aivi")
+        );
+        assert_eq!(
+            report.frames.first().map(|frame| frame.name.as_str()),
+            Some("aivi.text.join")
+        );
         assert!(
             report
                 .labels

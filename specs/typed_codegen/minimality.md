@@ -60,7 +60,7 @@ The combined result is block-free HIR composed of nested lambdas and ordinary fu
 | `do Query { x <- e1; e2 }` | Surface → HIR | `queryChain (λx → e2) e1` |
 | `do Effect { x <- e1; e2 }` | HIR → block-free HIR | `__withResourceScope (bind e1 (λx → e2))` |
 | `do Effect { x = e; rest }` | HIR → block-free HIR | `__withResourceScope (bind (pure e) (λx → rest))` |
-| `resource { acq; yield v; cleanup }` | HIR → block-free HIR | `__makeResource (λ_ → acquire_chain) (λ_ → cleanup_chain)`, where each chain is lowered with the `do Effect` rules |
+| `resource { acq; yield v; cleanup }` | HIR → block-free HIR | `__makeResource (λ_ → acquire_chain)`, where `acquire_chain` is lowered with the `do Effect` rules and yields `(v, λ_ → cleanup_chain)` so cleanup closes over acquisition bindings |
 | `generate { yield e; ... }` | HIR → block-free HIR | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` (the generator is represented by the fold that consumes it, not by a separate runtime generator data type) |
 | `plain { x = e; body }` | HIR → block-free HIR | `(λx → body) e` |
 

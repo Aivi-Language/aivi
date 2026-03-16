@@ -830,37 +830,83 @@ fn effect_pure_unit(id_gen: &mut IdGen) -> HirExpr {
 // ── resource { ... } desugaring ───────────────────────────────────────────────
 //
 // resource { acquire; yield x; cleanup }
-//   → __makeResource (λ_ → <desugared acquire+yield>) (λ_ → <desugared cleanup>)
+//   → __makeResource (λ_ → <desugared acquire yielding (x, λ_ → <desugared cleanup>)>)
 
 fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
     let yield_pos = items
         .iter()
         .position(|item| matches!(item, HirBlockItem::Yield { .. }));
 
-    let (acquire_items, cleanup_items) = match yield_pos {
+    let acquire_body = match yield_pos {
         Some(pos) => {
-            let (acq, rest) = items.split_at(pos + 1);
-            (acq.to_vec(), rest.to_vec())
+            let acquire_items = items[..pos].to_vec();
+            let yield_expr = match &items[pos] {
+                HirBlockItem::Yield { expr } => expr.clone(),
+                _ => unreachable!("yield position must point at a yield item"),
+            };
+            let cleanup_items = items[pos + 1..].to_vec();
+            let cleanup_body = if cleanup_items.is_empty() {
+                effect_pure_unit(id_gen)
+            } else {
+                HirExpr::Block {
+                    id: id_gen.next(),
+                    block_kind: HirBlockKind::Do {
+                        monad: "Effect".to_string(),
+                    },
+                    items: cleanup_items,
+                }
+            };
+            let cleanup_lambda = HirExpr::Lambda {
+                id: id_gen.next(),
+                param: format!("_res_unused_{}", id_gen.next()),
+                body: Box::new(cleanup_body),
+            };
+            let mut bundled_acquire_items = acquire_items;
+            bundled_acquire_items.push(HirBlockItem::Yield {
+                expr: HirExpr::Tuple {
+                    id: id_gen.next(),
+                    items: vec![yield_expr, cleanup_lambda],
+                },
+            });
+            lower_do_effect_block(bundled_acquire_items, id_gen)
         }
-        None => (items, vec![]),
+        None => {
+            let acquire_effect = lower_do_effect_block(items, id_gen);
+            let cleanup_lambda = HirExpr::Lambda {
+                id: id_gen.next(),
+                param: format!("_res_unused_{}", id_gen.next()),
+                body: Box::new(effect_pure_unit(id_gen)),
+            };
+            let value_param = format!("_resource_value_{}", id_gen.next());
+            effect_bind(
+                acquire_effect,
+                HirExpr::Lambda {
+                    id: id_gen.next(),
+                    param: value_param.clone(),
+                    body: Box::new(effect_pure(
+                        HirExpr::Tuple {
+                            id: id_gen.next(),
+                            items: vec![
+                                HirExpr::Var {
+                                    id: id_gen.next(),
+                                    name: value_param,
+                                
+                                    location: None,
+                                },
+                                cleanup_lambda,
+                            ],
+                        },
+                        id_gen,
+                    )),
+                },
+                id_gen,
+            )
+        }
     };
-
-    let acquire_body = lower_do_effect_block(acquire_items, id_gen);
     let acquire_lambda = HirExpr::Lambda {
         id: id_gen.next(),
         param: format!("_res_unused_{}", id_gen.next()),
         body: Box::new(acquire_body),
-    };
-
-    let cleanup_body = if cleanup_items.is_empty() {
-        effect_pure_unit(id_gen)
-    } else {
-        lower_do_effect_block(cleanup_items, id_gen)
-    };
-    let cleanup_lambda = HirExpr::Lambda {
-        id: id_gen.next(),
-        param: format!("_res_unused_{}", id_gen.next()),
-        body: Box::new(cleanup_body),
     };
 
     HirExpr::Call {
@@ -871,7 +917,7 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
         
             location: None,
         }),
-        args: vec![acquire_lambda, cleanup_lambda],
+        args: vec![acquire_lambda],
     }
 }
 

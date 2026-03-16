@@ -33,10 +33,14 @@ pub(super) fn build_instant_record() -> Value {
             let base = parse_datetime_text(&text, "instant.addMillis")?;
             let delta = millis
                 .checked_mul(1_000_000)
-                .ok_or_else(|| RuntimeError::Overflow { context: "instant.addMillis".to_string() })?;
+                .ok_or_else(|| RuntimeError::Overflow {
+                    context: "instant.addMillis".to_string(),
+                })?;
             let nanos = base
                 .checked_add(delta)
-                .ok_or_else(|| RuntimeError::Overflow { context: "instant.addMillis".to_string() })?;
+                .ok_or_else(|| RuntimeError::Overflow {
+                    context: "instant.addMillis".to_string(),
+                })?;
             let text = nanos_to_rfc3339(nanos, "instant.addMillis")?;
             Ok(Value::DateTime(text))
         }),
@@ -50,7 +54,9 @@ pub(super) fn build_instant_record() -> Value {
             let right = parse_datetime_text(&right, "instant.diffMillis")?;
             let delta = left
                 .checked_sub(right)
-                .ok_or_else(|| RuntimeError::Overflow { context: "instant.diffMillis".to_string() })?;
+                .ok_or_else(|| RuntimeError::Overflow {
+                    context: "instant.diffMillis".to_string(),
+                })?;
             let millis = delta / 1_000_000;
             let millis = i128_to_i64(millis, "instant.diffMillis")?;
             Ok(Value::Int(millis))
@@ -90,7 +96,9 @@ fn parse_datetime_text(text: &str, ctx: &str) -> Result<i128, RuntimeError> {
         return seconds
             .checked_mul(1_000_000_000)
             .and_then(|base| base.checked_add(nanos))
-            .ok_or_else(|| RuntimeError::Overflow { context: ctx.to_string() });
+            .ok_or_else(|| RuntimeError::Overflow {
+                context: ctx.to_string(),
+            });
     }
     if let Some(nanos) = parse_epoch_seconds(text) {
         return Ok(nanos);
@@ -136,13 +144,12 @@ fn nanos_to_rfc3339(nanos: i128, ctx: &str) -> Result<String, RuntimeError> {
     let nanos = i128_to_i64(nanos, ctx)?;
     let seconds = nanos.div_euclid(1_000_000_000);
     let subsec = nanos.rem_euclid(1_000_000_000) as u32;
-    let dt = Utc
-        .timestamp_opt(seconds, subsec)
-        .single()
-        .ok_or_else(|| RuntimeError::InvalidArgument {
+    let dt = Utc.timestamp_opt(seconds, subsec).single().ok_or_else(|| {
+        RuntimeError::InvalidArgument {
             context: ctx.to_string(),
             reason: "out of range".to_string(),
-        })?;
+        }
+    })?;
     Ok(dt.to_rfc3339_opts(SecondsFormat::Nanos, true))
 }
 

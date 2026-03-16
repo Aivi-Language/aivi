@@ -1394,6 +1394,18 @@ mod runtime_warning_tests {
                             }),
                         },
                     },
+                    HirDef {
+                        name: "safe".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 90,
+                            param: "value".to_string(),
+                            body: Box::new(HirExpr::Var {
+                                id: 91,
+                                name: "value".to_string(),
+                                location: Some(origin("src/demo/main.aivi", 11, 9)),
+                            }),
+                        },
+                    },
                 ],
             }],
         };
@@ -1418,6 +1430,22 @@ mod runtime_warning_tests {
         let err = runtime
             .apply(value, Value::Unit)
             .expect_err("entry should fail");
+        let safe = runtime
+            .ctx
+            .globals
+            .get("demo.main.safe")
+            .expect("safe binding should exist")
+            .clone();
+        let safe_result = runtime.apply(safe, Value::Int(1)).unwrap_or_else(|err| {
+            panic!(
+                "safe call after failure: {}",
+                crate::runtime::format_runtime_error(err)
+            )
+        });
+        match safe_result {
+            Value::Int(1) => {}
+            other => panic!("expected safe call to return 1, got {other:?}"),
+        }
         let rendered = aivi_driver::render_runtime_report(&runtime.runtime_report(err), false);
 
         assert!(
@@ -1427,6 +1455,120 @@ mod runtime_warning_tests {
         assert!(
             rendered.contains("demo.main.entry (lambda) at src/demo/main.aivi:"),
             "expected lambda frame location, got:\n{rendered}"
+        );
+
+        drop(module);
+    }
+
+    #[test]
+    fn jit_errors_keep_renderable_context_after_later_jit_calls() {
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "demo.main".to_string(),
+                defs: vec![
+                    HirDef {
+                        name: "helper".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 10,
+                            param: "ignored".to_string(),
+                            body: Box::new(HirExpr::If {
+                                id: 11,
+                                cond: Box::new(HirExpr::LitBool {
+                                    id: 12,
+                                    value: true,
+                                }),
+                                then_branch: Box::new(HirExpr::App {
+                                    id: 13,
+                                    func: Box::new(HirExpr::LitBool {
+                                        id: 14,
+                                        value: true,
+                                    }),
+                                    arg: Box::new(lit_int(15, "1")),
+                                }),
+                                else_branch: Box::new(tuple_else_branch(20)),
+                            }),
+                        },
+                    },
+                    HirDef {
+                        name: "entry".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 40,
+                            param: "_".to_string(),
+                            body: Box::new(HirExpr::App {
+                                id: 41,
+                                func: Box::new(HirExpr::Var {
+                                    id: 42,
+                                    name: "helper".to_string(),
+                                    location: Some(origin("src/demo/main.aivi", 6, 7)),
+                                }),
+                                arg: Box::new(HirExpr::LitBool {
+                                    id: 43,
+                                    value: true,
+                                }),
+                            }),
+                        },
+                    },
+                    HirDef {
+                        name: "safe".to_string(),
+                        expr: HirExpr::Lambda {
+                            id: 50,
+                            param: "value".to_string(),
+                            body: Box::new(HirExpr::Var {
+                                id: 51,
+                                name: "value".to_string(),
+                                location: Some(origin("src/demo/main.aivi", 9, 9)),
+                            }),
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        let entry = runtime
+            .ctx
+            .globals
+            .get("demo.main.entry")
+            .expect("entry binding should exist")
+            .clone();
+        let err = runtime
+            .apply(entry, Value::Unit)
+            .expect_err("entry should fail");
+        let safe = runtime
+            .ctx
+            .globals
+            .get("demo.main.safe")
+            .expect("safe binding should exist")
+            .clone();
+        let safe_result = runtime.apply(safe, Value::Int(1)).unwrap_or_else(|err| {
+            panic!(
+                "safe call after failure: {}",
+                crate::runtime::format_runtime_error(err)
+            )
+        });
+        match safe_result {
+            Value::Int(1) => {}
+            other => panic!("expected safe call to return 1, got {other:?}"),
+        }
+
+        let rendered = crate::runtime::format_runtime_error(err);
+        assert!(
+            rendered.contains("src/demo/main.aivi:6:7"),
+            "expected call-site location to survive later JIT work, got:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("1: demo.main.entry"),
+            "expected outer user frame to survive later JIT work, got:\n{rendered}"
         );
 
         drop(module);

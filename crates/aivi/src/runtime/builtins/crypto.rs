@@ -150,8 +150,8 @@ pub(super) fn build_crypto_record() -> Value {
                     "crypto.randomBytes expects non-negative length".to_string(),
                 ));
             }
-            let count = usize::try_from(count).map_err(|_| {
-                RuntimeError::Overflow { context: "crypto.randomBytes".to_string() }
+            let count = usize::try_from(count).map_err(|_| RuntimeError::Overflow {
+                context: "crypto.randomBytes".to_string(),
             })?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
