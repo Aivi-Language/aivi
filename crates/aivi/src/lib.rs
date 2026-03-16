@@ -107,6 +107,11 @@ pub use aivi_core::{
     InferModuleCache, InferResult, InferValueTypesIncrementalResult, ModuleExportSurfaceSummary,
 };
 pub use aivi_core::{
+    classify_source_kind, file_diagnostics_have_errors, render_diagnostic,
+    render_diagnostic_with_source, render_diagnostics, Diagnostic, DiagnosticLabel,
+    DiagnosticSeverity, FileDiagnostic, Position, SourceKind, SourceOrigin, Span,
+};
+pub use aivi_core::{
     embedded_stdlib_modules, embedded_stdlib_source, lower_modules_to_arena, parse_modules,
     parse_modules_from_tokens, resolve_import_names, ArenaBlockItem, ArenaBlockKind,
     ArenaClassDecl, ArenaClassMember, ArenaDecorator, ArenaDef, ArenaDomainDecl, ArenaDomainItem,
@@ -118,10 +123,6 @@ pub use aivi_core::{
     ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment, Pattern, RecordField,
     RecordPatternField, RecordTypeField, SpannedName, SpannedSymbol, TextPart, TypeAlias, TypeCtor,
     TypeDecl, TypeExpr, TypeSig, UseDecl,
-};
-pub use aivi_core::{
-    file_diagnostics_have_errors, render_diagnostics, Diagnostic, DiagnosticLabel,
-    DiagnosticSeverity, FileDiagnostic, Position, Span,
 };
 pub use aivi_core::{format_text, format_text_with_options, BraceStyle, FormatOptions};
 pub use aivi_core::{
@@ -226,8 +227,9 @@ pub use aivi_driver::{
     desugar_target_with_cg_types_and_surface_in_session,
     desugar_target_with_cg_types_and_surface_in_session_with_roots, format_target, kernel_target,
     load_module_diagnostics, load_modules, load_modules_from_paths, parse_file, parse_target,
-    resolve_target, AiviError, AssemblyStats, FrontendAssembly, FrontendAssemblyMode, Pipeline,
-    WorkspaceSession,
+    render_runtime_report, resolve_target, AiviError, AssemblyStats, FrontendAssembly,
+    FrontendAssemblyMode, Pipeline, RuntimeFrame, RuntimeFrameKind, RuntimeLabel, RuntimeNote,
+    RuntimeNoteKind, RuntimeReport, WorkspaceSession,
 };
 
 pub fn rust_ir_target(target: &str) -> Result<rust_ir::RustIrProgram, AiviError> {

@@ -619,7 +619,7 @@ fn handle_connection(
                     DaemonResponse::Diagnostics { rendered, summary }
                 }
                 Err(PrepareCompileFailure::Error(err)) => DaemonResponse::Error {
-                    message: err.to_string(),
+                    message: err.render(false),
                 },
             };
             write_json_line(&mut stream, &daemon_envelope(payload))?;
@@ -634,18 +634,18 @@ fn read_json_line<T: for<'de> Deserialize<'de>>(stream: &mut UnixStream) -> Resu
     let mut line = String::new();
     reader.read_line(&mut line)?;
     if line.trim().is_empty() {
-        return Err(AiviError::Runtime(
+        return Err(AiviError::runtime_message(
             "daemon sent an empty response".to_string(),
         ));
     }
     serde_json::from_str(&line)
-        .map_err(|err| AiviError::Runtime(format!("daemon json decode failed: {err}")))
+        .map_err(|err| AiviError::runtime_message(format!("daemon json decode failed: {err}")))
 }
 
 #[cfg(unix)]
 fn write_json_line<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<(), AiviError> {
     serde_json::to_writer(&mut *stream, value)
-        .map_err(|err| AiviError::Runtime(format!("daemon json encode failed: {err}")))?;
+        .map_err(|err| AiviError::runtime_message(format!("daemon json encode failed: {err}")))?;
     stream.write_all(b"\n")?;
     stream.flush()?;
     Ok(())
@@ -671,7 +671,7 @@ fn ensure_project_daemon(project_root: &Path) -> Result<ProjectDaemonPaths, Aivi
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    Err(AiviError::Runtime(format!(
+    Err(AiviError::runtime_message(format!(
         "timed out waiting for daemon {}",
         paths.socket.display()
     )))
@@ -684,13 +684,13 @@ fn send_daemon_request(
 ) -> Result<DaemonResponse, AiviError> {
     let response = send_daemon_request_raw(paths, payload)?;
     if response.version != DAEMON_PROTOCOL_VERSION {
-        return Err(AiviError::Runtime(format!(
+        return Err(AiviError::runtime_message(format!(
             "protocol mismatch: daemon {}, client {}",
             response.version, DAEMON_PROTOCOL_VERSION
         )));
     }
     if let Some(message) = daemon_identity_mismatch_message(response.identity.as_ref()) {
-        return Err(AiviError::Runtime(message));
+        return Err(AiviError::runtime_message(message));
     }
     Ok(response.payload)
 }

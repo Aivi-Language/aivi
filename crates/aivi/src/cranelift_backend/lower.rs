@@ -25,6 +25,7 @@ use crate::rust_ir::{
     RustIrExpr, RustIrListItem, RustIrLiteral, RustIrMatchArm, RustIrMockSubstitution,
     RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
+use crate::SourceOrigin;
 
 /// Pointer-sized integer type used for boxed `*mut Value` pointers.
 const PTR: cranelift_codegen::ir::Type = types::I64;
@@ -290,6 +291,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_reuse_tuple: FuncRef,
     // Source location tracking for diagnostics
     pub(crate) rt_enter_fn: FuncRef,
+    pub(crate) rt_leave_fn: FuncRef,
     // Source location tracking for diagnostics
     pub(crate) rt_set_location: FuncRef,
     // Snapshot mock helpers
@@ -428,8 +430,14 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_reuse_tuple: decl!("rt_reuse_tuple", [PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, name_ptr, name_len) -> void
         rt_enter_fn: decl!("rt_enter_fn", [PTR, PTR, PTR], []),
-        // (ctx, loc_ptr, loc_len) -> void
-        rt_set_location: decl!("rt_set_location", [PTR, PTR, PTR], []),
+        // (ctx) -> void
+        rt_leave_fn: decl!("rt_leave_fn", [PTR], []),
+        // (ctx, path_ptr, path_len, start_line, start_col, end_line, end_col, kind) -> void
+        rt_set_location: decl!(
+            "rt_set_location",
+            [PTR, PTR, PTR, PTR, PTR, PTR, PTR, PTR],
+            []
+        ),
         // (ctx, path_ptr, path_len) -> ptr (old global value)
         rt_snapshot_mock_install: decl!("rt_snapshot_mock_install", [PTR, PTR, PTR], [PTR]),
         // (ctx, path_ptr, path_len) -> void
@@ -504,6 +512,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_reuse_tuple: cranelift_module::FuncId,
     // Function entry tracking for diagnostics
     pub(crate) rt_enter_fn: cranelift_module::FuncId,
+    pub(crate) rt_leave_fn: cranelift_module::FuncId,
     // Source location tracking for diagnostics
     pub(crate) rt_set_location: cranelift_module::FuncId,
     // Snapshot mock helpers
@@ -575,6 +584,7 @@ impl DeclaredHelpers {
             rt_reuse_list: imp!(rt_reuse_list),
             rt_reuse_tuple: imp!(rt_reuse_tuple),
             rt_enter_fn: imp!(rt_enter_fn),
+            rt_leave_fn: imp!(rt_leave_fn),
             rt_set_location: imp!(rt_set_location),
             rt_snapshot_mock_install: imp!(rt_snapshot_mock_install),
             rt_snapshot_mock_flush: imp!(rt_snapshot_mock_flush),
@@ -716,11 +726,30 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     }
 
     /// Emit a call to `rt_set_location` to record the current source location for diagnostics.
-    pub(crate) fn emit_set_location(&mut self, builder: &mut FunctionBuilder<'_>, location: &str) {
-        let (ptr, len) = self.embed_str(builder, location.as_bytes());
-        builder
-            .ins()
-            .call(self.helpers.rt_set_location, &[self.ctx_param, ptr, len]);
+    pub(crate) fn emit_set_location(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        location: &SourceOrigin,
+    ) {
+        let (ptr, len) = self.embed_str(builder, location.path.as_bytes());
+        let start_line = builder.ins().iconst(PTR, location.span.start.line as i64);
+        let start_col = builder.ins().iconst(PTR, location.span.start.column as i64);
+        let end_line = builder.ins().iconst(PTR, location.span.end.line as i64);
+        let end_col = builder.ins().iconst(PTR, location.span.end.column as i64);
+        let kind = builder.ins().iconst(PTR, location.source_kind.as_i64());
+        builder.ins().call(
+            self.helpers.rt_set_location,
+            &[
+                self.ctx_param,
+                ptr,
+                len,
+                start_line,
+                start_col,
+                end_line,
+                end_col,
+                kind,
+            ],
+        );
     }
 
     /// Emit a call to `rt_enter_fn` to record the current function name for diagnostics.
@@ -729,6 +758,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder
             .ins()
             .call(self.helpers.rt_enter_fn, &[self.ctx_param, ptr, len]);
+    }
+
+    pub(crate) fn emit_leave_fn(&mut self, builder: &mut FunctionBuilder<'_>) {
+        builder
+            .ins()
+            .call(self.helpers.rt_leave_fn, &[self.ctx_param]);
     }
 
     /// Try to unbox a boxed `*mut Value` to an unboxed scalar if the target

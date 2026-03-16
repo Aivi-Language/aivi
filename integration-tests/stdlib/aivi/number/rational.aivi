@@ -1,0 +1,34 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.rational.tests
+
+use aivi
+use aivi.testing
+use aivi.number.bigint (fromInt, toInt)
+use aivi.number.rational
+
+@test "rational normalize and accessors"
+rational_normalize_and_accessors = do Effect {
+  value = normalize (fromBigInts (fromInt 6) (fromInt 8))
+
+  assertEq (toInt (numerator value)) (Some 3)
+  assertEq (toInt (denominator value)) (Some 4)
+}
+
+@test "rational domain arithmetic"
+rational_domain_arithmetic = do Effect {
+  half     = fromBigInts (fromInt 1) (fromInt 2)
+  third    = fromBigInts (fromInt 1) (fromInt 3)
+  sum      = normalize (half + third)
+  diff     = normalize (half - third)
+  product  = normalize (sum * diff)
+  quotient = normalize (sum / half)
+
+  assertEq (toInt (numerator sum)) (Some 5)
+  assertEq (toInt (denominator sum)) (Some 6)
+  assertEq (toInt (numerator diff)) (Some 1)
+  assertEq (toInt (denominator diff)) (Some 6)
+  assertEq (toInt (numerator product)) (Some 5)
+  assertEq (toInt (denominator product)) (Some 36)
+  assertEq (toInt (numerator quotient)) (Some 5)
+  assertEq (toInt (denominator quotient)) (Some 3)
+}

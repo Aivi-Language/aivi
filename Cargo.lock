@@ -92,6 +92,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-tungstenite",
  "toml",
  "toml_edit 0.25.3+spec-1.1.0",
  "unicode-normalization",

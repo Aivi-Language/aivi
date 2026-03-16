@@ -17,6 +17,8 @@ mod infer;
 mod ordering;
 
 #[cfg(test)]
+mod bigint_domain_tests;
+#[cfg(test)]
 mod builtins_parity_tests;
 #[cfg(test)]
 mod class_constraints_tests;
@@ -164,14 +166,39 @@ fn build_module_interface(
     env: &TypeEnv,
 ) -> ModuleInterface {
     let mut exports = HashMap::new();
-    for export in &module.exports {
-        if export.kind != crate::surface::ScopeItemKind::Value {
-            continue;
+    let mut insert_export_schemes = |name: &str| {
+        if let Some(schemes) = sigs.get(name) {
+            exports.insert(name.to_string(), schemes.clone());
+        } else if let Some(schemes) = env.get_all(name) {
+            exports.insert(name.to_string(), schemes.to_vec());
         }
-        if let Some(schemes) = sigs.get(&export.name.name) {
-            exports.insert(export.name.name.clone(), schemes.clone());
-        } else if let Some(schemes) = env.get_all(&export.name.name) {
-            exports.insert(export.name.name.clone(), schemes.to_vec());
+    };
+    for export in &module.exports {
+        match export.kind {
+            crate::surface::ScopeItemKind::Value => {
+                insert_export_schemes(&export.name.name);
+            }
+            crate::surface::ScopeItemKind::Domain => {
+                let domain_name = export.name.name.as_str();
+                for item in &module.items {
+                    let crate::surface::ModuleItem::DomainDecl(domain) = item else {
+                        continue;
+                    };
+                    if domain.name.name != domain_name {
+                        continue;
+                    }
+                    for domain_item in &domain.items {
+                        match domain_item {
+                            crate::surface::DomainItem::Def(def)
+                            | crate::surface::DomainItem::LiteralDef(def) => {
+                                insert_export_schemes(&def.name.name);
+                            }
+                            crate::surface::DomainItem::TypeAlias(_)
+                            | crate::surface::DomainItem::TypeSig(_) => {}
+                        }
+                    }
+                }
+            }
         }
     }
 

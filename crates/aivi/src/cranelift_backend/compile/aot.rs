@@ -41,11 +41,11 @@ pub fn compile_to_object(
 
     // 4. Create ObjectModule targeting the host platform
     let mut module = create_object_module("aivi_program")
-        .map_err(|e| AiviError::Runtime(format!("cranelift object init: {e}")))?;
+        .map_err(|e| AiviError::runtime_message(format!("cranelift object init: {e}")))?;
 
     // 5. Declare runtime helper imports
     let helpers = declare_helpers(&mut module)
-        .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?;
+        .map_err(|e| AiviError::runtime_message(format!("cranelift declare helpers: {e}")))?;
 
     // 6. Two-pass compilation (same as JIT path)
     #[allow(dead_code)]
@@ -83,7 +83,7 @@ pub fn compile_to_object(
                 if is_stdlib_module {
                     continue;
                 }
-                return Err(AiviError::Runtime(format!(
+                return Err(AiviError::runtime_message(format!(
                     "cranelift aot compile {}: unsupported arity {} (max {})",
                     qualified,
                     params.len(),
@@ -94,7 +94,7 @@ pub fn compile_to_object(
                 if is_stdlib_module {
                     continue;
                 }
-                return Err(AiviError::Runtime(format!(
+                return Err(AiviError::runtime_message(format!(
                     "cranelift aot compile {}: unsupported expression shape",
                     qualified
                 )));
@@ -116,7 +116,7 @@ pub fn compile_to_object(
             // AOT: export all functions so the runtime can find them
             let func_id = module
                 .declare_function(&func_name, Linkage::Export, &sig)
-                .map_err(|e| AiviError::Runtime(format!("declare {}: {e}", func_name)))?;
+                .map_err(|e| AiviError::runtime_message(format!("declare {}: {e}", func_name)))?;
 
             let (param_types, return_type) = if let Some(cg_ty) = &def.cg_type {
                 decompose_func_type(cg_ty, arity)
@@ -190,7 +190,7 @@ pub fn compile_to_object(
                 });
             }
             Err(e) => {
-                return Err(AiviError::Runtime(format!(
+                return Err(AiviError::runtime_message(format!(
                     "cranelift aot compile {}: {e}",
                     dd.qualified
                 )))
@@ -206,13 +206,13 @@ pub fn compile_to_object(
         &all_lambdas,
         surface_modules,
     )
-    .map_err(|e| AiviError::Runtime(format!("aot entry point: {e}")))?;
+    .map_err(|e| AiviError::runtime_message(format!("aot entry point: {e}")))?;
 
     // 8. Emit the object file
     let product = module.finish();
     let bytes = product
         .emit()
-        .map_err(|e| AiviError::Runtime(format!("emit object: {e}")))?;
+        .map_err(|e| AiviError::runtime_message(format!("emit object: {e}")))?;
 
     Ok(bytes)
 }

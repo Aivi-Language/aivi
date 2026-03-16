@@ -1,7 +1,7 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use aivi::{
@@ -86,7 +86,7 @@ fn should_skip_file(path: &Path) -> bool {
     if p.contains("/integration-tests/stdlib/aivi/ui/gtk4/") {
         return std::env::var_os("AIVI_RUN_GTK_TESTS").is_none();
     }
-    if p.contains("/integration-tests/stdlib/aivi/console/") {
+    if p.contains("/integration-tests/stdlib/aivi/console/interactive/") {
         return std::env::var_os("AIVI_RUN_CONSOLE_TESTS").is_none();
     }
     false

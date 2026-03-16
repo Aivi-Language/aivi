@@ -638,3 +638,83 @@ fn optional_bool(
         ))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn some(value: Value) -> Value {
+        Value::Constructor {
+            name: "Some".to_string(),
+            args: vec![value],
+        }
+    }
+
+    fn password(value: &str) -> Value {
+        Value::Constructor {
+            name: "Password".to_string(),
+            args: vec![Value::Text(value.to_string())],
+        }
+    }
+
+    fn text(value: &str) -> Value {
+        Value::Text(value.to_string())
+    }
+
+    #[test]
+    fn build_imap_config_applies_spec_defaults() {
+        let record = HashMap::from([
+            ("host".to_string(), text("imap.example.com")),
+            ("user".to_string(), text("user@example.com")),
+            ("auth".to_string(), password("secret")),
+        ]);
+
+        let config = match build_imap_config(&record) {
+            Ok(config) => config,
+            Err(_) => panic!("imap config"),
+        };
+        assert_eq!(config.host, "imap.example.com");
+        assert_eq!(config.user, "user@example.com");
+        assert_eq!(config.mailbox, "INBOX");
+        assert_eq!(config.filter, "ALL");
+        assert_eq!(config.limit, 50);
+        assert_eq!(config.port, 993);
+        assert!(!config.starttls);
+    }
+
+    #[test]
+    fn build_smtp_config_unwraps_optional_recipient_lists() {
+        let record = HashMap::from([
+            ("host".to_string(), text("smtp.example.com")),
+            ("user".to_string(), text("user@example.com")),
+            ("auth".to_string(), password("secret")),
+            ("from".to_string(), text("from@example.com")),
+            (
+                "to".to_string(),
+                Value::List(Arc::new(vec![text("to@example.com")])),
+            ),
+            (
+                "cc".to_string(),
+                some(Value::List(Arc::new(vec![text("cc@example.com")]))),
+            ),
+            ("bcc".to_string(), Value::Constructor {
+                name: "None".to_string(),
+                args: vec![],
+            }),
+            ("subject".to_string(), text("hello")),
+            ("body".to_string(), text("world")),
+            ("port".to_string(), some(Value::Int(2525))),
+            ("starttls".to_string(), some(Value::Bool(true))),
+        ]);
+
+        let config = match build_smtp_config(&record) {
+            Ok(config) => config,
+            Err(_) => panic!("smtp config"),
+        };
+        assert_eq!(config.to, vec!["to@example.com"]);
+        assert_eq!(config.cc, vec!["cc@example.com"]);
+        assert!(config.bcc.is_empty());
+        assert_eq!(config.port, 2525);
+        assert!(config.starttls);
+    }
+}

@@ -25,7 +25,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.read expects Text path".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
@@ -286,12 +286,12 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.open expects Text path".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| match std::fs::File::open(&path) {
-                    Ok(file) => Ok(Value::FileHandle(Arc::new(Mutex::new(file)))),
+                    Ok(file) => Ok(Value::FileHandle(Arc::new(Mutex::new(Some(file))))),
                     Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
                 }),
             };
@@ -301,16 +301,23 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
     fields.insert(
         "close".to_string(),
         builtin("file.close", 1, |mut args, _| {
-            let _handle = match args.remove(0) {
+            let handle = match args.remove(0) {
                 Value::FileHandle(handle) => handle,
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.close expects a file handle".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| Ok(Value::Unit)),
+                func: Arc::new(move |_| {
+                    let mut file = handle.lock().map_err(|_| RuntimeError::IOError {
+                        context: "file.close".to_string(),
+                        cause: "file handle poisoned".to_string(),
+                    })?;
+                    *file = None;
+                    Ok(Value::Unit)
+                }),
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),
@@ -323,18 +330,23 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.readAll expects a file handle".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let mut file = handle.lock().map_err(|_| RuntimeError::IOError {
+                    let mut handle = handle.lock().map_err(|_| RuntimeError::IOError {
                         context: "file.readAll".to_string(),
                         cause: "file handle poisoned".to_string(),
                     })?;
-                    let _ = std::io::Seek::seek(&mut *file, std::io::SeekFrom::Start(0));
+                    let Some(file) = handle.as_mut() else {
+                        return Err(RuntimeError::Error(Value::Text(
+                            "file handle is closed".to_string(),
+                        )));
+                    };
+                    let _ = std::io::Seek::seek(file, std::io::SeekFrom::Start(0));
                     let mut buffer = String::new();
-                    std::io::Read::read_to_string(&mut *file, &mut buffer)
+                    std::io::Read::read_to_string(file, &mut buffer)
                         .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
                     Ok(Value::Text(buffer))
                 }),
@@ -350,7 +362,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.write_text expects Text content".to_string(),
-                    ))
+                    ));
                 }
             };
             let path = match args.remove(0) {
@@ -358,7 +370,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.write_text expects Text path".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
@@ -378,7 +390,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.exists expects Text path".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
@@ -395,7 +407,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.stat expects Text path".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {
@@ -445,7 +457,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 _ => {
                     return Err(RuntimeError::Message(
                         "file.delete expects Text path".to_string(),
-                    ))
+                    ));
                 }
             };
             let effect = EffectValue::Thunk {

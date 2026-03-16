@@ -1,5 +1,6 @@
 #![deny(clippy::unwrap_used)]
 
+mod runtime_report;
 mod workspace;
 
 use std::fs;
@@ -12,6 +13,10 @@ use aivi_core::{
     file_diagnostics_have_errors, format_text, parse_modules, parse_modules_from_tokens,
     render_diagnostics, resolve_import_names, CstBundle, CstFile, Diagnostic, FileDiagnostic,
     HirProgram, Module,
+};
+pub use runtime_report::{
+    render_runtime_report, RuntimeFrame, RuntimeFrameKind, RuntimeLabel, RuntimeNote,
+    RuntimeNoteKind, RuntimeReport,
 };
 pub use workspace::{AssemblyStats, FrontendAssembly, FrontendAssemblyMode, WorkspaceSession};
 
@@ -55,11 +60,24 @@ pub enum AiviError {
     #[error("WASM error: {0}")]
     Wasm(String),
     #[error("Runtime error: {0}")]
-    Runtime(String),
+    Runtime(Box<RuntimeReport>),
     #[error("Config error: {0}")]
     Config(String),
     #[error("Cargo error: {0}")]
     Cargo(String),
+}
+
+impl AiviError {
+    pub fn runtime_message(message: impl Into<String>) -> Self {
+        Self::Runtime(Box::new(RuntimeReport::message(message)))
+    }
+
+    pub fn render(&self, use_color: bool) -> String {
+        match self {
+            Self::Runtime(report) => render_runtime_report(report, use_color),
+            _ => self.to_string(),
+        }
+    }
 }
 
 /// Prints diagnostics to stderr so the user sees errors before a `Diagnostics` exit.

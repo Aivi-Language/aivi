@@ -23,7 +23,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(AiviError::Diagnostics) => ExitCode::FAILURE,
         Err(err) => {
-            eprintln!("{err}");
+            eprintln!("{}", err.render(io::stderr().is_terminal()));
             ExitCode::FAILURE
         }
     }
@@ -294,10 +294,10 @@ fn run() -> Result<(), AiviError> {
                     println!("\x1b[32m\u{2714}\x1b[0m {}", success.description);
                 }
                 for failure in &report.failures {
-                    eprintln!(
-                        "\x1b[31m\u{2718}\x1b[0m {}: {}",
-                        failure.description, failure.message
-                    );
+                    eprintln!("\x1b[31m\u{2718}\x1b[0m {}", failure.description);
+                    for line in failure.message.lines() {
+                        eprintln!("    {line}");
+                    }
                 }
                 eprintln!(
                     "\x1b[31m\u{2718}\x1b[0m FAILED: {} failed, {} passed",

@@ -807,7 +807,9 @@ Command Reference
                             text: format!("{} :: {}{}", result.value_text, result_type, suffix),
                         });
                     }
-                    Err(err) => self.push_error(err.to_string()),
+                    Err(err) => {
+                        self.push_error(err.render(self.options.plain_mode && self.use_color()))
+                    }
                 }
             }
         }

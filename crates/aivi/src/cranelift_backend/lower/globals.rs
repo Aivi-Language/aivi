@@ -412,7 +412,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         op: &str,
         left: &RustIrExpr,
         right: &RustIrExpr,
-        location: Option<&str>,
+        location: Option<&crate::SourceOrigin>,
     ) -> TypedValue {
         let lhs = self.lower_expr(builder, left);
         let rhs = self.lower_expr(builder, right);

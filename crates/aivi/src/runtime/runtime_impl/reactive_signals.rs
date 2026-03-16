@@ -916,8 +916,11 @@ impl Runtime {
             } => err,
             other => {
                 let mut wrapped = other;
-                if let Some(location) = self.jit_current_loc.as_deref() {
-                    wrapped = self.reactive_wrap_error_context(wrapped, format!("at {location}"));
+                if let Some(location) = self.jit_current_loc.as_ref() {
+                    wrapped = self.reactive_wrap_error_context(
+                        wrapped,
+                        format!("at {}", location.start_position_text()),
+                    );
                 }
                 if let Some(function_name) = self.jit_current_fn.as_deref() {
                     wrapped =

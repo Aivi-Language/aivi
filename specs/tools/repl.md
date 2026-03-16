@@ -42,6 +42,21 @@ aivi repl [--color] [--no-color] [--plain]
 
 With no flags, `aivi repl` opens the full-screen TUI.
 
+## Runtime failures in the REPL
+
+The REPL should present runtime failures using the same underlying runtime-diagnostic model as `aivi run`, including:
+
+- a concise summary
+- the best available source location
+- notes and help text
+- a call chain when one is available
+
+In **plain mode**, the REPL renders that information as ordinary terminal output using the selected color mode.
+
+In **TUI mode**, the REPL may style the same data with TUI widgets instead of raw ANSI escapes, but it should not throw away important details such as source frames or stack information simply because the user is in an interactive session.
+
+See also [Runtime Diagnostics](runtime_diagnostics.md) for the shared contract.
+
 ## TUI mode vs plain mode
 
 Use the default TUI when you want history navigation, inline suggestions, and the symbol pane.

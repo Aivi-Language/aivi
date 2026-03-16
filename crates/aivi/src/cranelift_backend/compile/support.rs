@@ -382,7 +382,8 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
             arity,
             func: Arc::new(move |args: Vec<Value>, runtime: &mut Runtime| {
                 // Clear any stale pending error before entering JIT code
-                runtime.jit_pending_error = None;
+                runtime.clear_pending_runtime_error();
+                runtime.clear_match_failure();
 
                 // Construct JitRuntimeCtx and call the compiled function
                 let ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };
@@ -406,7 +407,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 // This lets apply_multi_clause try the next clause.
                 if runtime.jit_match_failed {
                     runtime.jit_match_failed = false;
-                    runtime.jit_pending_error = None;
+                    runtime.clear_pending_runtime_error();
                     // Clean up boxed arguments
                     for arg_ptr in boxed_args {
                         unsafe {
@@ -418,19 +419,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                             drop(Box::from_raw(result_ptr as *mut Value));
                         }
                     }
-                    let mut scrutinee_parts = Vec::new();
-                    if let Some(ref loc) = runtime.jit_current_loc {
-                        scrutinee_parts.push(format!("at {loc}"));
-                    }
-                    if let Some(ref fn_name) = runtime.jit_current_fn {
-                        scrutinee_parts.push(format!("in `{fn_name}`"));
-                    }
-                    let scrutinee = if scrutinee_parts.is_empty() {
-                        None
-                    } else {
-                        Some(scrutinee_parts.join(" "))
-                    };
-                    return Err(RuntimeError::NonExhaustiveMatch { scrutinee });
+                    return Err(RuntimeError::NonExhaustiveMatch { scrutinee: None });
                 }
 
                 // Clone the result from the pointer (don't take ownership — the

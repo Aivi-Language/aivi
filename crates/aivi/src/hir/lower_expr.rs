@@ -237,7 +237,7 @@ fn lower_expr_inner_ctx(
             index: Box::new(lower_expr_ctx(*index, id_gen, ctx, false)),
             location: ctx
                 .source_path
-                .map(|path| format!("{}:{}:{}", path, span.start.line, span.start.column)),
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())),
         },
         Expr::Call { func, args, .. } => HirExpr::Call {
             id: id_gen.next(),
@@ -256,7 +256,7 @@ fn lower_expr_inner_ctx(
         } => {
             let location = ctx
                 .source_path
-                .map(|path| format!("{}:{}:{}", path, span.start.line, span.start.column));
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone()));
             let scrutinee = if let Some(scrutinee) = scrutinee {
                 lower_expr_ctx(*scrutinee, id_gen, ctx, false)
             } else {
@@ -399,21 +399,24 @@ fn lower_expr_inner_ctx(
                         };
                     }
                     right => {
-                        return HirExpr::Binary {
-                            id: id_gen.next(),
-                            op,
-                            left: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
-                            right: Box::new(lower_expr_ctx(right, id_gen, ctx, false)),
-                            location: ctx.source_path.map(|path| {
-                                format!("{}:{}:{}", path, span.start.line, span.start.column)
-                            }),
-                        };
+                            return HirExpr::Binary {
+                                id: id_gen.next(),
+                                op,
+                                left: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
+                                right: Box::new(lower_expr_ctx(right, id_gen, ctx, false)),
+                                location: ctx.source_path.map(|path| {
+                                    crate::diagnostics::SourceOrigin::new(
+                                        path.to_string(),
+                                        span.clone(),
+                                    )
+                                }),
+                            };
                     }
                 }
             }
             let location = ctx
                 .source_path
-                .map(|path| format!("{}:{}:{}", path, span.start.line, span.start.column));
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone()));
             HirExpr::Binary {
                 id: id_gen.next(),
                 op,

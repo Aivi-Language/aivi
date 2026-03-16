@@ -44,8 +44,9 @@ mod typecheck;
 
 pub use cst::{CstBundle, CstFile, CstToken};
 pub use diagnostics::{
-    file_diagnostics_have_errors, render_diagnostics, Diagnostic, DiagnosticLabel,
-    DiagnosticSeverity, FileDiagnostic, Position, Span,
+    classify_source_kind, file_diagnostics_have_errors, render_diagnostic,
+    render_diagnostic_with_source, render_diagnostics, Diagnostic, DiagnosticLabel,
+    DiagnosticSeverity, FileDiagnostic, Position, SourceKind, SourceOrigin, Span,
 };
 pub use formatter::{format_text, format_text_with_options, BraceStyle, FormatOptions};
 pub use hir::{
