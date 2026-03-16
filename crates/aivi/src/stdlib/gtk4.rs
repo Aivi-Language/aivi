@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.ui.gtk4";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui.gtk4
-export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
+export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, MenuModelId, MenuButtonId, DialogId, ImageId, GestureClickId, ActionId, OverlayId, SeparatorId, GtkError
 export GtkBindingHandle
 export GtkNode, GtkAttr
 export GtkElement, GtkTextNode, GtkBoundText, GtkShowNode, GtkEachNode
@@ -29,21 +29,11 @@ export widgetSetCss, appSetCss
 export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource, imageNewFromIconName, imageSetPixelSize
 export iconThemeAddSearchPath
 export TrayIconId, trayIconNew, trayIconSetTooltip, trayIconSetVisible, trayIconSetMenuItems
-export dragSourceNew, dragSourceSetText
-export dropTargetNew, dropTargetLastText
 export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
 export dialogNew, dialogSetTitle, dialogSetChild, dialogPresent, dialogClose, adwDialogPresent, signalBindDialogPresent
-export fileDialogNew, fileDialogSelectFile
-export listStoreNew, listStoreAppendText, listStoreItems
-export listViewNew, listViewSetModel
-export treeViewNew, treeViewSetModel
 export gestureClickNew, gestureClickLastButton, widgetAddController
-export clipboardDefault, clipboardSetText, clipboardText
 export actionNew, actionSetEnabled, appAddAction
-export shortcutNew, widgetAddShortcut
-export notificationNew, notificationSetBody, appSendNotification, appWithdrawNotification
-export layoutManagerNew, widgetSetLayoutManager
-export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
+export osOpenUri, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkBoundText, gtkShow, gtkEach, gtkEachKeyed
 export gtkStaticAttr, gtkBoundAttr, gtkStaticProp, gtkBoundProp, gtkEventAttr, gtkEventSugarAttr, gtkIdAttr, gtkRefAttr
 export buildFromNode, buildWithIds, reconcileNode
@@ -63,22 +53,12 @@ LabelId = Int
 EntryId = Int
 ScrollAreaId = Int
 DrawAreaId = Int
-DragSourceId = Int
-DropTargetId = Int
 MenuModelId = Int
 MenuButtonId = Int
 DialogId = Int
-FileDialogId = Int
 ImageId = Int
-ListStoreId = Int
-ListViewId = Int
-TreeViewId = Int
 GestureClickId = Int
-ClipboardId = Int
 ActionId = Int
-ShortcutId = Int
-NotificationId = Int
-LayoutManagerId = Int
 OverlayId = Int
 SeparatorId = Int
 GtkError = Text
@@ -399,18 +379,6 @@ trayIconSetVisible = gtk4.trayIconSetVisible
 trayIconSetMenuItems : TrayIconId -> List { label: Text, action: Text } -> Effect GtkError Unit
 trayIconSetMenuItems = gtk4.trayIconSetMenuItems
 
-dragSourceNew : WidgetId -> Effect GtkError DragSourceId
-dragSourceNew = gtk4.dragSourceNew
-
-dragSourceSetText : DragSourceId -> Text -> Effect GtkError Unit
-dragSourceSetText = gtk4.dragSourceSetText
-
-dropTargetNew : WidgetId -> Effect GtkError DropTargetId
-dropTargetNew = gtk4.dropTargetNew
-
-dropTargetLastText : DropTargetId -> Effect GtkError Text
-dropTargetLastText = gtk4.dropTargetLastText
-
 menuModelNew : Unit -> Effect GtkError MenuModelId
 menuModelNew = gtk4.menuModelNew
 
@@ -444,12 +412,6 @@ adwDialogPresent = gtk4.adwDialogPresent
 signalBindDialogPresent : Text -> WidgetId -> WindowId -> Effect GtkError Unit
 signalBindDialogPresent = gtk4.signalBindDialogPresent
 
-fileDialogNew : Unit -> Effect GtkError FileDialogId
-fileDialogNew = gtk4.fileDialogNew
-
-fileDialogSelectFile : FileDialogId -> Effect GtkError Text
-fileDialogSelectFile = gtk4.fileDialogSelectFile
-
 imageNewFromFile : Text -> Effect GtkError ImageId
 imageNewFromFile = gtk4.imageNewFromFile
 
@@ -471,27 +433,6 @@ imageSetPixelSize = gtk4.imageSetPixelSize
 iconThemeAddSearchPath : Text -> Effect GtkError Unit
 iconThemeAddSearchPath = gtk4.iconThemeAddSearchPath
 
-listStoreNew : Unit -> Effect GtkError ListStoreId
-listStoreNew = gtk4.listStoreNew
-
-listStoreAppendText : ListStoreId -> Text -> Effect GtkError Unit
-listStoreAppendText = gtk4.listStoreAppendText
-
-listStoreItems : ListStoreId -> Effect GtkError (List Text)
-listStoreItems = gtk4.listStoreItems
-
-listViewNew : Unit -> Effect GtkError ListViewId
-listViewNew = gtk4.listViewNew
-
-listViewSetModel : ListViewId -> ListStoreId -> Effect GtkError Unit
-listViewSetModel = gtk4.listViewSetModel
-
-treeViewNew : Unit -> Effect GtkError TreeViewId
-treeViewNew = gtk4.treeViewNew
-
-treeViewSetModel : TreeViewId -> ListStoreId -> Effect GtkError Unit
-treeViewSetModel = gtk4.treeViewSetModel
-
 gestureClickNew : WidgetId -> Effect GtkError GestureClickId
 gestureClickNew = gtk4.gestureClickNew
 
@@ -500,15 +441,6 @@ gestureClickLastButton = gtk4.gestureClickLastButton
 
 widgetAddController : WidgetId -> GestureClickId -> Effect GtkError Unit
 widgetAddController = gtk4.widgetAddController
-
-clipboardDefault : Unit -> Effect GtkError ClipboardId
-clipboardDefault = gtk4.clipboardDefault
-
-clipboardSetText : ClipboardId -> Text -> Effect GtkError Unit
-clipboardSetText = gtk4.clipboardSetText
-
-clipboardText : ClipboardId -> Effect GtkError Text
-clipboardText = gtk4.clipboardText
 
 actionNew : Text -> Effect GtkError ActionId
 actionNew = gtk4.actionNew
@@ -519,35 +451,8 @@ actionSetEnabled = gtk4.actionSetEnabled
 appAddAction : AppId -> ActionId -> Effect GtkError Unit
 appAddAction = gtk4.appAddAction
 
-shortcutNew : Text -> Text -> Effect GtkError ShortcutId
-shortcutNew = gtk4.shortcutNew
-
-widgetAddShortcut : WidgetId -> ShortcutId -> Effect GtkError Unit
-widgetAddShortcut = gtk4.widgetAddShortcut
-
-notificationNew : Text -> Text -> Effect GtkError NotificationId
-notificationNew = gtk4.notificationNew
-
-notificationSetBody : NotificationId -> Text -> Effect GtkError Unit
-notificationSetBody = gtk4.notificationSetBody
-
-appSendNotification : AppId -> Text -> NotificationId -> Effect GtkError Unit
-appSendNotification = gtk4.appSendNotification
-
-appWithdrawNotification : AppId -> Text -> Effect GtkError Unit
-appWithdrawNotification = gtk4.appWithdrawNotification
-
-layoutManagerNew : Text -> Effect GtkError LayoutManagerId
-layoutManagerNew = gtk4.layoutManagerNew
-
-widgetSetLayoutManager : WidgetId -> LayoutManagerId -> Effect GtkError Unit
-widgetSetLayoutManager = gtk4.widgetSetLayoutManager
-
 osOpenUri : AppId -> Text -> Effect GtkError Unit
 osOpenUri = gtk4.osOpenUri
-
-osShowInFileManager : Text -> Effect GtkError Unit
-osShowInFileManager = gtk4.osShowInFileManager
 
 osSetBadgeCount : AppId -> Int -> Effect GtkError Unit
 osSetBadgeCount = gtk4.osSetBadgeCount

@@ -2,7 +2,7 @@
 // Value access helpers
 // ---------------------------------------------------------------------------
 
-/// Access a record field by name. Returns `*mut Value` (Unit with diagnostic if missing).
+/// Access a record field by name.
 ///
 /// # Safety
 /// `value_ptr` must be a valid `Value::Record`.
@@ -17,49 +17,26 @@ pub extern "C" fn rt_record_field(
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     unsafe { (*ctx).runtime_mut() }.reactive_note_record_field_access(value, name);
-    // During operator dispatch, field mismatches must be hard failures so that
-    // wrong-domain clauses cannot "succeed" with garbage Unit values.
-    let dispatching = unsafe { (*ctx).runtime_mut() }.jit_binary_op_dispatching;
     match value {
         Value::Record(rec) => match rec.get(name) {
             Some(v) => abi::box_value(v.clone()),
             None => {
-                if dispatching {
-                    unsafe {
-                        set_pending_error(
-                            ctx,
-                            RuntimeError::Message(format!(
-                                "field `{name}` does not exist on this record"
-                            )),
-                        );
-                    }
-                } else {
-                    rt_warn(
+                unsafe {
+                    set_pending_error(
                         ctx,
-                        "missing record field",
-                        &format!("field `{name}` does not exist on this record"),
-                        &format!("check that the record type includes a `{name}` field and that it was correctly constructed"),
+                        RuntimeError::Message(format!("field `{name}` does not exist on this record")),
                     );
                 }
                 abi::box_value(Value::Unit)
             }
         },
         other => {
-            if dispatching {
-                unsafe {
-                    set_pending_error(
-                        ctx,
-                        RuntimeError::Message(format!(
-                            "tried to access field `{name}` on a non-record value: `{other:?}`"
-                        )),
-                    );
-                }
-            } else {
-                rt_warn(
+            unsafe {
+                set_pending_error(
                     ctx,
-                    "type mismatch",
-                    &format!("tried to access field `{name}` on a non-record value: `{other:?}`"),
-                    "this value should be a record — check that the expression producing it returns the correct type",
+                    RuntimeError::Message(format!(
+                        "tried to access field `{name}` on a non-record value: `{other:?}`"
+                    )),
                 );
             }
             abi::box_value(Value::Unit)
@@ -223,6 +200,68 @@ pub extern "C" fn rt_reuse_record(
             std::ptr::write(token, new_value);
         }
         token
+    }
+}
+
+#[cfg(test)]
+mod values_tests {
+    use std::sync::Arc;
+
+    use crate::cranelift_backend::abi::JitRuntimeCtx;
+    use crate::runtime::values::Value;
+    use crate::runtime::{Runtime, RuntimeError};
+
+    use super::rt_record_field;
+
+    fn test_runtime() -> Runtime {
+        crate::runtime::build_runtime_base()
+    }
+
+    fn call_record_field(runtime: &mut Runtime, value: Value, field: &str) -> Value {
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };
+        let result = rt_record_field(
+            &mut ctx,
+            &value as *const Value,
+            field.as_ptr(),
+            field.len(),
+        );
+        unsafe { crate::cranelift_backend::abi::unbox_value(result) }
+    }
+
+    #[test]
+    fn record_field_sets_pending_error_for_non_record_values() {
+        let mut runtime = test_runtime();
+
+        let result = call_record_field(&mut runtime, Value::Text("boom".to_string()), "path");
+
+        assert!(matches!(result, Value::Unit));
+        match runtime.jit_pending_error.take() {
+            Some(RuntimeError::Message(message)) => {
+                assert!(
+                    message.contains("tried to access field `path` on a non-record value"),
+                    "unexpected message: {message}"
+                );
+            }
+            Some(err) => panic!("expected Message error, got {}", crate::runtime::format_runtime_error(err)),
+            None => panic!("expected pending field-access error"),
+        }
+    }
+
+    #[test]
+    fn record_field_sets_pending_error_for_missing_fields() {
+        let mut runtime = test_runtime();
+        let value = Value::Record(Arc::new(std::collections::HashMap::new()));
+
+        let result = call_record_field(&mut runtime, value, "path");
+
+        assert!(matches!(result, Value::Unit));
+        match runtime.jit_pending_error.take() {
+            Some(RuntimeError::Message(message)) => {
+                assert_eq!(message, "field `path` does not exist on this record");
+            }
+            Some(err) => panic!("expected Message error, got {}", crate::runtime::format_runtime_error(err)),
+            None => panic!("expected pending missing-field error"),
+        }
     }
 }
 

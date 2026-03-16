@@ -492,6 +492,7 @@ pub extern "C" fn rt_binary_op(
                     let saved_pending = runtime.jit_pending_error.take();
                     let saved_match_failed = runtime.jit_match_failed;
                     let saved_fn = runtime.jit_current_fn.clone();
+                    let saved_loc = runtime.jit_current_loc.clone();
                     runtime.jit_match_failed = false;
                     if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
                         if let Ok(result) = runtime.apply(applied, rhs.clone()) {
@@ -537,6 +538,7 @@ pub extern "C" fn rt_binary_op(
                     runtime.jit_pending_error = saved_pending;
                     runtime.jit_match_failed = saved_match_failed;
                     runtime.jit_current_fn = saved_fn;
+                    runtime.jit_current_loc = saved_loc;
                     runtime.jit_rt_warning_count = wc;
                 }
                 runtime.jit_binary_op_dispatching = false;
@@ -575,4 +577,68 @@ pub extern "C" fn rt_binary_op(
         &format!("check that both operands have compatible types for `{op}`"),
     );
     abi::box_value(Value::Unit)
+}
+
+#[cfg(test)]
+mod patterns_tests {
+    use std::sync::Arc;
+
+    use crate::cranelift_backend::abi::JitRuntimeCtx;
+    use crate::runtime::values::{BuiltinImpl, BuiltinValue};
+    use crate::runtime::values::Value;
+    use crate::runtime::{Runtime, RuntimeError};
+
+    use super::rt_binary_op;
+
+    fn test_runtime() -> Runtime {
+        crate::runtime::build_runtime_base()
+    }
+
+    fn builtin2(
+        name: &str,
+        func: impl Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
+    ) -> Value {
+        Value::Builtin(BuiltinValue {
+            imp: Arc::new(BuiltinImpl {
+                name: name.to_string(),
+                arity: 2,
+                func: Arc::new(func),
+            }),
+            args: Vec::new(),
+            tagged_args: Some(Vec::new()),
+        })
+    }
+
+    #[test]
+    fn rejected_multiclause_restores_stale_location() {
+        let mut runtime = test_runtime();
+        runtime.jit_current_fn = Some("caller".into());
+        runtime.jit_current_loc = Some("caller:1:1".into());
+        runtime.ctx.globals.set(
+            "(+)".to_string(),
+            Value::MultiClause(vec![
+                builtin2("bad-clause", |_args, runtime| {
+                    runtime.jit_current_fn = Some("aivi.number.quaternion.(+)".into());
+                    runtime.jit_current_loc =
+                        Some("<embedded:aivi.number.quaternion>:40:63".into());
+                    runtime.jit_pending_error = Some(RuntimeError::Message(
+                        "field `w` does not exist on this record".to_string(),
+                    ));
+                    Ok(Value::Unit)
+                }),
+                builtin2("good-clause", |_args, _runtime| Ok(Value::Int(7))),
+            ]),
+        );
+
+        let lhs = Value::Record(Arc::new(std::collections::HashMap::new()));
+        let rhs = Value::Record(Arc::new(std::collections::HashMap::new()));
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+        let result_ptr = rt_binary_op(&mut ctx, b"+".as_ptr(), 1, &lhs, &rhs);
+        let result = unsafe { crate::cranelift_backend::abi::unbox_value(result_ptr) };
+
+        assert!(matches!(result, Value::Int(7)));
+        assert_eq!(runtime.jit_current_fn.as_deref(), Some("caller"));
+        assert_eq!(runtime.jit_current_loc.as_deref(), Some("caller:1:1"));
+        assert!(runtime.jit_pending_error.is_none());
+    }
 }

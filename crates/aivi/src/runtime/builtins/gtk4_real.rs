@@ -651,6 +651,24 @@ mod bridge {
                 aivi_gtk4::widget_set_bool_property(widget_id, property, flag)
                     .map_err(gtk4_err_to_runtime)
             }
+            "active"
+                if matches!(
+                    class_name,
+                    "GtkCheckButton"
+                        | "GtkToggleButton"
+                        | "GtkSwitch"
+                        | "GtkMenuButton"
+                        | "AdwSwitchRow"
+                ) =>
+            {
+                let flag = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
+                    context: format!("gtk4 live binding {class_name}.{property}"),
+                    expected: "Bool".to_string(),
+                    got: value.to_string(),
+                })?;
+                aivi_gtk4::widget_set_bool_property(widget_id, property, flag)
+                    .map_err(gtk4_err_to_runtime)
+            }
             "hexpand" => {
                 let flag = parse_bool_text(value).ok_or_else(|| RuntimeError::TypeError {
                     context: format!("gtk4 live binding {class_name}.{property}"),
@@ -3532,6 +3550,138 @@ mod tests {
         assert!(
             aivi_gtk4::widget_get_bool_property(split_view_id, "show-sidebar")
                 .unwrap_or_else(|err| panic!("read updated show-sidebar: {}", err.message))
+        );
+    }
+
+    #[test]
+    fn live_menu_button_active_updates_from_signal_write() {
+        let _gtk = gtk_test_guard();
+        ensure_gtk();
+        let ctx = test_ctx();
+        let mut runtime = Runtime::new(ctx, CancelToken::root());
+        let active = ok_or_panic(
+            runtime.reactive_create_signal(Value::Bool(false)),
+            "create menu button active signal",
+        );
+        let notify_handler = builtin("test.menuButtonNotify", 1, |_args, _| Ok(Value::Unit));
+
+        let app = aivi_gtk4::app_new("com.aivi.menu.button.active.binding.test")
+            .unwrap_or_else(|err| panic!("create app: {}", err.message));
+        let window_node = ResolvedGtkNode::Element {
+            tag: "object".to_string(),
+            attrs: vec![
+                ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "AdwApplicationWindow".to_string(),
+                },
+                ResolvedGtkAttr::Id("menu-button-active-window".to_string()),
+                ResolvedGtkAttr::StaticProp {
+                    name: "title".to_string(),
+                    value: "Menu Button Active Window".to_string(),
+                },
+                ResolvedGtkAttr::StaticProp {
+                    name: "default-width".to_string(),
+                    value: "320".to_string(),
+                },
+                ResolvedGtkAttr::StaticProp {
+                    name: "default-height".to_string(),
+                    value: "180".to_string(),
+                },
+            ],
+            children: vec![ResolvedGtkNode::Element {
+                tag: "object".to_string(),
+                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                    name: "class".to_string(),
+                    value: "GtkBox".to_string(),
+                }],
+                children: vec![ResolvedGtkNode::Element {
+                    tag: "object".to_string(),
+                    attrs: vec![
+                        ResolvedGtkAttr::StaticAttr {
+                            name: "class".to_string(),
+                            value: "GtkMenuButton".to_string(),
+                        },
+                        ResolvedGtkAttr::Id("menu-button-active".to_string()),
+                        ResolvedGtkAttr::BoundProp {
+                            name: "active".to_string(),
+                            value: active.clone(),
+                        },
+                        ResolvedGtkAttr::EventProp {
+                            name: "notify::active".to_string(),
+                            handler: notify_handler,
+                            arg_mode: GtkCallbackArgMode::Raw,
+                        },
+                    ],
+                    children: vec![ResolvedGtkNode::Element {
+                        tag: "property".to_string(),
+                        attrs: vec![ResolvedGtkAttr::StaticAttr {
+                            name: "name".to_string(),
+                            value: "popover".to_string(),
+                        }],
+                        children: vec![ResolvedGtkNode::Element {
+                            tag: "object".to_string(),
+                            attrs: vec![ResolvedGtkAttr::StaticAttr {
+                                name: "class".to_string(),
+                                value: "GtkPopover".to_string(),
+                            }],
+                            children: vec![ResolvedGtkNode::Element {
+                                tag: "object".to_string(),
+                                attrs: vec![ResolvedGtkAttr::StaticAttr {
+                                    name: "class".to_string(),
+                                    value: "GtkBox".to_string(),
+                                }],
+                                children: Vec::new(),
+                            }],
+                        }],
+                    }],
+                }],
+            }],
+        };
+
+        let result = ok_or_panic(
+            materialize_app_window_with_bindings(app, &[window_node], &mut runtime),
+            "mount menu button window",
+        );
+        let button_id = *result
+            .named_widgets
+            .get("menu-button-active")
+            .expect("menu button should be named");
+
+        aivi_gtk4::widget_set_opacity(result.root_id, 0.0)
+            .unwrap_or_else(|err| panic!("hide menu button window: {}", err.message));
+        aivi_gtk4::window_present(result.root_id)
+            .unwrap_or_else(|err| panic!("present menu button window: {}", err.message));
+        for _ in 0..20 {
+            aivi_gtk4::pump_events();
+        }
+
+        assert!(
+            !aivi_gtk4::widget_get_bool_property(button_id, "active")
+                .unwrap_or_else(|err| panic!("read initial menu button active: {}", err.message))
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(active.clone(), Value::Bool(true)),
+            "open menu button",
+        );
+        for _ in 0..20 {
+            aivi_gtk4::pump_events();
+        }
+        assert!(
+            aivi_gtk4::widget_get_bool_property(button_id, "active")
+                .unwrap_or_else(|err| panic!("read opened menu button active: {}", err.message))
+        );
+
+        ok_or_panic(
+            runtime.reactive_set_signal(active, Value::Bool(false)),
+            "close menu button",
+        );
+        for _ in 0..20 {
+            aivi_gtk4::pump_events();
+        }
+        assert!(
+            !aivi_gtk4::widget_get_bool_property(button_id, "active")
+                .unwrap_or_else(|err| panic!("read closed menu button active: {}", err.message))
         );
     }
 
