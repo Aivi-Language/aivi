@@ -86,11 +86,15 @@ pub enum HirExpr {
         id: u32,
         func: Box<HirExpr>,
         arg: Box<HirExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Call {
         id: u32,
         func: Box<HirExpr>,
         args: Vec<HirExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     DebugFn {
         id: u32,
@@ -109,6 +113,8 @@ pub enum HirExpr {
         log_time: bool,
         func: Box<HirExpr>,
         arg: Box<HirExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     List {
         id: u32,
@@ -131,6 +137,8 @@ pub enum HirExpr {
         id: u32,
         base: Box<HirExpr>,
         field: String,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Index {
         id: u32,
@@ -151,6 +159,8 @@ pub enum HirExpr {
         cond: Box<HirExpr>,
         then_branch: Box<HirExpr>,
         else_branch: Box<HirExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Binary {
         id: u32,

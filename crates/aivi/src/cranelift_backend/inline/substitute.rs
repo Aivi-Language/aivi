@@ -550,6 +550,7 @@ mod tests {
             id,
             func: Box::new(func),
             arg: Box::new(arg),
+            location: None,
         }
     }
 
@@ -577,6 +578,7 @@ mod tests {
             cond: Box::new(c),
             then_branch: Box::new(t),
             else_branch: Box::new(e),
+            location: None,
         }
     }
 
@@ -747,6 +749,7 @@ mod tests {
                 id: 10,
                 func: Box::new(global(11, "add")),
                 args: vec![lit_int(12), lit_int(13)],
+                location: None,
             },
         );
         let mut modules = vec![make_module("Main", vec![add_def, main_def])];

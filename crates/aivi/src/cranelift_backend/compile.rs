@@ -1184,6 +1184,7 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
                         },
                         original,
                     ],
+                    location: None,
                 };
             }
         }
@@ -1334,8 +1335,10 @@ mod runtime_warning_tests {
                                         value: true,
                                     }),
                                     arg: Box::new(lit_int(15, "1")),
+                                    location: None,
                                 }),
                                 else_branch: Box::new(tuple_else_branch(20)),
+                                location: None,
                             }),
                         },
                     },
@@ -1355,11 +1358,13 @@ mod runtime_warning_tests {
                                     func: Box::new(HirExpr::Var {
                                         id: 44,
                                         name: "f".to_string(),
-                                        location: Some(origin("src/demo/main.aivi", 5, 11)),
+                                        location: None,
                                     }),
                                     arg: Box::new(lit_int(45, "1")),
+                                    location: Some(origin("src/demo/main.aivi", 5, 11)),
                                 }),
                                 else_branch: Box::new(tuple_else_branch(50)),
+                                location: None,
                             }),
                         },
                     },
@@ -1380,17 +1385,18 @@ mod runtime_warning_tests {
                                     param: "x".to_string(),
                                     body: Box::new(HirExpr::App {
                                         id: 74,
-                                        func: Box::new(HirExpr::Var {
+                                        func: Box::new(HirExpr::LitBool {
                                             id: 75,
-                                            name: "helper".to_string(),
-                                            location: Some(origin("src/demo/main.aivi", 8, 22)),
-                                        }),
-                                        arg: Box::new(HirExpr::LitBool {
-                                            id: 76,
                                             value: true,
                                         }),
+                                        arg: Box::new(HirExpr::LitNumber {
+                                            id: 76,
+                                            text: "1".to_string(),
+                                        }),
+                                        location: None,
                                     }),
                                 }),
+                                location: None,
                             }),
                         },
                     },
@@ -1449,11 +1455,7 @@ mod runtime_warning_tests {
         let rendered = aivi_driver::render_runtime_report(&runtime.runtime_report(err), false);
 
         assert!(
-            rendered.contains("demo.main.helper at src/demo/main.aivi:8:22"),
-            "expected helper frame location, got:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("demo.main.entry (lambda) at src/demo/main.aivi:"),
+            rendered.contains("demo.main.entry (lambda) at src/demo/main.aivi:5:11"),
             "expected lambda frame location, got:\n{rendered}"
         );
 
@@ -1484,8 +1486,10 @@ mod runtime_warning_tests {
                                         value: true,
                                     }),
                                     arg: Box::new(lit_int(15, "1")),
+                                    location: None,
                                 }),
                                 else_branch: Box::new(tuple_else_branch(20)),
+                                location: None,
                             }),
                         },
                     },
@@ -1505,6 +1509,7 @@ mod runtime_warning_tests {
                                     id: 43,
                                     value: true,
                                 }),
+                                location: None,
                             }),
                         },
                     },
@@ -1569,6 +1574,124 @@ mod runtime_warning_tests {
         assert!(
             rendered.contains("1: demo.main.entry"),
             "expected outer user frame to survive later JIT work, got:\n{rendered}"
+        );
+
+        drop(module);
+    }
+
+    #[test]
+    fn if_condition_warning_uses_if_node_location() {
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "demo.main".to_string(),
+                defs: vec![HirDef {
+                    name: "main".to_string(),
+                    expr: HirExpr::If {
+                        id: 1,
+                        cond: Box::new(HirExpr::Tuple {
+                            id: 2,
+                            items: vec![lit_int(3, "1"), lit_int(4, "2")],
+                        }),
+                        then_branch: Box::new(lit_int(5, "1")),
+                        else_branch: Box::new(lit_int(6, "0")),
+                        location: Some(origin("src/demo/main.aivi", 3, 5)),
+                    },
+                }],
+            }],
+        };
+
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        runtime.ctx.begin_console_capture();
+        let value = runtime
+            .ctx
+            .globals
+            .get("demo.main.main")
+            .expect("main binding should exist");
+        let _ = runtime.force_value(value).unwrap_or_else(|err| {
+            panic!(
+                "force main binding: {}",
+                crate::runtime::format_runtime_error(err)
+            )
+        });
+        let capture = runtime.ctx.take_console_capture();
+
+        assert!(
+            capture.stderr.contains("warning[RT]"),
+            "expected runtime warning, got stderr:\n{}",
+            capture.stderr
+        );
+        assert!(
+            capture.stderr.contains("src/demo/main.aivi:3:5"),
+            "expected if-node source location in warning, got stderr:\n{}",
+            capture.stderr
+        );
+
+        drop(module);
+    }
+
+    #[test]
+    fn field_access_errors_use_field_access_location() {
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "demo.main".to_string(),
+                defs: vec![HirDef {
+                    name: "helper".to_string(),
+                    expr: HirExpr::Lambda {
+                        id: 10,
+                        param: "_".to_string(),
+                        body: Box::new(HirExpr::FieldAccess {
+                            id: 11,
+                            base: Box::new(HirExpr::Tuple {
+                                id: 12,
+                                items: vec![lit_int(13, "1"), lit_int(14, "2")],
+                            }),
+                            field: "provider".to_string(),
+                            location: Some(origin("src/demo/main.aivi", 4, 13)),
+                        }),
+                    },
+                }],
+            }],
+        };
+
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        let helper = runtime
+            .ctx
+            .globals
+            .get("demo.main.helper")
+            .expect("helper binding should exist")
+            .clone();
+        let err = runtime
+            .apply(helper, Value::Unit)
+            .expect_err("helper should fail");
+        let rendered = crate::runtime::format_runtime_error(err);
+
+        assert!(
+            rendered.contains("field `provider`"),
+            "expected field-access error, got:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("src/demo/main.aivi:4:13"),
+            "expected field-access location, got:\n{rendered}"
         );
 
         drop(module);

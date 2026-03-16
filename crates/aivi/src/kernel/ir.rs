@@ -82,18 +82,30 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             param,
             body: Box::new(desugar_expr(*body, id_gen)),
         },
-        HirExpr::App { id, func, arg } => HirExpr::App {
+        HirExpr::App {
+            id,
+            func,
+            arg,
+            location,
+        } => HirExpr::App {
             id,
             func: Box::new(desugar_expr(*func, id_gen)),
             arg: Box::new(desugar_expr(*arg, id_gen)),
+            location,
         },
-        HirExpr::Call { id, func, args } => HirExpr::Call {
+        HirExpr::Call {
+            id,
+            func,
+            args,
+            location,
+        } => HirExpr::Call {
             id,
             func: Box::new(desugar_expr(*func, id_gen)),
             args: args
                 .into_iter()
                 .map(|a| desugar_expr(a, id_gen))
                 .collect(),
+            location,
         },
         HirExpr::DebugFn {
             id,
@@ -120,6 +132,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             log_time,
             func,
             arg,
+            location,
         } => HirExpr::Pipe {
             id,
             pipe_id,
@@ -128,6 +141,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             log_time,
             func: Box::new(desugar_expr(*func, id_gen)),
             arg: Box::new(desugar_expr(*arg, id_gen)),
+            location,
         },
         HirExpr::List { id, items } => HirExpr::List {
             id,
@@ -161,10 +175,16 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
                 .map(|f| desugar_record_field(f, id_gen))
                 .collect(),
         },
-        HirExpr::FieldAccess { id, base, field } => HirExpr::FieldAccess {
+        HirExpr::FieldAccess {
+            id,
+            base,
+            field,
+            location,
+        } => HirExpr::FieldAccess {
             id,
             base: Box::new(desugar_expr(*base, id_gen)),
             field,
+            location,
         },
         HirExpr::Index {
             id,
@@ -201,11 +221,13 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             cond,
             then_branch,
             else_branch,
+            location,
         } => HirExpr::If {
             id,
             cond: Box::new(desugar_expr(*cond, id_gen)),
             then_branch: Box::new(desugar_expr(*then_branch, id_gen)),
             else_branch: Box::new(desugar_expr(*else_branch, id_gen)),
+            location,
         },
         HirExpr::Binary {
             id,
@@ -313,6 +335,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         location: None,
                     }),
                     arg: Box::new(raw_src),
+                    location: None,
                 };
                 let next = lower_generate_block(rest, id_gen);
                 let param_name = format!("_gen_bind_{}", id_gen.next());
@@ -386,6 +409,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                             location: None,
                         }),
                         arg: Box::new(fix_body),
+                        location: None,
                     }
                 } else {
                     raw_src
@@ -400,6 +424,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         body: Box::new(body),
                     }),
                     arg: Box::new(value),
+                    location: None,
                 }
             }
         }
@@ -417,6 +442,7 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                     location: None,
                 }),
                 arg: Box::new(raw),
+                location: None,
             };
             if rest.is_empty() {
                 head
@@ -479,11 +505,13 @@ fn gen_yield(val: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         id: id_gen.next(),
         func: Box::new(k),
         arg: Box::new(z),
+        location: None,
     };
     let k_app_z_val = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(k_app_z),
         arg: Box::new(val),
+        location: None,
     };
 
     HirExpr::Lambda {
@@ -519,11 +547,13 @@ fn gen_append(g1: HirExpr, g2: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         id: id_gen.next(),
         func: Box::new(g1),
         arg: Box::new(k.clone()),
+        location: None,
     };
     let g1_k_z = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(g1_k),
         arg: Box::new(z.clone()),
+        location: None,
     };
 
     // g2 k (g1 k z)
@@ -531,11 +561,13 @@ fn gen_append(g1: HirExpr, g2: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         id: id_gen.next(),
         func: Box::new(g2),
         arg: Box::new(k),
+        location: None,
     };
     let g2_k_res = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(g2_k),
         arg: Box::new(g1_k_z),
+        location: None,
     };
 
     HirExpr::Lambda {
@@ -571,11 +603,13 @@ fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         id: id_gen.next(),
         func: Box::new(next),
         arg: Box::new(k.clone()),
+        location: None,
     };
     let next_k_z = HirExpr::App {
         id: id_gen.next(),
         func: Box::new(next_k),
         arg: Box::new(z.clone()),
+        location: None,
     };
 
     let if_expr = HirExpr::If {
@@ -583,6 +617,7 @@ fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         cond: Box::new(cond),
         then_branch: Box::new(next_k_z),
         else_branch: Box::new(z),
+        location: None,
     };
 
     HirExpr::Lambda {
@@ -622,6 +657,7 @@ fn lower_do_effect_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExp
             location: None,
         }),
         args: vec![chain],
+        location: None,
     }
 }
 
@@ -739,6 +775,7 @@ fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen)
                 cond: Box::new(lowered_expr),
                 then_branch: Box::new(rest),
                 else_branch: Box::new(effect_pure_unit(id_gen)),
+                location: None,
             }
         }
     }
@@ -795,8 +832,10 @@ fn effect_bind(expr: HirExpr, func: HirExpr, id_gen: &mut IdGen) -> HirExpr {
                 location: None,
             }),
             arg: Box::new(expr),
+            location: None,
         }),
         arg: Box::new(func),
+        location: None,
     }
 }
 
@@ -811,6 +850,7 @@ fn effect_pure(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             location: None,
         }),
         arg: Box::new(expr),
+        location: None,
     }
 }
 
@@ -918,6 +958,7 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
             location: None,
         }),
         args: vec![acquire_lambda],
+        location: None,
     }
 }
 
@@ -967,6 +1008,7 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                         body: Box::new(body),
                     }),
                     arg: Box::new(lowered_expr),
+                    location: None,
                 }
             }
         }
@@ -985,6 +1027,7 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                         body: Box::new(rest),
                     }),
                     arg: Box::new(lowered_expr),
+                    location: None,
                 }
             }
         }
@@ -1011,6 +1054,7 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                 
                     location: None,
                 }),
+                location: None,
             }
         }
     }

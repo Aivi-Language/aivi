@@ -104,11 +104,15 @@ pub enum RustIrExpr {
         id: u32,
         func: Box<RustIrExpr>,
         arg: Box<RustIrExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Call {
         id: u32,
         func: Box<RustIrExpr>,
         args: Vec<RustIrExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     DebugFn {
         id: u32,
@@ -127,6 +131,8 @@ pub enum RustIrExpr {
         log_time: bool,
         func: Box<RustIrExpr>,
         arg: Box<RustIrExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     List {
         id: u32,
@@ -149,6 +155,8 @@ pub enum RustIrExpr {
         id: u32,
         base: Box<RustIrExpr>,
         field: String,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Index {
         id: u32,
@@ -169,6 +177,8 @@ pub enum RustIrExpr {
         cond: Box<RustIrExpr>,
         then_branch: Box<RustIrExpr>,
         else_branch: Box<RustIrExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     Binary {
         id: u32,
@@ -398,18 +408,30 @@ fn lower_expr(
                 body: Box::new(body),
             }
         }
-        HirExpr::App { id, func, arg } => RustIrExpr::App {
+        HirExpr::App {
+            id,
+            func,
+            arg,
+            location,
+        } => RustIrExpr::App {
             id,
             func: Box::new(lower_expr(*func, globals, locals)?),
             arg: Box::new(lower_expr(*arg, globals, locals)?),
+            location,
         },
-        HirExpr::Call { id, func, args } => RustIrExpr::Call {
+        HirExpr::Call {
+            id,
+            func,
+            args,
+            location,
+        } => RustIrExpr::Call {
             id,
             func: Box::new(lower_expr(*func, globals, locals)?),
             args: args
                 .into_iter()
                 .map(|arg| lower_expr(arg, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
+            location,
         },
         HirExpr::DebugFn {
             id,
@@ -436,6 +458,7 @@ fn lower_expr(
             log_time,
             func,
             arg,
+            location,
         } => RustIrExpr::Pipe {
             id,
             pipe_id,
@@ -444,6 +467,7 @@ fn lower_expr(
             log_time,
             func: Box::new(lower_expr(*func, globals, locals)?),
             arg: Box::new(lower_expr(*arg, globals, locals)?),
+            location,
         },
         HirExpr::List { id, items } => RustIrExpr::List {
             id,
@@ -479,10 +503,16 @@ fn lower_expr(
                 .map(|field| lower_record_field(field, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::FieldAccess { id, base, field } => RustIrExpr::FieldAccess {
+        HirExpr::FieldAccess {
+            id,
+            base,
+            field,
+            location,
+        } => RustIrExpr::FieldAccess {
             id,
             base: Box::new(lower_expr(*base, globals, locals)?),
             field,
+            location,
         },
         HirExpr::Index { id, base, index, location } => RustIrExpr::Index {
             id,
@@ -509,11 +539,13 @@ fn lower_expr(
             cond,
             then_branch,
             else_branch,
+            location,
         } => RustIrExpr::If {
             id,
             cond: Box::new(lower_expr(*cond, globals, locals)?),
             then_branch: Box::new(lower_expr(*then_branch, globals, locals)?),
             else_branch: Box::new(lower_expr(*else_branch, globals, locals)?),
+            location,
         },
         HirExpr::Binary {
             id,
