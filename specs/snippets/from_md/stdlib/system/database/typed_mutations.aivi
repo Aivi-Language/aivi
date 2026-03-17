@@ -25,8 +25,8 @@ lookupUser = conn => userId =>
 syncUser : DbConnection -> User -> Effect DbError (Table User)
 syncUser = conn => user =>
   db.upsertOn conn userTable[id == user.id] user {
-      name: user.name
-      active: user.active
+    name: user.name
+    active: user.active
   }
 
 // Ambient variants use the default connection from db.configure
