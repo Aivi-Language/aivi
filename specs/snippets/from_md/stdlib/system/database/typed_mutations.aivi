@@ -14,7 +14,7 @@ removeInactiveUsers = conn =>
 // db.updateOn patches all rows selected by the table predicate.
 promoteAdmin : DbConnection -> Int -> Effect DbError (Table User)
 promoteAdmin = conn => userId =>
-  db.updateOn conn userTable[id == userId] (patch { role: "admin" })
+  db.updateOn conn userTable[id == userId] { role: "admin" }
 
 // db.firstOn keeps the selector syntax for reads as well.
 lookupUser : DbConnection -> Int -> Effect DbError (Option User)
@@ -24,10 +24,10 @@ lookupUser = conn => userId =>
 // db.upsertOn patches matching rows and inserts the seed row when none match.
 syncUser : DbConnection -> User -> Effect DbError (Table User)
 syncUser = conn => user =>
-  db.upsertOn conn userTable[id == user.id] user (patch {
+  db.upsertOn conn userTable[id == user.id] user {
       name: user.name
       active: user.active
-  })
+  }
 
 // Ambient variants use the default connection from db.configure
 // and mirror the explicit forms exactly:
@@ -36,8 +36,8 @@ syncUser = conn => user =>
 //   db.rows          table[pred]
 //   db.first         table[pred]
 //   db.delete        table[pred]
-//   db.update        table[pred] patch
-//   db.upsert        table[pred] value patch
+//   db.update        table[pred] { ... }
+//   db.upsert        table[pred] value { ... }
 
 addUserAmbient : User -> Effect DbError (Table User)
 addUserAmbient = newUser =>

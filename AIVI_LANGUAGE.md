@@ -216,8 +216,9 @@ record <| { items[price > 80].tag: "hot" }
 record <| { lookup["key"]: newVal }
 db.rows userTable[active]
 db.first userTable[id == userId]
+db.update userTable[id == userId] { role: "admin" }
 userTable[id == userId] <| { role: "admin" }
-userTable[id == userId] <| -
+db.delete userTable[id == userId]
 ```
 
 Patch instructions:
@@ -524,14 +525,22 @@ opt |> getOrElse default
 res |> getOrElse default
 opt |> map f |> filter pred |> chain g
 res |> map f |> mapErr g |> chain h
-do Applicative { x <- v1; y <- v2; f x y }
+do Applicative {
+  x <- v1
+  y <- v2
+  f x y
+}
 res <- attempt risky
 val <- risky or default
 when cond <- eff
 given cond or fail err
 state <| { user.profile.name: "New" }
 state <| { items[*].price: _ * 1.1 }
-generate { x <- src; x -> pred; yield f x }
+generate {
+  x <- src
+  x -> pred
+  yield f x
+}
 ```
 
 ## 23. Anti-patterns (never emit)
@@ -555,6 +564,7 @@ generate { x <- src; x -> pred; yield f x }
 - Keep opening `{` on same line as keyword.
 - do not chain if/else statements, prefer pattern matching
 - using ADT.func if func is not ambigeous. Ie: Prefer isSome to Option.isSome
+- do not nest "match" constructs
 
 ## 24. Minimal generation checklist
 

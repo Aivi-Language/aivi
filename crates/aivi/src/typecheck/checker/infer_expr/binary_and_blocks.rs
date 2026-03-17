@@ -219,14 +219,13 @@ impl TypeChecker {
             if let Some(row_ty) = self.extract_db_selection_row_type(target_ty.clone()) {
                 let effect_table_ty = self.db_effect_table_type(row_ty.clone());
                 return match right {
-                    Expr::Raw { text, .. } if text == "-" => Ok(effect_table_ty),
                     Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
                         self.infer_patch(row_ty, fields, env)?;
                         Ok(effect_table_ty)
                     }
                     _ => Err(TypeError {
                         span: expr_span(right),
-                        message: "database selector updates accept only a patch block or the delete marker `-`".to_string(),
+                        message: "database selector updates accept only a patch block like `{ ... }`".to_string(),
                         expected: None,
                         found: None,
                     }),
@@ -249,14 +248,6 @@ impl TypeChecker {
             }
             if let Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } = right {
                 return self.infer_patch(target_ty, fields, env);
-            }
-            if matches!(right, Expr::Raw { text, .. } if text == "-") {
-                return Err(TypeError {
-                    span: expr_span(right),
-                    message: "`<| -` is only valid when the left-hand side is a database selector like `userTable[id == userId]`".to_string(),
-                    expected: None,
-                    found: None,
-                });
             }
         }
         if op == "<<-" {

@@ -759,14 +759,6 @@ impl TypeChecker {
             if self.looks_like_db_selector_target(&left) {
                 return self.elab_db_selector_write(left, right, span, expected, env);
             }
-            if matches!(&right, Expr::Raw { text, .. } if text == "-") {
-                return Err(TypeError {
-                    span: expr_span(&right),
-                    message: "`<| -` is only valid when the left-hand side is a database selector like `userTable[id == userId]`".to_string(),
-                    expected: None,
-                    found: None,
-                });
-            }
         }
         if op == "|>" {
             let (left, _left_ty) = self.elab_expr(left, None, env)?;
@@ -999,9 +991,6 @@ impl TypeChecker {
         };
 
         let call = match right {
-            Expr::Raw { text, .. } if text == "-" => {
-                self.db_helper_call_expr("delete", vec![selection], &span)
-            }
             Expr::Record {
                 fields,
                 span: patch_span,
@@ -1021,7 +1010,7 @@ impl TypeChecker {
             other => {
                 return Err(TypeError {
                     span: expr_span(&other),
-                    message: "database selector updates accept only a patch block or the delete marker `-`".to_string(),
+                    message: "database selector updates accept only a patch block like `{ ... }`".to_string(),
                     expected: None,
                     found: None,
                 });

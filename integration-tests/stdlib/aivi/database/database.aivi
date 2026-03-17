@@ -16,7 +16,7 @@ use aivi.database (
   applyDelta, applyDeltaOn, chunkDeltas,
   ftsDoc, ftsMatchAny, ftsMatchAll,
   ins, del, ups,
-  insert, insertOn, rows, firstOn, deleteOn, updateOn, upsert, upsertOn
+  insert, insertOn, rows, firstOn, delete, deleteOn, update, updateOn, upsert, upsertOn
 )
 
 // Test that types are well-formed
@@ -249,12 +249,12 @@ firstOn_selector_convenience = do Effect {
     | None     => assert False
 }
 
-@test "delete selector shorthand"
-delete_selector_shorthand = do Effect {
+@test "delete selector convenience"
+delete_selector_convenience = do Effect {
   users0 = table "delete_selector_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
   users2 <- insert users1 { id: 2, name: "Bob" }
-  users3 <- users2[id == 1] <| -
+  users3 <- delete users2[id == 1]
   rows   <- dbLoad users3
   assertEq (List.length rows) 1
   rows match
@@ -286,13 +286,24 @@ update_selector_shorthand = do Effect {
     | _     => assert False
 }
 
+@test "update selector convenience"
+update_selector_convenience = do Effect {
+  users0 = table "update_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice" }
+  users2 <- update users1[id == 1] { name: "Alicia" }
+  rows   <- dbLoad users2
+  rows match
+    | [row] => assertEq row.name "Alicia"
+    | _     => assert False
+}
+
 @test "updateOn selector convenience"
 updateOn_selector_convenience = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
   users0 = table "updateOn_users"[]
   _      <- runMigrationsOn conn [users0]
   users1 <- insertOn conn users0 { id: 1, name: "Alice" }
-  users2 <- updateOn conn users1[id == 1] (patch { name: "Alicia" })
+  users2 <- updateOn conn users1[id == 1] { name: "Alicia" }
   rows   <- loadOn conn users2
   _      <- close conn
   rows match
@@ -315,7 +326,7 @@ upsert_convenience_inserts = do Effect {
 upsert_convenience_updates = do Effect {
   users0 = table "upsert_upd_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- upsert users1[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
+  users2 <- upsert users1[id == 1] { id: 1, name: "Alice" } { name: "Updated" }
   rows   <- dbLoad users2
   assertEq (List.length rows) 1
   rows match
@@ -328,8 +339,8 @@ upsertOn_convenience = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
   users0 = table "upsertOn_users"[]
   _      <- runMigrationsOn conn [users0]
-  users1 <- upsertOn conn users0[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
-  users2 <- upsertOn conn users1[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
+  users1 <- upsertOn conn users0[id == 1] { id: 1, name: "Alice" } { name: "Updated" }
+  users2 <- upsertOn conn users1[id == 1] { id: 1, name: "Alice" } { name: "Updated" }
   rows   <- loadOn conn users2
   _      <- close conn
   assertEq (List.length rows) 1
