@@ -204,8 +204,12 @@ Expr           := IfExpr
 IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr
 
-LambdaExpr     := LambdaArgs "=>" Expr
+LambdaExpr     := LambdaHead Sep? "=>" Expr
                | MatchExpr
+LambdaHead     := LambdaParam { Sep? LambdaParam }
+LambdaParam    := PatParam
+               | PatchedParam
+PatchedParam   := lowerIdent "<|" PipeArg
 LambdaArgs     := PatParam { PatParam }
 PatParam       := lowerIdent [ "as" PatParam ]
                | "_"
@@ -213,6 +217,11 @@ PatParam       := lowerIdent [ "as" PatParam ]
                | TuplePat
                | ListPat
                | "(" PatParam ")"
+(* `name <| updater => body` is argument-patch sugar. It desugars to a lambda whose
+   body starts by shadowing `name` with `name |> updater`. The updater uses the same
+   grammar as a pipe RHS (`PipeArg`), so placeholder transforms like `_ + 1`,
+   accessor sugar like `.field`, explicit lambdas, and bare matcher blocks all work.
+   In v0.1, only simple identifier parameters may use the `<|` head form. *)
 
 MatchExpr      := PipeExpr [ "match" MatchArms ] [ OrFallback ]
 MatchArms      := Sep? "|" Arm { Sep "|" Arm }

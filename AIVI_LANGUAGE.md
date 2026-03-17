@@ -61,10 +61,21 @@ inc = add 1
 result = add 5 10
 f = x => x + 1
 g = _ + 1                 // unary placeholder lambda only
+h = x <| _ + 1 => x * 2   // patch argument before body
 ```
 
 - Application uses spaces, not parentheses: `f x y`.
 - `.field` means accessor lambda: `x => x.field`.
+- `x <| updater => body` is lambda-head sugar for “shadow `x` with `x |> updater`, then evaluate `body`”.
+- The updater in that head form uses the same syntax as a pipe RHS (`_ + 1`, `.field`, explicit lambda, matcher block, ...).
+- Multi-arg patched heads are typically formatted as:
+
+  ```aivi
+  f = x <| _ + 1
+      y <| _ + 3
+    => ...
+  ```
+
 - Pipes pass the left value as the last argument:
     - `x |> f` == `f x`
     - `x |> f a b` == `f a b x`

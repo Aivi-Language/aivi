@@ -1773,12 +1773,148 @@
             Some(result)
         }
 
+        fn try_expand_arg_patch_head(line: &str, indent_size: usize) -> Option<Vec<String>> {
+            if line.contains("//") {
+                return None;
+            }
+
+            fn is_ident_char(byte: u8) -> bool {
+                byte.is_ascii_alphanumeric() || byte == b'_'
+            }
+
+            let bytes = line.as_bytes();
+            let mut depth = 0isize;
+            let mut in_quote: Option<u8> = None;
+            let mut escaped = false;
+            let mut arrow_idx: Option<usize> = None;
+            let mut patch_ops: Vec<usize> = Vec::new();
+            let mut i = 0usize;
+            while i + 1 < bytes.len() {
+                let byte = bytes[i];
+                if let Some(quote) = in_quote {
+                    if escaped {
+                        escaped = false;
+                        i += 1;
+                        continue;
+                    }
+                    if byte == b'\\' {
+                        escaped = true;
+                        i += 1;
+                        continue;
+                    }
+                    if byte == quote {
+                        in_quote = None;
+                    }
+                    i += 1;
+                    continue;
+                }
+
+                match byte {
+                    b'"' | b'\'' | b'`' => {
+                        in_quote = Some(byte);
+                        i += 1;
+                        continue;
+                    }
+                    b'(' | b'[' | b'{' => {
+                        depth += 1;
+                        i += 1;
+                        continue;
+                    }
+                    b')' | b']' | b'}' => {
+                        depth = (depth - 1).max(0);
+                        i += 1;
+                        continue;
+                    }
+                    _ => {}
+                }
+
+                if depth == 0 && bytes[i] == b'=' && bytes[i + 1] == b'>' {
+                    arrow_idx = Some(i);
+                    break;
+                }
+                if depth == 0 && bytes[i] == b'<' && bytes[i + 1] == b'|' {
+                    patch_ops.push(i);
+                }
+                i += 1;
+            }
+
+            if patch_ops.len() < 2 {
+                return None;
+            }
+            let arrow_idx = arrow_idx?;
+            let rhs = line[arrow_idx + 2..].trim_start();
+            if rhs.starts_with('{') {
+                return None;
+            }
+
+            let mut param_starts: Vec<usize> = Vec::new();
+            for patch_idx in patch_ops {
+                if patch_idx >= arrow_idx {
+                    continue;
+                }
+                let mut start = patch_idx;
+                while start > 0 && bytes[start - 1] == b' ' {
+                    start -= 1;
+                }
+                let end_ident = start;
+                while start > 0 && is_ident_char(bytes[start - 1]) {
+                    start -= 1;
+                }
+                if start == end_ident || !bytes[start].is_ascii_lowercase() {
+                    return None;
+                }
+                if param_starts.last().copied() != Some(start) {
+                    param_starts.push(start);
+                }
+            }
+            if param_starts.len() < 2 {
+                return None;
+            }
+
+            let first_param_start = param_starts[0];
+            let prefix = line[..first_param_start].trim_end();
+            let mut segments = Vec::with_capacity(param_starts.len());
+            for (index, start) in param_starts.iter().enumerate() {
+                let end = param_starts
+                    .get(index + 1)
+                    .copied()
+                    .unwrap_or(arrow_idx);
+                segments.push(line[*start..end].trim_end().to_string());
+            }
+
+            let leading_indent = line.chars().take_while(|ch| *ch == ' ').count();
+            let continuation_indent = " ".repeat(first_param_start);
+            let arrow_indent = " ".repeat(leading_indent + indent_size);
+
+            let first_line = if prefix.is_empty() {
+                segments[0].clone()
+            } else {
+                format!("{prefix} {}", segments[0])
+            };
+
+            let mut expanded = vec![first_line];
+            for segment in segments.iter().skip(1) {
+                expanded.push(format!("{continuation_indent}{segment}"));
+            }
+
+            let mut arrow_line = format!("{arrow_indent}=>");
+            if !rhs.is_empty() {
+                arrow_line.push(' ');
+                arrow_line.push_str(rhs);
+            }
+            expanded.push(arrow_line);
+            Some(expanded)
+        }
+
         let old_lines = std::mem::take(&mut rendered_lines);
         rendered_lines.reserve(old_lines.len() + 32);
         for line in old_lines {
             match try_expand_use(&line, options.max_width) {
                 Some(expanded) => rendered_lines.extend(expanded),
-                None => rendered_lines.push(line),
+                None => match try_expand_arg_patch_head(&line, indent_size) {
+                    Some(expanded) => rendered_lines.extend(expanded),
+                    None => rendered_lines.push(line),
+                },
             }
         }
     }
