@@ -679,7 +679,7 @@ fn projectable_schema_for_row(
     row: &Value,
     ctx: &str,
 ) -> Result<QueryTable, RuntimeError> {
-    build_query_storage_table(name, columns, &[row.clone()]).map_err(|err| {
+    build_query_storage_table(name, columns, std::slice::from_ref(row)).map_err(|err| {
         RuntimeError::Message(format!("{ctx} could not project selector upsert row: {err}"))
     })
 }

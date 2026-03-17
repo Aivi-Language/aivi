@@ -62,6 +62,9 @@ pub(super) struct TypeChecker {
     /// the call is first inferred, so it is lowered to `CgType` only after the
     /// surrounding definition has finished constraining it.
     load_source_schemas: Vec<(String, String, Type)>,
+    /// Records `(module, def_name, inner_type)` for file source constructor call
+    /// sites such as `file.json ...` and `file.csv ...`.
+    source_constructor_schemas: Vec<(String, String, Type)>,
     /// Maps bare type names to their unique qualified names from the global type universe.
     /// Built from `global_type_constructors` keys: e.g. `"DateTime"` → `"aivi.calendar.DateTime"`.
     /// Seeded into `type_name_bindings` on every `reset_module_context` so that bare type names
@@ -84,6 +87,7 @@ impl TypeChecker {
         let span_types = self.span_types.clone();
         let current_def_name = self.current_def_name.clone();
         let load_source_schemas = self.load_source_schemas.clone();
+        let source_constructor_schemas = self.source_constructor_schemas.clone();
         let in_call_arg = self.in_call_arg;
 
         let result = f(self);
@@ -100,6 +104,7 @@ impl TypeChecker {
         self.span_types = span_types;
         self.current_def_name = current_def_name;
         self.load_source_schemas = load_source_schemas;
+        self.source_constructor_schemas = source_constructor_schemas;
         self.in_call_arg = in_call_arg;
 
         result
@@ -138,6 +143,7 @@ impl TypeChecker {
             compact_subst_between_defs: false,
             current_def_name: String::new(),
             load_source_schemas: Vec::new(),
+            source_constructor_schemas: Vec::new(),
             bare_to_global_qualified: HashMap::new(),
         };
         checker.register_builtin_types();
@@ -249,6 +255,8 @@ impl TypeChecker {
         self.query_cache.clear_module(&_module.name.name);
         self.poly_instantiations.clear();
         self.span_types.clear();
+        self.load_source_schemas.clear();
+        self.source_constructor_schemas.clear();
     }
 
     fn collect_enabled_record_default_types(module: &Module) -> HashSet<String> {
@@ -332,16 +340,22 @@ impl TypeChecker {
     }
 
     /// Drain `load` call-site source schemas for the current module, applying final
-    /// substitutions and lowering only the concrete ones to `CgType`.
+    /// substitutions and lowering unresolved sites to `CgType::Dynamic` placeholders
+    /// so compile-time injection can preserve call ordering.
     pub(super) fn take_load_source_schemas(
         &mut self,
         env: &TypeEnv,
     ) -> Vec<(String, String, crate::cg_type::CgType)> {
         std::mem::take(&mut self.load_source_schemas)
             .into_iter()
-            .filter_map(|(module_name, def_name, inner_ty)| {
+            .map(|(module_name, def_name, inner_ty)| {
                 let resolved = self.apply(inner_ty);
                 let inner_cg = self.type_to_cg_type(&resolved, env);
+                let inner_cg = if inner_cg.is_closed() {
+                    inner_cg
+                } else {
+                    crate::cg_type::CgType::Dynamic
+                };
                 if std::env::var("AIVI_DEBUG_LOAD_SCHEMA").is_ok_and(|v| v == "1") {
                     eprintln!(
                         "[LOAD_SCHEMA_DEBUG] drain {}.{} resolved={} cg={:?}",
@@ -351,8 +365,28 @@ impl TypeChecker {
                         inner_cg
                     );
                 }
-                (inner_cg != crate::cg_type::CgType::Dynamic && inner_cg.is_closed())
-                    .then_some((module_name, def_name, inner_cg))
+                (module_name, def_name, inner_cg)
+            })
+            .collect()
+    }
+
+    /// Drain file source constructor schemas for the current module, preserving
+    /// constructor-call ordering with `CgType::Dynamic` placeholders.
+    pub(super) fn take_source_constructor_schemas(
+        &mut self,
+        env: &TypeEnv,
+    ) -> Vec<(String, String, crate::cg_type::CgType)> {
+        std::mem::take(&mut self.source_constructor_schemas)
+            .into_iter()
+            .map(|(module_name, def_name, inner_ty)| {
+                let resolved = self.apply(inner_ty);
+                let inner_cg = self.type_to_cg_type(&resolved, env);
+                let inner_cg = if inner_cg.is_closed() {
+                    inner_cg
+                } else {
+                    crate::cg_type::CgType::Dynamic
+                };
+                (module_name, def_name, inner_cg)
             })
             .collect()
     }
@@ -371,6 +405,24 @@ impl TypeChecker {
                     self.apply(inner_ty.clone())
                 };
                 self.load_source_schemas[idx].2 = resolved;
+            }
+        }
+    }
+
+    pub(super) fn resolve_current_def_source_constructor_schemas(&mut self) {
+        let current_module_name = self.current_module_name.clone();
+        let current_def_name = self.current_def_name.clone();
+        for idx in 0..self.source_constructor_schemas.len() {
+            let should_resolve = {
+                let (module_name, def_name, _) = &self.source_constructor_schemas[idx];
+                *module_name == current_module_name && *def_name == current_def_name
+            };
+            if should_resolve {
+                let resolved = {
+                    let (_, _, inner_ty) = &self.source_constructor_schemas[idx];
+                    self.apply(inner_ty.clone())
+                };
+                self.source_constructor_schemas[idx].2 = resolved;
             }
         }
     }
@@ -789,7 +841,17 @@ impl TypeChecker {
                     Type::Func(
                         Box::new(Type::con("Unit")),
                         Box::new(Type::con("Effect").app(vec![
-                            Type::con("Closed"),
+                            Type::con("Text"),
+                            Type::Tuple(vec![send_ty.clone(), recv_ty.clone()]),
+                        ])),
+                    ),
+                ),
+                (
+                    "makeBounded".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Int")),
+                        Box::new(Type::con("Effect").app(vec![
+                            Type::con("Text"),
                             Type::Tuple(vec![send_ty.clone(), recv_ty.clone()]),
                         ])),
                     ),
@@ -801,8 +863,7 @@ impl TypeChecker {
                         Box::new(Type::Func(
                             Box::new(Type::Var(a)),
                             Box::new(
-                                Type::con("Effect")
-                                    .app(vec![Type::con("Closed"), Type::con("Unit")]),
+                                Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]),
                             ),
                         )),
                     ),
@@ -812,7 +873,7 @@ impl TypeChecker {
                     Type::Func(
                         Box::new(recv_ty.clone()),
                         Box::new(Type::con("Effect").app(vec![
-                            Type::con("Closed"),
+                            Type::con("Text"),
                             Type::con("Result").app(vec![Type::con("Closed"), Type::Var(a)]),
                         ])),
                     ),
@@ -822,7 +883,7 @@ impl TypeChecker {
                     Type::Func(
                         Box::new(send_ty),
                         Box::new(
-                            Type::con("Effect").app(vec![Type::con("Closed"), Type::con("Unit")]),
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]),
                         ),
                     ),
                 ),
@@ -835,6 +896,31 @@ impl TypeChecker {
         let e = self.fresh_var_id();
         let a = self.fresh_var_id();
         let b = self.fresh_var_id();
+        let timeout_err = self.fresh_var_id();
+        let token_cancel_effect =
+            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]);
+        let token_is_cancelled_effect =
+            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Bool")]);
+        let cancel_token_ty = Type::Record {
+            fields: vec![
+                ("cancel".to_string(), token_cancel_effect.clone()),
+                ("isCancelled".to_string(), token_is_cancelled_effect.clone()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let task_ty = Type::Record {
+            fields: vec![
+                (
+                    "join".to_string(),
+                    Type::con("Effect").app(vec![Type::con("Text"), Type::Var(a)]),
+                ),
+                ("cancel".to_string(), token_cancel_effect.clone()),
+                ("isCancelled".to_string(), token_is_cancelled_effect.clone()),
+            ]
+            .into_iter()
+            .collect(),
+        };
         let concurrent_record = Type::Record {
             fields: vec![
                 (
@@ -877,31 +963,36 @@ impl TypeChecker {
                 (
                     "fork".to_string(),
                     Type::Func(
-                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::Var(e),
-                            Type::Record {
-                                fields: vec![
-                                    (
-                                        "join".to_string(),
-                                        Type::con("Effect")
-                                            .app(vec![Type::Var(e), Type::Var(a)]),
-                                    ),
-                                    (
-                                        "cancel".to_string(),
-                                        Type::con("Effect")
-                                            .app(vec![Type::Var(e), Type::con("Unit")]),
-                                    ),
-                                    (
-                                        "isCancelled".to_string(),
-                                        Type::con("Effect")
-                                            .app(vec![Type::Var(e), Type::con("Bool")]),
-                                    ),
-                                ]
-                                .into_iter()
-                                .collect(),
-                            },
-                        ])),
+                        Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::Var(a)])),
+                        Box::new(Type::con("Effect").app(vec![Type::con("Text"), task_ty])),
+                    ),
+                ),
+                (
+                    "sleep".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Int")),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]),
+                        ),
+                    ),
+                ),
+                (
+                    "timeoutWith".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Int")),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(timeout_err)),
+                            Box::new(Type::Func(
+                                Box::new(
+                                    Type::con("Effect")
+                                        .app(vec![Type::Var(timeout_err), Type::Var(a)]),
+                                ),
+                                Box::new(
+                                    Type::con("Effect")
+                                        .app(vec![Type::Var(timeout_err), Type::Var(a)]),
+                                ),
+                            )),
+                        )),
                     ),
                 ),
                 (
@@ -913,6 +1004,10 @@ impl TypeChecker {
                             Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
                         )),
                     ),
+                ),
+                (
+                    "cancelToken".to_string(),
+                    Type::Func(Box::new(Type::con("Unit")), Box::new(cancel_token_ty)),
                 ),
             ]
             .into_iter()

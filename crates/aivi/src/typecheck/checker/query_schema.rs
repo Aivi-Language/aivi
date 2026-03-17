@@ -127,6 +127,7 @@ impl TypeChecker {
         let span_types_len = self.span_types.len();
         let poly_len = self.poly_instantiations.len();
         let source_schema_len = self.load_source_schemas.len();
+        let source_constructor_schema_len = self.source_constructor_schemas.len();
         let extra_diag_len = self.extra_diagnostics.len();
         let mut local_env = env.clone();
         let result = (|| {
@@ -140,6 +141,8 @@ impl TypeChecker {
         self.span_types.truncate(span_types_len);
         self.poly_instantiations.truncate(poly_len);
         self.load_source_schemas.truncate(source_schema_len);
+        self.source_constructor_schemas
+            .truncate(source_constructor_schema_len);
         self.extra_diagnostics.truncate(extra_diag_len);
         result
     }

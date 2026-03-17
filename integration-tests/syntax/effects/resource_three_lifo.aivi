@@ -45,6 +45,6 @@ resourceThreeLifo = do Effect {
     | Ok other => fail "unexpected cleanup order, log contains: {other}"
     | Err _    => fail "log file not written — no cleanup ran"
 
-    _ <- delete logPath
-    pure Unit
+  _ <- delete logPath
+  pure Unit
 }

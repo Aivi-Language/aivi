@@ -1193,7 +1193,7 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
                                 value: false,
                             }),
                         );
-                        *arg = Box::new(wrap_source(*original_arg, schema_json));
+                        **arg = wrap_source(*original_arg, schema_json);
                     }
                     RustIrExpr::Call { args, .. } if args.len() == 1 => {
                         let original_arg = std::mem::replace(

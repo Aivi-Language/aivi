@@ -15,6 +15,8 @@ use super::global::collect_global_type_info;
 use super::ordering::ordered_modules;
 use super::{build_module_interface, ModuleInterface, ModuleInterfaceMaps};
 
+const SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX: &str = "::source_sites";
+
 /// Result of type inference: diagnostics, pretty-printed type strings, and codegen-friendly
 /// type annotations.
 #[derive(Clone)]
@@ -30,7 +32,8 @@ pub struct InferResult {
     /// Module → list of (span, rendered type) for LSP hover / quick info.
     pub span_types: HashMap<String, Vec<(Span, String)>>,
     /// `"module.def"` → ordered list of inner CgTypes for `load` calls in that def.
-    /// Used to inject JSON validation schemas at source boundaries.
+    /// Internal `::source_sites`-suffixed keys carry file source constructor schemas.
+    /// Used to inject JSON validation schemas at file source boundaries.
     pub source_schemas: HashMap<String, Vec<CgType>>,
 }
 
@@ -269,6 +272,10 @@ fn infer_value_types_incremental_impl(
 
             for (mod_name, def_name, inner_cg) in checker.take_load_source_schemas(&env) {
                 let key = format!("{}.{}", mod_name, def_name);
+                all_source_schemas.entry(key).or_default().push(inner_cg);
+            }
+            for (mod_name, def_name, inner_cg) in checker.take_source_constructor_schemas(&env) {
+                let key = format!("{}.{}{}", mod_name, def_name, SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX);
                 all_source_schemas.entry(key).or_default().push(inner_cg);
             }
 

@@ -18,13 +18,13 @@ trigger_constructors = do Effect {
     | Cron spec => assertEq spec.timezone.id "UTC"
     | _         => assert False
 
-    i match
-      | Interval span => assertEq span.millis 30000
-      | _             => assert False
+  i match
+    | Interval span => assertEq span.millis 30000
+    | _             => assert False
 
-    o match
-      | Once at => assertEq at 2026-01-01T00:00:00Z
-      | _       => assert False
+  o match
+    | Once at => assertEq at 2026-01-01T00:00:00Z
+    | _       => assert False
 }
 
 @test "idempotent planning index"
@@ -137,7 +137,7 @@ worker_action_helpers = do Effect {
     | RunNow => assert True
     | _      => assert False
 
-    retried = planRetryRun run (state <| { retryState: { attempts: 1, lastError: Some "boom" } }) 500
-    assertEq retried.status Planned
-    assertEq retried.attempt 1
+  retried = planRetryRun run (state <| { retryState: { attempts: 1, lastError: Some "boom" } }) 500
+  assertEq retried.status Planned
+  assertEq retried.attempt 1
 }

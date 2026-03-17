@@ -340,6 +340,7 @@ impl TypeChecker {
             for candidate in candidates {
                 self.subst = base_subst.clone();
                 let source_schema_len = self.load_source_schemas.len();
+                let source_constructor_schema_len = self.source_constructor_schemas.len();
                 let mut local_env = env.clone();
                 let expected = self.instantiate(candidate);
                 local_env.insert(name.clone(), Scheme::mono(expected.clone()));
@@ -416,11 +417,14 @@ impl TypeChecker {
                     Ok(()) => {
                         matched = true;
                         self.resolve_current_def_load_source_schemas();
+                        self.resolve_current_def_source_constructor_schemas();
                         self.validate_schema_aware_def(def, &expr, &candidate.ty, env);
                         break;
                     }
                     Err(err) => {
                         self.load_source_schemas.truncate(source_schema_len);
+                        self.source_constructor_schemas
+                            .truncate(source_constructor_schema_len);
                         if first_error.is_none() {
                             first_error = Some(err);
                         }

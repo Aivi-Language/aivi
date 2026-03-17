@@ -60,11 +60,11 @@ signal_pipe_accepts_bare_matcher_blocks = do Effect {
     | Some AiSettingsSection => True
     | _                      => False
 
-    assertEq (get aiSettingsOpen) False
-    assertEq (set shellState (Some AiSettingsSection)) Unit
-    assertEq (get aiSettingsOpen) True
-    assertEq (set shellState None) Unit
-    assertEq (get aiSettingsOpen) False
+  assertEq (get aiSettingsOpen) False
+  assertEq (set shellState (Some AiSettingsSection)) Unit
+  assertEq (get aiSettingsOpen) True
+  assertEq (set shellState None) Unit
+  assertEq (get aiSettingsOpen) False
 }
 
 @test "signal patch operator accepts replacement values"

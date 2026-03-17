@@ -28,8 +28,8 @@ cleanupRunsExactlyOnce = do Effect {
     | Ok txt => assertEq txt "cleanup-ran"
     | Err _  => fail "cleanup did not write marker"
 
-    _ <- delete markerPath
-    pure Unit
+  _ <- delete markerPath
+  pure Unit
 }
 
 // Verify that two independent acquisitions of the same resource recipe each
@@ -58,11 +58,11 @@ twoIndependentCleanups = do Effect {
     | Ok txt => assertEq txt "cleanup-ran"
     | Err _  => fail "first cleanup did not run"
 
-    _ <- r2 match
-      | Ok txt => assertEq txt "cleanup-ran"
-      | Err _  => fail "second cleanup did not run"
+  _ <- r2 match
+    | Ok txt => assertEq txt "cleanup-ran"
+    | Err _  => fail "second cleanup did not run"
 
-    _ <- delete path1
-    _ <- delete path2
-    pure Unit
+  _ <- delete path1
+  _ <- delete path2
+  pure Unit
 }

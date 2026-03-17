@@ -3,8 +3,10 @@ module integrationTests.stdlib.aivi.database.domain_Database.tests
 
 use aivi
 use aivi.testing
-use aivi.database (Delete, Insert, Table, Update, Upsert, load, table)
-use aivi.database (domain Database)
+use aivi (
+  database (Delete, Insert, Table, Update, Upsert, load, table)
+  database (domain Database)
+)
 
 len = xs => xs match
   | []           => 0

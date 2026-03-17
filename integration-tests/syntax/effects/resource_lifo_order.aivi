@@ -36,6 +36,6 @@ resourceLifoOrder = do Effect {
     | Ok txt => assertEq txt "A"
     | Err _  => fail "log file not written by cleanup"
 
-    _ <- delete logPath
-    pure Unit
+  _ <- delete logPath
+  pure Unit
 }
