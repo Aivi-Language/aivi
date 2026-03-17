@@ -395,15 +395,45 @@ fn lower_expr_inner_ctx(
                 };
             }
             if op == "<|" {
+                let left_is_db_selector = looks_like_db_selector_target(left.as_ref());
                 match *right {
+                    Expr::Raw { text, .. } if left_is_db_selector && text == "-" => {
+                        return lower_named_call_hir(
+                            "aivi.database.delete",
+                            vec![lower_expr_ctx(*left, id_gen, ctx, false)],
+                            id_gen,
+                            ctx,
+                            span.clone(),
+                        );
+                    }
                     Expr::Record {
                         fields,
-                        span: _record_span,
+                        span: record_span,
                     }
                     | Expr::PatchLit {
                         fields,
-                        span: _record_span,
+                        span: record_span,
                     } => {
+                        if left_is_db_selector {
+                            return lower_named_call_hir(
+                                "aivi.database.update",
+                                vec![
+                                    lower_expr_ctx(*left, id_gen, ctx, false),
+                                    lower_expr_ctx(
+                                        Expr::PatchLit {
+                                            fields,
+                                            span: record_span,
+                                        },
+                                        id_gen,
+                                        ctx,
+                                        false,
+                                    ),
+                                ],
+                                id_gen,
+                                ctx,
+                                span.clone(),
+                            );
+                        }
                         return HirExpr::Patch {
                             id: id_gen.next(),
                             target: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
@@ -1156,6 +1186,82 @@ fn make_pattern_lambda(
                 body: Box::new(match_expr),
             }
         }
+    }
+}
+
+fn looks_like_db_selector_target(expr: &Expr) -> bool {
+    match expr {
+        Expr::Index { index, .. } => looks_like_db_selector_predicate(index),
+        Expr::Record { fields, .. } => {
+            let mut has_table = false;
+            let mut has_pred = false;
+            for field in fields {
+                if field.spread {
+                    return false;
+                }
+                match field.path.as_slice() {
+                    [crate::surface::PathSegment::Field(name)] if name.name == "table" => {
+                        has_table = true
+                    }
+                    [crate::surface::PathSegment::Field(name)] if name.name == "pred" => {
+                        has_pred = true
+                    }
+                    _ => {}
+                }
+            }
+            has_table && has_pred
+        }
+        _ => false,
+    }
+}
+
+fn looks_like_db_selector_predicate(expr: &Expr) -> bool {
+    match expr {
+        Expr::Lambda { .. }
+        | Expr::Match { .. }
+        | Expr::If { .. }
+        | Expr::Call { .. }
+        | Expr::FieldAccess { .. }
+        | Expr::FieldSection { .. }
+        | Expr::Ident(_) => true,
+        Expr::Binary { op, .. } => matches!(
+            op.as_str(),
+            "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
+        ),
+        Expr::Literal(crate::surface::Literal::Bool { .. }) => true,
+        Expr::UnaryNeg { .. }
+        | Expr::Literal(_)
+        | Expr::TextInterpolate { .. }
+        | Expr::List { .. }
+        | Expr::Tuple { .. }
+        | Expr::Record { .. }
+        | Expr::PatchLit { .. }
+        | Expr::Index { .. }
+        | Expr::Raw { .. }
+        | Expr::Suffixed { .. }
+        | Expr::Block { .. }
+        | Expr::Mock { .. } => false,
+    }
+}
+
+fn lower_named_call_hir(
+    name: &str,
+    args: Vec<HirExpr>,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+    span: crate::diagnostics::Span,
+) -> HirExpr {
+    HirExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(HirExpr::Var {
+            id: id_gen.next(),
+            name: name.to_string(),
+            location: None,
+        }),
+        args,
+        location: ctx
+            .source_path
+            .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
     }
 }
 
