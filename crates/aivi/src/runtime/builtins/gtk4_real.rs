@@ -2667,7 +2667,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::sync::{Mutex, Once};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use serde_json::json;
 
@@ -2750,6 +2750,22 @@ mod tests {
         match result {
             Ok(value) => value,
             Err(err) => panic!("{context}: {}", format_runtime_error(err)),
+        }
+    }
+
+    fn wait_for_editable_focus(widget_id: i64, timeout: Duration, context: &str) {
+        let deadline = Instant::now() + timeout;
+        loop {
+            super::pump_gtk_events();
+            if aivi_gtk4::editable_has_focus(widget_id)
+                .unwrap_or_else(|err| panic!("{context}: {}", err.message))
+            {
+                return;
+            }
+            if Instant::now() >= deadline {
+                panic!("{context}: timed out waiting for focus");
+            }
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 
@@ -3727,16 +3743,10 @@ mod tests {
         }
         aivi_gtk4::editable_grab_focus(entry_id)
             .unwrap_or_else(|err| panic!("focus mounted adw entry row: {}", err.message));
-        for _ in 0..10 {
-            super::pump_gtk_events();
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(
-            aivi_gtk4::editable_has_focus(entry_id).unwrap_or_else(|err| panic!(
-                "read mounted adw entry focus state: {}",
-                err.message
-            )),
-            "expected mounted AdwEntryRow delegate to have focus before typing"
+        wait_for_editable_focus(
+            entry_id,
+            Duration::from_secs(2),
+            "expected mounted AdwEntryRow delegate to have focus before typing",
         );
 
         for typed in ["H", "He", "Hel", "Hell", "Hello"] {
