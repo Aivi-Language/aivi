@@ -1,0 +1,9 @@
+[package]
+name = "aivi_goa"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aivi_email = { path = "../aivi_email" }
+thiserror = "2.0.18"
+zbus = "5.14.0"

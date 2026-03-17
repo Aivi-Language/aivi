@@ -9,7 +9,7 @@ pub struct AiviEmailError {
     pub message: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmailAuth {
     Password(String),
     OAuth2(String),

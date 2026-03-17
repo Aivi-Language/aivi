@@ -72,6 +72,9 @@ Both password and OAuth2 (XOAUTH2) authentication are supported through `EmailAu
 
 OAuth2 uses the XOAUTH2 (an OAuth2-based authentication mechanism for email servers) SASL mechanism, which is commonly supported by providers such as Gmail and Outlook.
 
+On GNOME desktops, [`aivi.gnome.onlineAccounts`](../../stdlib/system/gnome_online_accounts.md) can supply the `host`, `user`, and `auth` fields for you.
+That module resolves desktop-managed credentials, then `Goa.toImapConfig` adds mailbox-specific fields before you call `load (email.imap ...)` or `imapOpen`.
+
 For the full record definitions of `ImapConfig`, `MailboxInfo`, and `IdleResult`, see the [Email Module](../../stdlib/system/email.md). In practice, the most important `ImapConfig` fields are:
 
 - `host`, `user`, and `auth` for the connection itself,
@@ -87,6 +90,29 @@ For session-oriented code, `mailbox` and `filter` are usually `None`, because yo
 
 
 This is a good fit for batch-style jobs such as importing unread support messages or extracting invoices from a mailbox. `myToken` stands for an OAuth2 access token that your program acquired elsewhere.
+
+## Example — GNOME Online Accounts to IMAP
+
+```aivi
+use aivi.gnome.onlineAccounts as Goa
+use aivi.email
+
+InboxMessage = {
+  subject: Option Text
+  body: Text
+}
+
+loadUnread = accountId => do Effect {
+  goaCfg <- Goa.imapConfig accountId
+  load (
+    email.imap (
+      Goa.toImapConfig goaCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
+    )
+  )
+}
+```
+
+This keeps the mailbox query in your application while letting GOA supply the desktop-managed transport credentials.
 
 ## Example — explicit search and fetch
 

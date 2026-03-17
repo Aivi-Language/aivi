@@ -186,7 +186,8 @@ export const sidebar = [
           { text: 'Log', link: '/stdlib/system/log' },
           { text: 'Concurrency', link: '/stdlib/system/concurrency' },
           { text: 'Crypto', link: '/stdlib/system/crypto' },
-          { text: 'Secrets', link: '/stdlib/system/secrets' }
+          { text: 'Secrets', link: '/stdlib/system/secrets' },
+          { text: 'GNOME Online Accounts', link: '/stdlib/system/gnome_online_accounts' }
         ]
       },
       {

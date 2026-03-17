@@ -30,7 +30,8 @@ restGetSource       = getter => getter ~u(https://api.example.com/users)
 imapSource          = reader => reader {
   host: "imap.example.com"
   user: "bot@example.com"
-  password: "secret"
+  auth: email.Password "secret"
+  starttls: None
   mailbox: Some "INBOX"
   filter: Some "UNSEEN"
   limit: Some 10

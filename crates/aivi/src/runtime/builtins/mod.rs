@@ -8,6 +8,7 @@ mod core;
 mod crypto;
 mod database;
 mod email;
+mod gnome_online_accounts;
 mod graph;
 mod gtk4;
 pub(super) mod gtk4_real;

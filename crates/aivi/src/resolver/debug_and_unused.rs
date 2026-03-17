@@ -210,7 +210,9 @@ fn check_expr(
         Expr::FieldSection { .. } => {}
         Expr::Index { base, index, .. } => {
             check_expr(base, scope, diagnostics, module, allow_unknown);
-            check_expr(index, scope, diagnostics, module, allow_unknown);
+            let index_allow_unknown =
+                allow_unknown || index_expr_allows_predicate_lifting(index);
+            check_expr(index, scope, diagnostics, module, index_allow_unknown);
         }
         Expr::Call { func, args, .. } => {
             check_expr(func, scope, diagnostics, module, allow_unknown);
@@ -362,6 +364,35 @@ fn call_arg_allows_function_lifting(func: &Expr, index: usize) -> bool {
             | ("ups", 0)
             | ("derive", 1)
     )
+}
+
+fn index_expr_allows_predicate_lifting(index: &Expr) -> bool {
+    match index {
+        Expr::Ident(_)
+        | Expr::FieldAccess { .. }
+        | Expr::FieldSection { .. }
+        | Expr::Call { .. }
+        | Expr::Lambda { .. }
+        | Expr::Match { .. }
+        | Expr::If { .. } => true,
+        Expr::Binary { op, .. } => matches!(
+            op.as_str(),
+            "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
+        ),
+        Expr::Literal(Literal::Bool { .. }) => true,
+        Expr::UnaryNeg { .. }
+        | Expr::Literal(_)
+        | Expr::TextInterpolate { .. }
+        | Expr::List { .. }
+        | Expr::Tuple { .. }
+        | Expr::Record { .. }
+        | Expr::PatchLit { .. }
+        | Expr::Index { .. }
+        | Expr::Raw { .. }
+        | Expr::Suffixed { .. }
+        | Expr::Block { .. }
+        | Expr::Mock { .. } => false,
+    }
 }
 
 fn binary_rhs_allows_function_lifting(op: &str) -> bool {
@@ -780,6 +811,43 @@ updated = tableRows + upd (id == 1) (row => row)
         assert!(
             unknown_name_errors.is_empty(),
             "expected no unknown-name errors for predicate-position bare fields, got {unknown_name_errors:#?}"
+        );
+    }
+
+    #[test]
+    fn selector_predicates_allow_bare_field_names() {
+        let source = r#"
+module test.selector_predicates
+use aivi.database
+
+Product = { id: Int, name: Text, active: Bool }
+productTable : Table Product
+productTable = table "products" [
+  { name: "id", type: IntType, constraints: [], default: None }
+  { name: "name", type: Varchar 120, constraints: [], default: None }
+  { name: "active", type: BoolType, constraints: [], default: None }
+]
+
+activeSelection = productTable[active]
+namedSelection = productTable[name == "Alice"]
+inactiveSelection = productTable[!active]
+"#;
+
+        let path = std::path::Path::new("test.aivi");
+        let (mut modules, diags) = crate::surface::parse_modules(path, source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let unknown_name_errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            unknown_name_errors.is_empty(),
+            "expected no unknown-name errors for selector predicates, got {unknown_name_errors:#?}"
         );
     }
 

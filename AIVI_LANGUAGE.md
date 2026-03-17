@@ -368,6 +368,8 @@ use aivi.chronos.duration (domain Duration)
 
 Preferred: schema-first declarations, `load` only inside `do Effect`.
 
+- On GNOME desktops, `aivi.gnome.onlineAccounts` can resolve desktop-managed mail auth/config for use with `aivi.email`.
+
 ```aivi
 usersSource =
   file.json {

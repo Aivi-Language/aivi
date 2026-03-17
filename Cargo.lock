@@ -48,6 +48,7 @@ dependencies = [
  "aivi_database",
  "aivi_driver",
  "aivi_email",
+ "aivi_goa",
  "aivi_gtk4",
  "aivi_http_server",
  "aivi_mcp",
@@ -179,6 +180,15 @@ dependencies = [
  "lettre",
  "mailparse",
  "thiserror",
+]
+
+[[package]]
+name = "aivi_goa"
+version = "0.1.0"
+dependencies = [
+ "aivi_email",
+ "thiserror",
+ "zbus",
 ]
 
 [[package]]

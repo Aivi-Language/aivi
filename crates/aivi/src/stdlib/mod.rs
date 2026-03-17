@@ -28,6 +28,7 @@ mod email;
 mod file;
 mod forms;
 mod generator;
+mod gnome_online_accounts;
 mod geometry;
 mod graph;
 mod gtk4;
@@ -250,6 +251,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: email::MODULE_NAME,
         source: email::SOURCE,
+    },
+    EmbeddedModule {
+        name: gnome_online_accounts::MODULE_NAME,
+        source: gnome_online_accounts::SOURCE,
     },
     EmbeddedModule {
         name: i18n::MODULE_NAME,

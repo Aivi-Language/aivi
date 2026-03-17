@@ -276,6 +276,11 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
     let imap_a = checker.fresh_var_id();
+    let option_int_ty = Type::con("Option").app(vec![int_ty.clone()]);
+    let option_bool_ty = Type::con("Option").app(vec![Type::con("Bool")]);
+    let list_text_ty = Type::con("List").app(vec![text_ty.clone()]);
+    let email_auth_ty = Type::con("EmailAuth");
+    let imap_session_ty = Type::con("ImapSession");
     let mime_part_ty = Type::Record {
         fields: vec![
             ("contentType".to_string(), text_ty.clone()),
@@ -284,15 +289,42 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
     };
+    let mailbox_info_ty = Type::Record {
+        fields: vec![
+            ("name".to_string(), text_ty.clone()),
+            ("separator".to_string(), option_text_ty.clone()),
+            ("attributes".to_string(), list_text_ty.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let imap_config_ty = Type::Record {
+        fields: vec![
+            ("host".to_string(), text_ty.clone()),
+            ("user".to_string(), text_ty.clone()),
+            ("auth".to_string(), email_auth_ty.clone()),
+            ("port".to_string(), option_int_ty.clone()),
+            ("starttls".to_string(), option_bool_ty.clone()),
+            ("mailbox".to_string(), option_text_ty.clone()),
+            ("filter".to_string(), option_text_ty.clone()),
+            ("limit".to_string(), option_int_ty.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
     let smtp_config_ty = Type::Record {
         fields: vec![
             ("host".to_string(), text_ty.clone()),
             ("user".to_string(), text_ty.clone()),
-            ("password".to_string(), text_ty.clone()),
+            ("auth".to_string(), email_auth_ty.clone()),
             ("from".to_string(), text_ty.clone()),
-            ("to".to_string(), text_ty.clone()),
+            ("to".to_string(), list_text_ty.clone()),
+            ("cc".to_string(), Type::con("Option").app(vec![list_text_ty.clone()])),
+            ("bcc".to_string(), Type::con("Option").app(vec![list_text_ty.clone()])),
             ("subject".to_string(), text_ty.clone()),
             ("body".to_string(), text_ty.clone()),
+            ("port".to_string(), option_int_ty.clone()),
+            ("starttls".to_string(), option_bool_ty.clone()),
         ]
         .into_iter()
         .collect(),
@@ -302,35 +334,245 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             (
                 "imap".to_string(),
                 Type::Func(
-                    Box::new(Type::Record {
-                        fields: vec![
-                            ("host".to_string(), text_ty.clone()),
-                            ("user".to_string(), text_ty.clone()),
-                            ("password".to_string(), text_ty.clone()),
-                            (
-                                "mailbox".to_string(),
-                                Type::con("Option").app(vec![text_ty.clone()]),
-                            ),
-                            (
-                                "filter".to_string(),
-                                Type::con("Option").app(vec![text_ty.clone()]),
-                            ),
-                            (
-                                "limit".to_string(),
-                                Type::con("Option").app(vec![int_ty.clone()]),
-                            ),
-                            (
-                                "port".to_string(),
-                                Type::con("Option").app(vec![int_ty.clone()]),
-                            ),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    }),
+                    Box::new(imap_config_ty.clone()),
                     Box::new(Type::con("Source").app(vec![
                         Type::con("Imap"),
                         Type::con("List").app(vec![Type::Var(imap_a)]),
                     ])),
+                ),
+            ),
+            (
+                "imapOpen".to_string(),
+                Type::Func(
+                    Box::new(imap_config_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), imap_session_ty.clone()])),
+                ),
+            ),
+            (
+                "imapClose".to_string(),
+                Type::Func(
+                    Box::new(imap_session_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "imapSelect".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            mailbox_info_ty.clone(),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "imapExamine".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            mailbox_info_ty.clone(),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "imapSearch".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            Type::con("List").app(vec![int_ty.clone()]),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "imapFetch".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![int_ty.clone()])),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            Type::con("List").app(vec![Type::Var(imap_a)]),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "imapSetFlags".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![int_ty.clone()])),
+                    Box::new(Type::Func(
+                        Box::new(list_text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapAddFlags".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![int_ty.clone()])),
+                    Box::new(Type::Func(
+                        Box::new(list_text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapRemoveFlags".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![int_ty.clone()])),
+                    Box::new(Type::Func(
+                        Box::new(list_text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapExpunge".to_string(),
+                Type::Func(
+                    Box::new(imap_session_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "imapCopy".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![int_ty.clone()])),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapMove".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![int_ty.clone()])),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapListMailboxes".to_string(),
+                Type::Func(
+                    Box::new(imap_session_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![
+                        text_ty.clone(),
+                        Type::con("List").app(vec![mailbox_info_ty.clone()]),
+                    ])),
+                ),
+            ),
+            (
+                "imapCreateMailbox".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            Type::con("Unit"),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "imapDeleteMailbox".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            Type::con("Unit"),
+                        ])),
+                    )),
+                ),
+            ),
+            (
+                "imapRenameMailbox".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapAppend".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(imap_session_ty.clone()),
+                            Box::new(Type::con("Effect").app(vec![
+                                text_ty.clone(),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "imapIdle".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(imap_session_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            text_ty.clone(),
+                            Type::con("IdleResult"),
+                        ])),
+                    )),
                 ),
             ),
             (
@@ -359,6 +601,53 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             origin: None,
         },
     );
+    let goa_record = Type::Record {
+        fields: vec![
+            (
+                "listMailAccounts".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::con("GoaError"),
+                        Type::con("List").app(vec![Type::con("GoaMailAccount")]),
+                    ])),
+                ),
+            ),
+            (
+                "ensureCredentials".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::con("GoaError"),
+                        Type::con("Unit"),
+                    ])),
+                ),
+            ),
+            (
+                "imapConfig".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::con("GoaError"),
+                        Type::con("GoaImapConfig"),
+                    ])),
+                ),
+            ),
+            (
+                "smtpConfig".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::con("GoaError"),
+                        Type::con("GoaSmtpConfig"),
+                    ])),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert("gnomeOnlineAccounts".to_string(), Scheme::mono(goa_record));
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
     let effect_text_int = Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]);
     let effect_text_bool = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Bool")]);
