@@ -25,6 +25,7 @@ struct RuntimeColumn {
 #[derive(Clone)]
 struct RuntimeTableSchema {
     name: String,
+    storage_name: String,
     columns: Vec<RuntimeColumn>,
 }
 
@@ -215,7 +216,15 @@ fn build_runtime_schemas(
         let (name, columns, _rows) = table_parts(table.clone(), "database.query schema")?;
         validate_identifier(&name, "database.query table name")?;
         let columns = parse_runtime_columns(columns)?;
-        schemas.insert(source.alias.clone(), RuntimeTableSchema { name, columns });
+        let storage_name = aivi_database::query_storage_name(&name);
+        schemas.insert(
+            source.alias.clone(),
+            RuntimeTableSchema {
+                name,
+                storage_name,
+                columns,
+            },
+        );
     }
     Ok(schemas)
 }
@@ -297,7 +306,7 @@ fn build_query_sql(
         let sql_alias = sql_aliases.get(&source.alias).ok_or_else(|| {
             RuntimeError::Message(format!("missing SQL alias for '{}'", source.alias))
         })?;
-        let part = format!("{} {}", schema.name, sql_alias);
+        let part = format!("{} {}", schema.storage_name, sql_alias);
         if index == 0 {
             from_parts.push(format!("FROM {part}"));
         } else {
@@ -327,7 +336,7 @@ fn build_query_sql(
         if order_exprs.is_empty() {
             for source in &plan.sources {
                 order_exprs.push(format!(
-                    "{}.__aivi_rowid ASC",
+                    "{}.__aivi_ord ASC",
                     sql_aliases
                         .get(&source.alias)
                         .ok_or_else(|| RuntimeError::Message(format!(
@@ -339,7 +348,7 @@ fn build_query_sql(
         } else {
             for source in &plan.sources {
                 order_exprs.push(format!(
-                    "{}.__aivi_rowid ASC",
+                    "{}.__aivi_ord ASC",
                     sql_aliases
                         .get(&source.alias)
                         .ok_or_else(|| RuntimeError::Message(format!(
@@ -417,12 +426,7 @@ fn render_select_projection(
     sql_aliases: &HashMap<String, String>,
 ) -> Result<Vec<String>, RuntimeError> {
     match projection {
-        CompiledProjection::Row { alias } => Ok(vec![format!(
-            "{}.__aivi_row_json",
-            sql_aliases
-                .get(alias)
-                .ok_or_else(|| RuntimeError::Message(format!("missing SQL alias for '{}'", alias)))?
-        )]),
+        CompiledProjection::Row { alias } => render_row_projection(alias, schemas, sql_aliases),
         CompiledProjection::Scalar { expr } => Ok(vec![render_scalar_expr(
             expr, schemas, sql_aliases,
         )?]),
@@ -434,6 +438,22 @@ fn render_select_projection(
             Ok(out)
         }
     }
+}
+
+fn render_row_projection(
+    alias: &str,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    sql_aliases: &HashMap<String, String>,
+) -> Result<Vec<String>, RuntimeError> {
+    let schema = schema_for_alias(schemas, alias)?;
+    let sql_alias = sql_aliases
+        .get(alias)
+        .ok_or_else(|| RuntimeError::Message(format!("missing SQL alias for '{}'", alias)))?;
+    Ok(schema
+        .columns
+        .iter()
+        .map(|column| format!("{sql_alias}.{}", column.name))
+        .collect())
 }
 
 fn render_scalar_expr(
@@ -542,22 +562,12 @@ fn decode_projection(
     start: usize,
 ) -> Result<(Value, usize), RuntimeError> {
     match projection {
-        CompiledProjection::Row { .. } => {
-            let cell = row.get(start).ok_or_else(|| {
-                RuntimeError::Message("database.query row json column is missing".to_string())
-            })?;
-            let QueryCell::Text(json) = cell else {
-                return Err(RuntimeError::Message(
-                    "database.query expected row json text cell".to_string(),
-                ));
-            };
-            Ok((decode_json(json)?, start + 1))
-        }
+        CompiledProjection::Row { alias } => decode_row_projection(alias, schemas, row, start),
         CompiledProjection::Scalar { expr } => {
             let cell = row.get(start).ok_or_else(|| {
                 RuntimeError::Message("database.query scalar column is missing".to_string())
             })?;
-            Ok((cell_to_value(cell, infer_scalar_kind(expr, schemas)?)?, start + 1))
+            Ok((decode_scalar_cell(expr, schemas, cell)?, start + 1))
         }
         CompiledProjection::Record { fields } => {
             let mut out = HashMap::new();
@@ -572,20 +582,134 @@ fn decode_projection(
     }
 }
 
+fn schema_for_alias<'a>(
+    schemas: &'a HashMap<String, RuntimeTableSchema>,
+    alias: &str,
+) -> Result<&'a RuntimeTableSchema, RuntimeError> {
+    schemas
+        .get(alias)
+        .ok_or_else(|| RuntimeError::Message(format!("unknown query alias '{}'", alias)))
+}
+
+fn column_for_alias_field<'a>(
+    schemas: &'a HashMap<String, RuntimeTableSchema>,
+    alias: &str,
+    field: &str,
+) -> Result<&'a RuntimeColumn, RuntimeError> {
+    let schema = schema_for_alias(schemas, alias)?;
+    schema
+        .columns
+        .iter()
+        .find(|column| column.name == field)
+        .ok_or_else(|| RuntimeError::Message(format!("unknown query field '{}.{}'", alias, field)))
+}
+
+fn decode_row_projection(
+    alias: &str,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    row: &[QueryCell],
+    start: usize,
+) -> Result<(Value, usize), RuntimeError> {
+    let schema = schema_for_alias(schemas, alias)?;
+    let mut out = HashMap::new();
+    let mut cursor = start;
+    for column in &schema.columns {
+        let cell = row.get(cursor).ok_or_else(|| {
+            RuntimeError::Message(format!(
+                "database.query row column '{}.{}' is missing",
+                schema.name, column.name
+            ))
+        })?;
+        out.insert(column.name.clone(), column_cell_to_value(cell, column)?);
+        cursor += 1;
+    }
+    Ok((Value::Record(Arc::new(out)), cursor))
+}
+
+fn decode_scalar_cell(
+    expr: &CompiledScalarExpr,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    cell: &QueryCell,
+) -> Result<Value, RuntimeError> {
+    match expr {
+        CompiledScalarExpr::Column { alias, field } => {
+            let column = column_for_alias_field(schemas, alias, field)?;
+            column_cell_to_value(cell, column)
+        }
+        _ => cell_to_value(cell, infer_scalar_kind(expr, schemas)?),
+    }
+}
+
+fn column_cell_to_value(cell: &QueryCell, column: &RuntimeColumn) -> Result<Value, RuntimeError> {
+    let value = match cell {
+        QueryCell::Null => {
+            if column.not_null {
+                return Err(RuntimeError::Message(format!(
+                    "database.query encountered NULL in NOT NULL column '{}'",
+                    column.name
+                )));
+            }
+            return Ok(Value::Constructor {
+                name: "None".to_string(),
+                args: Vec::new(),
+            });
+        }
+        _ => non_optional_column_cell_to_value(cell, column.kind)?,
+    };
+    if column.not_null {
+        Ok(value)
+    } else {
+        Ok(Value::Constructor {
+            name: "Some".to_string(),
+            args: vec![value],
+        })
+    }
+}
+
+fn non_optional_column_cell_to_value(
+    cell: &QueryCell,
+    kind: QueryColumnType,
+) -> Result<Value, RuntimeError> {
+    match (cell, kind) {
+        (QueryCell::Int(value), QueryColumnType::Int) => Ok(Value::Int(*value)),
+        (QueryCell::Int(value), QueryColumnType::Bool) => Ok(Value::Bool(*value != 0)),
+        (QueryCell::Float(value), QueryColumnType::Float) => Ok(Value::Float(*value)),
+        (QueryCell::Float(value), QueryColumnType::Int) => Ok(Value::Int(*value as i64)),
+        (QueryCell::Bool(value), QueryColumnType::Bool) => Ok(Value::Bool(*value)),
+        (QueryCell::Text(value), QueryColumnType::Text) => Ok(Value::Text(value.clone())),
+        (QueryCell::Text(value), QueryColumnType::Timestamp) => Ok(Value::DateTime(value.clone())),
+        (QueryCell::Text(value), QueryColumnType::Int) => value
+            .parse::<i64>()
+            .map(Value::Int)
+            .map_err(|_| RuntimeError::Message(format!("database.query could not decode int from '{value}'"))),
+        (QueryCell::Text(value), QueryColumnType::Float) => value
+            .parse::<f64>()
+            .map(Value::Float)
+            .map_err(|_| RuntimeError::Message(format!("database.query could not decode float from '{value}'"))),
+        (QueryCell::Text(value), QueryColumnType::Bool) => match value.as_str() {
+            "0" | "false" | "FALSE" | "f" | "F" => Ok(Value::Bool(false)),
+            "1" | "true" | "TRUE" | "t" | "T" => Ok(Value::Bool(true)),
+            _ => Err(RuntimeError::Message(format!(
+                "database.query could not decode bool from '{value}'"
+            ))),
+        },
+        (QueryCell::Null, _) => Err(RuntimeError::Message(
+            "database.query encountered NULL in a non-optional projection".to_string(),
+        )),
+        (other, _) => Err(RuntimeError::Message(format!(
+            "database.query could not decode cell {:?}",
+            other
+        ))),
+    }
+}
+
 fn infer_scalar_kind(
     expr: &CompiledScalarExpr,
     schemas: &HashMap<String, RuntimeTableSchema>,
 ) -> Result<ScalarKind, RuntimeError> {
     match expr {
         CompiledScalarExpr::Column { alias, field } => {
-            let schema = schemas.get(alias).ok_or_else(|| {
-                RuntimeError::Message(format!("unknown query alias '{}'", alias))
-            })?;
-            let column = schema
-                .columns
-                .iter()
-                .find(|column| column.name == *field)
-                .ok_or_else(|| RuntimeError::Message(format!("unknown query field '{}.{}'", alias, field)))?;
+            let column = column_for_alias_field(schemas, alias, field)?;
             Ok(match column.kind {
                 QueryColumnType::Int => ScalarKind::Int,
                 QueryColumnType::Bool => ScalarKind::Bool,
@@ -680,8 +804,7 @@ fn build_query_table_mirror(
             values.push(runtime_value_to_query_cell(value, column.kind, column.not_null)?);
         }
         query_rows.push(QueryRow {
-            row_index: index as i64,
-            row_json: encode_json(row)?,
+            row_ordinal: index as i64,
             values,
         });
     }
@@ -790,5 +913,135 @@ mod query_tests {
             }
             _ => panic!("unexpected error type"),
         }
+    }
+
+    #[test]
+    fn render_select_projection_expands_row_columns() {
+        let mut schemas = HashMap::new();
+        schemas.insert(
+            "p".to_string(),
+            RuntimeTableSchema {
+                name: "products".to_string(),
+                storage_name: "__aivi_query_storage_products".to_string(),
+                columns: vec![
+                    RuntimeColumn {
+                        name: "id".to_string(),
+                        kind: QueryColumnType::Int,
+                        not_null: true,
+                    },
+                    RuntimeColumn {
+                        name: "name".to_string(),
+                        kind: QueryColumnType::Text,
+                        not_null: true,
+                    },
+                ],
+            },
+        );
+        let sql_aliases = HashMap::from([("p".to_string(), "t0".to_string())]);
+
+        let sql = render_select_projection(
+            &CompiledProjection::Row {
+                alias: "p".to_string(),
+            },
+            &schemas,
+            &sql_aliases,
+        )
+        .unwrap_or_else(|_| panic!("row projection should render"));
+
+        assert_eq!(sql, vec!["t0.id".to_string(), "t0.name".to_string()]);
+    }
+
+    #[test]
+    fn decode_row_projection_reconstructs_option_and_timestamp_fields() {
+        let mut schemas = HashMap::new();
+        schemas.insert(
+            "p".to_string(),
+            RuntimeTableSchema {
+                name: "products".to_string(),
+                storage_name: "__aivi_query_storage_products".to_string(),
+                columns: vec![
+                    RuntimeColumn {
+                        name: "id".to_string(),
+                        kind: QueryColumnType::Int,
+                        not_null: true,
+                    },
+                    RuntimeColumn {
+                        name: "email".to_string(),
+                        kind: QueryColumnType::Text,
+                        not_null: false,
+                    },
+                    RuntimeColumn {
+                        name: "createdAt".to_string(),
+                        kind: QueryColumnType::Timestamp,
+                        not_null: true,
+                    },
+                ],
+            },
+        );
+
+        let row = vec![
+            QueryCell::Int(1),
+            QueryCell::Text("a@example.com".to_string()),
+            QueryCell::Text("2024-01-02 03:04:05.000000".to_string()),
+        ];
+        let (value, consumed) = decode_projection(
+            &CompiledProjection::Row {
+                alias: "p".to_string(),
+            },
+            &schemas,
+            &row,
+            0,
+        )
+        .unwrap_or_else(|_| panic!("row projection should decode"));
+
+        assert_eq!(consumed, 3);
+        let fields = expect_record(value, "row projection test")
+            .unwrap_or_else(|_| panic!("record result"));
+        assert!(matches!(fields.get("id"), Some(Value::Int(1))));
+        assert!(matches!(
+            fields.get("email"),
+            Some(Value::Constructor { name, args }) if name == "Some"
+                && matches!(args.as_slice(), [Value::Text(value)] if value == "a@example.com")
+        ));
+        assert!(matches!(
+            fields.get("createdAt"),
+            Some(Value::DateTime(value)) if value == "2024-01-02 03:04:05.000000"
+        ));
+    }
+
+    #[test]
+    fn decode_scalar_projection_of_nullable_column_returns_none() {
+        let mut schemas = HashMap::new();
+        schemas.insert(
+            "p".to_string(),
+            RuntimeTableSchema {
+                name: "products".to_string(),
+                storage_name: "__aivi_query_storage_products".to_string(),
+                columns: vec![RuntimeColumn {
+                    name: "email".to_string(),
+                    kind: QueryColumnType::Text,
+                    not_null: false,
+                }],
+            },
+        );
+
+        let (value, consumed) = decode_projection(
+            &CompiledProjection::Scalar {
+                expr: CompiledScalarExpr::Column {
+                    alias: "p".to_string(),
+                    field: "email".to_string(),
+                },
+            },
+            &schemas,
+            &[QueryCell::Null],
+            0,
+        )
+        .unwrap_or_else(|_| panic!("nullable scalar column should decode"));
+
+        assert_eq!(consumed, 1);
+        assert!(matches!(
+            value,
+            Value::Constructor { name, args } if name == "None" && args.is_empty()
+        ));
     }
 }

@@ -3,7 +3,12 @@ use std::sync::mpsc;
 use std::sync::Mutex;
 
 const META_TABLE: &str = "aivi_tables";
+const QUERY_STORAGE_PREFIX: &str = "__aivi_query_storage_";
 pub const EMPTY_ROWS_JSON: &str = "{\"t\":\"List\",\"v\":[]}";
+
+pub fn query_storage_name(logical_name: &str) -> String {
+    format!("{QUERY_STORAGE_PREFIX}{logical_name}")
+}
 
 pub type LoadTableRow = (i64, String, String);
 
@@ -41,8 +46,7 @@ pub struct QueryColumn {
 
 #[derive(Clone, Debug)]
 pub struct QueryRow {
-    pub row_index: i64,
-    pub row_json: String,
+    pub row_ordinal: i64,
     pub values: Vec<QueryCell>,
 }
 
@@ -436,12 +440,17 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
         }
     }
 
-    fn create_query_table_sql(table: &QueryTable) -> Result<String, String> {
+    fn query_storage_identifier(name: &str, ctx: &str) -> Result<String, String> {
+        require_sql_identifier(name, ctx)?;
+        let storage_name = query_storage_name(name);
+        require_sql_identifier(&storage_name, ctx)?;
+        Ok(storage_name)
+    }
+
+    fn create_query_storage_table_sql(table: &QueryTable) -> Result<String, String> {
         require_sql_identifier(&table.name, "database.query.create_table")?;
-        let mut parts = vec![
-            "__aivi_rowid BIGINT NOT NULL".to_string(),
-            "__aivi_row_json TEXT NOT NULL".to_string(),
-        ];
+        let storage_name = query_storage_identifier(&table.name, "database.query.create_table")?;
+        let mut parts = vec!["__aivi_ord BIGINT NOT NULL".to_string()];
         for column in &table.columns {
             require_sql_identifier(&column.name, "database.query.create_table")?;
             let mut part = format!("{} {}", column.name, sql_type_name(column.column_type));
@@ -452,13 +461,30 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
         }
         Ok(format!(
             "CREATE TABLE {} ({})",
-            table.name,
+            storage_name,
             parts.join(", ")
+        ))
+    }
+
+    fn create_query_view_sql(table: &QueryTable) -> Result<String, String> {
+        require_sql_identifier(&table.name, "database.query.create_view")?;
+        let storage_name = query_storage_identifier(&table.name, "database.query.create_view")?;
+        let mut select_columns = Vec::with_capacity(table.columns.len());
+        for column in &table.columns {
+            require_sql_identifier(&column.name, "database.query.create_view")?;
+            select_columns.push(column.name.clone());
+        }
+        Ok(format!(
+            "CREATE VIEW {} AS SELECT {} FROM {}",
+            table.name,
+            select_columns.join(", "),
+            storage_name
         ))
     }
 
     fn insert_row_sql(table: &QueryTable, row: &QueryRow) -> Result<String, String> {
         require_sql_identifier(&table.name, "database.query.insert")?;
+        let storage_name = query_storage_identifier(&table.name, "database.query.insert")?;
         if row.values.len() != table.columns.len() {
             return Err(format!(
                 "database.query.insert: row for '{}' has {} values but schema has {} columns",
@@ -467,11 +493,8 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 table.columns.len()
             ));
         }
-        let mut column_names = vec!["__aivi_rowid".to_string(), "__aivi_row_json".to_string()];
-        let mut value_parts = vec![
-            row.row_index.to_string(),
-            format!("'{}'", escape_sql_text(&row.row_json)),
-        ];
+        let mut column_names = vec!["__aivi_ord".to_string()];
+        let mut value_parts = vec![row.row_ordinal.to_string()];
         for (column, value) in table.columns.iter().zip(row.values.iter()) {
             require_sql_identifier(&column.name, "database.query.insert")?;
             column_names.push(column.name.clone());
@@ -479,7 +502,7 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
         }
         Ok(format!(
             "INSERT INTO {} ({}) VALUES ({})",
-            table.name,
+            storage_name,
             column_names.join(", "),
             value_parts.join(", ")
         ))
@@ -576,6 +599,90 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
     }
 
     impl Backend {
+        fn drop_logical_query_object(&mut self, name: &str) -> Result<(), String> {
+            require_sql_identifier(name, "database.query.drop_logical")?;
+            match self {
+                Backend::Sqlite(conn) => {
+                    let kind: Option<String> = conn
+                        .query_row(
+                            "SELECT type FROM sqlite_master WHERE name = ?1 LIMIT 1",
+                            [name],
+                            |row| row.get(0),
+                        )
+                        .optional()
+                        .map_err(|e| backend_err("sqlite.query.drop_logical.lookup", e))?;
+                    match kind.as_deref() {
+                        Some("table") => conn
+                            .execute_batch(&format!("DROP TABLE IF EXISTS {name}"))
+                            .map_err(|e| backend_err("sqlite.query.drop_logical.table", e)),
+                        Some("view") => conn
+                            .execute_batch(&format!("DROP VIEW IF EXISTS {name}"))
+                            .map_err(|e| backend_err("sqlite.query.drop_logical.view", e)),
+                        Some(other) => Err(format!(
+                            "database.query.drop_logical: unsupported sqlite object type '{other}'"
+                        )),
+                        None => Ok(()),
+                    }
+                }
+                Backend::Postgresql(client) => {
+                    let row = client
+                        .query_opt(
+                            "SELECT CASE \
+                                WHEN c.relkind IN ('r', 'p') THEN 'table' \
+                                WHEN c.relkind = 'v' THEN 'view' \
+                                ELSE c.relkind::text \
+                             END \
+                             FROM pg_class c \
+                             JOIN pg_namespace n ON n.oid = c.relnamespace \
+                             WHERE c.relname = $1 AND n.nspname = ANY(current_schemas(true)) \
+                             LIMIT 1",
+                            &[&name],
+                        )
+                        .map_err(|e| backend_err("postgres.query.drop_logical.lookup", e))?;
+                    match row.map(|row| row.get::<usize, String>(0)).as_deref() {
+                        Some("table") => client
+                            .batch_execute(&format!("DROP TABLE IF EXISTS {name}"))
+                            .map_err(|e| backend_err("postgres.query.drop_logical.table", e)),
+                        Some("view") => client
+                            .batch_execute(&format!("DROP VIEW IF EXISTS {name}"))
+                            .map_err(|e| backend_err("postgres.query.drop_logical.view", e)),
+                        Some(other) => Err(format!(
+                            "database.query.drop_logical: unsupported postgres object type '{other}'"
+                        )),
+                        None => Ok(()),
+                    }
+                }
+                Backend::Mysql(conn) => {
+                    let kind: Option<String> = conn
+                        .exec_first(
+                            "SELECT TABLE_TYPE FROM information_schema.TABLES \
+                             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? \
+                             LIMIT 1",
+                            (name,),
+                        )
+                        .map_err(|e| backend_err("mysql.query.drop_logical.lookup", e))?;
+                    match kind.as_deref() {
+                        Some("BASE TABLE") => conn
+                            .query_drop(format!("DROP TABLE IF EXISTS {name}"))
+                            .map_err(|e| backend_err("mysql.query.drop_logical.table", e)),
+                        Some("VIEW") => conn
+                            .query_drop(format!("DROP VIEW IF EXISTS {name}"))
+                            .map_err(|e| backend_err("mysql.query.drop_logical.view", e)),
+                        Some(other) => Err(format!(
+                            "database.query.drop_logical: unsupported mysql object type '{other}'"
+                        )),
+                        None => Ok(()),
+                    }
+                }
+            }
+        }
+
+        fn drop_query_storage_table(&mut self, logical_name: &str) -> Result<(), String> {
+            let storage_name =
+                query_storage_identifier(logical_name, "database.query.drop_storage")?;
+            self.execute_statement(&format!("DROP TABLE IF EXISTS {storage_name}"))
+        }
+
         fn ensure_schema(&mut self) -> Result<(), String> {
             match self {
                 Backend::Sqlite(conn) => {
@@ -853,12 +960,13 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
         }
 
         fn sync_query_table(&mut self, table: &QueryTable) -> Result<(), String> {
-            let drop_sql = format!("DROP TABLE IF EXISTS {}", table.name);
-            self.execute_statement(&drop_sql)?;
-            self.execute_statement(&create_query_table_sql(table)?)?;
+            self.drop_logical_query_object(&table.name)?;
+            self.drop_query_storage_table(&table.name)?;
+            self.execute_statement(&create_query_storage_table_sql(table)?)?;
             for row in &table.rows {
                 self.execute_statement(&insert_row_sql(table, row)?)?;
             }
+            self.execute_statement(&create_query_view_sql(table)?)?;
             Ok(())
         }
 
@@ -1118,6 +1226,92 @@ mod tests {
             err.contains("transaction"),
             "expected transaction error, got: {err}"
         );
+        connection.close().expect("close connection");
+    }
+
+    #[test]
+    fn sync_query_table_exposes_only_declared_columns() {
+        let state = DatabaseState::new();
+        let connection = state
+            .connect(Driver::Sqlite, ":memory:".to_string())
+            .expect("sqlite connection");
+
+        connection
+            .sync_query_table(QueryTable {
+                name: "products".to_string(),
+                columns: vec![
+                    QueryColumn {
+                        name: "id".to_string(),
+                        column_type: QueryColumnType::Int,
+                        not_null: true,
+                    },
+                    QueryColumn {
+                        name: "name".to_string(),
+                        column_type: QueryColumnType::Text,
+                        not_null: true,
+                    },
+                ],
+                rows: vec![
+                    QueryRow {
+                        row_ordinal: 0,
+                        values: vec![QueryCell::Int(1), QueryCell::Text("Widget".to_string())],
+                    },
+                    QueryRow {
+                        row_ordinal: 1,
+                        values: vec![QueryCell::Int(2), QueryCell::Text("Gadget".to_string())],
+                    },
+                ],
+            })
+            .expect("sync query table");
+
+        let logical_columns = connection
+            .query_sql("PRAGMA table_info(products)".to_string())
+            .expect("query logical columns");
+        let logical_column_names: Vec<String> = logical_columns
+            .iter()
+            .map(|row| match row.get(1) {
+                Some(QueryCell::Text(name)) => name.clone(),
+                other => panic!("expected PRAGMA column name text, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            logical_column_names,
+            vec!["id".to_string(), "name".to_string()]
+        );
+
+        let storage_table = query_storage_name("products");
+        let storage_columns = connection
+            .query_sql(format!("PRAGMA table_info({storage_table})"))
+            .expect("query storage columns");
+        let storage_column_names: Vec<String> = storage_columns
+            .iter()
+            .map(|row| match row.get(1) {
+                Some(QueryCell::Text(name)) => name.clone(),
+                other => panic!("expected storage column name text, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            storage_column_names,
+            vec![
+                "__aivi_ord".to_string(),
+                "id".to_string(),
+                "name".to_string()
+            ]
+        );
+
+        let rows = connection
+            .query_sql("SELECT id, name FROM products ORDER BY id".to_string())
+            .expect("query logical view rows");
+        assert_eq!(rows.len(), 2);
+        assert!(matches!(
+            rows[0].as_slice(),
+            [QueryCell::Int(1), QueryCell::Text(name)] if name == "Widget"
+        ));
+        assert!(matches!(
+            rows[1].as_slice(),
+            [QueryCell::Int(2), QueryCell::Text(name)] if name == "Gadget"
+        ));
+
         connection.close().expect("close connection");
     }
 }
