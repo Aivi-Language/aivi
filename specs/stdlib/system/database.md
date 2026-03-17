@@ -80,6 +80,23 @@ Explicit `DbConnection` handles are usually the better fit for larger programs b
 | default connection helpers (`db.configure`, `db.load`, `db.beginTx`) | tutorials, small tools, one-database apps | convenient, but the active connection is ambient | “configure once, then `db.load userTable`” |
 | explicit connections (`db.connect`, `db.loadOn`, `db.beginTxOn`) | services, pooled code, transaction-heavy workflows | a little more wiring, but ownership stays obvious | “open `dbConn`, pass it to `db.runQueryOn`, then close it” |
 
+### Ambient and explicit execution at a glance
+
+The ambient/explicit split applies to reads, writes, and transaction control, not just connection acquisition.
+
+| Concern | Ambient helper | Explicit helper |
+| --- | --- | --- |
+| load one table | `db.load userTable` | `db.loadOn conn userTable` |
+| run a query | `db.runQuery q` | `db.runQueryOn conn q` |
+| apply one delta | `db.applyDelta userTable delta` | `db.applyDeltaOn conn userTable delta` |
+| apply several deltas | `db.applyDeltas userTable deltas` | `db.applyDeltasOn conn userTable deltas` |
+| wrap work in a transaction | `db.inTransaction action` | `db.inTransactionOn conn action` |
+| manage a savepoint | `db.savepoint "afterUsers"` | `db.savepointOn conn "afterUsers"` |
+
+Ambient helpers always target the current default connection configured with `db.configure`.
+Explicit helpers always target the `DbConnection` value passed in by the caller.
+Any future selector-based CRUD surface should follow the same split instead of embedding connection ownership into the selector itself.
+
 ## Types
 
 If you are still on the beginner path, you can skim this section once and return later. The first overview, migration, query, and API-table examples are the faster route to a working mental model.
@@ -144,6 +161,9 @@ You can also build the same query with pipeline helpers:
 Sorting and paging work well in the pipeline style because they read from top to bottom:
 
 <<< ../../snippets/from_md/stdlib/system/database/block_05.aivi{aivi}
+
+
+When a lowered query omits `db.orderBy`, rows keep the source row order so `db.limit` and `db.offset` stay deterministic.
 
 
 Inside a `do Query` block, apply those helpers to the source query on the right-hand side of `<-`.
@@ -314,6 +334,120 @@ These helpers currently execute in memory, just like `db.applyDelta` and `db.app
 | **db.upsert** table pred value patch<br><code>Table A -> (A -> Bool) -> A -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDelta table (Upsert pred value patch)` |
 
 Use the typed helpers for one-off mutations. Use `db.applyDeltas` or `db.applyDeltasOn` when you want to batch several deltas together.
+
+### Selector-based CRUD (draft)
+
+Current implementation status: the repository currently ships the curried helpers `db.query`, `db.deleteWhere`, `db.updateWhere`, `db.upsert`, and their `...On` variants, plus the underlying delta APIs.
+The selector-based CRUD surface in this section is a draft for future implementation work; it is not implemented today.
+
+This draft keeps create explicit with `db.insert`.
+It only changes how row selection is written for reads, updates, deletes, and upserts.
+
+#### Proposed surface
+
+| Operation | Ambient form | Explicit form | Canonical meaning |
+| --- | --- | --- | --- |
+| create | `db.insert userTable newUser` | `db.insertOn conn userTable newUser` | existing create path |
+| read many | `db.list userTable[active]` | `db.listOn conn userTable[active]` | filter one table and return matching rows |
+| read one | `db.first userTable[id == userId]` | `db.firstOn conn userTable[id == userId]` | filter one table, keep at most one row, return `Option` |
+| update | `userTable[id == userId] <| { role: "admin" }` or `db.update userTable[id == userId] (patch { role: "admin" })` | `db.updateOn conn userTable[id == userId] (patch { role: "admin" })` | patch every selected row |
+| delete | `userTable[id == userId] <| -` or `db.delete userTable[id == userId]` | `db.deleteOn conn userTable[id == userId]` | delete every selected row |
+| upsert | `db.upsert userTable[id == user.id] user (patch { active: True })` | `db.upsertOn conn userTable[id == user.id] user (patch { active: True })` | patch matching rows or insert the seed row |
+
+Selector values are pure descriptions.
+They do not open connections, run I/O, or begin transactions by themselves.
+The ambient/explicit choice is made only by the `db.*` helper that consumes the selector or by the ambient `<|` shorthand.
+
+#### Ambient vs explicit execution in the draft
+
+Ambient selector operations run on the default connection configured with `db.configure`.
+For example, `db.inTransaction (...)` can contain both `db.delete userTable[id == userId]` and `userTable[id == userId] <| { active: False }`, and both operations stay on that ambient connection for the whole transaction.
+
+Explicit selector operations run on the `DbConnection` value passed to the helper.
+For example, `db.inTransactionOn conn (...)` can contain both `db.deleteOn conn userTable[id == userId]` and `db.updateOn conn userTable[id == userId] (patch { active: False })`, and both operations stay on that specific connection for the whole transaction.
+
+The selector itself never captures a connection and never changes transaction boundaries.
+
+#### Syntax
+
+The draft introduces one new expression form for selecting rows from a single table:
+
+```ebnf
+DbSelectorExpr := Expr "[" Expr "]"
+```
+
+When the left-hand side elaborates to `Table A`, the bracket body is interpreted as a predicate over row values of type `A` using the same lifting rules already used by `db.where` and patch predicates.
+That means forms such as `userTable[id == userId]`, `userTable[active]`, and `postTable[createdAt < cutoff]` all read as selector expressions over table rows.
+
+The draft also extends `<|` with one database-specific case:
+
+- `selection <| { ... }` updates the selected rows using the patch block on the right.
+- `selection <| -` deletes the selected rows.
+
+Standalone `-` remains invalid in ordinary expression position.
+Its delete meaning exists only as the right-hand side of `<|` when the left-hand side is a database selector.
+
+#### Typing
+
+The draft introduces an internal selector carrier:
+
+`DbSelection A`
+
+with these typing rules:
+
+- if `table : Table A` and `pred` checks as `A -> Bool` under predicate lifting, then `table[pred] : DbSelection A`
+- `db.list : DbSelection A -> Effect DbError (List A)`
+- `db.listOn : DbConnection -> DbSelection A -> Effect DbError (List A)`
+- `db.first : DbSelection A -> Effect DbError (Option A)`
+- `db.firstOn : DbConnection -> DbSelection A -> Effect DbError (Option A)`
+- `db.update : DbSelection A -> Patch A -> Effect DbError (Table A)`
+- `db.updateOn : DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)`
+- `db.delete : DbSelection A -> Effect DbError (Table A)`
+- `db.deleteOn : DbConnection -> DbSelection A -> Effect DbError (Table A)`
+- `db.upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)`
+- `db.upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)`
+
+`selection <| { ... }` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A` and the patch block checks as a valid `Patch A`.
+
+`selection <| -` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A`.
+
+The selector is always a pure row-description value.
+It never changes transaction scope or connection ownership.
+
+#### Desugaring
+
+| Surface form | Desugared form |
+| --- | --- |
+| `db.list table[pred]` | `db.runQuery (db.where pred (db.from table))` |
+| `db.listOn conn table[pred]` | `db.runQueryOn conn (db.where pred (db.from table))` |
+| `db.first table[pred]` | `db.list table[pred]` followed by `db.limit 1` in the query plan and `List.head`-style `Option` conversion at the API boundary |
+| `db.firstOn conn table[pred]` | `db.listOn conn table[pred]` followed by the same one-row `Option` conversion |
+| `db.update table[pred] patchFn` | `db.updateWhere table pred patchFn` |
+| `db.updateOn conn table[pred] patchFn` | `db.updateWhereOn conn table pred patchFn` |
+| `db.delete table[pred]` | `db.deleteWhere table pred` |
+| `db.deleteOn conn table[pred]` | `db.deleteWhereOn conn table pred` |
+| `db.upsert table[pred] seed patchFn` | `db.upsert table pred seed patchFn` |
+| `db.upsertOn conn table[pred] seed patchFn` | `db.upsertOn conn table pred seed patchFn` |
+| `table[pred] <| { ... }` | `db.update table[pred] (patch { ... })` |
+| `table[pred] <| -` | `db.delete table[pred]` |
+
+The desugaring keeps the selector layer shallow on purpose.
+It is syntax and API sugar over the existing single-table query and mutation model, not a new transaction or connection mechanism.
+
+#### Compile-fail cases and diagnostics
+
+The draft should reject at least these cases with targeted diagnostics:
+
+| Example | Why it is rejected | Suggested help |
+| --- | --- | --- |
+| `db.delete userTable` | `db.delete` expects a `DbSelection A`, not a whole `Table A` | suggest `db.delete userTable[pred]` |
+| `db.list userTable[id]` | `id` lifts to `User -> Int`, but a selector predicate must resolve to `Bool` | suggest `userTable[id == someId]` or another boolean predicate |
+| `db.update userTable[id == userId] { role: "admin" }` | the function form expects a `Patch A` value; plain braces in argument position are not a patch value | suggest `db.update userTable[id == userId] (patch { role: "admin" })` or `userTable[id == userId] <| { role: "admin" }` |
+| `userTable[id == userId] <| 1` | selector patch shorthand accepts only a patch block or the delete marker `-` | suggest `userTable[id == userId] <| { ... }` or `userTable[id == userId] <| -` |
+| `userTable[id == userId] <| { nope: True }` | the patch mentions a field that is not present on the selected row type | report the unknown field just as ordinary patching already does |
+
+These are specification-level diagnostics, not exact error strings.
+The important part is that the compiler explains whether the failure came from selector formation, patch typing, or misuse of ambient shorthand.
 
 ### FTS helpers
 

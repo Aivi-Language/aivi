@@ -25,8 +25,8 @@ getUserById = id => do Effect {
 }
 
 // Query DSL — compose queries, execute once with runQueryOn.
-// MVP note: queries execute in-memory after loading rows from the store;
-// SQL pushdown is not yet implemented in v0.1.
+// When the query stays inside the documented portable subset, AIVI lowers it
+// to the SQL-backed query path in v0.1 instead of loading all rows first.
 activeUserNames : Query Text
 activeUserNames = do Query {
   user <- db.from userTable
@@ -44,7 +44,7 @@ runActiveUserNames = do Effect {
 }
 
 // Ambient form — use db.runQuery when a default connection has been configured
-// with db.configure.  Same in-memory semantics as runQueryOn in v0.1.
+// with db.configure. It follows the same lowered-query semantics as runQueryOn.
 runActiveUserNamesDefault : Effect DbError (List Text)
 runActiveUserNamesDefault = do Effect {
   _     <- db.configure dbDefault
@@ -59,14 +59,14 @@ cheapActiveNames = db.from userTable
   |> db.where active
   |> db.select.name
 
-// Sorting and paging — all run in memory in v0.1 (no SQL pushdown yet)
+// Sorting and paging lower through the SQL-backed path in the portable subset.
 // orderBy : (A -> B) -> Query A -> Query A
 // limit   : Int -> Query A -> Query A
 // offset  : Int -> Query A -> Query A
 recentActiveNames : Query Text
 recentActiveNames = db.from userTable
   |> db.where active
-  |> db.orderBy.createdAt // sort ascending by creation time (in memory)
+  |> db.orderBy.createdAt // sort ascending by creation time
   |> db.offset 10 // skip the first 10 rows
   |> db.limit 5 // then take at most 5
   |> db.select.name
@@ -80,10 +80,10 @@ runRecentActiveNames = do Effect {
   pure names
 }
 
-// ── Multi-table join (in-memory, v0.1) ──────────────────────────────────────
-// SQL JOIN pushdown is not yet available.  Use repeated `from` binds with
-// `guard` to correlate rows from two tables.  Both tables are fully loaded
-// before the predicate runs in the AIVI runtime.
+// ── Multi-table join (SQL-backed portable subset) ───────────────────────────
+// Use repeated `from` binds with `guard` to correlate rows from two tables.
+// In the portable subset, AIVI lowers this shape to a SQL cross join with
+// pushed-down filter predicates.
 
 Order = { id: Int, userId: Int, total: Int }
 
@@ -114,7 +114,8 @@ runActiveUserOrders = do Effect {
 }
 
 // ── Count and exists (v0.1) ────────────────────────────────────────────────
-// db.count and db.exists aggregate queries; both run in memory (no SQL pushdown yet).
+// db.count and db.exists lower to SQL aggregates/existence checks when their
+// input query stays inside the portable subset.
 
 countActive : Query Int
 countActive = db.count (db.from userTable |> db.where active)

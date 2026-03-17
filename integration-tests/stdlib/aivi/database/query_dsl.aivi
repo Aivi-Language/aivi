@@ -25,6 +25,13 @@ seedProducts = conn => do Effect {
   pure Unit
 }
 
+expectedProducts : List Product
+expectedProducts = [
+  { id: 1, name: "Widget",  price: 10, active: True }
+  { id: 2, name: "Gadget",  price: 20, active: False }
+  { id: 3, name: "Doohick", price: 15, active: True }
+]
+
 // ── tests ──────────────────────────────────────────────────────────────────
 
 @test "from loads all rows"
@@ -34,7 +41,7 @@ from_loads_all_rows = do Effect {
   _       <- seedProducts conn
   results <- runQueryOn conn (from productTable)
   _       <- close conn
-  assertEq (List.length results) 3
+  assertEq results expectedProducts
 }
 
 @test "where filters rows"
@@ -67,7 +74,7 @@ do_query_from_single_bind = do Effect {
       queryOf p
   })
   _ <- close conn
-  assertEq (List.length results) 3
+  assertEq results expectedProducts
 }
 
 @test "do Query with guard filters"
@@ -170,7 +177,10 @@ limit_returns_first_n = do Effect {
   _       <- seedProducts conn
   results <- runQueryOn conn (limit 2 (from productTable))
   _       <- close conn
-  assertEq (List.length results) 2
+  assertEq results [
+    { id: 1, name: "Widget", price: 10, active: True }
+    { id: 2, name: "Gadget", price: 20, active: False }
+  ]
 }
 
 @test "limit 0 returns empty list"
@@ -190,7 +200,10 @@ offset_skips_first_n = do Effect {
   _       <- seedProducts conn
   results <- runQueryOn conn (offset 1 (from productTable))
   _       <- close conn
-  assertEq (List.length results) 2
+  assertEq results [
+    { id: 2, name: "Gadget",  price: 20, active: False }
+    { id: 3, name: "Doohick", price: 15, active: True }
+  ]
 }
 
 @test "offset beyond length returns empty"
@@ -359,6 +372,12 @@ activeOrdersQ = do Query {
   queryOf order
 }
 
+expectedActiveOrders : List Order
+expectedActiveOrders = [
+  { id: 1, productId: 1, qty: 5 }
+  { id: 2, productId: 3, qty: 2 }
+]
+
 inactiveOrdersQ : Query Order
 inactiveOrdersQ = do Query {
   order   <- from orderTable
@@ -386,6 +405,17 @@ count_orders_for_active_products = do Effect {
   result <- runQueryOn conn (count activeOrdersQ)
   _      <- close conn
   assertEq result [2]
+}
+
+@test "joined query returns whole order rows"
+joined_query_returns_whole_order_rows = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [productTable, orderTable]
+  _      <- seedProducts conn
+  _      <- seedOrders conn
+  result <- runQueryOn conn activeOrdersQ
+  _      <- close conn
+  assertEq result expectedActiveOrders
 }
 
 @test "exists for orders of inactive products is False"
@@ -450,4 +480,44 @@ run_query_ambient_do_query = do Effect {
       queryOf p.name
   })
   assertEq (List.length names) 2
+}
+
+// ── nullable columns ─────────────────────────────────────────────────────────
+
+Customer = { id: Int, email: Option Text }
+
+customerTable : Table Customer
+customerTable = table "customers" [
+  { name: "id",    type: IntType,     constraints: [NotNull], default: None }
+  { name: "email", type: Varchar 120, constraints: [],        default: None }
+]
+
+seedCustomers : DbConnection -> Effect DbError Unit
+seedCustomers = conn => do Effect {
+  _ <- applyDeltaOn conn customerTable (ins { id: 1, email: Some "a@example.com" })
+  _ <- applyDeltaOn conn customerTable (ins { id: 2, email: None })
+  pure Unit
+}
+
+@test "nullable row projection round-trips Option fields"
+nullable_row_projection_round_trips_option_fields = do Effect {
+  conn    <- connect { driver: Sqlite, url: ":memory:" }
+  _       <- runMigrationsOn conn [customerTable]
+  _       <- seedCustomers conn
+  results <- runQueryOn conn (from customerTable)
+  _       <- close conn
+  assertEq results [
+    { id: 1, email: Some "a@example.com" }
+    { id: 2, email: None }
+  ]
+}
+
+@test "nullable scalar projection round-trips Option fields"
+nullable_scalar_projection_round_trips_option_fields = do Effect {
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [customerTable]
+  _      <- seedCustomers conn
+  emails <- runQueryOn conn (select.email (from customerTable))
+  _      <- close conn
+  assertEq emails [Some "a@example.com", None]
 }
