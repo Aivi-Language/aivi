@@ -7,6 +7,7 @@ use super::color::build_color_record;
 use super::concurrency::build_concurrent_record;
 use super::crypto::build_crypto_record;
 use super::email::build_email_record;
+use super::gnome_online_accounts::build_gnome_online_accounts_record;
 use super::graph::build_graph_record;
 use super::gtk4::build_gtk4_record;
 use super::i18n::build_i18n_record;
@@ -582,6 +583,10 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("rest".to_string(), build_rest_api_record());
     env.set("__openapi_call".to_string(), build_openapi_call_builtin());
     env.set("email".to_string(), build_email_record());
+    env.set(
+        "gnomeOnlineAccounts".to_string(),
+        build_gnome_online_accounts_record(),
+    );
     env.set(
         "sockets".to_string(),
         super::sockets::build_sockets_record(),

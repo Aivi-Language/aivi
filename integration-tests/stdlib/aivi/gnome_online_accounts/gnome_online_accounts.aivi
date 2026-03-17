@@ -1,0 +1,138 @@
+@no_prelude
+module integrationTests.stdlib.aivi.gnome_online_accounts.tests
+
+use aivi
+use aivi.testing
+use aivi.email (Password, OAuth2)
+use aivi.gnome.onlineAccounts
+
+listMailAccountsWith = loader => loader Unit
+ensureCredentialsWith = runner => runner "account-1"
+imapConfigWith = reader => reader "account-1"
+smtpConfigWith = reader => reader "account-1"
+
+mockAccount = {
+  id: "account-1"
+  providerType: "google"
+  providerName: "Google"
+  presentationIdentity: "ada@example.com"
+  emailAddress: Some "ada@example.com"
+  attentionNeeded: False
+  imapSupported: True
+  smtpSupported: True
+}
+
+mockImapAccountConfig = {
+  host: "imap.gmail.com"
+  user: "ada@example.com"
+  auth: OAuth2 "access-token"
+  port: Some 993
+  starttls: Some False
+}
+
+mockSmtpAccountConfig = {
+  host: "smtp.gmail.com"
+  user: "ada@example.com"
+  auth: Password "secret"
+  from: "ada@example.com"
+  port: Some 587
+  starttls: Some True
+}
+
+@test "goa error constructors"
+goa_error_constructors = do Effect {
+  unsupported = PlatformUnsupported
+  serviceDown = ServiceUnavailable "session bus unavailable"
+  attention = AttentionNeeded "reauth required"
+  missing = AccountNotFound "missing"
+  noMail = MailUnsupported "smtp disabled"
+  badAuth = UnsupportedAuth "xoauth2 unavailable"
+  creds = Credentials "token expired"
+
+  _ <- assertEq unsupported PlatformUnsupported
+  _ <- (serviceDown match
+    | ServiceUnavailable msg => assertEq msg "session bus unavailable"
+    | _                      => fail "expected ServiceUnavailable"
+  )
+  _ <- (attention match
+    | AttentionNeeded msg => assertEq msg "reauth required"
+    | _                   => fail "expected AttentionNeeded"
+  )
+  _ <- (missing match
+    | AccountNotFound msg => assertEq msg "missing"
+    | _                   => fail "expected AccountNotFound"
+  )
+  _ <- (noMail match
+    | MailUnsupported msg => assertEq msg "smtp disabled"
+    | _                   => fail "expected MailUnsupported"
+  )
+  _ <- (badAuth match
+    | UnsupportedAuth msg => assertEq msg "xoauth2 unavailable"
+    | _                   => fail "expected UnsupportedAuth"
+  )
+  creds match
+    | Credentials msg => assertEq msg "token expired"
+    | _               => fail "expected Credentials"
+}
+
+@test "goa mail account record shape"
+goa_mail_account_record_shape = do Effect {
+  _ <- assertEq mockAccount.providerName "Google"
+  _ <- assertEq mockAccount.emailAddress (Some "ada@example.com")
+  _ <- assertEq mockAccount.imapSupported True
+  assertEq mockAccount.smtpSupported True
+}
+
+@test "goa list mail accounts can be mocked"
+goa_list_mail_accounts_can_be_mocked = do Effect {
+  fakeList = _ => pure [mockAccount]
+  accounts <- listMailAccountsWith fakeList
+  _ <- assertEq (List.length accounts) 1
+  accounts match
+    | [account, ..._] => assertEq account.providerType "google"
+    | []              => fail "expected mocked GOA accounts"
+}
+
+@test "goa ensure credentials can be mocked"
+goa_ensure_credentials_can_be_mocked = do Effect {
+  fakeEnsure = _ => pure Unit
+  _ <- ensureCredentialsWith fakeEnsure
+  assert True
+}
+
+@test "goa imap config builder composes with aivi email config"
+goa_imap_config_builder = do Effect {
+  cfg = toImapConfig mockImapAccountConfig (Some "INBOX") (Some "UNSEEN") (Some 25)
+  _ <- assertEq cfg.host "imap.gmail.com"
+  _ <- assertEq cfg.mailbox (Some "INBOX")
+  _ <- assertEq cfg.filter (Some "UNSEEN")
+  _ <- assertEq cfg.limit (Some 25)
+  cfg.auth match
+    | OAuth2 token => assertEq token "access-token"
+    | _            => fail "expected OAuth2 auth"
+}
+
+@test "goa smtp config builder composes with smtp send config"
+goa_smtp_config_builder = do Effect {
+  cfg = toSmtpConfig mockSmtpAccountConfig ["team@example.com"] (Some ["cc@example.com"]) None "subject" "body"
+  _ <- assertEq cfg.host "smtp.gmail.com"
+  _ <- assertEq cfg.from "ada@example.com"
+  _ <- assertEq cfg.to ["team@example.com"]
+  _ <- assertEq cfg.cc (Some ["cc@example.com"])
+  _ <- assertEq cfg.bcc None
+  cfg.auth match
+    | Password secret => assertEq secret "secret"
+    | _               => fail "expected Password auth"
+}
+
+@test "goa config effects can be mocked"
+goa_config_effects_can_be_mocked = do Effect {
+  fakeImapConfig = _ => pure mockImapAccountConfig
+  fakeSmtpConfig = _ => pure mockSmtpAccountConfig
+
+  imapCfg <- imapConfigWith fakeImapConfig
+  smtpCfg <- smtpConfigWith fakeSmtpConfig
+
+  _ <- assertEq imapCfg.port (Some 993)
+  assertEq smtpCfg.starttls (Some True)
+}

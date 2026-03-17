@@ -5,6 +5,7 @@ members = [
     "crates/aivi_database",
     "crates/aivi_driver",
     "crates/aivi_email",
+    "crates/aivi_goa",
     "crates/aivi_gtk4",
     "crates/aivi_http_server",
     "crates/aivi_lsp",

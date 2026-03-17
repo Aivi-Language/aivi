@@ -23,6 +23,9 @@ If you need the lower-level `load (email.imap ...)` source form, see [IMAP Email
 Both IMAP and SMTP accept password credentials or OAuth2 access tokens through `EmailAuth`.
 IMAP uses XOAUTH2 (an OAuth2-based authentication mechanism specifically for email servers) directly; SMTP token support depends on what the remote server accepts for authenticated SMTP.
 
+On GNOME desktops, [`aivi.gnome.onlineAccounts`](./gnome_online_accounts.md) can resolve desktop-managed mail credentials into typed config records for this module.
+Use `Goa.toImapConfig` to fill in mailbox/filter/limit details for `imap` or `imapOpen`, and `Goa.toSmtpConfig` to add recipients and message body fields for `smtpSend`.
+
 ## Types
 
 ### `EmailAuth`
@@ -155,6 +158,7 @@ Replace the host, username, mailbox names, and token/password values with the se
 
 This is the smallest useful flow when you just want “read a bounded batch of messages and return them”.
 `myAccessToken` stands for an OAuth2 access token that your program acquired elsewhere.
+On GNOME, a common source for that token is [`aivi.gnome.onlineAccounts`](./gnome_online_accounts.md), which can resolve the desktop-managed account into a typed IMAP config instead of requiring a hand-managed token string in your application config.
 
 ### Session-based workflow
 
