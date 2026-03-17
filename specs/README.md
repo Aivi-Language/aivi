@@ -134,6 +134,7 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Concurrency](stdlib/system/concurrency.md)
 - [Crypto](stdlib/system/crypto.md)
 - [Secrets](stdlib/system/secrets.md)
+- [GNOME Online Accounts](stdlib/system/gnome_online_accounts.md)
 #### Network, Services & Storage
 - [HTTP & HTTPS](stdlib/network/http.md)
 - [HTTP Server](stdlib/network/http_server.md)
