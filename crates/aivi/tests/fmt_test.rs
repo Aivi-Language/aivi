@@ -127,6 +127,14 @@ main = do Effect {
 }
 
 #[test]
+fn test_fmt_multiline_arg_patch_lambda_head() {
+    let input = "module demo\n\nf = x <| _ + 1 y <| _ + 3 => x + y\n";
+    let expected = "module demo\n\nf = x <| _ + 1\n    y <| _ + 3\n  => x + y\n";
+    assert_eq!(format_text(input), expected);
+    assert_eq!(format_text(expected), expected);
+}
+
+#[test]
 fn test_fmt_no_space_before_index_bracket() {
     // Adjacent `)[` (no space in source) → index access: space stays stripped.
     let input = "userTable = (database.table \"users\")[a]";

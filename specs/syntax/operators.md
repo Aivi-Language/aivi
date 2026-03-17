@@ -66,6 +66,12 @@ When the left-hand side is a database row selector from [`aivi.database`](../std
 Row deletion stays explicit as `db.delete userTable[id == userId]`.
 See [Patching Records](patching.md) for reusable `patch { ... }` values, deep selectors, and collection-aware updates.
 
+Inside a lambda head, `<|` has one extra surface-sugar role:
+
+- `x <| _ + 1 => body` means “bind `x`, transform it once, then run `body` with the updated `x`”
+
+That head form is documented in [Functions and Pipes](functions.md). It is limited to simple identifier parameters and desugars through ordinary `|>` transformer semantics.
+
 ### Signal write (`<<-`)
 
 `<<-` writes to a signal. The left side must be a `Signal A`. The semantics depend on the right-hand side:

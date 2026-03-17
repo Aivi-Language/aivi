@@ -43,6 +43,40 @@ When you need more than one argument, or when a callback deserves a clear name, 
 
 <<< ../snippets/from_md/syntax/functions/block_04.aivi{aivi}
 
+### Patching an argument before the body
+
+Sometimes the first thing a function does is “take the incoming argument, update it, then keep going”.
+For that case, a simple identifier parameter may carry a `<|` transformer directly in the head:
+
+```aivi
+f : Int -> Int
+f = x <| _ * 2 => x + 1
+```
+
+This is sugar for:
+
+```aivi
+f = x => {
+  x = x |> (_ * 2)
+  x + 1
+}
+```
+
+Read `x <| updater => body` as “bind `x`, transform it once, then evaluate `body` with the patched `x`”.
+The updater uses the same syntax as a pipe right-hand side, so forms such as `_ + 1`, `.name`, `toUpper`, explicit lambdas, and bare matcher blocks all fit naturally.
+
+Multi-argument heads may patch more than one simple identifier parameter:
+
+```aivi
+g = x <| _ + 1
+    y <| _ + 3
+  => x + y
+```
+
+The formatter prints multi-argument patched heads in that broken layout so the parameter/update pairs stay easy to scan.
+
+For now, argument-patch sugar applies only to simple identifier parameters. If you want to patch a destructured value, write the explicit block form instead.
+
 
 ---
 
