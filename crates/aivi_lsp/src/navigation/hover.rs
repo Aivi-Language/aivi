@@ -167,6 +167,10 @@ impl Backend {
                 "source-constructor",
                 "`file.json`\n\nSchema-first JSON source constructor.\n\nPrefer the record form:\n```aivi\nfile.json {\n  path: \"./users.json\"\n  schema: source.schema.derive\n}\n```\nThe compatibility string form still works, but the record form gives hover and diagnostics a stable schema contract to describe before `load` runs.",
             ),
+            "file.csv" => (
+                "source-constructor",
+                "`file.csv`\n\nSchema-first CSV source constructor.\n\nPrefer the record form:\n```aivi\nfile.csv {\n  path: \"./users.csv\"\n  schema: source.schema.derive\n}\n```\nUse this when CSV rows should decode into a typed record shape before any later `source.transform` or `source.validate` stages.",
+            ),
             "env.decode" => (
                 "source-constructor",
                 "`env.decode`\n\nSchema-first environment decoder.\n\nPrefer the record form:\n```aivi\nenv.decode {\n  prefix: \"AIVI_APP\"\n  schema: source.schema.derive\n}\n```\nUse this when the surrounding result type should drive record decoding and source-schema hover.",

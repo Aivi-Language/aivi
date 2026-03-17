@@ -377,7 +377,7 @@ impl Backend {
             Expr::Call { func, args, span } => {
                 if let Some(path) = Self::expr_ident_path(func) {
                     match path.as_str() {
-                        "file.json" | "env.decode" => {
+                        "file.json" | "file.csv" | "env.decode" => {
                             if let Some(arg) = args.first() {
                                 match arg {
                                     Expr::Literal(aivi::Literal::String { .. }) => out.push(

@@ -290,6 +290,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
 
     let file_json_arg = checker.fresh_var_id();
     let file_json_a = checker.fresh_var_id();
+    let file_csv_arg = checker.fresh_var_id();
     let file_csv_a = checker.fresh_var_id();
     let file_image_meta_a = checker.fresh_var_id();
     let file_image_a = checker.fresh_var_id();
@@ -372,7 +373,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             (
                 "csv".to_string(),
                 Type::Func(
-                    Box::new(Type::con("Text")),
+                    Box::new(Type::Var(file_csv_arg)),
                     Box::new(Type::con("Source").app(vec![
                         Type::con("File"),
                         Type::con("List").app(vec![Type::Var(file_csv_a)]),
@@ -408,6 +409,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             vars: vec![
                 file_json_arg,
                 file_json_a,
+                file_csv_arg,
                 file_csv_a,
                 file_image_meta_a,
                 file_image_a,

@@ -310,6 +310,29 @@ users = file.json "./users.json"
 }
 
 #[test]
+fn diagnostics_hint_for_legacy_file_csv_source_form() {
+    let text = r#"module demo
+use aivi
+
+users : Source File (List { id: Int, name: Text })
+users = file.csv "./users.csv"
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    let diag = diagnostics
+        .iter()
+        .find(|diag| matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "LSP-SOURCE001"))
+        .expect("expected schema-first source hint");
+
+    assert_eq!(diag.severity, Some(DiagnosticSeverity::HINT));
+    assert!(
+        diag.message.contains("schema-first record form"),
+        "expected schema-first guidance, got: {}",
+        diag.message
+    );
+}
+
+#[test]
 fn diagnostics_hint_for_missing_schema_strategy_on_source_record() {
     let text = r#"module demo
 use aivi

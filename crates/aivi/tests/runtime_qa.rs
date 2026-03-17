@@ -387,15 +387,21 @@ module app.main
 use aivi
 use aivi.testing
 
+makeAdder : Int -> Int -> Int
 makeAdder = n => x => n + x
 
+myMap : (Int -> Int) -> List Int -> List Int
 myMap = f xs => xs match
   | []           => []
   | [x, ...rest] => [f x, ...(myMap f rest)]
 
+compose : (Int -> Int) -> (Int -> Int) -> Int -> Int
 compose = f g x => f (g x)
+double : Int -> Int
 double = x => x * 2
+inc : Int -> Int
 inc = x => x + 1
+applyTwice : (Int -> Int) -> Int -> Int
 applyTwice = f x => f (f x)
 
 main : Effect Text Unit

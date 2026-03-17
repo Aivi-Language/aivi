@@ -275,7 +275,10 @@ fn infer_value_types_incremental_impl(
                 all_source_schemas.entry(key).or_default().push(inner_cg);
             }
             for (mod_name, def_name, inner_cg) in checker.take_source_constructor_schemas(&env) {
-                let key = format!("{}.{}{}", mod_name, def_name, SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX);
+                let key = format!(
+                    "{}.{}{}",
+                    mod_name, def_name, SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX
+                );
                 all_source_schemas.entry(key).or_default().push(inner_cg);
             }
 

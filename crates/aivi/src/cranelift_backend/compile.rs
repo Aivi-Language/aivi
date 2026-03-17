@@ -28,6 +28,8 @@ use crate::AiviError;
 use crate::{kernel, rust_ir};
 
 use super::abi::JitRuntimeCtx;
+
+const SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX: &str = "::source_sites";
 use super::jit_module::create_jit_module;
 use super::lower::{
     declare_helpers, decompose_func_type, CompiledLambda, DeclaredHelpers, JitFuncDecl,
@@ -1045,9 +1047,8 @@ pub fn run_test_suite_jit(
     result
 }
 
-/// Walk all RustIR modules and wrap `load(source)` calls as
-/// `load(__set_source_schema(schema_json, source))` when the typechecker
-/// recorded a concrete inner type for that load site.
+/// Walk all RustIR modules and inject recorded source schemas both at `load`
+/// boundaries and at file source constructor call sites.
 fn inject_source_schemas(
     modules: &mut [rust_ir::RustIrModule],
     source_schemas: &HashMap<String, Vec<CgType>>,
@@ -1055,64 +1056,159 @@ fn inject_source_schemas(
     for module in modules.iter_mut() {
         for def in &mut module.defs {
             let module_key = format!("{}.{}", module.name, def.name);
-            let schemas = source_schemas.get(&module_key).or_else(|| {
+            let load_schemas = source_schemas.get(&module_key).or_else(|| {
                 def.name
                     .contains('.')
                     .then(|| source_schemas.get(&def.name))
                     .flatten()
             });
-            if let Some(schemas) = schemas {
-                let mut schema_idx = 0;
-                inject_in_expr(&mut def.expr, schemas, &mut schema_idx);
+            let source_site_key = format!("{module_key}{SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX}");
+            let source_site_schemas = source_schemas.get(&source_site_key).or_else(|| {
+                def.name
+                    .contains('.')
+                    .then(|| {
+                        source_schemas
+                            .get(&format!("{}{SOURCE_CONSTRUCTOR_SCHEMA_SUFFIX}", def.name))
+                    })
+                    .flatten()
+            });
+            if load_schemas.is_some() || source_site_schemas.is_some() {
+                let mut load_idx = 0;
+                let mut source_site_idx = 0;
+                inject_in_expr(
+                    &mut def.expr,
+                    load_schemas.map_or(&[], Vec::as_slice),
+                    &mut load_idx,
+                    source_site_schemas.map_or(&[], Vec::as_slice),
+                    &mut source_site_idx,
+                );
             }
         }
     }
 }
 
-/// Recursively walk a RustIR expression. When we find `App(Global("load"), arg)`
-/// or `Call(Global("load"), [arg])`, wrap the source argument:
-///   `load(Call(Global("__set_source_schema"), [LitString(schema_json), arg]))`
-fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
-    // First recurse into children so inner load calls are found in order
+/// Recursively walk a RustIR expression. `load` applications and file source
+/// constructor calls are wrapped with `__set_source_schema` using the
+/// typechecker-recorded schema order.
+fn inject_in_expr(
+    expr: &mut RustIrExpr,
+    load_schemas: &[CgType],
+    load_idx: &mut usize,
+    source_site_schemas: &[CgType],
+    source_site_idx: &mut usize,
+) {
+    // First recurse into children so inner source sites are found in order.
     match expr {
-        RustIrExpr::Lambda { body, .. } => inject_in_expr(body, schemas, idx),
+        RustIrExpr::Lambda { body, .. } => inject_in_expr(
+            body,
+            load_schemas,
+            load_idx,
+            source_site_schemas,
+            source_site_idx,
+        ),
         RustIrExpr::App { func, arg, .. } => {
-            inject_in_expr(func, schemas, idx);
-            inject_in_expr(arg, schemas, idx);
+            inject_in_expr(
+                func,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
+            inject_in_expr(
+                arg,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
         }
         RustIrExpr::Call { func, args, .. } => {
-            inject_in_expr(func, schemas, idx);
+            inject_in_expr(
+                func,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
             for a in args.iter_mut() {
-                inject_in_expr(a, schemas, idx);
+                inject_in_expr(
+                    a,
+                    load_schemas,
+                    load_idx,
+                    source_site_schemas,
+                    source_site_idx,
+                );
             }
         }
         RustIrExpr::List { items, .. } => {
             for item in items {
-                inject_in_expr(&mut item.expr, schemas, idx);
+                inject_in_expr(
+                    &mut item.expr,
+                    load_schemas,
+                    load_idx,
+                    source_site_schemas,
+                    source_site_idx,
+                );
             }
         }
         RustIrExpr::Tuple { items, .. } => {
             for item in items {
-                inject_in_expr(item, schemas, idx);
+                inject_in_expr(
+                    item,
+                    load_schemas,
+                    load_idx,
+                    source_site_schemas,
+                    source_site_idx,
+                );
             }
         }
         RustIrExpr::Record { fields, .. } => {
             for field in fields {
-                inject_in_expr(&mut field.value, schemas, idx);
+                inject_in_expr(
+                    &mut field.value,
+                    load_schemas,
+                    load_idx,
+                    source_site_schemas,
+                    source_site_idx,
+                );
             }
         }
         RustIrExpr::Patch { target, fields, .. } => {
-            inject_in_expr(target, schemas, idx);
+            inject_in_expr(
+                target,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
             for field in fields {
-                inject_in_expr(&mut field.value, schemas, idx);
+                inject_in_expr(
+                    &mut field.value,
+                    load_schemas,
+                    load_idx,
+                    source_site_schemas,
+                    source_site_idx,
+                );
             }
         }
         RustIrExpr::Match {
             scrutinee, arms, ..
         } => {
-            inject_in_expr(scrutinee, schemas, idx);
+            inject_in_expr(
+                scrutinee,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
             for arm in arms {
-                inject_in_expr(&mut arm.body, schemas, idx);
+                inject_in_expr(
+                    &mut arm.body,
+                    load_schemas,
+                    load_idx,
+                    source_site_schemas,
+                    source_site_idx,
+                );
             }
         }
         RustIrExpr::If {
@@ -1121,35 +1217,108 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
             else_branch,
             ..
         } => {
-            inject_in_expr(cond, schemas, idx);
-            inject_in_expr(then_branch, schemas, idx);
-            inject_in_expr(else_branch, schemas, idx);
+            inject_in_expr(
+                cond,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
+            inject_in_expr(
+                then_branch,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
+            inject_in_expr(
+                else_branch,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
         }
         RustIrExpr::Binary { left, right, .. } => {
-            inject_in_expr(left, schemas, idx);
-            inject_in_expr(right, schemas, idx);
+            inject_in_expr(
+                left,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
+            inject_in_expr(
+                right,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
         }
         RustIrExpr::TextInterpolate { parts, .. } => {
             for part in parts {
                 if let RustIrTextPart::Expr { expr: e } = part {
-                    inject_in_expr(e, schemas, idx);
+                    inject_in_expr(
+                        e,
+                        load_schemas,
+                        load_idx,
+                        source_site_schemas,
+                        source_site_idx,
+                    );
                 }
             }
         }
-        RustIrExpr::DebugFn { body, .. } => inject_in_expr(body, schemas, idx),
+        RustIrExpr::DebugFn { body, .. } => inject_in_expr(
+            body,
+            load_schemas,
+            load_idx,
+            source_site_schemas,
+            source_site_idx,
+        ),
         RustIrExpr::Pipe { func, arg, .. } => {
-            inject_in_expr(func, schemas, idx);
-            inject_in_expr(arg, schemas, idx);
+            inject_in_expr(
+                func,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
+            inject_in_expr(
+                arg,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
         }
         RustIrExpr::FieldAccess { base, .. } | RustIrExpr::Index { base, .. } => {
-            inject_in_expr(base, schemas, idx);
+            inject_in_expr(
+                base,
+                load_schemas,
+                load_idx,
+                source_site_schemas,
+                source_site_idx,
+            );
         }
-        RustIrExpr::Mock { body, .. } => inject_in_expr(body, schemas, idx),
+        RustIrExpr::Mock { body, .. } => inject_in_expr(
+            body,
+            load_schemas,
+            load_idx,
+            source_site_schemas,
+            source_site_idx,
+        ),
         // Leaves: Local, Global, Builtin, ConstructorValue, Lit*, Raw, etc.
         _ => {}
     }
 
-    // After recursing, check if this node is a `load` application
+    if is_file_source_call(expr) {
+        if let Some(cg_type) = source_site_schemas.get(*source_site_idx) {
+            wrap_expr_with_schema(expr, cg_type);
+            *source_site_idx += 1;
+        }
+    }
+
+    // After recursing, check if this node is a `load` application.
     let is_load_app = match expr {
         RustIrExpr::App { func, .. } => matches!(
             func.as_ref(),
@@ -1165,51 +1334,109 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
     };
 
     if is_load_app {
-        if let Some(cg_type) = schemas.get(*idx) {
-            let schema = cg_type_to_json_schema(cg_type);
-            if let Ok(schema_json) = serde_json::to_string(&schema) {
-                let wrap_source = |source: RustIrExpr, schema_json: String| RustIrExpr::Call {
-                    id: 0,
-                    func: Box::new(RustIrExpr::Global {
-                        id: 0,
-                        name: "__set_source_schema".to_string(),
-                        location: None,
-                    }),
-                    args: vec![
-                        RustIrExpr::LitString {
-                            id: 0,
-                            text: schema_json,
-                        },
-                        source,
-                    ],
-                    location: None,
-                };
-                match expr {
-                    RustIrExpr::App { arg, .. } => {
-                        let original_arg = std::mem::replace(
-                            arg,
-                            Box::new(RustIrExpr::LitBool {
-                                id: 0,
-                                value: false,
-                            }),
-                        );
-                        **arg = wrap_source(*original_arg, schema_json);
-                    }
-                    RustIrExpr::Call { args, .. } if args.len() == 1 => {
-                        let original_arg = std::mem::replace(
-                            &mut args[0],
-                            RustIrExpr::LitBool {
-                                id: 0,
-                                value: false,
-                            },
-                        );
-                        args[0] = wrap_source(original_arg, schema_json);
-                    }
-                    _ => {}
+        if let Some(cg_type) = load_schemas.get(*load_idx) {
+            match expr {
+                RustIrExpr::App { arg, .. } => wrap_boxed_source_expr(arg, cg_type),
+                RustIrExpr::Call { args, .. } if args.len() == 1 => {
+                    wrap_list_source_expr(&mut args[0], cg_type);
                 }
+                _ => {}
             }
         }
-        *idx += 1;
+        *load_idx += 1;
+    }
+}
+
+fn is_file_source_call(expr: &RustIrExpr) -> bool {
+    match expr {
+        RustIrExpr::App { func, .. } => is_file_source_callee(func.as_ref()),
+        RustIrExpr::Call { func, args, .. } if args.len() == 1 => {
+            is_file_source_callee(func.as_ref())
+        }
+        _ => false,
+    }
+}
+
+fn is_file_source_callee(expr: &RustIrExpr) -> bool {
+    match expr {
+        RustIrExpr::Global { name, .. } => matches!(name.as_str(), "file.json" | "file.csv"),
+        RustIrExpr::Builtin { builtin, .. } => {
+            matches!(builtin.as_str(), "file.json" | "file.csv")
+        }
+        _ => false,
+    }
+}
+
+fn wrap_expr_with_schema(expr: &mut RustIrExpr, cg_type: &CgType) {
+    if *cg_type == CgType::Dynamic {
+        return;
+    }
+    let schema = cg_type_to_json_schema(cg_type);
+    let Ok(schema_json) = serde_json::to_string(&schema) else {
+        return;
+    };
+    let original = std::mem::replace(
+        expr,
+        RustIrExpr::LitBool {
+            id: 0,
+            value: false,
+        },
+    );
+    *expr = wrap_source_expr(original, schema_json);
+}
+
+fn wrap_boxed_source_expr(expr: &mut Box<RustIrExpr>, cg_type: &CgType) {
+    if *cg_type == CgType::Dynamic {
+        return;
+    }
+    let schema = cg_type_to_json_schema(cg_type);
+    let Ok(schema_json) = serde_json::to_string(&schema) else {
+        return;
+    };
+    let original = std::mem::replace(
+        expr,
+        Box::new(RustIrExpr::LitBool {
+            id: 0,
+            value: false,
+        }),
+    );
+    **expr = wrap_source_expr(*original, schema_json);
+}
+
+fn wrap_list_source_expr(expr: &mut RustIrExpr, cg_type: &CgType) {
+    if *cg_type == CgType::Dynamic {
+        return;
+    }
+    let schema = cg_type_to_json_schema(cg_type);
+    let Ok(schema_json) = serde_json::to_string(&schema) else {
+        return;
+    };
+    let original = std::mem::replace(
+        expr,
+        RustIrExpr::LitBool {
+            id: 0,
+            value: false,
+        },
+    );
+    *expr = wrap_source_expr(original, schema_json);
+}
+
+fn wrap_source_expr(source: RustIrExpr, schema_json: String) -> RustIrExpr {
+    RustIrExpr::Call {
+        id: 0,
+        func: Box::new(RustIrExpr::Global {
+            id: 0,
+            name: "__set_source_schema".to_string(),
+            location: None,
+        }),
+        args: vec![
+            RustIrExpr::LitString {
+                id: 0,
+                text: schema_json,
+            },
+            source,
+        ],
+        location: None,
     }
 }
 
@@ -1744,10 +1971,18 @@ mod runtime_warning_tests {
             ],
         }];
         let mut schema_idx = 0;
+        let mut source_site_idx = 0;
 
-        inject_in_expr(&mut expr, &schemas, &mut schema_idx);
+        inject_in_expr(
+            &mut expr,
+            &schemas,
+            &mut schema_idx,
+            &[],
+            &mut source_site_idx,
+        );
 
         assert_eq!(schema_idx, 1);
+        assert_eq!(source_site_idx, 0);
         let RustIrExpr::Call { func, args, .. } = expr else {
             panic!("expected load call");
         };
@@ -1786,6 +2021,57 @@ mod runtime_warning_tests {
         assert!(matches!(
             &wrapped_args[1],
             RustIrExpr::Global { name, .. } if name == "demo.source"
+        ));
+    }
+
+    #[test]
+    fn inject_in_expr_wraps_file_source_constructor_with_source_schema() {
+        let mut expr = RustIrExpr::Call {
+            id: 1,
+            func: Box::new(RustIrExpr::Builtin {
+                id: 2,
+                builtin: "file.csv".to_string(),
+                location: None,
+            }),
+            args: vec![RustIrExpr::LitString {
+                id: 3,
+                text: "./users.csv".to_string(),
+            }],
+            location: None,
+        };
+        let schemas = vec![CgType::ListOf(Box::new(CgType::Record(
+            std::collections::BTreeMap::from([
+                ("id".to_string(), CgType::Int),
+                ("name".to_string(), CgType::Text),
+            ]),
+        )))];
+        let mut load_idx = 0;
+        let mut source_site_idx = 0;
+
+        inject_in_expr(
+            &mut expr,
+            &[],
+            &mut load_idx,
+            &schemas,
+            &mut source_site_idx,
+        );
+
+        assert_eq!(load_idx, 0);
+        assert_eq!(source_site_idx, 1);
+        let RustIrExpr::Call { func, args, .. } = expr else {
+            panic!("expected wrapped source call");
+        };
+        assert!(matches!(
+            func.as_ref(),
+            RustIrExpr::Global { name, .. } if name == "__set_source_schema"
+        ));
+        assert_eq!(args.len(), 2);
+        let RustIrExpr::Call { func, .. } = &args[1] else {
+            panic!("expected original source call as second arg");
+        };
+        assert!(matches!(
+            func.as_ref(),
+            RustIrExpr::Builtin { builtin, .. } if builtin == "file.csv"
         ));
     }
 

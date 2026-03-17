@@ -585,6 +585,13 @@ usersSource =
     path: "./users.json"
     schema: source.schema.derive
   }
+
+usersCsvSource : Source File (List { id: Int, name: Text })
+usersCsvSource =
+  file.csv {
+    path: "./users.csv"
+    schema: source.schema.derive
+  }
 "#;
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi", "aivi.prelude"]);
@@ -604,6 +611,24 @@ usersSource =
     );
     assert!(
         file_json_markup
+            .value
+            .contains("schema: source.schema.derive")
+    );
+
+    let file_csv_pos = position_for(text, "file.csv");
+    let file_csv_hover =
+        Backend::build_hover_with_workspace(text, &uri, file_csv_pos, &workspace, &doc_index)
+            .expect("file.csv hover");
+    let HoverContents::Markup(file_csv_markup) = file_csv_hover.contents else {
+        panic!("expected file.csv hover markup");
+    };
+    assert!(
+        file_csv_markup
+            .value
+            .contains("Schema-first CSV source constructor")
+    );
+    assert!(
+        file_csv_markup
             .value
             .contains("schema: source.schema.derive")
     );

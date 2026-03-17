@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use csv::ReaderBuilder;
 use image::ImageReader;
@@ -13,6 +13,7 @@ use super::super::util::{
 use super::{
     json_to_runtime_with_schema, scalar_text_to_value, source_decode_error, source_transport_error,
 };
+use crate::runtime::json_schema::{constructor_name_for_enum_value, JsonSchema};
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 
 pub(in crate::runtime::builtins) fn build_file_record() -> Value {
@@ -43,7 +44,7 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
     fields.insert(
         "json".to_string(),
         builtin("file.json", 1, |mut args, _| {
-            let path = file_json_path(args.remove(0))?;
+            let path = file_source_path(args.remove(0), "file.json")?;
             let schema_slot: Arc<Mutex<Option<crate::runtime::json_schema::JsonSchema>>> =
                 Arc::new(Mutex::new(None));
             let raw_text_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -105,67 +106,81 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
     fields.insert(
         "csv".to_string(),
         builtin("file.csv", 1, |mut args, _| {
-            let path = expect_text(args.remove(0), "file.csv")?;
+            let path = file_source_path(args.remove(0), "file.csv")?;
+            let schema_slot: Arc<Mutex<Option<JsonSchema>>> = Arc::new(Mutex::new(None));
+            let raw_text_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let schema_ref = schema_slot.clone();
+            let raw_ref = raw_text_slot.clone();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let raw = std::fs::read_to_string(&path).map_err(|err| {
-                        RuntimeError::Error(Value::Text(source_transport_error(
-                            "File",
-                            &format!("path={path}"),
-                            &err.to_string(),
+                        RuntimeError::Error(make_source_io_error(format!(
+                            "file.csv path={path}: {err}"
                         )))
                     })?;
+                    if let Ok(mut guard) = raw_ref.lock() {
+                        *guard = Some(raw.clone());
+                    }
+                    let schema_opt = schema_ref.lock().ok().and_then(|g| g.clone());
+                    let row_schema = match schema_opt.as_ref() {
+                        Some(JsonSchema::List(inner)) => Some(inner.as_ref()),
+                        Some(JsonSchema::Any) | None => None,
+                        Some(other) => {
+                            return Err(RuntimeError::Error(make_source_decode_error(vec![
+                                make_decode_error(
+                                    Vec::new(),
+                                    format!(
+                                        "file.csv expects `List {{ ... }}` or `List Any`, got `{other}`"
+                                    ),
+                                ),
+                            ])));
+                        }
+                    };
                     let mut reader = ReaderBuilder::new()
                         .has_headers(true)
                         .from_reader(raw.as_bytes());
                     let headers = reader
                         .headers()
                         .map_err(|err| {
-                            RuntimeError::Error(Value::Text(source_decode_error(
-                                "File",
-                                "$",
-                                "valid CSV headers",
-                                "invalid CSV header row",
-                                &raw,
-                                1,
-                                1,
-                                &format!("failed to parse CSV headers in {path}: {err}"),
-                            )))
+                            RuntimeError::Error(make_source_decode_error(vec![make_decode_error(
+                                Vec::new(),
+                                format!("failed to parse CSV headers in {path}: {err}"),
+                            )]))
                         })?
                         .iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>();
+                    if let Some(JsonSchema::Record(fields)) = row_schema {
+                        for (field_name, field_schema) in fields {
+                            if !headers.iter().any(|header| header == field_name)
+                                && !matches!(field_schema, JsonSchema::Option(_))
+                            {
+                                return Err(RuntimeError::Error(make_source_decode_error(vec![
+                                    make_decode_error(
+                                        vec![field_name.clone()],
+                                        format!("missing CSV column `{field_name}` in {path}"),
+                                    ),
+                                ])));
+                            }
+                        }
+                    }
                     let mut rows = Vec::new();
                     for (idx, row) in reader.records().enumerate() {
                         let row = row.map_err(|err| {
-                            RuntimeError::Error(Value::Text(source_decode_error(
-                                "File",
-                                &format!("$[{}]", idx),
-                                "valid CSV row",
-                                "invalid CSV row",
-                                &raw,
-                                idx + 2,
-                                1,
-                                &format!("failed to parse CSV row {} in {path}: {err}", idx + 1),
-                            )))
+                            RuntimeError::Error(make_source_decode_error(vec![make_decode_error(
+                                vec![idx.to_string()],
+                                format!("failed to parse CSV row {} in {path}: {err}", idx + 1),
+                            )]))
                         })?;
-                        let mut rec = HashMap::new();
-                        for (col_idx, value) in row.iter().enumerate() {
-                            let key = headers
-                                .get(col_idx)
-                                .cloned()
-                                .unwrap_or_else(|| format!("col{col_idx}"));
-                            rec.insert(key, scalar_text_to_value(value));
-                        }
-                        rows.push(Value::Record(Arc::new(rec)));
+                        rows.push(csv_row_to_runtime(&headers, &row, idx, &path, row_schema)?);
                     }
                     Ok(Value::List(Arc::new(rows)))
                 }),
             };
-            Ok(Value::Source(Arc::new(SourceValue::new(
-                "File".to_string(),
-                Arc::new(effect),
-            ))))
+            let mut source = SourceValue::new("File".to_string(), Arc::new(effect));
+            source.schema = schema_slot;
+            source.raw_text = raw_text_slot;
+            Ok(Value::Source(Arc::new(source)))
         }),
     );
     fields.insert(
@@ -414,20 +429,15 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
                 func: Arc::new(move |_| {
                     let metadata = std::fs::metadata(&path)
                         .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
-                    let created = metadata
-                        .created()
-                        .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
                     let modified = metadata
                         .modified()
                         .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
-                    let created_ms = created
-                        .duration_since(UNIX_EPOCH)
-                        .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?
-                        .as_millis();
-                    let modified_ms = modified
-                        .duration_since(UNIX_EPOCH)
-                        .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?
-                        .as_millis();
+                    let modified_ms = system_time_to_millis(modified)?;
+                    let created_ms = metadata
+                        .created()
+                        .ok()
+                        .and_then(|created| system_time_to_millis(created).ok())
+                        .unwrap_or(modified_ms);
                     let size = i64::try_from(metadata.len()).map_err(|_| {
                         RuntimeError::Error(Value::Text("file too large".to_string()))
                     })?;
@@ -472,24 +482,133 @@ pub(in crate::runtime::builtins) fn build_file_record() -> Value {
     Value::Record(Arc::new(fields))
 }
 
-fn file_json_path(arg: Value) -> Result<String, RuntimeError> {
+fn file_source_path(arg: Value, context: &str) -> Result<String, RuntimeError> {
     match arg {
         Value::Text(path) => Ok(path),
         Value::Record(record) => match record.get("path") {
             Some(Value::Text(path)) => Ok(path.clone()),
             Some(other) => Err(RuntimeError::TypeError {
-                context: "file.json".to_string(),
+                context: context.to_string(),
                 expected: "Text".to_string(),
                 got: super::super::util::value_type_name(other).to_string(),
             }),
-            None => Err(RuntimeError::Message(
-                "file.json expects config.path".to_string(),
-            )),
+            None => Err(RuntimeError::Message(format!("{context} expects config.path"))),
         },
         other => Err(RuntimeError::TypeError {
-            context: "file.json".to_string(),
+            context: context.to_string(),
             expected: "Text or Record".to_string(),
             got: super::super::util::value_type_name(&other).to_string(),
         }),
+    }
+}
+
+fn system_time_to_millis(time: SystemTime) -> Result<u128, RuntimeError> {
+    time.duration_since(UNIX_EPOCH)
+        .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))
+        .map(|duration| duration.as_millis())
+}
+
+fn csv_row_to_runtime(
+    headers: &[String],
+    row: &csv::StringRecord,
+    row_index: usize,
+    path: &str,
+    row_schema: Option<&JsonSchema>,
+) -> Result<Value, RuntimeError> {
+    let mut rec = HashMap::new();
+    let record_schema = match row_schema {
+        Some(JsonSchema::Record(fields)) => Some(fields),
+        None => None,
+        Some(other) => {
+            return Err(RuntimeError::Error(make_source_decode_error(vec![
+                make_decode_error(
+                    Vec::new(),
+                    format!("file.csv expects row schema Record or Any, got `{other}`"),
+                ),
+            ])));
+        }
+    };
+
+    for (col_idx, value) in row.iter().enumerate() {
+        let key = headers
+            .get(col_idx)
+            .cloned()
+            .unwrap_or_else(|| format!("col{col_idx}"));
+        let field_schema = record_schema.and_then(|fields| fields.get(key.as_str()));
+        let runtime_value = csv_scalar_to_runtime(value, field_schema).map_err(|message| {
+            RuntimeError::Error(make_source_decode_error(vec![make_decode_error(
+                vec![row_index.to_string(), key.clone()],
+                format!("{message} in {path}"),
+            )]))
+        })?;
+        rec.insert(key, runtime_value);
+    }
+
+    if let Some(fields) = record_schema {
+        for (key, field_schema) in fields {
+            if rec.contains_key(key.as_str()) {
+                continue;
+            }
+            if matches!(field_schema, JsonSchema::Option(_)) {
+                rec.insert(
+                    key.clone(),
+                    Value::Constructor {
+                        name: "None".to_string(),
+                        args: Vec::new(),
+                    },
+                );
+                continue;
+            }
+            return Err(RuntimeError::Error(make_source_decode_error(vec![
+                make_decode_error(
+                    vec![row_index.to_string(), key.clone()],
+                    format!("missing CSV column `{key}` in {path}"),
+                ),
+            ])));
+        }
+    }
+
+    Ok(Value::Record(Arc::new(rec)))
+}
+
+fn csv_scalar_to_runtime(raw: &str, schema: Option<&JsonSchema>) -> Result<Value, String> {
+    let Some(schema) = schema else {
+        return Ok(scalar_text_to_value(raw));
+    };
+    let json_value = csv_scalar_to_json(raw, schema)?;
+    Ok(json_to_runtime_with_schema(&json_value, Some(schema)))
+}
+
+fn csv_scalar_to_json(raw: &str, schema: &JsonSchema) -> Result<JsonValue, String> {
+    match schema {
+        JsonSchema::Any => Ok(JsonValue::String(raw.to_string())),
+        JsonSchema::Int => raw
+            .parse::<i64>()
+            .map(JsonValue::from)
+            .map_err(|_| format!("expected Int, got {:?}", raw)),
+        JsonSchema::Float => raw
+            .parse::<f64>()
+            .map(JsonValue::from)
+            .map_err(|_| format!("expected Float, got {:?}", raw)),
+        JsonSchema::Text | JsonSchema::DateTime => Ok(JsonValue::String(raw.to_string())),
+        JsonSchema::Bool => raw
+            .parse::<bool>()
+            .map(JsonValue::from)
+            .map_err(|_| format!("expected Bool, got {:?}", raw)),
+        JsonSchema::Option(inner) => csv_scalar_to_json(raw, inner),
+        JsonSchema::Enum(variants) => {
+            if constructor_name_for_enum_value(variants, raw).is_none() {
+                let expected = variants
+                    .iter()
+                    .map(|variant| format!("{:?}", variant.json_value))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!("expected one of {expected}, got {:?}", raw));
+            }
+            Ok(JsonValue::String(raw.to_string()))
+        }
+        JsonSchema::List(_) | JsonSchema::Tuple(_) | JsonSchema::Record(_) => Err(format!(
+            "expected scalar CSV field, got `{schema}`"
+        )),
     }
 }
