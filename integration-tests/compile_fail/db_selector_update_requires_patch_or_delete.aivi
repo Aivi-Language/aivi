@@ -1,0 +1,11 @@
+// EXPECT-ERROR: database selector updates accept only a patch block or the delete marker
+@no_prelude
+module integrationTests.compileFail.dbSelectorUpdateRequiresPatchOrDelete
+
+use aivi
+use aivi.database
+
+users : Table { id: Int, name: Text }
+users = table "users"[]
+
+bad = users[id == 1] <| 1

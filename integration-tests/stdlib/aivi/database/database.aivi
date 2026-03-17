@@ -3,7 +3,21 @@ module integrationTests.stdlib.aivi.database.tests
 
 use aivi
 use aivi.testing
-use aivi.database
+use aivi.database (
+  IntType, BoolType, TimestampType, Varchar,
+  AutoIncrement, NotNull,
+  DefaultBool, DefaultInt, DefaultText, DefaultNow,
+  Sqlite, Postgresql, Mysql,
+  configure, configureSqlite, connect, close,
+  table, loadOn, runMigrationsOn, runMigrationSql,
+  beginTx, beginTxOn, commitTx, commitTxOn, rollbackTxOn,
+  savepoint, savepointOn, releaseSavepoint, releaseSavepointOn, rollbackToSavepointOn,
+  inTransactionOn,
+  applyDelta, applyDeltaOn, chunkDeltas,
+  ftsDoc, ftsMatchAny, ftsMatchAll,
+  ins, del, ups,
+  insert, insertOn, rows, firstOn, deleteOn, updateOn, upsert, upsertOn
+)
 
 // Test that types are well-formed
 
@@ -209,12 +223,38 @@ insertOn_convenience = do Effect {
   assertEq (List.length rows) 1
 }
 
-@test "deleteWhere convenience"
-deleteWhere_convenience = do Effect {
-  users0 = table "deleteWhere_users"[]
+@test "rows selector convenience"
+rows_selector_convenience = do Effect {
+  users0 = table "rows_users"[]
+  users1  <- insert users0 { id: 1, name: "Alice" }
+  users2  <- insert users1 { id: 2, name: "Bob" }
+  matched <- rows users2[id == 1]
+  assertEq (List.length matched) 1
+  matched match
+    | [row] => assertEq row.name "Alice"
+    | _     => assert False
+}
+
+@test "firstOn selector convenience"
+firstOn_selector_convenience = do Effect {
+  conn <- connect { driver: Sqlite, url: ":memory:" }
+  users0 = table "firstOn_users"[]
+  _      <- runMigrationsOn conn [users0]
+  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
+  users2 <- insertOn conn users1 { id: 2, name: "Bob" }
+  found  <- firstOn conn users2[id == 2]
+  _      <- close conn
+  found match
+    | Some row => assertEq row.name "Bob"
+    | None     => assert False
+}
+
+@test "delete selector shorthand"
+delete_selector_shorthand = do Effect {
+  users0 = table "delete_selector_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
   users2 <- insert users1 { id: 2, name: "Bob" }
-  users3 <- deleteWhere users2 (u => u.id == 1)
+  users3 <- users2[id == 1] <| -
   rows   <- load users3
   assertEq (List.length rows) 1
   rows match
@@ -222,37 +262,37 @@ deleteWhere_convenience = do Effect {
     | _     => assert False
 }
 
-@test "deleteWhereOn convenience"
-deleteWhereOn_convenience = do Effect {
+@test "deleteOn selector convenience"
+deleteOn_selector_convenience = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "deleteWhereOn_users"[]
+  users0 = table "deleteOn_users"[]
   _      <- runMigrationsOn conn [users0]
   users1 <- insertOn conn users0 { id: 1, name: "Alice" }
   users2 <- insertOn conn users1 { id: 2, name: "Bob" }
-  users3 <- deleteWhereOn conn users2 (u => u.id == 1)
+  users3 <- deleteOn conn users2[id == 1]
   rows   <- loadOn conn users3
   _      <- close conn
   assertEq (List.length rows) 1
 }
 
-@test "updateWhere convenience"
-updateWhere_convenience = do Effect {
-  users0 = table "updateWhere_users"[]
+@test "update selector shorthand"
+update_selector_shorthand = do Effect {
+  users0 = table "update_selector_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- updateWhere users1 (u => u.id == 1) (u => u <| { name: "Alicia" })
+  users2 <- users1[id == 1] <| { name: "Alicia" }
   rows   <- load users2
   rows match
     | [row] => assertEq row.name "Alicia"
     | _     => assert False
 }
 
-@test "updateWhereOn convenience"
-updateWhereOn_convenience = do Effect {
+@test "updateOn selector convenience"
+updateOn_selector_convenience = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "updateWhereOn_users"[]
+  users0 = table "updateOn_users"[]
   _      <- runMigrationsOn conn [users0]
   users1 <- insertOn conn users0 { id: 1, name: "Alice" }
-  users2 <- updateWhereOn conn users1 (u => u.id == 1) (u => u <| { name: "Alicia" })
+  users2 <- updateOn conn users1[id == 1] (patch { name: "Alicia" })
   rows   <- loadOn conn users2
   _      <- close conn
   rows match
@@ -263,7 +303,7 @@ updateWhereOn_convenience = do Effect {
 @test "upsert convenience inserts when missing"
 upsert_convenience_inserts = do Effect {
   users0 = table "upsert_ins_users"[]
-  users1 <- upsert users0 (u => u.id == 99) { id: 99, name: "New" } (u => u)
+  users1 <- upsert users0[id == 99] { id: 99, name: "New" } (u => u)
   rows   <- load users1
   assertEq (List.length rows) 1
   rows match
@@ -275,7 +315,7 @@ upsert_convenience_inserts = do Effect {
 upsert_convenience_updates = do Effect {
   users0 = table "upsert_upd_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- upsert users1 (u => u.id == 1) { id: 1, name: "Alice" } (u => u <| { name: "Updated" })
+  users2 <- upsert users1[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
   rows   <- load users2
   assertEq (List.length rows) 1
   rows match
@@ -288,8 +328,8 @@ upsertOn_convenience = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
   users0 = table "upsertOn_users"[]
   _      <- runMigrationsOn conn [users0]
-  users1 <- upsertOn conn users0 (u => u.id == 1) { id: 1, name: "Alice" } (u => u <| { name: "Updated" })
-  users2 <- upsertOn conn users1 (u => u.id == 1) { id: 1, name: "Alice" } (u => u <| { name: "Updated" })
+  users1 <- upsertOn conn users0[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
+  users2 <- upsertOn conn users1[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
   rows   <- loadOn conn users2
   _      <- close conn
   assertEq (List.length rows) 1

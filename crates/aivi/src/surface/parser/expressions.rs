@@ -345,6 +345,22 @@ impl Parser {
             self.pos += 1;
             let right = if op == "|>" || op == "->>" {
                 self.parse_pipe_rhs(prec + 1)?
+            } else if op == "<|" && self.check_symbol("-") {
+                let dash_span = self.peek_span()?;
+                self.pos += 1;
+                if self.is_expr_start() || self.is_negative_number_literal_start() {
+                    let inner = self.parse_binary(prec + 1)?;
+                    let span = merge_span(dash_span.clone(), expr_span(&inner));
+                    Expr::UnaryNeg {
+                        expr: Box::new(inner),
+                        span,
+                    }
+                } else {
+                    Expr::Raw {
+                        text: "-".to_string(),
+                        span: dash_span,
+                    }
+                }
             } else {
                 self.parse_binary(prec + 1)?
             };

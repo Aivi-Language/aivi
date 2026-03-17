@@ -242,15 +242,20 @@ MulExpr        := UnaryExpr { ("*" | "×" | "/" | "%") UnaryExpr }
 UnaryExpr      := ("!" | "-") UnaryExpr
                | PatchExpr
 
-PatchExpr      := AppExpr { ("<|" | "<<-") PatchLit }
-(* `<|` is record-patch. `<<-` is the signal-write operator; the LHS must be a
+PatchExpr      := AppExpr { ("<|" | "<<-") PatchArg }
+PatchArg       := PatchLit | "-"
+(* `<|` is record-patch. When the left-hand side elaborates to a database
+   selector from `aivi.database`, `<| { ... }` updates the selected rows and
+   `<| -` deletes them. `<<-` is the signal-write operator; the LHS must be a
    Signal A. Both share precedence 10. Signal-write semantics:
      signal <<- value   → set signal value
      signal <<- fn      → update signal fn
      signal <<- { ... } → update signal (patch { ... }) *)
 
 AppExpr        := PostfixExpr { PostfixExpr }
-PostfixExpr    := Atom { "." lowerIdent }
+PostfixExpr    := Atom { PostfixOp }
+PostfixOp      := "." lowerIdent
+               | "[" Expr "]"
 
 Atom           := Literal
                | lowerIdent
@@ -360,6 +365,7 @@ Literal        := "True"
 - `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals, and HTML/GTK angle sigils are documented in [Operators and Context](operators.md#118-sigils)
 - `RecordSpread` (`...expr`) merges fields left to right, with later fields overriding earlier ones
 - `name.path: value` inside a record literal builds nested record-shaped data from scratch. If you meant “update an existing nested value”, use `<|` / `patch`.
+- Postfix brackets reuse one syntax family for list indexing, map indexing, and database row selectors such as `userTable[id == userId]`. Which meaning applies is decided during elaboration from the left-hand side type.
 
 ## 0.4 Patching
 
@@ -381,6 +387,7 @@ Select         := "[" ( "*" | Expr ) "]"
 
 - `PathSeg` is intentionally broad so path navigation, traversal selectors, and prism-like focuses can share one syntax family.
 - The compiler should reject ill-typed or ill-scoped path forms with targeted diagnostics.
+- `-` inside `PatchLit` still means field removal. The direct form `selection <| -` is separate expression syntax used only for database row deletion.
 
 ## 0.5 Multi-clause unary functions
 

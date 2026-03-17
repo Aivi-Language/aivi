@@ -7,7 +7,7 @@ export Table, ColumnType, ColumnConstraint, ColumnDefault, Column
 export IntType, BoolType, TimestampType, Varchar
 export AutoIncrement, NotNull
 export DefaultBool, DefaultInt, DefaultText, DefaultNow
-export Pred, Patch, Delta, DbError
+export Pred, Patch, Delta, DbSelection, DbError
 export Driver, DbConfig, DbConnection, configure, connect, open, close
 export Sqlite, Postgresql, Mysql
 export SqliteTuning, MigrationStep, SavepointName, TxAction
@@ -22,8 +22,9 @@ export savepointOn, releaseSavepointOn, rollbackToSavepointOn
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export ins, upd, del, ups
 export insert, insertOn
-export deleteWhere, deleteWhereOn
-export updateWhere, updateWhereOn
+export rows, rowsOn, first, firstOn
+export delete, deleteOn
+export update, updateOn
 export upsert, upsertOn
 export domain Database
 export Query, queryOf, queryChain, emptyQuery, from, where, guard, select, runQueryOn, runQuery
@@ -49,6 +50,7 @@ Column = {
 Pred A = A -> Bool
 Patch A = A -> A
 Delta A = Insert A | Update (Pred A) (Patch A) | Delete (Pred A) | Upsert (Pred A) A (Patch A)
+DbSelection A = { table: Table A, pred: Pred A }
 
 Driver = Sqlite | Postgresql | Mysql
 DbConfig = { driver: Driver, url: Text }
@@ -395,23 +397,45 @@ insert = table value => applyDelta table (ins value)
 insertOn : DbConnection -> Table A -> A -> Effect DbError (Table A)
 insertOn = conn table value => applyDeltaOn conn table (ins value)
 
-deleteWhere : Table A -> (A -> Bool) -> Effect DbError (Table A)
-deleteWhere = table pred => applyDelta table (del pred)
+rows : DbSelection A -> Effect DbError (List A)
+rows = selection => query selection.table selection.pred
 
-deleteWhereOn : DbConnection -> Table A -> (A -> Bool) -> Effect DbError (Table A)
-deleteWhereOn = conn table pred => applyDeltaOn conn table (del pred)
+rowsOn : DbConnection -> DbSelection A -> Effect DbError (List A)
+rowsOn = conn selection => queryOn conn selection.table selection.pred
 
-updateWhere : Table A -> (A -> Bool) -> Patch A -> Effect DbError (Table A)
-updateWhere = table pred patchFn => applyDelta table (upd pred patchFn)
+first : DbSelection A -> Effect DbError (Option A)
+first = selection => do Effect {
+  matched <- rows selection
+  matched match
+    | [row, ..._] => pure (Some row)
+    | []          => pure None
+}
 
-updateWhereOn : DbConnection -> Table A -> (A -> Bool) -> Patch A -> Effect DbError (Table A)
-updateWhereOn = conn table pred patchFn => applyDeltaOn conn table (upd pred patchFn)
+firstOn : DbConnection -> DbSelection A -> Effect DbError (Option A)
+firstOn = conn selection => do Effect {
+  matched <- rowsOn conn selection
+  matched match
+    | [row, ..._] => pure (Some row)
+    | []          => pure None
+}
 
-upsert : Table A -> (A -> Bool) -> A -> Patch A -> Effect DbError (Table A)
-upsert = table pred value patchFn => applyDelta table (ups pred value patchFn)
+delete : DbSelection A -> Effect DbError (Table A)
+delete = selection => applyDelta selection.table (del selection.pred)
 
-upsertOn : DbConnection -> Table A -> (A -> Bool) -> A -> Patch A -> Effect DbError (Table A)
-upsertOn = conn table pred value patchFn => applyDeltaOn conn table (ups pred value patchFn)
+deleteOn : DbConnection -> DbSelection A -> Effect DbError (Table A)
+deleteOn = conn selection => applyDeltaOn conn selection.table (del selection.pred)
+
+update : DbSelection A -> Patch A -> Effect DbError (Table A)
+update = selection patchFn => applyDelta selection.table (upd selection.pred patchFn)
+
+updateOn : DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)
+updateOn = conn selection patchFn => applyDeltaOn conn selection.table (upd selection.pred patchFn)
+
+upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)
+upsert = selection value patchFn => applyDelta selection.table (ups selection.pred value patchFn)
+
+upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)
+upsertOn = conn selection value patchFn => applyDeltaOn conn selection.table (ups selection.pred value patchFn)
 
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)

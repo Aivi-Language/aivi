@@ -214,6 +214,10 @@ user3 = user <| { profile.avatar: "new.png" }
 record <| { items[*].price: _ * 1.1 }
 record <| { items[price > 80].tag: "hot" }
 record <| { lookup["key"]: newVal }
+db.rows userTable[active]
+db.first userTable[id == userId]
+userTable[id == userId] <| { role: "admin" }
+userTable[id == userId] <| -
 ```
 
 Patch instructions:

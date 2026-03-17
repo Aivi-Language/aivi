@@ -1,39 +1,52 @@
-// Typed mutation helpers are convenience wrappers over the delta machinery.
-// Each function constructs the appropriate Delta and calls db.applyDeltaOn
-// (or db.applyDelta for the ambient form) in one step.
+// Selector CRUD helpers keep inserts explicit and make reads/writes
+// flow through a shared `table[predicate]` selector surface.
 
 // db.insertOn inserts a single row through an explicit connection.
 createUser : DbConnection -> User -> Effect DbError (Table User)
 createUser = conn => newUser =>
   db.insertOn conn userTable newUser
 
-// db.deleteWhereOn deletes all rows matching a predicate.
+// db.deleteOn deletes all rows selected by the table predicate.
 removeInactiveUsers : DbConnection -> Effect DbError (Table User)
 removeInactiveUsers = conn =>
-  db.deleteWhereOn conn userTable (!active)
+  db.deleteOn conn userTable[!active]
 
-// db.updateWhereOn updates all rows matching a predicate.
+// db.updateOn patches all rows selected by the table predicate.
 promoteAdmin : DbConnection -> Int -> Effect DbError (Table User)
 promoteAdmin = conn => userId =>
-  db.updateWhereOn conn userTable (id == userId) (u => u <| { role: "admin" })
+  db.updateOn conn userTable[id == userId] (patch { role: "admin" })
+
+// db.firstOn keeps the selector syntax for reads as well.
+lookupUser : DbConnection -> Int -> Effect DbError (Option User)
+lookupUser = conn => userId =>
+  db.firstOn conn userTable[id == userId]
 
 // db.upsertOn patches matching rows and inserts the seed row when none match.
 syncUser : DbConnection -> User -> Effect DbError (Table User)
 syncUser = conn => user =>
-  db.upsertOn conn userTable (id == user.id) user (u => u <| { name: user.name, active: user.active })
+  db.upsertOn conn userTable[id == user.id] user (patch {
+      name: user.name
+      active: user.active
+  })
 
 // Ambient variants use the default connection from db.configure
 // and mirror the explicit forms exactly:
 //
 //   db.insert        table row
-//   db.deleteWhere   table pred
-//   db.updateWhere   table pred patch
-//   db.upsert        table pred value patch
+//   db.rows          table[pred]
+//   db.first         table[pred]
+//   db.delete        table[pred]
+//   db.update        table[pred] patch
+//   db.upsert        table[pred] value patch
 
 addUserAmbient : User -> Effect DbError (Table User)
 addUserAmbient = newUser =>
   db.insert userTable newUser
 
+activeUsersAmbient : Effect DbError (List User)
+activeUsersAmbient =
+  db.rows userTable[active]
+
 deleteStaleAmbient : Instant -> Effect DbError (Table User)
 deleteStaleAmbient = cutoff =>
-  db.deleteWhere userTable (createdAt < cutoff)
+  db.delete userTable[createdAt < cutoff]

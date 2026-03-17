@@ -715,6 +715,28 @@ impl TypeChecker {
                     }
                 }
             }
+            Expr::Index { base, index, span } => {
+                let base_ty = self.infer_expr(&base, env)?;
+                if let Some(row_ty) = self.extract_table_row_type(base_ty) {
+                    let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
+                    let pred_expected =
+                        Type::Func(Box::new(row_ty), Box::new(self.named_type("Bool")));
+                    let (base, _base_ty) = self.elab_expr(*base, None, env)?;
+                    let (index, _index_ty) =
+                        self.elab_call_arg_with_predicate_fallback(*index, pred_expected, env)?;
+                    let out = self.db_selection_record_expr(base, index, &span);
+                    self.check_or_coerce(out, expected.or(Some(selection_ty)), env)
+                } else {
+                    let (base, _base_ty) = self.elab_expr(*base, None, env)?;
+                    let (index, _index_ty) = self.elab_expr(*index, None, env)?;
+                    let out = Expr::Index {
+                        base: Box::new(base),
+                        index: Box::new(index),
+                        span,
+                    };
+                    self.check_or_coerce(out, expected, env)
+                }
+            }
             other => self.check_or_coerce(other, expected, env),
         }
     }
@@ -745,11 +767,24 @@ impl TypeChecker {
             return self.check_or_coerce(out, expected, env);
         }
         let left_ty = self.infer_expr(&left, env)?;
-        if let Some(signal_item_ty) = self.extract_signal_item_type(left_ty) {
+        if let Some(signal_item_ty) = self.extract_signal_item_type(left_ty.clone()) {
             match op.as_str() {
                 "->>" => return self.elab_signal_pipe(left, right, span, signal_item_ty, expected, env),
                 "<<-" => return self.elab_signal_write(left, right, span, signal_item_ty, expected, env),
                 _ => {}
+            }
+        }
+        if op == "<|" {
+            if let Some(row_ty) = self.extract_db_selection_row_type(left_ty) {
+                return self.elab_db_selector_write(left, right, span, row_ty, expected, env);
+            }
+            if matches!(&right, Expr::Raw { text, .. } if text == "-") {
+                return Err(TypeError {
+                    span: expr_span(&right),
+                    message: "`<| -` is only valid when the left-hand side is a database selector like `userTable[id == userId]`".to_string(),
+                    expected: None,
+                    found: None,
+                });
             }
         }
 
@@ -868,6 +903,88 @@ impl TypeChecker {
             args,
             span: span.clone(),
         }
+    }
+
+    fn db_selection_record_expr(&self, table: Expr, pred: Expr, span: &Span) -> Expr {
+        Expr::Record {
+            fields: vec![
+                RecordField {
+                    path: vec![PathSegment::Field(SpannedName {
+                        name: "table".to_string(),
+                        span: span.clone(),
+                    })],
+                    value: table,
+                    spread: false,
+                    span: span.clone(),
+                },
+                RecordField {
+                    path: vec![PathSegment::Field(SpannedName {
+                        name: "pred".to_string(),
+                        span: span.clone(),
+                    })],
+                    value: pred,
+                    spread: false,
+                    span: span.clone(),
+                },
+            ],
+            span: span.clone(),
+        }
+    }
+
+    fn db_helper_call_expr(&self, helper: &str, args: Vec<Expr>, span: &Span) -> Expr {
+        Expr::Call {
+            func: Box::new(Expr::Ident(SpannedName {
+                name: format!("aivi.database.{helper}"),
+                span: span.clone(),
+            })),
+            args,
+            span: span.clone(),
+        }
+    }
+
+    fn elab_db_selector_write(
+        &mut self,
+        left: Expr,
+        right: Expr,
+        span: Span,
+        row_ty: Type,
+        expected: Option<Type>,
+        env: &mut TypeEnv,
+    ) -> Result<(Expr, Type), TypeError> {
+        let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
+        let patch_ty = self.named_type("Patch").app(vec![row_ty]);
+        let (selection, _selection_ty) = self.elab_expr(left, Some(selection_ty), env)?;
+
+        let call = match right {
+            Expr::Raw { text, .. } if text == "-" => {
+                self.db_helper_call_expr("delete", vec![selection], &span)
+            }
+            Expr::Record {
+                fields,
+                span: patch_span,
+            }
+            | Expr::PatchLit {
+                fields,
+                span: patch_span,
+            } => {
+                let patch_expr = Expr::PatchLit {
+                    fields,
+                    span: patch_span,
+                };
+                let (patch, _patch_ty) = self.elab_expr(patch_expr, Some(patch_ty), env)?;
+                self.db_helper_call_expr("update", vec![selection, patch], &span)
+            }
+            other => {
+                return Err(TypeError {
+                    span: expr_span(&other),
+                    message: "database selector updates accept only a patch block or the delete marker `-`".to_string(),
+                    expected: None,
+                    found: None,
+                });
+            }
+        };
+
+        self.check_or_coerce(call, expected, env)
     }
 
 }

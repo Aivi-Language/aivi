@@ -144,6 +144,8 @@ Use `-` to remove a field when the target type allows that removal.
 
 Removal is structural, so the resulting type reflects the missing field.
 
+This field-removal meaning is distinct from the database selector form `selection <| -` described in [`aivi.database`](../stdlib/system/database.md). Inside a patch block, `-` still means “remove the selected field”; as the direct right-hand side of `<|` on a database selector, it means “delete the selected rows”.
+
 ## Common patching patterns
 
 ### Record bulk update

@@ -25,6 +25,49 @@ impl TypeChecker {
         }
     }
 
+    fn extract_table_row_type(&mut self, ty: Type) -> Option<Type> {
+        let applied = self.apply(ty);
+        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Table") {
+            let applied_row = self.apply(row_ty);
+            return Some(self.expand_alias(applied_row));
+        }
+
+        let resolved = self.expand_alias(applied);
+        let Type::Record { fields } = resolved else {
+            return None;
+        };
+        let rows_ty = fields.get("rows")?.clone();
+        let applied_rows = self.apply(rows_ty);
+        let list_row = Self::extract_named_type_arg(&applied_rows, "List")?;
+        let applied_row = self.apply(list_row);
+        Some(self.expand_alias(applied_row))
+    }
+
+    fn extract_db_selection_row_type(&mut self, ty: Type) -> Option<Type> {
+        let applied = self.apply(ty);
+        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "DbSelection") {
+            let applied_row = self.apply(row_ty);
+            return Some(self.expand_alias(applied_row));
+        }
+
+        let resolved = self.expand_alias(applied);
+        let Type::Record { fields } = resolved else {
+            return None;
+        };
+        let table_ty = fields.get("table")?.clone();
+        let _pred_ty = fields.get("pred")?.clone();
+        let row_ty = self.extract_table_row_type(table_ty)?;
+        let applied_row = self.apply(row_ty);
+        Some(self.expand_alias(applied_row))
+    }
+
+    fn db_effect_table_type(&self, row_ty: Type) -> Type {
+        self.named_type("Effect").app(vec![
+            self.named_type("DbError"),
+            self.named_type("Table").app(vec![row_ty]),
+        ])
+    }
+
     fn infer_signal_pipe_result(
         &mut self,
         left: &Expr,
@@ -173,6 +216,22 @@ impl TypeChecker {
         }
         if op == "<|" {
             let target_ty = self.infer_expr(left, env)?;
+            if let Some(row_ty) = self.extract_db_selection_row_type(target_ty.clone()) {
+                let effect_table_ty = self.db_effect_table_type(row_ty.clone());
+                return match right {
+                    Expr::Raw { text, .. } if text == "-" => Ok(effect_table_ty),
+                    Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
+                        self.infer_patch(row_ty, fields, env)?;
+                        Ok(effect_table_ty)
+                    }
+                    _ => Err(TypeError {
+                        span: expr_span(right),
+                        message: "database selector updates accept only a patch block or the delete marker `-`".to_string(),
+                        expected: None,
+                        found: None,
+                    }),
+                };
+            }
             let applied_target_ty = self.apply(target_ty.clone());
             let resolved = self.expand_alias(applied_target_ty);
             if let Some(type_name) = self.opaque_con_name(&resolved) {
@@ -190,6 +249,14 @@ impl TypeChecker {
             }
             if let Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } = right {
                 return self.infer_patch(target_ty, fields, env);
+            }
+            if matches!(right, Expr::Raw { text, .. } if text == "-") {
+                return Err(TypeError {
+                    span: expr_span(right),
+                    message: "`<| -` is only valid when the left-hand side is a database selector like `userTable[id == userId]`".to_string(),
+                    expected: None,
+                    found: None,
+                });
             }
         }
         if op == "<<-" {
