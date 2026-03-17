@@ -287,8 +287,9 @@ These constructors are the canonical low-level way to build reusable delta value
 The high-level CRUD helpers keep inserts explicit and route reads, updates, deletes, and upserts through a shared `table[predicate]` selector surface.
 Selectors are pure descriptions of “which rows in which table”; they do not open connections, start transactions, or perform I/O by themselves.
 
-These helpers currently execute through the in-memory path, just like `db.applyDelta`, `db.applyDeltaOn`, and helper-built queries that do not lower to SQL.
-Their predicates and patches do not compile to SQL mutation statements.
+On configured database connections, selector helpers run against the database-backed table storage directly instead of loading whole tables into memory first.
+Selector reads lower their predicates into the same portable SQL scalar subset used by lowered queries, and selector writes target only the matching persisted rows.
+Selector `update` and `upsert` require lowered patch blocks on that DB-backed path; unsupported patch functions fail explicitly at runtime instead of silently falling back to full-table in-memory mutation.
 <!-- /quick-info -->
 
 <<< ../../snippets/from_md/stdlib/system/database/typed_mutations.aivi{aivi}
@@ -315,22 +316,22 @@ That means all of these are valid selector forms:
 | Function | Canonical meaning |
 | --- | --- |
 | **db.insertOn** conn table row<br><code>DbConnection -> Table A -> A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Insert row)` |
-| **db.rowsOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (List A)</code> | `db.loadOn conn selection.table`, then keep the rows whose values satisfy `selection.pred` |
-| **db.firstOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Option A)</code> | `db.rowsOn conn selection`, then keep the first row if any |
-| **db.deleteOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Delete selection.pred)` |
-| **db.updateOn** conn selection patch<br><code>DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Update selection.pred patch)` |
-| **db.upsertOn** conn selection row patch<br><code>DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Upsert selection.pred row patch)` |
+| **db.rowsOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (List A)</code> | Executes `selection` against the persisted table on `conn` and returns the matching rows in source order. |
+| **db.firstOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Option A)</code> | Executes `selection` against the persisted table on `conn` and returns the first matching row, if any. |
+| **db.deleteOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Table A)</code> | Deletes rows matched by `selection` on `conn`, then returns the updated table snapshot. |
+| **db.updateOn** conn selection patch<br><code>DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on `conn`. On the DB-backed path the patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
+| **db.upsertOn** conn selection row patch<br><code>DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on `conn`, or inserts `row` if no row matches. On the DB-backed path the update patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
 
 #### Ambient forms
 
 | Function | Canonical meaning |
 | --- | --- |
 | **db.insert** table row<br><code>Table A -> A -> Effect DbError (Table A)</code> | `db.applyDelta table (Insert row)` |
-| **db.rows** selection<br><code>DbSelection A -> Effect DbError (List A)</code> | `db.load selection.table`, then keep the rows whose values satisfy `selection.pred` |
-| **db.first** selection<br><code>DbSelection A -> Effect DbError (Option A)</code> | `db.rows selection`, then keep the first row if any |
-| **db.delete** selection<br><code>DbSelection A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Delete selection.pred)` |
-| **db.update** selection patch<br><code>DbSelection A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Update selection.pred patch)` |
-| **db.upsert** selection row patch<br><code>DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Upsert selection.pred row patch)` |
+| **db.rows** selection<br><code>DbSelection A -> Effect DbError (List A)</code> | Executes `selection` against the persisted table on the default configured connection and returns the matching rows in source order. |
+| **db.first** selection<br><code>DbSelection A -> Effect DbError (Option A)</code> | Executes `selection` against the persisted table on the default configured connection and returns the first matching row, if any. |
+| **db.delete** selection<br><code>DbSelection A -> Effect DbError (Table A)</code> | Deletes rows matched by `selection` on the default configured connection, then returns the updated table snapshot. |
+| **db.update** selection patch<br><code>DbSelection A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on the default configured connection. On the DB-backed path the patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
+| **db.upsert** selection row patch<br><code>DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on the default configured connection, or inserts `row` if no row matches. On the DB-backed path the update patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
 
 Use the selector helpers for one-off CRUD operations.
 Use `db.applyDeltas` or `db.applyDeltasOn` when you want to batch several deltas together explicitly.
@@ -387,26 +388,29 @@ The selector CRUD surface type-checks with these rules:
 Plain record literals `{ ... }` are accepted directly anywhere these helpers expect a `Patch A`.
 That means `db.update table[pred] { ... }`, `db.updateOn conn table[pred] { ... }`, `db.upsert table[pred] row { ... }`, and `db.upsertOn conn table[pred] row { ... }` all type-check by coercing the inline record block to the corresponding `Patch A`.
 
+On the DB-backed selector path, only lowered patch blocks are accepted for the update branch.
+That means plain `{ ... }` blocks and reusable `patch { ... }` values work, while arbitrary patch lambdas fail explicitly at runtime instead of silently forcing a full-table in-memory mutation.
+
 `selection <| { ... }` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A` and the patch block checks as a valid `Patch A`.
 
-The surface desugars as follows:
+The selector surface behaves as follows:
 
-| Surface form | Desugared form |
+| Surface form | Operational meaning |
 | --- | --- |
-| `db.rows table[pred]` | `db.load table`, then filter the loaded rows with `pred` |
-| `db.rowsOn conn table[pred]` | `db.loadOn conn table`, then filter the loaded rows with `pred` |
-| `db.first table[pred]` | `db.rows table[pred]`, then return the first row as `Option` |
-| `db.firstOn conn table[pred]` | `db.rowsOn conn table[pred]`, then return the first row as `Option` |
-| `db.update table[pred] patchFn` | `db.applyDelta table (Update pred patchFn)` |
-| `db.update table[pred] { ... }` | `db.applyDelta table (Update pred (patch { ... }))` |
-| `db.updateOn conn table[pred] patchFn` | `db.applyDeltaOn conn table (Update pred patchFn)` |
-| `db.updateOn conn table[pred] { ... }` | `db.applyDeltaOn conn table (Update pred (patch { ... }))` |
-| `db.delete table[pred]` | `db.applyDelta table (Delete pred)` |
-| `db.deleteOn conn table[pred]` | `db.applyDeltaOn conn table (Delete pred)` |
-| `db.upsert table[pred] seed patchFn` | `db.applyDelta table (Upsert pred seed patchFn)` |
-| `db.upsert table[pred] seed { ... }` | `db.applyDelta table (Upsert pred seed (patch { ... }))` |
-| `db.upsertOn conn table[pred] seed patchFn` | `db.applyDeltaOn conn table (Upsert pred seed patchFn)` |
-| `db.upsertOn conn table[pred] seed { ... }` | `db.applyDeltaOn conn table (Upsert pred seed (patch { ... }))` |
+| `db.rows table[pred]` | Executes the lowered selector predicate against the default connection and returns only the matching rows. |
+| `db.rowsOn conn table[pred]` | Executes the lowered selector predicate against `conn` and returns only the matching rows. |
+| `db.first table[pred]` | Executes the lowered selector predicate against the default connection and returns the first matching row as `Option`. |
+| `db.firstOn conn table[pred]` | Executes the lowered selector predicate against `conn` and returns the first matching row as `Option`. |
+| `db.update table[pred] { ... }` | Locates matching persisted rows on the default connection, applies the lowered patch block to each matched row, and persists the updated rows. |
+| `db.update table[pred] patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
+| `db.updateOn conn table[pred] { ... }` | Locates matching persisted rows on `conn`, applies the lowered patch block to each matched row, and persists the updated rows. |
+| `db.updateOn conn table[pred] patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
+| `db.delete table[pred]` | Deletes rows matched by the lowered selector predicate on the default connection. |
+| `db.deleteOn conn table[pred]` | Deletes rows matched by the lowered selector predicate on `conn`. |
+| `db.upsert table[pred] seed { ... }` | Updates rows matched by the lowered selector predicate on the default connection, or inserts `seed` if no row matches. |
+| `db.upsert table[pred] seed patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
+| `db.upsertOn conn table[pred] seed { ... }` | Updates rows matched by the lowered selector predicate on `conn`, or inserts `seed` if no row matches. |
+| `db.upsertOn conn table[pred] seed patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
 | `table[pred] <| { ... }` | `db.update table[pred] { ... }` |
 
 This keeps the selector layer shallow on purpose.
@@ -473,5 +477,6 @@ The important part is that the compiler explains whether the failure came from s
 
 - In v0.1, database reads stay on `db.load`, selector helpers, or `db.runQuery*`.
 - `db.runMigrationSql` and `db.runMigrationSqlOn` are the stable raw SQL entry points in v0.1; regular row reads stay on `db.load`, selector helpers, or `db.runQuery*`.
-- `db.applyDelta`, `db.applyDeltas`, and the typed mutation helpers operate in memory rather than compiling predicates and patches into SQL mutation statements.
+- `db.applyDelta` and `db.applyDeltas` remain the generic mutation path for programmatically constructed deltas.
+- Selector CRUD helpers (`db.rows*`, `db.first*`, `db.delete*`, `db.update*`, `db.upsert*`, and `selection <| { ... }`) no longer materialize whole tables just to filter them on configured database connections.
 - Transactions are scoped to a single `DbConnection`.

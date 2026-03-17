@@ -159,9 +159,13 @@ fn lower_expr_inner_ctx(
                 .map(|item| lower_expr_ctx(item, id_gen, ctx, false))
                 .collect(),
         },
-        Expr::Record { fields, .. } => HirExpr::Record {
-            id: id_gen.next(),
-            fields: fields
+        Expr::Record { fields, .. } => {
+            let selection_meta = if looks_like_db_selection_record(&fields) {
+                Some(compile_static_db_selection(&fields))
+            } else {
+                None
+            };
+            let mut lowered_fields: Vec<HirRecordField> = fields
                 .into_iter()
                 .map(|field| HirRecordField {
                     spread: field.spread,
@@ -180,45 +184,23 @@ fn lower_expr_inner_ctx(
                         .collect(),
                     value: lower_expr_ctx(field.value, id_gen, ctx, false),
                 })
-                .collect(),
-        },
-        Expr::PatchLit { fields, .. } => {
-            let param = format!("__patch_target{}", id_gen.next());
-            let target = HirExpr::Var {
-                id: id_gen.next(),
-                name: param.clone(),
-            
-                location: None,
-            };
-            let patch = HirExpr::Patch {
-                id: id_gen.next(),
-                target: Box::new(target),
-                fields: fields
-                    .into_iter()
-                    .map(|field| HirRecordField {
-                        spread: field.spread,
-                        path: field
-                            .path
-                            .into_iter()
-                            .map(|segment| match segment {
-                                crate::surface::PathSegment::Field(name) => {
-                                    HirPathSegment::Field(name.name)
-                                }
-                                crate::surface::PathSegment::Index(expr, _) => {
-                                    HirPathSegment::Index(lower_expr_ctx(expr, id_gen, ctx, false))
-                                }
-                                crate::surface::PathSegment::All(_) => HirPathSegment::All,
-                            })
-                            .collect(),
-                        value: lower_expr_ctx(field.value, id_gen, ctx, false),
-                    })
-                    .collect(),
-            };
-            HirExpr::Lambda {
-                id: id_gen.next(),
-                param,
-                body: Box::new(patch),
+                .collect();
+            if let Some(meta) = selection_meta {
+                lowered_fields.push(HirRecordField {
+                    spread: false,
+                    path: vec![HirPathSegment::Field(DB_SELECTION_META_FIELD.to_string())],
+                    value: build_db_selection_meta_hir(meta, id_gen, ctx),
+                });
             }
+            HirExpr::Record {
+                id: id_gen.next(),
+                fields: lowered_fields,
+            }
+        }
+        Expr::PatchLit { fields, .. } => {
+            let compiled_patch = compile_static_db_patch(&fields);
+            let fallback_patch = build_patch_lambda_hir(fields, id_gen, ctx);
+            build_db_patch_hir(compiled_patch, fallback_patch, id_gen, ctx)
         }
         Expr::FieldAccess { base, field, span } => HirExpr::FieldAccess {
             id: id_gen.next(),
@@ -1256,6 +1238,210 @@ fn lower_named_call_hir(
     }
 }
 
+fn looks_like_db_selection_record(fields: &[crate::surface::RecordField]) -> bool {
+    let mut has_table = false;
+    let mut has_pred = false;
+    for field in fields {
+        if field.spread {
+            return false;
+        }
+        match field.path.as_slice() {
+            [crate::surface::PathSegment::Field(name)] if name.name == "table" => has_table = true,
+            [crate::surface::PathSegment::Field(name)] if name.name == "pred" => has_pred = true,
+            _ => {}
+        }
+    }
+    has_table && has_pred
+}
+
+fn build_db_selection_meta_hir(
+    meta: Result<StaticCompiledDbSelection, String>,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    match meta {
+        Ok(compiled) => {
+            let plan_json = match serde_json::to_string(&compiled.plan) {
+                Ok(json) => json,
+                Err(err) => {
+                    return HirExpr::Record {
+                        id: id_gen.next(),
+                        fields: vec![HirRecordField {
+                            spread: false,
+                            path: vec![HirPathSegment::Field("error".to_string())],
+                            value: HirExpr::LitString {
+                                id: id_gen.next(),
+                                text: format!(
+                                    "failed to serialize lowered selector plan: {err}"
+                                ),
+                            },
+                        }],
+                    };
+                }
+            };
+            let captures = HirExpr::List {
+                id: id_gen.next(),
+                items: compiled
+                    .capture_exprs
+                    .into_iter()
+                    .map(|expr| HirListItem {
+                        expr: lower_expr_ctx(expr, id_gen, ctx, false),
+                        spread: false,
+                    })
+                    .collect(),
+            };
+            HirExpr::Record {
+                id: id_gen.next(),
+                fields: vec![
+                    HirRecordField {
+                        spread: false,
+                        path: vec![HirPathSegment::Field("planJson".to_string())],
+                        value: HirExpr::LitString {
+                            id: id_gen.next(),
+                            text: plan_json,
+                        },
+                    },
+                    HirRecordField {
+                        spread: false,
+                        path: vec![HirPathSegment::Field("captures".to_string())],
+                        value: captures,
+                    },
+                ],
+            }
+        }
+        Err(message) => HirExpr::Record {
+            id: id_gen.next(),
+            fields: vec![HirRecordField {
+                spread: false,
+                path: vec![HirPathSegment::Field("error".to_string())],
+                value: HirExpr::LitString {
+                    id: id_gen.next(),
+                    text: message,
+                },
+            }],
+        },
+    }
+}
+
+fn build_patch_lambda_hir(
+    fields: Vec<crate::surface::RecordField>,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    let param = format!("__patch_target{}", id_gen.next());
+    let target = HirExpr::Var {
+        id: id_gen.next(),
+        name: param.clone(),
+        location: None,
+    };
+    let patch = HirExpr::Patch {
+        id: id_gen.next(),
+        target: Box::new(target),
+        fields: fields
+            .into_iter()
+            .map(|field| HirRecordField {
+                spread: field.spread,
+                path: field
+                    .path
+                    .into_iter()
+                    .map(|segment| match segment {
+                        crate::surface::PathSegment::Field(name) => {
+                            HirPathSegment::Field(name.name)
+                        }
+                        crate::surface::PathSegment::Index(expr, _) => {
+                            HirPathSegment::Index(lower_expr_ctx(expr, id_gen, ctx, false))
+                        }
+                        crate::surface::PathSegment::All(_) => HirPathSegment::All,
+                    })
+                    .collect(),
+                value: lower_expr_ctx(field.value, id_gen, ctx, false),
+            })
+            .collect(),
+    };
+    HirExpr::Lambda {
+        id: id_gen.next(),
+        param,
+        body: Box::new(patch),
+    }
+}
+
+fn build_db_patch_hir(
+    meta: Result<StaticCompiledDbPatch, String>,
+    fallback_patch: HirExpr,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    match meta {
+        Ok(compiled) => {
+            let plan_json = match serde_json::to_string(&compiled.plan) {
+                Ok(json) => json,
+                Err(err) => {
+                    return HirExpr::Call {
+                        id: id_gen.next(),
+                        func: Box::new(HirExpr::Var {
+                            id: id_gen.next(),
+                            name: DB_PATCH_ERROR_BUILTIN.to_string(),
+                            location: None,
+                        }),
+                        args: vec![
+                            HirExpr::LitString {
+                                id: id_gen.next(),
+                                text: format!("failed to serialize lowered selector patch: {err}"),
+                            },
+                            fallback_patch,
+                        ],
+                        location: None,
+                    };
+                }
+            };
+            let captures = HirExpr::List {
+                id: id_gen.next(),
+                items: compiled
+                    .capture_exprs
+                    .into_iter()
+                    .map(|expr| HirListItem {
+                        expr: lower_expr_ctx(expr, id_gen, ctx, false),
+                        spread: false,
+                    })
+                    .collect(),
+            };
+            HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: DB_PATCH_COMPILED_BUILTIN.to_string(),
+                    location: None,
+                }),
+                args: vec![
+                    HirExpr::LitString {
+                        id: id_gen.next(),
+                        text: plan_json,
+                    },
+                    captures,
+                    fallback_patch,
+                ],
+                location: None,
+            }
+        }
+        Err(message) => HirExpr::Call {
+            id: id_gen.next(),
+            func: Box::new(HirExpr::Var {
+                id: id_gen.next(),
+                name: DB_PATCH_ERROR_BUILTIN.to_string(),
+                location: None,
+            }),
+            args: vec![
+                HirExpr::LitString {
+                    id: id_gen.next(),
+                    text: message,
+                },
+                fallback_patch,
+            ],
+            location: None,
+        },
+    }
+}
+
 fn maybe_lower_query_expr(
     expr: &Expr,
     id_gen: &mut IdGen,
@@ -1329,6 +1515,17 @@ fn build_static_query_hir(
             })
             .collect(),
     };
+    let captures = HirExpr::List {
+        id: id_gen.next(),
+        items: compiled
+            .capture_exprs
+            .into_iter()
+            .map(|expr| HirListItem {
+                expr: lower_expr_ctx(expr, id_gen, ctx, false),
+                spread: false,
+            })
+            .collect(),
+    };
 
     HirExpr::Call {
         id: id_gen.next(),
@@ -1344,6 +1541,7 @@ fn build_static_query_hir(
                 text: plan_json,
             },
             sources,
+            captures,
         ],
         location: None,
     }

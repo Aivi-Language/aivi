@@ -197,8 +197,8 @@ spawned_ticker_updates_signal = do Effect {
       | Ok value => assertEq value 3
       | Err _    => assert False
 
-    assertEq (get ticks) 3
-    close tx
+  assertEq (get ticks) 3
+  close tx
 }
 
 @test "two spawned threads can collect delayed computations"
@@ -225,8 +225,8 @@ spawn_collects_delayed_computations = do Effect {
       | Ok value => assertEq value 2
       | Err _    => assert False
 
-    assertEq (slow + fast) 3
-    close tx
+  assertEq (slow + fast) 3
+  close tx
 }
 
 @test "retry succeeds after transient failures"

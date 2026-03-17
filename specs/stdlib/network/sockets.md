@@ -56,7 +56,7 @@ On the client side:
 
 ### Client example
 
-<<< ../../snippets/from_md/stdlib/network/sockets/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/sockets/block_02.aivi{aivi}
 
 ### Functions
 
@@ -83,6 +83,6 @@ Socket operations return `SocketError` when something goes wrong:
 <<< ../../snippets/from_md/stdlib/network/sockets/block_01.aivi{aivi}
 
 
-`SocketError` is intentionally small: surface `message` directly for logs or wrap it in a more specific application error.
+`SocketError` is intentionally small: surface `message` directly for logs or wrap it in a more specific application error. Address validation and outgoing byte validation also surface through `SocketError`, so `attempt` can catch those failures the same way it catches runtime I/O failures.
 
 Typical causes include bind failures, connection failures, broken pipes, and operations on closed sockets.

@@ -4,7 +4,7 @@ use std::net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAdd
 use std::sync::{Arc, Mutex};
 
 use super::util::{builtin, expect_int, expect_list, expect_record, list_value};
-use crate::runtime::{EffectValue, RuntimeError, Value};
+use crate::runtime::{format_runtime_error, EffectValue, RuntimeError, Value};
 
 const DEFAULT_RECV_CHUNK: usize = 4096;
 
@@ -12,6 +12,21 @@ fn socket_error_value(message: impl Into<String>) -> Value {
     let mut fields = HashMap::new();
     fields.insert("message".to_string(), Value::Text(message.into()));
     Value::Record(Arc::new(fields))
+}
+
+fn socket_error(message: impl Into<String>) -> RuntimeError {
+    RuntimeError::Error(socket_error_value(message))
+}
+
+fn socket_error_from_runtime(err: RuntimeError) -> RuntimeError {
+    match err {
+        RuntimeError::Error(value) => RuntimeError::Error(value),
+        RuntimeError::Cancelled => RuntimeError::Cancelled,
+        RuntimeError::InvalidArgument { reason, .. } => socket_error(reason),
+        RuntimeError::IOError { cause, .. } => socket_error(cause),
+        RuntimeError::Message(message) => socket_error(message),
+        other => socket_error(format_runtime_error(other)),
+    }
 }
 
 fn address_from_value(value: Value, ctx: &str) -> Result<SocketAddr, RuntimeError> {
@@ -102,11 +117,13 @@ pub(super) fn build_sockets_record() -> Value {
     fields.insert(
         "listen".to_string(),
         builtin("sockets.listen", 1, |mut args, _| {
-            let addr = address_from_value(args.pop().unwrap(), "sockets.listen")?;
+            let address = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
+                    let addr = address_from_value(address.clone(), "sockets.listen")
+                        .map_err(socket_error_from_runtime)?;
                     let listener = TcpListener::bind(addr)
-                        .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
+                        .map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Listener(Arc::new(Mutex::new(Some(listener)))))
                 }),
             };
@@ -119,17 +136,15 @@ pub(super) fn build_sockets_record() -> Value {
             let listener_lock = listener_from_value(args.pop().unwrap(), "sockets.accept")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let listener = listener_lock.lock().map_err(|_| RuntimeError::IOError {
-                        context: "sockets.accept".to_string(),
-                        cause: "listener lock poisoned".to_string(),
-                    })?;
-                    let listener = listener.as_ref().ok_or_else(|| RuntimeError::IOError {
-                        context: "sockets.accept".to_string(),
-                        cause: "listener closed".to_string(),
-                    })?;
+                    let listener = listener_lock
+                        .lock()
+                        .map_err(|_| socket_error("listener lock poisoned"))?;
+                    let listener = listener
+                        .as_ref()
+                        .ok_or_else(|| socket_error("listener closed"))?;
                     let (stream, _) = listener
                         .accept()
-                        .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
+                        .map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Connection(Arc::new(Mutex::new(stream))))
                 }),
             };
@@ -139,11 +154,13 @@ pub(super) fn build_sockets_record() -> Value {
     fields.insert(
         "connect".to_string(),
         builtin("sockets.connect", 1, |mut args, _| {
-            let addr = address_from_value(args.pop().unwrap(), "sockets.connect")?;
+            let address = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
+                    let addr = address_from_value(address.clone(), "sockets.connect")
+                        .map_err(socket_error_from_runtime)?;
                     let stream = TcpStream::connect(addr)
-                        .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
+                        .map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Connection(Arc::new(Mutex::new(stream))))
                 }),
             };
@@ -153,18 +170,18 @@ pub(super) fn build_sockets_record() -> Value {
     fields.insert(
         "send".to_string(),
         builtin("sockets.send", 2, |mut args, _| {
-            let bytes = args.pop().unwrap();
+            let bytes_value = args.pop().unwrap();
             let conn = connection_from_value(args.pop().unwrap(), "sockets.send")?;
-            let bytes = list_int_to_bytes(bytes, "sockets.send")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let mut stream = conn.lock().map_err(|_| RuntimeError::IOError {
-                        context: "sockets.send".to_string(),
-                        cause: "connection poisoned".to_string(),
-                    })?;
+                    let bytes = list_int_to_bytes(bytes_value.clone(), "sockets.send")
+                        .map_err(socket_error_from_runtime)?;
+                    let mut stream = conn
+                        .lock()
+                        .map_err(|_| socket_error("connection poisoned"))?;
                     stream
                         .write_all(&bytes)
-                        .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
+                        .map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Unit)
                 }),
             };
@@ -177,14 +194,13 @@ pub(super) fn build_sockets_record() -> Value {
             let conn = connection_from_value(args.pop().unwrap(), "sockets.recv")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let mut stream = conn.lock().map_err(|_| RuntimeError::IOError {
-                        context: "sockets.recv".to_string(),
-                        cause: "connection poisoned".to_string(),
-                    })?;
+                    let mut stream = conn
+                        .lock()
+                        .map_err(|_| socket_error("connection poisoned"))?;
                     let mut buffer = vec![0u8; DEFAULT_RECV_CHUNK];
                     let count = stream
                         .read(&mut buffer)
-                        .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
+                        .map_err(|err| socket_error(err.to_string()))?;
                     buffer.truncate(count);
                     let items = buffer
                         .into_iter()
@@ -202,11 +218,12 @@ pub(super) fn build_sockets_record() -> Value {
             let conn = connection_from_value(args.pop().unwrap(), "sockets.close")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let stream = conn.lock().map_err(|_| RuntimeError::IOError {
-                        context: "sockets.close".to_string(),
-                        cause: "connection poisoned".to_string(),
-                    })?;
-                    let _ = stream.shutdown(Shutdown::Both);
+                    let stream = conn
+                        .lock()
+                        .map_err(|_| socket_error("connection poisoned"))?;
+                    stream
+                        .shutdown(Shutdown::Both)
+                        .map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Unit)
                 }),
             };
@@ -219,10 +236,9 @@ pub(super) fn build_sockets_record() -> Value {
             let listener_lock = listener_from_value(args.pop().unwrap(), "sockets.closeListener")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let mut listener = listener_lock.lock().map_err(|_| RuntimeError::IOError {
-                        context: "sockets.closeListener".to_string(),
-                        cause: "listener lock poisoned".to_string(),
-                    })?;
+                    let mut listener = listener_lock
+                        .lock()
+                        .map_err(|_| socket_error("listener lock poisoned"))?;
                     *listener = None;
                     Ok(Value::Unit)
                 }),
@@ -266,5 +282,23 @@ mod tests {
             Err(_) => panic!("ipv6"),
         };
         assert_eq!(addr, "[::1]:443".parse().unwrap());
+    }
+
+    #[test]
+    fn address_from_value_rejects_out_of_range_ports() {
+        let err = address_from_value(address("127.0.0.1", 70000), "ctx").unwrap_err();
+        assert!(matches!(
+            err,
+            RuntimeError::InvalidArgument { reason, .. } if reason == "Address.port must be in 0..65535"
+        ));
+    }
+
+    #[test]
+    fn list_int_to_bytes_rejects_out_of_range_bytes() {
+        let err = list_int_to_bytes(Value::List(Arc::new(vec![Value::Int(256)])), "ctx").unwrap_err();
+        assert!(matches!(
+            err,
+            RuntimeError::InvalidArgument { reason, .. } if reason == "byte value must be in 0..255"
+        ));
     }
 }

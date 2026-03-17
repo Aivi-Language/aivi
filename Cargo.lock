@@ -162,6 +162,8 @@ dependencies = [
  "mysql",
  "postgres",
  "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

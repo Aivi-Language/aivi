@@ -47,6 +47,39 @@ listen_accept_recv_send_close_roundtrip = withEnvPort "AIVI_TEST_SOCKET_LISTEN_P
     assertEq request [104, 101, 108, 108, 111]
 })
 
+@test "connect rejects an out of range port as SocketError"
+connect_rejects_out_of_range_port_as_socket_error = do Effect {
+  result <- attempt (connect { host: "127.0.0.1", port: 70000 })
+  result match
+    | Err err => assertEq err.message "Address.port must be in 0..65535"
+    | Ok _    => assert False
+}
+
+@test "listen rejects an out of range port as SocketError"
+listen_rejects_out_of_range_port_as_socket_error = do Effect {
+  result <- attempt (do Effect {
+      _      <- listen { host: "127.0.0.1", port: 70000 }
+      pure Unit
+  })
+  result match
+    | Err err => assertEq err.message "Address.port must be in 0..65535"
+    | Ok _    => assert False
+}
+
+@test "send rejects out of range bytes as SocketError"
+send_rejects_out_of_range_bytes_as_socket_error = withEnvPort "AIVI_TEST_SOCKET_INVALID_SEND_PORT" (port => do Effect {
+    workflow   <- attempt (do Effect {
+        conn       <- connect { host: "127.0.0.1", port: port }
+        sendResult <- attempt (send conn [256])
+        _          <- close conn
+        pure sendResult
+    })
+    result <- assertOk workflow
+    result match
+      | Err err => assertEq err.message "byte value must be in 0..255"
+      | Ok _    => assert False
+})
+
 @test "socket error fields"
 socket_error_fields = do Effect {
   err = { message: "connection refused" }

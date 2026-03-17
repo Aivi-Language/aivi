@@ -162,13 +162,17 @@ instance Functor (Tree A) = given (A: Any) {
 instance Filterable (Tree A) = given (A: Any) {
   filter: pred tree => tree match
     | Node x children => {
-      filtered = List.filter (child => child match | Node y _ => pred y) children
+      keepChild = child => child match | Node y _ => pred y
+      filtered = List.filter keepChild children
       Node x (List.map (filter pred) filtered)
     }
 }
 
 instance Foldable (Tree A) = given (A: Any) {
   reduce: f init tree => tree match
-    | Node x children => List.foldl (acc child => reduce f acc child) (f init x) children
+    | Node x children => {
+      step = acc child => reduce f acc child
+      List.foldl step (f init x) children
+    }
 }
 "#;

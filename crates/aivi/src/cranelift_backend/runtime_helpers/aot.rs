@@ -225,6 +225,7 @@ pub extern "C" fn rt_snapshot_mock_install(
                         }
                     }
                 }),
+                db_patch_meta: None,
             }),
             args: vec![],
             tagged_args: None,
@@ -324,6 +325,7 @@ pub extern "C" fn rt_snapshot_mock_install(
                         func: Arc::new(move |_| Ok(val.clone())),
                     })))
                 }),
+                db_patch_meta: None,
             }),
             args: vec![],
             tagged_args: None,

@@ -102,7 +102,10 @@ traverse_ = f xs => xs match
   }
 
 sequence_ : List (Effect E A) -> Effect E Unit
-sequence_ = xs => traverse_ (x => x) xs
+sequence_ = xs => {
+  run = x => x
+  traverse_ run xs
+}
 
 mapM : (A -> Effect E B) -> List A -> Effect E (List B)
 mapM = f xs => xs match

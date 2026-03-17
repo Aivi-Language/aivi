@@ -2920,6 +2920,25 @@ mod tests {
     }
 
     #[test]
+    fn expression_submit_resolves_generator_pipeline_to_list() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.generator").unwrap();
+        let snap = engine.submit("range 1 5 |> map (_ * 2) |> toList").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::ValueResult)
+                && entry.text == "[2, 4, 6, 8] :: List Int"
+        }));
+        assert!(
+            !snap
+                .transcript
+                .iter()
+                .any(|entry| matches!(entry.kind, TranscriptKind::Error)),
+            "unexpected errors: {:?}",
+            snap.transcript
+        );
+    }
+
+    #[test]
     fn expression_submit_resolves_overloaded_get_or_else_for_validation() {
         let mut engine = make_engine();
         engine.submit("/use aivi.validation").unwrap();

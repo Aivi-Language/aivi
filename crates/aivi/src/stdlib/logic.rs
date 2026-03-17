@@ -192,7 +192,10 @@ instance Traversable (List A) = {
 }
 
 instance Apply (List A) = {
-  ap: fs xs => List.flatMap (f => List.map f xs) fs
+  ap: fs xs => {
+    applyOne = f => List.map f xs
+    List.flatMap applyOne fs
+  }
 }
 
 instance Applicative (List A) = {
@@ -318,11 +321,17 @@ instance Functor (Map K V) = {
 }
 
 instance Filterable (Map K V) = {
-  filter: pred m => Map.filterWithKey (_ v => pred v) m
+  filter: pred m => {
+    keep = key value => pred value
+    Map.filterWithKey keep m
+  }
 }
 
 instance Foldable (Map K V) = {
-  reduce: f init m => Map.foldWithKey (acc _ v => f acc v) init m
+  reduce: f init m => {
+    step = acc key value => f acc value
+    Map.foldWithKey step init m
+  }
 }
 
 instance Semigroup (Map K V) = {

@@ -6,7 +6,7 @@ use num_rational::BigRational;
 use regex::Regex;
 use rust_decimal::Decimal;
 
-use crate::runtime::values::{BuiltinImpl, BuiltinValue};
+use crate::runtime::values::{BuiltinImpl, BuiltinValue, DbPatchRuntimeMeta};
 use crate::runtime::{Runtime, RuntimeError, Value};
 
 /// Return a human-readable type name for a runtime value.
@@ -56,11 +56,21 @@ pub(crate) fn builtin(
     arity: usize,
     func: impl Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
 ) -> Value {
+    builtin_with_db_patch_meta(name, arity, None, func)
+}
+
+pub(crate) fn builtin_with_db_patch_meta(
+    name: &str,
+    arity: usize,
+    db_patch_meta: Option<Arc<DbPatchRuntimeMeta>>,
+    func: impl Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
+) -> Value {
     Value::Builtin(BuiltinValue {
         imp: Arc::new(BuiltinImpl {
             name: name.to_string(),
             arity,
             func: Arc::new(func),
+            db_patch_meta,
         }),
         args: Vec::new(),
         tagged_args: Some(Vec::new()),

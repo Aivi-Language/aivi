@@ -501,14 +501,9 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
 
     enable_raw_mode().map_err(AiviError::Io)?;
     let mut stdout = io::stdout();
-    // Enable mouse capture for scroll-wheel support.  Text selection still
-    // works in most terminals by holding Shift while selecting.
-    execute!(
-        stdout,
-        EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
-    )
-    .map_err(AiviError::Io)?;
+    // Keep terminal text selection working in the alternate screen by avoiding
+    // mouse capture, which steals drag gestures in many terminals.
+    execute!(stdout, EnterAlternateScreen).map_err(AiviError::Io)?;
 
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AiviError::Io)?;
@@ -519,11 +514,7 @@ pub(crate) fn run(mut engine: ReplEngine, options: &ReplOptions) -> Result<(), A
 
     // Always restore — even if event_loop returns an error.
     let _ = disable_raw_mode();
-    let _ = execute!(
-        terminal.backend_mut(),
-        crossterm::event::DisableMouseCapture,
-        LeaveAlternateScreen
-    );
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     let _ = terminal.show_cursor();
 
     result

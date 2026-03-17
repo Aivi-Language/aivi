@@ -1773,21 +1773,13 @@
             Some(result)
         }
 
-        fn try_expand_arg_patch_head(line: &str, indent_size: usize) -> Option<Vec<String>> {
-            if line.contains("//") {
-                return None;
-            }
-
-            fn is_ident_char(byte: u8) -> bool {
-                byte.is_ascii_alphanumeric() || byte == b'_'
-            }
-
+        fn scan_top_level_patch_ops(line: &str) -> (Vec<usize>, Option<usize>) {
             let bytes = line.as_bytes();
             let mut depth = 0isize;
             let mut in_quote: Option<u8> = None;
             let mut escaped = false;
-            let mut arrow_idx: Option<usize> = None;
             let mut patch_ops: Vec<usize> = Vec::new();
+            let mut arrow_idx: Option<usize> = None;
             let mut i = 0usize;
             while i + 1 < bytes.len() {
                 let byte = bytes[i];
@@ -1837,7 +1829,20 @@
                 }
                 i += 1;
             }
+            (patch_ops, arrow_idx)
+        }
 
+        fn try_expand_arg_patch_head(line: &str, indent_size: usize) -> Option<Vec<String>> {
+            if line.contains("//") {
+                return None;
+            }
+
+            fn is_ident_char(byte: u8) -> bool {
+                byte.is_ascii_alphanumeric() || byte == b'_'
+            }
+
+            let bytes = line.as_bytes();
+            let (patch_ops, arrow_idx) = scan_top_level_patch_ops(line);
             if patch_ops.len() < 2 {
                 return None;
             }
@@ -1906,6 +1911,69 @@
             Some(expanded)
         }
 
+        fn try_normalize_multiline_arg_patch_head(
+            rendered_lines: &mut [String],
+            start_idx: usize,
+            indent_size: usize,
+        ) -> Option<usize> {
+            let line = rendered_lines.get(start_idx)?;
+            if line.contains("//") {
+                return None;
+            }
+
+            fn is_ident_char(byte: u8) -> bool {
+                byte.is_ascii_alphanumeric() || byte == b'_'
+            }
+
+            let (patch_ops, arrow_idx) = scan_top_level_patch_ops(line);
+            if patch_ops.is_empty() || arrow_idx.is_some() {
+                return None;
+            }
+
+            let bytes = line.as_bytes();
+            let first_patch_idx = *patch_ops.first()?;
+            let mut first_param_start = first_patch_idx;
+            while first_param_start > 0 && bytes[first_param_start - 1] == b' ' {
+                first_param_start -= 1;
+            }
+            let end_ident = first_param_start;
+            while first_param_start > 0 && is_ident_char(bytes[first_param_start - 1]) {
+                first_param_start -= 1;
+            }
+            if first_param_start == end_ident || !bytes[first_param_start].is_ascii_lowercase() {
+                return None;
+            }
+
+            let leading_indent = line.chars().take_while(|ch| *ch == ' ').count();
+            let continuation_indent = " ".repeat(first_param_start);
+            let arrow_indent = " ".repeat(leading_indent + indent_size);
+
+            let mut idx = start_idx + 1;
+            let mut saw_patch_continuation = false;
+            while idx < rendered_lines.len() {
+                let trimmed = rendered_lines[idx].trim_start().to_string();
+                if trimmed.is_empty() || trimmed.starts_with("//") {
+                    return None;
+                }
+                let (next_patch_ops, next_arrow_idx) = scan_top_level_patch_ops(&trimmed);
+                if next_arrow_idx.is_some() {
+                    if !trimmed.starts_with("=>") || !saw_patch_continuation {
+                        return None;
+                    }
+                    rendered_lines[idx] = format!("{arrow_indent}{trimmed}");
+                    return Some(idx + 1);
+                }
+                if next_patch_ops.is_empty() {
+                    return None;
+                }
+                saw_patch_continuation = true;
+                rendered_lines[idx] = format!("{continuation_indent}{trimmed}");
+                idx += 1;
+            }
+
+            None
+        }
+
         let old_lines = std::mem::take(&mut rendered_lines);
         rendered_lines.reserve(old_lines.len() + 32);
         for line in old_lines {
@@ -1915,6 +1983,17 @@
                     Some(expanded) => rendered_lines.extend(expanded),
                     None => rendered_lines.push(line),
                 },
+            }
+        }
+
+        let mut i = 0usize;
+        while i < rendered_lines.len() {
+            if let Some(next) =
+                try_normalize_multiline_arg_patch_head(&mut rendered_lines, i, indent_size)
+            {
+                i = next;
+            } else {
+                i += 1;
             }
         }
     }
