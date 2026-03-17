@@ -1,0 +1,23 @@
+@no_prelude
+module integrationTests.syntax.functions.argPatch
+
+use aivi
+use aivi.testing
+
+f : Int -> Int
+f = x <| _ * 2 => x + 1
+
+g : Int -> Int -> Int
+g = x <| _ + 1
+    y <| _ + 3
+  => x + y
+
+h : Int
+h = 3 |> x <| _ + 1 => x * 2
+
+@test "patch can work on arguments"
+argPatch = do Effect {
+  assertEq (f 3) 7
+  assertEq (g 2 4) 10
+  assertEq h 8
+}

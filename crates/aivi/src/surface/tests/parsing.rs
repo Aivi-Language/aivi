@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::surface::{
-    lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem, PathSegment,
-    Pattern,
+    lower_modules_to_arena, parse_modules, ArenaExpr, BlockItem, Expr, Literal, ModuleItem,
+    PathSegment, Pattern,
 };
 
 use super::diag_codes;
@@ -991,6 +991,150 @@ f = { count: 1 } |> { count } => count + 1
     assert!(
         matches!(&**body, Expr::Binary { op, .. } if op == "+"),
         "expected lambda body to remain the addition expression"
+    );
+}
+
+#[test]
+fn parses_patched_lambda_head_into_shadowing_block() {
+    let src = r#"
+module Example
+
+f = x <| _ * 2 => x + 1
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "f" => Some(def),
+            _ => None,
+        })
+        .expect("f def");
+
+    let Expr::Lambda { params, body, .. } = &def.expr else {
+        panic!("expected lambda");
+    };
+    assert_eq!(params.len(), 1);
+    assert!(matches!(&params[0], Pattern::Ident(name) if name.name == "x"));
+
+    let Expr::Block { items, .. } = &**body else {
+        panic!("expected desugared block body, got {body:?}");
+    };
+    assert_eq!(items.len(), 2, "expected one synthetic let and the original body");
+
+    let BlockItem::Let { pattern, expr, .. } = &items[0] else {
+        panic!("expected synthetic let binding");
+    };
+    assert!(matches!(pattern, Pattern::Ident(name) if name.name == "x"));
+    let Expr::Binary {
+        op, left, right, ..
+    } = expr
+    else {
+        panic!("expected pipe rewrite, got {expr:?}");
+    };
+    assert_eq!(op, "|>");
+    assert!(matches!(&**left, Expr::Ident(name) if name.name == "x"));
+    assert!(
+        matches!(&**right, Expr::Binary { op, .. } if op == "*"),
+        "expected updater expression on pipe rhs"
+    );
+}
+
+#[test]
+fn parses_multiline_patched_lambda_head() {
+    let src = r#"
+module Example
+
+f = x <| _ + 1
+    y <| _ + 3
+  => x + y
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "f" => Some(def),
+            _ => None,
+        })
+        .expect("f def");
+
+    let Expr::Lambda { params, body, .. } = &def.expr else {
+        panic!("expected lambda");
+    };
+    assert_eq!(params.len(), 2);
+    assert!(matches!(&params[0], Pattern::Ident(name) if name.name == "x"));
+    assert!(matches!(&params[1], Pattern::Ident(name) if name.name == "y"));
+
+    let Expr::Block { items, .. } = &**body else {
+        panic!("expected desugared block body, got {body:?}");
+    };
+    assert_eq!(items.len(), 3, "expected two synthetic lets and the original body");
+    assert!(
+        matches!(&items[0], BlockItem::Let { pattern, .. } if matches!(pattern, Pattern::Ident(name) if name.name == "x"))
+    );
+    assert!(
+        matches!(&items[1], BlockItem::Let { pattern, .. } if matches!(pattern, Pattern::Ident(name) if name.name == "y"))
+    );
+    assert!(
+        matches!(&items[2], BlockItem::Expr { expr, .. } if matches!(expr, Expr::Binary { op, .. } if op == "+"))
+    );
+}
+
+#[test]
+fn parses_patched_lambda_on_pipe_rhs() {
+    let src = r#"
+module Example
+
+f = 3 |> x <| _ + 1 => x * 2
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "f" => Some(def),
+            _ => None,
+        })
+        .expect("f def");
+
+    let Expr::Binary { op, right, .. } = &def.expr else {
+        panic!("expected pipe expression");
+    };
+    assert_eq!(op, "|>");
+
+    let Expr::Lambda { params, body, .. } = &**right else {
+        panic!("expected lambda on pipe rhs, got: {right:?}");
+    };
+    assert_eq!(params.len(), 1);
+    assert!(matches!(&params[0], Pattern::Ident(name) if name.name == "x"));
+    assert!(
+        matches!(&**body, Expr::Block { items, .. } if items.len() == 2),
+        "expected patched rhs lambda to desugar through a block body"
     );
 }
 
