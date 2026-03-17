@@ -39,7 +39,6 @@ pub(super) fn build_source_record() -> Value {
                 }),
             };
             let mut wrapped = SourceValue::new(kind, Arc::new(effect));
-            wrapped.schema = source.schema.clone();
             wrapped.raw_text = source.raw_text.clone();
             Ok(Value::Source(Arc::new(wrapped)))
         }),
@@ -83,7 +82,6 @@ pub(super) fn build_source_record() -> Value {
                 }),
             };
             let mut wrapped = SourceValue::new(kind, Arc::new(effect));
-            wrapped.schema = source.schema.clone();
             wrapped.raw_text = source.raw_text.clone();
             Ok(Value::Source(Arc::new(wrapped)))
         }),

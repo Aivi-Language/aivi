@@ -116,16 +116,29 @@ open_readAll_close_prevents_further_reads = do Effect {
   _           <- cleanupPath resourcePath
   writeResult <- writeText resourcePath "hello from handle"
   _           <- assertOk writeResult
-  handle      <- resource {
-    fileHandle <- open resourcePath
-    yield fileHandle
-  }
+  handle      <- open resourcePath
   contentResult  <- readAll handle
   content        <- assertOk contentResult
   _              <- assertEq content "hello from handle"
   _              <- close handle
   readAfterClose <- readAll handle
   err            <- assertErr readAfterClose
+  _              <- assert (text.length err > 0)
+  _              <- cleanupPath resourcePath
+  pure Unit
+}
+
+@test "open auto-closes when scope exits"
+open_auto_closes_when_scope_exits = do Effect {
+  _           <- cleanupPath resourcePath
+  writeResult <- writeText resourcePath "hello from scope"
+  _           <- assertOk writeResult
+  escapedHandle <- do Effect {
+    handle <- open resourcePath
+    pure handle
+  }
+  readAfterScope <- readAll escapedHandle
+  err            <- assertErr readAfterScope
   _              <- assert (text.length err > 0)
   _              <- cleanupPath resourcePath
   pure Unit

@@ -24,7 +24,7 @@ Most source-heavy code follows the same simple pattern:
 
 Nothing is read when `usersFromFile` is defined. The read happens when `load usersFromFile` runs.
 
-For new code, prefer schema-first record forms such as `file.json { path: "...", schema: source.schema.derive }` and `env.decode { prefix: "...", schema: source.schema.derive }`. The shorter string forms still work and appear in a few overview examples because they are the smallest way to show the model.
+For new code, prefer schema-first record forms such as `file.json { path: "...", schema: source.schema.derive }`, `file.csv { path: "...", schema: source.schema.derive }`, and `env.decode { prefix: "...", schema: source.schema.derive }`. The shorter string forms still work and appear in a few overview examples because they are the smallest way to show the model.
 
 ## Source Guides
 

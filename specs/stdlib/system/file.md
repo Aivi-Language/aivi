@@ -38,6 +38,7 @@ If you are choosing an API for a beginner-friendly workflow, a good rule of thum
 
 - Use the **path-based helpers** such as `readText`, `readJson`, and `writeText` for one-shot operations.
 - Use the **resource API** when a workflow already lives inside a `resource` block or when you want to keep an open file handle around briefly for staged work.
+- In normal `do Effect` code, bind `handle <- open path` directly. If a handle escapes an inner scope, the resource cleanup for that inner scope has already run.
 - `open` currently opens files for reading; it is not a general read/write handle API.
 
 ## Resource operations
@@ -93,6 +94,6 @@ Byte-oriented helpers, directory traversal helpers, and copy/move helpers are no
 ## Practical notes
 
 - Relative paths are resolved against the program's current working directory.
-- `FileStats.created` and `FileStats.modified` are Unix timestamps in milliseconds.
+- `FileStats.created` and `FileStats.modified` are Unix timestamps in milliseconds. On filesystems without a native creation timestamp, `created` falls back to `modified`.
 - `readJson`, `readCsv`, `imageMeta`, and `image` are the right fit when you want typed data instead of raw text.
 - When you already need a resource scope for other reasons, `open` and `readAll` can make a short multi-step file workflow easier to structure.

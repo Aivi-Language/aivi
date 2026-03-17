@@ -3,9 +3,10 @@ module integrationTests.runtime.sourcePipeline
 
 use aivi
 use aivi.testing
-use aivi.validation
 
 countItems = items => List.length items
+
+CsvUser = { id: Int, name: Text, active: Bool }
 
 usersCountSource : Text -> Source File Int
 usersCountSource = path =>
@@ -36,6 +37,13 @@ fileDecodeErrors = err => source.decodeErrors err
 envDecodeErrors : SourceError Env -> List DecodeError
 envDecodeErrors = err => source.decodeErrors err
 
+typedUsersCsvSource : Text -> Source File (List CsvUser)
+typedUsersCsvSource = path =>
+  file.csv {
+    path: path
+    schema: source.schema.derive
+  }
+
 @test "schema-first file source supports transform pipeline"
 schema_first_file_source_supports_transform_pipeline = do Effect {
   path = "/tmp/aivi_source_pipeline_users.json"
@@ -62,6 +70,24 @@ source_validate_returns_structured_decode_errors = do Effect {
           | _ => fail "expected one decode error"
       }
     | Ok _ => fail "expected decode error"
+}
+
+@test "schema-first file csv source supports record form"
+schema_first_file_csv_source_supports_record_form = do Effect {
+  path = "/tmp/aivi_source_pipeline_users.csv"
+  _    <- file.write_text path "id,name,active\n1,Ada,true\n2,Lin,false\n"
+  rows <- load (typedUsersCsvSource path)
+  _    <- assertEq (List.length rows) 2
+  rows match
+    | [first, second] => do Effect {
+        _ <- assertEq first.id 1
+        _ <- assertEq first.name "Ada"
+        _ <- assertEq first.active True
+        _ <- assertEq second.id 2
+        _ <- assertEq second.name "Lin"
+        assertEq second.active False
+      }
+    | _ => fail "expected two csv rows"
 }
 
 @test "schema-first env decode supports config records"
