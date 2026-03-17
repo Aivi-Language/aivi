@@ -663,6 +663,34 @@ double = _ * 2
 }
 
 #[test]
+fn patched_lambda_param_typechecks() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Int -> Int
+f = x <| _ * 2 => x + 1
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn patched_lambda_params_typecheck_across_multiple_args() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Int -> Int -> Int
+f = x <| _ + 1
+    y <| _ + 3
+  => x + y
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
 fn dot_field_accessor_syntax() {
     let diags = parse_and_check(
         r#"

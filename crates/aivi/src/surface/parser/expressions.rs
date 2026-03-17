@@ -1,3 +1,9 @@
+#[derive(Debug, Clone)]
+struct LambdaHeadParam {
+    pattern: Pattern,
+    patch: Option<Expr>,
+}
+
 impl Parser {
     fn parse_bare_arm_expr(&mut self, start: Span, arrow_message: &str) -> Expr {
         let mut arms = Vec::new();
@@ -200,22 +206,189 @@ impl Parser {
         })
     }
 
+    fn build_lambda_expr(&self, params: Vec<LambdaHeadParam>, body: Expr, span: Span) -> Expr {
+        let lambda_params: Vec<Pattern> = params.iter().map(|param| param.pattern.clone()).collect();
+        let mut patched_items = Vec::new();
+        for param in &params {
+            let Some(updater) = &param.patch else {
+                continue;
+            };
+            let Pattern::Ident(name) = &param.pattern else {
+                continue;
+            };
+            let value_expr = Expr::Ident(name.clone());
+            let pipe_expr = Expr::Binary {
+                op: "|>".to_string(),
+                left: Box::new(value_expr),
+                right: Box::new(updater.clone()),
+                span: merge_span(name.span.clone(), expr_span(updater)),
+            };
+            let let_span = merge_span(name.span.clone(), expr_span(&pipe_expr));
+            patched_items.push(BlockItem::Let {
+                pattern: Pattern::Ident(name.clone()),
+                expr: pipe_expr,
+                span: let_span,
+            });
+        }
+
+        let body = if patched_items.is_empty() {
+            body
+        } else {
+            let body_span = expr_span(&body);
+            patched_items.push(BlockItem::Expr {
+                expr: body,
+                span: body_span.clone(),
+            });
+            Expr::Block {
+                kind: BlockKind::Plain,
+                items: patched_items,
+                span: merge_span(span.clone(), body_span),
+            }
+        };
+
+        Expr::Lambda {
+            params: lambda_params,
+            body: Box::new(body),
+            span,
+        }
+    }
+
+    fn parser_slice(&self, start: usize, end: usize) -> Parser {
+        Parser {
+            tokens: self.tokens[start..end].to_vec(),
+            pos: 0,
+            diagnostics: Vec::new(),
+            path: self.path.clone(),
+            gensym: self.gensym,
+            loop_block_kind: self.loop_block_kind.clone(),
+        }
+    }
+
+    fn is_pattern_start_at(&self, pos: usize) -> bool {
+        let parser = self.parser_slice(pos, self.tokens.len());
+        parser.is_pattern_start()
+    }
+
+    fn parse_lambda_patch_transformer_slice(&self, start: usize, end: usize) -> Option<Expr> {
+        if start >= end {
+            return None;
+        }
+        let mut parser = self.parser_slice(start, end);
+        let expr = parser.parse_pipe_rhs(0)?;
+        parser.consume_newlines();
+        if parser.pos == parser.tokens.len() && parser.diagnostics.is_empty() {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    fn try_parse_lambda_param_sequence(&mut self) -> Option<Vec<LambdaHeadParam>> {
+        let checkpoint = self.pos;
+        let diag_checkpoint = self.diagnostics.len();
+        self.consume_newlines();
+
+        let Some(pattern) = self.parse_pattern() else {
+            self.pos = checkpoint;
+            self.diagnostics.truncate(diag_checkpoint);
+            return None;
+        };
+
+        if self.consume_symbol("<|") {
+            let updater_start = self.pos;
+            let Pattern::Ident(_) = &pattern else {
+                self.pos = checkpoint;
+                self.diagnostics.truncate(diag_checkpoint);
+                return None;
+            };
+
+            for end in updater_start + 1..=self.tokens.len() {
+                let boundary_is_arrow = self
+                    .tokens
+                    .get(end)
+                    .is_some_and(|token| token.kind == TokenKind::Symbol && token.text == "=>");
+                let boundary_is_param = end < self.tokens.len() && self.is_pattern_start_at(end);
+                if !boundary_is_arrow && !boundary_is_param {
+                    continue;
+                }
+
+                let Some(updater) = self.parse_lambda_patch_transformer_slice(updater_start, end)
+                else {
+                    continue;
+                };
+
+                self.pos = end;
+                let after_param_checkpoint = self.pos;
+                let after_param_diags = self.diagnostics.len();
+                self.consume_newlines();
+                if self.check_symbol("=>") {
+                    return Some(vec![LambdaHeadParam {
+                        pattern,
+                        patch: Some(updater),
+                    }]);
+                }
+                if let Some(mut rest) = self.try_parse_lambda_param_sequence() {
+                    let mut out = vec![LambdaHeadParam {
+                        pattern,
+                        patch: Some(updater),
+                    }];
+                    out.append(&mut rest);
+                    return Some(out);
+                }
+                self.pos = after_param_checkpoint;
+                self.diagnostics.truncate(after_param_diags);
+            }
+
+            self.pos = checkpoint;
+            self.diagnostics.truncate(diag_checkpoint);
+            return None;
+        }
+
+        let after_param_checkpoint = self.pos;
+        let after_param_diags = self.diagnostics.len();
+        self.consume_newlines();
+        if self.check_symbol("=>") {
+            return Some(vec![LambdaHeadParam {
+                pattern,
+                patch: None,
+            }]);
+        }
+        if let Some(mut rest) = self.try_parse_lambda_param_sequence() {
+            let mut out = vec![LambdaHeadParam {
+                pattern,
+                patch: None,
+            }];
+            out.append(&mut rest);
+            return Some(out);
+        }
+
+        self.pos = after_param_checkpoint;
+        self.diagnostics.truncate(after_param_diags);
+        self.pos = checkpoint;
+        self.diagnostics.truncate(diag_checkpoint);
+        None
+    }
+
+    fn try_parse_lambda_head(&mut self) -> Option<Vec<LambdaHeadParam>> {
+        let checkpoint = self.pos;
+        let diag_checkpoint = self.diagnostics.len();
+        let params = self.try_parse_lambda_param_sequence()?;
+        self.consume_newlines();
+        if self.consume_symbol("=>") {
+            return Some(params);
+        }
+        self.pos = checkpoint;
+        self.diagnostics.truncate(diag_checkpoint);
+        None
+    }
+
     fn parse_lambda_or_binary(&mut self) -> Option<Expr> {
         let checkpoint = self.pos;
         let diag_checkpoint = self.diagnostics.len();
-        let mut params = Vec::new();
-        while let Some(pattern) = self.parse_pattern() {
-            params.push(pattern);
-        }
-        let saw_pattern_diags = self.diagnostics.len() != diag_checkpoint;
-        if !params.is_empty() && !saw_pattern_diags && self.consume_symbol("=>") {
+        if let Some(params) = self.try_parse_lambda_head() {
             let body = self.parse_expr()?;
-            let span = merge_span(pattern_span(&params[0]), expr_span(&body));
-            return Some(Expr::Lambda {
-                params,
-                body: Box::new(body),
-                span,
-            });
+            let span = merge_span(pattern_span(&params[0].pattern), expr_span(&body));
+            return Some(self.build_lambda_expr(params, body, span));
         }
 
         self.pos = checkpoint;
@@ -227,19 +400,10 @@ impl Parser {
         self.consume_newlines();
         let checkpoint = self.pos;
         let diag_checkpoint = self.diagnostics.len();
-        let mut params = Vec::new();
-        while let Some(pattern) = self.parse_pattern() {
-            params.push(pattern);
-        }
-        let saw_pattern_diags = self.diagnostics.len() != diag_checkpoint;
-        if !params.is_empty() && !saw_pattern_diags && self.consume_symbol("=>") {
+        if let Some(params) = self.try_parse_lambda_head() {
             let body = self.parse_expr()?;
-            let span = merge_span(pattern_span(&params[0]), expr_span(&body));
-            return Some(Expr::Lambda {
-                params,
-                body: Box::new(body),
-                span,
-            });
+            let span = merge_span(pattern_span(&params[0].pattern), expr_span(&body));
+            return Some(self.build_lambda_expr(params, body, span));
         }
 
         self.pos = checkpoint;
