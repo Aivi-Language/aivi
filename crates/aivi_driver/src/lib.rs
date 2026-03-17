@@ -176,7 +176,7 @@ impl Pipeline {
     /// Run name-resolution checks and coercion elaboration. Returns check diagnostics.
     pub fn typecheck(&mut self) -> Vec<FileDiagnostic> {
         let mut diags = check_modules(&self.modules);
-        if diags.is_empty() {
+        if !file_diagnostics_have_errors(&diags) {
             diags.extend(elaborate_expected_coercions(&mut self.modules));
         }
         diags

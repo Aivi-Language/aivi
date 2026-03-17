@@ -526,7 +526,7 @@ impl TypeChecker {
                 left,
                 right,
                 span,
-            } if op == "->>" || op == "<<-" => {
+            } if op == "->>" || op == "<<-" || op == "<|" => {
                 self.elab_binary_expr(op, *left, *right, span, expected, env)
             }
             Expr::Block { kind, items, span } => {
@@ -755,6 +755,19 @@ impl TypeChecker {
         } else {
             right
         };
+        if op == "<|" {
+            if self.looks_like_db_selector_target(&left) {
+                return self.elab_db_selector_write(left, right, span, expected, env);
+            }
+            if matches!(&right, Expr::Raw { text, .. } if text == "-") {
+                return Err(TypeError {
+                    span: expr_span(&right),
+                    message: "`<| -` is only valid when the left-hand side is a database selector like `userTable[id == userId]`".to_string(),
+                    expected: None,
+                    found: None,
+                });
+            }
+        }
         if op == "|>" {
             let (left, _left_ty) = self.elab_expr(left, None, env)?;
             let (right, _right_ty) = self.elab_expr(right, None, env)?;
@@ -776,15 +789,8 @@ impl TypeChecker {
         }
         if op == "<|" {
             if let Some(row_ty) = self.extract_db_selection_row_type(left_ty) {
-                return self.elab_db_selector_write(left, right, span, row_ty, expected, env);
-            }
-            if matches!(&right, Expr::Raw { text, .. } if text == "-") {
-                return Err(TypeError {
-                    span: expr_span(&right),
-                    message: "`<| -` is only valid when the left-hand side is a database selector like `userTable[id == userId]`".to_string(),
-                    expected: None,
-                    found: None,
-                });
+                let _ = row_ty;
+                return self.elab_db_selector_write(left, right, span, expected, env);
             }
         }
 
@@ -947,13 +953,50 @@ impl TypeChecker {
         left: Expr,
         right: Expr,
         span: Span,
-        row_ty: Type,
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
-        let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
-        let patch_ty = self.named_type("Patch").app(vec![row_ty]);
-        let (selection, _selection_ty) = self.elab_expr(left, Some(selection_ty), env)?;
+        let (selection, row_ty) = match left {
+            Expr::Index {
+                base,
+                index,
+                span: index_span,
+            } => {
+                let base_ty = self.infer_expr(&base, env)?;
+                let Some(row_ty) = self.extract_table_row_type(base_ty) else {
+                    return Err(TypeError {
+                        span: expr_span(&base),
+                        message: "database selector writes require a table selection like `userTable[id == userId]`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                };
+                let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
+                let pred_expected =
+                    Type::Func(Box::new(row_ty.clone()), Box::new(self.named_type("Bool")));
+                let (base, _base_ty) = self.elab_expr(*base, None, env)?;
+                let (index, _index_ty) =
+                    self.elab_call_arg_with_predicate_fallback(*index, pred_expected, env)?;
+                let selection = self.db_selection_record_expr(base, index, &index_span);
+                let (selection, _selection_ty) =
+                    self.check_or_coerce(selection, Some(selection_ty), env)?;
+                (selection, row_ty)
+            }
+            other => {
+                let left_ty = self.infer_expr(&other, env)?;
+                let Some(row_ty) = self.extract_db_selection_row_type(left_ty) else {
+                    return Err(TypeError {
+                        span: expr_span(&other),
+                        message: "database selector writes require a table selection like `userTable[id == userId]`".to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                };
+                let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
+                let (selection, _selection_ty) = self.elab_expr(other, Some(selection_ty), env)?;
+                (selection, row_ty)
+            }
+        };
 
         let call = match right {
             Expr::Raw { text, .. } if text == "-" => {
@@ -971,6 +1014,7 @@ impl TypeChecker {
                     fields,
                     span: patch_span,
                 };
+                let patch_ty = self.named_type("Patch").app(vec![row_ty]);
                 let (patch, _patch_ty) = self.elab_expr(patch_expr, Some(patch_ty), env)?;
                 self.db_helper_call_expr("update", vec![selection, patch], &span)
             }
@@ -985,6 +1029,57 @@ impl TypeChecker {
         };
 
         self.check_or_coerce(call, expected, env)
+    }
+
+    fn looks_like_db_selector_target(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Index { index, .. } => self.looks_like_db_selector_predicate(index),
+            Expr::Record { fields, .. } => {
+                let mut has_table = false;
+                let mut has_pred = false;
+                for field in fields {
+                    if field.spread {
+                        return false;
+                    }
+                    match field.path.as_slice() {
+                        [PathSegment::Field(name)] if name.name == "table" => has_table = true,
+                        [PathSegment::Field(name)] if name.name == "pred" => has_pred = true,
+                        _ => {}
+                    }
+                }
+                has_table && has_pred
+            }
+            _ => false,
+        }
+    }
+
+    fn looks_like_db_selector_predicate(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Lambda { .. }
+            | Expr::Match { .. }
+            | Expr::If { .. }
+            | Expr::Call { .. }
+            | Expr::FieldAccess { .. }
+            | Expr::FieldSection { .. }
+            | Expr::Ident(_) => true,
+            Expr::Binary { op, .. } => matches!(
+                op.as_str(),
+                "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
+            ),
+            Expr::Literal(Literal::Bool { .. }) => true,
+            Expr::UnaryNeg { .. }
+            | Expr::Literal(_)
+            | Expr::TextInterpolate { .. }
+            | Expr::List { .. }
+            | Expr::Tuple { .. }
+            | Expr::Record { .. }
+            | Expr::PatchLit { .. }
+            | Expr::Index { .. }
+            | Expr::Raw { .. }
+            | Expr::Suffixed { .. }
+            | Expr::Block { .. }
+            | Expr::Mock { .. } => false,
+        }
     }
 
 }

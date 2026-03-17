@@ -9,9 +9,9 @@ use aivi.database (
   DefaultBool, DefaultInt, DefaultText, DefaultNow,
   Sqlite, Postgresql, Mysql,
   configure, configureSqlite, connect, close,
-  table, loadOn, runMigrationsOn, runMigrationSql,
+  table, load as dbLoad, loadOn, runMigrationsOn, runMigrationSql,
   beginTx, beginTxOn, commitTx, commitTxOn, rollbackTxOn,
-  savepoint, savepointOn, releaseSavepoint, releaseSavepointOn, rollbackToSavepointOn,
+  savepoint, savepointOn, releaseSavepoint, rollbackToSavepointOn,
   inTransactionOn,
   applyDelta, applyDeltaOn, chunkDeltas,
   ftsDoc, ftsMatchAny, ftsMatchAll,
@@ -100,7 +100,7 @@ delta_construct = do Effect {
   users1 <- applyDelta users0 insertDelta
   users2 <- applyDelta users1 deleteDelta
   users3 <- applyDelta users2 upsertDelta
-  rows   <- load users3
+  rows   <- dbLoad users3
   rows match
     | [row] => do Effect {
         assertEq row.id 1
@@ -208,7 +208,7 @@ insert_convenience = do Effect {
   users0 = table "insert_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
   users2 <- insert users1 { id: 2, name: "Bob" }
-  rows   <- load users2
+  rows   <- dbLoad users2
   assertEq (List.length rows) 2
 }
 
@@ -255,7 +255,7 @@ delete_selector_shorthand = do Effect {
   users1 <- insert users0 { id: 1, name: "Alice" }
   users2 <- insert users1 { id: 2, name: "Bob" }
   users3 <- users2[id == 1] <| -
-  rows   <- load users3
+  rows   <- dbLoad users3
   assertEq (List.length rows) 1
   rows match
     | [row] => assertEq row.name "Bob"
@@ -280,7 +280,7 @@ update_selector_shorthand = do Effect {
   users0 = table "update_selector_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
   users2 <- users1[id == 1] <| { name: "Alicia" }
-  rows   <- load users2
+  rows   <- dbLoad users2
   rows match
     | [row] => assertEq row.name "Alicia"
     | _     => assert False
@@ -304,7 +304,7 @@ updateOn_selector_convenience = do Effect {
 upsert_convenience_inserts = do Effect {
   users0 = table "upsert_ins_users"[]
   users1 <- upsert users0[id == 99] { id: 99, name: "New" } (u => u)
-  rows   <- load users1
+  rows   <- dbLoad users1
   assertEq (List.length rows) 1
   rows match
     | [row] => assertEq row.name "New"
@@ -316,7 +316,7 @@ upsert_convenience_updates = do Effect {
   users0 = table "upsert_upd_users"[]
   users1 <- insert users0 { id: 1, name: "Alice" }
   users2 <- upsert users1[id == 1] { id: 1, name: "Alice" } (patch { name: "Updated" })
-  rows   <- load users2
+  rows   <- dbLoad users2
   assertEq (List.length rows) 1
   rows match
     | [row] => assertEq row.name "Updated"

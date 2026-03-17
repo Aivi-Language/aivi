@@ -378,6 +378,16 @@ impl TypeChecker {
                 (mod_name.clone(), exports.keys().cloned().collect())
             })
             .collect();
+
+        // Qualified export names (for example `aivi.database.load`) should be
+        // available everywhere without requiring a local import. Unqualified
+        // spellings still follow normal import rules.
+        for (mod_name, exports) in module_exports {
+            for (name, schemes) in exports {
+                Self::insert_schemes(env, format!("{mod_name}.{name}"), schemes);
+            }
+        }
+
         let empty_defs = HashSet::new();
         let import_pairs = crate::surface::compute_import_pairs(
             &module.uses,
