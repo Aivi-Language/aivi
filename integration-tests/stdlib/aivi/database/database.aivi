@@ -16,7 +16,7 @@ use aivi.database (
   applyDelta, applyDeltaOn, chunkDeltas,
   ftsDoc, ftsMatchAny, ftsMatchAll,
   ins, del, ups,
-  insert, insertOn, rows, firstOn, delete, deleteOn, update, updateOn, upsert, upsertOn
+  insert, insertOn, rows, first, firstOn, delete, deleteOn, update, updateOn, upsert, upsertOn
 )
 
 // Test that types are well-formed
@@ -233,6 +233,35 @@ rows_selector_convenience = do Effect {
   matched match
     | [row] => assertEq row.name "Alice"
     | _     => assert False
+}
+
+@test "selector predicate lifting supports bare bool fields"
+selector_predicate_lifting_bool_field = do Effect {
+  users0 = table "selector_bool_users"[]
+  users1  <- insert users0 { id: 1, name: "Alice", active: True }
+  users2  <- insert users1 { id: 2, name: "Bob", active: False }
+  matched <- rows users2[active]
+  assertEq (List.length matched) 1
+  matched match
+    | [row] => do Effect {
+        assertEq row.name "Alice"
+        assertEq row.active True
+      }
+    | _ => assert False
+}
+
+@test "selector predicate lifting supports comparison predicates"
+selector_predicate_lifting_comparison = do Effect {
+  users0 = table "selector_name_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice", active: True }
+  users2 <- insert users1 { id: 2, name: "Bob", active: False }
+  found  <- first users2[name == "Alice"]
+  found match
+    | Some row => do Effect {
+        assertEq row.id 1
+        assertEq row.active True
+      }
+    | None => assert False
 }
 
 @test "firstOn selector convenience"
