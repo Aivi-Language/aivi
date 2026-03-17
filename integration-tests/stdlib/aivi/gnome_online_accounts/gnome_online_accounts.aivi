@@ -6,10 +6,10 @@ use aivi.testing
 use aivi.email (Password, OAuth2)
 use aivi.gnome.onlineAccounts
 
-listMailAccountsWith = loader => loader Unit
+listMailAccountsWith  = loader => loader Unit
 ensureCredentialsWith = runner => runner "account-1"
-imapConfigWith = reader => reader "account-1"
-smtpConfigWith = reader => reader "account-1"
+imapConfigWith        = reader => reader "account-1"
+smtpConfigWith        = reader => reader "account-1"
 
 mockAccount = {
   id: "account-1"
@@ -43,11 +43,11 @@ mockSmtpAccountConfig = {
 goa_error_constructors = do Effect {
   unsupported = PlatformUnsupported
   serviceDown = ServiceUnavailable "session bus unavailable"
-  attention = AttentionNeeded "reauth required"
-  missing = AccountNotFound "missing"
-  noMail = MailUnsupported "smtp disabled"
-  badAuth = UnsupportedAuth "xoauth2 unavailable"
-  creds = Credentials "token expired"
+  attention   = AttentionNeeded "reauth required"
+  missing     = AccountNotFound "missing"
+  noMail      = MailUnsupported "smtp disabled"
+  badAuth     = UnsupportedAuth "xoauth2 unavailable"
+  creds       = Credentials "token expired"
 
   _ <- assertEq unsupported PlatformUnsupported
   _ <- (serviceDown match
@@ -87,7 +87,7 @@ goa_mail_account_record_shape = do Effect {
 goa_list_mail_accounts_can_be_mocked = do Effect {
   fakeList = _ => pure [mockAccount]
   accounts <- listMailAccountsWith fakeList
-  _ <- assertEq (List.length accounts) 1
+  _        <- assertEq (List.length accounts) 1
   accounts match
     | [account, ..._] => assertEq account.providerType "google"
     | []              => fail "expected mocked GOA accounts"

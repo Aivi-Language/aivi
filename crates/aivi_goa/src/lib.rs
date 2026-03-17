@@ -167,11 +167,12 @@ impl GoaBackend for RealGoaBackend {
 
 impl RealGoaBackend {
     fn load_snapshots(&self, conn: &Connection) -> Result<Vec<GoaAccountSnapshot>, GoaError> {
-        let proxy = ObjectManagerProxy::new(conn, GOA_SERVICE, GOA_ROOT)
-            .map_err(|err| GoaError::ServiceUnavailable(format!("could not connect to GOA object manager: {err}")))?;
-        let managed: ManagedObjects = proxy
-            .get_managed_objects()
-            .map_err(|err| GoaError::ServiceUnavailable(format!("could not enumerate GOA accounts: {err}")))?;
+        let proxy = ObjectManagerProxy::new(conn, GOA_SERVICE, GOA_ROOT).map_err(|err| {
+            GoaError::ServiceUnavailable(format!("could not connect to GOA object manager: {err}"))
+        })?;
+        let managed: ManagedObjects = proxy.get_managed_objects().map_err(|err| {
+            GoaError::ServiceUnavailable(format!("could not enumerate GOA accounts: {err}"))
+        })?;
 
         let mut out = Vec::new();
         for (path, interfaces) in managed {
@@ -197,7 +198,9 @@ impl RealGoaBackend {
         self.load_snapshots(conn)?
             .into_iter()
             .find(|snapshot| snapshot.id == account_id)
-            .ok_or_else(|| GoaError::AccountNotFound(format!("GOA account `{account_id}` was not found")))
+            .ok_or_else(|| {
+                GoaError::AccountNotFound(format!("GOA account `{account_id}` was not found"))
+            })
     }
 }
 
@@ -210,8 +213,9 @@ fn ensure_platform_supported() -> Result<(), GoaError> {
 }
 
 fn session_connection() -> Result<Connection, GoaError> {
-    Connection::session()
-        .map_err(|err| GoaError::ServiceUnavailable(format!("could not connect to the session bus: {err}")))
+    Connection::session().map_err(|err| {
+        GoaError::ServiceUnavailable(format!("could not connect to the session bus: {err}"))
+    })
 }
 
 fn load_snapshot(
@@ -249,7 +253,11 @@ fn load_snapshot(
     })
 }
 
-fn proxy<'a>(conn: &'a Connection, path: &'a str, interface: &'a str) -> Result<Proxy<'a>, GoaError> {
+fn proxy<'a>(
+    conn: &'a Connection,
+    path: &'a str,
+    interface: &'a str,
+) -> Result<Proxy<'a>, GoaError> {
     Proxy::new(conn, GOA_SERVICE, path, interface).map_err(|err| {
         GoaError::ServiceUnavailable(format!(
             "could not create GOA proxy for {interface} at {path}: {err}"
@@ -299,7 +307,8 @@ fn ensure_credentials_for_snapshot(
     match ensure_result {
         Ok(_) => Ok(()),
         Err(err) => {
-            if required_bool_property(&account, &snapshot.path, "AttentionNeeded").unwrap_or(false) {
+            if required_bool_property(&account, &snapshot.path, "AttentionNeeded").unwrap_or(false)
+            {
                 Err(GoaError::AttentionNeeded(format!(
                     "GOA account `{}` needs user attention before credentials can be used",
                     snapshot.presentation_identity
@@ -327,12 +336,13 @@ fn resolve_auth(
             )));
         }
         let oauth = proxy(conn, &snapshot.path, GOA_OAUTH2_IFACE)?;
-        let (token, _expires_in): (String, i32) = oauth.call("GetAccessToken", &()).map_err(|err| {
-            GoaError::Credentials(format!(
-                "could not obtain an OAuth2 token for `{}`: {err}",
-                snapshot.presentation_identity
-            ))
-        })?;
+        let (token, _expires_in): (String, i32) =
+            oauth.call("GetAccessToken", &()).map_err(|err| {
+                GoaError::Credentials(format!(
+                    "could not obtain an OAuth2 token for `{}`: {err}",
+                    snapshot.presentation_identity
+                ))
+            })?;
         let token = token.trim().to_string();
         if token.is_empty() {
             return Err(GoaError::Credentials(format!(
@@ -355,14 +365,15 @@ fn resolve_auth(
             AuthTarget::Imap => "imap-password",
             AuthTarget::Smtp => "smtp-password",
         };
-        let password: String = password_proxy
-            .call("GetPassword", &(secret_id,))
-            .map_err(|err| {
-                GoaError::Credentials(format!(
-                    "could not obtain the {secret_id} secret for `{}`: {err}",
-                    snapshot.presentation_identity
-                ))
-            })?;
+        let password: String =
+            password_proxy
+                .call("GetPassword", &(secret_id,))
+                .map_err(|err| {
+                    GoaError::Credentials(format!(
+                        "could not obtain the {secret_id} secret for `{}`: {err}",
+                        snapshot.presentation_identity
+                    ))
+                })?;
         if password.is_empty() {
             return Err(GoaError::Credentials(format!(
                 "GOA account `{}` returned an empty password for {secret_id}",
@@ -456,8 +467,7 @@ fn snapshot_to_smtp_config(
             snapshot.presentation_identity
         ))
     })?;
-    let (host, port) =
-        split_host_and_port(host_raw, if snapshot.smtp_use_ssl { 465 } else { 587 });
+    let (host, port) = split_host_and_port(host_raw, if snapshot.smtp_use_ssl { 465 } else { 587 });
 
     Ok(GoaSmtpConfig {
         host,
@@ -469,7 +479,11 @@ fn snapshot_to_smtp_config(
     })
 }
 
-fn preferred_user(first: Option<&str>, second: Option<&str>, third: Option<&str>) -> Option<String> {
+fn preferred_user(
+    first: Option<&str>,
+    second: Option<&str>,
+    third: Option<&str>,
+) -> Option<String> {
     [first, second, third]
         .into_iter()
         .flatten()

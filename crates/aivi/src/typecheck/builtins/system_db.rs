@@ -319,8 +319,14 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ("auth".to_string(), email_auth_ty.clone()),
             ("from".to_string(), text_ty.clone()),
             ("to".to_string(), list_text_ty.clone()),
-            ("cc".to_string(), Type::con("Option").app(vec![list_text_ty.clone()])),
-            ("bcc".to_string(), Type::con("Option").app(vec![list_text_ty.clone()])),
+            (
+                "cc".to_string(),
+                Type::con("Option").app(vec![list_text_ty.clone()]),
+            ),
+            (
+                "bcc".to_string(),
+                Type::con("Option").app(vec![list_text_ty.clone()]),
+            ),
             ("subject".to_string(), text_ty.clone()),
             ("body".to_string(), text_ty.clone()),
             ("port".to_string(), option_int_ty.clone()),
@@ -345,7 +351,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "imapOpen".to_string(),
                 Type::Func(
                     Box::new(imap_config_ty.clone()),
-                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), imap_session_ty.clone()])),
+                    Box::new(
+                        Type::con("Effect").app(vec![text_ty.clone(), imap_session_ty.clone()]),
+                    ),
                 ),
             ),
             (
@@ -361,10 +369,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(text_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(imap_session_ty.clone()),
-                        Box::new(Type::con("Effect").app(vec![
-                            text_ty.clone(),
-                            mailbox_info_ty.clone(),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![text_ty.clone(), mailbox_info_ty.clone()]),
+                        ),
                     )),
                 ),
             ),
@@ -374,10 +381,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(text_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(imap_session_ty.clone()),
-                        Box::new(Type::con("Effect").app(vec![
-                            text_ty.clone(),
-                            mailbox_info_ty.clone(),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![text_ty.clone(), mailbox_info_ty.clone()]),
+                        ),
                     )),
                 ),
             ),
@@ -415,10 +421,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(list_text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -431,10 +436,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(list_text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -447,10 +451,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(list_text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -470,10 +473,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -486,10 +488,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -510,10 +511,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(text_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(imap_session_ty.clone()),
-                        Box::new(Type::con("Effect").app(vec![
-                            text_ty.clone(),
-                            Type::con("Unit"),
-                        ])),
+                        Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
                     )),
                 ),
             ),
@@ -523,10 +521,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(text_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(imap_session_ty.clone()),
-                        Box::new(Type::con("Effect").app(vec![
-                            text_ty.clone(),
-                            Type::con("Unit"),
-                        ])),
+                        Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
                     )),
                 ),
             ),
@@ -538,10 +533,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -554,10 +548,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(text_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(imap_session_ty.clone()),
-                            Box::new(Type::con("Effect").app(vec![
-                                text_ty.clone(),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]),
+                            ),
                         )),
                     )),
                 ),
@@ -568,10 +561,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(imap_session_ty.clone()),
-                        Box::new(Type::con("Effect").app(vec![
-                            text_ty.clone(),
-                            Type::con("IdleResult"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![text_ty.clone(), Type::con("IdleResult")]),
+                        ),
                     )),
                 ),
             ),
@@ -617,30 +609,29 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "ensureCredentials".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
-                    Box::new(Type::con("Effect").app(vec![
-                        Type::con("GoaError"),
-                        Type::con("Unit"),
-                    ])),
+                    Box::new(
+                        Type::con("Effect").app(vec![Type::con("GoaError"), Type::con("Unit")]),
+                    ),
                 ),
             ),
             (
                 "imapConfig".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
-                    Box::new(Type::con("Effect").app(vec![
-                        Type::con("GoaError"),
-                        Type::con("GoaImapConfig"),
-                    ])),
+                    Box::new(
+                        Type::con("Effect")
+                            .app(vec![Type::con("GoaError"), Type::con("GoaImapConfig")]),
+                    ),
                 ),
             ),
             (
                 "smtpConfig".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
-                    Box::new(Type::con("Effect").app(vec![
-                        Type::con("GoaError"),
-                        Type::con("GoaSmtpConfig"),
-                    ])),
+                    Box::new(
+                        Type::con("Effect")
+                            .app(vec![Type::con("GoaError"), Type::con("GoaSmtpConfig")]),
+                    ),
                 ),
             ),
         ]
