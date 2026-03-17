@@ -122,6 +122,8 @@ If you want the underlying source-oriented API or more detail about typed mailbo
 | **mimeParts** raw<br><code>Text -> List MimePart</code> | Parses a raw MIME message into decoded parts. |
 | **flattenBodies** parts<br><code>List MimePart -> Text</code> | Joins the body text of multiple MIME parts into one plain text value. |
 
+When `imap` or `imapFetch` decodes directly into a record, the built-in decoder can populate common mail fields such as `uid`, `subject`, `from`, `to`, `cc`, `bcc`, `date`, `messageId`, `inReplyTo`, `references`, `textBody`, `htmlBody`, `body`, and `rawRfc822`. Ask for the subset your program needs.
+
 ### Session-based IMAP
 
 Use `imapOpen` when you need several mailbox actions in one connection.

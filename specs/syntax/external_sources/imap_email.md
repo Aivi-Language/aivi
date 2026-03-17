@@ -91,6 +91,8 @@ For session-oriented code, `mailbox` and `filter` are usually `None`, because yo
 
 This is a good fit for batch-style jobs such as importing unread support messages or extracting invoices from a mailbox. `myToken` stands for an OAuth2 access token that your program acquired elsewhere.
 
+When you decode IMAP messages into a record, the built-in decoder can supply common transport and threading fields such as `uid`, `subject`, `from`, `to`, `cc`, `bcc`, `date`, `messageId`, `inReplyTo`, `references`, `textBody`, `htmlBody`, `body`, and `rawRfc822`. Ask for only the fields your application actually needs.
+
 ## Example — GNOME Online Accounts to IMAP
 
 ```aivi
