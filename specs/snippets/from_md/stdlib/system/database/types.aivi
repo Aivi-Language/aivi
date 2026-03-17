@@ -54,5 +54,8 @@ Delta A =
   | Delete (Pred A)
   | Upsert (Pred A) A (Patch A)
 
+// Selector values carry one table plus the row predicate applied to it.
+DbSelection A = { table: Table A, pred: Pred A }
+
 // Patch functions apply record updates
 Patch A = A -> A

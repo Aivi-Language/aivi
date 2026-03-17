@@ -304,61 +304,61 @@ The ambient forms (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.inTransacti
 
 When `use aivi.database (domain Database)` is in scope, these aliases work well in expressions such as `table + upd (...) (...)`.
 
-### Typed mutation helpers
+### Selector CRUD helpers
 
-<!-- quick-info: {"kind":"feature","name":"Typed mutation helpers"} -->
-The typed mutation helpers are convenience wrappers over delta construction.
-They build the appropriate `Delta A` for you and then call `db.applyDeltaOn` or `db.applyDelta`, which is handy when the operation is straightforward and you do not need to name the intermediate delta value.
+<!-- quick-info: {"kind":"feature","name":"Selector CRUD helpers"} -->
+The high-level CRUD helpers keep inserts explicit and route reads, updates, deletes, and upserts through a shared `table[predicate]` selector surface.
+Selectors are pure descriptions of “which rows in which table”; they do not open connections, start transactions, or perform I/O by themselves.
 
-These helpers currently execute in memory, just like `db.applyDelta` and `db.applyDeltaOn`. Their predicates and patches do not compile to SQL mutation statements.
+These helpers currently execute in memory, just like `db.query`, `db.applyDelta`, and `db.applyDeltaOn`.
+Their predicates and patches do not compile to SQL mutation statements.
 <!-- /quick-info -->
 
 <<< ../../snippets/from_md/stdlib/system/database/typed_mutations.aivi{aivi}
 
+#### Selector values
+
+`aivi.database` exposes a structural selector carrier:
+
+```aivi
+DbSelection A = { table: Table A, pred: Pred A }
+```
+
+`table[predicate]` is the constructor surface for this type.
+When the left-hand side elaborates to `Table A`, the bracket body is interpreted as a row predicate of type `A -> Bool` using the same predicate-lifting rules already used by `db.where` and collection selectors.
+
+That means all of these are valid selector forms:
+
+- `userTable[id == userId]`
+- `userTable[active]`
+- `postTable[createdAt < cutoff]`
+
 #### Explicit (`…On`) forms
 
-| Function | Equivalent delta expression |
+| Function | Canonical meaning |
 | --- | --- |
 | **db.insertOn** conn table row<br><code>DbConnection -> Table A -> A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Insert row)` |
-| **db.deleteWhereOn** conn table pred<br><code>DbConnection -> Table A -> (A -> Bool) -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Delete pred)` |
-| **db.updateWhereOn** conn table pred patch<br><code>DbConnection -> Table A -> (A -> Bool) -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Update pred patch)` |
-| **db.upsertOn** conn table pred value patch<br><code>DbConnection -> Table A -> (A -> Bool) -> A -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Upsert pred value patch)` |
+| **db.rowsOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (List A)</code> | `db.runQueryOn conn (db.where selection.pred (db.from selection.table))` |
+| **db.firstOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Option A)</code> | `db.rowsOn conn selection`, then keep the first row if any |
+| **db.deleteOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Delete selection.pred)` |
+| **db.updateOn** conn selection patch<br><code>DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Update selection.pred patch)` |
+| **db.upsertOn** conn selection row patch<br><code>DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Upsert selection.pred row patch)` |
 
 #### Ambient forms
 
-| Function | Equivalent delta expression |
+| Function | Canonical meaning |
 | --- | --- |
 | **db.insert** table row<br><code>Table A -> A -> Effect DbError (Table A)</code> | `db.applyDelta table (Insert row)` |
-| **db.deleteWhere** table pred<br><code>Table A -> (A -> Bool) -> Effect DbError (Table A)</code> | `db.applyDelta table (Delete pred)` |
-| **db.updateWhere** table pred patch<br><code>Table A -> (A -> Bool) -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDelta table (Update pred patch)` |
-| **db.upsert** table pred value patch<br><code>Table A -> (A -> Bool) -> A -> (A -> A) -> Effect DbError (Table A)</code> | `db.applyDelta table (Upsert pred value patch)` |
+| **db.rows** selection<br><code>DbSelection A -> Effect DbError (List A)</code> | `db.runQuery (db.where selection.pred (db.from selection.table))` |
+| **db.first** selection<br><code>DbSelection A -> Effect DbError (Option A)</code> | `db.rows selection`, then keep the first row if any |
+| **db.delete** selection<br><code>DbSelection A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Delete selection.pred)` |
+| **db.update** selection patch<br><code>DbSelection A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Update selection.pred patch)` |
+| **db.upsert** selection row patch<br><code>DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Upsert selection.pred row patch)` |
 
-Use the typed helpers for one-off mutations. Use `db.applyDeltas` or `db.applyDeltasOn` when you want to batch several deltas together.
+Use the selector helpers for one-off CRUD operations.
+Use `db.applyDeltas` or `db.applyDeltasOn` when you want to batch several deltas together explicitly.
 
-### Selector-based CRUD (draft)
-
-Current implementation status: the repository currently ships the curried helpers `db.query`, `db.deleteWhere`, `db.updateWhere`, `db.upsert`, and their `...On` variants, plus the underlying delta APIs.
-The selector-based CRUD surface in this section is a draft for future implementation work; it is not implemented today.
-
-This draft keeps create explicit with `db.insert`.
-It only changes how row selection is written for reads, updates, deletes, and upserts.
-
-#### Proposed surface
-
-| Operation | Ambient form | Explicit form | Canonical meaning |
-| --- | --- | --- | --- |
-| create | `db.insert userTable newUser` | `db.insertOn conn userTable newUser` | existing create path |
-| read many | `db.list userTable[active]` | `db.listOn conn userTable[active]` | filter one table and return matching rows |
-| read one | `db.first userTable[id == userId]` | `db.firstOn conn userTable[id == userId]` | filter one table, keep at most one row, return `Option` |
-| update | `userTable[id == userId] <| { role: "admin" }` or `db.update userTable[id == userId] (patch { role: "admin" })` | `db.updateOn conn userTable[id == userId] (patch { role: "admin" })` | patch every selected row |
-| delete | `userTable[id == userId] <| -` or `db.delete userTable[id == userId]` | `db.deleteOn conn userTable[id == userId]` | delete every selected row |
-| upsert | `db.upsert userTable[id == user.id] user (patch { active: True })` | `db.upsertOn conn userTable[id == user.id] user (patch { active: True })` | patch matching rows or insert the seed row |
-
-Selector values are pure descriptions.
-They do not open connections, run I/O, or begin transactions by themselves.
-The ambient/explicit choice is made only by the `db.*` helper that consumes the selector or by the ambient `<|` shorthand.
-
-#### Ambient vs explicit execution in the draft
+#### Ambient vs explicit execution
 
 Ambient selector operations run on the default connection configured with `db.configure`.
 For example, `db.inTransaction (...)` can contain both `db.delete userTable[id == userId]` and `userTable[id == userId] <| { active: False }`, and both operations stay on that ambient connection for the whole transaction.
@@ -368,36 +368,37 @@ For example, `db.inTransactionOn conn (...)` can contain both `db.deleteOn conn 
 
 The selector itself never captures a connection and never changes transaction boundaries.
 
-#### Syntax
+#### Selector-specific `<|` sugar
 
-The draft introduces one new expression form for selecting rows from a single table:
+`<|` keeps its ordinary record-patching meaning on ordinary data, and gains one database-specific case when the left-hand side is a `DbSelection A`:
 
-```ebnf
-DbSelectorExpr := Expr "[" Expr "]"
+- `selection <| { ... }` is shorthand for `db.update selection (patch { ... })`
+- `selection <| -` is shorthand for `db.delete selection`
+
+So these forms are equivalent:
+
+```aivi
+db.update userTable[id == userId] (patch { role: "admin" })
+userTable[id == userId] <| { role: "admin" }
 ```
 
-When the left-hand side elaborates to `Table A`, the bracket body is interpreted as a predicate over row values of type `A` using the same lifting rules already used by `db.where` and patch predicates.
-That means forms such as `userTable[id == userId]`, `userTable[active]`, and `postTable[createdAt < cutoff]` all read as selector expressions over table rows.
+and:
 
-The draft also extends `<|` with one database-specific case:
-
-- `selection <| { ... }` updates the selected rows using the patch block on the right.
-- `selection <| -` deletes the selected rows.
+```aivi
+db.delete userTable[id == userId]
+userTable[id == userId] <| -
+```
 
 Standalone `-` remains invalid in ordinary expression position.
-Its delete meaning exists only as the right-hand side of `<|` when the left-hand side is a database selector.
+Its delete meaning exists only as the direct right-hand side of `<|` when the left-hand side is a database selector.
 
-#### Typing
+#### Typing and desugaring
 
-The draft introduces an internal selector carrier:
-
-`DbSelection A`
-
-with these typing rules:
+The selector CRUD surface type-checks with these rules:
 
 - if `table : Table A` and `pred` checks as `A -> Bool` under predicate lifting, then `table[pred] : DbSelection A`
-- `db.list : DbSelection A -> Effect DbError (List A)`
-- `db.listOn : DbConnection -> DbSelection A -> Effect DbError (List A)`
+- `db.rows : DbSelection A -> Effect DbError (List A)`
+- `db.rowsOn : DbConnection -> DbSelection A -> Effect DbError (List A)`
 - `db.first : DbSelection A -> Effect DbError (Option A)`
 - `db.firstOn : DbConnection -> DbSelection A -> Effect DbError (Option A)`
 - `db.update : DbSelection A -> Patch A -> Effect DbError (Table A)`
@@ -411,43 +412,40 @@ with these typing rules:
 
 `selection <| -` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A`.
 
-The selector is always a pure row-description value.
-It never changes transaction scope or connection ownership.
-
-#### Desugaring
+The surface desugars as follows:
 
 | Surface form | Desugared form |
 | --- | --- |
-| `db.list table[pred]` | `db.runQuery (db.where pred (db.from table))` |
-| `db.listOn conn table[pred]` | `db.runQueryOn conn (db.where pred (db.from table))` |
-| `db.first table[pred]` | `db.list table[pred]` followed by `db.limit 1` in the query plan and `List.head`-style `Option` conversion at the API boundary |
-| `db.firstOn conn table[pred]` | `db.listOn conn table[pred]` followed by the same one-row `Option` conversion |
-| `db.update table[pred] patchFn` | `db.updateWhere table pred patchFn` |
-| `db.updateOn conn table[pred] patchFn` | `db.updateWhereOn conn table pred patchFn` |
-| `db.delete table[pred]` | `db.deleteWhere table pred` |
-| `db.deleteOn conn table[pred]` | `db.deleteWhereOn conn table pred` |
-| `db.upsert table[pred] seed patchFn` | `db.upsert table pred seed patchFn` |
-| `db.upsertOn conn table[pred] seed patchFn` | `db.upsertOn conn table pred seed patchFn` |
+| `db.rows table[pred]` | `db.runQuery (db.where pred (db.from table))` |
+| `db.rowsOn conn table[pred]` | `db.runQueryOn conn (db.where pred (db.from table))` |
+| `db.first table[pred]` | `db.rows table[pred]`, then return the first row as `Option` |
+| `db.firstOn conn table[pred]` | `db.rowsOn conn table[pred]`, then return the first row as `Option` |
+| `db.update table[pred] patchFn` | `db.applyDelta table (Update pred patchFn)` |
+| `db.updateOn conn table[pred] patchFn` | `db.applyDeltaOn conn table (Update pred patchFn)` |
+| `db.delete table[pred]` | `db.applyDelta table (Delete pred)` |
+| `db.deleteOn conn table[pred]` | `db.applyDeltaOn conn table (Delete pred)` |
+| `db.upsert table[pred] seed patchFn` | `db.applyDelta table (Upsert pred seed patchFn)` |
+| `db.upsertOn conn table[pred] seed patchFn` | `db.applyDeltaOn conn table (Upsert pred seed patchFn)` |
 | `table[pred] <| { ... }` | `db.update table[pred] (patch { ... })` |
 | `table[pred] <| -` | `db.delete table[pred]` |
 
-The desugaring keeps the selector layer shallow on purpose.
-It is syntax and API sugar over the existing single-table query and mutation model, not a new transaction or connection mechanism.
+This keeps the selector layer shallow on purpose.
+It is syntax and API sugar over the existing single-table query and delta model, not a new transaction or connection mechanism.
 
 #### Compile-fail cases and diagnostics
 
-The draft should reject at least these cases with targeted diagnostics:
+The compiler should reject at least these cases with targeted diagnostics:
 
 | Example | Why it is rejected | Suggested help |
 | --- | --- | --- |
 | `db.delete userTable` | `db.delete` expects a `DbSelection A`, not a whole `Table A` | suggest `db.delete userTable[pred]` |
-| `db.list userTable[id]` | `id` lifts to `User -> Int`, but a selector predicate must resolve to `Bool` | suggest `userTable[id == someId]` or another boolean predicate |
+| `db.rows userTable[id]` | `id` lifts to `User -> Int`, but a selector predicate must resolve to `Bool` | suggest `userTable[id == someId]` or another boolean predicate |
 | `db.update userTable[id == userId] { role: "admin" }` | the function form expects a `Patch A` value; plain braces in argument position are not a patch value | suggest `db.update userTable[id == userId] (patch { role: "admin" })` or `userTable[id == userId] <| { role: "admin" }` |
 | `userTable[id == userId] <| 1` | selector patch shorthand accepts only a patch block or the delete marker `-` | suggest `userTable[id == userId] <| { ... }` or `userTable[id == userId] <| -` |
 | `userTable[id == userId] <| { nope: True }` | the patch mentions a field that is not present on the selected row type | report the unknown field just as ordinary patching already does |
 
 These are specification-level diagnostics, not exact error strings.
-The important part is that the compiler explains whether the failure came from selector formation, patch typing, or misuse of ambient shorthand.
+The important part is that the compiler explains whether the failure came from selector formation, patch typing, or misuse of selector shorthand.
 
 ### FTS helpers
 

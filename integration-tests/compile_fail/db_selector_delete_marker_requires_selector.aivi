@@ -1,0 +1,8 @@
+// EXPECT-ERROR: `<| -` is only valid
+@no_prelude
+module integrationTests.compileFail.dbSelectorDeleteMarkerRequiresSelector
+
+use aivi
+
+record = { id: 1, name: "Alice" }
+bad    = record <| -
