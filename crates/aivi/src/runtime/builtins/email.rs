@@ -485,10 +485,39 @@ fn messages_to_values(messages: Vec<aivi_email::EmailMessage>) -> Vec<Value> {
                 msg.to.map(Value::Text).unwrap_or_else(make_none),
             );
             rec.insert(
+                "cc".to_string(),
+                msg.cc.map(Value::Text).unwrap_or_else(make_none),
+            );
+            rec.insert(
+                "bcc".to_string(),
+                msg.bcc.map(Value::Text).unwrap_or_else(make_none),
+            );
+            rec.insert(
                 "date".to_string(),
                 msg.date.map(Value::Text).unwrap_or_else(make_none),
             );
+            rec.insert(
+                "messageId".to_string(),
+                msg.message_id.map(Value::Text).unwrap_or_else(make_none),
+            );
+            rec.insert(
+                "inReplyTo".to_string(),
+                msg.in_reply_to.map(Value::Text).unwrap_or_else(make_none),
+            );
+            rec.insert(
+                "references".to_string(),
+                Value::List(Arc::new(msg.references.into_iter().map(Value::Text).collect())),
+            );
+            rec.insert(
+                "textBody".to_string(),
+                msg.text_body.map(Value::Text).unwrap_or_else(make_none),
+            );
+            rec.insert(
+                "htmlBody".to_string(),
+                msg.html_body.map(Value::Text).unwrap_or_else(make_none),
+            );
             rec.insert("body".to_string(), Value::Text(msg.body));
+            rec.insert("rawRfc822".to_string(), Value::Text(msg.raw_rfc822));
             Value::Record(Arc::new(rec))
         })
         .collect()

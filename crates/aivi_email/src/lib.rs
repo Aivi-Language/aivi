@@ -48,8 +48,16 @@ pub struct EmailMessage {
     pub subject: Option<String>,
     pub from: Option<String>,
     pub to: Option<String>,
+    pub cc: Option<String>,
+    pub bcc: Option<String>,
     pub date: Option<String>,
+    pub message_id: Option<String>,
+    pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
+    pub text_body: Option<String>,
+    pub html_body: Option<String>,
     pub body: String,
+    pub raw_rfc822: String,
 }
 
 #[derive(Debug, Clone)]
@@ -166,17 +174,7 @@ pub fn load_imap_messages(config: ImapConfig) -> Result<Vec<EmailMessage>, AiviE
         let Some(raw) = msg.body() else {
             continue;
         };
-        let parsed = mailparse::parse_mail(raw).map_err(|err| AiviEmailError {
-            message: format!("email.imap decode error: {err}"),
-        })?;
-        out.push(EmailMessage {
-            uid: msg.uid,
-            subject: header_value(&parsed, "Subject"),
-            from: header_value(&parsed, "From"),
-            to: header_value(&parsed, "To"),
-            date: header_value(&parsed, "Date"),
-            body: parsed.get_body().unwrap_or_default(),
-        });
+        out.push(decode_email_message(msg.uid, raw)?);
     }
 
     let _ = session.logout();
@@ -265,17 +263,7 @@ pub fn imap_fetch(
         let Some(raw) = msg.body() else {
             continue;
         };
-        let parsed = mailparse::parse_mail(raw).map_err(|err| AiviEmailError {
-            message: format!("email.imapFetch decode error: {err}"),
-        })?;
-        out.push(EmailMessage {
-            uid: msg.uid,
-            subject: header_value(&parsed, "Subject"),
-            from: header_value(&parsed, "From"),
-            to: header_value(&parsed, "To"),
-            date: header_value(&parsed, "Date"),
-            body: parsed.get_body().unwrap_or_default(),
-        });
+        out.push(decode_email_message(msg.uid, raw)?);
     }
     Ok(out)
 }
@@ -576,6 +564,138 @@ fn collect_parts(
     Ok(())
 }
 
+fn decode_email_message(uid: Option<u32>, raw: &[u8]) -> Result<EmailMessage, AiviEmailError> {
+    let parsed = mailparse::parse_mail(raw).map_err(|err| AiviEmailError {
+        message: format!("email.imap decode error: {err}"),
+    })?;
+    let text_body = preferred_body_variant(&parsed, "text/plain")?;
+    let html_body = preferred_body_variant(&parsed, "text/html")?;
+    Ok(EmailMessage {
+        uid,
+        subject: header_value(&parsed, "Subject"),
+        from: header_value(&parsed, "From"),
+        to: header_value(&parsed, "To"),
+        cc: header_value(&parsed, "Cc"),
+        bcc: header_value(&parsed, "Bcc"),
+        date: header_value(&parsed, "Date"),
+        message_id: first_message_id(&parsed, "Message-ID"),
+        in_reply_to: first_message_id(&parsed, "In-Reply-To"),
+        references: message_ids(&parsed, "References"),
+        text_body: text_body.clone(),
+        html_body: html_body.clone(),
+        body: preferred_body(&parsed, &text_body, &html_body),
+        raw_rfc822: String::from_utf8_lossy(raw).into_owned(),
+    })
+}
+
+fn preferred_body_variant(
+    parsed: &mailparse::ParsedMail<'_>,
+    mime_type: &str,
+) -> Result<Option<String>, AiviEmailError> {
+    let mut parts = Vec::new();
+    collect_text_parts(parsed, mime_type, &mut parts)?;
+    if parts.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(parts.join("\n\n")))
+    }
+}
+
+fn collect_text_parts(
+    parsed: &mailparse::ParsedMail<'_>,
+    mime_type: &str,
+    out: &mut Vec<String>,
+) -> Result<(), AiviEmailError> {
+    if parsed.subparts.is_empty() {
+        if is_attachment(parsed) {
+            return Ok(());
+        }
+        if parsed.ctype.mimetype.eq_ignore_ascii_case(mime_type) {
+            let body = parsed.get_body().unwrap_or_default();
+            let trimmed = body.trim();
+            if !trimmed.is_empty() {
+                out.push(trimmed.to_string());
+            }
+        }
+        return Ok(());
+    }
+
+    for subpart in &parsed.subparts {
+        collect_text_parts(subpart, mime_type, out)?;
+    }
+    Ok(())
+}
+
+fn is_attachment(parsed: &mailparse::ParsedMail<'_>) -> bool {
+    header_value(parsed, "Content-Disposition")
+        .map(|value| value.to_ascii_lowercase().contains("attachment"))
+        .unwrap_or(false)
+}
+
+fn preferred_body(
+    parsed: &mailparse::ParsedMail<'_>,
+    text_body: &Option<String>,
+    html_body: &Option<String>,
+) -> String {
+    text_body
+        .clone()
+        .or_else(|| html_body.clone())
+        .unwrap_or_else(|| parsed.get_body().unwrap_or_default())
+}
+
+fn first_message_id(parsed: &mailparse::ParsedMail<'_>, name: &str) -> Option<String> {
+    message_ids(parsed, name).into_iter().next()
+}
+
+fn message_ids(parsed: &mailparse::ParsedMail<'_>, name: &str) -> Vec<String> {
+    header_value(parsed, name)
+        .map(|value| extract_message_ids(&value))
+        .unwrap_or_default()
+}
+
+fn extract_message_ids(value: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut current = String::new();
+    let mut inside = false;
+
+    for ch in value.chars() {
+        match ch {
+            '<' => {
+                inside = true;
+                current.clear();
+                current.push(ch);
+            }
+            '>' => {
+                if inside {
+                    current.push(ch);
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        ids.push(trimmed.to_string());
+                    }
+                    current.clear();
+                    inside = false;
+                }
+            }
+            _ => {
+                if inside {
+                    current.push(ch);
+                }
+            }
+        }
+    }
+
+    if ids.is_empty() {
+        value
+            .split_whitespace()
+            .map(|part| part.trim().trim_matches(','))
+            .filter(|part| !part.is_empty())
+            .map(|part| part.to_string())
+            .collect()
+    } else {
+        ids
+    }
+}
+
 fn header_value(parsed: &mailparse::ParsedMail<'_>, name: &str) -> Option<String> {
     parsed
         .headers
@@ -784,9 +904,25 @@ mod tests {
             "Subject: hello\r\n",
             "From: from@example.com\r\n",
             "To: to@example.com\r\n",
+            "Cc: cc@example.com\r\n",
+            "Bcc: bcc@example.com\r\n",
             "Date: Tue, 1 Jan 2024 00:00:00 +0000\r\n",
+            "Message-ID: <reply@example.com>\r\n",
+            "In-Reply-To: <orig@example.com>\r\n",
+            "References: <root@example.com> <orig@example.com>\r\n",
+            "MIME-Version: 1.0\r\n",
+            "Content-Type: multipart/alternative; boundary=\"abc\"\r\n",
             "\r\n",
-            "Body text\r\n"
+            "--abc\r\n",
+            "Content-Type: text/plain; charset=\"utf-8\"\r\n",
+            "\r\n",
+            "Body text\r\n",
+            "\r\n",
+            "--abc\r\n",
+            "Content-Type: text/html; charset=\"utf-8\"\r\n",
+            "\r\n",
+            "<p>Body text</p>\r\n",
+            "--abc--\r\n"
         );
         let fetch_response = format!(
             "* SEARCH 9 3 5\r\n\
@@ -808,11 +944,28 @@ mod tests {
         assert_eq!(message.subject.as_deref(), Some("hello"));
         assert_eq!(message.from.as_deref(), Some("from@example.com"));
         assert_eq!(message.to.as_deref(), Some("to@example.com"));
+        assert_eq!(message.cc.as_deref(), Some("cc@example.com"));
+        assert_eq!(message.bcc.as_deref(), Some("bcc@example.com"));
         assert_eq!(
             message.date.as_deref(),
             Some("Tue, 1 Jan 2024 00:00:00 +0000")
         );
+        assert_eq!(message.message_id.as_deref(), Some("<reply@example.com>"));
+        assert_eq!(message.in_reply_to.as_deref(), Some("<orig@example.com>"));
+        assert_eq!(
+            message.references,
+            vec![
+                "<root@example.com>".to_string(),
+                "<orig@example.com>".to_string()
+            ]
+        );
+        assert_eq!(message.text_body.as_deref(), Some("Body text"));
+        assert_eq!(message.html_body.as_deref(), Some("<p>Body text</p>"));
         assert_eq!(message.body.trim(), "Body text");
+        assert!(message
+            .raw_rfc822
+            .contains("Message-ID: <reply@example.com>"));
+        assert!(message.raw_rfc822.contains("<p>Body text</p>"));
 
         let commands = written(&state);
         assert!(commands.contains("a2 UID SEARCH UNSEEN\r\n"));
