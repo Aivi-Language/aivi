@@ -95,6 +95,31 @@ fn find_symbol_span(text: &str, name: &str) -> Span {
     panic!("symbol not found: {name}");
 }
 
+fn find_value_def_span(text: &str, name: &str) -> Span {
+    let path = PathBuf::from("test.aivi");
+    let (modules, _) = parse_modules(&path, text);
+    for module in modules {
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::Def(def) if def.name.name == name => return def.name.span.clone(),
+                ModuleItem::DomainDecl(domain_decl) => {
+                    for domain_item in domain_decl.items.iter() {
+                        if let aivi::DomainItem::Def(def) | aivi::DomainItem::LiteralDef(def) =
+                            domain_item
+                        {
+                            if def.name.name == name {
+                                return def.name.span.clone();
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    panic!("value definition not found: {name}");
+}
+
 #[test]
 fn completion_items_include_keywords_and_defs() {
     let text = sample_text();
@@ -299,7 +324,7 @@ fn build_definition_resolves_def() {
     let uri = sample_uri();
     let position = position_for(text, "add 1 2");
     let location = Backend::build_definition(text, &uri, position).expect("definition found");
-    let expected_span = find_symbol_span(text, "add");
+    let expected_span = find_value_def_span(text, "add");
     let expected_range = Backend::span_to_range(expected_span);
     assert_eq!(location.range, expected_range);
 }
@@ -309,6 +334,7 @@ fn build_definition_resolves_def_across_files_via_use() {
     let math_text = r#"@no_prelude
 module examples.compiler.math
 export add
+add : Number -> Number -> Number
 add = x y => x + y"#;
     let app_text = r#"@no_prelude
 module examples.compiler.app
@@ -338,9 +364,20 @@ run = add 1 2"#;
         Backend::build_definition_with_workspace(app_text, &app_uri, position, &workspace)
             .expect("definition found");
 
-    let expected_span = find_symbol_span(math_text, "add");
+    let expected_span = find_value_def_span(math_text, "add");
     let expected_range = Backend::span_to_range(expected_span);
     assert_eq!(location.uri, math_uri);
+    assert_eq!(location.range, expected_range);
+}
+
+#[test]
+fn build_definition_on_definition_name_prefers_current_def_over_type_sig() {
+    let text = sample_text();
+    let uri = sample_uri();
+    let position = position_for(text, "add = x y =>");
+    let location = Backend::build_definition(text, &uri, position).expect("definition found");
+    let expected_range = Backend::span_to_range(find_value_def_span(text, "add"));
+    assert_eq!(location.uri, uri);
     assert_eq!(location.range, expected_range);
 }
 

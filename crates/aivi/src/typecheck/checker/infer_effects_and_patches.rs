@@ -416,10 +416,36 @@ impl TypeChecker {
         err_ty: Type,
         span: Span,
     ) -> Result<Type, TypeError> {
+        if let Some(value_ty) = self.infallible_effect_value_ty(expr_ty.clone()) {
+            return Ok(value_ty);
+        }
         let value_ty = self.fresh_var();
         let effect_ty = Type::con("Effect").app(vec![err_ty, value_ty.clone()]);
         self.unify_with_span(expr_ty, effect_ty, span)?;
         Ok(value_ty)
+    }
+
+    fn effect_type_args(&mut self, ty: &Type) -> Option<Vec<Type>> {
+        match ty {
+            Type::Con(name, args) if self.type_name_matches(name, "Effect") => Some(args.clone()),
+            Type::App(base, args) => {
+                let mut collected = self.effect_type_args(base)?;
+                collected.extend(args.iter().cloned());
+                Some(collected)
+            }
+            _ => None,
+        }
+    }
+
+    fn infallible_effect_value_ty(&mut self, expr_ty: Type) -> Option<Type> {
+        let applied = self.apply(expr_ty);
+        let expanded = self.expand_alias(applied);
+        let args = self.effect_type_args(&expanded)?;
+        if args.len() == 1 {
+            Some(args[0].clone())
+        } else {
+            None
+        }
     }
 
     fn infer_effect_block(
@@ -524,9 +550,13 @@ impl TypeChecker {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     if idx + 1 == items.len() {
                         result_ty = self.fresh_var();
-                        let expected =
-                            Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
-                        self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
+                        if let Some(value_ty) = self.infallible_effect_value_ty(expr_ty.clone()) {
+                            self.unify_with_span(value_ty, result_ty.clone(), expr_span(expr))?;
+                        } else {
+                            let expected =
+                                Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
+                            self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
+                        }
                     } else {
                         // Bare expression desugars to `chain (λ_. body) expr`; the value is
                         // discarded, so expr need only be `Effect E A` for any A (like `_ <- expr`).
@@ -1147,6 +1177,9 @@ impl TypeChecker {
         err_ty: Type,
         span: Span,
     ) -> Result<Type, TypeError> {
+        if let Some(value_ty) = self.infallible_effect_value_ty(expr_ty.clone()) {
+            return Ok(value_ty);
+        }
         let value_ty = self.fresh_var();
         let source_kind_ty = self.fresh_var();
         let source_ty = Type::con("Source").app(vec![source_kind_ty.clone(), value_ty.clone()]);
@@ -1317,5 +1350,17 @@ mod tests {
         let err_ty = checker.fresh_var();
         let res = checker.bind_effect_value(Type::con("Int"), err_ty, span);
         assert!(res.is_err(), "expected Err, got: {res:?}");
+    }
+
+    #[test]
+    fn bind_effect_value_accepts_infallible_effect_partial() {
+        let mut checker = TypeChecker::new();
+        let span = dummy_span();
+        let err_ty = checker.fresh_var();
+        let partial_effect = Type::con("Effect").app(vec![Type::con("DateTime")]);
+        let res = checker
+            .bind_effect_value(partial_effect, err_ty, span)
+            .expect("expected infallible effect bind to succeed");
+        assert_eq!(checker.type_to_string(&res), "DateTime");
     }
 }

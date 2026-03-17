@@ -4,7 +4,7 @@ module integrationTests.syntax.functions.closures
 use aivi
 use aivi.testing
 use aivi.generator
-use aivi.list (map)
+use aivi.list
 
 // Closure over `factor` used inside a generator
 scaledRange : Int -> Generator Int
@@ -44,7 +44,7 @@ innerClosureInDoEffect = do Effect {
 @test "closure passed to higher-order map"
 closureInHigherOrder = do Effect {
   multiplier = 4
-  assertEq ([3, 4, 5] |> map (n => n * multiplier)) [12, 16, 20]
+  assertEq ([3, 4, 5] |> map (_ * multiplier)) [12, 16, 20]
 }
 
 @test "closure used inside do Option"

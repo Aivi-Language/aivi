@@ -564,6 +564,51 @@ move = (x, y) =>
         );
     }
 
+    #[test]
+    fn format_dedents_effect_statements_after_multiline_match_rhs() {
+        let input = "\
+module demo
+
+loadConfig = do Effect {
+  resolvedBaseUrl = baseUrlText match
+    | Some \"\"  => defaultBaseUrl
+    | Some raw => raw
+    | None     => defaultBaseUrl
+
+    pure {
+      apiKey: apiKeyText ?? \"\"
+      model: modelText ?? defaultModel
+      baseUrl: resolvedBaseUrl
+      organization: organizationText
+    }
+}
+";
+        let expected = "\
+module demo
+
+loadConfig = do Effect {
+  resolvedBaseUrl = baseUrlText match
+    | Some \"\"  => defaultBaseUrl
+    | Some raw => raw
+    | None     => defaultBaseUrl
+
+  pure {
+    apiKey: apiKeyText ?? \"\"
+    model: modelText ?? defaultModel
+    baseUrl: resolvedBaseUrl
+    organization: organizationText
+  }
+}
+";
+        let formatted = format_text(input);
+        assert_eq!(formatted, expected);
+        assert_eq!(
+            format_text(expected),
+            expected,
+            "formatting should be idempotent"
+        );
+    }
+
     /// Regression test: `;` between non-operator tokens must not insert a phantom
     /// space that the second pass then removes (non-idempotency).
     #[test]

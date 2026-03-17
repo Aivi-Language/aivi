@@ -4,23 +4,23 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.database
 export Table, ColumnType, ColumnConstraint, ColumnDefault, Column
-export IntType, BoolType, TimestampType, Varchar
+export IntType, FloatType, BoolType, TimestampType, Varchar
 export AutoIncrement, NotNull
 export DefaultBool, DefaultInt, DefaultText, DefaultNow
 export Pred, Patch, Delta, DbSelection, DbError
+export Insert, Update, Delete, Upsert
 export Driver, DbConfig, DbConnection, configure, connect, open, close
 export Sqlite, Postgresql, Mysql
 export SqliteTuning, MigrationStep, SavepointName, TxAction
 export FtsDoc, FtsQuery
-export table, load, query, applyDelta, applyDeltas, runMigrations, runMigrationSql
-export loadOn, queryOn, applyDeltaOn, applyDeltasOn, runMigrationsOn, runMigrationSqlOn
+export table, load, applyDelta, applyDeltas, runMigrations, runMigrationSql
+export loadOn, applyDeltaOn, applyDeltasOn, runMigrationsOn, runMigrationSqlOn
 export configureSqlite, configureSqliteOn
 export beginTx, commitTx, rollbackTx, inTransaction
 export beginTxOn, commitTxOn, rollbackTxOn, inTransactionOn
 export savepoint, releaseSavepoint, rollbackToSavepoint
 export savepointOn, releaseSavepointOn, rollbackToSavepointOn
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
-export ins, upd, del, ups
 export insert, insertOn
 export rows, rowsOn, first, firstOn
 export delete, deleteOn
@@ -37,7 +37,7 @@ DbError = Text
 
 Table A = { name: Text, columns: List Column, rows: List A }
 
-ColumnType = IntType | BoolType | TimestampType | Varchar Int
+ColumnType = IntType | FloatType | BoolType | TimestampType | Varchar Int
 ColumnConstraint = AutoIncrement | NotNull
 ColumnDefault = DefaultBool Bool | DefaultInt Int | DefaultText Text | DefaultNow
 Column = {
@@ -222,18 +222,6 @@ load = value => database.load value
 loadOn : DbConnection -> Table A -> Effect DbError (List A)
 loadOn = conn value => database.loadOn conn value
 
-query : Table A -> (A -> Bool) -> Effect DbError (List A)
-query = tbl pred => do Effect {
-  rows <- load tbl
-  pure (List.filter pred rows)
-}
-
-queryOn : DbConnection -> Table A -> (A -> Bool) -> Effect DbError (List A)
-queryOn = conn tbl pred => do Effect {
-  rows <- loadOn conn tbl
-  pure (List.filter pred rows)
-}
-
 applyDelta : Table A -> Delta A -> Effect DbError (Table A)
 applyDelta = table delta => database.applyDelta table delta
 
@@ -379,29 +367,23 @@ ftsMatchAny = terms => { expression: joinTermsWithOr terms, matchMode: "any" }
 ftsMatchAll : List Text -> FtsQuery
 ftsMatchAll = terms => { expression: joinTerms terms, matchMode: "all" }
 
-ins : A -> Delta A
-ins = value => Insert value
-
-upd : Pred A -> Patch A -> Delta A
-upd = pred patchFn => Update pred patchFn
-
-del : Pred A -> Delta A
-del = pred => Delete pred
-
-ups : Pred A -> A -> Patch A -> Delta A
-ups = pred value patchFn => Upsert pred value patchFn
-
 insert : Table A -> A -> Effect DbError (Table A)
-insert = table value => applyDelta table (ins value)
+insert = table value => applyDelta table (Insert value)
 
 insertOn : DbConnection -> Table A -> A -> Effect DbError (Table A)
-insertOn = conn table value => applyDeltaOn conn table (ins value)
+insertOn = conn table value => applyDeltaOn conn table (Insert value)
 
 rows : DbSelection A -> Effect DbError (List A)
-rows = selection => query selection.table selection.pred
+rows = selection => do Effect {
+  loaded <- load selection.table
+  pure (List.filter selection.pred loaded)
+}
 
 rowsOn : DbConnection -> DbSelection A -> Effect DbError (List A)
-rowsOn = conn selection => queryOn conn selection.table selection.pred
+rowsOn = conn selection => do Effect {
+  loaded <- loadOn conn selection.table
+  pure (List.filter selection.pred loaded)
+}
 
 first : DbSelection A -> Effect DbError (Option A)
 first = selection => do Effect {
@@ -420,30 +402,25 @@ firstOn = conn selection => do Effect {
 }
 
 delete : DbSelection A -> Effect DbError (Table A)
-delete = selection => applyDelta selection.table (del selection.pred)
+delete = selection => applyDelta selection.table (Delete selection.pred)
 
 deleteOn : DbConnection -> DbSelection A -> Effect DbError (Table A)
-deleteOn = conn selection => applyDeltaOn conn selection.table (del selection.pred)
+deleteOn = conn selection => applyDeltaOn conn selection.table (Delete selection.pred)
 
 update : DbSelection A -> Patch A -> Effect DbError (Table A)
-update = selection patchFn => applyDelta selection.table (upd selection.pred patchFn)
+update = selection patchFn => applyDelta selection.table (Update selection.pred patchFn)
 
 updateOn : DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)
-updateOn = conn selection patchFn => applyDeltaOn conn selection.table (upd selection.pred patchFn)
+updateOn = conn selection patchFn => applyDeltaOn conn selection.table (Update selection.pred patchFn)
 
 upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)
-upsert = selection value patchFn => applyDelta selection.table (ups selection.pred value patchFn)
+upsert = selection value patchFn => applyDelta selection.table (Upsert selection.pred value patchFn)
 
 upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)
-upsertOn = conn selection value patchFn => applyDeltaOn conn selection.table (ups selection.pred value patchFn)
+upsertOn = conn selection value patchFn => applyDeltaOn conn selection.table (Upsert selection.pred value patchFn)
 
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)
   (+) = table delta => applyDelta table delta
-
-  ins = Insert
-  upd = Update
-  del = Delete
-  ups = Upsert
 }
 "#;

@@ -1045,8 +1045,8 @@ pub fn run_test_suite_jit(
     result
 }
 
-/// Walk all RustIR modules and wrap `load(source)` calls with
-/// `__set_source_schema(schema_json, load(source))` when the typechecker
+/// Walk all RustIR modules and wrap `load(source)` calls as
+/// `load(__set_source_schema(schema_json, source))` when the typechecker
 /// recorded a concrete inner type for that load site.
 fn inject_source_schemas(
     modules: &mut [rust_ir::RustIrModule],
@@ -1054,8 +1054,14 @@ fn inject_source_schemas(
 ) {
     for module in modules.iter_mut() {
         for def in &mut module.defs {
-            let key = format!("{}.{}", module.name, def.name);
-            if let Some(schemas) = source_schemas.get(&key) {
+            let module_key = format!("{}.{}", module.name, def.name);
+            let schemas = source_schemas.get(&module_key).or_else(|| {
+                def.name
+                    .contains('.')
+                    .then(|| source_schemas.get(&def.name))
+                    .flatten()
+            });
+            if let Some(schemas) = schemas {
                 let mut schema_idx = 0;
                 inject_in_expr(&mut def.expr, schemas, &mut schema_idx);
             }
@@ -1064,8 +1070,8 @@ fn inject_source_schemas(
 }
 
 /// Recursively walk a RustIR expression. When we find `App(Global("load"), arg)`
-/// or `Call(Global("load"), [arg])`, wrap the whole thing:
-///   `Call(Global("__set_source_schema"), [LitString(schema_json), <original>])`
+/// or `Call(Global("load"), [arg])`, wrap the source argument:
+///   `load(Call(Global("__set_source_schema"), [LitString(schema_json), arg]))`
 fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
     // First recurse into children so inner load calls are found in order
     match expr {
@@ -1162,15 +1168,7 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
         if let Some(cg_type) = schemas.get(*idx) {
             let schema = cg_type_to_json_schema(cg_type);
             if let Ok(schema_json) = serde_json::to_string(&schema) {
-                // Replace: `load(source)` → `__set_source_schema(schema_json, load(source))`
-                let original = std::mem::replace(
-                    expr,
-                    RustIrExpr::LitBool {
-                        id: 0,
-                        value: false,
-                    },
-                );
-                *expr = RustIrExpr::Call {
+                let wrap_source = |source: RustIrExpr, schema_json: String| RustIrExpr::Call {
                     id: 0,
                     func: Box::new(RustIrExpr::Global {
                         id: 0,
@@ -1182,10 +1180,33 @@ fn inject_in_expr(expr: &mut RustIrExpr, schemas: &[CgType], idx: &mut usize) {
                             id: 0,
                             text: schema_json,
                         },
-                        original,
+                        source,
                     ],
                     location: None,
                 };
+                match expr {
+                    RustIrExpr::App { arg, .. } => {
+                        let original_arg = std::mem::replace(
+                            arg,
+                            Box::new(RustIrExpr::LitBool {
+                                id: 0,
+                                value: false,
+                            }),
+                        );
+                        *arg = Box::new(wrap_source(*original_arg, schema_json));
+                    }
+                    RustIrExpr::Call { args, .. } if args.len() == 1 => {
+                        let original_arg = std::mem::replace(
+                            &mut args[0],
+                            RustIrExpr::LitBool {
+                                id: 0,
+                                value: false,
+                            },
+                        );
+                        args[0] = wrap_source(original_arg, schema_json);
+                    }
+                    _ => {}
+                }
             }
         }
         *idx += 1;
@@ -1199,9 +1220,11 @@ include!("compile/aot.rs");
 #[cfg(test)]
 mod runtime_warning_tests {
     use std::collections::{HashMap, HashSet};
+    use std::path::Path;
 
     use super::*;
     use crate::hir::{HirDef, HirExpr, HirModule, HirProgram};
+    use crate::surface::parse_modules;
     use crate::{Position, SourceOrigin, Span};
 
     fn origin(path: &str, line: usize, column: usize) -> SourceOrigin {
@@ -1693,6 +1716,275 @@ mod runtime_warning_tests {
             rendered.contains("src/demo/main.aivi:4:13"),
             "expected field-access location, got:\n{rendered}"
         );
+
+        drop(module);
+    }
+
+    #[test]
+    fn inject_in_expr_wraps_load_argument_with_source_schema() {
+        let mut expr = RustIrExpr::Call {
+            id: 1,
+            func: Box::new(RustIrExpr::Global {
+                id: 2,
+                name: "load".to_string(),
+                location: None,
+            }),
+            args: vec![RustIrExpr::Global {
+                id: 3,
+                name: "demo.source".to_string(),
+                location: None,
+            }],
+            location: None,
+        };
+        let schemas = vec![CgType::Adt {
+            name: "Option".to_string(),
+            constructors: vec![
+                ("None".to_string(), Vec::new()),
+                ("Some".to_string(), vec![CgType::Float]),
+            ],
+        }];
+        let mut schema_idx = 0;
+
+        inject_in_expr(&mut expr, &schemas, &mut schema_idx);
+
+        assert_eq!(schema_idx, 1);
+        let RustIrExpr::Call { func, args, .. } = expr else {
+            panic!("expected load call");
+        };
+        assert!(matches!(
+            func.as_ref(),
+            RustIrExpr::Global { name, .. } if name == "load"
+        ));
+        let wrapped_source = args.into_iter().next().expect("load arg");
+        let RustIrExpr::Call {
+            func: wrapped_func,
+            args: wrapped_args,
+            ..
+        } = wrapped_source
+        else {
+            panic!("expected wrapped source argument");
+        };
+        assert!(matches!(
+            wrapped_func.as_ref(),
+            RustIrExpr::Global { name, .. } if name == "__set_source_schema"
+        ));
+        assert_eq!(wrapped_args.len(), 2);
+        let RustIrExpr::LitString {
+            text: schema_json, ..
+        } = &wrapped_args[0]
+        else {
+            panic!("expected schema JSON string");
+        };
+        let parsed_schema: crate::runtime::json_schema::JsonSchema =
+            serde_json::from_str(schema_json).expect("valid schema json");
+        assert_eq!(
+            parsed_schema,
+            crate::runtime::json_schema::JsonSchema::Option(Box::new(
+                crate::runtime::json_schema::JsonSchema::Float,
+            ))
+        );
+        assert!(matches!(
+            &wrapped_args[1],
+            RustIrExpr::Global { name, .. } if name == "demo.source"
+        ));
+    }
+
+    #[test]
+    fn inject_source_schemas_uses_fully_qualified_def_name_fallback() {
+        let mut modules = vec![rust_ir::RustIrModule {
+            name: "demo.main".to_string(),
+            defs: vec![rust_ir::RustIrDef {
+                name: "demo.main.parseValue".to_string(),
+                expr: RustIrExpr::Call {
+                    id: 1,
+                    func: Box::new(RustIrExpr::Builtin {
+                        id: 2,
+                        builtin: "load".to_string(),
+                        location: None,
+                    }),
+                    args: vec![RustIrExpr::Global {
+                        id: 3,
+                        name: "demo.source".to_string(),
+                        location: None,
+                    }],
+                    location: None,
+                },
+                cg_type: None,
+            }],
+        }];
+        let source_schemas = HashMap::from([(
+            "demo.main.parseValue".to_string(),
+            vec![CgType::Adt {
+                name: "Option".to_string(),
+                constructors: vec![
+                    ("None".to_string(), Vec::new()),
+                    ("Some".to_string(), vec![CgType::Float]),
+                ],
+            }],
+        )]);
+
+        inject_source_schemas(&mut modules, &source_schemas);
+
+        let expr = &modules[0].defs[0].expr;
+        let RustIrExpr::Call { args, .. } = expr else {
+            panic!("expected load call");
+        };
+        let RustIrExpr::Call {
+            func: wrapped_func, ..
+        } = &args[0]
+        else {
+            panic!("expected wrapped load argument");
+        };
+        assert!(matches!(
+            wrapped_func.as_ref(),
+            RustIrExpr::Global { name, .. } if name == "__set_source_schema"
+        ));
+    }
+
+    #[test]
+    fn jit_load_wraps_nested_optional_float_from_file_json() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "aivi-source-schema-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("unix epoch")
+                .as_nanos()
+        ));
+        std::fs::write(
+            &temp_path,
+            r#"{"entities":{"orders":[{"totalAmount":42.5}]}}"#,
+        )
+        .expect("write fixture");
+
+        let source = format!(
+            r#"
+module Test
+
+Order = {{ totalAmount: Option Float }}
+Entities = {{ orders: List Order }}
+Parsed = {{ entities: Entities }}
+
+parse : Effect Text Parsed
+parse = do Effect {{
+  decoded <- attempt (load (file.json "{}"))
+  decoded match
+    | Ok value => pure value
+    | Err _ => fail "decode failed"
+}}
+"#,
+            temp_path.to_string_lossy()
+        );
+
+        let (modules, parse_diags) = parse_modules(Path::new("test.aivi"), &source);
+        assert!(
+            !crate::diagnostics::file_diagnostics_have_errors(&parse_diags),
+            "unexpected parse errors: {parse_diags:?}"
+        );
+
+        let infer_result = aivi_core::infer_value_types_full(&modules);
+        let non_embedded: Vec<_> = infer_result
+            .diagnostics
+            .iter()
+            .filter(|d| !d.path.starts_with("<embedded:"))
+            .cloned()
+            .collect();
+        assert!(
+            !crate::diagnostics::file_diagnostics_have_errors(&non_embedded),
+            "unexpected infer errors: {non_embedded:?}"
+        );
+        assert!(
+            matches!(
+                infer_result.source_schemas.get("Test.parse"),
+                Some(schemas)
+                    if matches!(
+                        schemas.as_slice(),
+                        [CgType::Record(fields)]
+                            if matches!(
+                                fields.get("entities"),
+                                Some(CgType::Record(entity_fields))
+                                    if matches!(
+                                        entity_fields.get("orders"),
+                                        Some(CgType::ListOf(item))
+                                            if matches!(
+                                                item.as_ref(),
+                                                CgType::Record(order_fields)
+                                                    if matches!(
+                                                        order_fields.get("totalAmount"),
+                                                        Some(CgType::Adt { name, constructors })
+                                                            if name == "Option"
+                                                                && matches!(
+                                                                    constructors.as_slice(),
+                                                                    [(none_name, none_args), (some_name, some_args)]
+                                                                        if none_name == "None"
+                                                                            && none_args.is_empty()
+                                                                            && some_name == "Some"
+                                                                            && matches!(some_args.as_slice(), [CgType::Float])
+                                                                )
+                                                    )
+                                            )
+                                    )
+                            )
+                    )
+            ),
+            "unexpected source schemas map: {:?}",
+            infer_result.source_schemas
+        );
+
+        let program = crate::desugar_modules(&modules);
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            infer_result.cg_types,
+            infer_result.monomorph_plan,
+            infer_result.source_schemas,
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        let value = runtime
+            .ctx
+            .globals
+            .get("Test.parse")
+            .expect("parse binding should exist");
+        let effect = runtime.force_value(value).unwrap_or_else(|err| {
+            panic!(
+                "force parse binding: {}",
+                crate::runtime::format_runtime_error(err)
+            )
+        });
+        let result = runtime.run_effect_value(effect).unwrap_or_else(|err| {
+            panic!(
+                "run parse effect: {}",
+                crate::runtime::format_runtime_error(err)
+            )
+        });
+
+        std::fs::remove_file(&temp_path).expect("remove fixture");
+
+        assert!(matches!(
+            result,
+            Value::Record(fields)
+                if matches!(
+                    fields.get("entities"),
+                    Some(Value::Record(entity_fields))
+                        if matches!(
+                            entity_fields.get("orders"),
+                            Some(Value::List(items))
+                                if matches!(
+                                    &items.as_ref()[..],
+                                    [Value::Record(order_fields)]
+                                        if matches!(
+                                            order_fields.get("totalAmount"),
+                                            Some(Value::Constructor { name, args })
+                                                if name == "Some"
+                                                    && matches!(args.as_slice(), [Value::Float(amount)] if (*amount - 42.5).abs() < 0.0001)
+                                        )
+                                )
+                        )
+                )
+        ));
 
         drop(module);
     }

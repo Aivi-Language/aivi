@@ -260,6 +260,9 @@ fn parse_runtime_columns(columns: Value) -> Result<Vec<RuntimeColumn>, RuntimeEr
             Value::Constructor { name, args } if args.is_empty() && name == "IntType" => {
                 QueryColumnType::Int
             }
+            Value::Constructor { name, args } if args.is_empty() && name == "FloatType" => {
+                QueryColumnType::Float
+            }
             Value::Constructor { name, args } if args.is_empty() && name == "BoolType" => {
                 QueryColumnType::Bool
             }
@@ -913,6 +916,34 @@ mod query_tests {
             }
             _ => panic!("unexpected error type"),
         }
+    }
+
+    #[test]
+    fn parse_runtime_columns_accepts_float_type() {
+        let columns = list_value(vec![Value::Record(Arc::new(HashMap::from([
+            ("name".to_string(), Value::Text("amount".to_string())),
+            (
+                "type".to_string(),
+                Value::Constructor {
+                    name: "FloatType".to_string(),
+                    args: Vec::new(),
+                },
+            ),
+            ("constraints".to_string(), list_value(Vec::new())),
+            (
+                "default".to_string(),
+                Value::Constructor {
+                    name: "None".to_string(),
+                    args: Vec::new(),
+                },
+            ),
+        ])))]);
+
+        let parsed = parse_runtime_columns(columns)
+            .unwrap_or_else(|_| panic!("FloatType column should parse"));
+
+        assert_eq!(parsed.len(), 1);
+        assert!(matches!(parsed[0].kind, QueryColumnType::Float));
     }
 
     #[test]

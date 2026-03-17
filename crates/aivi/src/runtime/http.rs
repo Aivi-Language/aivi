@@ -8,6 +8,7 @@ use aivi_http_server::{
 };
 
 use super::builtins::builtin;
+use super::builtins::json_value_to_text;
 use super::{
     format_runtime_error, format_value, CancelToken, EffectValue, Runtime, RuntimeContext,
     RuntimeError, Value,
@@ -262,14 +263,23 @@ fn response_from_value(value: Value) -> Result<AiviResponse, AiviHttpError> {
             })
         }
     };
-    let body = match record.get("body") {
-        Some(Value::List(items)) => list_value_to_bytes(items.as_ref())?,
-        _ => {
+    let (body, default_content_type) = match record.get("body") {
+        Some(value) => response_body_from_value(value)?,
+        None => {
             return Err(AiviHttpError {
-                message: "Response.body must be List Int".to_string(),
+                message: "Response.body must be ResponseBody".to_string(),
             })
         }
     };
+    let mut headers = headers;
+    if let Some(content_type) = default_content_type {
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+        {
+            headers.push(("Content-Type".to_string(), content_type.to_string()));
+        }
+    }
     Ok(AiviResponse {
         status: status as u16,
         headers,
@@ -349,6 +359,58 @@ fn list_value_to_bytes(values: &[Value]) -> Result<Vec<u8>, AiviHttpError> {
         bytes.push(int as u8);
     }
     Ok(bytes)
+}
+
+fn response_body_from_value(value: &Value) -> Result<(Vec<u8>, Option<&'static str>), AiviHttpError> {
+    match value {
+        Value::Constructor { name, args } if name == "RawBytes" && args.len() == 1 => {
+            match args.first() {
+                Some(Value::List(items)) => Ok((list_value_to_bytes(items.as_ref())?, None)),
+                _ => Err(AiviHttpError {
+                    message: "Response.body RawBytes expects List Int".to_string(),
+                }),
+            }
+        }
+        Value::Constructor { name, args } if name == "Plain" && args.len() == 1 => {
+            match args.first() {
+                Some(Value::Text(text)) => Ok((text.as_bytes().to_vec(), None)),
+                _ => Err(AiviHttpError {
+                    message: "Response.body Plain expects Text".to_string(),
+                }),
+            }
+        }
+        Value::Constructor { name, args } if name == "Form" && args.len() == 1 => {
+            match args.first() {
+                Some(Value::List(items)) => {
+                    let pairs = headers_from_value(items.as_ref())?;
+                    let encoded = url::form_urlencoded::Serializer::new(String::new())
+                        .extend_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                        .finish();
+                    Ok((encoded.into_bytes(), None))
+                }
+                _ => Err(AiviHttpError {
+                    message: "Response.body Form expects List Header".to_string(),
+                }),
+            }
+        }
+        Value::Constructor { name, args } if name == "Json" && args.len() == 1 => {
+            let text = json_value_to_text(&args[0]).map_err(runtime_error_to_http_error)?;
+            Ok((text.into_bytes(), Some("application/json")))
+        }
+        // Backward compatibility for existing byte-list responses.
+        Value::List(items) => Ok((list_value_to_bytes(items.as_ref())?, None)),
+        // Be tolerant of direct values that missed elaboration.
+        Value::Text(text) => Ok((text.as_bytes().to_vec(), None)),
+        Value::Record(_) => {
+            let text = json_value_to_text(value).map_err(runtime_error_to_http_error)?;
+            Ok((text.into_bytes(), Some("application/json")))
+        }
+        _ => Err(AiviHttpError {
+            message:
+                "Response.body must be ResponseBody (RawBytes List Int, Plain Text, Form List Header, or Json JsonValue)"
+                    .to_string(),
+        }),
+    }
 }
 
 fn ws_message_to_value(msg: AiviWsMessage) -> Value {

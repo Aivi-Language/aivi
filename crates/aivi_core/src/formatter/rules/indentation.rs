@@ -564,6 +564,7 @@
     let mut rendered_lines: Vec<String> = Vec::new();
     let mut blank_run = 0usize;
     let mut pipe_block_stack: Vec<(usize, isize)> = Vec::new();
+    let mut pipe_block_break_after_blank = false;
     let mut pipeop_block_base_indent: Option<usize> = None;
     let mut pipeop_block_base_depth: Option<isize> = None;
     let mut rhs_next_line_indent: Option<usize> = None;
@@ -574,6 +575,7 @@
     let mut arm_rhs_active = false;
     let mut pipeop_seed_indent: Option<usize> = None;
     let mut prev_non_blank_last_token: Option<String> = None;
+    let mut prev_non_blank_was_arm_line = false;
     // Delimiter groups opened at end-of-line (`{`/`(`/`[`) that should cause a hanging indent
     // until the matching close delimiter starts a line. We also keep the opener line's effective
     // indentation to align the corresponding closer and contents.
@@ -774,6 +776,9 @@
                 continue;
             }
             rendered_lines.push(String::new());
+            if !pipe_block_stack.is_empty() && prev_non_blank_was_arm_line && open_depth <= 1 {
+                pipe_block_break_after_blank = true;
+            }
             // Keep continuation state across blank lines so indentation inside continuation blocks
             // and delimiter groups stays stable when the author uses spacing for readability.
             rhs_next_line_indent = None;
@@ -810,6 +815,7 @@
             pipeop_seed_indent = None;
             if_stack.clear();
             rhs_decorator_pending = false;
+            prev_non_blank_was_arm_line = false;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
             continue;
@@ -837,6 +843,7 @@
                 if_stack.clear();
             }
             rhs_decorator_pending = false;
+            prev_non_blank_was_arm_line = false;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
             continue;
@@ -896,6 +903,19 @@
         let starts_with_pipeop = state.tokens[first_idx].text == "|>";
         let is_arm_line =
             starts_with_pipe && find_top_level_token(&state.tokens, "=>", first_idx + 1).is_some();
+        if pipe_block_break_after_blank {
+            if !starts_with_pipe
+                && !starts_with_pipeop
+                && matches!(
+                    state.top_context,
+                    Some(ContextKind::Effect | ContextKind::Generate | ContextKind::Resource)
+                )
+            {
+                pipe_block_stack.clear();
+                arm_rhs_active = false;
+            }
+            pipe_block_break_after_blank = false;
+        }
         let should_start_pipe_block = starts_with_pipe
             && matches!(
                 prev_non_blank_last_token.as_deref(),
@@ -1184,6 +1204,7 @@
                     }
                 }
                 update_open_depth(&mut open_depth, &state.tokens);
+                prev_non_blank_was_arm_line = false;
                 continue;
             }
         }
@@ -1266,6 +1287,7 @@
                     }
                 }
                 update_open_depth(&mut open_depth, &state.tokens);
+                prev_non_blank_was_arm_line = false;
                 continue;
             }
         }
@@ -1358,6 +1380,7 @@
                         }
                     }
                     update_open_depth(&mut open_depth, &state.tokens);
+                    prev_non_blank_was_arm_line = true;
                     continue;
                 }
             }
@@ -1441,6 +1464,7 @@
                     }
                 }
                 update_open_depth(&mut open_depth, &state.tokens);
+                prev_non_blank_was_arm_line = false;
                 continue;
             }
         }
@@ -1585,8 +1609,9 @@
                             rhs_block_base_indent = Some(line_indent_len);
                             rhs_block_base_depth = Some(line_depth);
                         }
-                    }
+                            }
                             update_open_depth(&mut open_depth, &state.tokens);
+                            prev_non_blank_was_arm_line = false;
                             continue;
                         }
                     }
@@ -1692,6 +1717,7 @@
         if (line_starts_mock && mock_block_stack.is_empty()) || line_ends_mock {
             mock_block_stack.push(effective_indent_len);
         }
+        prev_non_blank_was_arm_line = is_arm_line;
     }
 
     // Strip leading blank lines to keep output stable when inputs start with a newline.

@@ -1,5 +1,14 @@
-usersRows : Source Db (List User)
-usersRows = db.source {
-  table: usersTable
-  schema: source.schema.table usersTable
+activeUsers : Query User
+activeUsers = do Query {
+  user <- db.from userTable
+  db.guard user.active
+  db.queryOf user
+}
+
+main = do Effect {
+  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
+  _      <- db.runMigrationsOn dbConn [userTable]
+  users  <- db.runQueryOn dbConn activeUsers
+  _      <- db.close dbConn
+  pure users
 }

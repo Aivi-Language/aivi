@@ -1524,8 +1524,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let db_config_ty = Type::con("DbConfig");
     let db_connection_ty = Type::con("DbConnection");
     let table_ty = Type::con("Table").app(vec![Type::Var(db_row)]);
-    let pred_ty = Type::con("Pred").app(vec![Type::Var(db_row)]);
-    let patch_ty = Type::con("Patch").app(vec![Type::Var(db_row)]);
     let delta_ty = Type::con("Delta").app(vec![Type::Var(db_row)]);
     let list_table_ty = Type::con("List").app(vec![table_ty.clone()]);
     let list_row_ty = Type::con("List").app(vec![Type::Var(db_row)]);
@@ -1746,37 +1744,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::Func(
                         Box::new(Type::con("List").app(vec![text_ty.clone()])),
                         Box::new(db_effect_unit_ty.clone()),
-                    )),
-                ),
-            ),
-            (
-                "ins".to_string(),
-                Type::Func(Box::new(Type::Var(db_row)), Box::new(delta_ty.clone())),
-            ),
-            (
-                "upd".to_string(),
-                Type::Func(
-                    Box::new(pred_ty.clone()),
-                    Box::new(Type::Func(Box::new(patch_ty), Box::new(delta_ty.clone()))),
-                ),
-            ),
-            (
-                "del".to_string(),
-                Type::Func(Box::new(pred_ty.clone()), Box::new(delta_ty.clone())),
-            ),
-            (
-                "ups".to_string(),
-                Type::Func(
-                    Box::new(pred_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(Type::Var(db_row)),
-                        Box::new(Type::Func(
-                            Box::new(Type::Func(
-                                Box::new(Type::Var(db_row)),
-                                Box::new(Type::Var(db_row)),
-                            )),
-                            Box::new(delta_ty.clone()),
-                        )),
                     )),
                 ),
             ),

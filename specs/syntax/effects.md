@@ -87,7 +87,7 @@ A `do Effect { ... }` block lets you write effectful code in the same order the 
 
 Inside a `do Effect { ... }` block:
 
-- `x <- eff` runs an `Effect` and binds its result to `x`
+- `x <- eff` runs an `Effect` and binds its result to `x`; this accepts both fallible `Effect E A` values and infallible `Effect A` values such as `calendar.now`
 - `x = e` is a pure local binding and does not run effects
 - `x <- res` acquires a `Resource`; see [Resources](resources.md)
 - branching uses ordinary expressions such as `if` and `match`
@@ -255,4 +255,3 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 `given cond or failExpr` asserts a precondition. If `cond` is false, `failExpr` is evaluated, typically as a `fail ...` call:
 
 <<< ../snippets/from_md/syntax/effects/given.aivi{aivi}
-

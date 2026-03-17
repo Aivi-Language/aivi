@@ -3,18 +3,21 @@ pub const MODULE_NAME: &str = "aivi.net.httpServer";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.net.httpServer
-export Header, Request, Response, ServerConfig
+export Header, Request, Response, ResponseBody, ServerConfig
 export HttpError, WsError, WsMessage, ServerReply
+export RawBytes, Plain, Form, Json
 export TextMsg, BinaryMsg, Ping, Pong, Close
 export Server, WebSocket
 export Http, Ws
 export listen, stop, wsRecv, wsSend, wsClose
 
 use aivi
+use aivi.json (JsonValue)
 
 Header = { name: Text, value: Text }
 Request = { method: Text, path: Text, headers: List Header, body: List Int, remoteAddr: Option Text }
-Response = { status: Int, headers: List Header, body: List Int }
+ResponseBody = RawBytes (List Int) | Plain Text | Form (List Header) | Json JsonValue
+Response = { status: Int, headers: List Header, body: ResponseBody }
 ServerConfig = { address: Text }
 HttpError = { message: Text }
 WsError = { message: Text }

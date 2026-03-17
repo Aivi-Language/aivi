@@ -77,6 +77,106 @@ x = 1 + 2
 }
 
 #[test]
+fn infer_records_source_schema_for_load_with_optional_float_field() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+Parsed = { amount: Option Float }
+
+parse : Effect Text Parsed
+parse = do Effect {
+  value <- load (file.json "fixture.json")
+  pure value
+}
+"#,
+    );
+    let non_embedded: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| !d.path.starts_with("<embedded:"))
+        .cloned()
+        .collect();
+    assert!(
+        !has_errors(&non_embedded),
+        "unexpected errors: {non_embedded:?}"
+    );
+    let schemas = result
+        .source_schemas
+        .get("Test.parse")
+        .expect("expected source schema for Test.parse");
+    assert_eq!(schemas.len(), 1);
+    assert_eq!(
+        schemas[0],
+        crate::cg_type::CgType::Record(std::collections::BTreeMap::from([(
+            "amount".to_string(),
+            crate::cg_type::CgType::Adt {
+                name: "Option".to_string(),
+                constructors: vec![
+                    ("None".to_string(), Vec::new()),
+                    ("Some".to_string(), vec![crate::cg_type::CgType::Float]),
+                ],
+            },
+        )]))
+    );
+}
+
+#[test]
+fn infer_records_source_schema_for_load_with_nested_optional_float_aliases() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+Order = { totalAmount: Option Float }
+Entities = { orders: List Order }
+Parsed = { entities: Entities }
+
+parse : Effect Text Parsed
+parse = do Effect {
+  value <- load (file.json "fixture.json")
+  pure value
+}
+"#,
+    );
+    let non_embedded: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| !d.path.starts_with("<embedded:"))
+        .cloned()
+        .collect();
+    assert!(
+        !has_errors(&non_embedded),
+        "unexpected errors: {non_embedded:?}"
+    );
+    let schemas = result
+        .source_schemas
+        .get("Test.parse")
+        .expect("expected source schema for Test.parse");
+    assert_eq!(schemas.len(), 1);
+    assert_eq!(
+        schemas[0],
+        crate::cg_type::CgType::Record(std::collections::BTreeMap::from([(
+            "entities".to_string(),
+            crate::cg_type::CgType::Record(std::collections::BTreeMap::from([(
+                "orders".to_string(),
+                crate::cg_type::CgType::ListOf(Box::new(crate::cg_type::CgType::Record(
+                    std::collections::BTreeMap::from([(
+                        "totalAmount".to_string(),
+                        crate::cg_type::CgType::Adt {
+                            name: "Option".to_string(),
+                            constructors: vec![
+                                ("None".to_string(), Vec::new()),
+                                ("Some".to_string(), vec![crate::cg_type::CgType::Float]),
+                            ],
+                        },
+                    )]),
+                ))),
+            )])),
+        )]))
+    );
+}
+
+#[test]
 fn lambda_param_use_site_has_span_type() {
     // `event` is used in the body of the lambda — the use-site span must be
     // present in span_types so that LSP hover can resolve its type.

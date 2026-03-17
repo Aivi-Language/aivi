@@ -3,7 +3,20 @@ module integrationTests.stdlib.aivi.database.queryDsl
 
 use aivi
 use aivi.testing
-use aivi.database
+use aivi.database (
+  Table, IntType, BoolType, Varchar,
+  AutoIncrement, NotNull,
+  DefaultBool,
+  Sqlite,
+  DbConnection, DbError,
+  Query,
+  Insert,
+  emptyQuery,
+  table, connect, close,
+  runMigrationsOn, applyDeltaOn, runQueryOn,
+  from, where, select, queryOf, guard, orderBy, limit, offset, count, exists,
+  configure, runMigrations, applyDelta, runQuery
+)
 
 // ── shared schema ──────────────────────────────────────────────────────────
 
@@ -19,9 +32,9 @@ productTable = table "products" [
 
 seedProducts : DbConnection -> Effect DbError Unit
 seedProducts = conn => do Effect {
-  _ <- applyDeltaOn conn productTable (ins { id: 1, name: "Widget", price: 10, active: True })
-  _ <- applyDeltaOn conn productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
-  _ <- applyDeltaOn conn productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  _ <- applyDeltaOn conn productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
+  _ <- applyDeltaOn conn productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
+  _ <- applyDeltaOn conn productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
   pure Unit
 }
 
@@ -358,8 +371,8 @@ orderTable = table "orders" [
 
 seedOrders : DbConnection -> Effect DbError Unit
 seedOrders = conn => do Effect {
-  _ <- applyDeltaOn conn orderTable (ins { id: 1, productId: 1, qty: 5 })
-  _ <- applyDeltaOn conn orderTable (ins { id: 2, productId: 3, qty: 2 })
+  _ <- applyDeltaOn conn orderTable (Insert { id: 1, productId: 1, qty: 5 })
+  _ <- applyDeltaOn conn orderTable (Insert { id: 2, productId: 3, qty: 2 })
   pure Unit
 }
 
@@ -449,9 +462,9 @@ do_query_join_projects_record = do Effect {
 run_query_ambient_all_rows = do Effect {
   _       <- configure { driver: Sqlite, url: ":memory:" }
   _       <- runMigrations [productTable]
-  _       <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
-  _       <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
-  _       <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  _       <- applyDelta productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
+  _       <- applyDelta productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
+  _       <- applyDelta productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
   results <- runQuery (from productTable)
   assertEq (List.length results) 3
 }
@@ -460,9 +473,9 @@ run_query_ambient_all_rows = do Effect {
 run_query_ambient_with_filter = do Effect {
   _       <- configure { driver: Sqlite, url: ":memory:" }
   _       <- runMigrations [productTable]
-  _       <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
-  _       <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
-  _       <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  _       <- applyDelta productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
+  _       <- applyDelta productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
+  _       <- applyDelta productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
   results <- runQuery (where active (from productTable))
   assertEq (List.length results) 2
 }
@@ -471,9 +484,9 @@ run_query_ambient_with_filter = do Effect {
 run_query_ambient_do_query = do Effect {
   _     <- configure { driver: Sqlite, url: ":memory:" }
   _     <- runMigrations [productTable]
-  _     <- applyDelta productTable (ins { id: 1, name: "Widget", price: 10, active: True })
-  _     <- applyDelta productTable (ins { id: 2, name: "Gadget", price: 20, active: False })
-  _     <- applyDelta productTable (ins { id: 3, name: "Doohick", price: 15, active: True })
+  _     <- applyDelta productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
+  _     <- applyDelta productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
+  _     <- applyDelta productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
   names <- runQuery (do Query {
       p     <- from productTable
       guard p.active
@@ -494,8 +507,8 @@ customerTable = table "customers" [
 
 seedCustomers : DbConnection -> Effect DbError Unit
 seedCustomers = conn => do Effect {
-  _ <- applyDeltaOn conn customerTable (ins { id: 1, email: Some "a@example.com" })
-  _ <- applyDeltaOn conn customerTable (ins { id: 2, email: None })
+  _ <- applyDeltaOn conn customerTable (Insert { id: 1, email: Some "a@example.com" })
+  _ <- applyDeltaOn conn customerTable (Insert { id: 2, email: None })
   pure Unit
 }
 

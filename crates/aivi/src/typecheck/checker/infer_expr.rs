@@ -299,14 +299,17 @@ impl TypeChecker {
                         found: None,
                     });
                 };
-
                 let base_subst = self.subst.clone();
-                let mut selected: Option<(Type, std::collections::HashMap<TypeVarId, Type>)> =
-                    None;
+                let mut selected: Option<(
+                    Type,
+                    std::collections::HashMap<TypeVarId, Type>,
+                    Type,
+                )> = None;
 
                 for scheme in candidates {
                     self.subst = base_subst.clone();
                     let mut func_ty = self.instantiate(scheme);
+                    let original_func_ty = func_ty.clone();
                     let mut ok = true;
                     for (arg_ty, arg_expr) in arg_tys.iter().zip(args.iter()) {
                         // Structurally check record field sets before unification.
@@ -364,11 +367,25 @@ impl TypeChecker {
                             found: None,
                         });
                     }
-                    selected = Some((applied, self.subst.clone()));
+                    selected = Some((applied, self.subst.clone(), original_func_ty));
                 }
 
-                if let Some((ty, subst)) = selected {
+                if let Some((ty, subst, original_func_ty)) = selected {
                     self.subst = subst;
+                    if name.name == "load" {
+                        let resolved = self.apply(original_func_ty);
+                        if let Type::Func(ref param, _) = resolved {
+                            if let Type::Con(ref source_name, ref sargs) = **param {
+                                if source_name == "Source" && sargs.len() == 2 {
+                                    self.load_source_schemas.push((
+                                        self.current_module_name.clone(),
+                                        self.current_def_name.clone(),
+                                        sargs[1].clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
                     return Ok(ty);
                 }
 
@@ -397,9 +414,10 @@ impl TypeChecker {
         } else {
             None
         };
+        let is_load_call = matches!(func, Expr::Ident(ident) if ident.name == "load");
 
         let mut func_ty = self.infer_expr(func, env)?;
-        let original_func_ty = if poly_call_info.is_some() {
+        let original_func_ty = if poly_call_info.is_some() || is_load_call {
             Some(func_ty.clone())
         } else {
             None
@@ -434,30 +452,26 @@ impl TypeChecker {
             func_ty = result_ty;
         }
         self.validate_query_call_args(func, args, &resolved_arg_tys, env)?;
-        if let (Some(qname), Some(orig_ty)) = (poly_call_info, original_func_ty) {
+        if let Some(orig_ty) = original_func_ty {
             let resolved = self.apply(orig_ty.clone());
             // Record source schemas for `load` calls: extract the inner type `A`
             // from `Source K A → Effect (SourceError K) A`.
-            if let Expr::Ident(ref ident) = func {
-                if ident.name == "load" {
-                    if let Type::Func(ref param, _) = resolved {
-                        if let Type::Con(ref name, ref sargs) = **param {
-                            if name == "Source" && sargs.len() == 2 {
-                                let env_ref: &crate::typecheck::types::TypeEnv = env;
-                                let inner_cg = self.type_to_cg_type(&sargs[1], env_ref);
-                                if inner_cg != CgType::Dynamic && inner_cg.is_closed() {
-                                    self.load_source_schemas.push((
-                                        self.current_module_name.clone(),
-                                        self.current_def_name.clone(),
-                                        inner_cg,
-                                    ));
-                                }
-                            }
+            if is_load_call {
+                if let Type::Func(ref param, _) = resolved {
+                    if let Type::Con(ref name, ref sargs) = **param {
+                        if name == "Source" && sargs.len() == 2 {
+                            self.load_source_schemas.push((
+                                self.current_module_name.clone(),
+                                self.current_def_name.clone(),
+                                sargs[1].clone(),
+                            ));
                         }
                     }
                 }
             }
-            self.poly_instantiations.push((qname, resolved));
+            if let Some(qname) = poly_call_info {
+                self.poly_instantiations.push((qname, resolved));
+            }
         }
         Ok(func_ty)
     }

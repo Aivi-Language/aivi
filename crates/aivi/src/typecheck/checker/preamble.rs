@@ -57,10 +57,11 @@ pub(super) struct TypeChecker {
     pub(super) compact_subst_between_defs: bool,
     /// Name of the definition currently being type-checked (for source schema tracking).
     pub(super) current_def_name: String,
-    /// Records `(module, def_name, inner_cg_type)` for each `load` call site where
-    /// the inner type `A` of `Source K A` is concrete. Used to inject JSON validation
-    /// schemas at source boundaries.
-    load_source_schemas: Vec<(String, String, CgType)>,
+    /// Records `(module, def_name, inner_type)` for each `load` call site.
+    /// The inner type `A` of `Source K A` may still contain type variables when
+    /// the call is first inferred, so it is lowered to `CgType` only after the
+    /// surrounding definition has finished constraining it.
+    load_source_schemas: Vec<(String, String, Type)>,
     /// Maps bare type names to their unique qualified names from the global type universe.
     /// Built from `global_type_constructors` keys: e.g. `"DateTime"` → `"aivi.calendar.DateTime"`.
     /// Seeded into `type_name_bindings` on every `reset_module_context` so that bare type names
@@ -330,9 +331,48 @@ impl TypeChecker {
         std::mem::take(&mut self.poly_instantiations)
     }
 
-    /// Drain `load` call-site source schemas for the current module.
-    pub(super) fn take_load_source_schemas(&mut self) -> Vec<(String, String, CgType)> {
+    /// Drain `load` call-site source schemas for the current module, applying final
+    /// substitutions and lowering only the concrete ones to `CgType`.
+    pub(super) fn take_load_source_schemas(
+        &mut self,
+        env: &TypeEnv,
+    ) -> Vec<(String, String, crate::cg_type::CgType)> {
         std::mem::take(&mut self.load_source_schemas)
+            .into_iter()
+            .filter_map(|(module_name, def_name, inner_ty)| {
+                let resolved = self.apply(inner_ty);
+                let inner_cg = self.type_to_cg_type(&resolved, env);
+                if std::env::var("AIVI_DEBUG_LOAD_SCHEMA").is_ok_and(|v| v == "1") {
+                    eprintln!(
+                        "[LOAD_SCHEMA_DEBUG] drain {}.{} resolved={} cg={:?}",
+                        module_name,
+                        def_name,
+                        self.type_to_string(&resolved),
+                        inner_cg
+                    );
+                }
+                (inner_cg != crate::cg_type::CgType::Dynamic && inner_cg.is_closed())
+                    .then_some((module_name, def_name, inner_cg))
+            })
+            .collect()
+    }
+
+    pub(super) fn resolve_current_def_load_source_schemas(&mut self) {
+        let current_module_name = self.current_module_name.clone();
+        let current_def_name = self.current_def_name.clone();
+        for idx in 0..self.load_source_schemas.len() {
+            let should_resolve = {
+                let (module_name, def_name, _) = &self.load_source_schemas[idx];
+                *module_name == current_module_name && *def_name == current_def_name
+            };
+            if should_resolve {
+                let resolved = {
+                    let (_, _, inner_ty) = &self.load_source_schemas[idx];
+                    self.apply(inner_ty.clone())
+                };
+                self.load_source_schemas[idx].2 = resolved;
+            }
+        }
     }
 
     /// Drain the recorded span→type pairs for the current module, applying final substitutions

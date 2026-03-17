@@ -34,4 +34,5 @@ mod url_http;
 mod util;
 
 pub(crate) use core::register_builtins;
+pub(crate) use json::json_value_to_text;
 pub(crate) use util::builtin;

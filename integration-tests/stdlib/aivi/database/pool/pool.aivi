@@ -74,7 +74,7 @@ pooled_connections_isolate_uncommitted_writes = do Effect {
 
   outerResult <- Pool.withConn pool (conn1 => do Effect {
       _           <- Db.beginTxOn conn1
-      _           <- Db.applyDeltaOn conn1 users (Db.ins { id: 1, name: "Outer" })
+      _           <- Db.applyDeltaOn conn1 users (Db.Insert { id: 1, name: "Outer" })
 
       beforeResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
       rowsBefore   <- expectPoolOk beforeResult
