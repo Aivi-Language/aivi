@@ -81,8 +81,8 @@ option_functional = do Effect {
     | Some n => assertEq n 1
     | None   => assert False
 
-    none = None
-    assertEq none None
+  none = None
+  assertEq none None
 }
 
 @test "patch"
@@ -99,10 +99,10 @@ result_functional = do Effect {
     | Ok n  => assertEq n 1
     | Err _ => assert False
 
-    err = Err "nope"
-    err match
-      | Ok _  => assert False
-      | Err e => assertEq e "nope"
+  err = Err "nope"
+  err match
+    | Ok _  => assert False
+    | Err e => assertEq e "nope"
 }
 
 @test "constructor introspection"
@@ -120,10 +120,10 @@ attempt_functional = do Effect {
     | Ok n  => assertEq n 42
     | Err _ => assert False
 
-    bad <- attempt (fail "boom")
-    bad match
-      | Ok _  => assert False
-      | Err e => assertEq e "boom"
+  bad <- attempt (fail "boom")
+  bad match
+    | Ok _  => assert False
+    | Err e => assertEq e "boom"
 }
 
 @test "text"

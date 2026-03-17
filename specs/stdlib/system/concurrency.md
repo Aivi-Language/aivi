@@ -36,11 +36,11 @@ Two other shapes matter when you read the API below:
 | Function | What it does | When it helps |
 | --- | --- | --- |
 | **par** left right<br><code>Effect E A -> Effect E B -> Effect E (A, B)</code> | Runs both effects at the same time and returns both results. If either side fails, the combined effect fails. | Fetching two independent resources in parallel. |
-| **race** left right<br><code>Effect E A -> Effect E A -> Effect E A</code> | Starts both effects and keeps the one that completes first. The other one is cancelled. | Trying two mirrors or fallback services and taking the fastest response. |
+| **race** left right<br><code>Effect E A -> Effect E A -> Effect E A</code> | Starts both effects, returns the first result to complete, and cancels the other branch. | Trying two mirrors or fallback services and taking the fastest response. |
 | **scope** run<br><code>(Scope -> Effect E A) -> Effect E A</code> | Creates a structured scope for child tasks. When the scope ends, child work is cancelled with it instead of silently outliving the parent operation. | Any operation that starts background work you do not want to leak. |
 | **spawn** effect<br><code>Effect Text A -> Effect Text { join : Effect Text A, cancel : Effect Text Unit, isCancelled : Effect Text Bool }</code> | Starts an effect in the background and returns a task handle record. You can wait for the result with `join`, stop it with `cancel`, or inspect its state with `isCancelled`. | Long-running work such as polling, indexing, or background imports. |
 | **timeoutWith** ms timeoutError effect<br><code>Int -> E -> Effect E A -> Effect E A</code> | Runs `effect` with a time limit and fails with `timeoutError` if the timer wins. | Network calls or external processes that should not hang forever. |
-| **retry** attempts effect<br><code>Int -> Effect E A -> Effect E A</code> | Re-runs a failing effect up to `attempts` times. Use a positive attempt count. | Temporary failures such as flaky I/O. |
+| **retry** attempts effect<br><code>Int -> Effect E A -> Effect E A</code> | Re-runs a failing effect up to `attempts` times. Use a positive attempt count; non-positive counts fail immediately. | Temporary failures such as flaky I/O. |
 | **sleep** millis<br><code>Int -> Effect Text Unit</code> | Pauses the current effect for a number of milliseconds. | Backoff, scheduling, and simple polling loops. |
 
 ### The task handle returned by `spawn`
@@ -49,7 +49,7 @@ This module uses an ordinary record as the task handle:
 
 | Field | Type | What it does |
 | --- | --- | --- |
-| `join` | `Effect Text A` | Waits for the task to finish and returns its value, or fails with the same error as the task. |
+| `join` | `Effect Text A` | Waits for the task to finish and returns its value, or fails with the same error as the task. Calling `join` again returns the same settled result. |
 | `cancel` | `Effect Text Unit` | Requests cancellation. Cleanup code inside the task still runs. |
 | `isCancelled` | `Effect Text Bool` | Reports whether cancellation has been requested. |
 

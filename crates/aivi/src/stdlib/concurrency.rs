@@ -35,22 +35,22 @@ timeoutWith = concurrent.timeoutWith
 retry : Int -> Effect e a -> Effect e a
 retry = concurrent.retry
 
-make : a -> Effect e (Sender a, Receiver a)
+make : a -> Effect e (Send a, Recv a)
 make = _sample => channel.make Unit
 
-makeBounded : Int -> Effect e (Sender a, Receiver a)
+makeBounded : Int -> Effect e (Send a, Recv a)
 makeBounded = capacity => channel.makeBounded capacity
 
-send : Sender a -> a -> Effect e Unit
+send : Send a -> a -> Effect e Unit
 send = sender value => channel.send sender value
 
-recv : Receiver a -> Effect e (Result ChannelError a)
+recv : Recv a -> Effect e (Result ChannelError a)
 recv = receiver => channel.recv receiver
 
-close : Sender a -> Effect e Unit
+close : Send a -> Effect e Unit
 close = sender => channel.close sender
 
-fold : s -> (s -> a -> Effect e s) -> Receiver a -> Effect e s
+fold : s -> (s -> a -> Effect e s) -> Recv a -> Effect e s
 fold = init => fn => receiver => do Effect {
   loop state = init => {
     result <- channel.recv receiver
@@ -63,7 +63,7 @@ fold = init => fn => receiver => do Effect {
   }
 }
 
-forEach : Receiver a -> (a -> Effect e Unit) -> Effect e Unit
+forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit
 forEach = receiver => fn => do Effect {
   loop _ = Unit => {
     result <- channel.recv receiver

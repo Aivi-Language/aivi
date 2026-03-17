@@ -392,3 +392,58 @@ retry_failure = do Effect {
     | Err msg => assertEq msg "no"
     close tx
 }
+
+@test "spawn join repeats settled result"
+spawn_join_repeats_settled_result = do Effect {
+  task   <- spawn (pure 42)
+  first  <- task.join
+  second <- timeoutWith 100 "timeout" (task.join)
+  assertEq first 42
+  assertEq second 42
+}
+
+@test "par fails fast without waiting for cancelled branch"
+par_fails_fast = do Effect {
+  (tx, rx) <- make 0
+  blocked = _ => do Effect {
+    _ <- recv rx
+    pure 2
+  }
+
+  result <- attempt (timeoutWith 50 "timeout" (par (fail "boom") (blocked Unit)))
+  close tx
+  result match
+    | Ok _    => assert False
+    | Err msg => assertEq msg "boom"
+}
+
+@test "race returns winner without waiting for cancelled branch"
+race_returns_winner_immediately = do Effect {
+  (tx, rx) <- make 0
+  blocked = _ => do Effect {
+    _ <- recv rx
+    pure "blocked"
+  }
+
+  value <- timeoutWith 50 "timeout" (race (pure "winner") (blocked Unit))
+  close tx
+  assertEq value "winner"
+}
+
+@test "scope cancels spawned children on exit"
+scope_cancels_spawned_children_on_exit = do Effect {
+  (tx, rx) <- make 0
+  _        <- scope (_ => do Effect {
+      _        <- spawn (do Effect {
+          sleep 200
+          send tx 1
+      })
+      pure Unit
+  })
+
+  result <- attempt (timeoutWith 100 "timeout" (recv rx))
+  close tx
+  result match
+    | Ok _    => assert False
+    | Err msg => assertEq msg "timeout"
+}

@@ -33,9 +33,9 @@ fromListByBuildsExpectedShape = do Effect {
     | None   => leaf 0
     | Some t => t
 
-    assertEq (len (dfsPreorder t2)) 6
-    assertEq (len (dfsPostorder t2)) 6
-    assertEq (len (bfs t2)) 6
+  assertEq (len (dfsPreorder t2)) 6
+  assertEq (len (dfsPostorder t2)) 6
+  assertEq (len (bfs t2)) 6
 }
 
 @test "from list by rejects multiple roots"

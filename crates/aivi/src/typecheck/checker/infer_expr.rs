@@ -452,6 +452,8 @@ impl TypeChecker {
             func_ty = result_ty;
         }
         self.validate_query_call_args(func, args, &resolved_arg_tys, env)?;
+        let resolved_result_ty = self.apply(func_ty.clone());
+        self.record_source_constructor_schema(func, &resolved_result_ty);
         if let Some(orig_ty) = original_func_ty {
             let resolved = self.apply(orig_ty.clone());
             // Record source schemas for `load` calls: extract the inner type `A`
@@ -474,6 +476,56 @@ impl TypeChecker {
             }
         }
         Ok(func_ty)
+    }
+
+    fn record_source_constructor_schema(&mut self, func: &Expr, result_ty: &Type) {
+        if !matches!(
+            Self::file_source_constructor_name(func),
+            Some("file.json" | "file.csv")
+        ) {
+            return;
+        }
+        let Some(inner_ty) = Self::source_inner_type(result_ty) else {
+            return;
+        };
+        self.source_constructor_schemas.push((
+            self.current_module_name.clone(),
+            self.current_def_name.clone(),
+            inner_ty,
+        ));
+    }
+
+    fn file_source_constructor_name(expr: &Expr) -> Option<&'static str> {
+        match expr {
+            Expr::Ident(name) => match name.name.as_str() {
+                "file.json" => Some("file.json"),
+                "file.csv" => Some("file.csv"),
+                _ => None,
+            },
+            Expr::FieldAccess { base, field, .. } => match (&**base, field.name.as_str()) {
+                (Expr::Ident(base_name), "json") if base_name.name == "file" => Some("file.json"),
+                (Expr::Ident(base_name), "csv") if base_name.name == "file" => Some("file.csv"),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn source_inner_type(ty: &Type) -> Option<Type> {
+        match ty {
+            Type::Con(name, args) if name == "Source" && args.len() == 2 => Some(args[1].clone()),
+            Type::App(base, args) => match &**base {
+                Type::Con(name, existing)
+                    if name == "Source" && existing.len() + args.len() == 2 =>
+                {
+                    args.last()
+                        .cloned()
+                        .or_else(|| existing.last().cloned())
+                }
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     fn infer_arg_with_predicate_fallback(

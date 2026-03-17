@@ -119,7 +119,9 @@ fn build_compiled_query_value(plan_json: String, sources: Vec<Value>, captures: 
     make_query_value(run, Some(meta_plan_json), meta_sources, meta_captures)
 }
 
-fn extract_query_meta(query: &Value) -> Result<Option<(String, Vec<Value>, Vec<Value>)>, RuntimeError> {
+type QueryMeta = (String, Vec<Value>, Vec<Value>);
+
+fn extract_query_meta(query: &Value) -> Result<Option<QueryMeta>, RuntimeError> {
     let fields = expect_record(query.clone(), "database.query meta")?;
     let Some(meta_value) = fields.get(QUERY_META_FIELD) else {
         return Ok(None);
@@ -1157,6 +1159,7 @@ mod query_tests {
             },
             &schemas,
             &sql_aliases,
+            &[],
         )
         .unwrap_or_else(|_| panic!("row projection should render"));
 
@@ -1201,6 +1204,7 @@ mod query_tests {
                 alias: "p".to_string(),
             },
             &schemas,
+            &[],
             &row,
             0,
         )
@@ -1245,6 +1249,7 @@ mod query_tests {
                 },
             },
             &schemas,
+            &[],
             &[QueryCell::Null],
             0,
         )

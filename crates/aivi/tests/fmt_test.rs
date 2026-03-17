@@ -122,7 +122,7 @@ main = do Effect {
   assertEq aiSettingsOpen False
 }
 "#;
-    let expected = "main = do Effect {\n  aiSettingsOpen = shellState ->>\n    | Some AiSettingsSection => True\n    | _                      => False\n\n    assertEq aiSettingsOpen False\n}\n";
+    let expected = "main = do Effect {\n  aiSettingsOpen = shellState ->>\n    | Some AiSettingsSection => True\n    | _                      => False\n\n  assertEq aiSettingsOpen False\n}\n";
     assert_eq!(format_text(input), expected);
 }
 

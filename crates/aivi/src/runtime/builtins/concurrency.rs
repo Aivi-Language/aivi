@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use super::util::{builtin, expect_int};
@@ -201,7 +201,10 @@ fn spawn_effect(
 
 fn spawn_task(effect_value: Value, ctx: Arc<RuntimeContext>, parent: Arc<CancelToken>) -> Value {
     let cancel = CancelToken::child(parent);
-    let result = Arc::new(Mutex::new(None::<Result<Value, RuntimeError>>));
+    let result = Arc::new((
+        Mutex::new(None::<Result<Value, RuntimeError>>),
+        Condvar::new(),
+    ));
 
     {
         let result = result.clone();
@@ -209,8 +212,9 @@ fn spawn_task(effect_value: Value, ctx: Arc<RuntimeContext>, parent: Arc<CancelT
         std::thread::spawn(move || {
             let mut runtime = Runtime::new(ctx, cancel_for_thread);
             let output = runtime.run_effect_value(effect_value);
-            if let Ok(mut guard) = result.lock() {
+            if let Ok(mut guard) = result.0.lock() {
                 *guard = Some(output);
+                result.1.notify_all();
             }
         });
     }
@@ -224,13 +228,19 @@ fn spawn_task(effect_value: Value, ctx: Arc<RuntimeContext>, parent: Arc<CancelT
                 move |runtime| loop {
                     runtime.check_cancelled()?;
                     let mut guard = result
+                        .0
                         .lock()
                         .map_err(|_| RuntimeError::Message("task poisoned".to_string()))?;
-                    if let Some(output) = guard.take() {
-                        return output;
+                    if let Some(output) = guard.as_ref() {
+                        return output.clone();
                     }
+                    let (next_guard, _) =
+                        result
+                            .1
+                            .wait_timeout(guard, Duration::from_millis(25))
+                            .map_err(|_| RuntimeError::Message("task poisoned".to_string()))?;
+                    guard = next_guard;
                     drop(guard);
-                    std::thread::sleep(Duration::from_millis(25));
                 }
             }),
         })),
@@ -326,14 +336,13 @@ pub(crate) fn build_concurrent_record() -> Value {
                         tx.clone(),
                     );
 
-                    let mut left_result = None;
-                    let mut right_result = None;
-                    let mut cancelled = false;
+                    let mut left_result = None::<Value>;
+                    let mut right_result = None::<Value>;
                     while left_result.is_none() || right_result.is_none() {
-                        if runtime.check_cancelled().is_err() {
-                            cancelled = true;
+                        if let Err(err) = runtime.check_cancelled() {
                             left_cancel.cancel();
                             right_cancel.cancel();
+                            return Err(err);
                         }
                         let (id, result) = match rx.recv_timeout(Duration::from_millis(25)) {
                             Ok(value) => value,
@@ -343,31 +352,34 @@ pub(crate) fn build_concurrent_record() -> Value {
                             }
                         };
                         if id == 0 {
-                            if result.is_err() {
-                                right_cancel.cancel();
+                            match result {
+                                Ok(left_value) => {
+                                    if let Some(right_value) = right_result.take() {
+                                        return Ok(Value::Tuple(vec![left_value, right_value]));
+                                    }
+                                    left_result = Some(left_value);
+                                }
+                                Err(err) => {
+                                    right_cancel.cancel();
+                                    return Err(err);
+                                }
                             }
-                            left_result = Some(result);
                         } else {
-                            if result.is_err() {
-                                left_cancel.cancel();
+                            match result {
+                                Ok(right_value) => {
+                                    if let Some(left_value) = left_result.take() {
+                                        return Ok(Value::Tuple(vec![left_value, right_value]));
+                                    }
+                                    right_result = Some(right_value);
+                                }
+                                Err(err) => {
+                                    left_cancel.cancel();
+                                    return Err(err);
+                                }
                             }
-                            right_result = Some(result);
                         }
                     }
-
-                    if cancelled {
-                        return Err(RuntimeError::Cancelled);
-                    }
-
-                    let left_result = left_result.unwrap();
-                    let right_result = right_result.unwrap();
-                    match (left_result, right_result) {
-                        (Ok(left_value), Ok(right_value)) => {
-                            Ok(Value::Tuple(vec![left_value, right_value]))
-                        }
-                        (Err(err), _) => Err(err),
-                        (_, Err(err)) => Err(err),
-                    }
+                    unreachable!("par exits once both branches have completed");
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -399,12 +411,11 @@ pub(crate) fn build_concurrent_record() -> Value {
                         tx.clone(),
                     );
 
-                    let mut cancelled = false;
                     let (winner, result) = loop {
-                        if runtime.check_cancelled().is_err() {
-                            cancelled = true;
+                        if let Err(err) = runtime.check_cancelled() {
                             left_cancel.cancel();
                             right_cancel.cancel();
+                            return Err(err);
                         }
                         match rx.recv_timeout(Duration::from_millis(25)) {
                             Ok(value) => break value,
@@ -418,16 +429,6 @@ pub(crate) fn build_concurrent_record() -> Value {
                         right_cancel.cancel();
                     } else {
                         left_cancel.cancel();
-                    }
-                    while rx.recv_timeout(Duration::from_millis(25)).is_err() {
-                        if runtime.check_cancelled().is_err() {
-                            cancelled = true;
-                            left_cancel.cancel();
-                            right_cancel.cancel();
-                        }
-                    }
-                    if cancelled {
-                        return Err(RuntimeError::Cancelled);
                     }
                     result
                 }),
@@ -559,7 +560,14 @@ pub(crate) fn build_concurrent_record() -> Value {
             let ctx = runtime.ctx.clone();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
-                    let mut last_err = RuntimeError::Message("retry: no attempts".to_string());
+                    if max_attempts <= 0 {
+                        return Err(RuntimeError::Message(
+                            "concurrent.retry expects attempts > 0".to_string(),
+                        ));
+                    }
+                    let mut last_err = RuntimeError::Message(
+                        "concurrent.retry exhausted without a result".to_string(),
+                    );
                     for _ in 0..max_attempts {
                         runtime.check_cancelled()?;
                         let mut rt = Runtime::new(ctx.clone(), runtime.cancel.clone());

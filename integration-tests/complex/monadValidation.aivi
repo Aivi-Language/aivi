@@ -160,12 +160,12 @@ doResultOptionInterop = do Effect {
     | Some v => Ok v
     | None   => Err "missing key"
 
-    notFound = Map.get "z" cfg match
-      | Some v => Ok v
-      | None   => Err "missing key"
+  notFound = Map.get "z" cfg match
+    | Some v => Ok v
+    | None   => Err "missing key"
 
-    assertEq found (Ok 42)
-    assertEq notFound (Err "missing key")
+  assertEq found (Ok 42)
+  assertEq notFound (Err "missing key")
 
   // Compose validation on top of lookup
   combined = do Result {
