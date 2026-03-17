@@ -113,10 +113,10 @@ exists_tracks_lifecycle = do Effect {
 
 @test "open readAll close prevents further reads"
 open_readAll_close_prevents_further_reads = do Effect {
-  _           <- cleanupPath resourcePath
-  writeResult <- writeText resourcePath "hello from handle"
-  _           <- assertOk writeResult
-  handle      <- open resourcePath
+  _              <- cleanupPath resourcePath
+  writeResult    <- writeText resourcePath "hello from handle"
+  _              <- assertOk writeResult
+  handle         <- open resourcePath
   contentResult  <- readAll handle
   content        <- assertOk contentResult
   _              <- assertEq content "hello from handle"
@@ -130,11 +130,11 @@ open_readAll_close_prevents_further_reads = do Effect {
 
 @test "open auto-closes when scope exits"
 open_auto_closes_when_scope_exits = do Effect {
-  _           <- cleanupPath resourcePath
-  writeResult <- writeText resourcePath "hello from scope"
-  _           <- assertOk writeResult
+  _             <- cleanupPath resourcePath
+  writeResult   <- writeText resourcePath "hello from scope"
+  _             <- assertOk writeResult
   escapedHandle <- do Effect {
-    handle <- open resourcePath
+    handle        <- open resourcePath
     pure handle
   }
   readAfterScope <- readAll escapedHandle
