@@ -995,6 +995,43 @@ f = { count: 1 } |> { count } => count + 1
 }
 
 #[test]
+fn parses_parenthesized_lambda_as_call_argument() {
+    let src = r#"
+module Example
+
+x = gen (a => b => a + b) 0
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    let Expr::Call { func, args, .. } = &def.expr else {
+        panic!("expected call expression, got: {:?}", def.expr);
+    };
+    assert!(matches!(&**func, Expr::Ident(name) if name.name == "gen"));
+    assert_eq!(args.len(), 2, "expected lambda and zero arguments");
+    assert!(matches!(&args[0], Expr::Lambda { .. }));
+    assert!(matches!(
+        &args[1],
+        Expr::Literal(Literal::Number { text, .. }) if text == "0"
+    ));
+}
+
+#[test]
 fn parses_patched_lambda_head_into_shadowing_block() {
     let src = r#"
 module Example
@@ -1028,7 +1065,11 @@ f = x <| _ * 2 => x + 1
     let Expr::Block { items, .. } = &**body else {
         panic!("expected desugared block body, got {body:?}");
     };
-    assert_eq!(items.len(), 2, "expected one synthetic let and the original body");
+    assert_eq!(
+        items.len(),
+        2,
+        "expected one synthetic let and the original body"
+    );
 
     let BlockItem::Let { pattern, expr, .. } = &items[0] else {
         panic!("expected synthetic let binding");
@@ -1085,7 +1126,11 @@ f = x <| _ + 1
     let Expr::Block { items, .. } = &**body else {
         panic!("expected desugared block body, got {body:?}");
     };
-    assert_eq!(items.len(), 3, "expected two synthetic lets and the original body");
+    assert_eq!(
+        items.len(),
+        3,
+        "expected two synthetic lets and the original body"
+    );
     assert!(
         matches!(&items[0], BlockItem::Let { pattern, .. } if matches!(pattern, Pattern::Ident(name) if name.name == "x"))
     );
@@ -1094,6 +1139,31 @@ f = x <| _ + 1
     );
     assert!(
         matches!(&items[2], BlockItem::Expr { expr, .. } if matches!(expr, Expr::Binary { op, .. } if op == "+"))
+    );
+}
+
+#[test]
+fn rejects_patched_non_identifier_lambda_param() {
+    let src = r#"
+module Example
+
+f = { x } <| _ + 1 => x
+"#;
+
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.contains(&"E1545".to_string()),
+        "expected E1545, got: {codes:?}"
+    );
+    let diag = diags
+        .iter()
+        .find(|d| d.diagnostic.code == "E1545")
+        .expect("E1545 diagnostic should be present");
+    assert!(
+        diag.diagnostic.message.contains("simple identifier"),
+        "expected E1545 message to mention simple identifiers, got: {:?}",
+        diag.diagnostic.message
     );
 }
 

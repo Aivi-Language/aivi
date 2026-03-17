@@ -351,6 +351,7 @@ managedFile = path => resource {
 - code after `yield` is cleanup
 - cleanup runs on scope exit, error, or cancellation
 - resources release in LIFO order
+- `aivi.net.sockets.listen` returns a resource-scoped `Listener`; `Connection` values from `connect`/`accept` still need explicit `close`
 
 ## 14. Modules / imports / exports
 

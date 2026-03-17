@@ -30,14 +30,17 @@ struct RuntimeTableSchema {
 }
 
 pub(super) fn build_query_compiled_builtin() -> Value {
-    builtin("__db_query_compiled", 2, |mut args, _| {
+    builtin("__db_query_compiled", 3, |mut args, _| {
+        let captures_value = args.pop().unwrap();
         let sources_value = args.pop().unwrap();
         let plan_json_value = args.pop().unwrap();
         let plan_json = expect_text(plan_json_value, "__db_query_compiled")?;
         let sources = expect_list(sources_value, "__db_query_compiled")?;
+        let captures = expect_list(captures_value, "__db_query_compiled")?;
         Ok(build_compiled_query_value(
             plan_json,
             sources.iter().cloned().collect(),
+            captures.iter().cloned().collect(),
         ))
     })
 }
@@ -63,13 +66,19 @@ pub(super) fn build_query_error_builtin() -> Value {
     })
 }
 
-fn make_query_value(run: Value, plan_json: Option<String>, sources: Vec<Value>) -> Value {
+fn make_query_value(
+    run: Value,
+    plan_json: Option<String>,
+    sources: Vec<Value>,
+    captures: Vec<Value>,
+) -> Value {
     let mut fields = HashMap::new();
     fields.insert("run".to_string(), run);
     if let Some(plan_json) = plan_json {
         let mut meta = HashMap::new();
         meta.insert("planJson".to_string(), Value::Text(plan_json));
         meta.insert("sources".to_string(), list_value(sources));
+        meta.insert("captures".to_string(), list_value(captures));
         fields.insert(QUERY_META_FIELD.to_string(), Value::Record(Arc::new(meta)));
     }
     Value::Record(Arc::new(fields))
@@ -85,30 +94,32 @@ fn make_query_error_value(message: String) -> Value {
         };
         Ok(Value::Effect(Arc::new(effect)))
     });
-    make_query_value(run, None, Vec::new())
+    make_query_value(run, None, Vec::new(), Vec::new())
 }
 
-fn build_compiled_query_value(plan_json: String, sources: Vec<Value>) -> Value {
+fn build_compiled_query_value(plan_json: String, sources: Vec<Value>, captures: Vec<Value>) -> Value {
     let meta_plan_json = plan_json.clone();
     let meta_sources = sources.clone();
+    let meta_captures = captures.clone();
     let run = builtin("__db_query_compiled.run", 1, move |mut args, _| {
         let connection = args.pop().unwrap();
         let effect = EffectValue::Thunk {
             func: Arc::new({
                 let plan_json = plan_json.clone();
                 let sources = sources.clone();
+                let captures = captures.clone();
                 move |_| {
                     let connection = expect_db_connection(connection.clone(), "database.query.run")?;
-                    execute_compiled_query(&connection, &plan_json, &sources)
+                    execute_compiled_query(&connection, &plan_json, &sources, &captures)
                 }
             }),
         };
         Ok(Value::Effect(Arc::new(effect)))
     });
-    make_query_value(run, Some(meta_plan_json), meta_sources)
+    make_query_value(run, Some(meta_plan_json), meta_sources, meta_captures)
 }
 
-fn extract_query_meta(query: &Value) -> Result<Option<(String, Vec<Value>)>, RuntimeError> {
+fn extract_query_meta(query: &Value) -> Result<Option<(String, Vec<Value>, Vec<Value>)>, RuntimeError> {
     let fields = expect_record(query.clone(), "database.query meta")?;
     let Some(meta_value) = fields.get(QUERY_META_FIELD) else {
         return Ok(None);
@@ -126,17 +137,27 @@ fn extract_query_meta(query: &Value) -> Result<Option<(String, Vec<Value>)>, Run
             .clone(),
         "database.query meta",
     )?;
-    Ok(Some((plan_json, sources.iter().cloned().collect())))
+    let captures = expect_list(
+        meta.get("captures")
+            .ok_or_else(|| RuntimeError::Message("database query plan is missing captures".to_string()))?
+            .clone(),
+        "database.query meta",
+    )?;
+    Ok(Some((
+        plan_json,
+        sources.iter().cloned().collect(),
+        captures.iter().cloned().collect(),
+    )))
 }
 
 fn build_count_query(query: Value) -> Result<Value, RuntimeError> {
-    if let Some((plan_json, sources)) = extract_query_meta(&query)? {
+    if let Some((plan_json, sources, captures)) = extract_query_meta(&query)? {
         let mut plan: CompiledQueryPlan = serde_json::from_str(&plan_json)
             .map_err(|err| RuntimeError::Message(format!("database query plan decode error: {err}")))?;
         plan.aggregate = CompiledAggregate::Count;
         let next_json = serde_json::to_string(&plan)
             .map_err(|err| RuntimeError::Message(format!("database query plan encode error: {err}")))?;
-        return Ok(build_compiled_query_value(next_json, sources));
+        return Ok(build_compiled_query_value(next_json, sources, captures));
     }
 
     let run = builtin("__db_query_count.run", 1, move |mut args, runtime| {
@@ -151,17 +172,17 @@ fn build_count_query(query: Value) -> Result<Value, RuntimeError> {
         };
         Ok(Value::Effect(Arc::new(effect)))
     });
-    Ok(make_query_value(run, None, Vec::new()))
+    Ok(make_query_value(run, None, Vec::new(), Vec::new()))
 }
 
 fn build_exists_query(query: Value) -> Result<Value, RuntimeError> {
-    if let Some((plan_json, sources)) = extract_query_meta(&query)? {
+    if let Some((plan_json, sources, captures)) = extract_query_meta(&query)? {
         let mut plan: CompiledQueryPlan = serde_json::from_str(&plan_json)
             .map_err(|err| RuntimeError::Message(format!("database query plan decode error: {err}")))?;
         plan.aggregate = CompiledAggregate::Exists;
         let next_json = serde_json::to_string(&plan)
             .map_err(|err| RuntimeError::Message(format!("database query plan encode error: {err}")))?;
-        return Ok(build_compiled_query_value(next_json, sources));
+        return Ok(build_compiled_query_value(next_json, sources, captures));
     }
 
     let run = builtin("__db_query_exists.run", 1, move |mut args, runtime| {
@@ -176,7 +197,7 @@ fn build_exists_query(query: Value) -> Result<Value, RuntimeError> {
         };
         Ok(Value::Effect(Arc::new(effect)))
     });
-    Ok(make_query_value(run, None, Vec::new()))
+    Ok(make_query_value(run, None, Vec::new(), Vec::new()))
 }
 
 fn query_run_field(query: Value, connection: Value, runtime: &mut Runtime) -> Result<Value, RuntimeError> {
@@ -192,13 +213,14 @@ fn execute_compiled_query(
     connection: &aivi_database::DbConnection,
     plan_json: &str,
     sources: &[Value],
+    captures: &[Value],
 ) -> Result<Value, RuntimeError> {
     let plan: CompiledQueryPlan = serde_json::from_str(plan_json)
         .map_err(|err| RuntimeError::Message(format!("database query plan decode error: {err}")))?;
     let schemas = build_runtime_schemas(&plan.sources, sources)?;
-    let sql = build_query_sql(&plan, &schemas)?;
+    let sql = build_query_sql(&plan, &schemas, captures)?;
     let rows = connection.query_sql(sql).map_err(RuntimeError::Message)?;
-    decode_query_rows(&plan, &schemas, rows)
+    decode_query_rows(&plan, &schemas, captures, rows)
 }
 
 fn build_runtime_schemas(
@@ -286,6 +308,67 @@ fn parse_runtime_columns(columns: Value) -> Result<Vec<RuntimeColumn>, RuntimeEr
     Ok(out)
 }
 
+#[derive(Clone, Copy)]
+struct InferredColumnState {
+    kind: QueryColumnType,
+    present_rows: usize,
+    saw_nullish: bool,
+}
+
+fn infer_runtime_columns(rows: &[Value]) -> Result<Vec<RuntimeColumn>, RuntimeError> {
+    let mut inferred = std::collections::BTreeMap::<String, InferredColumnState>::new();
+    for row in rows {
+        let fields = expect_record(row.clone(), "database.query infer row")?;
+        for (name, value) in fields.iter() {
+            validate_identifier(name, "database.query inferred column name")?;
+            let (kind, nullish) = infer_runtime_column_kind(value)?;
+            if let Some(kind) = kind {
+                let entry = inferred.entry(name.clone()).or_insert(InferredColumnState {
+                    kind,
+                    present_rows: 0,
+                    saw_nullish: false,
+                });
+                if entry.kind != kind {
+                    return Err(RuntimeError::Message(format!(
+                        "database.query inferred column '{name}' changed type across rows"
+                    )));
+                }
+                entry.present_rows += 1;
+                entry.saw_nullish |= nullish;
+            }
+        }
+    }
+    Ok(inferred
+        .into_iter()
+        .map(|(name, state)| RuntimeColumn {
+            name,
+            kind: state.kind,
+            not_null: state.present_rows == rows.len() && !state.saw_nullish,
+        })
+        .collect())
+}
+
+fn infer_runtime_column_kind(
+    value: &Value,
+) -> Result<(Option<QueryColumnType>, bool), RuntimeError> {
+    match value {
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+            let (kind, _) = infer_runtime_column_kind(&args[0])?;
+            Ok((kind, true))
+        }
+        Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok((None, true)),
+        Value::Int(_) => Ok((Some(QueryColumnType::Int), false)),
+        Value::Float(_) => Ok((Some(QueryColumnType::Float), false)),
+        Value::Bool(_) => Ok((Some(QueryColumnType::Bool), false)),
+        Value::Text(_) => Ok((Some(QueryColumnType::Text), false)),
+        Value::DateTime(_) => Ok((Some(QueryColumnType::Timestamp), false)),
+        other => Err(RuntimeError::Message(format!(
+            "database.query cannot infer SQL storage column for {}",
+            crate::runtime::format_value(other)
+        ))),
+    }
+}
+
 fn validate_identifier(name: &str, ctx: &str) -> Result<(), RuntimeError> {
     if !name.is_empty() && name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
         Ok(())
@@ -299,6 +382,7 @@ fn validate_identifier(name: &str, ctx: &str) -> Result<(), RuntimeError> {
 fn build_query_sql(
     plan: &CompiledQueryPlan,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    captures: &[Value],
 ) -> Result<String, RuntimeError> {
     let sql_aliases = build_sql_aliases(plan);
     let mut from_parts = Vec::new();
@@ -324,7 +408,7 @@ fn build_query_sql(
             " WHERE {}",
             plan.filters
                 .iter()
-                .map(|expr| render_scalar_expr(expr, schemas, &sql_aliases))
+                .map(|expr| render_scalar_expr(expr, schemas, &sql_aliases, captures))
                 .collect::<Result<Vec<_>, _>>()?
                 .join(" AND ")
         )
@@ -333,7 +417,7 @@ fn build_query_sql(
     let mut order_exprs = plan
         .order_by
         .iter()
-        .map(|order| render_order_by(order, schemas, &sql_aliases))
+        .map(|order| render_order_by(order, schemas, &sql_aliases, captures))
         .collect::<Result<Vec<_>, _>>()?;
     if matches!(plan.aggregate, CompiledAggregate::None) {
         if order_exprs.is_empty() {
@@ -385,7 +469,8 @@ fn build_query_sql(
 
     match plan.aggregate {
         CompiledAggregate::None => {
-            let select_sql = render_select_projection(&plan.projection, schemas, &sql_aliases)?;
+            let select_sql =
+                render_select_projection(&plan.projection, schemas, &sql_aliases, captures)?;
             Ok(format!("SELECT {} {}", select_sql.join(", "), from_where_order_limit))
         }
         CompiledAggregate::Count => Ok(format!(
@@ -415,10 +500,11 @@ fn render_order_by(
     order: &CompiledOrderBy,
     schemas: &HashMap<String, RuntimeTableSchema>,
     sql_aliases: &HashMap<String, String>,
+    captures: &[Value],
 ) -> Result<String, RuntimeError> {
     Ok(format!(
         "{} {}",
-        render_scalar_expr(&order.expr, schemas, sql_aliases)?,
+        render_scalar_expr(&order.expr, schemas, sql_aliases, captures)?,
         if order.descending { "DESC" } else { "ASC" }
     ))
 }
@@ -427,16 +513,22 @@ fn render_select_projection(
     projection: &CompiledProjection,
     schemas: &HashMap<String, RuntimeTableSchema>,
     sql_aliases: &HashMap<String, String>,
+    captures: &[Value],
 ) -> Result<Vec<String>, RuntimeError> {
     match projection {
         CompiledProjection::Row { alias } => render_row_projection(alias, schemas, sql_aliases),
         CompiledProjection::Scalar { expr } => Ok(vec![render_scalar_expr(
-            expr, schemas, sql_aliases,
+            expr, schemas, sql_aliases, captures,
         )?]),
         CompiledProjection::Record { fields } => {
             let mut out = Vec::new();
             for field in fields {
-                out.extend(render_select_projection(&field.value, schemas, sql_aliases)?);
+                out.extend(render_select_projection(
+                    &field.value,
+                    schemas,
+                    sql_aliases,
+                    captures,
+                )?);
             }
             Ok(out)
         }
@@ -463,6 +555,7 @@ fn render_scalar_expr(
     expr: &CompiledScalarExpr,
     schemas: &HashMap<String, RuntimeTableSchema>,
     sql_aliases: &HashMap<String, String>,
+    captures: &[Value],
 ) -> Result<String, RuntimeError> {
     match expr {
         CompiledScalarExpr::Column { alias, field } => {
@@ -486,6 +579,15 @@ fn render_scalar_expr(
                 field
             ))
         }
+        CompiledScalarExpr::Captured { capture_index } => {
+            let value = captures.get(*capture_index).ok_or_else(|| {
+                RuntimeError::Message(format!(
+                    "database query capture index {} is out of bounds",
+                    capture_index
+                ))
+            })?;
+            render_runtime_scalar_literal(value)
+        }
         CompiledScalarExpr::IntLit { value } => Ok(value.to_string()),
         CompiledScalarExpr::FloatLit { value } => Ok(value.to_string()),
         CompiledScalarExpr::TextLit { value } => Ok(format!("'{}'", value.replace('\'', "''"))),
@@ -501,7 +603,7 @@ fn render_scalar_expr(
         }
         CompiledScalarExpr::UnaryNeg { expr } => Ok(format!(
             "(-{})",
-            render_scalar_expr(expr, schemas, sql_aliases)?
+            render_scalar_expr(expr, schemas, sql_aliases, captures)?
         )),
         CompiledScalarExpr::Binary { op, left, right } => {
             let sql_op = match op.as_str() {
@@ -513,17 +615,39 @@ fn render_scalar_expr(
             };
             Ok(format!(
                 "({} {} {})",
-                render_scalar_expr(left, schemas, sql_aliases)?,
+                render_scalar_expr(left, schemas, sql_aliases, captures)?,
                 sql_op,
-                render_scalar_expr(right, schemas, sql_aliases)?
+                render_scalar_expr(right, schemas, sql_aliases, captures)?
             ))
         }
+    }
+}
+
+fn render_runtime_scalar_literal(value: &Value) -> Result<String, RuntimeError> {
+    match value {
+        Value::Int(value) => Ok(value.to_string()),
+        Value::Float(value) => Ok(value.to_string()),
+        Value::Bool(value) => {
+            if *value {
+                Ok("TRUE".to_string())
+            } else {
+                Ok("FALSE".to_string())
+            }
+        }
+        Value::Text(value) | Value::DateTime(value) => {
+            Ok(format!("'{}'", value.replace('\'', "''")))
+        }
+        other => Err(RuntimeError::Message(format!(
+            "database query capture is not a supported SQL scalar: {}",
+            crate::runtime::format_value(other)
+        ))),
     }
 }
 
 fn decode_query_rows(
     plan: &CompiledQueryPlan,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    captures: &[Value],
     rows: Vec<Vec<QueryCell>>,
 ) -> Result<Value, RuntimeError> {
     match plan.aggregate {
@@ -545,7 +669,8 @@ fn decode_query_rows(
         CompiledAggregate::None => {
             let mut out = Vec::with_capacity(rows.len());
             for row in rows {
-                let (value, consumed) = decode_projection(&plan.projection, schemas, &row, 0)?;
+                let (value, consumed) =
+                    decode_projection(&plan.projection, schemas, captures, &row, 0)?;
                 if consumed != row.len() {
                     return Err(RuntimeError::Message(
                         "database.query returned more columns than expected".to_string(),
@@ -561,6 +686,7 @@ fn decode_query_rows(
 fn decode_projection(
     projection: &CompiledProjection,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    captures: &[Value],
     row: &[QueryCell],
     start: usize,
 ) -> Result<(Value, usize), RuntimeError> {
@@ -570,13 +696,14 @@ fn decode_projection(
             let cell = row.get(start).ok_or_else(|| {
                 RuntimeError::Message("database.query scalar column is missing".to_string())
             })?;
-            Ok((decode_scalar_cell(expr, schemas, cell)?, start + 1))
+            Ok((decode_scalar_cell(expr, schemas, captures, cell)?, start + 1))
         }
         CompiledProjection::Record { fields } => {
             let mut out = HashMap::new();
             let mut cursor = start;
             for field in fields {
-                let (value, next) = decode_projection(&field.value, schemas, row, cursor)?;
+                let (value, next) =
+                    decode_projection(&field.value, schemas, captures, row, cursor)?;
                 out.insert(field.name.clone(), value);
                 cursor = next;
             }
@@ -632,6 +759,7 @@ fn decode_row_projection(
 fn decode_scalar_cell(
     expr: &CompiledScalarExpr,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    captures: &[Value],
     cell: &QueryCell,
 ) -> Result<Value, RuntimeError> {
     match expr {
@@ -639,7 +767,7 @@ fn decode_scalar_cell(
             let column = column_for_alias_field(schemas, alias, field)?;
             column_cell_to_value(cell, column)
         }
-        _ => cell_to_value(cell, infer_scalar_kind(expr, schemas)?),
+        _ => cell_to_value(cell, infer_scalar_kind(expr, schemas, captures)?),
     }
 }
 
@@ -709,6 +837,7 @@ fn non_optional_column_cell_to_value(
 fn infer_scalar_kind(
     expr: &CompiledScalarExpr,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    captures: &[Value],
 ) -> Result<ScalarKind, RuntimeError> {
     match expr {
         CompiledScalarExpr::Column { alias, field } => {
@@ -720,19 +849,39 @@ fn infer_scalar_kind(
                 QueryColumnType::Text | QueryColumnType::Timestamp => ScalarKind::Text,
             })
         }
+        CompiledScalarExpr::Captured { capture_index } => {
+            let value = captures.get(*capture_index).ok_or_else(|| {
+                RuntimeError::Message(format!(
+                    "database query capture index {} is out of bounds",
+                    capture_index
+                ))
+            })?;
+            Ok(match value {
+                Value::Int(_) => ScalarKind::Int,
+                Value::Float(_) => ScalarKind::Float,
+                Value::Bool(_) => ScalarKind::Bool,
+                Value::Text(_) | Value::DateTime(_) => ScalarKind::Text,
+                other => {
+                    return Err(RuntimeError::Message(format!(
+                        "database query capture is not a supported SQL scalar: {}",
+                        crate::runtime::format_value(other)
+                    )))
+                }
+            })
+        }
         CompiledScalarExpr::IntLit { .. } => Ok(ScalarKind::Int),
         CompiledScalarExpr::FloatLit { .. } => Ok(ScalarKind::Float),
         CompiledScalarExpr::TextLit { .. } | CompiledScalarExpr::DateTimeLit { .. } => {
             Ok(ScalarKind::Text)
         }
         CompiledScalarExpr::BoolLit { .. } => Ok(ScalarKind::Bool),
-        CompiledScalarExpr::UnaryNeg { expr } => infer_scalar_kind(expr, schemas),
+        CompiledScalarExpr::UnaryNeg { expr } => infer_scalar_kind(expr, schemas, captures),
         CompiledScalarExpr::Binary { op, left, right } => match op.as_str() {
             "==" | "!=" | ">" | ">=" | "<" | "<=" | "&&" | "||" => Ok(ScalarKind::Bool),
             "/" => Ok(ScalarKind::Float),
             _ => {
-                let left_kind = infer_scalar_kind(left, schemas)?;
-                let right_kind = infer_scalar_kind(right, schemas)?;
+                let left_kind = infer_scalar_kind(left, schemas, captures)?;
+                let right_kind = infer_scalar_kind(right, schemas, captures)?;
                 if matches!(left_kind, ScalarKind::Float) || matches!(right_kind, ScalarKind::Float) {
                     Ok(ScalarKind::Float)
                 } else {
@@ -776,15 +925,19 @@ fn cell_to_value(cell: &QueryCell, kind: ScalarKind) -> Result<Value, RuntimeErr
     }
 }
 
-fn build_query_table_mirror(
+fn build_query_storage_table(
     name: String,
     columns_value: Value,
     rows: &[Value],
-) -> Result<Option<QueryTable>, RuntimeError> {
-    let runtime_columns = parse_runtime_columns(columns_value)?;
-    if runtime_columns.is_empty() {
-        return Ok(None);
-    }
+) -> Result<QueryTable, RuntimeError> {
+    let runtime_columns = {
+        let parsed = parse_runtime_columns(columns_value)?;
+        if parsed.is_empty() {
+            infer_runtime_columns(rows)?
+        } else {
+            parsed
+        }
+    };
     let columns = runtime_columns
         .iter()
         .map(|column| QueryColumn {
@@ -798,24 +951,32 @@ fn build_query_table_mirror(
         let row_fields = expect_record(row.clone(), "database.query mirror row")?;
         let mut values = Vec::with_capacity(runtime_columns.len());
         for column in &runtime_columns {
-            let value = row_fields.get(&column.name).ok_or_else(|| {
-                RuntimeError::Message(format!(
-                    "database.query mirror row is missing field '{}'",
-                    column.name
-                ))
-            })?;
-            values.push(runtime_value_to_query_cell(value, column.kind, column.not_null)?);
+            match row_fields.get(&column.name) {
+                Some(value) => values.push(runtime_value_to_query_cell(
+                    value,
+                    column.kind,
+                    column.not_null,
+                )?),
+                None if !column.not_null => values.push(QueryCell::Null),
+                None => {
+                    return Err(RuntimeError::Message(format!(
+                        "database.query mirror row is missing field '{}'",
+                        column.name
+                    )))
+                }
+            }
         }
         query_rows.push(QueryRow {
             row_ordinal: index as i64,
+            row_json: encode_json(row)?,
             values,
         });
     }
-    Ok(Some(QueryTable {
+    Ok(QueryTable {
         name,
         columns,
         rows: query_rows,
-    }))
+    })
 }
 
 fn runtime_value_to_query_cell(
@@ -851,16 +1012,36 @@ fn runtime_value_to_query_cell(
     }
 }
 
-fn sync_query_table_if_possible(
+fn load_rows_from_storage(
     connection: &aivi_database::DbConnection,
-    name: String,
-    columns_value: Value,
-    rows: &[Value],
-) -> Result<(), RuntimeError> {
-    if let Some(table) = build_query_table_mirror(name, columns_value, rows)? {
-        connection.sync_query_table(table).map_err(RuntimeError::Message)?;
+    name: &str,
+) -> Result<Vec<Value>, RuntimeError> {
+    if connection
+        .load_table(name.to_string())
+        .map_err(RuntimeError::Message)?
+        .is_none()
+    {
+        return Ok(Vec::new());
     }
-    Ok(())
+    let rows = connection
+        .query_sql(format!(
+            "SELECT __aivi_row_json FROM {} ORDER BY __aivi_ord",
+            aivi_database::query_storage_name(name)
+        ))
+        .map_err(RuntimeError::Message)?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let json = match row.as_slice() {
+            [QueryCell::Text(json)] => json.as_str(),
+            other => {
+                return Err(RuntimeError::Message(format!(
+                    "database.query storage read returned unexpected row shape: {other:?}"
+                )))
+            }
+        };
+        out.push(decode_json(json)?);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

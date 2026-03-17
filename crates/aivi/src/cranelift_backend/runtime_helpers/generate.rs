@@ -96,6 +96,7 @@ pub extern "C" fn rt_gen_vec_into_generator(
                 }
                 Ok(acc)
             }),
+            db_patch_meta: None,
         }),
         args: Vec::new(),
         tagged_args: Some(Vec::new()),

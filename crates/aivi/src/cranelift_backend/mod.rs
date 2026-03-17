@@ -85,6 +85,7 @@ impl<'a> CrateNativeRegistrar<'a> {
                         Err(msg) => Err(crate::runtime::RuntimeError::Message(msg)),
                     }
                 }),
+                db_patch_meta: None,
             }),
             args: Vec::new(),
             tagged_args: Some(Vec::new()),

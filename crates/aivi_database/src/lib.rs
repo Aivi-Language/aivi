@@ -1,10 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Mutex;
 
 const META_TABLE: &str = "aivi_tables";
 const QUERY_STORAGE_PREFIX: &str = "__aivi_query_storage_";
-pub const EMPTY_ROWS_JSON: &str = "{\"t\":\"List\",\"v\":[]}";
+const EMPTY_STORAGE_COLUMNS_JSON: &str = "[]";
 
 pub fn query_storage_name(logical_name: &str) -> String {
     format!("{QUERY_STORAGE_PREFIX}{logical_name}")
@@ -19,7 +20,7 @@ pub enum Driver {
     Mysql,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum QueryCell {
     Null,
     Int(i64),
@@ -28,7 +29,7 @@ pub enum QueryCell {
     Text(String),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QueryColumnType {
     Int,
     Bool,
@@ -37,7 +38,7 @@ pub enum QueryColumnType {
     Timestamp,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueryColumn {
     pub name: String,
     pub column_type: QueryColumnType,
@@ -47,6 +48,7 @@ pub struct QueryColumn {
 #[derive(Clone, Debug)]
 pub struct QueryRow {
     pub row_ordinal: i64,
+    pub row_json: String,
     pub values: Vec<QueryCell>,
 }
 
@@ -82,14 +84,16 @@ enum DbRequest {
         connection_id: u64,
         name: String,
         columns_json: String,
+        storage_columns_json: String,
         resp: DbResp<()>,
     },
-    CompareAndSwapRows {
+    ReplaceTableStorage {
         connection_id: u64,
-        name: String,
         expected_rev: i64,
+        name: String,
         columns_json: String,
-        rows_json: String,
+        storage_columns_json: String,
+        table: QueryTable,
         resp: DbResp<i64>,
     },
     SqliteConfigure {
@@ -130,10 +134,10 @@ enum DbRequest {
         statements: Vec<String>,
         resp: DbResp<()>,
     },
-    SyncQueryTable {
+    ExecuteSql {
         connection_id: u64,
-        table: QueryTable,
-        resp: DbResp<()>,
+        sql: String,
+        resp: DbResp<u64>,
     },
     QuerySql {
         connection_id: u64,
@@ -178,28 +182,36 @@ impl DbConnection {
         })
     }
 
-    pub fn migrate_table(&self, name: String, columns_json: String) -> Result<(), String> {
+    pub fn migrate_table(
+        &self,
+        name: String,
+        columns_json: String,
+        storage_columns_json: String,
+    ) -> Result<(), String> {
         self.request(|connection_id, resp| DbRequest::MigrateTable {
             connection_id,
             name,
             columns_json,
+            storage_columns_json,
             resp,
         })
     }
 
-    pub fn compare_and_swap_rows(
+    pub fn replace_table_storage(
         &self,
-        name: String,
         expected_rev: i64,
+        name: String,
         columns_json: String,
-        rows_json: String,
+        storage_columns_json: String,
+        table: QueryTable,
     ) -> Result<i64, String> {
-        self.request(|connection_id, resp| DbRequest::CompareAndSwapRows {
+        self.request(|connection_id, resp| DbRequest::ReplaceTableStorage {
             connection_id,
-            name,
             expected_rev,
+            name,
             columns_json,
-            rows_json,
+            storage_columns_json,
+            table,
             resp,
         })
     }
@@ -266,10 +278,10 @@ impl DbConnection {
         })
     }
 
-    pub fn sync_query_table(&self, table: QueryTable) -> Result<(), String> {
-        self.request(|connection_id, resp| DbRequest::SyncQueryTable {
+    pub fn execute_sql(&self, sql: String) -> Result<u64, String> {
+        self.request(|connection_id, resp| DbRequest::ExecuteSql {
             connection_id,
-            table,
+            sql,
             resp,
         })
     }
@@ -450,7 +462,10 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
     fn create_query_storage_table_sql(table: &QueryTable) -> Result<String, String> {
         require_sql_identifier(&table.name, "database.query.create_table")?;
         let storage_name = query_storage_identifier(&table.name, "database.query.create_table")?;
-        let mut parts = vec!["__aivi_ord BIGINT NOT NULL".to_string()];
+        let mut parts = vec![
+            "__aivi_ord BIGINT NOT NULL".to_string(),
+            "__aivi_row_json TEXT NOT NULL".to_string(),
+        ];
         for column in &table.columns {
             require_sql_identifier(&column.name, "database.query.create_table")?;
             let mut part = format!("{} {}", column.name, sql_type_name(column.column_type));
@@ -469,6 +484,11 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
     fn create_query_view_sql(table: &QueryTable) -> Result<String, String> {
         require_sql_identifier(&table.name, "database.query.create_view")?;
         let storage_name = query_storage_identifier(&table.name, "database.query.create_view")?;
+        if table.columns.is_empty() {
+            return Err(
+                "database.query.create_view requires at least one declared column".to_string(),
+            );
+        }
         let mut select_columns = Vec::with_capacity(table.columns.len());
         for column in &table.columns {
             require_sql_identifier(&column.name, "database.query.create_view")?;
@@ -494,7 +514,11 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
             ));
         }
         let mut column_names = vec!["__aivi_ord".to_string()];
-        let mut value_parts = vec![row.row_ordinal.to_string()];
+        let mut value_parts = vec![
+            row.row_ordinal.to_string(),
+            format!("'{}'", escape_sql_text(&row.row_json)),
+        ];
+        column_names.push("__aivi_row_json".to_string());
         for (column, value) in table.columns.iter().zip(row.values.iter()) {
             require_sql_identifier(&column.name, "database.query.insert")?;
             column_names.push(column.name.clone());
@@ -692,8 +716,8 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                                 name TEXT PRIMARY KEY,\
                                 rev INTEGER NOT NULL DEFAULT 0,\
                                 columns_json TEXT NOT NULL,\
-                                rows_json TEXT NOT NULL\
-                            )"
+                                storage_columns_json TEXT NOT NULL DEFAULT '{EMPTY_STORAGE_COLUMNS_JSON}'\
+                             )"
                         ),
                         [],
                     )
@@ -708,8 +732,8 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                                     name TEXT PRIMARY KEY,\
                                     rev BIGINT NOT NULL DEFAULT 0,\
                                     columns_json TEXT NOT NULL,\
-                                    rows_json TEXT NOT NULL\
-                                )"
+                                    storage_columns_json TEXT NOT NULL DEFAULT '{EMPTY_STORAGE_COLUMNS_JSON}'\
+                                 )"
                             ),
                             &[],
                         )
@@ -722,8 +746,8 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                             name VARCHAR(255) PRIMARY KEY,\
                             rev BIGINT NOT NULL DEFAULT 0,\
                             columns_json LONGTEXT NOT NULL,\
-                            rows_json LONGTEXT NOT NULL\
-                        )"
+                            storage_columns_json LONGTEXT NOT NULL\
+                         )"
                     ))
                     .map_err(|e| backend_err("mysql.ensure_schema", e))?;
                     Ok(())
@@ -736,15 +760,15 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 Backend::Sqlite(conn) => {
                     let mut stmt = conn
                         .prepare(&format!(
-                            "SELECT rev, columns_json, rows_json FROM {META_TABLE} WHERE name = ?1"
+                            "SELECT rev, columns_json, storage_columns_json FROM {META_TABLE} WHERE name = ?1"
                         ))
                         .map_err(|e| backend_err("sqlite.load_table.prepare", e))?;
                     let row = stmt
                         .query_row([name], |row| {
                             let rev: i64 = row.get(0)?;
                             let columns_json: String = row.get(1)?;
-                            let rows_json: String = row.get(2)?;
-                            Ok((rev, columns_json, rows_json))
+                            let storage_columns_json: String = row.get(2)?;
+                            Ok((rev, columns_json, storage_columns_json))
                         })
                         .optional()
                         .map_err(|e| backend_err("sqlite.load_table.query_row", e))?;
@@ -754,7 +778,7 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                     let row = client
                         .query_opt(
                             &format!(
-                                "SELECT rev, columns_json, rows_json FROM {META_TABLE} WHERE name = $1"
+                                "SELECT rev, columns_json, storage_columns_json FROM {META_TABLE} WHERE name = $1"
                             ),
                             &[&name],
                         )
@@ -762,15 +786,15 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                     Ok(row.map(|row| {
                         let rev: i64 = row.get::<usize, i64>(0);
                         let columns_json: String = row.get::<usize, String>(1);
-                        let rows_json: String = row.get::<usize, String>(2);
-                        (rev, columns_json, rows_json)
+                        let storage_columns_json: String = row.get::<usize, String>(2);
+                        (rev, columns_json, storage_columns_json)
                     }))
                 }
                 Backend::Mysql(conn) => {
                     let row: Option<(i64, String, String)> = conn
                         .exec_first(
                             format!(
-                                "SELECT rev, columns_json, rows_json FROM {META_TABLE} WHERE name = ?"
+                                "SELECT rev, columns_json, storage_columns_json FROM {META_TABLE} WHERE name = ?"
                             ),
                             (name,),
                         )
@@ -780,118 +804,124 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
             }
         }
 
-        fn migrate_table(&mut self, name: &str, columns_json: &str) -> Result<(), String> {
+        fn migrate_table(
+            &mut self,
+            name: &str,
+            columns_json: &str,
+            storage_columns_json: &str,
+        ) -> Result<(), String> {
+            let storage_columns: Vec<QueryColumn> = serde_json::from_str(storage_columns_json)
+                .map_err(|err| {
+                    format!("database.migrate_table invalid storage columns json: {err}")
+                })?;
             match self {
                 Backend::Sqlite(conn) => {
                     conn.execute(
                         &format!(
-                            "INSERT INTO {META_TABLE} (name, rev, columns_json, rows_json) VALUES (?1, 0, ?2, '{EMPTY_ROWS_JSON}') \
-                             ON CONFLICT(name) DO UPDATE SET columns_json = excluded.columns_json"
+                            "INSERT INTO {META_TABLE} (name, rev, columns_json, storage_columns_json) VALUES (?1, 0, ?2, ?3) \
+                             ON CONFLICT(name) DO UPDATE SET columns_json = excluded.columns_json, storage_columns_json = excluded.storage_columns_json"
                         ),
-                        [name, columns_json],
+                        [name, columns_json, storage_columns_json],
                     )
                     .map_err(|e| backend_err("sqlite.migrate_table", e))?;
-                    Ok(())
                 }
                 Backend::Postgresql(client) => {
                     client
                         .execute(
                             &format!(
-                                "INSERT INTO {META_TABLE} (name, rev, columns_json, rows_json) VALUES ($1, 0, $2, '{EMPTY_ROWS_JSON}') \
-                                 ON CONFLICT (name) DO UPDATE SET columns_json = EXCLUDED.columns_json"
+                                "INSERT INTO {META_TABLE} (name, rev, columns_json, storage_columns_json) VALUES ($1, 0, $2, $3) \
+                                 ON CONFLICT (name) DO UPDATE SET columns_json = EXCLUDED.columns_json, storage_columns_json = EXCLUDED.storage_columns_json"
                             ),
-                            &[&name, &columns_json],
+                            &[&name, &columns_json, &storage_columns_json],
                         )
                         .map_err(|e| backend_err("postgres.migrate_table", e))?;
-                    Ok(())
                 }
                 Backend::Mysql(conn) => {
                     conn.exec_drop(
                         format!(
-                            "INSERT INTO {META_TABLE} (name, rev, columns_json, rows_json) VALUES (?, 0, ?, '{EMPTY_ROWS_JSON}') \
-                             ON DUPLICATE KEY UPDATE columns_json = VALUES(columns_json)"
+                            "INSERT INTO {META_TABLE} (name, rev, columns_json, storage_columns_json) VALUES (?, 0, ?, ?) \
+                             ON DUPLICATE KEY UPDATE columns_json = VALUES(columns_json), storage_columns_json = VALUES(storage_columns_json)"
                         ),
-                        (name, columns_json),
+                        (name, columns_json, storage_columns_json),
                     )
                     .map_err(|e| backend_err("mysql.migrate_table", e))?;
-                    Ok(())
                 }
             }
+
+            let table = QueryTable {
+                name: name.to_string(),
+                columns: storage_columns,
+                rows: Vec::new(),
+            };
+            let storage_name =
+                query_storage_identifier(name, "database.migrate_table.ensure_storage")?;
+            if self
+                .query_sql(&format!("SELECT __aivi_ord FROM {storage_name} LIMIT 1"))
+                .is_err()
+            {
+                self.replace_table_storage_compat(&table)?;
+            }
+            Ok(())
         }
 
-        fn compare_and_swap_rows(
+        fn replace_table_storage(
             &mut self,
             name: &str,
             expected_rev: i64,
             columns_json: &str,
-            rows_json: &str,
+            storage_columns_json: &str,
+            table: &QueryTable,
         ) -> Result<i64, String> {
-            match self {
+            let changed = match self {
                 Backend::Sqlite(conn) => {
-                    let changed = conn
+                    conn
                         .execute(
                             &format!(
-                                "UPDATE {META_TABLE} SET columns_json = ?1, rows_json = ?2, rev = rev + 1 \
+                                "UPDATE {META_TABLE} SET columns_json = ?1, storage_columns_json = ?2, rev = rev + 1 \
                                  WHERE name = ?3 AND rev = ?4"
                             ),
-                            rusqlite::params![columns_json, rows_json, name, expected_rev],
+                            rusqlite::params![
+                                columns_json,
+                                storage_columns_json,
+                                name,
+                                expected_rev
+                            ],
                         )
-                        .map_err(|e| backend_err("sqlite.cas_rows", e))?;
-                    if changed == 0 {
-                        return Err("concurrent write detected; retry".to_string());
-                    }
-                    let new_rev: i64 = conn
-                        .query_row(
-                            &format!("SELECT rev FROM {META_TABLE} WHERE name = ?1"),
-                            [name],
-                            |row| row.get(0),
-                        )
-                        .map_err(|e| backend_err("sqlite.cas_rows.read_rev", e))?;
-                    Ok(new_rev)
+                        .map_err(|e| backend_err("sqlite.replace_table_storage.meta", e))?
                 }
                 Backend::Postgresql(client) => {
-                    let changed = client
+                    client
                         .execute(
                             &format!(
-                                "UPDATE {META_TABLE} SET columns_json = $1, rows_json = $2, rev = rev + 1 \
+                                "UPDATE {META_TABLE} SET columns_json = $1, storage_columns_json = $2, rev = rev + 1 \
                                  WHERE name = $3 AND rev = $4"
                             ),
-                            &[&columns_json, &rows_json, &name, &expected_rev],
+                            &[&columns_json, &storage_columns_json, &name, &expected_rev],
                         )
-                        .map_err(|e| backend_err("postgres.cas_rows", e))?;
-                    if changed == 0 {
-                        return Err("concurrent write detected; retry".to_string());
-                    }
-                    let row = client
-                        .query_one(
-                            &format!("SELECT rev FROM {META_TABLE} WHERE name = $1"),
-                            &[&name],
-                        )
-                        .map_err(|e| backend_err("postgres.cas_rows.read_rev", e))?;
-                    Ok(row.get::<usize, i64>(0))
+                        .map_err(|e| backend_err("postgres.replace_table_storage.meta", e))?
+                        .try_into()
+                        .unwrap_or(0usize)
                 }
                 Backend::Mysql(conn) => {
                     conn.exec_drop(
                         format!(
-                            "UPDATE {META_TABLE} SET columns_json = ?, rows_json = ?, rev = rev + 1 \
+                            "UPDATE {META_TABLE} SET columns_json = ?, storage_columns_json = ?, rev = rev + 1 \
                              WHERE name = ? AND rev = ?"
                         ),
-                        (columns_json, rows_json, name, expected_rev),
+                        (columns_json, storage_columns_json, name, expected_rev),
                     )
-                    .map_err(|e| backend_err("mysql.cas_rows", e))?;
-                    let changed = conn.affected_rows().try_into().unwrap_or(0usize);
-                    if changed == 0 {
-                        return Err("concurrent write detected; retry".to_string());
-                    }
-                    let row: Option<i64> = conn
-                        .exec_first(
-                            format!("SELECT rev FROM {META_TABLE} WHERE name = ?"),
-                            (name,),
-                        )
-                        .map_err(|e| backend_err("mysql.cas_rows.read_rev", e))?;
-                    row.ok_or_else(|| "missing table after update".to_string())
+                    .map_err(|e| backend_err("mysql.replace_table_storage.meta", e))?;
+                    conn.affected_rows().try_into().unwrap_or(0usize)
                 }
+            };
+            if changed == 0 {
+                return Err("concurrent write detected; retry".to_string());
             }
+            self.replace_table_storage_compat(table)?;
+            let Some((rev, _, _)) = self.load_table(name)? else {
+                return Err("missing table after update".to_string());
+            };
+            Ok(rev)
         }
 
         fn sqlite_configure(&mut self, wal: bool, busy_timeout_ms: i64) -> Result<(), String> {
@@ -959,14 +989,33 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
             Ok(())
         }
 
-        fn sync_query_table(&mut self, table: &QueryTable) -> Result<(), String> {
+        fn execute_sql(&mut self, sql: &str) -> Result<u64, String> {
+            match self {
+                Backend::Sqlite(conn) => conn
+                    .execute(sql, [])
+                    .map(|count| count as u64)
+                    .map_err(|e| backend_err("sqlite.execute_sql", e)),
+                Backend::Postgresql(client) => client
+                    .execute(sql, &[])
+                    .map_err(|e| backend_err("postgres.execute_sql", e)),
+                Backend::Mysql(conn) => {
+                    conn.query_drop(sql)
+                        .map_err(|e| backend_err("mysql.execute_sql", e))?;
+                    Ok(conn.affected_rows())
+                }
+            }
+        }
+
+        fn replace_table_storage_compat(&mut self, table: &QueryTable) -> Result<(), String> {
             self.drop_logical_query_object(&table.name)?;
             self.drop_query_storage_table(&table.name)?;
             self.execute_statement(&create_query_storage_table_sql(table)?)?;
             for row in &table.rows {
                 self.execute_statement(&insert_row_sql(table, row)?)?;
             }
-            self.execute_statement(&create_query_view_sql(table)?)?;
+            if !table.columns.is_empty() {
+                self.execute_statement(&create_query_view_sql(table)?)?;
+            }
             Ok(())
         }
 
@@ -1098,22 +1147,31 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 connection_id,
                 name,
                 columns_json,
+                storage_columns_json,
                 resp,
             } => {
-                let result = backend_mut(&mut backends, connection_id)
-                    .and_then(|backend| backend.migrate_table(&name, &columns_json));
+                let result = backend_mut(&mut backends, connection_id).and_then(|backend| {
+                    backend.migrate_table(&name, &columns_json, &storage_columns_json)
+                });
                 let _ = resp.send(result);
             }
-            DbRequest::CompareAndSwapRows {
+            DbRequest::ReplaceTableStorage {
                 connection_id,
                 name,
                 expected_rev,
                 columns_json,
-                rows_json,
+                storage_columns_json,
+                table,
                 resp,
             } => {
                 let result = backend_mut(&mut backends, connection_id).and_then(|backend| {
-                    backend.compare_and_swap_rows(&name, expected_rev, &columns_json, &rows_json)
+                    backend.replace_table_storage(
+                        &name,
+                        expected_rev,
+                        &columns_json,
+                        &storage_columns_json,
+                        &table,
+                    )
                 });
                 let _ = resp.send(result);
             }
@@ -1187,13 +1245,13 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                     .and_then(|backend| backend.run_migration_sql(&statements));
                 let _ = resp.send(result);
             }
-            DbRequest::SyncQueryTable {
+            DbRequest::ExecuteSql {
                 connection_id,
-                table,
+                sql,
                 resp,
             } => {
                 let result = backend_mut(&mut backends, connection_id)
-                    .and_then(|backend| backend.sync_query_table(&table));
+                    .and_then(|backend| backend.execute_sql(&sql));
                 let _ = resp.send(result);
             }
             DbRequest::QuerySql {
@@ -1230,39 +1288,59 @@ mod tests {
     }
 
     #[test]
-    fn sync_query_table_exposes_only_declared_columns() {
+    fn replace_table_storage_exposes_only_declared_columns() {
         let state = DatabaseState::new();
         let connection = state
             .connect(Driver::Sqlite, ":memory:".to_string())
             .expect("sqlite connection");
+        connection.ensure_schema().expect("ensure schema");
+
+        let columns = vec![
+            QueryColumn {
+                name: "id".to_string(),
+                column_type: QueryColumnType::Int,
+                not_null: true,
+            },
+            QueryColumn {
+                name: "name".to_string(),
+                column_type: QueryColumnType::Text,
+                not_null: true,
+            },
+        ];
+        let columns_json = serde_json::to_string(&columns).expect("serialize columns");
 
         connection
-            .sync_query_table(QueryTable {
-                name: "products".to_string(),
-                columns: vec![
-                    QueryColumn {
-                        name: "id".to_string(),
-                        column_type: QueryColumnType::Int,
-                        not_null: true,
-                    },
-                    QueryColumn {
-                        name: "name".to_string(),
-                        column_type: QueryColumnType::Text,
-                        not_null: true,
-                    },
-                ],
-                rows: vec![
-                    QueryRow {
-                        row_ordinal: 0,
-                        values: vec![QueryCell::Int(1), QueryCell::Text("Widget".to_string())],
-                    },
-                    QueryRow {
-                        row_ordinal: 1,
-                        values: vec![QueryCell::Int(2), QueryCell::Text("Gadget".to_string())],
-                    },
-                ],
-            })
-            .expect("sync query table");
+            .migrate_table(
+                "products".to_string(),
+                columns_json.clone(),
+                columns_json.clone(),
+            )
+            .expect("migrate table");
+
+        connection
+            .replace_table_storage(
+                0,
+                "products".to_string(),
+                columns_json.clone(),
+                columns_json,
+                QueryTable {
+                    name: "products".to_string(),
+                    columns,
+                    rows: vec![
+                        QueryRow {
+                            row_ordinal: 0,
+                            row_json: r#"{"id":1,"name":"Widget"}"#.to_string(),
+                            values: vec![QueryCell::Int(1), QueryCell::Text("Widget".to_string())],
+                        },
+                        QueryRow {
+                            row_ordinal: 1,
+                            row_json: r#"{"id":2,"name":"Gadget"}"#.to_string(),
+                            values: vec![QueryCell::Int(2), QueryCell::Text("Gadget".to_string())],
+                        },
+                    ],
+                },
+            )
+            .expect("replace table storage");
 
         let logical_columns = connection
             .query_sql("PRAGMA table_info(products)".to_string())
@@ -1294,6 +1372,7 @@ mod tests {
             storage_column_names,
             vec![
                 "__aivi_ord".to_string(),
+                "__aivi_row_json".to_string(),
                 "id".to_string(),
                 "name".to_string()
             ]

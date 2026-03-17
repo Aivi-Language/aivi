@@ -374,50 +374,34 @@ insertOn : DbConnection -> Table A -> A -> Effect DbError (Table A)
 insertOn = conn table value => applyDeltaOn conn table (Insert value)
 
 rows : DbSelection A -> Effect DbError (List A)
-rows = selection => do Effect {
-  loaded <- load selection.table
-  pure (List.filter selection.pred loaded)
-}
+rows = selection => database.rows selection
 
 rowsOn : DbConnection -> DbSelection A -> Effect DbError (List A)
-rowsOn = conn selection => do Effect {
-  loaded <- loadOn conn selection.table
-  pure (List.filter selection.pred loaded)
-}
+rowsOn = conn selection => database.rowsOn conn selection
 
 first : DbSelection A -> Effect DbError (Option A)
-first = selection => do Effect {
-  matched <- rows selection
-  matched match
-    | [row, ..._] => pure (Some row)
-    | []          => pure None
-}
+first = selection => database.first selection
 
 firstOn : DbConnection -> DbSelection A -> Effect DbError (Option A)
-firstOn = conn selection => do Effect {
-  matched <- rowsOn conn selection
-  matched match
-    | [row, ..._] => pure (Some row)
-    | []          => pure None
-}
+firstOn = conn selection => database.firstOn conn selection
 
 delete : DbSelection A -> Effect DbError (Table A)
-delete = selection => applyDelta selection.table (Delete selection.pred)
+delete = selection => database.delete selection
 
 deleteOn : DbConnection -> DbSelection A -> Effect DbError (Table A)
-deleteOn = conn selection => applyDeltaOn conn selection.table (Delete selection.pred)
+deleteOn = conn selection => database.deleteOn conn selection
 
 update : DbSelection A -> Patch A -> Effect DbError (Table A)
-update = selection patchFn => applyDelta selection.table (Update selection.pred patchFn)
+update = selection patchFn => database.update selection patchFn
 
 updateOn : DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)
-updateOn = conn selection patchFn => applyDeltaOn conn selection.table (Update selection.pred patchFn)
+updateOn = conn selection patchFn => database.updateOn conn selection patchFn
 
 upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)
-upsert = selection value patchFn => applyDelta selection.table (Upsert selection.pred value patchFn)
+upsert = selection value patchFn => database.upsert selection value patchFn
 
 upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)
-upsertOn = conn selection value patchFn => applyDeltaOn conn selection.table (Upsert selection.pred value patchFn)
+upsertOn = conn selection value patchFn => database.upsertOn conn selection value patchFn
 
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)

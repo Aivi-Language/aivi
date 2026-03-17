@@ -21,7 +21,7 @@ If you are new to generators, copy this three-stage workflow first:
 ```aivi
 /use aivi.generator
 range 1 5 |> map (_ * 2) |> toList
-// => [2, 4, 6, 8, 10]
+// => [2, 4, 6, 8]
 range 1 100 |> filter (_ % 15 == 0) |> toList
 // => [15, 30, 45, 60, 75, 90]
 ```

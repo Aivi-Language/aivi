@@ -174,6 +174,11 @@ fn sockets_stdlib_exercises_real_connection_lifecycle() {
     let client_listener = TcpListener::bind("127.0.0.1:0").expect("bind socket peer");
     let client_port = client_listener.local_addr().expect("peer addr").port();
     let server_port = reserve_port();
+    let invalid_send_listener = TcpListener::bind("127.0.0.1:0").expect("bind invalid send peer");
+    let invalid_send_port = invalid_send_listener
+        .local_addr()
+        .expect("invalid send peer addr")
+        .port();
 
     let client_thread = thread::spawn(move || {
         let mut stream = wait_for_accept(client_listener, Duration::from_secs(5));
@@ -195,9 +200,17 @@ fn sockets_stdlib_exercises_real_connection_lifecycle() {
         assert_eq!(&response, b"world");
     });
 
+    let invalid_send_thread = thread::spawn(move || {
+        let _stream = wait_for_accept(invalid_send_listener, Duration::from_secs(5));
+    });
+
     let _env = EnvGuard::set(&[
         ("AIVI_TEST_SOCKET_SERVER_PORT", client_port.to_string()),
         ("AIVI_TEST_SOCKET_LISTEN_PORT", server_port.to_string()),
+        (
+            "AIVI_TEST_SOCKET_INVALID_SEND_PORT",
+            invalid_send_port.to_string(),
+        ),
     ]);
 
     let report = run_stdlib_file(&path);
@@ -205,6 +218,9 @@ fn sockets_stdlib_exercises_real_connection_lifecycle() {
 
     client_thread.join().expect("client peer thread");
     server_thread.join().expect("server peer thread");
+    invalid_send_thread
+        .join()
+        .expect("invalid send peer thread");
 }
 
 #[test]

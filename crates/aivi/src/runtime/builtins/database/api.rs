@@ -220,13 +220,13 @@ fn decode_value(value: &JsonValue) -> Result<Value, RuntimeError> {
     }
 }
 
-fn encode_json(value: &Value) -> Result<String, RuntimeError> {
+pub(super) fn encode_json(value: &Value) -> Result<String, RuntimeError> {
     let json = encode_value(value)?;
     serde_json::to_string(&json)
         .map_err(|e| RuntimeError::Message(format!("database: json encode error: {e}")))
 }
 
-fn decode_json(text: &str) -> Result<Value, RuntimeError> {
+pub(super) fn decode_json(text: &str) -> Result<Value, RuntimeError> {
     let json: JsonValue = serde_json::from_str(text)
         .map_err(|e| RuntimeError::Message(format!("database: json decode error: {e}")))?;
     decode_value(&json)

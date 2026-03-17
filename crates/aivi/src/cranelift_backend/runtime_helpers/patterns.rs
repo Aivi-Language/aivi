@@ -404,6 +404,7 @@ pub extern "C" fn rt_make_closure(
 
                 Ok(result)
             }),
+            db_patch_meta: None,
         }),
         args: Vec::new(),
         tagged_args: None,
@@ -611,6 +612,7 @@ mod patterns_tests {
                 name: name.to_string(),
                 arity: 2,
                 func: Arc::new(func),
+                db_patch_meta: None,
             }),
             args: Vec::new(),
             tagged_args: Some(Vec::new()),

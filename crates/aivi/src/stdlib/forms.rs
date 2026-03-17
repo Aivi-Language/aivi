@@ -44,8 +44,11 @@ validate : (A -> Validation (List E) B) -> Field A -> Validation (List E) B
 validate = validator state => validator state.value
 
 errorsFrom : Validation (List E) A -> List E
-errorsFrom = validationResult =>
-  fold (errs => errs) (_ => []) validationResult
+errorsFrom = validationResult => {
+  invalidErrors = errs => errs
+  validErrors = _ => []
+  fold invalidErrors validErrors validationResult
+}
 
 errors : (A -> Validation (List E) B) -> Field A -> List E
 errors = validator state => errorsFrom (validate validator state)

@@ -207,7 +207,8 @@ impl Parser {
     }
 
     fn build_lambda_expr(&self, params: Vec<LambdaHeadParam>, body: Expr, span: Span) -> Expr {
-        let lambda_params: Vec<Pattern> = params.iter().map(|param| param.pattern.clone()).collect();
+        let lambda_params: Vec<Pattern> =
+            params.iter().map(|param| param.pattern.clone()).collect();
         let mut patched_items = Vec::new();
         for param in &params {
             let Some(updater) = &param.patch else {
@@ -264,6 +265,12 @@ impl Parser {
         }
     }
 
+    fn has_error_diagnostics_since(&self, checkpoint: usize) -> bool {
+        self.diagnostics[checkpoint..]
+            .iter()
+            .any(|diag| diag.diagnostic.severity == crate::DiagnosticSeverity::Error)
+    }
+
     fn is_pattern_start_at(&self, pos: usize) -> bool {
         let parser = self.parser_slice(pos, self.tokens.len());
         parser.is_pattern_start()
@@ -293,14 +300,15 @@ impl Parser {
             self.diagnostics.truncate(diag_checkpoint);
             return None;
         };
+        if self.has_error_diagnostics_since(diag_checkpoint) {
+            self.pos = checkpoint;
+            self.diagnostics.truncate(diag_checkpoint);
+            return None;
+        }
 
         if self.consume_symbol("<|") {
             let updater_start = self.pos;
-            let Pattern::Ident(_) = &pattern else {
-                self.pos = checkpoint;
-                self.diagnostics.truncate(diag_checkpoint);
-                return None;
-            };
+            let supports_patch = matches!(&pattern, Pattern::Ident(_));
 
             for end in updater_start + 1..=self.tokens.len() {
                 let boundary_is_arrow = self
@@ -322,18 +330,39 @@ impl Parser {
                 let after_param_diags = self.diagnostics.len();
                 self.consume_newlines();
                 if self.check_symbol("=>") {
+                    if !supports_patch {
+                        self.emit_diag(
+                            "E1545",
+                            "only simple identifier parameters may use `<|` patch syntax",
+                            pattern_span(&pattern),
+                        );
+                    }
                     return Some(vec![LambdaHeadParam {
                         pattern,
-                        patch: Some(updater),
+                        patch: supports_patch.then_some(updater),
                     }]);
                 }
-                if let Some(mut rest) = self.try_parse_lambda_param_sequence() {
-                    let mut out = vec![LambdaHeadParam {
-                        pattern,
-                        patch: Some(updater),
-                    }];
-                    out.append(&mut rest);
-                    return Some(out);
+                if self.is_pattern_start_at(self.pos) {
+                    let mut probe = self.parser_slice(self.pos, self.tokens.len());
+                    if let Some(mut rest) = probe.try_parse_lambda_param_sequence() {
+                        if probe.has_error_diagnostics_since(0) {
+                            continue;
+                        }
+                        self.pos += probe.pos;
+                        if !supports_patch {
+                            self.emit_diag(
+                                "E1545",
+                                "only simple identifier parameters may use `<|` patch syntax",
+                                pattern_span(&pattern),
+                            );
+                        }
+                        let mut out = vec![LambdaHeadParam {
+                            pattern,
+                            patch: supports_patch.then_some(updater),
+                        }];
+                        out.append(&mut rest);
+                        return Some(out);
+                    }
                 }
                 self.pos = after_param_checkpoint;
                 self.diagnostics.truncate(after_param_diags);
@@ -353,13 +382,24 @@ impl Parser {
                 patch: None,
             }]);
         }
-        if let Some(mut rest) = self.try_parse_lambda_param_sequence() {
-            let mut out = vec![LambdaHeadParam {
-                pattern,
-                patch: None,
-            }];
-            out.append(&mut rest);
-            return Some(out);
+        if self.is_pattern_start_at(self.pos) {
+            let mut probe = self.parser_slice(self.pos, self.tokens.len());
+            if let Some(mut rest) = probe.try_parse_lambda_param_sequence() {
+                if probe.has_error_diagnostics_since(0) {
+                    self.pos = after_param_checkpoint;
+                    self.diagnostics.truncate(after_param_diags);
+                    self.pos = checkpoint;
+                    self.diagnostics.truncate(diag_checkpoint);
+                    return None;
+                }
+                self.pos += probe.pos;
+                let mut out = vec![LambdaHeadParam {
+                    pattern,
+                    patch: None,
+                }];
+                out.append(&mut rest);
+                return Some(out);
+            }
         }
 
         self.pos = after_param_checkpoint;
@@ -593,7 +633,10 @@ impl Parser {
         if args.is_empty() {
             return Some(expr);
         }
-        let span = merge_span(expr_span(&expr), expr_span(args.last().expect("infallible")));
+        let span = merge_span(
+            expr_span(&expr),
+            expr_span(args.last().expect("infallible")),
+        );
         expr = Expr::Call {
             func: Box::new(expr),
             args,

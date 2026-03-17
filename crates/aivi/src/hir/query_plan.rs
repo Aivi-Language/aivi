@@ -1,9 +1,14 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 pub(crate) const DB_QUERY_COMPILED_BUILTIN: &str = "__db_query_compiled";
 pub(crate) const DB_QUERY_COUNT_BUILTIN: &str = "__db_query_count";
 pub(crate) const DB_QUERY_EXISTS_BUILTIN: &str = "__db_query_exists";
 pub(crate) const DB_QUERY_ERROR_BUILTIN: &str = "__db_query_error";
+pub const DB_SELECTION_META_FIELD: &str = "__aiviDbSelectionPlan";
+pub(crate) const DB_PATCH_COMPILED_BUILTIN: &str = "__db_patch_compiled";
+pub(crate) const DB_PATCH_ERROR_BUILTIN: &str = "__db_patch_error";
 
 const DB_MODULE: &str = "aivi.database";
 
@@ -65,6 +70,9 @@ pub enum CompiledScalarExpr {
         alias: String,
         field: String,
     },
+    Captured {
+        capture_index: usize,
+    },
     IntLit {
         value: i64,
     },
@@ -94,12 +102,52 @@ pub enum CompiledScalarExpr {
 pub struct StaticCompiledQuery {
     pub plan: CompiledQueryPlan,
     pub source_exprs: Vec<Expr>,
+    pub capture_exprs: Vec<Expr>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledDbSelectionPlan {
+    pub predicate: CompiledScalarExpr,
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticCompiledDbSelection {
+    pub plan: CompiledDbSelectionPlan,
+    pub capture_exprs: Vec<Expr>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledDbPatchPlan {
+    pub fields: Vec<CompiledDbPatchField>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledDbPatchField {
+    pub field: String,
+    pub value: CompiledScalarExpr,
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticCompiledDbPatch {
+    pub plan: CompiledDbPatchPlan,
+    pub capture_exprs: Vec<Expr>,
+}
+
+#[derive(Debug, Clone)]
 struct QueryCompileEnv {
     aliases: HashSet<String>,
     lets: HashMap<String, CompiledProjection>,
+    captures: Rc<RefCell<Vec<Expr>>>,
+}
+
+impl Default for QueryCompileEnv {
+    fn default() -> Self {
+        Self {
+            aliases: HashSet::new(),
+            lets: HashMap::new(),
+            captures: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
 }
 
 pub(crate) fn compile_static_query(expr: &Expr) -> Result<StaticCompiledQuery, String> {
@@ -183,6 +231,7 @@ fn compile_static_query_with_env(
                         aggregate: CompiledAggregate::None,
                     },
                     source_exprs: vec![args[0].clone()],
+                    capture_exprs: env.captures.borrow().clone(),
                 });
             }
             "where" => {
@@ -190,29 +239,35 @@ fn compile_static_query_with_env(
                     return Err("db.where expects predicate and query".to_string());
                 }
                 let mut inner = compile_static_query_with_env(args[1], env, base)?;
-                let pred = compile_lambda_scalar(args[0], &inner.plan.projection)?;
+                let pred =
+                    compile_lambda_scalar(args[0], &inner.plan.projection, env.captures.clone())?;
                 inner.plan.filters.push(pred);
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             "select" => {
                 if args.len() != 2 {
                     return Err("db.select expects mapper and query".to_string());
                 }
                 let mut inner = compile_static_query_with_env(args[1], env, base)?;
-                inner.plan.projection = compile_lambda_projection(args[0], &inner.plan.projection)?;
-                return Ok(inner);
+                inner.plan.projection = compile_lambda_projection(
+                    args[0],
+                    &inner.plan.projection,
+                    env.captures.clone(),
+                )?;
+                return Ok(with_query_captures(inner, env));
             }
             "orderBy" => {
                 if args.len() != 2 {
                     return Err("db.orderBy expects key function and query".to_string());
                 }
                 let mut inner = compile_static_query_with_env(args[1], env, base)?;
-                let key = compile_lambda_scalar(args[0], &inner.plan.projection)?;
+                let key =
+                    compile_lambda_scalar(args[0], &inner.plan.projection, env.captures.clone())?;
                 inner.plan.order_by.push(CompiledOrderBy {
                     expr: key,
                     descending: false,
                 });
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             "limit" => {
                 if args.len() != 2 {
@@ -220,7 +275,7 @@ fn compile_static_query_with_env(
                 }
                 let mut inner = compile_static_query_with_env(args[1], env, base)?;
                 inner.plan.limit = Some(compile_const_int(args[0], env)?);
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             "offset" => {
                 if args.len() != 2 {
@@ -228,7 +283,7 @@ fn compile_static_query_with_env(
                 }
                 let mut inner = compile_static_query_with_env(args[1], env, base)?;
                 inner.plan.offset = Some(compile_const_int(args[0], env)?);
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             "count" => {
                 if args.len() != 1 {
@@ -236,7 +291,7 @@ fn compile_static_query_with_env(
                 }
                 let mut inner = compile_static_query_with_env(args[0], env, base)?;
                 inner.plan.aggregate = CompiledAggregate::Count;
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             "exists" => {
                 if args.len() != 1 {
@@ -244,7 +299,7 @@ fn compile_static_query_with_env(
                 }
                 let mut inner = compile_static_query_with_env(args[0], env, base)?;
                 inner.plan.aggregate = CompiledAggregate::Exists;
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             "queryOf" => {
                 if args.len() != 1 {
@@ -254,7 +309,7 @@ fn compile_static_query_with_env(
                     "db.queryOf only lowers to SQL inside a query that already has a source".to_string()
                 })?;
                 inner.plan.projection = compile_value_expr(args[0], env)?;
-                return Ok(inner);
+                return Ok(with_query_captures(inner, env));
             }
             _ => {}
         }
@@ -328,6 +383,7 @@ fn compile_query_do_block(items: &[crate::surface::BlockItem]) -> Result<StaticC
                         aggregate: CompiledAggregate::None,
                     },
                     source_exprs,
+                    capture_exprs: env.captures.borrow().clone(),
                 };
                 let lowered = compile_static_query_with_env(expr, &env, Some(base))?;
                 return match lowered.plan.projection {
@@ -365,11 +421,15 @@ fn guard_arg(expr: &Expr) -> Option<&Expr> {
 fn compile_lambda_projection(
     expr: &Expr,
     input: &CompiledProjection,
+    captures: Rc<RefCell<Vec<Expr>>>,
 ) -> Result<CompiledProjection, String> {
     match expr {
         Expr::FieldSection { field, .. } => project_field(input, &field.name),
         Expr::Lambda { params, body, .. } if params.len() == 1 => {
-            let mut env = QueryCompileEnv::default();
+            let mut env = QueryCompileEnv {
+                captures,
+                ..QueryCompileEnv::default()
+            };
             bind_lambda_param(&mut env, &params[0], input.clone())?;
             compile_value_expr(body, &env)
         }
@@ -377,8 +437,12 @@ fn compile_lambda_projection(
     }
 }
 
-fn compile_lambda_scalar(expr: &Expr, input: &CompiledProjection) -> Result<CompiledScalarExpr, String> {
-    let projection = compile_lambda_projection(expr, input)?;
+fn compile_lambda_scalar(
+    expr: &Expr,
+    input: &CompiledProjection,
+    captures: Rc<RefCell<Vec<Expr>>>,
+) -> Result<CompiledScalarExpr, String> {
+    let projection = compile_lambda_projection(expr, input, captures)?;
     projection_into_scalar(projection)
 }
 
@@ -405,6 +469,18 @@ fn compile_const_int(expr: &Expr, env: &QueryCompileEnv) -> Result<i64, String> 
 }
 
 fn compile_value_expr(expr: &Expr, env: &QueryCompileEnv) -> Result<CompiledProjection, String> {
+    match compile_value_expr_inner(expr, env) {
+        Ok(value) => Ok(value),
+        Err(err) if expr_can_capture(expr, env) => Ok(CompiledProjection::Scalar {
+            expr: CompiledScalarExpr::Captured {
+                capture_index: capture_expr(env, expr.clone()),
+            },
+        }),
+        Err(err) => Err(err),
+    }
+}
+
+fn compile_value_expr_inner(expr: &Expr, env: &QueryCompileEnv) -> Result<CompiledProjection, String> {
     match expr {
         Expr::Ident(name) => {
             if let Some(value) = env.lets.get(&name.name) {
@@ -478,6 +554,34 @@ fn compile_scalar_expr(expr: &Expr, env: &QueryCompileEnv) -> Result<CompiledSca
     projection_into_scalar(projection)
 }
 
+fn with_query_captures(
+    mut compiled: StaticCompiledQuery,
+    env: &QueryCompileEnv,
+) -> StaticCompiledQuery {
+    compiled.capture_exprs = env.captures.borrow().clone();
+    compiled
+}
+
+fn capture_expr(env: &QueryCompileEnv, expr: Expr) -> usize {
+    let mut captures = env.captures.borrow_mut();
+    let index = captures.len();
+    captures.push(expr);
+    index
+}
+
+fn expr_can_capture(expr: &Expr, env: &QueryCompileEnv) -> bool {
+    match expr {
+        Expr::Ident(name) => !env.aliases.contains(&name.name) && !env.lets.contains_key(&name.name),
+        Expr::Literal(_) => true,
+        Expr::UnaryNeg { expr, .. } => expr_can_capture(expr, env),
+        Expr::FieldAccess { base, .. } => expr_can_capture(base, env),
+        Expr::Binary { left, right, .. } => {
+            expr_can_capture(left, env) && expr_can_capture(right, env)
+        }
+        _ => false,
+    }
+}
+
 fn projection_into_scalar(projection: CompiledProjection) -> Result<CompiledScalarExpr, String> {
     match projection {
         CompiledProjection::Scalar { expr } => Ok(expr),
@@ -533,4 +637,61 @@ fn compile_literal_scalar(
             Err("sigil literals are not supported in lowered queries".to_string())
         }
     }
+}
+
+pub(crate) fn compile_static_db_selection(
+    fields: &[crate::surface::RecordField],
+) -> Result<StaticCompiledDbSelection, String> {
+    let pred = fields
+        .iter()
+        .find_map(|field| match field.path.as_slice() {
+            [crate::surface::PathSegment::Field(name)] if name.name == "pred" && !field.spread => {
+                Some(&field.value)
+            }
+            _ => None,
+        })
+        .ok_or_else(|| "selection is missing a `pred` field".to_string())?;
+    let env = QueryCompileEnv::default();
+    let predicate = compile_lambda_scalar(
+        pred,
+        &CompiledProjection::Row {
+            alias: "q0".to_string(),
+        },
+        env.captures.clone(),
+    )?;
+    let capture_exprs = env.captures.borrow().clone();
+    Ok(StaticCompiledDbSelection {
+        plan: CompiledDbSelectionPlan { predicate },
+        capture_exprs,
+    })
+}
+
+pub(crate) fn compile_static_db_patch(
+    fields: &[crate::surface::RecordField],
+) -> Result<StaticCompiledDbPatch, String> {
+    let env = QueryCompileEnv::default();
+    let mut compiled_fields = Vec::with_capacity(fields.len());
+    for field in fields {
+        if field.spread {
+            return Err("selector patch lowering does not support record spread".to_string());
+        }
+        if field.path.len() != 1 {
+            return Err("selector patch lowering requires plain field names".to_string());
+        }
+        let field_name = match &field.path[0] {
+            crate::surface::PathSegment::Field(name) => name.name.clone(),
+            _ => return Err("selector patch lowering requires plain field names".to_string()),
+        };
+        compiled_fields.push(CompiledDbPatchField {
+            field: field_name,
+            value: compile_scalar_expr(&field.value, &env)?,
+        });
+    }
+    let capture_exprs = env.captures.borrow().clone();
+    Ok(StaticCompiledDbPatch {
+        plan: CompiledDbPatchPlan {
+            fields: compiled_fields,
+        },
+        capture_exprs,
+    })
 }

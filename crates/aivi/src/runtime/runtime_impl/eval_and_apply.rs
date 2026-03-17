@@ -74,6 +74,7 @@ impl Runtime {
                     list.push(x);
                     Ok(Value::List(Arc::new(list)))
                 }),
+                db_patch_meta: None,
             });
         }
         let step = Value::Builtin(BuiltinValue {

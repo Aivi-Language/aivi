@@ -326,6 +326,18 @@ update_selector_convenience = do Effect {
     | _     => assert False
 }
 
+@test "update selector rejects non-lowered patch functions"
+update_selector_rejects_non_lowered_patch_functions = do Effect {
+  users0 = table "update_patch_users"[]
+  users1 <- insert users0 { id: 1, name: "Alice" }
+  result <- attempt (update users1[id == 1] (u => u))
+  rows   <- dbLoad users1
+  assertEq (List.length rows) 1
+  result match
+    | Err err => assertEq err "database.update requires a patch block in the lowered SQL-backed subset"
+    | Ok _    => assert False
+}
+
 @test "updateOn selector convenience"
 updateOn_selector_convenience = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
@@ -343,7 +355,7 @@ updateOn_selector_convenience = do Effect {
 @test "upsert convenience inserts when missing"
 upsert_convenience_inserts = do Effect {
   users0 = table "upsert_ins_users"[]
-  users1 <- upsert users0[id == 99] { id: 99, name: "New" } (u => u)
+  users1 <- upsert users0[id == 99] { id: 99, name: "New" } { id: 99, name: "New" }
   rows   <- dbLoad users1
   assertEq (List.length rows) 1
   rows match

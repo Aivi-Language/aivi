@@ -36,10 +36,16 @@ range = start end => k => z =>
   if start >= end then z else range (start + 1) end k (k z start)
 
 map : (A -> B) -> Generator A -> Generator B
-map = f gen => k => z => gen (acc a => k acc (f a)) z
+map = f gen => k => z => {
+  step = acc a => k acc (f a)
+  gen step z
+}
 
 filter : (A -> Bool) -> Generator A -> Generator A
-filter = pred gen => k => z => gen (acc a => if pred a then k acc a else acc) z
+filter = pred gen => k => z => {
+  step = acc a => if pred a then k acc a else acc
+  gen step z
+}
 
 reduce : (B -> A -> B) -> B -> Generator A -> B
 reduce = f init gen => gen f init

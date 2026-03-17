@@ -1094,6 +1094,7 @@ fn runtime_builtin(
             name: name.to_string(),
             arity,
             func: Arc::new(func),
+            db_patch_meta: None,
         }),
         args: Vec::new(),
         tagged_args: Some(Vec::new()),
