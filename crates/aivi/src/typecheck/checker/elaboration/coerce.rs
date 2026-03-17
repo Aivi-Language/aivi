@@ -230,6 +230,19 @@ impl TypeChecker {
             Type::Con(name, args) if self.type_name_matches(&name, "Patch") && args.len() == 1 => {
                 args.into_iter().next()
             }
+            Type::Func(param, ret) => {
+                let param_ty = self.apply((*param).clone());
+                let ret_ty = self.apply((*ret).clone());
+                let param_expanded = self.expand_alias(param_ty.clone());
+                let ret_expanded = self.expand_alias(ret_ty);
+                if matches!(param_expanded, Type::Record { .. })
+                    && self.type_to_string(&param_expanded) == self.type_to_string(&ret_expanded)
+                {
+                    Some(param_ty)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }

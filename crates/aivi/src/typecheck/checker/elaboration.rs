@@ -755,10 +755,8 @@ impl TypeChecker {
         } else {
             right
         };
-        if op == "<|" {
-            if self.looks_like_db_selector_target(&left) {
-                return self.elab_db_selector_write(left, right, span, expected, env);
-            }
+        if op == "<|" && self.looks_like_db_selector_target(&left) {
+            return self.elab_db_selector_write(left, right, span, expected, env);
         }
         if op == "|>" {
             let (left, _left_ty) = self.elab_expr(left, None, env)?;
