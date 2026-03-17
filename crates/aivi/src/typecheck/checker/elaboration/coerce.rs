@@ -224,6 +224,16 @@ impl TypeChecker {
         result
     }
 
+    fn expected_patch_target_ty(&mut self, expected: Option<&Type>) -> Option<Type> {
+        let applied = self.apply(expected?.clone());
+        match applied {
+            Type::Con(name, args) if self.type_name_matches(&name, "Patch") && args.len() == 1 => {
+                args.into_iter().next()
+            }
+            _ => None,
+        }
+    }
+
     fn elab_record(
         &mut self,
         fields: Vec<RecordField>,
@@ -231,6 +241,11 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
+        if let Some(target_ty) = self.expected_patch_target_ty(expected.as_ref()) {
+            self.infer_patch(target_ty, &fields, env)?;
+            return self.check_or_coerce(Expr::PatchLit { fields, span }, expected, env);
+        }
+
         let expected_ty = if let Some(ty) = expected.as_ref() {
             let applied = self.apply(ty.clone());
             Some(self.expand_alias(applied))
@@ -543,6 +558,20 @@ impl TypeChecker {
                     self.subst = checkpoint;
                 }
             }
+        }
+
+        if let (Some(target_ty), Expr::Record { fields, span }) =
+            (self.expected_patch_target_ty(expected.as_ref()), &expr)
+        {
+            self.infer_patch(target_ty, fields, env)?;
+            return self.check_or_coerce(
+                Expr::PatchLit {
+                    fields: fields.clone(),
+                    span: span.clone(),
+                },
+                expected,
+                env,
+            );
         }
 
         if let (Some(expected_ty), Expr::Record { fields, .. }) = (expected.clone(), &expr) {

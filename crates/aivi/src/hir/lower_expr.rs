@@ -397,15 +397,6 @@ fn lower_expr_inner_ctx(
             if op == "<|" {
                 let left_is_db_selector = looks_like_db_selector_target(left.as_ref());
                 match *right {
-                    Expr::Raw { text, .. } if left_is_db_selector && text == "-" => {
-                        return lower_named_call_hir(
-                            "aivi.database.delete",
-                            vec![lower_expr_ctx(*left, id_gen, ctx, false)],
-                            id_gen,
-                            ctx,
-                            span.clone(),
-                        );
-                    }
                     Expr::Record {
                         fields,
                         span: record_span,

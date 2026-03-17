@@ -243,11 +243,12 @@ UnaryExpr      := ("!" | "-") UnaryExpr
                | PatchExpr
 
 PatchExpr      := AppExpr { ("<|" | "<<-") PatchArg }
-PatchArg       := PatchLit | "-"
+PatchArg       := PatchLit | AppExpr
 (* `<|` is record-patch. When the left-hand side elaborates to a database
-   selector from `aivi.database`, `<| { ... }` updates the selected rows and
-   `<| -` deletes them. `<<-` is the signal-write operator; the LHS must be a
-   Signal A. Both share precedence 10. Signal-write semantics:
+   selector from `aivi.database`, `<| { ... }` updates the selected rows.
+   Database row deletion uses `db.delete` / `db.deleteOn`. `<<-` is the
+   signal-write operator; the LHS must be a Signal A. Both share precedence 10.
+   Signal-write semantics:
      signal <<- value   → set signal value
      signal <<- fn      → update signal fn
      signal <<- { ... } → update signal (patch { ... }) *)
@@ -387,7 +388,7 @@ Select         := "[" ( "*" | Expr ) "]"
 
 - `PathSeg` is intentionally broad so path navigation, traversal selectors, and prism-like focuses can share one syntax family.
 - The compiler should reject ill-typed or ill-scoped path forms with targeted diagnostics.
-- `-` inside `PatchLit` still means field removal. The direct form `selection <| -` is separate expression syntax used only for database row deletion.
+- `-` inside `PatchLit` still means field removal. Database row deletion is separate and uses `db.delete table[pred]`.
 
 ## 0.5 Multi-clause unary functions
 

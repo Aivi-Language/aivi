@@ -364,7 +364,7 @@ Ambient selector operations run on the default connection configured with `db.co
 For example, `db.inTransaction (...)` can contain both `db.delete userTable[id == userId]` and `userTable[id == userId] <| { active: False }`, and both operations stay on that ambient connection for the whole transaction.
 
 Explicit selector operations run on the `DbConnection` value passed to the helper.
-For example, `db.inTransactionOn conn (...)` can contain both `db.deleteOn conn userTable[id == userId]` and `db.updateOn conn userTable[id == userId] (patch { active: False })`, and both operations stay on that specific connection for the whole transaction.
+For example, `db.inTransactionOn conn (...)` can contain both `db.deleteOn conn userTable[id == userId]` and `db.updateOn conn userTable[id == userId] { active: False }`, and both operations stay on that specific connection for the whole transaction.
 
 The selector itself never captures a connection and never changes transaction boundaries.
 
@@ -372,25 +372,24 @@ The selector itself never captures a connection and never changes transaction bo
 
 `<|` keeps its ordinary record-patching meaning on ordinary data, and gains one database-specific case when the left-hand side is a `DbSelection A`:
 
-- `selection <| { ... }` is shorthand for `db.update selection (patch { ... })`
-- `selection <| -` is shorthand for `db.delete selection`
+- `selection <| { ... }` is shorthand for `db.update selection { ... }`
 
 So these forms are equivalent:
 
 ```aivi
-db.update userTable[id == userId] (patch { role: "admin" })
+db.update userTable[id == userId] { role: "admin" }
 userTable[id == userId] <| { role: "admin" }
 ```
 
-and:
+Row deletion always stays explicit:
 
 ```aivi
 db.delete userTable[id == userId]
-userTable[id == userId] <| -
+db.deleteOn conn userTable[id == userId]
 ```
 
-Standalone `-` remains invalid in ordinary expression position.
-Its delete meaning exists only as the direct right-hand side of `<|` when the left-hand side is a database selector.
+Standalone `-` keeps its ordinary patch meaning only inside patch blocks.
+It does not gain any selector-specific delete meaning.
 
 #### Typing and desugaring
 
@@ -408,9 +407,10 @@ The selector CRUD surface type-checks with these rules:
 - `db.upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)`
 - `db.upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)`
 
-`selection <| { ... }` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A` and the patch block checks as a valid `Patch A`.
+Plain record literals `{ ... }` are accepted directly anywhere these helpers expect a `Patch A`.
+That means `db.update table[pred] { ... }`, `db.updateOn conn table[pred] { ... }`, `db.upsert table[pred] row { ... }`, and `db.upsertOn conn table[pred] row { ... }` all type-check by coercing the inline record block to the corresponding `Patch A`.
 
-`selection <| -` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A`.
+`selection <| { ... }` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A` and the patch block checks as a valid `Patch A`.
 
 The surface desugars as follows:
 
@@ -421,13 +421,16 @@ The surface desugars as follows:
 | `db.first table[pred]` | `db.rows table[pred]`, then return the first row as `Option` |
 | `db.firstOn conn table[pred]` | `db.rowsOn conn table[pred]`, then return the first row as `Option` |
 | `db.update table[pred] patchFn` | `db.applyDelta table (Update pred patchFn)` |
+| `db.update table[pred] { ... }` | `db.applyDelta table (Update pred (patch { ... }))` |
 | `db.updateOn conn table[pred] patchFn` | `db.applyDeltaOn conn table (Update pred patchFn)` |
+| `db.updateOn conn table[pred] { ... }` | `db.applyDeltaOn conn table (Update pred (patch { ... }))` |
 | `db.delete table[pred]` | `db.applyDelta table (Delete pred)` |
 | `db.deleteOn conn table[pred]` | `db.applyDeltaOn conn table (Delete pred)` |
 | `db.upsert table[pred] seed patchFn` | `db.applyDelta table (Upsert pred seed patchFn)` |
+| `db.upsert table[pred] seed { ... }` | `db.applyDelta table (Upsert pred seed (patch { ... }))` |
 | `db.upsertOn conn table[pred] seed patchFn` | `db.applyDeltaOn conn table (Upsert pred seed patchFn)` |
-| `table[pred] <| { ... }` | `db.update table[pred] (patch { ... })` |
-| `table[pred] <| -` | `db.delete table[pred]` |
+| `db.upsertOn conn table[pred] seed { ... }` | `db.applyDeltaOn conn table (Upsert pred seed (patch { ... }))` |
+| `table[pred] <| { ... }` | `db.update table[pred] { ... }` |
 
 This keeps the selector layer shallow on purpose.
 It is syntax and API sugar over the existing single-table query and delta model, not a new transaction or connection mechanism.
@@ -440,8 +443,8 @@ The compiler should reject at least these cases with targeted diagnostics:
 | --- | --- | --- |
 | `db.delete userTable` | `db.delete` expects a `DbSelection A`, not a whole `Table A` | suggest `db.delete userTable[pred]` |
 | `db.rows userTable[id]` | `id` lifts to `User -> Int`, but a selector predicate must resolve to `Bool` | suggest `userTable[id == someId]` or another boolean predicate |
-| `db.update userTable[id == userId] { role: "admin" }` | the function form expects a `Patch A` value; plain braces in argument position are not a patch value | suggest `db.update userTable[id == userId] (patch { role: "admin" })` or `userTable[id == userId] <| { role: "admin" }` |
-| `userTable[id == userId] <| 1` | selector patch shorthand accepts only a patch block or the delete marker `-` | suggest `userTable[id == userId] <| { ... }` or `userTable[id == userId] <| -` |
+| `db.update userTable[id == userId] 1` | `db.update` expects a patch value in its final argument position | suggest `db.update userTable[id == userId] { role: "admin" }` or pass a reusable `patch { ... }` value |
+| `userTable[id == userId] <| 1` | selector patch shorthand accepts only a patch block | suggest `userTable[id == userId] <| { ... }` |
 | `userTable[id == userId] <| { nope: True }` | the patch mentions a field that is not present on the selected row type | report the unknown field just as ordinary patching already does |
 
 These are specification-level diagnostics, not exact error strings.
@@ -483,7 +486,7 @@ The important part is that the compiler explains whether the failure came from s
 
 ## Practical guidance
 
-- Prefer explicit connections when a function opens, shares, or nests database work.
+- Prefer ambient connections when a function opens, shares, or nests database work.
 - Use ambient helpers when you truly want one process-wide default connection.
 - Keep table definitions complete with explicit column lists if you want the query DSL to lower cleanly into SQL.
 - Use savepoints for inner rollback boundaries instead of trying to nest transactions on the same connection.
