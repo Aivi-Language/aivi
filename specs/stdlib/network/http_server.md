@@ -25,10 +25,6 @@ Because `listen` returns a [`Resource HttpError Server`](../../syntax/resources.
 
 <<< ../../snippets/from_md/stdlib/network/http_server/block_01.aivi{aivi}
 
-
-> `Response.body` uses raw bytes (`List Int`), so text responses are typically encoded before sending.
-> In other words, `"Hello"` is shown here as the byte values the server actually writes to the socket.
-
 ## Types
 
 <<< ../../snippets/from_md/stdlib/network/http_server/types.aivi{aivi}
@@ -59,7 +55,25 @@ Important fields:
 | `Request` | `remoteAddr` | The client address, if available, as `Option Text`. Use it for logging or access control. |
 | `Response` | `status` | The HTTP status code to return. |
 | `Response` | `headers` | Response headers. |
-| `Response` | `body` | Raw response body bytes. |
+| `Response` | `body` | A `ResponseBody` value. Bare `Text`, record literals, and raw `List Int` byte lists are all accepted in the field through expected-type coercions. |
+
+### `ResponseBody`
+
+`ResponseBody` lets handlers stay ergonomic without giving up exact byte control:
+
+- `RawBytes (List Int)` preserves the old raw-byte form.
+- `Plain Text` sends UTF-8 text as written.
+- `Form (List Header)` percent-encodes name/value pairs as `application/x-www-form-urlencoded` content.
+- `Json JsonValue` sends structured JSON data.
+
+When the expected type is `ResponseBody`, the compiler inserts the convenient wrappers below:
+
+- bare `List Int` → `RawBytes bytes`
+- bare `Text` → `Plain text`
+- bare record literal `{ ... }` → `Json (toJson { ... })`
+- bare `JsonValue` → `Json value`
+
+Runtime header rule: JSON responses automatically add `Content-Type: application/json` when you do not already provide a `Content-Type` header. Plain text and form responses keep your headers unchanged.
 
 ## Functions
 

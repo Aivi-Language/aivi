@@ -1,3 +1,5 @@
+use aivi.json (JsonValue)
+
 Header = { name: Text, value: Text }
 
 Request = {
@@ -8,10 +10,16 @@ Request = {
   remoteAddr: Option Text
 }
 
+ResponseBody =
+  | RawBytes (List Int)
+  | Plain Text
+  | Form (List Header)
+  | Json JsonValue
+
 Response = {
   status: Int
   headers: List Header
-  body: List Int
+  body: ResponseBody
 }
 
 ServerConfig = {

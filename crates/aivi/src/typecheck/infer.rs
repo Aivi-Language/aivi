@@ -267,7 +267,7 @@ fn infer_value_types_incremental_impl(
                 }
             }
 
-            for (mod_name, def_name, inner_cg) in checker.take_load_source_schemas() {
+            for (mod_name, def_name, inner_cg) in checker.take_load_source_schemas(&env) {
                 let key = format!("{}.{}", mod_name, def_name);
                 all_source_schemas.entry(key).or_default().push(inner_cg);
             }

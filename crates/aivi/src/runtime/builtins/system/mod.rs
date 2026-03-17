@@ -601,7 +601,54 @@ mod system_json_tests {
                     && matches!(
                         args.as_slice(),
                         [Value::Constructor { name, args }] if name == "Critical" && args.is_empty()
-                    )
+                )
+        ));
+    }
+
+    #[test]
+    fn json_to_runtime_with_schema_wraps_nested_optional_floats_inside_lists() {
+        let schema = crate::runtime::json_schema::JsonSchema::Record(
+            std::collections::BTreeMap::from([(
+                "orders".to_string(),
+                crate::runtime::json_schema::JsonSchema::List(Box::new(
+                    crate::runtime::json_schema::JsonSchema::Record(
+                        std::collections::BTreeMap::from([(
+                            "totalAmount".to_string(),
+                            crate::runtime::json_schema::JsonSchema::Option(Box::new(
+                                crate::runtime::json_schema::JsonSchema::Float,
+                            )),
+                        )]),
+                    ),
+                )),
+            )]),
+        );
+
+        let value = json_to_runtime_with_schema(
+            &json!({
+                "orders": [
+                    { "totalAmount": 42.5 }
+                ]
+            }),
+            Some(&schema),
+        );
+
+        assert!(matches!(
+            value,
+            Value::Record(fields)
+                if matches!(
+                    fields.get("orders"),
+                    Some(Value::List(items))
+                        if matches!(
+                            &items.as_ref()[..],
+                            [Value::Record(order_fields)]
+                                if matches!(
+                                    order_fields.get("totalAmount"),
+                                    Some(Value::Constructor { name, args })
+                                        if name == "Some"
+                                            && matches!(args.as_slice(), [Value::Float(amount)] if (*amount - 42.5).abs() < 0.0001)
+                                )
+                        )
+                )
         ));
     }
 }

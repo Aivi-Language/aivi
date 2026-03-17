@@ -177,10 +177,11 @@ Key notes:
 When expected type requires it:
 
 - `Text` context may insert `toText` if `ToText` exists.
-- `Body` context can coerce:
+- `Body` / `ResponseBody` context can coerce:
     - record literal → `Json (toJson record)`
     - `Text` → `Plain text`
     - `JsonValue` → `Json ...`
+    - `List Int` → `RawBytes ...` when `ResponseBody` is expected
 - `Option A` context may wrap a plain `A` as `Some A`.
 
 ## 9. Predicates

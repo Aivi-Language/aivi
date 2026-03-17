@@ -110,8 +110,8 @@ fn con1(name: &str, arg: Value) -> Value {
 }
 
 /// Converts an AIVI `JsonValue` ADT value back to a JSON text string.
-/// Used by the HTTP runtime to serialize a `Json` body variant.
-pub(super) fn json_value_to_text(value: &Value) -> Result<String, RuntimeError> {
+/// Used by the HTTP runtimes to serialize `Json` body variants.
+pub(crate) fn json_value_to_text(value: &Value) -> Result<String, RuntimeError> {
     match value {
         Value::Constructor { name, args } if name == "JsonNull" && args.is_empty() => {
             Ok("null".to_string())

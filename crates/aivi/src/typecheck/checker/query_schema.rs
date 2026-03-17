@@ -1,6 +1,7 @@
 #[derive(Clone, Debug)]
 enum TableColumnType {
     Int,
+    Float,
     Bool,
     Timestamp,
     Varchar,
@@ -911,6 +912,9 @@ impl TypeChecker {
             TableColumnType::Int => {
                 matches!(expanded, Type::Con(ref name, ref args) if Self::leaf_name(name) == "Int" && args.is_empty())
             }
+            TableColumnType::Float => {
+                matches!(expanded, Type::Con(ref name, ref args) if Self::leaf_name(name) == "Float" && args.is_empty())
+            }
             TableColumnType::Bool => {
                 matches!(expanded, Type::Con(ref name, ref args) if Self::leaf_name(name) == "Bool" && args.is_empty())
             }
@@ -926,6 +930,7 @@ impl TypeChecker {
     fn table_column_expected_type(&mut self, column_ty: &TableColumnType) -> Type {
         match column_ty {
             TableColumnType::Int => Type::con("Int"),
+            TableColumnType::Float => Type::con("Float"),
             TableColumnType::Bool => Type::con("Bool"),
             TableColumnType::Timestamp => Type::con("DateTime"),
             TableColumnType::Varchar => Type::con("Text"),
@@ -1001,6 +1006,7 @@ impl TypeChecker {
         let field = Self::record_field_value(fields, "type")?;
         match field {
             Expr::Ident(name) if name.name == "IntType" => Some(TableColumnType::Int),
+            Expr::Ident(name) if name.name == "FloatType" => Some(TableColumnType::Float),
             Expr::Ident(name) if name.name == "BoolType" => Some(TableColumnType::Bool),
             Expr::Ident(name) if name.name == "TimestampType" => Some(TableColumnType::Timestamp),
             Expr::Call { func, args, .. }

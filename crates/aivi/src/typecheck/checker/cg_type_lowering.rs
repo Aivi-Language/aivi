@@ -11,11 +11,12 @@ impl TypeChecker {
     /// Any remaining `Type::Var` or un-resolved HKTs produce `CgType::Dynamic`.
     pub(super) fn type_to_cg_type(&mut self, ty: &Type, env: &crate::typecheck::types::TypeEnv) -> CgType {
         let resolved = self.apply(ty.clone());
+        let resolved = self.expand_alias(resolved);
         self.type_to_cg_type_inner_with_depth(&resolved, env, Self::MAX_CG_LOWERING_DEPTH)
     }
 
     fn type_to_cg_type_inner_with_depth(
-        &self,
+        &mut self,
         ty: &Type,
         env: &crate::typecheck::types::TypeEnv,
         depth_left: usize,
@@ -23,7 +24,8 @@ impl TypeChecker {
         if depth_left == 0 {
             return CgType::Dynamic;
         }
-        match ty {
+        let resolved = self.expand_alias(ty.clone());
+        match &resolved {
             Type::Var(_) => CgType::Dynamic,
 
             Type::Con(name, args) => match name.as_str() {
@@ -38,9 +40,44 @@ impl TypeChecker {
                         self.type_to_cg_type_inner_with_depth(&args[0], env, depth_left - 1),
                     ))
                 }
+                "Option" if args.len() == 1 => CgType::Adt {
+                    name: name.clone(),
+                    constructors: vec![
+                        ("None".to_string(), Vec::new()),
+                        (
+                            "Some".to_string(),
+                            vec![self.type_to_cg_type_inner_with_depth(
+                                &args[0],
+                                env,
+                                depth_left - 1,
+                            )],
+                        ),
+                    ],
+                },
+                "Result" if args.len() == 2 => CgType::Adt {
+                    name: name.clone(),
+                    constructors: vec![
+                        (
+                            "Err".to_string(),
+                            vec![self.type_to_cg_type_inner_with_depth(
+                                &args[0],
+                                env,
+                                depth_left - 1,
+                            )],
+                        ),
+                        (
+                            "Ok".to_string(),
+                            vec![self.type_to_cg_type_inner_with_depth(
+                                &args[1],
+                                env,
+                                depth_left - 1,
+                            )],
+                        ),
+                    ],
+                },
                 _ => {
                     // Check if this is a known ADT
-                    if let Some(ctor_names) = self.adt_constructors.get(name) {
+                    if let Some(ctor_names) = self.adt_constructors.get(name).cloned() {
                         let mut constructors = Vec::new();
                         for ctor_name in ctor_names {
                             // For each constructor, figure out its payload types from the
@@ -48,7 +85,7 @@ impl TypeChecker {
                             // `Ctor : Arg1 -> Arg2 -> ... -> ResultType`
                             // We need to collect the argument types.
                             let ctor_arg_types = self.extract_ctor_arg_types(
-                                ctor_name,
+                                &ctor_name,
                                 name,
                                 args,
                                 env,
@@ -67,7 +104,17 @@ impl TypeChecker {
                 }
             },
 
-            Type::App(_, _) => CgType::Dynamic,
+            Type::App(base, args) => {
+                let expanded_base = self.expand_alias((**base).clone());
+                match expanded_base {
+                    Type::Con(name, mut existing_args) => {
+                        existing_args.extend(args.iter().cloned());
+                        let combined = Type::Con(name, existing_args);
+                        self.type_to_cg_type_inner_with_depth(&combined, env, depth_left - 1)
+                    }
+                    _ => CgType::Dynamic,
+                }
+            }
 
             Type::Func(a, b) => CgType::Func(
                 Box::new(self.type_to_cg_type_inner_with_depth(a, env, depth_left - 1)),
@@ -103,7 +150,7 @@ impl TypeChecker {
     /// the applied type arguments (e.g. [Int] for `Option Int`), returns the constructor's
     /// payload types with variables resolved.
     fn extract_ctor_arg_types(
-        &self,
+        &mut self,
         ctor_name: &str,
         adt_name: &str,
         type_args: &[Type],

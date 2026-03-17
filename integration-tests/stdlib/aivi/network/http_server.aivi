@@ -11,7 +11,7 @@ use aivi.text as text
 use aivi.url (parse)
 
 withEnvPort = key run => do Effect {
-  portResult <- attempt (env.get key)
+  portResult <- attempt (load (env.get key))
   portResult match
     | Err _     => pure Unit
     | Ok raw    => text.parseInt raw match
@@ -62,7 +62,7 @@ wsEcho = tx => socket => do Effect {
 
 wsHandler = tx => request =>
   if request.path == "/ws" then pure (Ws (wsEcho tx))
-  else pure (Http { status: 404, headers: [], body: [] })
+  else pure (Http { status: 404, headers: [], body: RawBytes [] })
 
 @test "listen and stop handle a real http request"
 listen_and_stop_handle_http_requests = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" (port => do Effect {
@@ -77,8 +77,8 @@ listen_and_stop_handle_http_requests = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" 
     workflow        <- assertOk workflowResult
     responseResult  <- assertOk workflow.responseResult
     response        <- assertOk responseResult
-    _               <- assertEq response.status 200
-    _               <- assertEq response.body "ok"
+    _               <- assert_eq response.status 200
+    _               <- assert_eq response.body "ok"
     stoppedResponse <- assertOk workflow.stoppedResult
     _               <- assertErr stoppedResponse
     pure Unit
@@ -95,8 +95,8 @@ listen_resource_cleanup_stops_the_http_server_on_scope_exit = withEnvPort "AIVI_
     workflow        <- assertOk workflowResult
     responseResult  <- assertOk workflow.responseResult
     response        <- assertOk responseResult
-    _               <- assertEq response.status 200
-    _               <- assertEq response.body "ok"
+    _               <- assert_eq response.status 200
+    _               <- assert_eq response.body "ok"
     stoppedResult   <- attempt (get requestUrl)
     stoppedResponse <- assertOk stoppedResult
     _               <- assertErr stoppedResponse
@@ -116,14 +116,14 @@ websocket_receive_send_and_close_echo = withEnvPort "AIVI_TEST_HTTP_WS_PORT" (po
     received <- assertOk wsResult
     result   <- assertOk received
     result match
-      | Ok value => assertEq value "hello websocket"
+      | Ok value => assert_eq value "hello websocket"
       | Err _    => assert False
 })
 
 @test "server config"
 server_config = do Effect {
   cfg = { address: "127.0.0.1:0" }
-  assertEq cfg.address "127.0.0.1:0"
+  assert_eq cfg.address "127.0.0.1:0"
 }
 
 @test "request fields"
@@ -135,20 +135,42 @@ request_fields = do Effect {
     body: []
     remoteAddr: Some "127.0.0.1"
   }
-  _ <- assertEq req.method "GET"
-  _ <- assertEq req.path "/health"
-  assertEq req.remoteAddr (Some "127.0.0.1")
+  _ <- assert_eq req.method "GET"
+  _ <- assert_eq req.path "/health"
+  assert_eq req.remoteAddr (Some "127.0.0.1")
 }
 
 @test "response construction"
 response_construction = do Effect {
-  resp = {
+  textReply = Http {
+    status: 200
+    headers: [{ name: "Content-Type", value: "text/plain" }]
+    body: "Hello"
+  }
+  bytesReply = Http {
     status: 200
     headers: [{ name: "Content-Type", value: "text/plain" }]
     body: [72, 101, 108, 108, 111]
   }
-  _ <- assertEq resp.status 200
-  assertEq (List.length resp.body) 5
+  jsonReply = Http {
+    status: 200
+    headers: []
+    body: { message: "hi" }
+  }
+  _ <- (textReply match
+    | Http response => do Effect {
+        _ <- assert_eq response.status 200
+        assert_eq response.body (Plain "Hello")
+      }
+    | _ => assert False
+  )
+  _ <- (bytesReply match
+    | Http response => assert_eq response.body (RawBytes [72, 101, 108, 108, 111])
+    | _             => assert False
+  )
+  jsonReply match
+    | Http response => assert_eq response.body (Json (toJson { message: "hi" }))
+    | _             => assert False
 }
 
 @test "ws message variants"
@@ -156,23 +178,23 @@ ws_message_variants = do Effect {
   textMsg   = TextMsg "hello ws"
   binaryMsg = BinaryMsg [1, 2, 3]
   _ <- (textMsg match
-    | TextMsg text => assertEq text "hello ws"
+    | TextMsg text => assert_eq text "hello ws"
     | _            => assert False
   )
   _ <- (binaryMsg match
-    | BinaryMsg bytes => assertEq (List.length bytes) 3
+    | BinaryMsg bytes => assert_eq (List.length bytes) 3
     | _               => assert False
   )
-  _ <- assertEq Ping Ping
-  _ <- assertEq Pong Pong
-  assertEq Close Close
+  _ <- assert_eq Ping Ping
+  _ <- assert_eq Pong Pong
+  assert_eq Close Close
 }
 
 @test "server reply http variant"
 server_reply_http = do Effect {
-  reply = Http { status: 404, headers: [], body: [] }
+  reply = Http { status: 404, headers: [], body: RawBytes [] }
   reply match
-    | Http response => assertEq response.status 404
+    | Http response => assert_eq response.status 404
     | _             => assert False
 }
 
@@ -180,6 +202,6 @@ server_reply_http = do Effect {
 http_and_ws_error_fields = do Effect {
   httpErr = { message: "internal server error" }
   wsErr   = { message: "connection closed" }
-  _ <- assertEq httpErr.message "internal server error"
-  assertEq wsErr.message "connection closed"
+  _ <- assert_eq httpErr.message "internal server error"
+  assert_eq wsErr.message "connection closed"
 }

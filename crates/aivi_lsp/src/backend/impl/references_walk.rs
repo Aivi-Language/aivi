@@ -230,18 +230,17 @@ impl Backend {
     }
 
     pub(super) fn module_member_definition_range(module: &Module, ident: &str) -> Option<Range> {
-        let matches = |name: &str| name == ident || name == format!("({})", ident);
+        let operator_name = format!("({ident})");
+        let matches = |name: &str| name == ident || name == operator_name;
 
+        // Prefer executable/value definitions over adjacent type signatures so go-to-definition
+        // lands on the implementation site. VS Code can then use its normal "already at
+        // definition" fallback to show references/usages.
         for item in module.items.iter() {
             match item {
                 ModuleItem::Def(def) => {
                     if matches(&def.name.name) {
                         return Some(Self::span_to_range(def.name.span.clone()));
-                    }
-                }
-                ModuleItem::TypeSig(sig) => {
-                    if matches(&sig.name.name) {
-                        return Some(Self::span_to_range(sig.name.span.clone()));
                     }
                 }
                 ModuleItem::TypeDecl(decl) => {
@@ -295,15 +294,36 @@ impl Backend {
                                     }
                                 }
                             }
-                            DomainItem::TypeSig(_) => {}
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                                 if matches(&def.name.name) {
                                     return Some(Self::span_to_range(def.name.span.clone()));
                                 }
                             }
+                            DomainItem::TypeSig(_) => {}
                         }
                     }
                 }
+                ModuleItem::TypeSig(_) => {}
+            }
+        }
+
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::TypeSig(sig) => {
+                    if matches(&sig.name.name) {
+                        return Some(Self::span_to_range(sig.name.span.clone()));
+                    }
+                }
+                ModuleItem::DomainDecl(domain_decl) => {
+                    for domain_item in domain_decl.items.iter() {
+                        if let DomainItem::TypeSig(sig) = domain_item {
+                            if matches(&sig.name.name) {
+                                return Some(Self::span_to_range(sig.name.span.clone()));
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         None

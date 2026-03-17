@@ -1,11 +1,8 @@
-@no_prelude
 module integrationTests.stdlib.aivi.crypto.tests
 
-use aivi
-use aivi.prelude
 use aivi.testing
 use aivi.crypto
-use aivi.text
+use aivi.text (length)
 
 // -- Hashing --
 

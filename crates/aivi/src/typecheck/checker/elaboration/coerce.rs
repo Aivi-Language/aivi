@@ -725,12 +725,23 @@ impl TypeChecker {
             self.subst = base_subst3;
         }
 
-        // Coerce into `Body`: record → Json (toJson record), Text → Plain, JsonValue → Json.
-        let is_body = matches!(
-            expected_applied,
-            Type::Con(ref name, ref args) if name == "Body" && args.is_empty()
-        );
-        if is_body {
+        // Coerce into HTTP body-like types:
+        // - `Body`: record → Json (toJson record), Text → Plain, JsonValue → Json
+        // - `ResponseBody`: same as `Body`, plus List Int → RawBytes
+        let http_body_kind = match expected_applied {
+            Type::Con(ref name, ref args)
+                if args.is_empty() && self.type_name_matches(name, "Body") =>
+            {
+                Some("Body")
+            }
+            Type::Con(ref name, ref args)
+                if args.is_empty() && self.type_name_matches(name, "ResponseBody") =>
+            {
+                Some("ResponseBody")
+            }
+            _ => None,
+        };
+        if let Some(http_body_kind) = http_body_kind {
             let inferred_applied = self.apply(inferred.clone());
             let inferred_expanded = self.expand_alias(inferred_applied);
 
@@ -745,8 +756,13 @@ impl TypeChecker {
                     args: vec![expr.clone()],
                     span: expr_span(&expr),
                 };
+                let json_ctor_name = if http_body_kind == "ResponseBody" {
+                    "aivi.net.httpServer.Json"
+                } else {
+                    "Json"
+                };
                 let json_ctor = Expr::Ident(SpannedName {
-                    name: "Json".into(),
+                    name: json_ctor_name.into(),
                     span: expr_span(&expr),
                 });
                 let wrapped = Expr::Call {
@@ -768,8 +784,13 @@ impl TypeChecker {
             // Text → Plain text
             if matches!(inferred_expanded, Type::Con(ref n, ref a) if n == "Text" && a.is_empty())
             {
+                let plain_ctor_name = if http_body_kind == "ResponseBody" {
+                    "aivi.net.httpServer.Plain"
+                } else {
+                    "Plain"
+                };
                 let plain_ctor = Expr::Ident(SpannedName {
-                    name: "Plain".into(),
+                    name: plain_ctor_name.into(),
                     span: expr_span(&expr),
                 });
                 let wrapped = Expr::Call {
@@ -791,12 +812,46 @@ impl TypeChecker {
             // JsonValue → Json jv
             if matches!(inferred_expanded, Type::Con(ref n, ref a) if n == "JsonValue" && a.is_empty())
             {
+                let json_ctor_name = if http_body_kind == "ResponseBody" {
+                    "aivi.net.httpServer.Json"
+                } else {
+                    "Json"
+                };
                 let json_ctor = Expr::Ident(SpannedName {
-                    name: "Json".into(),
+                    name: json_ctor_name.into(),
                     span: expr_span(&expr),
                 });
                 let wrapped = Expr::Call {
                     func: Box::new(json_ctor),
+                    args: vec![expr.clone()],
+                    span: expr_span(&expr),
+                };
+                let wrapped_ty = self.infer_expr(&wrapped, env)?;
+                let checkpoint = self.subst.clone();
+                if self
+                    .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
+                    .is_ok()
+                {
+                    return Ok((wrapped, self.apply(expected)));
+                }
+                self.subst = checkpoint;
+            }
+
+            if http_body_kind == "ResponseBody"
+                && matches!(
+                    inferred_expanded,
+                    Type::Con(ref n, ref a)
+                        if self.type_name_matches(n, "List")
+                            && a.len() == 1
+                            && matches!(&a[0], Type::Con(elem, elem_args) if self.type_name_matches(elem, "Int") && elem_args.is_empty())
+                )
+            {
+                let raw_bytes_ctor = Expr::Ident(SpannedName {
+                    name: "aivi.net.httpServer.RawBytes".into(),
+                    span: expr_span(&expr),
+                });
+                let wrapped = Expr::Call {
+                    func: Box::new(raw_bytes_ctor),
                     args: vec![expr.clone()],
                     span: expr_span(&expr),
                 };

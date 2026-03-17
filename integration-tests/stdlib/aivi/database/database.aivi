@@ -15,7 +15,7 @@ use aivi.database (
   inTransactionOn,
   applyDelta, applyDeltaOn, chunkDeltas,
   ftsDoc, ftsMatchAny, ftsMatchAll,
-  ins, del, ups,
+  Insert, Delete, Upsert,
   insert, insertOn, rows, first, firstOn, delete, deleteOn, update, updateOn, upsert, upsertOn
 )
 
@@ -93,9 +93,9 @@ column_construct = do Effect {
 @test "delta construct"
 delta_construct = do Effect {
   user        = { id: 1, name: "Alice" }
-  insertDelta = ins user
-  deleteDelta = del (u => u.id == 1)
-  upsertDelta = ups (u => u.id == 1) user (u => u <| { name: "Bob" })
+  insertDelta = Insert user
+  deleteDelta = Delete (u => u.id == 1)
+  upsertDelta = Upsert (u => u.id == 1) user (u => u <| { name: "Bob" })
   users0      = table "users"[]
   users1 <- applyDelta users0 insertDelta
   users2 <- applyDelta users1 deleteDelta
@@ -135,13 +135,13 @@ explicit_connection_commit_and_rollback = do Effect {
   users0 = table "users"[]
   _      <- runMigrationsOn conn [users0]
   _      <- beginTxOn conn
-  users1 <- applyDeltaOn conn users0 (ins { id: 1, name: "Alice" })
+  users1 <- applyDeltaOn conn users0 (Insert { id: 1, name: "Alice" })
   _      <- commitTxOn conn
   rows1  <- loadOn conn users1
   assertEq (List.length rows1) 1
 
   _     <- beginTxOn conn
-  _     <- applyDeltaOn conn users1 (ins { id: 2, name: "Bob" })
+  _     <- applyDeltaOn conn users1 (Insert { id: 2, name: "Bob" })
   _     <- rollbackTxOn conn
   rows2 <- loadOn conn users0
   _     <- close conn
@@ -154,9 +154,9 @@ savepoint_rollback_on_explicit_connection = do Effect {
   users0 = table "savepoint_users"[]
   _      <- runMigrationsOn conn [users0]
   _      <- beginTxOn conn
-  users1 <- applyDeltaOn conn users0 (ins { id: 1, name: "Alpha" })
+  users1 <- applyDeltaOn conn users0 (Insert { id: 1, name: "Alpha" })
   _      <- savepointOn conn "after_first"
-  _      <- applyDeltaOn conn users1 (ins { id: 2, name: "Beta" })
+  _      <- applyDeltaOn conn users1 (Insert { id: 2, name: "Beta" })
   _      <- rollbackToSavepointOn conn "after_first"
   _      <- commitTxOn conn
   rows   <- loadOn conn users0
@@ -170,7 +170,7 @@ inTransactionOn_rolls_back_on_failure = do Effect {
   users0 = table "tx_users"[]
   _      <- runMigrationsOn conn [users0]
   result <- attempt (inTransactionOn conn (do Effect {
-        _      <- applyDeltaOn conn users0 (ins { id: 1, name: "Tx" })
+        _      <- applyDeltaOn conn users0 (Insert { id: 1, name: "Tx" })
         fail "boom"
   }))
   rows <- loadOn conn users0
@@ -185,9 +185,9 @@ inTransactionOn_rolls_back_on_failure = do Effect {
 delta_chunk_helper = do Effect {
   deltas =
     [
-      ins { id: 1, name: "A" }
-      ins { id: 2, name: "B" }
-      del (u => u.id == 1)
+      Insert { id: 1, name: "A" }
+      Insert { id: 2, name: "B" }
+      Delete (u => u.id == 1)
     ]
   chunks = chunkDeltas 2 deltas
   assertEq (List.length chunks) 2

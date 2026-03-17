@@ -11,7 +11,7 @@ Expected-type coercions only happen in places where the compiler already knows t
 - function arguments
 - record fields checked against a known record type
 - bindings with an explicit type annotation
-- other checked positions with a known expected type, such as text interpolation, HTML child splices, or `body:` fields in an HTTP request record
+- other checked positions with a known expected type, such as text interpolation, HTML child splices, or `body:` fields in HTTP request/response records
 
 Outside those positions, no conversion is inserted.
 
@@ -64,13 +64,14 @@ Defaults are prepended before user-written fields, so explicit fields and later 
 
 ## `Body` coercions
 
-When `Body` is expected, such as in an HTTP request, the compiler inserts the following wrappers:
+When `Body` or `ResponseBody` is expected at an HTTP boundary, the compiler inserts the following wrappers:
 
-| Expression type | Rewritten to |
-| --- | --- |
-| Record literal `{ ... }` | `Json (toJson { ... })` |
-| `Text` | `Plain text` |
-| `JsonValue` | `Json jv` |
+| Expected type | Expression type | Rewritten to |
+| --- | --- | --- |
+| `Body` or `ResponseBody` | Record literal `{ ... }` | `Json (toJson { ... })` |
+| `Body` or `ResponseBody` | `Text` | `Plain text` |
+| `Body` or `ResponseBody` | `JsonValue` | `Json jv` |
+| `ResponseBody` only | `List Int` | `RawBytes bytes` |
 
 The record-to-JSON rule only applies to a literal record expression at the coercion site.
 If you already bound the payload to a name, write `Json (toJson payload)` explicitly.
@@ -79,7 +80,7 @@ That lets request-building code stay focused on the payload you mean to send:
 
 <<< ../../snippets/from_md/syntax/types/expected_type_coercions/block_02.aivi{aivi}
 
-For the surrounding request API and `Body` type definition, see [HTTP Domain](../../stdlib/network/http.md#body).
+For the surrounding request API and `Body` type definition, see [HTTP Domain](../../stdlib/network/http.md#body). For server responses, see [HTTP Server Domain](../../stdlib/network/http_server.md#responsebody).
 
 
 ## `VNode` coercion

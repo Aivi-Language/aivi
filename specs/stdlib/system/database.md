@@ -95,7 +95,7 @@ The ambient/explicit split applies to reads, writes, and transaction control, no
 
 Ambient helpers always target the current default connection configured with `db.configure`.
 Explicit helpers always target the `DbConnection` value passed in by the caller.
-Any future selector-based CRUD surface should follow the same split instead of embedding connection ownership into the selector itself.
+The selector-based CRUD surface follows the same split instead of embedding connection ownership into the selector itself.
 
 ## Types
 
@@ -208,20 +208,6 @@ Marking them `@static` allows compile-time validation and migration analysis whe
 
 <<< ../../snippets/from_md/stdlib/system/database/migrations.aivi{aivi}
 
-## Schema-first source declarations
-
-Database-backed source declarations can reuse table and migration values as schema carriers instead of hiding row shape behind the eventual `db.load` or query call.
-This gives tooling enough information to validate columns and projected row shapes earlier.
-
-A database source declaration should carry typed connector config, the table or query/projection to read from, and any typed parameters it needs.
-
-For the `Source Db` forms themselves, see [External Sources](../../syntax/external_sources.md) and [Schema-First Source Definitions](../../syntax/external_sources/schema_first.md). A minimal table-backed declaration looks like this:
-
-<<< ../../snippets/from_md/stdlib/system/database/block_01.aivi{aivi}
-
-
-`load usersRows` is still the effectful step; the declaration just makes the database boundary reusable and statically inspectable.
-
 ## Pooling
 
 Connection pooling lives in `aivi.database.pool`.
@@ -235,7 +221,7 @@ If you are still on the beginner path, skip pooling until one process needs many
 ## Runtime effects
 
 - `db.configure`, `db.configureSqlite`, pool creation, and connection acquisition open or configure database connections.
-- `db.load` and read-only query helpers execute database reads.
+- `db.load`, selector helpers, and `db.runQuery` / `db.runQueryOn` execute database reads.
 - `db.applyDelta`, typed mutation helpers, transactions, and savepoints execute database writes.
 - `db.runMigrations` and `db.runMigrationSql` apply schema changes.
 
@@ -293,16 +279,7 @@ The ambient forms (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.inTransacti
 | **Delete** pred<br><code>Pred A -> Delta A</code> | Delete rows that match `pred`. |
 | **Upsert** pred value patch<br><code>Pred A -> A -> Patch A -> Delta A</code> | Update matching rows, or insert `value` if no row matches. |
 
-### Convenience aliases
-
-`aivi.database` also exports short aliases for the delta constructors:
-
-- `ins = Insert`
-- `upd = Update`
-- `del = Delete`
-- `ups = Upsert`
-
-When `use aivi.database (domain Database)` is in scope, these aliases work well in expressions such as `table + upd (...) (...)`.
+These constructors are the canonical low-level way to build reusable delta values programmatically.
 
 ### Selector CRUD helpers
 
@@ -310,7 +287,7 @@ When `use aivi.database (domain Database)` is in scope, these aliases work well 
 The high-level CRUD helpers keep inserts explicit and route reads, updates, deletes, and upserts through a shared `table[predicate]` selector surface.
 Selectors are pure descriptions of “which rows in which table”; they do not open connections, start transactions, or perform I/O by themselves.
 
-These helpers currently execute in memory, just like `db.query`, `db.applyDelta`, and `db.applyDeltaOn`.
+These helpers currently execute through the in-memory path, just like `db.applyDelta`, `db.applyDeltaOn`, and helper-built queries that do not lower to SQL.
 Their predicates and patches do not compile to SQL mutation statements.
 <!-- /quick-info -->
 
@@ -338,7 +315,7 @@ That means all of these are valid selector forms:
 | Function | Canonical meaning |
 | --- | --- |
 | **db.insertOn** conn table row<br><code>DbConnection -> Table A -> A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Insert row)` |
-| **db.rowsOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (List A)</code> | `db.runQueryOn conn (db.where selection.pred (db.from selection.table))` |
+| **db.rowsOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (List A)</code> | `db.loadOn conn selection.table`, then keep the rows whose values satisfy `selection.pred` |
 | **db.firstOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Option A)</code> | `db.rowsOn conn selection`, then keep the first row if any |
 | **db.deleteOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Delete selection.pred)` |
 | **db.updateOn** conn selection patch<br><code>DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn selection.table (Update selection.pred patch)` |
@@ -349,7 +326,7 @@ That means all of these are valid selector forms:
 | Function | Canonical meaning |
 | --- | --- |
 | **db.insert** table row<br><code>Table A -> A -> Effect DbError (Table A)</code> | `db.applyDelta table (Insert row)` |
-| **db.rows** selection<br><code>DbSelection A -> Effect DbError (List A)</code> | `db.runQuery (db.where selection.pred (db.from selection.table))` |
+| **db.rows** selection<br><code>DbSelection A -> Effect DbError (List A)</code> | `db.load selection.table`, then keep the rows whose values satisfy `selection.pred` |
 | **db.first** selection<br><code>DbSelection A -> Effect DbError (Option A)</code> | `db.rows selection`, then keep the first row if any |
 | **db.delete** selection<br><code>DbSelection A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Delete selection.pred)` |
 | **db.update** selection patch<br><code>DbSelection A -> Patch A -> Effect DbError (Table A)</code> | `db.applyDelta selection.table (Update selection.pred patch)` |
@@ -416,8 +393,8 @@ The surface desugars as follows:
 
 | Surface form | Desugared form |
 | --- | --- |
-| `db.rows table[pred]` | `db.runQuery (db.where pred (db.from table))` |
-| `db.rowsOn conn table[pred]` | `db.runQueryOn conn (db.where pred (db.from table))` |
+| `db.rows table[pred]` | `db.load table`, then filter the loaded rows with `pred` |
+| `db.rowsOn conn table[pred]` | `db.loadOn conn table`, then filter the loaded rows with `pred` |
 | `db.first table[pred]` | `db.rows table[pred]`, then return the first row as `Option` |
 | `db.firstOn conn table[pred]` | `db.rowsOn conn table[pred]`, then return the first row as `Option` |
 | `db.update table[pred] patchFn` | `db.applyDelta table (Update pred patchFn)` |
@@ -494,6 +471,7 @@ The important part is that the compiler explains whether the failure came from s
 
 ## Notes
 
-- The external-source form `db.query "SELECT ..."` is documented with [External Sources](../../syntax/external_sources.md) and [Schema-First Source Definitions](../../syntax/external_sources/schema_first.md), not with the `Query A` DSL on this page.
+- In v0.1, database reads stay on `db.load`, selector helpers, or `db.runQuery*`.
+- `db.runMigrationSql` and `db.runMigrationSqlOn` are the stable raw SQL entry points in v0.1; regular row reads stay on `db.load`, selector helpers, or `db.runQuery*`.
 - `db.applyDelta`, `db.applyDeltas`, and the typed mutation helpers operate in memory rather than compiling predicates and patches into SQL mutation statements.
 - Transactions are scoped to a single `DbConnection`.

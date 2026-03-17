@@ -4,7 +4,7 @@ module integrationTests.stdlib.aivi.rest.tests
 use aivi
 use aivi.testing
 use aivi.rest
-use aivi.net.httpServer (Http)
+use aivi.net.httpServer (Http, RawBytes)
 use aivi.concurrency (sleep)
 use aivi.reactive as reactive
 use aivi.text as text
@@ -50,7 +50,7 @@ headerValue = name => headers => headers match
 jsonReply = status => body => Http {
   status: status
   headers: [{ name: "Content-Type", value: "application/json" }]
-  body: body
+  body: RawBytes body
 }
 
 isEchoPost = request =>
@@ -70,8 +70,8 @@ restGetDecodesJsonResponse = do Effect {
   server <- startServer "127.0.0.1:39101" handler
   user   <- loadUser ~u(http://127.0.0.1:39101/user)
   _      <- stopServer server
-  _      <- assertEq user.id 42
-  assertEq user.name "Ada"
+  _      <- assert_eq user.id 42
+  assert_eq user.name "Ada"
 }
 
 @test "rest fetch uses bearer token and decodes body"
@@ -94,7 +94,7 @@ restFetchUsesBearerTokenAndDecodesBody = do Effect {
     strictStatus: None
   }
   _ <- stopServer server
-  assertEq ping.ping True
+  assert_eq ping.ping True
 }
 
 @test "rest fetch strict status returns io error"
@@ -117,8 +117,8 @@ restFetchStrictStatusReturnsIoError = do Effect {
   _ <- stopServer server
   result match
     | Err err => do Effect {
-        _ <- assertEq (constructorName err) "IOError"
-        assertEq (List.length (source.decodeErrors err)) 0
+        _ <- assert_eq (constructorName err) "IOError"
+        assert_eq (List.length (source.decodeErrors err)) 0
       }
     | Ok _ => fail "expected strict status failure"
 }
@@ -139,7 +139,7 @@ restFetchDecodesNon2xxBodyWhenStrictStatusIsDisabled = do Effect {
     strictStatus: None
   }
   _ <- stopServer server
-  assertEq payload.error "missing"
+  assert_eq payload.error "missing"
 }
 
 @test "rest fetch timeout returns io error"
@@ -165,8 +165,8 @@ restFetchTimeoutReturnsIoError = do Effect {
   _ <- stopServer server
   result match
     | Err err => do Effect {
-        _ <- assertEq (constructorName err) "IOError"
-        assertEq (List.length (source.decodeErrors err)) 0
+        _ <- assert_eq (constructorName err) "IOError"
+        assert_eq (List.length (source.decodeErrors err)) 0
       }
     | Ok _ => fail "expected timeout failure"
 }
@@ -197,6 +197,6 @@ restFetchRetriesAfterTimeout = do Effect {
     strictStatus: None
   }
   _ <- stopServer server
-  _ <- assertEq value.attempt 2
-  assertEq (reactive.get attempts) 2
+  _ <- assert_eq value.attempt 2
+  assert_eq (reactive.get attempts) 2
 }
