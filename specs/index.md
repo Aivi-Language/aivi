@@ -164,6 +164,7 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Concurrency](stdlib/system/concurrency)
 - [Crypto](stdlib/system/crypto)
 - [Secrets](stdlib/system/secrets)
+- [GNOME Online Accounts](stdlib/system/gnome_online_accounts)
 #### Network, Services & Storage
 - [HTTP & HTTPS](stdlib/network/http)
 - [HTTP Server](stdlib/network/http_server)
