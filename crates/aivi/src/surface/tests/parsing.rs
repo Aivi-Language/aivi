@@ -976,6 +976,116 @@ x = Bar
 }
 
 #[test]
+fn rejects_same_line_export_items_without_comma() {
+    let src = r#"
+module Example
+
+export Value Other
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1548".to_string()),
+        "expected export separator diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_same_line_import_items_without_comma() {
+    let src = r#"
+@no_prelude
+module Example
+
+use some.module (foo bar)
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1548".to_string()),
+        "expected import separator diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_same_line_grouped_import_items_without_separator() {
+    let src = r#"
+@no_prelude
+module Example
+
+use some.module (text(foo) math(bar))
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1548".to_string()),
+        "expected grouped import separator diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_trailing_tokens_after_use_statement() {
+    let src = r#"
+@no_prelude
+module Example
+
+use some.module extra
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1547".to_string()),
+        "expected trailing use diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_trailing_tokens_after_type_alias() {
+    let src = r#"
+module Example
+
+Alias = Int ?? Text
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1547".to_string()),
+        "expected trailing type alias diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_trailing_tokens_after_class_decl() {
+    let src = r#"
+module Example
+
+class Eq A = {} trailing
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1547".to_string()),
+        "expected trailing class diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_trailing_tokens_after_domain_local_type_decl() {
+    let src = r#"
+module Example
+
+domain Change over Int = {
+  Delta = Add | Remove ?? Invalid
+}
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1547".to_string()),
+        "expected trailing domain type diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
 fn parses_unparenthesized_lambda_on_pipe_rhs() {
     let src = r#"
 module Example

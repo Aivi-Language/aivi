@@ -74,16 +74,7 @@ impl Parser {
             "definitions must end after the right-hand side expression; unexpected trailing tokens"
         };
         self.emit_diag("E1546", message, merge_span(span.clone(), next_span));
-        while self.pos < self.tokens.len() {
-            let tok = &self.tokens[self.pos];
-            if tok.kind == TokenKind::Newline
-                || (tok.kind == TokenKind::Symbol && tok.text == "}")
-                || tok.span.start.line != line
-            {
-                break;
-            }
-            self.pos += 1;
-        }
+        self.skip_same_line_tokens_until_terminator(line);
     }
 
     fn parse_literal_type_sig(&mut self, decorators: Vec<Decorator>) -> Option<TypeSig> {
@@ -122,30 +113,11 @@ impl Parser {
         let span = merge_span(name_span, type_span(&ty));
 
         // Same rule as `parse_type_sig`: signatures must be standalone.
-        if let Some(next) = self.tokens.get(self.pos) {
-            let same_line = next.span.start.line == span.end.line;
-            let allowed_terminator = next.kind == TokenKind::Newline
-                || (next.kind == TokenKind::Symbol && next.text == "}");
-            if same_line && !allowed_terminator {
-                let next_span = next.span.clone();
-                let line = next.span.start.line;
-                self.emit_diag(
-                    "E1528",
-                    "type signatures must be written on their own line (write `name = ...` on the next line)",
-                    merge_span(span.clone(), next_span.clone()),
-                );
-                while self.pos < self.tokens.len() {
-                    let tok = &self.tokens[self.pos];
-                    if tok.kind == TokenKind::Newline
-                        || (tok.kind == TokenKind::Symbol && tok.text == "}")
-                        || tok.span.start.line != line
-                    {
-                        break;
-                    }
-                    self.pos += 1;
-                }
-            }
-        }
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1528",
+            "type signatures must be written on their own line (write `name = ...` on the next line)",
+        );
 
         Some(TypeSig {
             decorators,

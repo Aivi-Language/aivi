@@ -36,7 +36,7 @@ aivi run                     # Run the project entry through the development JIT
 
 For a library project, use `--lib` instead of `--bin`.
 
-When the current directory contains `aivi.toml`, `aivi build`, `aivi run`, `aivi check`, and `aivi test` all prefer **project mode**. Passing a file path from inside that project does not switch those commands into direct mode; run them from outside the project root if you want true direct-mode behavior.
+When the current directory contains `aivi.toml`, `aivi build` and `aivi run` always prefer **project mode**. `aivi check` and `aivi test` still default to project mode when you omit the target, but an explicit file or directory target overrides the default source tree even from inside the project root.
 
 ## Command map by task
 
@@ -270,6 +270,7 @@ aivi check [--debug-trace] [--check-stdlib] [<path|dir/...>]
 ```
 
 - inside a project, omitting the target checks the source tree derived from `aivi.toml`
+- inside a project, passing an explicit file or directory checks only that target
 - outside a project, pass an explicit file or directory target
 - `--debug-trace`: enable verbose compiler tracing
 - `--check-stdlib`: include diagnostics from embedded stdlib modules
@@ -283,6 +284,7 @@ aivi test [<path|dir/...>] [--check-stdlib] [--only <name>...] [--update-snapsho
 ```
 
 - inside a project, omitting the target uses the source tree derived from `aivi.toml`
+- inside a project, passing an explicit file or directory tests only that target while keeping the current project root for project-relative features such as snapshots
 - outside a project, pass an explicit file or directory target
 - discovers `@test` definitions under the target
 - formats discovered test files in place before execution

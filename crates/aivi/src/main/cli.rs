@@ -819,26 +819,37 @@ struct TargetContext {
 }
 
 fn resolve_check_or_test_target(args: &[String]) -> Option<TargetContext> {
-    if let Ok(root) = env::current_dir() {
-        let toml_path = root.join("aivi.toml");
-        if toml_path.exists() {
-            if let Ok(cfg) = aivi::read_aivi_toml(&toml_path) {
-                return Some(TargetContext {
-                    target: resolve_project_source_target(&root, &cfg.project.entry),
-                    project_root: Some(root),
-                });
-            }
-        }
+    let cwd = env::current_dir().ok();
+    resolve_check_or_test_target_in_dir(args, cwd.as_deref())
+}
+
+fn resolve_check_or_test_target_in_dir(args: &[String], cwd: Option<&Path>) -> Option<TargetContext> {
+    let project_ctx = cwd.and_then(load_check_or_test_project_context);
+
+    if let Some(target) = args.first() {
+        return Some(TargetContext {
+            project_root: explicit_check_or_test_project_root(
+                target,
+                cwd,
+                project_ctx.as_ref().map(|(root, _)| root.as_path()),
+            ),
+            target: target.clone(),
+        });
     }
 
-    let target = args.first()?.clone();
+    let (root, cfg) = project_ctx?;
     Some(TargetContext {
-        project_root: explicit_target_project_root(&target),
-        target,
+        target: resolve_project_source_target(&root, &cfg.project.entry),
+        project_root: Some(root),
     })
 }
 
 fn explicit_target_project_root(target: &str) -> Option<PathBuf> {
+    let cwd = env::current_dir().ok()?;
+    explicit_target_project_root_in_dir(target, &cwd)
+}
+
+fn explicit_target_project_root_in_dir(target: &str, cwd: &Path) -> Option<PathBuf> {
     let base = target
         .strip_suffix("/...")
         .or_else(|| target.strip_suffix("/**"))
@@ -846,12 +857,44 @@ fn explicit_target_project_root(target: &str) -> Option<PathBuf> {
         .or_else(|| target.strip_suffix("\\**"))
         .unwrap_or(target);
     let base = if base.is_empty() { "." } else { base };
-    let path = Path::new(base).canonicalize().ok()?;
+    let path = cwd.join(base).canonicalize().ok()?;
     if path.is_file() {
         path.parent().map(|parent| parent.to_path_buf())
     } else {
         Some(path)
     }
+}
+
+fn explicit_check_or_test_project_root(
+    target: &str,
+    cwd: Option<&Path>,
+    current_project_root: Option<&Path>,
+) -> Option<PathBuf> {
+    let target_root = match cwd {
+        Some(cwd) => explicit_target_project_root_in_dir(target, cwd),
+        None => explicit_target_project_root(target),
+    }?;
+
+    let Some(project_root) = current_project_root else {
+        return Some(target_root);
+    };
+    let canonical_project_root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
+    if target_root.starts_with(&canonical_project_root) {
+        Some(project_root.to_path_buf())
+    } else {
+        Some(target_root)
+    }
+}
+
+fn load_check_or_test_project_context(cwd: &Path) -> Option<(PathBuf, aivi::AiviToml)> {
+    let toml_path = cwd.join("aivi.toml");
+    if !toml_path.exists() {
+        return None;
+    }
+    let cfg = aivi::read_aivi_toml(&toml_path).ok()?;
+    Some((cwd.to_path_buf(), cfg))
 }
 
 fn collect_candidate_test_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>, AiviError> {
@@ -950,6 +993,17 @@ impl Drop for Spinner {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+    use std::path::Path;
+
+    fn write_project_manifest(root: &Path, entry: &str) {
+        std::fs::write(
+            root.join("aivi.toml"),
+            format!(
+                "[project]\nkind = \"bin\"\nentry = \"{entry}\"\nlanguage_version = \"0.1\"\n"
+            ),
+        )
+        .expect("write aivi.toml");
+    }
 
     #[test]
     fn version_text_contains_cli_and_language_versions() {
@@ -971,8 +1025,73 @@ mod cli_tests {
 
         let recursive = format!("{}/**", src.display());
         assert_eq!(
-            explicit_target_project_root(&recursive),
+            explicit_target_project_root_in_dir(&recursive, dir.path()),
             Some(src.canonicalize().expect("canonicalize src"))
         );
+    }
+
+    #[test]
+    fn resolve_check_or_test_target_prefers_explicit_target_inside_project() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let project_root = dir.path();
+        let src = project_root.join("src");
+        let focused = src.join("focused");
+        std::fs::create_dir_all(&focused).expect("create focused dir");
+        std::fs::write(src.join("main.aivi"), "module demo.main\n").expect("write entry");
+        std::fs::write(focused.join("leaf.aivi"), "module demo.focused.leaf\n")
+            .expect("write focused file");
+        write_project_manifest(project_root, "src/main.aivi");
+
+        let target = "src/focused/**".to_string();
+        let ctx = resolve_check_or_test_target_in_dir(std::slice::from_ref(&target), Some(project_root))
+            .expect("resolve target");
+
+        assert_eq!(ctx.target, target);
+        assert_eq!(ctx.project_root, Some(project_root.to_path_buf()));
+    }
+
+    #[test]
+    fn resolve_check_or_test_target_keeps_explicit_root_outside_project() {
+        let project = tempfile::tempdir().expect("project tempdir");
+        let project_root = project.path();
+        let src = project_root.join("src");
+        std::fs::create_dir_all(&src).expect("create src");
+        std::fs::write(src.join("main.aivi"), "module demo.main\n").expect("write entry");
+        write_project_manifest(project_root, "src/main.aivi");
+
+        let external = tempfile::tempdir().expect("external tempdir");
+        let external_src = external.path().join("focused");
+        std::fs::create_dir_all(&external_src).expect("create external dir");
+        std::fs::write(external_src.join("leaf.aivi"), "module external.focused.leaf\n")
+            .expect("write external file");
+
+        let target = format!("{}/**", external_src.display());
+        let ctx = resolve_check_or_test_target_in_dir(std::slice::from_ref(&target), Some(project_root))
+            .expect("resolve target");
+
+        assert_eq!(ctx.target, target);
+        assert_eq!(
+            ctx.project_root,
+            Some(external_src.canonicalize().expect("canonicalize external dir"))
+        );
+    }
+
+    #[test]
+    fn resolve_check_or_test_target_uses_project_default_when_target_omitted() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let project_root = dir.path();
+        let src = project_root.join("src");
+        std::fs::create_dir_all(&src).expect("create src");
+        std::fs::write(src.join("main.aivi"), "module demo.main\n").expect("write entry");
+        write_project_manifest(project_root, "src/main.aivi");
+
+        let ctx = resolve_check_or_test_target_in_dir(&[], Some(project_root))
+            .expect("resolve project default");
+
+        assert_eq!(
+            ctx.target,
+            resolve_project_source_target(project_root, "src/main.aivi")
+        );
+        assert_eq!(ctx.project_root, Some(project_root.to_path_buf()));
     }
 }
