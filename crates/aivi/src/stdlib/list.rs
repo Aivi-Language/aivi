@@ -8,7 +8,7 @@ export foldr, scanl
 export take, drop, takeWhile, dropWhile, partition, find, findMap
 export at, indexOf, zip, zipWith, unzip, intersperse, chunk, dedup, uniqueBy
 export any, all, elem, dropLast, last
-export traverse_, sequence_
+export traverseEffects, sequenceEffects
 
 use aivi
 
@@ -93,18 +93,18 @@ dropLast = xs => List.dropLast xs
 last : List A -> Option A
 last = xs => List.last xs
 
-traverse_ : (A -> Effect E B) -> List A -> Effect E Unit
-traverse_ = f xs => xs match
+traverseEffects : (A -> Effect E B) -> List A -> Effect E Unit
+traverseEffects = f xs => xs match
   | []           => pure Unit
   | [x, ...rest] => do Effect {
     _ <- f x
-    traverse_ f rest
+    traverseEffects f rest
   }
 
-sequence_ : List (Effect E A) -> Effect E Unit
-sequence_ = xs => {
+sequenceEffects : List (Effect E A) -> Effect E Unit
+sequenceEffects = xs => {
   run = x => x
-  traverse_ run xs
+  traverseEffects run xs
 }
 
 "#;
