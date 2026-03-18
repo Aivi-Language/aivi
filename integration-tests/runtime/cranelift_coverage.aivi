@@ -191,11 +191,11 @@ resultMatching = do Effect {
   v   = ok match
     | Ok x  => x
     | Err _ => 0
-    assertEq v 42
-    e = err match
-      | Ok _  => "ok"
-      | Err s => s
-    assertEq e "fail"
+  assertEq v 42
+  e = err match
+    | Ok _  => "ok"
+    | Err s => s
+  assertEq e "fail"
 }
 
 @test "tree adt construction"
@@ -204,7 +204,7 @@ treeAdt = do Effect {
   v = t match
     | Node _ x _ => x
     | Leaf       => 0
-    assertEq v 2
+  assertEq v 2
 }
 
 // --- Nested pattern matching (triggers emit_pattern_test recursion) ---
@@ -219,7 +219,7 @@ nestedConstructorMatch = do Effect {
     | Some (Some n) => n
     | Some None     => 0
     | None          => -1
-    assertEq v 42
+  assertEq v 42
 }
 
 @test "pair matching"
@@ -248,8 +248,8 @@ listHeadTail = do Effect {
   ht = xs => xs match
     | []           => (0, [])
     | [x, ...rest] => (x, rest)
-    assertEq (ht [1, 2, 3]) (1, [2, 3])
-    assertEq (ht [42]) (42, [])
+  assertEq (ht [1, 2, 3]) (1, [2, 3])
+  assertEq (ht [42]) (42, [])
 }
 
 // --- Closure captures and higher-order (triggers rt_make_closure, compile_definition_body lambda paths) ---
@@ -327,9 +327,9 @@ literalPatternMatch = do Effect {
     | 0 => "zero"
     | 1 => "one"
     | _ => "other"
-    assertEq (describe 0) "zero"
-    assertEq (describe 1) "one"
-    assertEq (describe 42) "other"
+  assertEq (describe 0) "zero"
+  assertEq (describe 1) "one"
+  assertEq (describe 42) "other"
 }
 
 @test "string literal pattern"
@@ -338,9 +338,9 @@ stringLiteralPattern = do Effect {
     | "Alice" => "Hi Alice!"
     | "Bob"   => "Hey Bob!"
     | _       => "Hello stranger!"
-    assertEq (greet "Alice") "Hi Alice!"
-    assertEq (greet "Bob") "Hey Bob!"
-    assertEq (greet "Charlie") "Hello stranger!"
+  assertEq (greet "Alice") "Hi Alice!"
+  assertEq (greet "Bob") "Hey Bob!"
+  assertEq (greet "Charlie") "Hello stranger!"
 }
 
 @test "bool literal pattern"
@@ -348,8 +348,8 @@ boolLiteralPattern = do Effect {
   describe = b => b match
     | True  => "yes"
     | False => "no"
-    assertEq (describe True) "yes"
-    assertEq (describe False) "no"
+  assertEq (describe True) "yes"
+  assertEq (describe False) "no"
 }
 
 // --- Generator operations (triggers rt_gen_vec_*, rt_generator_to_list) ---

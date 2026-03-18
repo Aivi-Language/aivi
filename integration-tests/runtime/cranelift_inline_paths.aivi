@@ -168,7 +168,7 @@ tupleSwap = do Effect {
 recordInMatch = do Effect {
   getName = person => person match
     | { name: n } => n
-      assertEq (getName { name: "Alice", age: 30 }) "Alice"
+  assertEq (getName { name: "Alice", age: 30 }) "Alice"
 }
 
 // --- Returning closures and applying them (triggers rt_make_closure + rt_apply) ---
@@ -208,7 +208,7 @@ listOfRecords = do Effect {
   first = people match
     | [p, ...] => p.name
     | []       => "none"
-    assertEq first "Alice"
+  assertEq first "Alice"
 }
 
 // --- ADT with many constructors (triggers multiple constructor paths) ---

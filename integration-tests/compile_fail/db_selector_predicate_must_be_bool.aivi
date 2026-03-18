@@ -6,14 +6,13 @@ use aivi
 use aivi.database
 
 users : Table { id: Int }
-users =
-  table "users" [
-    {
-      name: "id"
-      type: IntType
-      constraints: []
-      default: None
-    }
-  ]
+users = table "users" [
+  {
+    name: "id"
+    type: IntType
+    constraints: []
+    default: None
+  }
+]
 
 bad = rows users[(u => u.id)]

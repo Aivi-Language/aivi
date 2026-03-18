@@ -6,115 +6,107 @@ use aivi.ui.gtk4
 export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice, shorthandNode, shorthandSignalNode, keySignalNode, functionCallSugarNode, zeroArgFunctionCallSugarNode
 
 node : GtkNode
-node =
-  ~<gtk>
-    <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
-      <object class="GtkLabel">
-        <property name="label">
-          Hello
-        </property>
-      </object>
+node = ~<gtk>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="GtkLabel">
+      <property name="label">
+        Hello
+      </property>
     </object>
-  </gtk>
+  </object>
+</gtk>
 
 interfaceNode : GtkNode
-interfaceNode =
-  ~<gtk>
-    <interface>
-      <requires lib="gtk" version="4.0">
-      </requires>
-      <object class="GtkBox">
-        <object class="GtkLabel" id="headline">
-          <property name="label">
-            Hi
-          </property>
-        </object>
-        <object ref="headline">
-        </object>
+interfaceNode = ~<gtk>
+  <interface>
+    <requires lib="gtk" version="4.0">
+    </requires>
+    <object class="GtkBox">
+      <object class="GtkLabel" id="headline">
+        <property name="label">
+          Hi
+        </property>
       </object>
-    </interface>
-  </gtk>
+      <object ref="headline">
+      </object>
+    </object>
+  </interface>
+</gtk>
 
 templateNode : GtkNode
-templateNode =
-  ~<gtk>
-    <template class="AppCard" parent="GtkBox">
-      <property name="orientation">
-        vertical
-      </property>
-      <object class="GtkOverlay">
-        <object class="GtkLabel" id="baseLabel">
+templateNode = ~<gtk>
+  <template class="AppCard" parent="GtkBox">
+    <property name="orientation">
+      vertical
+    </property>
+    <object class="GtkOverlay">
+      <object class="GtkLabel" id="baseLabel">
+        <property name="label">
+          Base
+        </property>
+      </object>
+      <child type="overlay">
+        <object class="GtkLabel">
           <property name="label">
-            Base
+            Badge
           </property>
         </object>
-        <child type="overlay">
-          <object class="GtkLabel">
-            <property name="label">
-              Badge
-            </property>
-          </object>
-        </child>
-      </object>
-      <object class="GtkButton">
-        <property name="label">
-          Open
-        </property>
-        <signal name="clicked" handler="onOpenClicked" swapped="no">
-        </signal>
-      </object>
-    </template>
-  </gtk>
+      </child>
+    </object>
+    <object class="GtkButton">
+      <property name="label">
+        Open
+      </property>
+      <signal name="clicked" handler="onOpenClicked" swapped="no">
+      </signal>
+    </object>
+  </template>
+</gtk>
 
 save : a -> Unit
 save = _ => Unit
 
 signalSugarNode : GtkNode
-signalSugarNode =
-  ~<gtk>
-    <object class="GtkButton" onClick={save}>
-      <property name="label">
-        Save
-      </property>
-      <signal name="clicked" on={save}>
-      </signal>
-    </object>
-  </gtk>
+signalSugarNode = ~<gtk>
+  <object class="GtkButton" onClick={save}>
+    <property name="label">
+      Save
+    </property>
+    <signal name="clicked" on={save}>
+    </signal>
+  </object>
+</gtk>
 
 // Regression: nested `~<gtk>` inside a splice must not
 // cause the lexer to close the outer sigil prematurely.
 nestedSigilInSplice : GtkNode
-nestedSigilInSplice =
-  ~<gtk>
-    <object class="GtkBox">
-      { ~<gtk><object class="GtkLabel" /></gtk> }
-    </object>
-  </gtk>
+nestedSigilInSplice = ~<gtk>
+  <object class="GtkBox">
+    { ~<gtk><object class="GtkLabel" /></gtk> }
+  </object>
+</gtk>
 
 // GTK widget shorthand: <GtkButton label="..."> → <object class="GtkButton" props={{ label: "..." }}>
 shorthandNode : GtkNode
-shorthandNode =
-  ~<gtk>
-    <GtkBox spacing="24" marginTop="12">
-      <GtkLabel label="Hello" />
-    </GtkBox>
-  </gtk>
+shorthandNode = ~<gtk>
+  <GtkBox spacing="24" marginTop="12">
+    <GtkLabel label="Hello" />
+  </GtkBox>
+</gtk>
 
 // GTK shorthand with signal sugar
 shorthandSignalNode : GtkNode
-shorthandSignalNode =
-  ~<gtk>
-    <GtkButton label="Save" onClick={save}>
-    </GtkButton>
-  </gtk>
+shorthandSignalNode = ~<gtk>
+  <GtkButton label="Save" onClick={save}>
+  </GtkButton>
+</gtk>
 
 keySignalNode : GtkNode
-keySignalNode =
-  ~<gtk>
-    <GtkBox onKeyPress={save}>
-      <GtkLabel label="Press a key" />
-    </GtkBox>
-  </gtk>
+keySignalNode = ~<gtk>
+  <GtkBox onKeyPress={save}>
+    <GtkLabel label="Press a key" />
+  </GtkBox>
+</gtk>
 
 navRailNode : Text -> GtkNode
 navRailNode = activeSection =>
@@ -129,17 +121,15 @@ accountSettingsPage = _ =>
   </gtk>
 
 functionCallSugarNode : GtkNode
-functionCallSugarNode =
-  ~<gtk>
-    <GtkBox>
-      <NavRailNode "settings" />
-    </GtkBox>
-  </gtk>
+functionCallSugarNode = ~<gtk>
+  <GtkBox>
+    <NavRailNode "settings" />
+  </GtkBox>
+</gtk>
 
 zeroArgFunctionCallSugarNode : GtkNode
-zeroArgFunctionCallSugarNode =
-  ~<gtk>
-    <GtkBox>
-      <AccountSettingsPage />
-    </GtkBox>
-  </gtk>
+zeroArgFunctionCallSugarNode = ~<gtk>
+  <GtkBox>
+    <AccountSettingsPage />
+  </GtkBox>
+</gtk>

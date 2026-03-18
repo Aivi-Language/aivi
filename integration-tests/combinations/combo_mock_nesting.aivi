@@ -14,11 +14,10 @@ greeting = "Hello"
 // --- Mock in do Effect ---
 
 @test "mock active in do Effect"
-mockInDoEffect =
-  mock greeting = "Hi"
-  in do Effect {
-    assertEq greeting "Hi"
-  }
+mockInDoEffect = mock greeting = "Hi"
+in do Effect {
+  assertEq greeting "Hi"
+}
 
 // --- Mock scope does not leak into outer ---
 
