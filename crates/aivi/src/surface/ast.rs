@@ -45,7 +45,42 @@ pub struct UseDecl {
     pub items: Vec<UseItem>,
     pub span: Span,
     pub wildcard: bool,
+    pub hiding: bool,
     pub alias: Option<SpannedName>,
+}
+
+impl UseDecl {
+    pub fn imported_items(&self) -> &[UseItem] {
+        if self.wildcard {
+            &[]
+        } else {
+            &self.items
+        }
+    }
+
+    pub fn hidden_items(&self) -> &[UseItem] {
+        if self.hiding {
+            &self.items
+        } else {
+            &[]
+        }
+    }
+
+    pub fn hides_item(&self, kind: ScopeItemKind, name: &str) -> bool {
+        self.hiding
+            && self
+                .items
+                .iter()
+                .any(|item| item.kind == kind && item.name.name == name)
+    }
+
+    pub fn hides_value(&self, name: &str) -> bool {
+        self.hides_item(ScopeItemKind::Value, name)
+    }
+
+    pub fn hides_domain(&self, name: &str) -> bool {
+        self.hides_item(ScopeItemKind::Domain, name)
+    }
 }
 
 #[derive(Debug, Clone)]

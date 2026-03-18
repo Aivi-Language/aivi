@@ -1,0 +1,7 @@
+// EXPECT-ERROR: unknown name
+@no_prelude
+module integrationTests.compileFail.useHidingExcludedName
+
+use aivi.text hiding (length)
+
+bad = length "hello"

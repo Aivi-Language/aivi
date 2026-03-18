@@ -1238,6 +1238,7 @@ use some.module (foo, bar)
         .expect("use decl");
     assert_eq!(use_decl.items.len(), 2);
     assert!(!use_decl.wildcard);
+    assert!(!use_decl.hiding);
 }
 
 #[test]
@@ -1258,6 +1259,29 @@ use some.module
         .find(|u| u.module.symbol.as_str() == "some.module")
         .expect("use decl");
     assert!(use_decl.wildcard);
+    assert!(!use_decl.hiding);
+}
+
+#[test]
+fn lower_hiding_use_decl_to_arena() {
+    let src = r#"
+@no_prelude
+module Example
+
+use some.module hiding (foo)
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (_arena, lowered) = lower_modules_to_arena(&modules);
+    let module = &lowered[0];
+    let use_decl = module
+        .uses
+        .iter()
+        .find(|u| u.module.symbol.as_str() == "some.module")
+        .expect("use decl");
+    assert!(use_decl.wildcard);
+    assert!(use_decl.hiding);
+    assert_eq!(use_decl.items.len(), 1);
 }
 
 #[test]
@@ -1435,6 +1459,28 @@ use aivi.stdlib.text (trim, split)
         .find(|u| u.module.name == "aivi.stdlib.text")
         .expect("use decl");
     assert_eq!(use_decl.items.len(), 2);
+    assert!(!use_decl.hiding);
+}
+
+#[test]
+fn parses_use_hiding_declaration() {
+    let src = r#"
+@no_prelude
+module Example
+
+use aivi.stdlib.text hiding (trim)
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let module = modules.first().expect("module");
+    let use_decl = module
+        .uses
+        .iter()
+        .find(|u| u.module.name == "aivi.stdlib.text")
+        .expect("use decl");
+    assert!(use_decl.wildcard);
+    assert!(use_decl.hiding);
+    assert_eq!(use_decl.items.len(), 1);
 }
 
 #[test]

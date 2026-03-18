@@ -277,11 +277,12 @@ impl TypeChecker {
                         "ToDefault",
                     ]
                     .into_iter()
+                    .filter(|name| !use_decl.hides_value(name))
                     .map(|name| name.to_string()),
                 );
                 continue;
             }
-            for item in &use_decl.items {
+            for item in use_decl.imported_items() {
                 if item.kind == crate::surface::ScopeItemKind::Value {
                     enabled.insert(item.name.name.clone());
                 }

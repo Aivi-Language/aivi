@@ -1,0 +1,12 @@
+@no_prelude
+module integrationTests.syntax.modules.useHidingImports
+
+use aivi.text hiding (length)
+use aivi.testing
+
+upper = toUpper "ab"
+
+@test "use hiding imports"
+importsWork = do Effect {
+  assertEq upper "AB"
+}
