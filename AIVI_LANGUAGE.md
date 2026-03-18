@@ -72,8 +72,7 @@ h = x <| _ + 1 => x * 2   // patch argument before body
 
   ```aivi
   f = x <| _ + 1
-      y <| _ + 3
-    => ...
+      y <| _ + 3 => ...
   ```
 
 - Pipes pass the left value as the last argument:

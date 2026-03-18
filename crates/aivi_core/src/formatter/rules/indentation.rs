@@ -1832,143 +1832,264 @@
             (patch_ops, arrow_idx)
         }
 
-        fn try_expand_arg_patch_head(line: &str, indent_size: usize) -> Option<Vec<String>> {
-            if line.contains("//") {
+        fn literal_span(literal: &crate::surface::Literal) -> crate::Span {
+            match literal {
+                crate::surface::Literal::Number { span, .. }
+                | crate::surface::Literal::String { span, .. }
+                | crate::surface::Literal::Sigil { span, .. }
+                | crate::surface::Literal::Bool { span, .. }
+                | crate::surface::Literal::DateTime { span, .. } => span.clone(),
+            }
+        }
+
+        fn pattern_span(pattern: &crate::surface::Pattern) -> crate::Span {
+            match pattern {
+                crate::surface::Pattern::Wildcard(span) => span.clone(),
+                crate::surface::Pattern::Ident(name)
+                | crate::surface::Pattern::SubjectIdent(name) => name.span.clone(),
+                crate::surface::Pattern::Literal(literal) => literal_span(literal),
+                crate::surface::Pattern::At { span, .. }
+                | crate::surface::Pattern::Constructor { span, .. }
+                | crate::surface::Pattern::Tuple { span, .. }
+                | crate::surface::Pattern::List { span, .. }
+                | crate::surface::Pattern::Record { span, .. } => span.clone(),
+            }
+        }
+
+        fn expr_span(expr: &crate::surface::Expr) -> crate::Span {
+            match expr {
+                crate::surface::Expr::Ident(name) => name.span.clone(),
+                crate::surface::Expr::Literal(literal) => literal_span(literal),
+                crate::surface::Expr::UnaryNeg { span, .. }
+                | crate::surface::Expr::Suffixed { span, .. }
+                | crate::surface::Expr::TextInterpolate { span, .. }
+                | crate::surface::Expr::List { span, .. }
+                | crate::surface::Expr::Tuple { span, .. }
+                | crate::surface::Expr::Record { span, .. }
+                | crate::surface::Expr::PatchLit { span, .. }
+                | crate::surface::Expr::FieldAccess { span, .. }
+                | crate::surface::Expr::FieldSection { span, .. }
+                | crate::surface::Expr::Index { span, .. }
+                | crate::surface::Expr::Call { span, .. }
+                | crate::surface::Expr::Lambda { span, .. }
+                | crate::surface::Expr::Match { span, .. }
+                | crate::surface::Expr::If { span, .. }
+                | crate::surface::Expr::Binary { span, .. }
+                | crate::surface::Expr::Block { span, .. }
+                | crate::surface::Expr::Mock { span, .. }
+                | crate::surface::Expr::Raw { span, .. } => span.clone(),
+            }
+        }
+
+        fn slice_source_by_span(source: &str, span: &crate::Span) -> Option<String> {
+            let mut offset = 0usize;
+            let mut current_line = 1usize;
+            let mut start_offset = None;
+            let mut end_offset = None;
+
+            for line in source.split_inclusive('\n') {
+                let line_start = offset;
+                let line_end = offset + line.len();
+                if current_line == span.start.line {
+                    start_offset = Some(line_start + span.start.column.saturating_sub(1));
+                }
+                if current_line == span.end.line {
+                    end_offset = Some(line_start + span.end.column);
+                }
+                if start_offset.is_some() && end_offset.is_some() {
+                    break;
+                }
+                offset = line_end;
+                current_line += 1;
+            }
+
+            let start = start_offset?;
+            let end = end_offset?;
+            source.get(start.min(end)..end.min(source.len())).map(str::to_string)
+        }
+
+        fn same_position(lhs: &crate::Position, rhs: &crate::Position) -> bool {
+            lhs.line == rhs.line && lhs.column == rhs.column
+        }
+
+        fn try_rewrite_arg_patch_head(candidate: &str) -> Option<Vec<String>> {
+            if candidate.contains("//") || !candidate.contains("<|") || !candidate.contains("=>") {
                 return None;
             }
 
-            fn is_ident_char(byte: u8) -> bool {
-                byte.is_ascii_alphanumeric() || byte == b'_'
+            let first_line = candidate.lines().next()?;
+            let mut start_indices = vec![0usize];
+            let bytes = first_line.as_bytes();
+            for idx in 1..bytes.len() {
+                if bytes[idx - 1] == b' ' && bytes[idx] != b' ' {
+                    start_indices.push(idx);
+                }
             }
 
-            let bytes = line.as_bytes();
-            let (patch_ops, arrow_idx) = scan_top_level_patch_ops(line);
-            if patch_ops.len() < 2 {
-                return None;
-            }
-            let arrow_idx = arrow_idx?;
-            let rhs = line[arrow_idx + 2..].trim_start();
-            if rhs.starts_with('{') {
-                return None;
-            }
-
-            let mut param_starts: Vec<usize> = Vec::new();
-            for patch_idx in patch_ops {
-                if patch_idx >= arrow_idx {
+            for start_idx in start_indices {
+                let lambda_source = candidate.get(start_idx..)?;
+                let probe = format!("module FormatterProbe\n\nprobe = {lambda_source}\n");
+                let (modules, diags) = crate::surface::parse_modules(
+                    std::path::Path::new("formatter_arg_patch_probe.aivi"),
+                    &probe,
+                );
+                if diags
+                    .iter()
+                    .any(|diag| diag.diagnostic.severity == crate::DiagnosticSeverity::Error)
+                {
                     continue;
                 }
-                let mut start = patch_idx;
-                while start > 0 && bytes[start - 1] == b' ' {
-                    start -= 1;
+
+                let module = match modules.first() {
+                    Some(module) => module,
+                    None => continue,
+                };
+                let def = match module.items.iter().find_map(|item| match item {
+                    crate::surface::ModuleItem::Def(def) if def.name.name == "probe" => Some(def),
+                    _ => None,
+                }) {
+                    Some(def) => def,
+                    None => continue,
+                };
+                let crate::surface::Expr::Lambda { params, body, .. } = &def.expr else {
+                    continue;
+                };
+                if params.len() < 2 {
+                    continue;
                 }
-                let end_ident = start;
-                while start > 0 && is_ident_char(bytes[start - 1]) {
-                    start -= 1;
+
+                let crate::surface::Expr::Block { items, .. } = &**body else {
+                    continue;
+                };
+                let mut patched_spans = std::collections::VecDeque::new();
+                let mut body_expr = None;
+                let mut valid = true;
+                for item in items {
+                    match item {
+                        crate::surface::BlockItem::Let {
+                            pattern,
+                            expr,
+                            span,
+                        } if body_expr.is_none() => {
+                            let crate::surface::Pattern::Ident(name) = pattern else {
+                                valid = false;
+                                break;
+                            };
+                            let crate::surface::Expr::Binary { op, left, .. } = expr else {
+                                valid = false;
+                                break;
+                            };
+                            let crate::surface::Expr::Ident(left_name) = &**left else {
+                                valid = false;
+                                break;
+                            };
+                            if op != "|>" || left_name.name != name.name {
+                                valid = false;
+                                break;
+                            }
+                            patched_spans.push_back(span.clone());
+                        }
+                        crate::surface::BlockItem::Expr { expr, .. } if body_expr.is_none() => {
+                            body_expr = Some(expr);
+                        }
+                        _ => {
+                            valid = false;
+                            break;
+                        }
+                    }
                 }
-                if start == end_ident || !bytes[start].is_ascii_lowercase() {
-                    return None;
+                if !valid || patched_spans.is_empty() {
+                    continue;
                 }
-                if param_starts.last().copied() != Some(start) {
-                    param_starts.push(start);
+
+                let body_expr = match body_expr {
+                    Some(expr) => expr,
+                    None => continue,
+                };
+                let body_text = match slice_source_by_span(&probe, &expr_span(body_expr)) {
+                    Some(text) => text.trim().to_string(),
+                    None => continue,
+                };
+                if body_text.is_empty() || body_text.starts_with('{') || body_text.contains('\n') {
+                    continue;
                 }
-            }
-            if param_starts.len() < 2 {
-                return None;
+
+                let mut segments = Vec::with_capacity(params.len());
+                for param in params {
+                    let param_span = pattern_span(param);
+                    let segment_span = if patched_spans
+                        .front()
+                        .is_some_and(|span| same_position(&span.start, &param_span.start))
+                    {
+                        patched_spans.pop_front().unwrap_or_else(|| param_span.clone())
+                    } else {
+                        param_span
+                    };
+                    let segment = match slice_source_by_span(&probe, &segment_span) {
+                        Some(segment) => segment.trim().to_string(),
+                        None => {
+                            valid = false;
+                            break;
+                        }
+                    };
+                    if segment.is_empty() {
+                        valid = false;
+                        break;
+                    }
+                    segments.push(segment);
+                }
+                if !valid || segments.len() < 2 {
+                    continue;
+                }
+
+                let prefix = first_line[..start_idx].trim_end();
+                let continuation_indent = " ".repeat(start_idx);
+                let first_line = if prefix.is_empty() {
+                    segments[0].clone()
+                } else {
+                    format!("{prefix} {}", segments[0])
+                };
+
+                let mut expanded = vec![first_line];
+                for segment in segments.iter().skip(1).take(segments.len().saturating_sub(2)) {
+                    expanded.push(format!("{continuation_indent}{segment}"));
+                }
+                expanded.push(format!(
+                    "{continuation_indent}{} => {body_text}",
+                    segments.last()?
+                ));
+                return Some(expanded);
             }
 
-            let first_param_start = param_starts[0];
-            let prefix = line[..first_param_start].trim_end();
-            let mut segments = Vec::with_capacity(param_starts.len());
-            for (index, start) in param_starts.iter().enumerate() {
-                let end = param_starts
-                    .get(index + 1)
-                    .copied()
-                    .unwrap_or(arrow_idx);
-                segments.push(line[*start..end].trim_end().to_string());
-            }
+            None
+        }
 
-            let leading_indent = line.chars().take_while(|ch| *ch == ' ').count();
-            let continuation_indent = " ".repeat(first_param_start);
-            let arrow_indent = " ".repeat(leading_indent + indent_size);
-
-            let first_line = if prefix.is_empty() {
-                segments[0].clone()
-            } else {
-                format!("{prefix} {}", segments[0])
-            };
-
-            let mut expanded = vec![first_line];
-            for segment in segments.iter().skip(1) {
-                expanded.push(format!("{continuation_indent}{segment}"));
-            }
-
-            let mut arrow_line = format!("{arrow_indent}=>");
-            if !rhs.is_empty() {
-                arrow_line.push(' ');
-                arrow_line.push_str(rhs);
-            }
-            expanded.push(arrow_line);
-            Some(expanded)
+        fn try_expand_arg_patch_head(line: &str) -> Option<Vec<String>> {
+            let expanded = try_rewrite_arg_patch_head(line)?;
+            (expanded.len() > 1).then_some(expanded)
         }
 
         fn try_normalize_multiline_arg_patch_head(
-            rendered_lines: &mut [String],
+            rendered_lines: &[String],
             start_idx: usize,
-            indent_size: usize,
-        ) -> Option<usize> {
+        ) -> Option<(Vec<String>, usize)> {
             let line = rendered_lines.get(start_idx)?;
-            if line.contains("//") {
+            if line.contains("//") || line.trim().is_empty() {
                 return None;
             }
 
-            fn is_ident_char(byte: u8) -> bool {
-                byte.is_ascii_alphanumeric() || byte == b'_'
-            }
-
-            let (patch_ops, arrow_idx) = scan_top_level_patch_ops(line);
-            if patch_ops.is_empty() || arrow_idx.is_some() {
-                return None;
-            }
-
-            let bytes = line.as_bytes();
-            let first_patch_idx = *patch_ops.first()?;
-            let mut first_param_start = first_patch_idx;
-            while first_param_start > 0 && bytes[first_param_start - 1] == b' ' {
-                first_param_start -= 1;
-            }
-            let end_ident = first_param_start;
-            while first_param_start > 0 && is_ident_char(bytes[first_param_start - 1]) {
-                first_param_start -= 1;
-            }
-            if first_param_start == end_ident || !bytes[first_param_start].is_ascii_lowercase() {
-                return None;
-            }
-
-            let leading_indent = line.chars().take_while(|ch| *ch == ' ').count();
-            let continuation_indent = " ".repeat(first_param_start);
-            let arrow_indent = " ".repeat(leading_indent + indent_size);
-
-            let mut idx = start_idx + 1;
-            let mut saw_patch_continuation = false;
-            while idx < rendered_lines.len() {
-                let trimmed = rendered_lines[idx].trim_start().to_string();
-                if trimmed.is_empty() || trimmed.starts_with("//") {
+            let mut candidate = line.clone();
+            for (idx, next_line) in rendered_lines.iter().enumerate().skip(start_idx + 1) {
+                let next = next_line.trim_start();
+                if next.is_empty() || next.starts_with("//") {
                     return None;
                 }
-                let (next_patch_ops, next_arrow_idx) = scan_top_level_patch_ops(&trimmed);
-                if next_arrow_idx.is_some() {
-                    if !trimmed.starts_with("=>") || !saw_patch_continuation {
-                        return None;
-                    }
-                    rendered_lines[idx] = format!("{arrow_indent}{trimmed}");
-                    return Some(idx + 1);
+                candidate.push('\n');
+                candidate.push_str(next_line);
+                if scan_top_level_patch_ops(next).1.is_some() {
+                    let rewritten = try_rewrite_arg_patch_head(&candidate)?;
+                    return Some((rewritten, idx + 1));
                 }
-                if next_patch_ops.is_empty() {
-                    return None;
-                }
-                saw_patch_continuation = true;
-                rendered_lines[idx] = format!("{continuation_indent}{trimmed}");
-                idx += 1;
             }
 
             None
@@ -1979,20 +2100,23 @@
         for line in old_lines {
             match try_expand_use(&line, options.max_width) {
                 Some(expanded) => rendered_lines.extend(expanded),
-                None => match try_expand_arg_patch_head(&line, indent_size) {
+                None => match try_expand_arg_patch_head(&line) {
                     Some(expanded) => rendered_lines.extend(expanded),
                     None => rendered_lines.push(line),
                 },
             }
         }
 
+        let old_lines = std::mem::take(&mut rendered_lines);
+        rendered_lines.reserve(old_lines.len() + 32);
         let mut i = 0usize;
-        while i < rendered_lines.len() {
-            if let Some(next) =
-                try_normalize_multiline_arg_patch_head(&mut rendered_lines, i, indent_size)
+        while i < old_lines.len() {
+            if let Some((rewritten, next)) = try_normalize_multiline_arg_patch_head(&old_lines, i)
             {
+                rendered_lines.extend(rewritten);
                 i = next;
             } else {
+                rendered_lines.push(old_lines[i].clone());
                 i += 1;
             }
         }

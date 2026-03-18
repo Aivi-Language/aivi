@@ -129,8 +129,46 @@ main = do Effect {
 #[test]
 fn test_fmt_multiline_arg_patch_lambda_head() {
     let input = "module demo\n\nf = x <| _ + 1 y <| _ + 3 => x + y\n";
-    let expected = "module demo\n\nf = x <| _ + 1\n    y <| _ + 3\n  => x + y\n";
+    let expected = "module demo\n\nf = x <| _ + 1\n    y <| _ + 3 => x + y\n";
     assert_eq!(format_text(input), expected);
+    assert_eq!(format_text(expected), expected);
+}
+
+#[test]
+fn test_fmt_normalizes_multiline_arg_patch_lambda_head_with_inline_arrow() {
+    let input = "module demo\n\ng = x <| _ + 1\n    y <| _ + 3\n  => x + y\n";
+    let expected = "module demo\n\ng = x <| _ + 1\n    y <| _ + 3 => x + y\n";
+    assert_eq!(format_text(input), expected);
+    assert_eq!(
+        format_text("module demo\n\ng = x <| _ + 1\ny <| _ + 3 => x + y\n"),
+        expected
+    );
+    assert_eq!(format_text(expected), expected);
+}
+
+#[test]
+fn test_fmt_breaks_mixed_arg_patch_lambda_head_when_only_last_arg_is_patched() {
+    let input = "module demo\n\ng = x y <| _ + 3 => x + y\n";
+    let expected = "module demo\n\ng = x\n    y <| _ + 3 => x + y\n";
+    assert_eq!(format_text(input), expected);
+
+    let multiline_input = "module demo\n\ng = x\ny <| _ + 3 => x + y\n";
+    assert_eq!(format_text(multiline_input), expected);
+    assert_eq!(format_text(expected), expected);
+}
+
+#[test]
+fn test_fmt_breaks_mixed_arg_patch_lambda_head_when_only_first_arg_is_patched() {
+    let input = "module demo\n\ng = x <| _ + 1 y => x + y\n";
+    let expected = "module demo\n\ng = x <| _ + 1\n    y => x + y\n";
+    assert_eq!(format_text(input), expected);
+
+    let multiline_input = "module demo\n\ng = x <| _ + 1\n    y\n  => x + y\n";
+    assert_eq!(format_text(multiline_input), expected);
+    assert_eq!(
+        format_text("module demo\n\ng = x <| _ + 1\ny => x + y\n"),
+        expected
+    );
     assert_eq!(format_text(expected), expected);
 }
 

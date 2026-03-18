@@ -582,13 +582,8 @@ fn render_scalar_expr(
             ))
         }
         CompiledScalarExpr::Captured { capture_index } => {
-            let value = captures.get(*capture_index).ok_or_else(|| {
-                RuntimeError::Message(format!(
-                    "database query capture index {} is out of bounds",
-                    capture_index
-                ))
-            })?;
-            render_runtime_scalar_literal(value)
+            let value = query_capture_value(*capture_index, captures)?;
+            render_required_runtime_scalar_literal(value)
         }
         CompiledScalarExpr::IntLit { value } => Ok(value.to_string()),
         CompiledScalarExpr::FloatLit { value } => Ok(value.to_string()),
@@ -608,6 +603,11 @@ fn render_scalar_expr(
             render_scalar_expr(expr, schemas, sql_aliases, captures)?
         )),
         CompiledScalarExpr::Binary { op, left, right } => {
+            if let Some(sql) =
+                render_null_sensitive_binary(op, left, right, schemas, sql_aliases, captures)?
+            {
+                return Ok(sql);
+            }
             let sql_op = match op.as_str() {
                 "==" => "=",
                 "!=" => "<>",
@@ -625,24 +625,114 @@ fn render_scalar_expr(
     }
 }
 
-fn render_runtime_scalar_literal(value: &Value) -> Result<String, RuntimeError> {
-    match value {
-        Value::Int(value) => Ok(value.to_string()),
-        Value::Float(value) => Ok(value.to_string()),
-        Value::Bool(value) => {
-            if *value {
-                Ok("TRUE".to_string())
+fn render_required_runtime_scalar_literal(value: &Value) -> Result<String, RuntimeError> {
+    render_runtime_scalar_literal(value)?.ok_or_else(|| {
+                RuntimeError::Message(
+                    "database query capture None is only supported with == and !=".to_string(),
+                )
+            })
+}
+
+fn render_null_sensitive_binary(
+    op: &str,
+    left: &CompiledScalarExpr,
+    right: &CompiledScalarExpr,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    sql_aliases: &HashMap<String, String>,
+    captures: &[Value],
+) -> Result<Option<String>, RuntimeError> {
+    let left_is_null = scalar_expr_is_null_capture(left, captures)?;
+    let right_is_null = scalar_expr_is_null_capture(right, captures)?;
+    if !left_is_null && !right_is_null {
+        return Ok(None);
+    }
+
+    match op {
+        "==" | "!=" => {}
+        _ => {
+            return Err(RuntimeError::Message(
+                "database query capture None is only supported with == and !=".to_string(),
+            ))
+        }
+    }
+
+    if left_is_null && right_is_null {
+        return Ok(Some(
+            if op == "==" {
+                "TRUE".to_string()
             } else {
-                Ok("FALSE".to_string())
-            }
+                "FALSE".to_string()
+            },
+        ));
+    }
+
+    let non_null = if left_is_null { right } else { left };
+    let rendered = render_scalar_expr(non_null, schemas, sql_aliases, captures)?;
+    Ok(Some(if op == "==" {
+        format!("({rendered} IS NULL)")
+    } else {
+        format!("({rendered} IS NOT NULL)")
+    }))
+}
+
+fn scalar_expr_is_null_capture(
+    expr: &CompiledScalarExpr,
+    captures: &[Value],
+) -> Result<bool, RuntimeError> {
+    match expr {
+        CompiledScalarExpr::Captured { capture_index } => {
+            let value = query_capture_value(*capture_index, captures)?;
+            Ok(normalize_runtime_scalar(value)?.is_none())
         }
-        Value::Text(value) | Value::DateTime(value) => {
-            Ok(format!("'{}'", value.replace('\'', "''")))
+        _ => Ok(false),
+    }
+}
+
+fn query_capture_value(capture_index: usize, captures: &[Value]) -> Result<&Value, RuntimeError> {
+    captures.get(capture_index).ok_or_else(|| {
+        RuntimeError::Message(format!(
+            "database query capture index {} is out of bounds",
+            capture_index
+        ))
+    })
+}
+
+fn normalize_runtime_scalar(value: &Value) -> Result<Option<&Value>, RuntimeError> {
+    match value {
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+            normalize_runtime_scalar(&args[0])
         }
+        Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(None),
+        Value::Int(_)
+        | Value::Float(_)
+        | Value::Bool(_)
+        | Value::Text(_)
+        | Value::DateTime(_) => Ok(Some(value)),
         other => Err(RuntimeError::Message(format!(
             "database query capture is not a supported SQL scalar: {}",
             crate::runtime::format_value(other)
         ))),
+    }
+}
+
+fn render_runtime_scalar_literal(value: &Value) -> Result<Option<String>, RuntimeError> {
+    let Some(value) = normalize_runtime_scalar(value)? else {
+        return Ok(None);
+    };
+    match value {
+        Value::Int(value) => Ok(Some(value.to_string())),
+        Value::Float(value) => Ok(Some(value.to_string())),
+        Value::Bool(value) => {
+            if *value {
+                Ok(Some("TRUE".to_string()))
+            } else {
+                Ok(Some("FALSE".to_string()))
+            }
+        }
+        Value::Text(value) | Value::DateTime(value) => {
+            Ok(Some(format!("'{}'", value.replace('\'', "''"))))
+        }
+        _ => unreachable!("normalize_runtime_scalar only returns SQL scalar values"),
     }
 }
 
@@ -852,24 +942,17 @@ fn infer_scalar_kind(
             })
         }
         CompiledScalarExpr::Captured { capture_index } => {
-            let value = captures.get(*capture_index).ok_or_else(|| {
-                RuntimeError::Message(format!(
-                    "database query capture index {} is out of bounds",
-                    capture_index
-                ))
-            })?;
-            Ok(match value {
-                Value::Int(_) => ScalarKind::Int,
-                Value::Float(_) => ScalarKind::Float,
-                Value::Bool(_) => ScalarKind::Bool,
-                Value::Text(_) | Value::DateTime(_) => ScalarKind::Text,
-                other => {
-                    return Err(RuntimeError::Message(format!(
-                        "database query capture is not a supported SQL scalar: {}",
-                        crate::runtime::format_value(other)
-                    )))
-                }
-            })
+            let value = query_capture_value(*capture_index, captures)?;
+            match normalize_runtime_scalar(value)? {
+                Some(Value::Int(_)) => Ok(ScalarKind::Int),
+                Some(Value::Float(_)) => Ok(ScalarKind::Float),
+                Some(Value::Bool(_)) => Ok(ScalarKind::Bool),
+                Some(Value::Text(_)) | Some(Value::DateTime(_)) => Ok(ScalarKind::Text),
+                None => Err(RuntimeError::Message(
+                    "database query capture None is only supported with == and !=".to_string(),
+                )),
+                Some(_) => unreachable!("normalize_runtime_scalar only returns SQL scalar values"),
+            }
         }
         CompiledScalarExpr::IntLit { .. } => Ok(ScalarKind::Int),
         CompiledScalarExpr::FloatLit { .. } => Ok(ScalarKind::Float),
@@ -1050,6 +1133,21 @@ fn load_rows_from_storage(
 mod query_tests {
     use super::*;
 
+    fn single_text_schema(not_null: bool) -> HashMap<String, RuntimeTableSchema> {
+        HashMap::from([(
+            "p".to_string(),
+            RuntimeTableSchema {
+                name: "products".to_string(),
+                storage_name: "__aivi_query_storage_products".to_string(),
+                columns: vec![RuntimeColumn {
+                    name: "email".to_string(),
+                    kind: QueryColumnType::Text,
+                    not_null,
+                }],
+            },
+        )])
+    }
+
     #[test]
     fn runtime_value_to_query_cell_unwraps_some_text() {
         let cell = match runtime_value_to_query_cell(
@@ -1080,6 +1178,68 @@ mod query_tests {
             Err(_) => panic!("None should map to NULL for nullable columns"),
         };
         assert!(matches!(cell, QueryCell::Null));
+    }
+
+    #[test]
+    fn render_scalar_expr_unwraps_some_capture() {
+        let sql = render_scalar_expr(
+            &CompiledScalarExpr::Captured { capture_index: 0 },
+            &single_text_schema(false),
+            &HashMap::new(),
+            &[Value::Constructor {
+                name: "Some".to_string(),
+                args: vec![Value::Text("hello".to_string())],
+            }],
+        )
+        .unwrap_or_else(|_| panic!("Some capture should render"));
+
+        assert_eq!(sql, "'hello'");
+    }
+
+    #[test]
+    fn render_scalar_expr_uses_is_null_for_none_capture_equality() {
+        let sql = render_scalar_expr(
+            &CompiledScalarExpr::Binary {
+                op: "==".to_string(),
+                left: Box::new(CompiledScalarExpr::Column {
+                    alias: "p".to_string(),
+                    field: "email".to_string(),
+                }),
+                right: Box::new(CompiledScalarExpr::Captured { capture_index: 0 }),
+            },
+            &single_text_schema(false),
+            &HashMap::from([("p".to_string(), "t0".to_string())]),
+            &[Value::Constructor {
+                name: "None".to_string(),
+                args: Vec::new(),
+            }],
+        )
+        .unwrap_or_else(|_| panic!("None equality should render"));
+
+        assert_eq!(sql, "(t0.email IS NULL)");
+    }
+
+    #[test]
+    fn render_scalar_expr_uses_is_not_null_for_none_capture_inequality() {
+        let sql = render_scalar_expr(
+            &CompiledScalarExpr::Binary {
+                op: "!=".to_string(),
+                left: Box::new(CompiledScalarExpr::Column {
+                    alias: "p".to_string(),
+                    field: "email".to_string(),
+                }),
+                right: Box::new(CompiledScalarExpr::Captured { capture_index: 0 }),
+            },
+            &single_text_schema(false),
+            &HashMap::from([("p".to_string(), "t0".to_string())]),
+            &[Value::Constructor {
+                name: "None".to_string(),
+                args: Vec::new(),
+            }],
+        )
+        .unwrap_or_else(|_| panic!("None inequality should render"));
+
+        assert_eq!(sql, "(t0.email IS NOT NULL)");
     }
 
     #[test]

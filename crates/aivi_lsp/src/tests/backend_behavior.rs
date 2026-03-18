@@ -58,6 +58,18 @@ fn formatting_edits_match_formatter_output() {
 }
 
 #[test]
+fn formatting_edits_align_multiline_arg_patch_heads() {
+    let text = "module demo\n\ng = x <| _ + 1\ny <| _ + 3 => x + y\n";
+    let options = FormatOptions::default();
+    let edits = Backend::build_formatting_edits(text, options);
+    assert_eq!(edits.len(), 1);
+    assert_eq!(
+        edits[0].new_text,
+        "module demo\n\ng = x <| _ + 1\n    y <| _ + 3 => x + y\n"
+    );
+}
+
+#[test]
 fn formatting_edits_respect_indent_size() {
     let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
     let options = FormatOptions {
