@@ -239,6 +239,7 @@ export const sidebar = [
     items: [
       { text: 'Compiler & Backend', link: '/typed_codegen/design' },
       { text: 'Minimality Proof', link: '/typed_codegen/minimality' },
+      { text: 'Unified Workflow Pipelines (Proposal)', link: '/proposals/unified_workflow_pipelines' },
       { text: 'Spec Doc Markers', link: '/doc-markers-spec' }
     ]
   }
