@@ -628,6 +628,7 @@ impl Parser {
                 items: Vec::new(),
                 span: span.clone(),
                 wildcard: true,
+                hiding: false,
                 alias: Some(alias_name),
             };
             self.reject_trailing_same_line_tokens_after_item(
@@ -636,6 +637,31 @@ impl Parser {
                 "use statements must end after the module path, alias, or import list; unexpected trailing tokens",
             );
             return vec![decl];
+        }
+        if self.match_keyword("hiding") {
+            let has_open_paren =
+                self.expect_symbol("(", "expected '(' after 'hiding'").is_some();
+            let items = if has_open_paren {
+                self.parse_use_item_list()
+            } else {
+                Vec::new()
+            };
+            self.expect_symbol(")", "expected ')' to close hiding list");
+            let span = merge_span(start, self.previous_span());
+            let decls = vec![UseDecl {
+                module,
+                items,
+                span: span.clone(),
+                wildcard: true,
+                hiding: true,
+                alias: None,
+            }];
+            self.reject_trailing_same_line_tokens_after_item(
+                &span,
+                "E1547",
+                "use statements must end after the module path, alias, or import list; unexpected trailing tokens",
+            );
+            return decls;
         }
         if self.consume_symbol("(") {
             // Disambiguate grouped vs selective import by lookahead:
@@ -666,6 +692,7 @@ impl Parser {
                 items,
                 span: span.clone(),
                 wildcard: false,
+                hiding: false,
                 alias: None,
             }];
             self.reject_trailing_same_line_tokens_after_item(
@@ -682,6 +709,7 @@ impl Parser {
             items: Vec::new(),
             span: span.clone(),
             wildcard: true,
+            hiding: false,
             alias: None,
         };
         self.reject_trailing_same_line_tokens_after_item(
@@ -836,6 +864,7 @@ impl Parser {
                 items,
                 span: decl_span,
                 wildcard: false,
+                hiding: false,
                 alias: None,
             });
 
@@ -1051,5 +1080,18 @@ mod use_separator_tests {
         let uses = parse_use("module test\nuse aivi.text (toUpper, toLower)\n");
         let text_use = uses.iter().find(|u| u.module.name == "aivi.text").expect("aivi.text use not found");
         assert_eq!(text_use.items.len(), 2);
+    }
+
+    #[test]
+    fn hiding_import_parses() {
+        let uses = parse_use("module test\nuse aivi.text hiding (trim)\n");
+        let text_use = uses
+            .iter()
+            .find(|u| u.module.name == "aivi.text")
+            .expect("aivi.text use not found");
+        assert!(text_use.wildcard);
+        assert!(text_use.hiding);
+        assert_eq!(text_use.items.len(), 1);
+        assert_eq!(text_use.items[0].name.name, "trim");
     }
 }

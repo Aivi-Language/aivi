@@ -476,5 +476,6 @@ pub struct ArenaUseDecl {
     pub items: Vec<ArenaScopeItem>,
     pub span: Span,
     pub wildcard: bool,
+    pub hiding: bool,
     pub alias: Option<SpannedSymbol>,
 }

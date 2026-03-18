@@ -976,6 +976,42 @@ x = Bar
 }
 
 #[test]
+fn hiding_import_parses() {
+    let src = r#"
+@no_prelude
+module Example
+
+use some.module hiding (foo, domain Bar)
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let use_decl = module
+        .uses
+        .iter()
+        .find(|u| u.module.name == "some.module")
+        .expect("use decl for some.module");
+    assert!(
+        use_decl.wildcard,
+        "hiding imports should still import the module"
+    );
+    assert!(use_decl.hiding, "expected hiding mode");
+    assert_eq!(use_decl.items.len(), 2, "expected 2 hidden items");
+    assert_eq!(use_decl.items[0].name.name, "foo");
+    assert_eq!(use_decl.items[0].kind, crate::surface::ScopeItemKind::Value);
+    assert_eq!(use_decl.items[1].name.name, "Bar");
+    assert_eq!(
+        use_decl.items[1].kind,
+        crate::surface::ScopeItemKind::Domain
+    );
+}
+
+#[test]
 fn rejects_same_line_export_items_without_comma() {
     let src = r#"
 module Example
