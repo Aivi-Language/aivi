@@ -83,9 +83,9 @@ resourceSequential = do Effect {
   _ <- r1 match
     | Ok txt => assertEq txt "first"
     | Err _  => fail "first read failed"
-    r2 match
-      | Ok txt => assertEq txt "second"
-      | Err _  => fail "second read failed"
+  r2 match
+    | Ok txt => assertEq txt "second"
+    | Err _  => fail "second read failed"
 }
 
 @test "resource loop: acquire use release per iteration"

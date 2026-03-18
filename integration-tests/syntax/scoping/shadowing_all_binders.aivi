@@ -42,8 +42,8 @@ matchArmShadow = do Effect {
   result = (Some 77) match
     | Some x => x
     | None   => 0
-    assertEq result 77
-    assertEq x 999
+  assertEq result 77
+  assertEq x 999
 }
 
 @test "generator bind x shadows outer x, outer unchanged after"

@@ -157,7 +157,7 @@ attemptRecover = do Effect {
   val = result match
     | Ok v  => v
     | Err _ => 42
-    assertEq val 42
+  assertEq val 42
 }
 
 // --- Multi-clause function definitions ---

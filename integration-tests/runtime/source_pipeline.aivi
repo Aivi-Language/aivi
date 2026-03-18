@@ -70,7 +70,7 @@ source_validate_returns_structured_decode_errors = do Effect {
             }
           | _ => fail "expected one decode error"
       }
-    | Ok _ => fail "expected decode error"
+  | Ok _ => fail "expected decode error"
 }
 
 @test "schema-first file csv source supports record form"
