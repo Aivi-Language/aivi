@@ -1,4 +1,91 @@
 impl Parser {
+    fn finish_definition(
+        &mut self,
+        decorators: Vec<Decorator>,
+        name: SpannedName,
+        params: Vec<Pattern>,
+        expr: Expr,
+    ) -> Def {
+        let span = merge_span(name.span.clone(), expr_span(&expr));
+        self.reject_trailing_tokens_after_definition(&span);
+        Def {
+            decorators,
+            name,
+            params,
+            expr,
+            span,
+        }
+    }
+
+    fn reject_trailing_tokens_after_definition(&mut self, span: &Span) {
+        let Some(next) = self.tokens.get(self.pos) else {
+            return;
+        };
+        let same_line = next.span.start.line == span.end.line;
+        let allowed_terminator = next.kind == TokenKind::Newline
+            || (next.kind == TokenKind::Symbol && next.text == "}");
+        if !same_line || allowed_terminator {
+            return;
+        }
+        if next.kind != TokenKind::Symbol {
+            return;
+        }
+        let relevant_operator_tail = matches!(
+            next.text.as_str(),
+            "<-"
+                | "<|"
+                | "<<-"
+                | "|>"
+                | "->>"
+                | "??"
+                | "+"
+                | "-"
+                | "*"
+                | "/"
+                | "%"
+                | "=="
+                | "!="
+                | "<"
+                | "<="
+                | ">"
+                | ">="
+                | "&&"
+                | "||"
+                | "++"
+                | ".."
+        );
+        if !relevant_operator_tail {
+            return;
+        }
+
+        let next_span = next.span.clone();
+        let line = next_span.start.line;
+        let looks_like_misspelled_signal_write =
+            next.kind == TokenKind::Symbol
+                && next.text == "<-"
+                && self.tokens.get(self.pos + 1).is_some_and(|tok| {
+                    tok.kind == TokenKind::Symbol
+                        && tok.text == "-"
+                        && tok.span.start.line == line
+                });
+        let message = if looks_like_misspelled_signal_write {
+            "unexpected `<--` after definition body; if you meant a signal write, use `<<-`"
+        } else {
+            "definitions must end after the right-hand side expression; unexpected trailing tokens"
+        };
+        self.emit_diag("E1546", message, merge_span(span.clone(), next_span));
+        while self.pos < self.tokens.len() {
+            let tok = &self.tokens[self.pos];
+            if tok.kind == TokenKind::Newline
+                || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                || tok.span.start.line != line
+            {
+                break;
+            }
+            self.pos += 1;
+        }
+    }
+
     fn parse_literal_type_sig(&mut self, decorators: Vec<Decorator>) -> Option<TypeSig> {
         self.reject_debug_decorators(&decorators, "type signatures");
         let start = self.pos;
@@ -101,14 +188,7 @@ impl Parser {
                 name: format!("{}{}", number.text, suffix.name),
                 span: name_span.clone(),
             };
-            let span = merge_span(name_span, expr_span(&expr));
-            return Some(Def {
-                decorators,
-                name,
-                params: Vec::new(),
-                expr,
-                span,
-            });
+            return Some(self.finish_definition(decorators, name, Vec::new(), expr));
         }
 
         fn rewrite_literal_template(expr: Expr, needle: &str, param: &str) -> Expr {
@@ -298,17 +378,15 @@ impl Parser {
             name: format!("{}{}", number.text, suffix.name),
             span: name_span.clone(),
         };
-        let span = merge_span(name_span, expr_span(&expr));
-        Some(Def {
+        Some(self.finish_definition(
             decorators,
             name,
-            params: vec![Pattern::Ident(SpannedName {
+            vec![Pattern::Ident(SpannedName {
                 name: param,
                 span: number.span.clone(),
             })],
             expr,
-            span,
-        })
+        ))
     }
 
     fn parse_def(&mut self, decorators: Vec<Decorator>) -> Option<Def> {
@@ -374,13 +452,6 @@ impl Parser {
             (Vec::new(), expr)
         };
 
-        let span = merge_span(name.span.clone(), expr_span(&expr));
-        Some(Def {
-            decorators,
-            name,
-            params,
-            expr,
-            span,
-        })
+        Some(self.finish_definition(decorators, name, params, expr))
     }
 }

@@ -500,6 +500,31 @@ x : Int = 1
 }
 
 #[test]
+fn rejects_trailing_tokens_after_definition_rhs() {
+    let src = r#"
+module Example
+
+x = signal { a: 1 }
+y = x <-- { a: _ * 2 }
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.contains(&"E1546".to_string()),
+        "expected trailing definition token diagnostic, got: {codes:?}"
+    );
+    let diag = diags
+        .iter()
+        .find(|d| d.diagnostic.code == "E1546")
+        .expect("E1546 diagnostic should be present");
+    assert!(
+        diag.diagnostic.message.contains("<<-"),
+        "expected E1546 message to mention `<<-`, got: {:?}",
+        diag.diagnostic.message
+    );
+}
+
+#[test]
 fn parses_parenthesized_suffix_application_expression() {
     let src = r#"
 module Example

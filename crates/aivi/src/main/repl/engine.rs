@@ -3017,6 +3017,19 @@ mod tests {
     }
 
     #[test]
+    fn expression_submit_rejects_invalid_signal_write_spelling() {
+        let mut engine = make_engine();
+        engine.submit("/use aivi.reactive").unwrap();
+        engine.submit("x = signal { a: 1 }").unwrap();
+        let snap = engine.submit("x <-- { a: _ * 2 }").unwrap();
+        assert!(snap.transcript.iter().any(|entry| {
+            matches!(entry.kind, TranscriptKind::Error)
+                && entry.text.contains("unexpected `<--`")
+                && entry.text.contains("<<-")
+        }));
+    }
+
+    #[test]
     fn expression_submit_persists_signal_updates_for_derived_signals() {
         let mut engine = make_engine();
         engine.submit("/use aivi.reactive").unwrap();
