@@ -8,12 +8,16 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::Path;
 
+use aivi::typecheck::{
+    check_types_stdlib_checkpoint, check_types_with_checkpoint, elaborate_stdlib_checkpoint,
+    elaborate_with_checkpoint, infer_value_types_fast_incremental, CheckTypesCheckpoint,
+    ElaborationCheckpoint, InferCheckpoint, InferResult,
+};
 use aivi::{
-    check_modules, check_types, desugar_modules, elaborate_expected_coercions,
-    embedded_stdlib_modules, file_diagnostics_have_errors, infer_value_types_full, parse_modules,
-    render_diagnostics, resolve_import_names, AiviError, ClassDecl, DomainDecl, DomainItem,
-    FileDiagnostic, Module, ModuleItem, RecordTypeField, ReplJitSession, TypeAlias, TypeDecl,
-    TypeExpr, TypeSig,
+    check_modules, desugar_modules, embedded_stdlib_modules, file_diagnostics_have_errors,
+    parse_modules, render_diagnostics, resolve_import_names, AiviError, ClassDecl, DomainDecl,
+    DomainItem, FileDiagnostic, Module, ModuleItem, RecordTypeField, ReplJitSession, TypeAlias,
+    TypeDecl, TypeExpr, TypeSig,
 };
 
 use super::doc_index::{DocIndex, QuickInfoEntry, DOC_INDEX_JSON};
@@ -140,11 +144,156 @@ pub(crate) struct ReplSnapshot {
     pub(crate) turn: usize,
 }
 
+#[derive(Clone)]
+struct CompiledReplModules {
+    all_modules: Vec<Module>,
+    session_start: usize,
+}
+
+impl CompiledReplModules {
+    fn all_modules(&self) -> &[Module] {
+        &self.all_modules
+    }
+
+    fn session_modules(&self) -> &[Module] {
+        &self.all_modules[self.session_start..]
+    }
+
+    fn into_all_modules(self) -> Vec<Module> {
+        self.all_modules
+    }
+}
+
+#[derive(Clone)]
+struct ReplCompileContext {
+    stdlib_modules: Vec<Module>,
+    elaboration_checkpoint: ElaborationCheckpoint,
+    typecheck_checkpoint: CheckTypesCheckpoint,
+    infer_checkpoint: InferCheckpoint,
+    stdlib_infer_seed: InferResult,
+}
+
+impl ReplCompileContext {
+    fn new() -> Self {
+        let stdlib_modules = embedded_stdlib_modules();
+        let mut resolved_stdlib_modules = stdlib_modules.clone();
+        resolve_import_names(&mut resolved_stdlib_modules);
+
+        let mut elaborated_stdlib_modules = resolved_stdlib_modules.clone();
+        let elaboration_checkpoint = elaborate_stdlib_checkpoint(&mut elaborated_stdlib_modules);
+        let typecheck_checkpoint = check_types_stdlib_checkpoint(&resolved_stdlib_modules);
+        let infer_seed = infer_value_types_fast_incremental(
+            &resolved_stdlib_modules,
+            &resolved_stdlib_modules,
+            &InferCheckpoint::empty(),
+        );
+
+        Self {
+            stdlib_modules,
+            elaboration_checkpoint,
+            typecheck_checkpoint,
+            infer_checkpoint: infer_seed.checkpoint,
+            stdlib_infer_seed: infer_seed.result,
+        }
+    }
+
+    fn stdlib_modules(&self) -> &[Module] {
+        &self.stdlib_modules
+    }
+
+    fn compile_modules(
+        &self,
+        path: &Path,
+        source: &str,
+    ) -> Result<CompiledReplModules, Vec<FileDiagnostic>> {
+        let path_text = path.display().to_string();
+        let (mut session_modules, mut parse_diags) = parse_modules(path, source);
+        let session_start = self.stdlib_modules.len();
+        let mut all_modules = self.stdlib_modules.clone();
+        all_modules.append(&mut session_modules);
+        resolve_import_names(&mut all_modules);
+
+        parse_diags.extend(
+            check_modules(&all_modules)
+                .into_iter()
+                .filter(|d| d.path == path_text),
+        );
+        if file_diagnostics_have_errors(&parse_diags) {
+            return Err(parse_diags);
+        }
+
+        let elab_diags: Vec<FileDiagnostic> =
+            elaborate_with_checkpoint(&mut all_modules, &self.elaboration_checkpoint)
+                .into_iter()
+                .filter(|d| d.path == path_text)
+                .collect();
+        if file_diagnostics_have_errors(&elab_diags) {
+            return Err(elab_diags);
+        }
+
+        let type_diags: Vec<FileDiagnostic> =
+            check_types_with_checkpoint(&all_modules, &self.typecheck_checkpoint)
+                .into_iter()
+                .filter(|d| d.path == path_text)
+                .collect();
+        if file_diagnostics_have_errors(&type_diags) {
+            return Err(type_diags);
+        }
+
+        Ok(CompiledReplModules {
+            all_modules,
+            session_start,
+        })
+    }
+
+    fn infer_modules(&self, compiled: &CompiledReplModules) -> InferResult {
+        let incremental = infer_value_types_fast_incremental(
+            compiled.all_modules(),
+            compiled.session_modules(),
+            &self.infer_checkpoint,
+        )
+        .result;
+        let mut result = InferResult {
+            diagnostics: incremental.diagnostics,
+            type_strings: self.stdlib_infer_seed.type_strings.clone(),
+            cg_types: self.stdlib_infer_seed.cg_types.clone(),
+            monomorph_plan: self.stdlib_infer_seed.monomorph_plan.clone(),
+            span_types: self.stdlib_infer_seed.span_types.clone(),
+            source_schemas: self.stdlib_infer_seed.source_schemas.clone(),
+        };
+        result.type_strings.extend(incremental.type_strings);
+        result.cg_types.extend(incremental.cg_types);
+        result.span_types.extend(incremental.span_types);
+        extend_map_lists(&mut result.monomorph_plan, incremental.monomorph_plan);
+        extend_map_lists(&mut result.source_schemas, incremental.source_schemas);
+        result
+    }
+}
+
+fn extend_unique<T: PartialEq>(target: &mut Vec<T>, values: Vec<T>) {
+    for value in values {
+        if !target.contains(&value) {
+            target.push(value);
+        }
+    }
+}
+
+fn extend_map_lists<T: PartialEq>(
+    target: &mut HashMap<String, Vec<T>>,
+    values: HashMap<String, Vec<T>>,
+) {
+    for (key, value_list) in values {
+        extend_unique(target.entry(key).or_default(), value_list);
+    }
+}
+
 // ── Core session state ────────────────────────────────────────────────────────
 
 pub(crate) struct ReplEngine {
     options: ReplOptions,
     doc_index: DocIndex,
+    /// Cached stdlib compiler state reused across every REPL compilation.
+    compile_context: ReplCompileContext,
     /// Accumulated `use` module paths (e.g. `"aivi.text"`).
     imports: Vec<String>,
     /// Accumulated user definition source snippets (verbatim lines).
@@ -178,19 +327,24 @@ pub(crate) struct ReplEngine {
 impl ReplEngine {
     /// Create a new engine, pre-loading the stdlib symbol inventory.
     pub(crate) fn new(options: &ReplOptions) -> Result<Self, AiviError> {
-        let stdlib = embedded_stdlib_modules();
+        let compile_context = ReplCompileContext::new();
         let doc_index = DocIndex::from_json(DOC_INDEX_JSON).map_err(|err| {
             AiviError::InvalidCommand(format!("internal REPL doc index error: {err}"))
         })?;
-        let default_visible_modules = collect_default_visible_modules(&stdlib);
-        let visible_stdlib_count: usize = stdlib
+        let default_visible_modules =
+            collect_default_visible_modules(compile_context.stdlib_modules());
+        let visible_stdlib_count: usize = compile_context
+            .stdlib_modules()
             .iter()
             .filter(|module| default_visible_modules.contains(&module.name.name))
             .map(count_exportable_items)
             .sum();
+        let stdlib_module_completions =
+            collect_module_completion_symbols(compile_context.stdlib_modules(), false);
         let mut engine = ReplEngine {
             options: options.clone(),
             doc_index,
+            compile_context,
             imports: Vec::new(),
             definitions: Vec::new(),
             history: Vec::new(),
@@ -202,7 +356,7 @@ impl ReplEngine {
             builtin_completions: builtin_symbol_completions(),
             session_types: HashMap::new(),
             jit_session: ReplJitSession::new(),
-            stdlib_module_completions: collect_module_completion_symbols(&stdlib, false),
+            stdlib_module_completions,
             session_constructors: Vec::new(),
             autorun_effects: true,
         };
@@ -598,7 +752,7 @@ Command Reference
             }
             Ok(content) => {
                 let display_path = path.display().to_string();
-                match compile_repl_modules(path, &content) {
+                match self.compile_modules(path, &content) {
                     Ok(_) => {}
                     Err(file_diags) => {
                         self.push_diagnostics_as_error(&display_path, &file_diags);
@@ -657,7 +811,7 @@ Command Reference
                 // Validate by running the snippet through the normal compile pipeline.
                 let module_source = self.synthesize_module(&snippet, InputKind::Definition);
                 let path = Path::new("<repl_session>");
-                let all_modules = match compile_repl_modules(path, &module_source) {
+                let compiled = match self.compile_modules(path, &module_source) {
                     Ok(modules) => modules,
                     Err(diags) => {
                         self.push_diagnostics_as_error("<repl_session>", &diags);
@@ -665,7 +819,7 @@ Command Reference
                     }
                 };
 
-                let infer = infer_value_types_full(&all_modules);
+                let infer = self.infer_modules(&compiled);
                 let infer_diags: Vec<FileDiagnostic> = infer
                     .diagnostics
                     .into_iter()
@@ -719,7 +873,7 @@ Command Reference
         // Build a synthetic module source containing all session context.
         let source = self.synthesize_module(input, classification);
         let path = Path::new("<repl_session>");
-        let all_modules = match compile_repl_modules(path, &source) {
+        let compiled = match self.compile_modules(path, &source) {
             Ok(modules) => modules,
             Err(diags) => {
                 self.push_diagnostics_as_error("<repl_session>", &diags);
@@ -727,7 +881,7 @@ Command Reference
             }
         };
 
-        let infer = infer_value_types_full(&all_modules);
+        let infer = self.infer_modules(&compiled);
         let infer_diags: Vec<FileDiagnostic> = infer
             .diagnostics
             .into_iter()
@@ -782,7 +936,7 @@ Command Reference
                     .get("_replResult")
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
-                let program = desugar_modules(&all_modules);
+                let program = desugar_modules(compiled.all_modules());
                 let capture_binding_names: Vec<String> =
                     self.session_types.keys().cloned().collect();
                 match self.jit_session.evaluate_binding_detailed(
@@ -790,7 +944,7 @@ Command Reference
                     infer.cg_types,
                     infer.monomorph_plan,
                     infer.source_schemas,
-                    &all_modules,
+                    compiled.all_modules(),
                     "_replResult",
                     self.autorun_effects,
                     &capture_binding_names,
@@ -865,6 +1019,18 @@ Command Reference
         }
     }
 
+    fn compile_modules(
+        &self,
+        path: &Path,
+        source: &str,
+    ) -> Result<CompiledReplModules, Vec<FileDiagnostic>> {
+        self.compile_context.compile_modules(path, source)
+    }
+
+    fn infer_modules(&self, compiled: &CompiledReplModules) -> InferResult {
+        self.compile_context.infer_modules(compiled)
+    }
+
     // ── Symbol inventory ────────────────────────────────────────────────────
 
     fn build_symbol_entries(&self, pane: SymbolPane, filter: &str) -> Vec<SymbolEntry> {
@@ -876,8 +1042,10 @@ Command Reference
         match pane {
             SymbolPane::Types => {
                 let mut names: Vec<String> = Vec::new();
-                for module in embedded_stdlib_modules()
-                    .into_iter()
+                for module in self
+                    .compile_context
+                    .stdlib_modules()
+                    .iter()
                     .filter(|module| self.module_is_visible(&module.name.name))
                 {
                     for item in &module.items {
@@ -964,11 +1132,11 @@ Command Reference
 
         let source = self.synthesize_module("", InputKind::Definition);
         let path = Path::new("<repl_session>");
-        let Ok(all_modules) = compile_repl_modules(path, &source) else {
+        let Ok(compiled) = self.compile_modules(path, &source) else {
             return Vec::new();
         };
 
-        let infer = infer_value_types_full(&all_modules);
+        let infer = self.infer_modules(&compiled);
         if file_diagnostics_have_errors(&infer.diagnostics) {
             return Vec::new();
         }
@@ -1000,7 +1168,10 @@ Command Reference
 
         let source = self.synthesize_module("", InputKind::Definition);
         let path = Path::new("<repl_session>");
-        compile_repl_modules(path, &source).unwrap_or_default()
+        match self.compile_modules(path, &source) {
+            Ok(compiled) => compiled.into_all_modules(),
+            Err(_) => Vec::new(),
+        }
     }
 
     fn command_completion_state(&self, input: &str, cursor: usize) -> Option<CompletionState> {
@@ -1257,7 +1428,7 @@ Command Reference
         let mut subjects = Vec::new();
         let mut seen = HashSet::new();
         let session_modules = self.current_session_modules();
-        let stdlib_modules = embedded_stdlib_modules();
+        let stdlib_modules = self.compile_context.stdlib_modules();
 
         for module in stdlib_modules.iter().chain(session_modules.iter()) {
             self.push_module_explain_subject(module, &mut subjects, &mut seen);
@@ -1478,41 +1649,6 @@ Command Reference
             ColorMode::Never => false,
         }
     }
-}
-
-fn compile_repl_modules(path: &Path, source: &str) -> Result<Vec<Module>, Vec<FileDiagnostic>> {
-    let path_text = path.display().to_string();
-    let (mut session_modules, mut parse_diags) = parse_modules(path, source);
-    let mut all_modules = embedded_stdlib_modules();
-    all_modules.append(&mut session_modules);
-    resolve_import_names(&mut all_modules);
-
-    parse_diags.extend(
-        check_modules(&all_modules)
-            .into_iter()
-            .filter(|d| d.path == path_text),
-    );
-    if file_diagnostics_have_errors(&parse_diags) {
-        return Err(parse_diags);
-    }
-
-    let elab_diags: Vec<FileDiagnostic> = elaborate_expected_coercions(&mut all_modules)
-        .into_iter()
-        .filter(|d| d.path == path_text)
-        .collect();
-    if file_diagnostics_have_errors(&elab_diags) {
-        return Err(elab_diags);
-    }
-
-    let type_diags: Vec<FileDiagnostic> = check_types(&all_modules)
-        .into_iter()
-        .filter(|d| d.path == path_text)
-        .collect();
-    if file_diagnostics_have_errors(&type_diags) {
-        return Err(type_diags);
-    }
-
-    Ok(all_modules)
 }
 
 // ── Input classification ──────────────────────────────────────────────────────
@@ -2713,6 +2849,19 @@ mod tests {
         assert!(!engine
             .imports
             .contains(&"aivi.not_a_real_module".to_owned()));
+    }
+
+    #[test]
+    fn repl_compile_context_accepts_named_module_file() {
+        let context = ReplCompileContext::new();
+        let path = Path::new("/tmp/loaded_defs.aivi");
+        let compiled = context
+            .compile_modules(path, "module loaded_defs\n\nincrement = n => n + 1\n")
+            .expect("named module should compile");
+        assert!(compiled
+            .all_modules()
+            .iter()
+            .any(|module| module.name.name == "loaded_defs"));
     }
 
     #[test]
