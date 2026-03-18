@@ -25,6 +25,8 @@ pub struct RustIrModule {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RustIrDef {
     pub name: String,
+    #[serde(skip)]
+    pub location: Option<SourceOrigin>,
     pub expr: RustIrExpr,
     /// Codegen-friendly type annotation. `Some(ty)` when the type checker was able to
     /// resolve this definition to a concrete ground type; `None` when the definition is
@@ -99,6 +101,8 @@ pub enum RustIrExpr {
         id: u32,
         param: String,
         body: Box<RustIrExpr>,
+        #[serde(skip)]
+        location: Option<SourceOrigin>,
     },
     App {
         id: u32,
@@ -335,6 +339,7 @@ fn lower_def(def: HirDef, globals: &[String]) -> Result<RustIrDef, AiviError> {
     let expr = lower_expr(def.expr, globals, &mut locals)?;
     Ok(RustIrDef {
         name: def.name,
+        location: def.location,
         expr,
         cg_type: None,
     })
@@ -398,7 +403,12 @@ fn lower_expr(
         },
         HirExpr::LitBool { id, value } => RustIrExpr::LitBool { id, value },
         HirExpr::LitDateTime { id, text } => RustIrExpr::LitDateTime { id, text },
-        HirExpr::Lambda { id, param, body } => {
+        HirExpr::Lambda {
+            id,
+            param,
+            body,
+            location,
+        } => {
             locals.push(param.clone());
             let body = lower_expr(*body, globals, locals)?;
             locals.pop();
@@ -406,6 +416,7 @@ fn lower_expr(
                 id,
                 param,
                 body: Box::new(body),
+                location,
             }
         }
         HirExpr::App {
@@ -651,6 +662,7 @@ fn lower_path_segment(
                     id: rust_ir_expr_id(&body),
                     param,
                     body: Box::new(body),
+                    location: None,
                 }));
             }
 

@@ -552,6 +552,7 @@ mod tests {
                 name: "test".to_string(),
                 defs: vec![HirDef {
                     name: "main".to_string(),
+                    location: None,
                     expr: HirExpr::LitBool { id: 0, value: true },
                 }],
             }],

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::diagnostics::SourceOrigin;
+use crate::diagnostics::{deserialize_optional_source_origin_lossy, SourceOrigin};
 use crate::surface::{
     BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern,
     SpannedName, TextPart,
@@ -32,6 +32,12 @@ pub struct HirModule {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HirDef {
     pub name: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_source_origin_lossy",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub location: Option<SourceOrigin>,
     pub expr: HirExpr,
 }
 
@@ -48,7 +54,11 @@ pub enum HirExpr {
     Var {
         id: u32,
         name: String,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     LitNumber {
@@ -81,19 +91,33 @@ pub enum HirExpr {
         id: u32,
         param: String,
         body: Box<HirExpr>,
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
+        location: Option<SourceOrigin>,
     },
     App {
         id: u32,
         func: Box<HirExpr>,
         arg: Box<HirExpr>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     Call {
         id: u32,
         func: Box<HirExpr>,
         args: Vec<HirExpr>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     DebugFn {
@@ -113,7 +137,11 @@ pub enum HirExpr {
         log_time: bool,
         func: Box<HirExpr>,
         arg: Box<HirExpr>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     List {
@@ -137,21 +165,33 @@ pub enum HirExpr {
         id: u32,
         base: Box<HirExpr>,
         field: String,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     Index {
         id: u32,
         base: Box<HirExpr>,
         index: Box<HirExpr>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     Match {
         id: u32,
         scrutinee: Box<HirExpr>,
         arms: Vec<HirMatchArm>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     If {
@@ -159,7 +199,11 @@ pub enum HirExpr {
         cond: Box<HirExpr>,
         then_branch: Box<HirExpr>,
         else_branch: Box<HirExpr>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     Binary {
@@ -167,7 +211,11 @@ pub enum HirExpr {
         op: String,
         left: Box<HirExpr>,
         right: Box<HirExpr>,
-        #[serde(skip)]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_optional_source_origin_lossy",
+            skip_serializing_if = "Option::is_none"
+        )]
         location: Option<SourceOrigin>,
     },
     Block {
@@ -354,6 +402,10 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
                 }
                 HirDef {
                     name,
+                    location: Some(crate::diagnostics::SourceOrigin::new(
+                        module.path.clone(),
+                        def.span.clone(),
+                    )),
                     expr: lower_def_expr(
                         module,
                         def,
@@ -530,7 +582,7 @@ fn lower_def_expr(
     if effective_params.is_empty() {
         body_hir
     } else {
-        lower_lambda_hir(effective_params, body_hir, id_gen)
+        lower_lambda_hir(effective_params, body_hir, None, id_gen)
     }
 }
 
@@ -547,9 +599,9 @@ fn lower_expr_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pip
                 body: Box::new(HirExpr::Var {
                     id: id_gen.next(),
                     name: param,
-                
                     location: None,
                 }),
+                location: None,
             };
         }
     }

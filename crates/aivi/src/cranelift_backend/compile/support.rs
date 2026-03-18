@@ -294,6 +294,7 @@ fn monomorphize_program(
                 let spec_name = format!("{}$mono_{}", def.name, suffix);
                 new_defs.push(RustIrDef {
                     name: spec_name.clone(),
+                    location: def.location.clone(),
                     expr: def.expr.clone(),
                     cg_type: Some(concrete_type.clone()),
                 });

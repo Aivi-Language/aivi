@@ -220,7 +220,7 @@
         "aivi.server.command": {
           "type": "string",
           "default": "",
-          "description": "Override the language server command. If unset, the extension prefers the bundled `aivi-lsp`, then `aivi-lsp` on PATH, then `aivi lsp`."
+          "description": "Override the language server command. If unset, source checkouts prefer a newer workspace-built `aivi-lsp` from `target/{debug,release}`; otherwise the extension prefers the bundled `aivi-lsp`, then `aivi-lsp` on PATH, then `aivi lsp`."
         },
         "aivi.server.args": {
           "type": "array",

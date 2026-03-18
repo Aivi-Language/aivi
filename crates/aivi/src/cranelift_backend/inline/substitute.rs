@@ -559,6 +559,7 @@ mod tests {
             id,
             param: param.to_string(),
             body: Box::new(body),
+            location: None,
         }
     }
 
@@ -642,6 +643,7 @@ mod tests {
     fn make_def(name: &str, expr: RustIrExpr) -> RustIrDef {
         RustIrDef {
             name: name.to_string(),
+            location: None,
             expr,
             cg_type: None,
         }

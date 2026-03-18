@@ -61,7 +61,9 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             param: x_name,
             body: Box::new(fx_k_acc),
+            location: None,
         }),
+        location: None,
     };
 
     // g step_fn z
@@ -85,7 +87,9 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             param: z_name,
             body: Box::new(g_step_z),
+            location: None,
         }),
+        location: None,
     }
 }
 

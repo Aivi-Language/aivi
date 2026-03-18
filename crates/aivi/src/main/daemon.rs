@@ -934,4 +934,76 @@ mod tests {
         };
         assert!(location.is_none());
     }
+
+    #[test]
+    fn compile_ok_round_trip_preserves_structured_locations() {
+        let origin = aivi::SourceOrigin::new(
+            "src/app/main.aivi",
+            aivi::Span {
+                start: aivi::Position { line: 7, column: 3 },
+                end: aivi::Position {
+                    line: 7,
+                    column: 21,
+                },
+            },
+        );
+        let response = daemon_envelope(DaemonResponse::CompileOk {
+            artifacts: Box::new(PreparedCompileArtifacts {
+                program: HirProgram {
+                    modules: vec![aivi::hir::HirModule {
+                        name: "app.main".to_string(),
+                        defs: vec![aivi::hir::HirDef {
+                            name: "main".to_string(),
+                            location: Some(origin.clone()),
+                            expr: aivi::hir::HirExpr::Lambda {
+                                id: 1,
+                                param: "x".to_string(),
+                                body: Box::new(aivi::hir::HirExpr::Var {
+                                    id: 2,
+                                    name: "x".to_string(),
+                                    location: Some(origin.clone()),
+                                }),
+                                location: Some(origin.clone()),
+                            },
+                        }],
+                    }],
+                },
+                cg_types: HashMap::new(),
+                monomorph_plan: HashMap::new(),
+                source_schemas: HashMap::new(),
+                constructor_ordinals: HashMap::new(),
+                crate_natives: Vec::new(),
+            }),
+            summary: CompileSummary::default(),
+        });
+        let encoded = serde_json::to_value(&response).expect("serialize compile response");
+        let decoded: Envelope<DaemonResponse> =
+            serde_json::from_value(encoded).expect("deserialize compile response");
+
+        let DaemonResponse::CompileOk { artifacts, .. } = decoded.payload else {
+            panic!("expected compile response");
+        };
+
+        let def = &artifacts.program.modules[0].defs[0];
+        assert_eq!(def.location.as_ref(), Some(&origin));
+
+        let aivi::hir::HirExpr::Lambda {
+            body,
+            location: lambda_location,
+            ..
+        } = &def.expr
+        else {
+            panic!("expected lambda expr");
+        };
+        assert_eq!(lambda_location.as_ref(), Some(&origin));
+
+        let aivi::hir::HirExpr::Var {
+            location: var_location,
+            ..
+        } = body.as_ref()
+        else {
+            panic!("expected var expr");
+        };
+        assert_eq!(var_location.as_ref(), Some(&origin));
+    }
 }

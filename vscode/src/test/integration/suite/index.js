@@ -9,6 +9,7 @@ function run() {
     color: true,
   });
 
+  mocha.addFile(path.resolve(__dirname, './formatting.test.js'));
   mocha.addFile(path.resolve(__dirname, './lsp-completions.test.js'));
 
   return new Promise((resolve, reject) => {
@@ -27,4 +28,3 @@ function run() {
 }
 
 module.exports = { run };
-

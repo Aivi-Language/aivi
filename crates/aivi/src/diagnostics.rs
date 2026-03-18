@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -54,6 +54,26 @@ pub struct SourceOrigin {
     pub path: String,
     pub span: Span,
     pub source_kind: SourceKind,
+}
+
+pub fn deserialize_optional_source_origin_lossy<'de, D>(
+    deserializer: D,
+) -> Result<Option<SourceOrigin>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[allow(dead_code)]
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum WireValue {
+        Origin(SourceOrigin),
+        LegacyString(String),
+    }
+
+    Ok(match Option::<WireValue>::deserialize(deserializer)? {
+        Some(WireValue::Origin(origin)) => Some(origin),
+        Some(WireValue::LegacyString(_)) | None => None,
+    })
 }
 
 impl SourceOrigin {

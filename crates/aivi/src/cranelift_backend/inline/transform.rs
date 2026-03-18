@@ -301,10 +301,16 @@ fn inline_children(
                 .collect(),
         },
 
-        RustIrExpr::Lambda { id, param, body } => RustIrExpr::Lambda {
+        RustIrExpr::Lambda {
+            id,
+            param,
+            body,
+            location,
+        } => RustIrExpr::Lambda {
             id,
             param,
             body: Box::new(inline_expr(*body, candidates, id_gen, depth)),
+            location,
         },
 
         RustIrExpr::App {

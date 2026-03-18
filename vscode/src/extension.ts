@@ -8,6 +8,7 @@ import {
   ServerOptions,
 } from "vscode-languageclient/node";
 import { extractHoverToken, fallbackHoverMarkdownForToken } from "./hoverFallback";
+import { resolveServerCommand } from "./serverResolution";
 
 let client: LanguageClient | undefined;
 
@@ -352,41 +353,32 @@ export function activate(context: vscode.ExtensionContext) {
     true
   );
 
-  const isWindows = process.platform === "win32";
-  const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
-  const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
-
   const config = vscode.workspace.getConfiguration("aivi");
   const configuredCommand = config.get<string>("server.command");
   const configuredArgs = config.get<string[]>("server.args") ?? [];
 
-  // Preferred order: user config -> bundled `aivi-lsp` -> `aivi-lsp` on PATH -> `aivi lsp`.
-  let serverCommand: string;
-  let serverArgs: string[];
-  if (configuredCommand && configuredCommand.trim().length > 0) {
-    serverCommand = configuredCommand;
-    serverArgs = configuredArgs;
-  } else if (fs.existsSync(bundledServerPath)) {
-    serverCommand = bundledServerPath;
-    serverArgs = [];
-  } else if (hasCommand("aivi-lsp")) {
-    serverCommand = "aivi-lsp";
-    serverArgs = [];
-  } else if (hasCommand("aivi")) {
-    serverCommand = "aivi";
-    serverArgs = ["lsp"];
-  } else {
-    serverCommand = "aivi-lsp";
-    serverArgs = [];
-  }
+  const isWindows = process.platform === "win32";
+  const serverResolution = resolveServerCommand({
+    extensionPath: context.extensionPath,
+    configuredCommand,
+    configuredArgs,
+    isWindows,
+    hasCommand,
+  });
+  const serverCommand = serverResolution.command;
+  const serverArgs = serverResolution.args;
 
-  if (!isWindows && serverCommand === bundledServerPath && fs.existsSync(bundledServerPath)) {
+  if (!isWindows && serverResolution.source === "bundled" && fs.existsSync(serverCommand)) {
     try {
-      fs.chmodSync(bundledServerPath, 0o755);
+      fs.chmodSync(serverCommand, 0o755);
     } catch (err) {
       outputChannel.appendLine(`Failed to chmod aivi-lsp: ${String(err)}`);
     }
   }
+  const renderedServerArgs = serverArgs.length > 0 ? ` ${serverArgs.join(" ")}` : "";
+  outputChannel.appendLine(
+    `Using AIVI Language Server (${serverResolution.source}): ${serverCommand}${renderedServerArgs}`,
+  );
 
   const serverOptions: ServerOptions = {
     command: serverCommand,

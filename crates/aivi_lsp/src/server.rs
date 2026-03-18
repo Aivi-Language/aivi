@@ -72,7 +72,7 @@ struct DiagnosticTarget {
 impl Backend {
     // Incremental didChange ranges are defined against the previous document version, so
     // same-file open/change/close handlers must observe a consistent per-document order.
-    async fn document_change_lock(&self, uri: &Url) -> Arc<Mutex<()>> {
+    pub(super) async fn document_change_lock(&self, uri: &Url) -> Arc<Mutex<()>> {
         let mut state = self.state.lock().await;
         state
             .document_change_locks

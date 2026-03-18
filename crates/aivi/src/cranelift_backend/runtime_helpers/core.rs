@@ -172,16 +172,68 @@ thread_local! {
 
 /// Called at the start of every JIT-compiled function to record its name.
 /// This makes subsequent runtime warnings show which function triggered them.
+fn decode_source_origin(
+    ctx: *mut JitRuntimeCtx,
+    ptr: *const u8,
+    len: usize,
+    start_line: i64,
+    start_col: i64,
+    end_line: i64,
+    end_col: i64,
+    kind: i64,
+    label: &str,
+) -> Option<SourceOrigin> {
+    if ptr.is_null() || len == 0 {
+        return None;
+    }
+    let Some(path) = decode_utf8_owned(ctx, ptr, len, label) else {
+        return None;
+    };
+    let span = Span {
+        start: crate::diagnostics::Position {
+            line: start_line.max(1) as usize,
+            column: start_col.max(1) as usize,
+        },
+        end: crate::diagnostics::Position {
+            line: end_line.max(1) as usize,
+            column: end_col.max(1) as usize,
+        },
+    };
+    Some(SourceOrigin::with_kind(path, span, SourceKind::from_i64(kind)))
+}
+
 #[no_mangle]
-pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usize) {
+pub extern "C" fn rt_enter_fn(
+    ctx: *mut JitRuntimeCtx,
+    ptr: *const u8,
+    len: usize,
+    fallback_ptr: *const u8,
+    fallback_len: usize,
+    start_line: i64,
+    start_col: i64,
+    end_line: i64,
+    end_col: i64,
+    kind: i64,
+) {
     if ctx.is_null() {
         return;
     }
     let Some(name) = decode_utf8_owned(ctx, ptr, len, "rt_enter_fn") else {
         return;
     };
+    let fallback_origin = decode_source_origin(
+        ctx,
+        fallback_ptr,
+        fallback_len,
+        start_line,
+        start_col,
+        end_line,
+        end_col,
+        kind,
+        "rt_enter_fn",
+    );
     let runtime = unsafe { (*ctx).runtime_mut() };
-    let inherited_origin = runtime.jit_pending_call_loc.take();
+    let inherited_origin = runtime.jit_pending_call_loc.take().or(fallback_origin);
     runtime.jit_current_fn = Some(name.clone().into_boxed_str());
     runtime.jit_current_loc = inherited_origin.clone();
     runtime.jit_frame_stack.push(RuntimeFrame {
@@ -231,20 +283,19 @@ pub extern "C" fn rt_set_location(
     if ctx.is_null() {
         return;
     }
-    let Some(path) = decode_utf8_owned(ctx, ptr, len, "rt_set_location") else {
+    let Some(origin) = decode_source_origin(
+        ctx,
+        ptr,
+        len,
+        start_line,
+        start_col,
+        end_line,
+        end_col,
+        kind,
+        "rt_set_location",
+    ) else {
         return;
     };
-    let span = Span {
-        start: crate::diagnostics::Position {
-            line: start_line.max(1) as usize,
-            column: start_col.max(1) as usize,
-        },
-        end: crate::diagnostics::Position {
-            line: end_line.max(1) as usize,
-            column: end_col.max(1) as usize,
-        },
-    };
-    let origin = SourceOrigin::with_kind(path, span, SourceKind::from_i64(kind));
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_loc = Some(origin.clone());
     if let Some(frame) = runtime.jit_frame_stack.last_mut() {
@@ -266,20 +317,19 @@ pub extern "C" fn rt_prepare_call_location(
     if ctx.is_null() {
         return;
     }
-    let Some(path) = decode_utf8_owned(ctx, ptr, len, "rt_prepare_call_location") else {
+    let Some(origin) = decode_source_origin(
+        ctx,
+        ptr,
+        len,
+        start_line,
+        start_col,
+        end_line,
+        end_col,
+        kind,
+        "rt_prepare_call_location",
+    ) else {
         return;
     };
-    let span = Span {
-        start: crate::diagnostics::Position {
-            line: start_line.max(1) as usize,
-            column: start_col.max(1) as usize,
-        },
-        end: crate::diagnostics::Position {
-            line: end_line.max(1) as usize,
-            column: end_col.max(1) as usize,
-        },
-    };
-    let origin = SourceOrigin::with_kind(path, span, SourceKind::from_i64(kind));
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_pending_call_loc = Some(origin);
 }
@@ -311,7 +361,18 @@ mod core_tests {
         ));
         let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
 
-        rt_enter_fn(&mut ctx, b"test.fn".as_ptr(), "test.fn".len());
+        rt_enter_fn(
+            &mut ctx,
+            b"test.fn".as_ptr(),
+            "test.fn".len(),
+            std::ptr::null(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
 
         assert_eq!(runtime.jit_current_fn.as_deref(), Some("test.fn"));
         assert!(runtime.jit_current_loc.is_none());
@@ -333,7 +394,18 @@ mod core_tests {
             18,
             0,
         );
-        rt_enter_fn(&mut ctx, b"test.fn".as_ptr(), "test.fn".len());
+        rt_enter_fn(
+            &mut ctx,
+            b"test.fn".as_ptr(),
+            "test.fn".len(),
+            std::ptr::null(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
 
         assert_eq!(runtime.jit_current_fn.as_deref(), Some("test.fn"));
         assert_eq!(
@@ -361,7 +433,18 @@ mod core_tests {
         let mut runtime = test_runtime();
         let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
 
-        rt_enter_fn(&mut ctx, b"test.fn".as_ptr(), "test.fn".len());
+        rt_enter_fn(
+            &mut ctx,
+            b"test.fn".as_ptr(),
+            "test.fn".len(),
+            std::ptr::null(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
         rt_set_location(&mut ctx, b"src/main.aivi".as_ptr(), "src/main.aivi".len(), 4, 2, 4, 12, 0);
 
         let current = runtime
@@ -385,9 +468,31 @@ mod core_tests {
         let mut runtime = test_runtime();
         let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
 
-        rt_enter_fn(&mut ctx, b"outer.fn".as_ptr(), "outer.fn".len());
+        rt_enter_fn(
+            &mut ctx,
+            b"outer.fn".as_ptr(),
+            "outer.fn".len(),
+            std::ptr::null(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
         rt_set_location(&mut ctx, b"src/main.aivi".as_ptr(), "src/main.aivi".len(), 1, 1, 1, 6, 0);
-        rt_enter_fn(&mut ctx, b"inner.fn".as_ptr(), "inner.fn".len());
+        rt_enter_fn(
+            &mut ctx,
+            b"inner.fn".as_ptr(),
+            "inner.fn".len(),
+            std::ptr::null(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
         rt_set_location(&mut ctx, b"src/main.aivi".as_ptr(), "src/main.aivi".len(), 8, 3, 8, 10, 0);
 
         rt_leave_fn(&mut ctx);
@@ -400,6 +505,72 @@ mod core_tests {
                 .expect("restored location")
                 .start_position_text(),
             "src/main.aivi:1:1"
+        );
+    }
+
+    #[test]
+    fn enter_fn_uses_fallback_location_when_pending_location_is_missing() {
+        let mut runtime = test_runtime();
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+
+        rt_enter_fn(
+            &mut ctx,
+            b"test.fn".as_ptr(),
+            "test.fn".len(),
+            b"src/main.aivi".as_ptr(),
+            "src/main.aivi".len(),
+            7,
+            3,
+            7,
+            12,
+            0,
+        );
+
+        assert_eq!(
+            runtime
+                .jit_current_loc
+                .as_ref()
+                .expect("fallback location")
+                .start_position_text(),
+            "src/main.aivi:7:3"
+        );
+    }
+
+    #[test]
+    fn pending_call_location_overrides_fallback_location() {
+        let mut runtime = test_runtime();
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+
+        rt_prepare_call_location(
+            &mut ctx,
+            b"src/callsite.aivi".as_ptr(),
+            "src/callsite.aivi".len(),
+            4,
+            9,
+            4,
+            20,
+            0,
+        );
+        rt_enter_fn(
+            &mut ctx,
+            b"test.fn".as_ptr(),
+            "test.fn".len(),
+            b"src/definition.aivi".as_ptr(),
+            "src/definition.aivi".len(),
+            12,
+            2,
+            12,
+            15,
+            0,
+        );
+
+        assert_eq!(
+            runtime
+                .jit_current_loc
+                .as_ref()
+                .expect("call-site location")
+                .start_position_text(),
+            "src/callsite.aivi:4:9"
         );
     }
 }
