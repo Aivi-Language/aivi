@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Once};
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
+use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::request::{
     GotoDeclarationParams, GotoDeclarationResponse, GotoImplementationParams,
     GotoImplementationResponse,
@@ -67,6 +68,35 @@ struct DiagnosticTarget {
     uri: Url,
     version: Option<i32>,
     text: String,
+}
+
+const DIAGNOSTICS_PROGRESS_NOTIFICATION: &str = "aivi/diagnosticsProgress";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum DiagnosticsProgressPhase {
+    Begin,
+    Report,
+    End,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticsProgressParams {
+    phase: DiagnosticsProgressPhase,
+    snapshot: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total: Option<usize>,
+}
+
+#[derive(Debug)]
+enum DiagnosticsProgressNotification {}
+
+impl Notification for DiagnosticsProgressNotification {
+    type Params = DiagnosticsProgressParams;
+    const METHOD: &'static str = DIAGNOSTICS_PROGRESS_NOTIFICATION;
 }
 
 impl Backend {
@@ -190,12 +220,25 @@ impl Backend {
     }
 
     async fn begin_diagnostics_snapshot(&self) -> u64 {
-        let mut state = self.state.lock().await;
-        if let Some(handle) = state.pending_diagnostics.take() {
+        let (previous_snapshot, pending_handle, next_snapshot) = {
+            let mut state = self.state.lock().await;
+            let previous_snapshot = state.diagnostics_snapshot;
+            let pending_handle = state.pending_diagnostics.take();
+            state.diagnostics_snapshot = state.diagnostics_snapshot.wrapping_add(1);
+            (previous_snapshot, pending_handle, state.diagnostics_snapshot)
+        };
+        if let Some(handle) = pending_handle {
             handle.abort();
+            Self::send_diagnostics_progress(
+                &self.client,
+                DiagnosticsProgressPhase::End,
+                previous_snapshot,
+                None,
+                None,
+            )
+            .await;
         }
-        state.diagnostics_snapshot = state.diagnostics_snapshot.wrapping_add(1);
-        state.diagnostics_snapshot
+        next_snapshot
     }
 
     async fn diagnostics_context(
@@ -269,6 +312,23 @@ impl Backend {
         }
     }
 
+    async fn send_diagnostics_progress(
+        client: &tower_lsp::Client,
+        phase: DiagnosticsProgressPhase,
+        snapshot: u64,
+        completed: Option<usize>,
+        total: Option<usize>,
+    ) {
+        client
+            .send_notification::<DiagnosticsProgressNotification>(DiagnosticsProgressParams {
+                phase,
+                snapshot,
+                completed,
+                total,
+            })
+            .await;
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn run_diagnostics_publish_task(
         client: tower_lsp::Client,
@@ -287,6 +347,17 @@ impl Backend {
         let mut checkpoint = checkpoint;
         let mut published_targets = 0usize;
         let dependent_target_count = dependent_targets.len();
+        let total_targets = usize::from(current_target.is_some()) + dependent_target_count;
+        if total_targets > 0 {
+            Self::send_diagnostics_progress(
+                &client,
+                DiagnosticsProgressPhase::Begin,
+                snapshot,
+                Some(0),
+                Some(total_targets),
+            )
+            .await;
+        }
 
         if let Some(target) = current_target {
             let (diagnostics, new_checkpoint) = Backend::compute_target_diagnostics(
@@ -334,6 +405,16 @@ impl Backend {
                     ),
                 )
                 .await;
+                if total_targets > 0 {
+                    Self::send_diagnostics_progress(
+                        &client,
+                        DiagnosticsProgressPhase::End,
+                        snapshot,
+                        Some(published_targets),
+                        Some(total_targets),
+                    )
+                    .await;
+                }
                 return;
             }
 
@@ -352,6 +433,16 @@ impl Backend {
                 .publish_diagnostics(target.uri, diagnostics, target.version)
                 .await;
             published_targets += 1;
+            if total_targets > 0 {
+                Self::send_diagnostics_progress(
+                    &client,
+                    DiagnosticsProgressPhase::Report,
+                    snapshot,
+                    Some(published_targets),
+                    Some(total_targets),
+                )
+                .await;
+            }
         }
 
         for target in dependent_targets {
@@ -398,6 +489,16 @@ impl Backend {
                 .publish_diagnostics(target.uri, diagnostics, target.version)
                 .await;
             published_targets += 1;
+            if total_targets > 0 {
+                Self::send_diagnostics_progress(
+                    &client,
+                    DiagnosticsProgressPhase::Report,
+                    snapshot,
+                    Some(published_targets),
+                    Some(total_targets),
+                )
+                .await;
+            }
         }
 
         let still_current = {
@@ -420,6 +521,16 @@ impl Backend {
             ),
         )
         .await;
+        if total_targets > 0 {
+            Self::send_diagnostics_progress(
+                &client,
+                DiagnosticsProgressPhase::End,
+                snapshot,
+                Some(published_targets),
+                Some(total_targets),
+            )
+            .await;
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
