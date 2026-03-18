@@ -600,7 +600,10 @@ fn build_insert_sql_for_schema(
 ) -> Result<String, RuntimeError> {
     let fields = expect_record(row.clone(), ctx)?;
     let mut column_names = vec!["__aivi_ord".to_string(), "__aivi_row_json".to_string()];
-    let mut values = vec![ordinal.to_string(), render_runtime_scalar_literal(&Value::Text(encode_json(row)?))?];
+    let mut values = vec![
+        ordinal.to_string(),
+        render_required_runtime_scalar_literal(&Value::Text(encode_json(row)?))?,
+    ];
     for column in &schema.columns {
         column_names.push(column.name.clone());
         let cell = match fields.get(&column.name) {
@@ -638,8 +641,10 @@ fn build_update_sql_for_schema(
     ctx: &str,
 ) -> Result<String, RuntimeError> {
     let fields = expect_record(row.clone(), ctx)?;
-    let mut assignments =
-        vec![format!("__aivi_row_json = {}", render_runtime_scalar_literal(&Value::Text(encode_json(row)?))?)];
+    let mut assignments = vec![format!(
+        "__aivi_row_json = {}",
+        render_required_runtime_scalar_literal(&Value::Text(encode_json(row)?))?
+    )];
     for column in &schema.columns {
         let cell = match fields.get(&column.name) {
             Some(value) => runtime_value_to_query_cell(value, column.kind, column.not_null)?,

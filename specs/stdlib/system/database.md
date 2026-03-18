@@ -165,6 +165,8 @@ Sorting and paging work well in the pipeline style because they read from top to
 
 When a lowered query omits `db.orderBy`, rows keep the source row order so `db.limit` and `db.offset` stay deterministic.
 
+Captured `Option` values also participate in lowered SQL predicates. Comparisons such as `row.deletedAt == None` lower to `IS NULL`, `row.deletedAt != None` lowers to `IS NOT NULL`, and captured `Some value` unwraps to the contained SQL scalar before rendering.
+
 
 Inside a `do Query` block, apply those helpers to the source query on the right-hand side of `<-`.
 <!-- /quick-info -->

@@ -69,11 +69,10 @@ Multi-argument heads may patch more than one simple identifier parameter:
 
 ```aivi
 g = x <| _ + 1
-    y <| _ + 3
-  => x + y
+    y <| _ + 3 => x + y
 ```
 
-The formatter prints multi-argument patched heads in that broken layout so the parameter/update pairs stay easy to scan.
+The formatter breaks multi-argument patched heads across lines so continuation lines stay aligned at the first argument while the final argument line keeps `=> body` inline.
 
 For now, argument-patch sugar applies only to simple identifier parameters. If you want to patch a destructured value, write the explicit block form instead.
 

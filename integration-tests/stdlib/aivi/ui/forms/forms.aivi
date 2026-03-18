@@ -70,7 +70,7 @@ input_change_marks_dirty = do Effect {
 @test "blur reveals field validation"
 blur_reveals_validation = do Effect {
   changed = initialState <| { name: setValue "A" initialState.name }
-            blurred = changed <| { name: touch changed.name }
+  blurred = changed <| { name: touch changed.name }
   assertEq blurred.name.touched True
   assertEq (nameErrors blurred) ["Must be at least 2 characters"]
 }
