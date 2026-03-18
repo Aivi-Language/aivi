@@ -13,11 +13,10 @@ sharedState = "original"
 // --- First test: uses mock, verifies the mock is active ---
 
 @test "first test sees its own mock"
-firstTestUsesMock =
-  mock sharedState = "mocked"
-  in do Effect {
-    assertEq sharedState "mocked"
-  }
+firstTestUsesMock = mock sharedState = "mocked"
+in do Effect {
+  assertEq sharedState "mocked"
+}
 
 // --- Second test: must NOT see the mock from the first test ---
 
@@ -33,11 +32,10 @@ sharedTag = "alpha"
 applyTag = tag => tag
 
 @test "third test mock is scoped to itself"
-thirdTestOwnMock =
-  mock sharedTag = "beta"
-  in do Effect {
-    assertEq (applyTag sharedTag) "beta"
-  }
+thirdTestOwnMock = mock sharedTag = "beta"
+in do Effect {
+  assertEq (applyTag sharedTag) "beta"
+}
 
 // --- Fourth test: verifies sharedTag unchanged after third test's mock ---
 

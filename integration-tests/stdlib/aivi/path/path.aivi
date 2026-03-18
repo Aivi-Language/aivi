@@ -42,7 +42,7 @@ parent_functional = do Effect {
           | Some name => assertEq name "b"
           | None      => assert False
       }
-    | None => assert False
+  | None => assert False
 }
 
 @test "to string roundtrip"

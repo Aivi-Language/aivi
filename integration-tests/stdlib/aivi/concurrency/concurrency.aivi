@@ -15,7 +15,7 @@ channel_roundtrip = do Effect {
   res match
     | Ok payload => assertEq payload True
     | Err _      => assert False
-    close tx
+  close tx
 }
 
 @test "close drains then Err Closed"
@@ -28,9 +28,9 @@ close_drains_then_closed = do Effect {
   first match
     | Ok payload => assertEq payload True
     | Err _      => assert False
-    second match
-      | Ok _       => assert False
-      | Err Closed => assert True
+  second match
+    | Ok _       => assert False
+    | Err Closed => assert True
 }
 
 @test "makeBounded roundtrip"
@@ -41,7 +41,7 @@ make_bounded_roundtrip = do Effect {
   res match
     | Ok value => assertEq value 7
     | Err _    => assert False
-    close tx
+  close tx
 }
 
 @test "fold accumulates"
@@ -77,9 +77,9 @@ forEach_order = do Effect {
   first match
     | Ok v  => assertEq v 10
     | Err _ => assert False
-    second match
-      | Ok v  => assertEq v 20
-      | Err _ => assert False
+  second match
+    | Ok v  => assertEq v 20
+    | Err _ => assert False
 }
 
 @test "par returns both"
@@ -190,12 +190,12 @@ spawned_ticker_updates_signal = do Effect {
   first match
     | Ok value => assertEq value 1
     | Err _    => assert False
-    second match
-      | Ok value => assertEq value 2
-      | Err _    => assert False
-    third match
-      | Ok value => assertEq value 3
-      | Err _    => assert False
+  second match
+    | Ok value => assertEq value 2
+    | Err _    => assert False
+  third match
+    | Ok value => assertEq value 3
+    | Err _    => assert False
 
   assertEq (get ticks) 3
   close tx
@@ -221,9 +221,9 @@ spawn_collects_delayed_computations = do Effect {
   first match
     | Ok value => assertEq value 1
     | Err _    => assert False
-    second match
-      | Ok value => assertEq value 2
-      | Err _    => assert False
+  second match
+    | Ok value => assertEq value 2
+    | Err _    => assert False
 
   assertEq (slow + fast) 3
   close tx
@@ -318,7 +318,7 @@ watcher_fires_cross_thread = do Effect {
   result match
     | Ok value => assertEq value 7
     | Err _    => assert False
-    close tx
+  close tx
 }
 
 @test "batch from spawned thread delivers consistent derived state"
@@ -390,7 +390,7 @@ retry_failure = do Effect {
   result match
     | Ok _    => assert False
     | Err msg => assertEq msg "no"
-    close tx
+  close tx
 }
 
 @test "spawn join repeats settled result"

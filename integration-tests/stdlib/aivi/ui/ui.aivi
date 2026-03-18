@@ -9,8 +9,7 @@ use aivi.ui.layout (Px)
 @test "html sigil render lowers attributes and handlers"
 html_sigil_render_functional = do Effect {
   label = "Run"
-  node  =
-    ~<html>
+  node  = ~<html>
       <button
         key="save"
         class="primary"

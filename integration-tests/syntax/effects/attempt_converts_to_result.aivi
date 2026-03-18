@@ -29,7 +29,7 @@ attemptAllowsRecovery = do Effect {
   value = res match
     | Ok v  => v
     | Err _ => 0
-    assertEq value 0
+  assertEq value 0
 }
 
 @test "attempt on nested failure short-circuits inner block"

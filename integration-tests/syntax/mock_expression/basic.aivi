@@ -11,19 +11,17 @@ greeting = "Hello, World!"
 makeMessage = name => greeting ++ " " ++ name
 
 @test "basic mock substitution"
-basicMock =
-  mock greeting = "Mocked!"
-  in do Effect {
-    assertEq greeting "Mocked!"
-  }
+basicMock = mock greeting = "Mocked!"
+in do Effect {
+  assertEq greeting "Mocked!"
+}
 
 @test "deep mock scoping"
-deepMock =
-  mock greeting = "Hi!"
-  in do Effect {
-    result <- pure (makeMessage "Ada")
-    assertEq result "Hi! Ada"
-  }
+deepMock = mock greeting = "Hi!"
+in do Effect {
+  result <- pure (makeMessage "Ada")
+  assertEq result "Hi! Ada"
+}
 
 @test "original restored after mock"
 restoreAfterMock = do Effect {
