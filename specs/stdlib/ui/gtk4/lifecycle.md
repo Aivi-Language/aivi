@@ -56,9 +56,74 @@ main = do Effect {
 | `widgetById` | you want to look up a named widget programmatically |
 | `widgetSetCss` / `appSetCss` | you want imperative CSS injection |
 | `drawAreaQueueDraw` | you want to queue redraw for a custom drawing surface |
-| `menuButtonSetMenuModel` | you are wiring programmatic GMenu infrastructure |
+| `menuModelNew` / `menuModelAppendItem` / `menuButtonSetMenuModel` | you are wiring programmatic GMenu infrastructure around a declarative `GtkMenuButton` |
+| `osOpenUri` | you want to hand a URI to the desktop from a callback or helper |
+| `gtkSetInterval` | you want a repeating low-level `GtkTick` feed for custom integrations |
 
 Bound callbacks and event handles are the default. These helpers are mainly for libraries, tests, embedding, or special GTK integrations.
+
+The imperative surface is intentionally narrow. Dialog-construction helpers, tray/mail helpers, D-Bus startup, badge counters, and theme probes are not public GTK APIs; use mounted dialog roots plus ordinary callbacks instead.
+
+## Curated imperative integrations
+
+### Programmatic GMenu setup
+
+Use `menuModelNew`, `menuModelAppendItem`, and `menuButtonSetMenuModel` when you need GTK's application-level `GMenu` infrastructure. Keep the button itself declarative and attach the model after mount:
+
+```aivi
+use aivi.ui.gtk4
+
+windowRoot = ~<gtk>
+  <AdwApplicationWindow title="Mailfox">
+    <GtkMenuButton id="appMenu" label="App" />
+  </AdwApplicationWindow>
+</gtk>
+
+main = do Effect {
+  _      <- init Unit
+  app    <- appNew "com.example.mailfox"
+  action <- actionNew "preferences"
+  _      <- appAddAction app action
+  win    <- mountAppWindow app [windowRoot]
+  menu   <- menuModelNew Unit
+  _      <- menuModelAppendItem menu "Preferences" "app.preferences"
+  button <- widgetById "appMenu"
+  _      <- menuButtonSetMenuModel button menu
+  _      <- windowPresent win
+  appRun app
+}
+```
+
+### Desktop handoff
+
+`osOpenUri` is the public escape hatch for opening links or files with the desktop shell. Because it is callback-friendly, it works directly from the signal-first app shape:
+
+```aivi
+docsButton = ~<gtk>
+  <GtkButton
+    label="Open docs"
+    onClick={_ => osOpenUri "https://example.com/docs"}
+  />
+</gtk>
+```
+
+### Low-level tick feeds
+
+Use `gtkSetInterval` only when direct callbacks or `Event` handles are not a good fit and you explicitly want raw `GtkTick` events:
+
+```aivi
+use aivi.concurrency
+
+main = do Effect {
+  _  <- gtkSetInterval 1000
+  rx <- signalStream Unit
+  concurrency.forEach rx (event =>
+    event match
+      | GtkTick => pollExternalState
+      | _       => pure Unit
+  )
+}
+```
 
 ## Raw GTK events
 

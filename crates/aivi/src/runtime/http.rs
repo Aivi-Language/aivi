@@ -361,7 +361,9 @@ fn list_value_to_bytes(values: &[Value]) -> Result<Vec<u8>, AiviHttpError> {
     Ok(bytes)
 }
 
-fn response_body_from_value(value: &Value) -> Result<(Vec<u8>, Option<&'static str>), AiviHttpError> {
+fn response_body_from_value(
+    value: &Value,
+) -> Result<(Vec<u8>, Option<&'static str>), AiviHttpError> {
     match value {
         Value::Constructor { name, args } if name == "RawBytes" && args.len() == 1 => {
             match args.first() {

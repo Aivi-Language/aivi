@@ -2214,7 +2214,7 @@ mod bridge {
         bridge_unit_ib!("actionSetEnabled", aivi_gtk4::action_set_enabled);
         bridge_unit_ii!("appAddAction", aivi_gtk4::app_add_action);
 
-        // ── Menu, dialog ──
+        // ── Menu ──
         fields.insert(
             "menuModelNew".to_string(),
             builtin("gtk4.menuModelNew", 1, |mut args, _| {
@@ -2250,73 +2250,22 @@ mod bridge {
                 }))
             }),
         );
-        bridge_int_t!("menuButtonNew", aivi_gtk4::menu_button_new);
         bridge_unit_ii!(
             "menuButtonSetMenuModel",
             aivi_gtk4::menu_button_set_menu_model
         );
 
-        fields.insert(
-            "dialogNew".to_string(),
-            builtin("gtk4.dialogNew", 1, |mut args, _| {
-                let _ = args.remove(0);
-                Ok(effect(move |_| {
-                    let r = aivi_gtk4::dialog_new().map_err(gtk4_err_to_runtime)?;
-                    Ok(Value::Int(r))
-                }))
-            }),
-        );
-        bridge_unit_it!("dialogSetTitle", aivi_gtk4::dialog_set_title);
-        bridge_unit_ii!("dialogSetChild", aivi_gtk4::dialog_set_child);
-        bridge_unit_ii!("dialogPresent", aivi_gtk4::dialog_present);
-        bridge_unit_i!("dialogClose", aivi_gtk4::dialog_close);
-        bridge_unit_ii!("adwDialogPresent", aivi_gtk4::adw_dialog_present);
-
         // ── OS ──
         fields.insert(
             "osOpenUri".to_string(),
-            builtin("gtk4.osOpenUri", 2, |mut args, _| {
-                let uri = match args.remove(1) {
+            builtin("gtk4.osOpenUri", 1, |mut args, _| {
+                let uri = match args.remove(0) {
                     Value::Text(v) => v,
                     _ => return Err(invalid("expects Text")),
                 };
-                let app_id = match args.remove(0) {
-                    Value::Int(v) => v,
-                    _ => return Err(invalid("expects Int")),
-                };
                 Ok(effect(move |_| {
-                    aivi_gtk4::os_open_uri(app_id, &uri).map_err(gtk4_err_to_runtime)?;
+                    aivi_gtk4::os_open_uri(0, &uri).map_err(gtk4_err_to_runtime)?;
                     Ok(Value::Unit)
-                }))
-            }),
-        );
-        fields.insert(
-            "osSetBadgeCount".to_string(),
-            builtin("gtk4.osSetBadgeCount", 2, |mut args, _| {
-                let count = match args.remove(1) {
-                    Value::Int(v) => v,
-                    _ => return Err(invalid("expects Int")),
-                };
-                let app_id = match args.remove(0) {
-                    Value::Int(v) => v,
-                    _ => return Err(invalid("expects Int")),
-                };
-                Ok(effect(move |_| {
-                    aivi_gtk4::os_set_badge_count(app_id, count).map_err(gtk4_err_to_runtime)?;
-                    Ok(Value::Unit)
-                }))
-            }),
-        );
-        fields.insert(
-            "osThemePreference".to_string(),
-            builtin("gtk4.osThemePreference", 1, |mut args, _| {
-                match args.remove(0) {
-                    Value::Unit => {}
-                    _ => return Err(invalid("expects Unit")),
-                }
-                Ok(effect(move |_| {
-                    let r = aivi_gtk4::os_theme_preference().map_err(gtk4_err_to_runtime)?;
-                    Ok(Value::Text(r))
                 }))
             }),
         );
@@ -2448,20 +2397,6 @@ mod bridge {
             }),
         );
 
-        // dbusServerStart : Unit -> Effect GtkError Unit
-        fields.insert(
-            "dbusServerStart".to_string(),
-            builtin("gtk4.dbusServerStart", 1, |mut args, _| {
-                match args.remove(0) {
-                    Value::Unit => {}
-                    _ => return Err(invalid("expects Unit")),
-                }
-                Ok(effect(move |_| {
-                    aivi_gtk4::dbus_server_start().map_err(gtk4_err_to_runtime)?;
-                    Ok(Value::Unit)
-                }))
-            }),
-        );
         fields.insert(
             "signalEmit".to_string(),
             builtin("gtk4.signalEmit", 4, |mut args, _| {
@@ -2598,29 +2533,6 @@ mod bridge {
                 };
                 Ok(effect(move |_| {
                     aivi_gtk4::signal_toggle_css_class(&handler, wid, &class)
-                        .map_err(gtk4_err_to_runtime)?;
-                    Ok(Value::Unit)
-                }))
-            }),
-        );
-
-        fields.insert(
-            "signalBindDialogPresent".to_string(),
-            builtin("gtk4.signalBindDialogPresent", 3, |mut args, _| {
-                let parent_id = match args.remove(2) {
-                    Value::Int(v) => v,
-                    _ => return Err(invalid("expects Int")),
-                };
-                let dialog_id = match args.remove(1) {
-                    Value::Int(v) => v,
-                    _ => return Err(invalid("expects Int")),
-                };
-                let handler = match args.remove(0) {
-                    Value::Text(v) => v,
-                    _ => return Err(invalid("expects Text")),
-                };
-                Ok(effect(move |_| {
-                    aivi_gtk4::signal_bind_dialog_present(&handler, dialog_id, parent_id)
                         .map_err(gtk4_err_to_runtime)?;
                     Ok(Value::Unit)
                 }))
@@ -5024,6 +4936,9 @@ mod tests {
             runtime.reactive_create_signal(Value::Text("dialog".to_string())),
             "create dialog text signal",
         );
+        let app = aivi_gtk4::app_new("com.aivi.dialog.cleanup.test")
+            .unwrap_or_else(|err| panic!("create app: {}", err.message));
+        let win = present_stealth_host_window(app, "Cleanup Host");
         let node = ResolvedGtkNode::Element {
             tag: "object".to_string(),
             attrs: vec![
@@ -5035,6 +4950,10 @@ mod tests {
                 ResolvedGtkAttr::StaticAttr {
                     name: "title".to_string(),
                     value: "Cleanup".to_string(),
+                },
+                ResolvedGtkAttr::StaticProp {
+                    name: "present-for".to_string(),
+                    value: win.to_string(),
                 },
             ],
             children: vec![ResolvedGtkNode::Element {
@@ -5094,11 +5013,8 @@ mod tests {
             Some(1)
         );
 
-        let app = aivi_gtk4::app_new("com.aivi.dialog.cleanup.test")
-            .unwrap_or_else(|err| panic!("create app: {}", err.message));
-        let win = present_stealth_host_window(app, "Cleanup Host");
         make_test_widget_invisible(result.root_id, "make cleanup dialog transparent");
-        aivi_gtk4::adw_dialog_present(result.root_id, win)
+        aivi_gtk4::dialog_set_open(result.root_id, true)
             .unwrap_or_else(|err| panic!("present cleanup dialog: {}", err.message));
         super::pump_gtk_events();
 

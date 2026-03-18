@@ -1,11 +1,37 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::util::{builtin, expect_int, expect_list, expect_record, list_floats};
+use super::util::{builtin, expect_float, expect_int, expect_list, expect_record, list_floats};
 use crate::runtime::{RuntimeError, Value};
 
 pub(super) fn build_linalg_record() -> Value {
     let mut fields = HashMap::new();
+    fields.insert(
+        "addVec".to_string(),
+        builtin("linalg.addVec", 2, |args, _| {
+            vec_binary_op(args, "linalg.addVec", |a, b| a + b)
+        }),
+    );
+    fields.insert(
+        "subVec".to_string(),
+        builtin("linalg.subVec", 2, |args, _| {
+            vec_binary_op(args, "linalg.subVec", |a, b| a - b)
+        }),
+    );
+    fields.insert(
+        "scaleVec".to_string(),
+        builtin("linalg.scaleVec", 2, |mut args, _| {
+            let scalar = expect_float(args.pop().unwrap(), "linalg.scaleVec")?;
+            let (size, vector) = vec_from_value(args.pop().unwrap(), "linalg.scaleVec")?;
+            Ok(vec_to_value(
+                size,
+                vector
+                    .into_iter()
+                    .map(|component| component * scalar)
+                    .collect(),
+            ))
+        }),
+    );
     fields.insert(
         "dot".to_string(),
         builtin("linalg.dot", 2, |mut args, _| {
@@ -75,6 +101,28 @@ pub(super) fn build_linalg_record() -> Value {
     );
     Value::Record(Arc::new(fields))
 }
+
+fn vec_binary_op<F>(args: Vec<Value>, ctx: &str, op: F) -> Result<Value, RuntimeError>
+where
+    F: Fn(f64, f64) -> f64,
+{
+    let mut args = args;
+    let (right_size, right) = vec_from_value(args.pop().unwrap(), ctx)?;
+    let (left_size, left) = vec_from_value(args.pop().unwrap(), ctx)?;
+    if left_size != right_size {
+        return Err(RuntimeError::Message(format!(
+            "{ctx} expects vectors of equal size"
+        )));
+    }
+    Ok(vec_to_value(
+        left_size,
+        left.into_iter()
+            .zip(right)
+            .map(|(left, right)| op(left, right))
+            .collect(),
+    ))
+}
+
 fn vec_from_value(value: Value, ctx: &str) -> Result<(i64, Vec<f64>), RuntimeError> {
     let record = expect_record(value, ctx)?;
     let size = match record.get("size") {

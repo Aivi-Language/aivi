@@ -4,7 +4,6 @@ module integrationTests.stdlib.aivi.i18n.tests
 use aivi
 use aivi.testing
 use aivi.i18n
-use aivi.map
 
 @test "parse locale"
 parseLocale_functional = do Effect {

@@ -506,7 +506,9 @@ fn messages_to_values(messages: Vec<aivi_email::EmailMessage>) -> Vec<Value> {
             );
             rec.insert(
                 "references".to_string(),
-                Value::List(Arc::new(msg.references.into_iter().map(Value::Text).collect())),
+                Value::List(Arc::new(
+                    msg.references.into_iter().map(Value::Text).collect(),
+                )),
             );
             rec.insert(
                 "textBody".to_string(),

@@ -12,30 +12,15 @@ use aivi
 Vec = { size: Int, data: List Float }
 Mat = { rows: Int, cols: Int, data: List Float }
 
-map : (A -> B) -> List A -> List B
-map = f items => List.map f items
-
-zipWith : (A -> B -> C) -> List A -> List B -> List C
-zipWith = f left right => (left, right) match
-  | ([], _) => []
-  | (_, []) => []
-  | ([x, ...xs], [y, ...ys]) => [f x y, ...zipWith f xs ys]
-
-add : Float -> Float -> Float
-add = a b => a + b
-
-sub : Float -> Float -> Float
-sub = a b => a - b
-
 domain LinearAlgebra over Vec = {
   (+) : Vec -> Vec -> Vec
-  (+) = a b => { size: a.size, data: zipWith add a.data b.data }
+  (+) = a b => linalg.addVec a b
 
   (-) : Vec -> Vec -> Vec
-  (-) = a b => { size: a.size, data: zipWith sub a.data b.data }
+  (-) = a b => linalg.subVec a b
 
   (*) : Vec -> Float -> Vec
-  (*) = v s => { size: v.size, data: map (_ * s) v.data }
+  (*) = v s => linalg.scaleVec v s
 }
 
 dot : Vec -> Vec -> Float

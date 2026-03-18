@@ -18,7 +18,10 @@ pub(super) fn build_gnome_online_accounts_record() -> Value {
                 func: Arc::new(move |_| {
                     let accounts = aivi_goa::list_mail_accounts().map_err(goa_err_to_runtime)?;
                     Ok(Value::List(Arc::new(
-                        accounts.into_iter().map(goa_mail_account_to_value).collect(),
+                        accounts
+                            .into_iter()
+                            .map(goa_mail_account_to_value)
+                            .collect(),
                     )))
                 }),
             };
@@ -100,8 +103,14 @@ fn unary_constructor(name: &str, message: String) -> Value {
 fn goa_mail_account_to_value(account: GoaMailAccount) -> Value {
     let mut fields = HashMap::new();
     fields.insert("id".to_string(), Value::Text(account.id));
-    fields.insert("providerType".to_string(), Value::Text(account.provider_type));
-    fields.insert("providerName".to_string(), Value::Text(account.provider_name));
+    fields.insert(
+        "providerType".to_string(),
+        Value::Text(account.provider_type),
+    );
+    fields.insert(
+        "providerName".to_string(),
+        Value::Text(account.provider_name),
+    );
     fields.insert(
         "presentationIdentity".to_string(),
         Value::Text(account.presentation_identity),
@@ -118,8 +127,14 @@ fn goa_mail_account_to_value(account: GoaMailAccount) -> Value {
         "attentionNeeded".to_string(),
         Value::Bool(account.attention_needed),
     );
-    fields.insert("imapSupported".to_string(), Value::Bool(account.imap_supported));
-    fields.insert("smtpSupported".to_string(), Value::Bool(account.smtp_supported));
+    fields.insert(
+        "imapSupported".to_string(),
+        Value::Bool(account.imap_supported),
+    );
+    fields.insert(
+        "smtpSupported".to_string(),
+        Value::Bool(account.smtp_supported),
+    );
     Value::Record(Arc::new(fields))
 }
 
@@ -130,7 +145,10 @@ fn goa_imap_config_to_value(config: GoaImapConfig) -> Value {
     fields.insert("auth".to_string(), email_auth_to_value(config.auth));
     fields.insert(
         "port".to_string(),
-        config.port.map(|value| make_some(Value::Int(value))).unwrap_or_else(make_none),
+        config
+            .port
+            .map(|value| make_some(Value::Int(value)))
+            .unwrap_or_else(make_none),
     );
     fields.insert(
         "starttls".to_string(),
@@ -150,7 +168,10 @@ fn goa_smtp_config_to_value(config: GoaSmtpConfig) -> Value {
     fields.insert("from".to_string(), Value::Text(config.from));
     fields.insert(
         "port".to_string(),
-        config.port.map(|value| make_some(Value::Int(value))).unwrap_or_else(make_none),
+        config
+            .port
+            .map(|value| make_some(Value::Int(value)))
+            .unwrap_or_else(make_none),
     );
     fields.insert(
         "starttls".to_string(),

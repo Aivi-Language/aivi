@@ -3,7 +3,6 @@ module integrationTests.runtime.determinismMapOrder
 
 use aivi
 use aivi.testing
-use aivi.map
 
 // Map-to-list conversion must produce a stable, deterministic ordering.
 //
@@ -21,8 +20,8 @@ use aivi.map
 
 @test "single entry map toList"
 singleEntryToList = do Effect {
-  m = insert "x" 42 empty
-  assertEq (toList m) [("x", 42)]
+  m = Map.insert "x" 42 Map.empty
+  assertEq (Map.toList m) [("x", 42)]
 }
 
 // --- toList is stable: same map always gives same list ---
@@ -32,9 +31,9 @@ singleEntryToList = do Effect {
 
 @test "toList is stable on same map"
 toListStable = do Effect {
-  m  = fromList [("b", 2), ("a", 1), ("c", 3)]
-  l1 = toList m
-  l2 = toList m
+  m  = Map.fromList [("b", 2), ("a", 1), ("c", 3)]
+  l1 = Map.toList m
+  l2 = Map.toList m
   assertEq l1 l2
 }
 
@@ -43,50 +42,50 @@ toListStable = do Effect {
 @test "fromList toList round-trip preserves all entries"
 fromListToListRoundTrip = do Effect {
   entries = [("a", 1), ("b", 2), ("c", 3)]
-  m       = fromList entries
-  xs      = toList m
-  m2      = fromList xs
-  assertEq (size m) 3
-  assertEq (size m2) 3
-  assertEq (get "a" m2) (Some 1)
-  assertEq (get "b" m2) (Some 2)
-  assertEq (get "c" m2) (Some 3)
+  m       = Map.fromList entries
+  xs      = Map.toList m
+  m2      = Map.fromList xs
+  assertEq (Map.size m) 3
+  assertEq (Map.size m2) 3
+  assertEq (Map.get "a" m2) (Some 1)
+  assertEq (Map.get "b" m2) (Some 2)
+  assertEq (Map.get "c" m2) (Some 3)
 }
 
 // --- keys() returns all keys (order may vary) ---
 
 @test "map keys contains all keys"
 mapKeysContainsAll = do Effect {
-  m = fromList [("alpha", 1), ("beta", 2), ("gamma", 3)]
-  assertEq (size m) 3
-  assertEq (has "alpha" m) True
-  assertEq (has "beta" m) True
-  assertEq (has "gamma" m) True
+  m = Map.fromList [("alpha", 1), ("beta", 2), ("gamma", 3)]
+  assertEq (Map.size m) 3
+  assertEq (Map.has "alpha" m) True
+  assertEq (Map.has "beta" m) True
+  assertEq (Map.has "gamma" m) True
 }
 
 // --- values() length matches map size ---
 
 @test "map values length matches size"
 mapValuesLength = do Effect {
-  m = fromList [("x", 10), ("y", 20), ("z", 30)]
-  assertEq (size m) 3
+  m = Map.fromList [("x", 10), ("y", 20), ("z", 30)]
+  assertEq (Map.size m) 3
 }
 
 // --- entries() length matches map size ---
 
 @test "map entries length matches size"
 mapEntriesLength = do Effect {
-  m = fromList [("p", 100), ("q", 200)]
-  assertEq (size m) 2
+  m = Map.fromList [("p", 100), ("q", 200)]
+  assertEq (Map.size m) 2
 }
 
 // --- Numeric keys: size and lookup correct ---
 
 @test "integer-keyed map size and lookup"
 intKeyedMapCorrect = do Effect {
-  m = fromList [(3, "three"), (1, "one"), (2, "two")]
-  assertEq (size m) 3
-  assertEq (get 1 m) (Some "one")
-  assertEq (get 2 m) (Some "two")
-  assertEq (get 3 m) (Some "three")
+  m = Map.fromList [(3, "three"), (1, "one"), (2, "two")]
+  assertEq (Map.size m) 3
+  assertEq (Map.get 1 m) (Some "one")
+  assertEq (Map.get 2 m) (Some "two")
+  assertEq (Map.get 3 m) (Some "three")
 }

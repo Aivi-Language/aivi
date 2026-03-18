@@ -77,7 +77,13 @@ pub fn check_types_stdlib_checkpoint(stdlib_modules: &[Module]) -> CheckTypesChe
             &mut discarded,
         );
         // Don't check_module_defs — stdlib bodies may be incomplete in v0.1.
-        let interface = module_interface_from_setup(module, &checker, &setup);
+        let interface = module_interface_from_setup(
+            module,
+            &checker,
+            &setup,
+            &state.module_exports,
+            &state.module_domain_exports,
+        );
         state.apply_module_interface(&module.name.name, &interface);
     }
 
@@ -135,7 +141,14 @@ pub fn check_types_with_checkpoint_incremental(
         let mut checked_env = setup.env.clone();
         let mut module_diags = checker.check_module_defs(module, &setup.sigs, &mut checked_env);
         diagnostics.append(&mut module_diags);
-        let interface = build_module_interface(module, &checker, &setup.sigs, &checked_env);
+        let interface = build_module_interface(
+            module,
+            &checker,
+            &setup.sigs,
+            &checked_env,
+            &state.module_exports,
+            &state.module_domain_exports,
+        );
         state.apply_module_interface(&module.name.name, &interface);
         module_results.push(CheckedModule {
             module_name: module.name.name.clone(),
@@ -385,7 +398,14 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
             setup.env.clone()
         };
 
-        let interface = build_module_interface(module, &checker, &setup.sigs, &interface_env);
+        let interface = build_module_interface(
+            module,
+            &checker,
+            &setup.sigs,
+            &interface_env,
+            &module_exports,
+            &module_domain_exports,
+        );
         module_exports.insert(module.name.name.clone(), interface.exports.clone());
         module_type_exports.insert(module.name.name.clone(), interface.type_exports.clone());
         module_domain_exports.insert(module.name.name.clone(), interface.domain_exports.clone());

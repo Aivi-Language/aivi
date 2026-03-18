@@ -9,6 +9,36 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     let linalg_record = Type::Record {
         fields: vec![
             (
+                "addVec".to_string(),
+                Type::Func(
+                    Box::new(vec_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(vec_ty.clone()),
+                        Box::new(vec_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "subVec".to_string(),
+                Type::Func(
+                    Box::new(vec_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(vec_ty.clone()),
+                        Box::new(vec_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "scaleVec".to_string(),
+                Type::Func(
+                    Box::new(vec_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(float_ty.clone()),
+                        Box::new(vec_ty.clone()),
+                    )),
+                ),
+            ),
+            (
                 "dot".to_string(),
                 Type::Func(
                     Box::new(vec_ty.clone()),

@@ -150,7 +150,10 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
         "signalPoll",
         "signalStream",
         "signalEmit",
-        "signalBindDialogPresent",
+        "menuModelNew",
+        "menuModelAppendItem",
+        "menuButtonSetMenuModel",
+        "osOpenUri",
         "gtkSetInterval",
     ] {
         assert!(
@@ -162,6 +165,41 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
             "expected aivi.ui.gtk4 to define {expected}; defs={def_names:?}"
         );
     }
+
+    let mut actual_curated_imperative_exports: Vec<&str> = export_names
+        .iter()
+        .copied()
+        .filter(|name| {
+            matches!(
+                *name,
+                "MenuModelId"
+                    | "MenuButtonId"
+                    | "DialogId"
+                    | "TrayIconId"
+                    | "adwDialogPresent"
+                    | "signalBindDialogPresent"
+                    | "dbusServerStart"
+                    | "gtkSetInterval"
+                    | "trayNotifyPersonalEmail"
+                    | "traySetEmailSuggestions"
+            ) || name.starts_with("menu")
+                || name.starts_with("dialog")
+                || name.starts_with("tray")
+                || name.starts_with("os")
+        })
+        .collect();
+    actual_curated_imperative_exports.sort_unstable();
+    assert_eq!(
+        actual_curated_imperative_exports,
+        vec![
+            "MenuModelId",
+            "gtkSetInterval",
+            "menuButtonSetMenuModel",
+            "menuModelAppendItem",
+            "menuModelNew",
+            "osOpenUri",
+        ]
+    );
 
     for removed in [
         "gtkApp",
@@ -184,6 +222,9 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
     }
 
     for removed in [
+        "MenuButtonId",
+        "DialogId",
+        "TrayIconId",
         "DragSourceId",
         "DropTargetId",
         "FileDialogId",
@@ -202,6 +243,23 @@ fn stdlib_gtk4_exports_signal_first_binding_surface() {
     }
 
     for removed in [
+        "menuButtonNew",
+        "dialogNew",
+        "dialogSetTitle",
+        "dialogSetChild",
+        "dialogPresent",
+        "dialogClose",
+        "adwDialogPresent",
+        "signalBindDialogPresent",
+        "trayIconNew",
+        "trayIconSetTooltip",
+        "trayIconSetVisible",
+        "trayIconSetMenuItems",
+        "trayNotifyPersonalEmail",
+        "traySetEmailSuggestions",
+        "dbusServerStart",
+        "osSetBadgeCount",
+        "osThemePreference",
         "dragSourceNew",
         "dragSourceSetText",
         "dropTargetNew",
