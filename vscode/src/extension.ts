@@ -11,10 +11,22 @@ import { extractHoverToken, fallbackHoverMarkdownForToken } from "./hoverFallbac
 import { resolveServerCommand } from "./serverResolution";
 
 let client: LanguageClient | undefined;
+const FORMAT_PROGRESS_DELAY_MS = 200;
+const DIAGNOSTICS_STATUS_DELAY_MS = 250;
+const DIAGNOSTICS_PROGRESS_NOTIFICATION = "aivi/diagnosticsProgress";
 
 type CliInvocation = {
   command: string;
   baseArgs: string[];
+};
+
+type DiagnosticsProgressPhase = "begin" | "report" | "end";
+
+type DiagnosticsProgressParams = {
+  phase: DiagnosticsProgressPhase;
+  snapshot: number;
+  completed?: number;
+  total?: number;
 };
 
 function hasCommand(cmd: string): boolean {
@@ -39,6 +51,60 @@ function getCliInvocation(): CliInvocation {
 
 function docHasTests(doc: vscode.TextDocument): boolean {
   return /(^|\n)\s*@test\b/.test(doc.getText());
+}
+
+function formatDiagnosticsStatusText(progress: DiagnosticsProgressParams): string {
+  const total = progress.total ?? 0;
+  if (total > 1) {
+    const completed = Math.min(progress.completed ?? 0, total);
+    return `$(loading~spin) AIVI: Checking ${completed}/${total}`;
+  }
+  return "$(loading~spin) AIVI: Checking workspace";
+}
+
+function diagnosticsStatusTooltip(progress: DiagnosticsProgressParams): string {
+  const total = progress.total ?? 0;
+  if (total > 1) {
+    const completed = Math.min(progress.completed ?? 0, total);
+    return `AIVI workspace diagnostics are still running (${completed}/${total} files checked).`;
+  }
+  return "AIVI workspace diagnostics are still running.";
+}
+
+async function withDelayedWindowProgress<T>(
+  title: string,
+  task: () => Thenable<T> | T,
+  delayMs = FORMAT_PROGRESS_DELAY_MS
+): Promise<T> {
+  let resolveProgress: (() => void) | undefined;
+  let progressRequested = false;
+  let taskFinished = false;
+  const timer = setTimeout(() => {
+    if (taskFinished) {
+      return;
+    }
+    progressRequested = true;
+    void vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title, cancellable: false },
+      async () =>
+        await new Promise<void>((resolve) => {
+          resolveProgress = resolve;
+          if (taskFinished) {
+            resolve();
+          }
+        })
+    );
+  }, delayMs);
+
+  try {
+    return await Promise.resolve(task());
+  } finally {
+    taskFinished = true;
+    clearTimeout(timer);
+    if (progressRequested) {
+      resolveProgress?.();
+    }
+  }
 }
 
 type DiscoveredTest = {
@@ -396,6 +462,48 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(watcher);
   }
 
+  const diagnosticsStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
+  diagnosticsStatus.hide();
+  context.subscriptions.push(diagnosticsStatus);
+
+  let diagnosticsStatusTimer: ReturnType<typeof setTimeout> | undefined;
+  let activeDiagnosticsSnapshot: number | undefined;
+  let latestDiagnosticsProgress: DiagnosticsProgressParams | undefined;
+
+  const clearDiagnosticsStatusTimer = (): void => {
+    if (diagnosticsStatusTimer) {
+      clearTimeout(diagnosticsStatusTimer);
+      diagnosticsStatusTimer = undefined;
+    }
+  };
+
+  const hideDiagnosticsStatus = (): void => {
+    clearDiagnosticsStatusTimer();
+    activeDiagnosticsSnapshot = undefined;
+    latestDiagnosticsProgress = undefined;
+    diagnosticsStatus.hide();
+  };
+
+  const renderDiagnosticsStatus = (): void => {
+    if (!latestDiagnosticsProgress) {
+      return;
+    }
+    diagnosticsStatus.text = formatDiagnosticsStatusText(latestDiagnosticsProgress);
+    diagnosticsStatus.tooltip = diagnosticsStatusTooltip(latestDiagnosticsProgress);
+    diagnosticsStatus.show();
+  };
+
+  const scheduleDiagnosticsStatus = (): void => {
+    clearDiagnosticsStatusTimer();
+    diagnosticsStatusTimer = setTimeout(() => {
+      diagnosticsStatusTimer = undefined;
+      if (!latestDiagnosticsProgress || latestDiagnosticsProgress.phase === "end") {
+        return;
+      }
+      renderDiagnosticsStatus();
+    }, DIAGNOSTICS_STATUS_DELAY_MS);
+  };
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "aivi" }],
     synchronize: {
@@ -422,14 +530,45 @@ export function activate(context: vscode.ExtensionContext) {
         const markdown = new vscode.MarkdownString(`\`${hoverToken}\`\n\n${fallback}`);
         return new vscode.Hover(markdown);
       },
-      provideDocumentFormattingEdits: (document, options, token, next) =>
-        next(document, options, token),
-      provideDocumentRangeFormattingEdits: (document, range, options, token, next) =>
-        next(document, range, options, token),
+      provideDocumentFormattingEdits: async (document, options, token, next) =>
+        await withDelayedWindowProgress("AIVI: Formatting document", () =>
+          Promise.resolve(next(document, options, token))
+        ),
+      provideDocumentRangeFormattingEdits: async (document, range, options, token, next) =>
+        await withDelayedWindowProgress("AIVI: Formatting document", () =>
+          Promise.resolve(next(document, range, options, token))
+        ),
     },
   };
 
   client = new LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
+  client.onNotification(
+    DIAGNOSTICS_PROGRESS_NOTIFICATION,
+    (progress: DiagnosticsProgressParams): void => {
+      switch (progress.phase) {
+        case "begin":
+          activeDiagnosticsSnapshot = progress.snapshot;
+          latestDiagnosticsProgress = progress;
+          scheduleDiagnosticsStatus();
+          break;
+        case "report":
+          if (progress.snapshot !== activeDiagnosticsSnapshot) {
+            return;
+          }
+          latestDiagnosticsProgress = progress;
+          if (!diagnosticsStatusTimer) {
+            renderDiagnosticsStatus();
+          }
+          break;
+        case "end":
+          if (progress.snapshot !== activeDiagnosticsSnapshot) {
+            return;
+          }
+          hideDiagnosticsStatus();
+          break;
+      }
+    }
+  );
   client.start();
 
   const runStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -455,8 +594,36 @@ export function activate(context: vscode.ExtensionContext) {
       outputChannel.appendLine("Restarting AIVI Language Server...");
       const prev = client;
       client = undefined;
+      hideDiagnosticsStatus();
       await prev?.stop();
       client = new LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
+      client.onNotification(
+        DIAGNOSTICS_PROGRESS_NOTIFICATION,
+        (progress: DiagnosticsProgressParams): void => {
+          switch (progress.phase) {
+            case "begin":
+              activeDiagnosticsSnapshot = progress.snapshot;
+              latestDiagnosticsProgress = progress;
+              scheduleDiagnosticsStatus();
+              break;
+            case "report":
+              if (progress.snapshot !== activeDiagnosticsSnapshot) {
+                return;
+              }
+              latestDiagnosticsProgress = progress;
+              if (!diagnosticsStatusTimer) {
+                renderDiagnosticsStatus();
+              }
+              break;
+            case "end":
+              if (progress.snapshot !== activeDiagnosticsSnapshot) {
+                return;
+              }
+              hideDiagnosticsStatus();
+              break;
+          }
+        }
+      );
       client.start();
     })
   );
