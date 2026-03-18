@@ -72,7 +72,7 @@ struct DiagnosticTarget {
 
 const DIAGNOSTICS_PROGRESS_NOTIFICATION: &str = "aivi/diagnosticsProgress";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum DiagnosticsProgressPhase {
     Begin,
@@ -80,7 +80,7 @@ enum DiagnosticsProgressPhase {
     End,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiagnosticsProgressParams {
     phase: DiagnosticsProgressPhase,
@@ -225,7 +225,11 @@ impl Backend {
             let previous_snapshot = state.diagnostics_snapshot;
             let pending_handle = state.pending_diagnostics.take();
             state.diagnostics_snapshot = state.diagnostics_snapshot.wrapping_add(1);
-            (previous_snapshot, pending_handle, state.diagnostics_snapshot)
+            (
+                previous_snapshot,
+                pending_handle,
+                state.diagnostics_snapshot,
+            )
         };
         if let Some(handle) = pending_handle {
             handle.abort();

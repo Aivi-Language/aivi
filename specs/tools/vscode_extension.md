@@ -8,6 +8,7 @@ The **AIVI Language Support** extension is the main Visual Studio Code integrati
 - **Semantic highlighting** with custom token types for arrows, pipes, brackets, dots, units, sigils, and dotted-path segments. This is extra language-aware coloring on top of the grammar-based highlighting.
 - **Language server integration** so features such as hover, rename, go-to-definition, diagnostics, and completion work automatically.
 - **Formatting** through VS Code's standard **Format Document** command and Format on Save.
+- **Progress feedback** so long-running workspace checks show a spinner in the status bar and slower formatting requests show editor progress instead of silently waiting.
 - **Testing support** for running AIVI `@test` definitions from commands, gutter actions, and the Testing view.
 - **Theme support** through the bundled “AIVI Dark Modern” color theme.
 - **EBNF syntax highlighting** for `.ebnf` files used in AIVI development.

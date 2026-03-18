@@ -504,6 +504,36 @@ export function activate(context: vscode.ExtensionContext) {
     }, DIAGNOSTICS_STATUS_DELAY_MS);
   };
 
+  const attachDiagnosticsProgressHandler = (languageClient: LanguageClient): void => {
+    languageClient.onNotification(
+      DIAGNOSTICS_PROGRESS_NOTIFICATION,
+      (progress: DiagnosticsProgressParams): void => {
+        switch (progress.phase) {
+          case "begin":
+            activeDiagnosticsSnapshot = progress.snapshot;
+            latestDiagnosticsProgress = progress;
+            scheduleDiagnosticsStatus();
+            break;
+          case "report":
+            if (progress.snapshot !== activeDiagnosticsSnapshot) {
+              return;
+            }
+            latestDiagnosticsProgress = progress;
+            if (!diagnosticsStatusTimer) {
+              renderDiagnosticsStatus();
+            }
+            break;
+          case "end":
+            if (progress.snapshot !== activeDiagnosticsSnapshot) {
+              return;
+            }
+            hideDiagnosticsStatus();
+            break;
+        }
+      }
+    );
+  };
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "aivi" }],
     synchronize: {
@@ -542,33 +572,7 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   client = new LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
-  client.onNotification(
-    DIAGNOSTICS_PROGRESS_NOTIFICATION,
-    (progress: DiagnosticsProgressParams): void => {
-      switch (progress.phase) {
-        case "begin":
-          activeDiagnosticsSnapshot = progress.snapshot;
-          latestDiagnosticsProgress = progress;
-          scheduleDiagnosticsStatus();
-          break;
-        case "report":
-          if (progress.snapshot !== activeDiagnosticsSnapshot) {
-            return;
-          }
-          latestDiagnosticsProgress = progress;
-          if (!diagnosticsStatusTimer) {
-            renderDiagnosticsStatus();
-          }
-          break;
-        case "end":
-          if (progress.snapshot !== activeDiagnosticsSnapshot) {
-            return;
-          }
-          hideDiagnosticsStatus();
-          break;
-      }
-    }
-  );
+  attachDiagnosticsProgressHandler(client);
   client.start();
 
   const runStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -597,33 +601,7 @@ export function activate(context: vscode.ExtensionContext) {
       hideDiagnosticsStatus();
       await prev?.stop();
       client = new LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
-      client.onNotification(
-        DIAGNOSTICS_PROGRESS_NOTIFICATION,
-        (progress: DiagnosticsProgressParams): void => {
-          switch (progress.phase) {
-            case "begin":
-              activeDiagnosticsSnapshot = progress.snapshot;
-              latestDiagnosticsProgress = progress;
-              scheduleDiagnosticsStatus();
-              break;
-            case "report":
-              if (progress.snapshot !== activeDiagnosticsSnapshot) {
-                return;
-              }
-              latestDiagnosticsProgress = progress;
-              if (!diagnosticsStatusTimer) {
-                renderDiagnosticsStatus();
-              }
-              break;
-            case "end":
-              if (progress.snapshot !== activeDiagnosticsSnapshot) {
-                return;
-              }
-              hideDiagnosticsStatus();
-              break;
-          }
-        }
-      );
+      attachDiagnosticsProgressHandler(client);
       client.start();
     })
   );

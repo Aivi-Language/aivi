@@ -76,6 +76,8 @@ The server reports diagnostics as you type. It checks:
 - **structured-source ergonomics** — warns about legacy `file.json "..."` / `env.decode "..."` forms, missing `schema:` fields in record-form sources, and top-level `source.schema.derive` declarations that need an explicit `Source ...` type signature
 - **optional strict-mode rules** — when enabled, adds progressively stricter style and safety diagnostics on top of the default checks
 
+When a diagnostic pass is noticeably slow, the server also emits progress updates so editor integrations can show that workspace checking is still running instead of looking stalled.
+
 ## Incremental workspace checking
 
 The LSP works with **workspace snapshots**, not isolated one-file analyses.
