@@ -59,6 +59,29 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
     diagnostics
 }
 
+fn module_importable_names(target: &Module) -> HashSet<&str> {
+    if target.exports.is_empty() {
+        target
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::Def(def) => Some(def.name.name.as_str()),
+                ModuleItem::TypeDecl(type_decl) => Some(type_decl.name.name.as_str()),
+                ModuleItem::TypeAlias(type_alias) => Some(type_alias.name.name.as_str()),
+                ModuleItem::ClassDecl(class_decl) => Some(class_decl.name.name.as_str()),
+                ModuleItem::DomainDecl(domain_decl) => Some(domain_decl.name.name.as_str()),
+                ModuleItem::TypeSig(_) | ModuleItem::InstanceDecl(_) => None,
+            })
+            .collect()
+    } else {
+        target
+            .exports
+            .iter()
+            .map(|item| item.name.name.as_str())
+            .collect()
+    }
+}
+
 fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
     // Embedded stdlib modules are not held to the same hygiene bar in v0.1; avoid failing
     // compiler/LSP checks due to warning-only lint rules.
@@ -431,17 +454,13 @@ fn check_uses(
             ));
             continue;
         }
-        if use_decl.wildcard {
+        if use_decl.wildcard && !use_decl.hiding {
             continue;
         }
         let Some(target) = target else {
             continue;
         };
-        let exports: HashSet<&str> = target
-            .exports
-            .iter()
-            .map(|item| item.name.name.as_str())
-            .collect();
+        let exports = module_importable_names(target);
         for item in &use_decl.items {
             if !exports.contains(item.name.name.as_str()) {
                 let mut hints = Vec::new();
@@ -555,14 +574,12 @@ fn check_defs(
         }
         if use_decl.wildcard {
             if let Some(target) = module_map.get(&use_decl.module.name) {
-                let exported: HashSet<&str> = target
-                    .exports
-                    .iter()
-                    .map(|item| item.name.name.as_str())
-                    .collect();
+                let exported = module_importable_names(target);
                 for item in &target.items {
                     if let ModuleItem::ClassDecl(class_decl) = item {
-                        if !exported.contains(class_decl.name.name.as_str()) {
+                        if !exported.contains(class_decl.name.name.as_str())
+                            || use_decl.hides_value(&class_decl.name.name)
+                        {
                             continue;
                         }
                         for member in &class_decl.members {
@@ -580,12 +597,8 @@ fn check_defs(
             continue;
         }
         if let Some(target) = module_map.get(&use_decl.module.name) {
-            let exported: HashSet<&str> = target
-                .exports
-                .iter()
-                .map(|item| item.name.name.as_str())
-                .collect();
-            for item in &use_decl.items {
+            let exported = module_importable_names(target);
+            for item in use_decl.imported_items() {
                 match item.kind {
                     crate::surface::ScopeItemKind::Value => {
                         // Class members for selectively imported classes.
@@ -609,11 +622,7 @@ fn check_defs(
                         }
                     }
                     crate::surface::ScopeItemKind::Domain => {
-                        let exported_domain = target.exports.iter().any(|export| {
-                            export.kind == crate::surface::ScopeItemKind::Domain
-                                && export.name.name == item.name.name
-                        });
-                        if !exported_domain {
+                        if !exported.contains(item.name.name.as_str()) {
                             continue;
                         }
                         for module_item in &target.items {
@@ -812,13 +821,6 @@ fn check_import_conflicts(
         .collect();
 
     // First pass: record which modules are wildcard-imported.
-    let mut wildcard_modules: HashSet<&str> = HashSet::new();
-    for use_decl in &module.uses {
-        if use_decl.wildcard {
-            wildcard_modules.insert(use_decl.module.name.as_str());
-        }
-    }
-
     // ── Wildcard-vs-wildcard shadowing (W2104) ──
     // Walk wildcard imports in order; for each exported name that was already
     // brought into scope by an earlier wildcard import from a *different* module,
@@ -827,7 +829,7 @@ fn check_import_conflicts(
         // name → (source module, use_decl index)
         let mut wildcard_seen: HashMap<String, (&str, usize)> = HashMap::new();
         for (idx, use_decl) in module.uses.iter().enumerate() {
-            if use_decl.alias.is_some() || !use_decl.items.is_empty() {
+            if use_decl.alias.is_some() || !use_decl.wildcard {
                 continue;
             }
             let source = use_decl.module.name.as_str();
@@ -850,8 +852,11 @@ fn check_import_conflicts(
                     .filter(|e| e.kind == ScopeItemKind::Value)
                     .map(|e| e.name.name.clone())
                     .collect()
-            };
+             };
             for name in &exports {
+                if use_decl.hides_value(name) {
+                    continue;
+                }
                 if local_defs.contains(name.as_str()) {
                     continue;
                 }
@@ -890,7 +895,7 @@ fn check_import_conflicts(
             continue;
         }
         let source = use_decl.module.name.as_str();
-        for item in &use_decl.items {
+        for item in use_decl.imported_items() {
             if item.kind == ScopeItemKind::Domain {
                 // Domain imports activate operators; name conflicts don't apply.
                 continue;
@@ -899,7 +904,14 @@ fn check_import_conflicts(
             let name = local_ref.name.as_str();
 
             // Selective import covered by a wildcard of the same module.
-            if wildcard_modules.contains(source) {
+            let covered_by_wildcard = item.alias.is_none()
+                && module.uses.iter().any(|other| {
+                    other.alias.is_none()
+                        && other.wildcard
+                        && other.module.name == source
+                        && !other.hides_value(&item.name.name)
+                });
+            if covered_by_wildcard {
                 diagnostics.push(file_diag(
                     module,
                     Diagnostic {

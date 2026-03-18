@@ -558,18 +558,25 @@ pub(super) fn collect_imported_class_env(
             continue;
         };
         if use_decl.wildcard {
+            let mut imported_classes = HashSet::new();
             for (name, info) in class_exports {
+                if use_decl.hides_value(name) {
+                    continue;
+                }
                 classes.insert(name.clone(), info.clone());
+                imported_classes.insert(name.clone());
             }
             if let Some(instance_exports) = module_instance_exports.get(&use_decl.module.name) {
                 for instance in instance_exports {
-                    push_unique_instance(instance);
+                    if imported_classes.contains(&instance.class_name) {
+                        push_unique_instance(instance);
+                    }
                 }
             }
             continue;
         }
         let mut imported_classes = HashSet::new();
-        for item in &use_decl.items {
+        for item in use_decl.imported_items() {
             if item.kind != ScopeItemKind::Value {
                 continue;
             }

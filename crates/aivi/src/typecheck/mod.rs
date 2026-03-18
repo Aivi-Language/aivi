@@ -304,11 +304,12 @@ fn imported_domain_sources(
     let mut seen_modules = HashSet::new();
     for use_decl in &module.uses {
         let imports_domain = if use_decl.wildcard {
-            module_domain_exports
-                .get(&use_decl.module.name)
-                .is_some_and(|domains| domains.contains_key(domain_name))
+            !use_decl.hides_domain(domain_name)
+                && module_domain_exports
+                    .get(&use_decl.module.name)
+                    .is_some_and(|domains| domains.contains_key(domain_name))
         } else {
-            use_decl.items.iter().any(|item| {
+            use_decl.imported_items().iter().any(|item| {
                 item.kind == crate::surface::ScopeItemKind::Domain && item.name.name == domain_name
             })
         };

@@ -428,27 +428,31 @@ impl TypeChecker {
                 continue;
             }
 
-            if use_decl.items.is_empty() {
-                // Wildcard import: also bring in all domain members.
-                if use_decl.wildcard {
-                    if let Some(domains) = module_domain_exports.get(&use_decl.module.name) {
-                        for members in domains.values() {
-                            for member in members {
-                                if let Some(schemes) = exports.get(member) {
-                                    Self::insert_schemes(env, member.clone(), schemes);
-                                    Self::insert_schemes(
-                                        env,
-                                        format!("{}.{}", use_decl.module.name, member),
-                                        schemes,
-                                    );
-                                }
+            if use_decl.wildcard {
+                // Wildcard import: also bring in all domain members, minus any hidden names.
+                if let Some(domains) = module_domain_exports.get(&use_decl.module.name) {
+                    for (domain_name, members) in domains {
+                        if use_decl.hides_domain(domain_name) {
+                            continue;
+                        }
+                        for member in members {
+                            if use_decl.hides_value(member) {
+                                continue;
+                            }
+                            if let Some(schemes) = exports.get(member) {
+                                Self::insert_schemes(env, member.clone(), schemes);
+                                Self::insert_schemes(
+                                    env,
+                                    format!("{}.{}", use_decl.module.name, member),
+                                    schemes,
+                                );
                             }
                         }
                     }
                 }
                 continue;
             }
-            for item in &use_decl.items {
+            for item in use_decl.imported_items() {
                 if item.kind != crate::surface::ScopeItemKind::Domain {
                     continue;
                 }
