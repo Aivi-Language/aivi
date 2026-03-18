@@ -9,14 +9,13 @@ onSave : a -> Unit
 onSave = _ => update state (patch { saved: True })
 
 formView : GtkNode
-formView =
-  ~<gtk>
-    <object class="GtkBox" props={{ orientation: "vertical", spacing: 8 }}>
-      <object class="GtkEntry" onInput={onInput} />
-      <object class="GtkButton" onClick={onSave}>
-        <property name="label">
-          Save
-        </property>
-      </object>
+formView = ~<gtk>
+  <object class="GtkBox" props={{ orientation: "vertical", spacing: 8 }}>
+    <object class="GtkEntry" onInput={onInput} />
+    <object class="GtkButton" onClick={onSave}>
+      <property name="label">
+        Save
+      </property>
     </object>
-  </gtk>
+  </object>
+</gtk>

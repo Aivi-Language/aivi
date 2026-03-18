@@ -4,12 +4,11 @@ onSave : a -> Unit
 onSave = _ => Unit
 
 buttonView : GtkNode
-buttonView =
-  ~<gtk>
-    <object class="GtkButton">
-      <property name="label">
-        Save
-      </property>
-      <signal name="clicked" on={onSave} />
-    </object>
-  </gtk>
+buttonView = ~<gtk>
+  <object class="GtkButton">
+    <property name="label">
+      Save
+    </property>
+    <signal name="clicked" on={onSave} />
+  </object>
+</gtk>

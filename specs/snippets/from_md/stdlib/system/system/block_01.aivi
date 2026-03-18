@@ -6,5 +6,5 @@ main = do Effect {
     | Some p => p
     | None   => "8080"
 
-    print "Server will listen on {port}"
+  print "Server will listen on {port}"
 }

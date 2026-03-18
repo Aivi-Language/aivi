@@ -1,10 +1,10 @@
-pi : Float
-tau : Float
-e : Float
-inf : Float
-negInf : Float
-nan : Float
-phi : Float
-sqrt2 : Float
-ln2 : Float
-ln10 : Float
+pi: Float
+tau: Float
+e: Float
+inf: Float
+negInf: Float
+nan: Float
+phi: Float
+sqrt2: Float
+ln2: Float
+ln10: Float

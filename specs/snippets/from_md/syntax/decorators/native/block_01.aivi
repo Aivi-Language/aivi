@@ -1,2 +1,2 @@
 @native "module.functionName"
-binding : TypeSig
+binding: TypeSig

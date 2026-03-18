@@ -4,7 +4,7 @@ domain Url over Url = {
 
   (-) : Url -> Text -> Url
   (-) = value key => {
-    ...value,
+    ...value
     query: List.filter (filterKey key) value.query
   }
 }

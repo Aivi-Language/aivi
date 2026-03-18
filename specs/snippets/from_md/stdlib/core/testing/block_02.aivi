@@ -7,7 +7,7 @@ fetchUsers = rest.get ~u(https://api.example.com/users)
 
 @test "fetch users with a mocked request"
 fetchUsersWithMock = mock
-rest.g - et        = _ => pure [{ id: 1, name: "Ada" }]
+  rest.g - et = _ => pure [{ id: 1, name: "Ada" }]
 in do Effect {
   users <- fetchUsers
   assertEq (length users) 1

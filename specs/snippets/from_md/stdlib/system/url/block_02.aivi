@@ -1,11 +1,11 @@
 use aivi.url
 
-base = ~url(https://api.example.com/v1/search)
-search = base + ("q", "aivi") + ("sort", "desc")
+base    = ~url(https://api.example.com/v1/search)
+search  = base + ("q", "aivi") + ("sort", "desc")
 cleaned = search - "sort"
 
-searchHost = host search
-searchPath = path search
+searchHost  = host search
+searchPath  = path search
 searchQuery = query search
-searchText = toString search
+searchText  = toString search
 cleanedText = toString cleaned
