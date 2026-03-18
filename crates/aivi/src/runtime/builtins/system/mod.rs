@@ -7,8 +7,9 @@ pub(super) use file::build_file_record;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
+use chrono::{SecondsFormat, Utc};
 use serde_json::Value as JsonValue;
 
 use super::util::{
@@ -23,18 +24,16 @@ pub(super) fn build_clock_record() -> Value {
         "now".to_string(),
         builtin("clock.now", 1, |_args, _runtime| {
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or(Duration::from_secs(0));
-                    let text = format!("{}.{:09}Z", now.as_secs(), now.subsec_nanos());
-                    Ok(Value::DateTime(text))
-                }),
+                func: Arc::new(move |_| Ok(Value::DateTime(system_now_datetime_text(SystemTime::now())))),
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
     Value::Record(Arc::new(fields))
+}
+
+fn system_now_datetime_text(now: SystemTime) -> String {
+    chrono::DateTime::<Utc>::from(now).to_rfc3339_opts(SecondsFormat::Nanos, true)
 }
 
 pub(super) fn build_random_record() -> Value {
@@ -403,7 +402,11 @@ pub(in crate::runtime::builtins) fn json_to_runtime(value: &JsonValue) -> Value 
 
 #[cfg(test)]
 mod tests {
-    use super::run_command_effect;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    use chrono::{DateTime, FixedOffset};
+
+    use super::{run_command_effect, system_now_datetime_text};
     use crate::runtime::Value;
 
     #[test]
@@ -436,6 +439,13 @@ mod tests {
         assert!(matches!(fields.get("status"), Some(Value::Int(3))));
         assert!(matches!(fields.get("stdout"), Some(Value::Text(text)) if text.is_empty()));
         assert!(matches!(fields.get("stderr"), Some(Value::Text(text)) if text == "fail"));
+    }
+
+    #[test]
+    fn clock_now_formats_rfc3339_datetime_text() {
+        let text = system_now_datetime_text(UNIX_EPOCH + Duration::new(1, 234_567_890));
+        assert_eq!(text, "1970-01-01T00:00:01.234567890Z");
+        assert!(DateTime::<FixedOffset>::parse_from_rfc3339(&text).is_ok());
     }
 }
 
