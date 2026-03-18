@@ -74,6 +74,7 @@ fn inject_prelude_imports(modules: &mut [Module]) {
                 items: Vec::new(),
                 span,
                 wildcard: true,
+                hiding: false,
                 alias: None,
             },
         );

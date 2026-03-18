@@ -263,6 +263,7 @@ impl ArenaBuilder {
             items: decl.items.iter().map(|x| self.lower_use_item(x)).collect(),
             span: decl.span.clone(),
             wildcard: decl.wildcard,
+            hiding: decl.hiding,
             alias: decl.alias.as_ref().map(SpannedSymbol::from),
         }
     }

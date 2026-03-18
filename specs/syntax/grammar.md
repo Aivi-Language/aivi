@@ -183,7 +183,7 @@ Notes:
 - `TypeAlias` covers transparent aliases such as `User = { name: Text }` or `Handler = Req -> Effect Err Res`.
 - `TypeDef` is the constructor-list form (`Foo = A | B | C`) used for ADTs.
 - Decorators may appear before ordinary declarations and before inline `export` declarations, but not before standalone `use` or export-list items.
-- `hiding (...)` is part of the documented module surface syntax. Current parser support is still being aligned.
+- `hiding (...)` excludes the listed exports from an otherwise wildcard-like module import.
 - A grouped import `use a.b (c (...), d (...))` desugars to `use a.b.c (...)` + `use a.b.d (...)` during parsing. The resolver and typechecker only see flat `UseDecl` values.
 - In the broader docs, “binding” is sometimes used more loosely for destructuring `=` forms. This grammar keeps the parser-facing distinction explicit and uses `BindingRhs` to show where the arm form from §0.5 fits.
 

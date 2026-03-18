@@ -121,16 +121,17 @@ fn resolve_exported_domain_sources(
     let mut seen_modules = HashSet::new();
     for use_decl in &module.uses {
         let imports_domain = if use_decl.wildcard {
-            surface_by_name
-                .get(&use_decl.module.name)
-                .is_some_and(|target| {
-                    target.exports.iter().any(|export| {
-                        export.kind == crate::surface::ScopeItemKind::Domain
-                            && export.name.name == domain_name
+            !use_decl.hides_domain(domain_name)
+                && surface_by_name
+                    .get(&use_decl.module.name)
+                    .is_some_and(|target| {
+                        target.exports.iter().any(|export| {
+                            export.kind == crate::surface::ScopeItemKind::Domain
+                                && export.name.name == domain_name
+                        })
                     })
-                })
         } else {
-            use_decl.items.iter().any(|item| {
+            use_decl.imported_items().iter().any(|item| {
                 item.kind == crate::surface::ScopeItemKind::Domain && item.name.name == domain_name
             })
         };
@@ -719,6 +720,9 @@ fn build_runtime_from_program_scoped(
             if use_decl.wildcard {
                 if let Some(names) = value_exports.get(&imported_mod) {
                     for name in names {
+                        if use_decl.hides_value(name) {
+                            continue;
+                        }
                         let qualified = format!("{imported_mod}.{name}");
                         if let Some(value) = globals.get(&qualified) {
                             if let Some(existing) = module_env.get(name) {
@@ -733,11 +737,14 @@ fn build_runtime_from_program_scoped(
                         }
                     }
                 }
-                for ((domain_module, _domain_name), members) in &domain_members {
-                    if domain_module != &imported_mod {
+                for ((domain_module, domain_name), members) in &domain_members {
+                    if domain_module != &imported_mod || use_decl.hides_domain(domain_name) {
                         continue;
                     }
                     for member in members {
+                        if use_decl.hides_value(member) {
+                            continue;
+                        }
                         let qualified = format!("{imported_mod}.{member}");
                         if let Some(value) = globals.get(&qualified) {
                             if let Some(existing) = module_env.get(member) {
@@ -753,7 +760,7 @@ fn build_runtime_from_program_scoped(
                 }
                 continue;
             }
-            for item in &use_decl.items {
+            for item in use_decl.imported_items() {
                 match item.kind {
                     crate::surface::ScopeItemKind::Value => {
                         let original = item.name.name.clone();

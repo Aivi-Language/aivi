@@ -415,6 +415,7 @@ fn syntax_remaining_batch_three_files_execute_without_failures() {
     let files: Vec<PathBuf> = [
         "integration-tests/syntax/functions/multi_arg_and_sig.aivi",
         "integration-tests/syntax/modules/use_alias_and_selective_imports.aivi",
+        "integration-tests/syntax/modules/use_hiding_imports.aivi",
         "integration-tests/syntax/operators/precedence_and_pipes.aivi",
         "integration-tests/syntax/pattern_matching/guarded_case_with_if.aivi",
         "integration-tests/syntax/pattern_matching/match_keyword.aivi",
