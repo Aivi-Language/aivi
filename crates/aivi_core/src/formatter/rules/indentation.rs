@@ -257,6 +257,52 @@
         tokens_by_line = merged_tokens_by_line;
     }
 
+    // Pre-pass: merge the next line onto a line ending with `=` unless the next
+    // line starts a match/type arm (`|`).  This prevents the formatter from
+    // leaving a dangling `=` at the end of a line when the RHS fits inline.
+    {
+        let mut merged_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len());
+        let mut merged_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
+            Vec::with_capacity(tokens_by_line.len());
+
+        let mut i = 0usize;
+        while i < raw_lines.len() {
+            let tokens = tokens_by_line[i].clone();
+            if tokens.is_empty() {
+                merged_raw_lines.push(raw_lines[i]);
+                merged_tokens_by_line.push(tokens);
+                i += 1;
+                continue;
+            }
+
+            let has_comment = tokens.iter().any(|t| t.kind == "comment");
+            let ends_with_eq = !has_comment && last_code_token_is(&tokens, &["="]);
+
+            if ends_with_eq && i + 1 < raw_lines.len() {
+                let next_tokens = &tokens_by_line[i + 1];
+                let next_has_comment = next_tokens.iter().any(|t| t.kind == "comment");
+                let next_starts_with_pipe = first_code_index(next_tokens)
+                    .is_some_and(|fi| next_tokens[fi].text == "|");
+
+                if !next_tokens.is_empty() && !next_has_comment && !next_starts_with_pipe {
+                    let mut combined = tokens;
+                    combined.extend(next_tokens.clone());
+                    merged_raw_lines.push(raw_lines[i]);
+                    merged_tokens_by_line.push(combined);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            merged_raw_lines.push(raw_lines[i]);
+            merged_tokens_by_line.push(tokens);
+            i += 1;
+        }
+
+        raw_lines = merged_raw_lines;
+        tokens_by_line = merged_tokens_by_line;
+    }
+
     // First pass: compute context per line and indentation level.
     let mut stack: Vec<OpenFrame> = Vec::new();
     let mut degraded = false;
@@ -903,16 +949,32 @@
         let starts_with_pipeop = state.tokens[first_idx].text == "|>";
         let is_arm_line =
             starts_with_pipe && find_top_level_token(&state.tokens, "=>", first_idx + 1).is_some();
+        // A new `|` arm resets any RHS continuation block from a previous arm's
+        // multi-line body (e.g. `| A =>\n  body\n| B => ...`), but only if the
+        // RHS block was set at the same or deeper delimiter depth.  Outer RHS
+        // blocks (e.g. from a surrounding `=>`) must be preserved.
+        if starts_with_pipe {
+            if let Some(rhs_depth) = rhs_block_base_depth {
+                if rhs_depth >= line_depth {
+                    rhs_block_base_indent = None;
+                    rhs_block_base_depth = None;
+                }
+            }
+        }
         if pipe_block_break_after_blank {
-            if !starts_with_pipe
-                && !starts_with_pipeop
-                && matches!(
-                    state.top_context,
-                    Some(ContextKind::Effect | ContextKind::Generate | ContextKind::Resource)
-                )
-            {
+            if !starts_with_pipe && !starts_with_pipeop {
+                // Only clear RHS block if it was set within the match scope.
+                let match_base_depth = pipe_block_stack.last().map(|&(_, d)| d);
                 pipe_block_stack.clear();
                 arm_rhs_active = false;
+                if let (Some(rhs_depth), Some(match_depth)) =
+                    (rhs_block_base_depth, match_base_depth)
+                {
+                    if rhs_depth >= match_depth {
+                        rhs_block_base_indent = None;
+                        rhs_block_base_depth = None;
+                    }
+                }
             }
             pipe_block_break_after_blank = false;
         }
@@ -944,6 +1006,34 @@
         }
         if pipe_block_stack.is_empty() {
             arm_rhs_active = false;
+        }
+
+        // After a single-line arm (body complete on the same line, i.e. not ending
+        // with `=>`), the next non-pipe line at the same or lower delimiter depth
+        // means the match expression is done.
+        if prev_non_blank_was_arm_line
+            && !starts_with_pipe
+            && !starts_with_pipeop
+            && !matches!(prev_non_blank_last_token.as_deref(), Some("=>"))
+        {
+            // Only clear the RHS block if it was set within the match scope (same
+            // or deeper delimiter depth). Outer RHS blocks must be preserved.
+            let match_base_depth = pipe_block_stack.last().map(|&(_, d)| d);
+            while pipe_block_stack
+                .last()
+                .is_some_and(|&(_, base_depth)| line_depth <= base_depth)
+            {
+                pipe_block_stack.pop();
+            }
+            arm_rhs_active = false;
+            if let (Some(rhs_depth), Some(match_depth)) =
+                (rhs_block_base_depth, match_base_depth)
+            {
+                if rhs_depth >= match_depth {
+                    rhs_block_base_indent = None;
+                    rhs_block_base_depth = None;
+                }
+            }
         }
 
         // For `|`/`|>` lines, anchor indentation to the subject line's indent (not just delimiter nesting).
@@ -1697,10 +1787,13 @@
             rhs_decorator_pending = true;
         }
 
-        // After rendering an arm line, keep an extra indentation level for its body until the next
-        // arm (or until we leave the surrounding `|` block).
+        // After rendering a multi-line arm (one whose body starts on the next line,
+        // i.e. the arm line ends with `=>`), indent continuation lines one extra level.
+        // Single-line arms (body complete on the same line) do not need this.
         if is_arm_line {
-            arm_rhs_active = true;
+            arm_rhs_active = seeds_rhs_continuation(
+                last_continuation_token(&state.tokens).as_deref(),
+            );
         } else if starts_with_pipe {
             // Starting a new arm resets the body indent for this line.
             arm_rhs_active = false;
