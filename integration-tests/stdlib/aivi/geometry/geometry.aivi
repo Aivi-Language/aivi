@@ -57,6 +57,21 @@ midpoint_functional = do Effect {
   assert (abs (mid.y - 3.0) < 0.0001)
 }
 
+@test "polygon area is non-negative"
+polygon_area = do Effect {
+  ccw = {
+    vertices: [point2 0.0 0.0, point2 4.0 0.0, point2 4.0 3.0, point2 0.0 3.0]
+  }
+  cw = {
+    vertices: [point2 0.0 0.0, point2 0.0 3.0, point2 4.0 3.0, point2 4.0 0.0]
+  }
+  empty = { vertices: [] }
+
+  assert (abs (area ccw - 12.0) < 0.0001)
+  assert (abs (area cw - 12.0) < 0.0001)
+  assertEq (area empty) 0.0
+}
+
 @test "point2 arithmetic"
 point2_arithmetic = do Effect {
   a = point2 1.0 2.0

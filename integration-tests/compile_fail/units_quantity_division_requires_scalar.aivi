@@ -1,0 +1,14 @@
+// EXPECT-ERROR: type mismatch
+@no_prelude
+module integrationTests.compileFail.unitsQuantityDivisionRequiresScalar
+
+use aivi
+use aivi.units (Quantity, defineUnit, domain Units)
+
+distance : Quantity
+distance = { value: 100.0, unit: defineUnit "m" 1.0 }
+
+time : Quantity
+time = { value: 9.58, unit: defineUnit "s" 1.0 }
+
+speed = distance / time

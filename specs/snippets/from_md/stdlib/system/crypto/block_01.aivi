@@ -5,7 +5,7 @@ fingerprint = sha256 "hello world"
 makeSessionToken : Effect Text Text
 makeSessionToken = do Effect {
   bytes <- randomBytes 32
-  pure (toHex bytes)
+  pure (toBase64Url bytes)
 }
 
 checkPassword : Text -> Text -> Effect Text Bool

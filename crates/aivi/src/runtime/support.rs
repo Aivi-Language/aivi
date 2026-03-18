@@ -76,15 +76,19 @@ fn try_url_query_binary(op: &str, left: &Value, right: &Value) -> Option<Value> 
     }
 }
 
-pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Option<Value> {
+pub(crate) fn eval_binary_builtin(
+    op: &str,
+    left: &Value,
+    right: &Value,
+) -> Result<Option<Value>, RuntimeError> {
     if let Some(result) = try_url_query_binary(op, left, right) {
-        return Some(result);
+        return Ok(Some(result));
     }
 
     match (op, left, right) {
         ("..", Value::Int(start), Value::Int(end)) => {
             if start > end {
-                return Some(Value::List(Arc::new(Vec::new())));
+                return Ok(Some(Value::List(Arc::new(Vec::new()))));
             }
             let mut out = Vec::new();
             let mut current = *start;
@@ -93,80 +97,88 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
                 if current == *end {
                     break;
                 }
-                current = current.checked_add(1)?;
+                current = match current.checked_add(1) {
+                    Some(next) => next,
+                    None => return Ok(None),
+                };
             }
-            Some(Value::List(Arc::new(out)))
+            Ok(Some(Value::List(Arc::new(out))))
         }
         // Use wrapping arithmetic to match Cranelift's iadd/isub/imul semantics.
-        ("+", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_add(*b))),
-        ("-", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_sub(*b))),
-        ("*", Value::Int(a), Value::Int(b)) => Some(Value::Int(a.wrapping_mul(*b))),
+        ("+", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Int(a.wrapping_add(*b)))),
+        ("-", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Int(a.wrapping_sub(*b)))),
+        ("*", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Int(a.wrapping_mul(*b)))),
         ("/", Value::Int(a), Value::Int(b)) => {
             if *b == 0 {
-                None
+                Ok(None)
             } else {
-                Some(Value::Int(a.wrapping_div(*b)))
+                Ok(Some(Value::Int(a.wrapping_div(*b))))
             }
         }
         ("%", Value::Int(a), Value::Int(b)) => {
             if *b == 0 {
-                None
+                Ok(None)
             } else {
-                Some(Value::Int(a.wrapping_rem(*b)))
+                Ok(Some(Value::Int(a.wrapping_rem(*b))))
             }
         }
-        ("+", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a + &**b))),
-        ("-", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a - &**b))),
-        ("*", Value::BigInt(a), Value::BigInt(b)) => Some(Value::BigInt(Arc::new(&**a * &**b))),
-        ("+", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Decimal(*a + *b)),
-        ("-", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Decimal(*a - *b)),
-        ("*", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Decimal(*a * *b)),
-        ("/", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Decimal(*a / *b)),
-        ("+", Value::Float(a), Value::Float(b)) => Some(Value::Float(a + b)),
-        ("-", Value::Float(a), Value::Float(b)) => Some(Value::Float(a - b)),
-        ("*", Value::Float(a), Value::Float(b)) => Some(Value::Float(a * b)),
-        ("/", Value::Float(a), Value::Float(b)) => Some(Value::Float(a / b)),
-        ("%", Value::Float(a), Value::Float(b)) => Some(Value::Float(a % b)),
-        ("==", a, b) => Some(Value::Bool(values_equal(a, b))),
-        ("!=", a, b) => Some(Value::Bool(!values_equal(a, b))),
-        ("<", Value::Int(a), Value::Int(b)) => Some(Value::Bool(a < b)),
-        ("<=", Value::Int(a), Value::Int(b)) => Some(Value::Bool(a <= b)),
-        (">", Value::Int(a), Value::Int(b)) => Some(Value::Bool(a > b)),
-        (">=", Value::Int(a), Value::Int(b)) => Some(Value::Bool(a >= b)),
-        ("<", Value::Float(a), Value::Float(b)) => Some(Value::Bool(a < b)),
-        ("<=", Value::Float(a), Value::Float(b)) => Some(Value::Bool(a <= b)),
-        (">", Value::Float(a), Value::Float(b)) => Some(Value::Bool(a > b)),
-        (">=", Value::Float(a), Value::Float(b)) => Some(Value::Bool(a >= b)),
-        ("<", Value::BigInt(a), Value::BigInt(b)) => Some(Value::Bool(a < b)),
-        ("<=", Value::BigInt(a), Value::BigInt(b)) => Some(Value::Bool(a <= b)),
-        (">", Value::BigInt(a), Value::BigInt(b)) => Some(Value::Bool(a > b)),
-        (">=", Value::BigInt(a), Value::BigInt(b)) => Some(Value::Bool(a >= b)),
-        ("<", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a < b)),
-        ("<=", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a <= b)),
-        (">", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a > b)),
-        (">=", Value::Decimal(a), Value::Decimal(b)) => Some(Value::Bool(a >= b)),
-        ("<", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a < b)),
-        ("<=", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a <= b)),
-        (">", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a > b)),
-        (">=", Value::Text(a), Value::Text(b)) => Some(Value::Bool(a >= b)),
+        ("+", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::BigInt(Arc::new(&**a + &**b)))),
+        ("-", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::BigInt(Arc::new(&**a - &**b)))),
+        ("*", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::BigInt(Arc::new(&**a * &**b)))),
+        ("+", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Decimal(*a + *b))),
+        ("-", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Decimal(*a - *b))),
+        ("*", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Decimal(*a * *b))),
+        ("/", Value::Decimal(_), Value::Decimal(b)) if *b == rust_decimal::Decimal::ZERO => {
+            Err(RuntimeError::DivisionByZero {
+                context: "decimal.div".to_string(),
+            })
+        }
+        ("/", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Decimal(*a / *b))),
+        ("+", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Float(a + b))),
+        ("-", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Float(a - b))),
+        ("*", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Float(a * b))),
+        ("/", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Float(a / b))),
+        ("%", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Float(a % b))),
+        ("==", a, b) => Ok(Some(Value::Bool(values_equal(a, b)))),
+        ("!=", a, b) => Ok(Some(Value::Bool(!values_equal(a, b)))),
+        ("<", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Bool(a < b))),
+        ("<=", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Bool(a <= b))),
+        (">", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Bool(a > b))),
+        (">=", Value::Int(a), Value::Int(b)) => Ok(Some(Value::Bool(a >= b))),
+        ("<", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Bool(a < b))),
+        ("<=", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Bool(a <= b))),
+        (">", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Bool(a > b))),
+        (">=", Value::Float(a), Value::Float(b)) => Ok(Some(Value::Bool(a >= b))),
+        ("<", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::Bool(a < b))),
+        ("<=", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::Bool(a <= b))),
+        (">", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::Bool(a > b))),
+        (">=", Value::BigInt(a), Value::BigInt(b)) => Ok(Some(Value::Bool(a >= b))),
+        ("<", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Bool(a < b))),
+        ("<=", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Bool(a <= b))),
+        (">", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Bool(a > b))),
+        (">=", Value::Decimal(a), Value::Decimal(b)) => Ok(Some(Value::Bool(a >= b))),
+        ("<", Value::Text(a), Value::Text(b)) => Ok(Some(Value::Bool(a < b))),
+        ("<=", Value::Text(a), Value::Text(b)) => Ok(Some(Value::Bool(a <= b))),
+        (">", Value::Text(a), Value::Text(b)) => Ok(Some(Value::Bool(a > b))),
+        (">=", Value::Text(a), Value::Text(b)) => Ok(Some(Value::Bool(a >= b))),
         ("++", Value::Text(a), Value::Text(b)) => {
             let mut result = a.clone();
             result.push_str(b);
-            Some(Value::Text(result))
+            Ok(Some(Value::Text(result)))
         }
-        ("&&", Value::Bool(a), Value::Bool(b)) => Some(Value::Bool(*a && *b)),
-        ("||", Value::Bool(a), Value::Bool(b)) => Some(Value::Bool(*a || *b)),
+        ("&&", Value::Bool(a), Value::Bool(b)) => Ok(Some(Value::Bool(*a && *b))),
+        ("||", Value::Bool(a), Value::Bool(b)) => Ok(Some(Value::Bool(*a || *b))),
         ("??", Value::Constructor { name, args }, _rhs) if name == "Some" && args.len() == 1 => {
-            Some(args[0].clone())
+            Ok(Some(args[0].clone()))
         }
-        ("??", Value::Constructor { name, .. }, rhs) if name == "None" => Some(rhs.clone()),
+        ("??", Value::Constructor { name, .. }, rhs) if name == "None" => Ok(Some(rhs.clone())),
         // Handle un-wrapped values from schema-less JSON deserialization.
         // The type checker guarantees `??` is only used on `Option A`, so if
         // the LHS is Unit (absent field) use the default, otherwise the value
         // is present — pass it through.
-        ("??", Value::Unit, rhs) => Some(rhs.clone()),
-        ("??", lhs, _rhs) => Some(lhs.clone()),
-        _ => None,
+        ("??", Value::Unit, rhs) => Ok(Some(rhs.clone())),
+        ("??", lhs, _rhs) => Ok(Some(lhs.clone())),
+        _ => Ok(None),
     }
 }
 
@@ -578,7 +590,9 @@ pub(crate) fn eval_sigil_literal(
                 i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc()) * 1000;
 
             let local_naive = zdt.naive_local();
-            let dt_str = format!("{}Z", local_naive.format("%Y-%m-%dT%H:%M:%S"));
+            let dt_str = local_naive
+                .and_utc()
+                .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
 
             let mut zone_map = HashMap::new();
             zone_map.insert("id".to_string(), Value::Text(zone_id.to_string()));

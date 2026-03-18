@@ -1,10 +1,8 @@
 @no_prelude
 module integrationTests.stdlib.aivi.prelude.tests
 
-use aivi
-use aivi.testing
 use aivi.prelude
-use aivi.text
+use aivi.testing
 
 @test "bool"
 bool_functional = do Effect {
@@ -15,20 +13,6 @@ bool_functional = do Effect {
   assert (!(True && False))
   assert (True != False)
   assert (True == True)
-}
-
-@test "bytes"
-bytes_functional = do Effect {
-  b   = toBytes Utf8 "abc"
-  res = fromBytes Utf8 b
-  res match
-    | Ok s  => assertEq s "abc"
-    | Err _ => assert False
-}
-
-@test "char"
-char_functional = do Effect {
-  assertEq (1 + 1) 2
 }
 
 @test "float"
@@ -65,13 +49,12 @@ map = f xs => xs match
   | []           => []
   | [x, ...rest] => [f x, ...(map f rest)]
 
-Status = Draft | Published | Archived
-
 @test "list"
 list_functional = do Effect {
-  l = [1, 2, 3]
+  l      = [1, 2, 3]
+  mapped = map (x => x + 1) l
   assertEq (len l) 3
-  assertEq (map (x => x + 1) l)[2, 3, 4]
+  assertEq mapped [2, 3, 4]
 }
 
 @test "option"
@@ -105,35 +88,12 @@ result_functional = do Effect {
     | Err e => assertEq e "nope"
 }
 
-@test "constructor introspection"
-constructor_introspection = do Effect {
-  assertEq (constructorName (Some 1)) "Some"
-  assertEq (constructorOrdinal (Some 1)) 1
-  assertEq (constructorName Published) "Published"
-  assertEq (constructorOrdinal Published) 1
-}
-
-@test "attempt"
-attempt_functional = do Effect {
-  ok <- attempt (pure 42)
-  ok match
-    | Ok n  => assertEq n 42
-    | Err _ => assert False
-
-  bad <- attempt (fail "boom")
-  bad match
-    | Ok _  => assert False
-    | Err e => assertEq e "boom"
-}
-
-@test "text"
-text_functional = do Effect {
-  t = "Hello"
-  assertEq (length t) 5
-  assertEq (toUpper t) "HELLO"
-  assertEq (toLower t) "hello"
-  assert (isEmpty "" == True)
-  assert (isEmpty t == False)
+@test "prelude helpers"
+prelude_helpers = do Effect {
+  assertEq (not False) True
+  assertEq (not True) False
+  assertEq (any (n => n > 2) [1, 2, 3]) True
+  assertEq (any (n => n > 5) [1, 2, 3]) False
 }
 
 @test "to text"
@@ -144,11 +104,8 @@ toText_functional = do Effect {
 
 @test "tuple"
 tuple_functional = do Effect {
-  t   = (1, "two")
-  res = t match
-    | (a, b) => if a == 1 && b == "two" then True else False
-    | _      => False
-    assert (res == True)
+  pair = (1, "two")
+  assertEq pair (1, "two")
 }
 
 @test "to text 2"

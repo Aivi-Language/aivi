@@ -211,12 +211,45 @@ Marking them `@static` allows compile-time validation and migration analysis whe
 ## Pooling
 
 Connection pooling lives in `aivi.database.pool`.
-The pool is configured explicitly, and `withConn` guarantees a checked-out connection is released even if the work fails or is cancelled.
+The pool is configured explicitly.
+Prefer `Pool.withConn` for routine short-lived work because it guarantees a checked-out connection is returned even if the work fails or is cancelled.
+Reach for `Pool.acquire` / `Pool.release` only when one workflow truly needs to hold the same connection across several steps.
+
+On success, `Pool.create` has already eagerly seeded `minIdle` idle connections.
+After creation, `idleTimeout` and `healthCheckInterval` are enforced lazily when later borrows inspect idle connections; there is no background reaper that keeps `minIdle` topped up or prunes stale connections proactively.
+`Pool.drain` waits for borrowed connections to come back, releases the idle set, and leaves the pool open for future borrows.
+`Pool.close` performs the same idle cleanup, marks the pool closed, and causes future borrows to return `Pool.Closed`.
 The underlying pool API is generic; the signatures below show the usual database instantiation with `DbConnection` and `DbError`.
 
 If you are still on the beginner path, skip pooling until one process needs many short-lived database operations.
 
 <<< ../../snippets/from_md/stdlib/system/database/pooling.aivi{aivi}
+
+### Pool configuration at a glance
+
+Only the fields listed here are valid. `Pool.create` rejects unexpected config fields so stale or misspelled settings fail fast.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `maxSize` | `Int` | Hard upper bound on total idle + checked-out + in-flight connection creations. Must be `> 0`. |
+| `minIdle` | `Int` | Number of idle connections eagerly created during `Pool.create`. Must be `>= 0` and `<= maxSize`. This is a startup warm count, not a background-maintained floor. |
+| `acquireTimeout` | `Span` | Maximum time `Pool.acquire` / `Pool.withConn` wait when the pool is exhausted or repeatedly retires unhealthy connections. Must be non-negative. |
+| `idleTimeout` | `Option Span` | When present, idle connections older than this are retired lazily on a later borrow. Must be non-negative when present. |
+| `healthCheckInterval` | `Option Span` | When present, an idle connection is re-checked before reuse once it has been idle at least this long. Must be non-negative when present. `Some { millis: 0 }` checks every reuse. |
+| `backoffPolicy` | `BackoffPolicy` | Retry delay while waiting for capacity or retrying after health-check failures. `Fixed span` uses one delay every time. `Exponential { base, max }` doubles from `base` up to `max`. All spans must be non-negative, and exponential `max` must be `>= base`. |
+| `queuePolicy` | `QueuePolicy` | `Fifo` reuses the oldest idle connection first. `Lifo` reuses the most recently returned idle connection first. |
+| `acquire` | `Unit -> Effect DbError Conn` | Opens one new connection when the pool needs capacity. |
+| `release` | `Conn -> Effect DbError Unit` | Permanently closes one connection that the pool is discarding. |
+| `healthCheck` | `Conn -> Effect DbError Bool` | Returns `True` to keep a connection in circulation, or `False` to retire it and retry. |
+
+### Pool errors and monitoring
+
+- `Pool.Timeout` — no healthy connection became available before `acquireTimeout` elapsed.
+- `Pool.Closed` — the pool has been closed and will not hand out new connections.
+- `Pool.HealthFailed` — every attempted connection failed `healthCheck` before the acquire timeout elapsed.
+- `Pool.InvalidConfig reason` — configuration validation failed before the pool was created.
+
+`Pool.stats` returns `PoolStats = { size, idle, inUse, waiters, closed }`, where `size` counts idle, checked-out, and in-flight connection creations.
 
 ## Runtime effects
 
@@ -460,15 +493,33 @@ The important part is that the compiler explains whether the failure came from s
 
 ### Pooling (`aivi.database.pool`)
 
+#### Types and constructors
+
+| Name | Type / shape | What it means |
+| --- | --- | --- |
+| **Pool.PoolError** | `Timeout | Closed | HealthFailed | InvalidConfig Text` | Pool-level failures returned from `Pool.create`, `Pool.acquire`, and `Pool.withConn`. |
+| **Pool.QueuePolicy** | `Fifo | Lifo` | Chooses which idle connection is reused first. |
+| **Pool.BackoffPolicy** | `Fixed Span | Exponential { base: Span, max: Span }` | Chooses retry delay while waiting for capacity or retrying after health-check failures. |
+| **Pool.PoolStats** | `{ size: Int, idle: Int, inUse: Int, waiters: Int, closed: Bool }` | Snapshot returned by `Pool.stats`. |
+
+#### Operations
+
 | Function | What it does |
 | --- | --- |
-| **Pool.create** config<br><code>Pool.Config DbConnection -> Effect DbError (Result Pool.PoolError (Pool DbConnection))</code> | Creates a connection pool from the given configuration. |
-| **Pool.withConn** pool f<br><code>Pool DbConnection -> (DbConnection -> Effect DbError A) -> Effect DbError (Result Pool.PoolError A)</code> | Borrows a connection, runs `f`, and always releases the connection afterward. |
+| **Pool.create** config<br><code>Pool.Config Conn -> Effect DbError (Result Pool.PoolError (Pool Conn))</code> | Validates the configuration, eagerly seeds `minIdle` idle connections, and returns a pool. |
+| **Pool.acquire** pool<br><code>Pool Conn -> Effect DbError (Result Pool.PoolError Conn)</code> | Borrows one connection. Returns `Err Timeout`, `Err Closed`, or `Err HealthFailed` for pool-level failures. |
+| **Pool.release** pool conn<br><code>Pool Conn -> Conn -> Effect DbError Unit</code> | Returns a previously borrowed connection to the pool. If the pool is already closed, the connection is destroyed instead of becoming idle again. |
+| **Pool.withConn** pool f<br><code>Pool Conn -> (Conn -> Effect DbError A) -> Effect DbError (Result Pool.PoolError A)</code> | Borrows a connection, runs `f`, and always releases the connection afterward. Prefer this helper for routine work. |
+| **Pool.stats** pool<br><code>Pool Conn -> Effect DbError Pool.PoolStats</code> | Returns `{ size, idle, inUse, waiters, closed }` for the current pool state. |
+| **Pool.drain** pool<br><code>Pool Conn -> Effect DbError Unit</code> | Waits for all borrowed connections to be returned, releases the idle set, and leaves the pool open. |
+| **Pool.close** pool<br><code>Pool Conn -> Effect DbError Unit</code> | Releases the idle set, marks the pool closed, and causes future `Pool.acquire` / `Pool.withConn` calls to return `Err Pool.Closed`. |
 
 ## Practical guidance
 
 - Prefer ambient connections when a function opens, shares, or nests database work.
 - Use ambient helpers when you truly want one process-wide default connection.
+- Prefer `Pool.withConn` over manual `Pool.acquire` / `Pool.release` unless one workflow genuinely needs to hold the same connection across multiple steps.
+- Call `Pool.close` during shutdown, or `Pool.drain` followed by `Pool.close` when you want borrowed work to finish first.
 - Keep table definitions complete with explicit column lists if you want the query DSL to lower cleanly into SQL.
 - Use savepoints for inner rollback boundaries instead of trying to nest transactions on the same connection.
 - Reach for raw deltas when you want to construct mutations programmatically; reach for typed helpers when you want the shortest clear code.

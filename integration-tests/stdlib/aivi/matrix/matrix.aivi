@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.matrix.tests
 use aivi
 use aivi.testing
 use aivi.matrix
+use aivi.vector (vec2, vec3, vec4, transform2, transform3, transform4)
 
 @test "mat2"
 mat2_functional = do Effect {
@@ -60,6 +61,116 @@ multiply3_functional = do Effect {
 @test "multiply4"
 multiply4_functional = do Effect {
   assert (multiply4 identity4 identity4 == identity4)
+}
+
+@test "mat2 domain operators"
+mat2_domain_operators = do Effect {
+  a = ~mat[1.0 2.0
+    3.0 4.0
+  ]
+  b = ~mat[2.0 0.0
+    1.0 2.0
+  ]
+  input         = vec2 1.0 2.0
+  added         = a + b
+  subtracted    = a - b
+  scaled        = a * 2.0
+  matrixProduct = a × b
+  transformed   = a × input
+  expectedAdded = ~mat[3.0 2.0
+    4.0 6.0
+  ]
+  expectedSub = ~mat[-1.0 2.0
+    2.0 2.0
+  ]
+  expectedScaled = ~mat[2.0 4.0
+    6.0 8.0
+  ]
+
+  assertEq added expectedAdded
+  assertEq subtracted expectedSub
+  assertEq scaled expectedScaled
+  assertEq matrixProduct (multiply2 a b)
+  assertEq transformed (transform2 a input)
+}
+
+@test "mat3 domain operators"
+mat3_domain_operators = do Effect {
+  a = ~mat[1.0 0.0 2.0
+    0.0 1.0 3.0
+    0.0 0.0 1.0
+  ]
+  b = ~mat[2.0 0.0 1.0
+    0.0 3.0 0.0
+    0.0 0.0 1.0
+  ]
+  input             = vec3 4.0 5.0 1.0
+  added             = a + b
+  subtracted        = a - b
+  scaled            = a * 2.0
+  matrixProduct     = a × b
+  transformed       = a × input
+  expectedProduct   = multiply3 a b
+  expectedTransform = transform3 a input
+
+  assertEq added.m00 3.0
+  assertEq added.m12 3.0
+  assertEq added.m22 2.0
+  assertEq subtracted.m00 -1.0
+  assertEq subtracted.m12 3.0
+  assertEq subtracted.m22 0.0
+  assertEq scaled.m00 2.0
+  assertEq scaled.m12 6.0
+  assertEq scaled.m22 2.0
+  assertEq matrixProduct.m00 expectedProduct.m00
+  assertEq matrixProduct.m12 expectedProduct.m12
+  assertEq matrixProduct.m22 expectedProduct.m22
+  assertEq transformed.x expectedTransform.x
+  assertEq transformed.y expectedTransform.y
+  assertEq transformed.z expectedTransform.z
+}
+
+@test "mat4 domain operators"
+mat4_domain_operators = do Effect {
+  a = ~mat[1.0 0.0 0.0 2.0
+    0.0 2.0 0.0 3.0
+    0.0 0.0 3.0 4.0
+    0.0 0.0 0.0 1.0
+  ]
+  b = ~mat[2.0 0.0 0.0 1.0
+    0.0 3.0 0.0 0.0
+    0.0 0.0 4.0 -1.0
+    0.0 0.0 0.0 1.0
+  ]
+  input             = vec4 1.0 2.0 3.0 1.0
+  added             = a + b
+  subtracted        = a - b
+  scaled            = a * 2.0
+  matrixProduct     = a × b
+  transformed       = a × input
+  expectedProduct   = multiply4 a b
+  expectedTransform = transform4 a input
+
+  assertEq added.m00 3.0
+  assertEq added.m11 5.0
+  assertEq added.m23 3.0
+  assertEq added.m33 2.0
+  assertEq subtracted.m00 -1.0
+  assertEq subtracted.m11 -1.0
+  assertEq subtracted.m23 5.0
+  assertEq subtracted.m33 0.0
+  assertEq scaled.m00 2.0
+  assertEq scaled.m11 4.0
+  assertEq scaled.m23 8.0
+  assertEq scaled.m33 2.0
+  assertEq matrixProduct.m00 expectedProduct.m00
+  assertEq matrixProduct.m11 expectedProduct.m11
+  assertEq matrixProduct.m23 expectedProduct.m23
+  assertEq matrixProduct.m33 expectedProduct.m33
+  assertEq transformed.x expectedTransform.x
+  assertEq transformed.y expectedTransform.y
+  assertEq transformed.z expectedTransform.z
+  assertEq transformed.w expectedTransform.w
 }
 
 @test "transpose2"

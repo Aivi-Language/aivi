@@ -469,8 +469,15 @@ pub extern "C" fn rt_binary_op(
     }
 
     // Fast path: try the pure built-in evaluation
-    if let Some(result) = crate::runtime::eval_binary_builtin(op, &lhs, &rhs) {
-        return abi::box_value(result);
+    match crate::runtime::eval_binary_builtin(op, &lhs, &rhs) {
+        Ok(Some(result)) => return abi::box_value(result),
+        Ok(None) => {}
+        Err(err) => {
+            unsafe {
+                set_pending_error(ctx, err);
+            }
+            return abi::box_value(Value::Unit);
+        }
     }
 
     // Slow path: look up operator in globals and apply curried
@@ -485,6 +492,7 @@ pub extern "C" fn rt_binary_op(
             if !runtime.jit_binary_op_dispatching {
                 runtime.jit_binary_op_dispatching = true;
                 let input_keys = record_key_set(&lhs);
+                let rhs_keys = record_key_set(&rhs);
                 let mut subset_fallback: Option<Value> = None;
                 let mut fallback_result: Option<Value> = None;
                 for clause in clauses.into_iter() {
@@ -516,12 +524,14 @@ pub extern "C" fn rt_binary_op(
                                     if fallback_result.is_none() {
                                         fallback_result = Some(result);
                                     }
-                                } else if is_strict_record_subset(&result, &input_keys) {
+                                } else if is_strict_record_subset(&result, &input_keys)
+                                    || is_strict_record_subset(&result, &rhs_keys)
+                                {
                                     // If the result is a record with strictly fewer
-                                    // fields that are all a subset of the input record's
-                                    // fields, this is a sub-type match (e.g. Point2.(+)
-                                    // on Point3 args). Skip it in favor of a more
-                                    // specific clause, but keep as fallback.
+                                    // fields that are all a subset of either operand's
+                                    // record fields, this is a sub-type match (e.g. Point2.(+)
+                                    // on Point3 args or Mat2.(×) on Mat3/Vec3 args). Skip it in
+                                    // favor of a more specific clause, but keep as fallback.
                                     if subset_fallback.is_none() {
                                         subset_fallback = Some(result);
                                     }

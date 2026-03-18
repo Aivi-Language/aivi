@@ -7,16 +7,18 @@ use aivi.testing
 value = 1 + 2
 pair  = (value, "ok")
 
-map = f xs => xs match
+mapList : (A -> B) -> List A -> List B
+mapList = f xs => xs match
   | []           => []
-  | [x, ...rest] => [f x, ...(map f rest)]
+  | [x, ...rest] => [f x, ...(mapList f rest)]
 
+maybeInc : Option Int -> Int
 maybeInc = opt => opt match
   | Some n => n + 1
   | None   => 0
 
-result =
-  [Some 1, None, Some 41] |> map maybeInc
+result : List Int
+result = mapList maybeInc [Some 1, None, Some 41]
 
 expected = [2, 0, 42]
 

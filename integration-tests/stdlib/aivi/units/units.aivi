@@ -28,6 +28,18 @@ quantity_functional = do Effect {
   assertEq halved.unit.name "m"
 }
 
+@test "quantity operators keep the left-hand unit"
+quantity_preserves_left_unit_functional = do Effect {
+  meter     = defineUnit "m" 1.0
+  kilometer = defineUnit "km" 1000.0
+  total     = { value: 1.0, unit: meter } + { value: 1.0, unit: kilometer }
+  delta     = { value: 2.0, unit: kilometer } - { value: 1.0, unit: meter }
+  assert (abs (total.value - 2.0) < 0.0000001)
+  assertEq total.unit.name "m"
+  assert (abs (delta.value - 1.0) < 0.0000001)
+  assertEq delta.unit.name "km"
+}
+
 @test "unit"
 unit_functional = do Effect {
   u = defineUnit "s" 1.0
@@ -55,11 +67,14 @@ defineUnit_functional = do Effect {
 
 @test "same unit"
 sameUnit_functional = do Effect {
-  m  = defineUnit "m" 1.0
-  km = defineUnit "km" 1000.0
-  a  = { value: 1.0, unit: m }
-  b  = { value: 2.0, unit: m }
-  c  = { value: 1.0, unit: km }
+  m            = defineUnit "m" 1.0
+  km           = defineUnit "km" 1000.0
+  renamedMeter = defineUnit "m" 100.0
+  a            = { value: 1.0, unit: m }
+  b            = { value: 2.0, unit: m }
+  c            = { value: 1.0, unit: km }
+  d            = { value: 3.0, unit: renamedMeter }
   assert (sameUnit a b == True)
   assert (sameUnit a c == False)
+  assert (sameUnit a d == True)
 }

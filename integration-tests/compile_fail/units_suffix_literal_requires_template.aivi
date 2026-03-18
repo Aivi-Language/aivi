@@ -1,0 +1,9 @@
+// EXPECT-ERROR: suffix literals require a '1m' template in scope
+@no_prelude
+module integrationTests.compileFail.unitsSuffixLiteralRequiresTemplate
+
+use aivi
+use aivi.units (defineUnit, domain Units)
+
+meter    = defineUnit "m" 1.0
+distance = 100m

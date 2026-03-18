@@ -10,7 +10,6 @@ cfg = {
   minIdle: 1
   acquireTimeout: { millis: 1000 }
   idleTimeout: None
-  maxLifetime: None
   healthCheckInterval: None
   backoffPolicy: Pool.Fixed ({ millis: 25 })
   queuePolicy: Pool.Fifo
@@ -25,9 +24,13 @@ main = do Effect {
   poolRes <- Pool.create cfg
   poolRes match
     | Err e   => pure (Err e)
-    | Ok pool => Pool.withConn pool (conn =>
-      db.inTransactionOn conn (do Effect {
-          pure 123
-      })
-    )
+    | Ok pool => do Effect {
+        result <- Pool.withConn pool (conn =>
+        db.inTransactionOn conn (do Effect {
+            pure 123
+        })
+        )
+        _ <- Pool.close pool
+        pure result
+      }
 }

@@ -1,0 +1,21 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.bigint.tests
+
+use aivi
+use aivi.testing
+use aivi.number.bigint
+
+@test "bigint arithmetic and overflow"
+bigint_arithmetic_and_overflow = do Effect {
+  seven  = fromInt 7
+  eight  = fromInt 8
+  offset = fromInt 14
+  exact  = seven * eight - offset
+
+  seed = fromInt 1000000
+  one  = fromInt 1
+  huge = seed * seed * seed * seed + one
+
+  assertEq (toInt exact) (Some 42)
+  assertEq (toInt huge) None
+}

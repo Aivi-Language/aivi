@@ -3,6 +3,7 @@ module integrationTests.runtime.sourcePipeline
 
 use aivi
 use aivi.testing
+use aivi.validation
 
 countItems = items => List.length items
 

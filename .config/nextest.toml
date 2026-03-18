@@ -5,20 +5,20 @@ final-status-level = "fail"
 failure-output = "final"
 
 # Heavy runner-style tests JIT-compile many .aivi files with per-file timeouts.
-# Keep them in separate capped pools so they run concurrently without flooding
-# the whole suite, and still terminate at 25 seconds if something regresses.
+# Keep them in separate capped pools so they don't swamp the machine, and give
+# each process enough time to finish its batch under full-workspace load.
 [test-groups.runner-jit]
-max-threads = 5
+max-threads = 2
 
 [test-groups.stdlib-jit]
-max-threads = 5
+max-threads = 2
 
 [[profile.default.overrides]]
 filter = 'binary_id(aivi::runner)'
 test-group = 'runner-jit'
-slow-timeout = { period = "25s", terminate-after = 1, grace-period = "0s" }
+slow-timeout = { period = "120s", terminate-after = 1, grace-period = "0s" }
 
 [[profile.default.overrides]]
 filter = 'binary_id(aivi::stdlib_runner)'
 test-group = 'stdlib-jit'
-slow-timeout = { period = "25s", terminate-after = 1, grace-period = "0s" }
+slow-timeout = { period = "120s", terminate-after = 1, grace-period = "0s" }

@@ -4,8 +4,100 @@ module integrationTests.stdlib.aivi.database.pool.tests
 use aivi
 use aivi.file as File
 use aivi.testing
+use aivi.concurrency
+use aivi.list as List
+use aivi.reactive
 use aivi.database as Db
 use aivi.database.pool as Pool
+
+IntPoolHarness = {
+  nextId: Signal Int
+  released: Signal (List Int)
+  healthy: Signal Bool
+}
+
+IntPoolOptions = {
+  maxSize: Int
+  minIdle: Int
+  acquireTimeout: { millis: Int }
+  idleTimeout: Option { millis: Int }
+  healthCheckInterval: Option { millis: Int }
+  backoffPolicy: Pool.BackoffPolicy
+  queuePolicy: Pool.QueuePolicy
+}
+
+mkHarness : Unit -> IntPoolHarness
+mkHarness = _ => {
+  nextId: signal 0
+  released: signal []
+  healthy: signal True
+}
+
+mkIntPoolConfig : IntPoolOptions -> IntPoolHarness -> Pool.Config Int
+mkIntPoolConfig = options => harness => {
+  maxSize: options.maxSize
+  minIdle: options.minIdle
+  acquireTimeout: options.acquireTimeout
+  idleTimeout: options.idleTimeout
+  healthCheckInterval: options.healthCheckInterval
+  backoffPolicy: options.backoffPolicy
+  queuePolicy: options.queuePolicy
+  acquire: _ => do Effect {
+    current = get harness.nextId
+    _       = set harness.nextId (current + 1)
+    pure current
+  }
+  release: conn => do Effect {
+    _ = update harness.released (items => [...items, conn])
+    pure Unit
+  }
+  healthCheck: _ => pure (get harness.healthy)
+}
+
+assertInvalidConfig : Result PoolError A -> Text -> Effect Text Unit
+assertInvalidConfig = result => expected => do Effect {
+  err <- assertErr result
+  err match
+    | InvalidConfig reason => assertEq reason expected
+    | _                    => assert False
+}
+
+createIntPool = options => harness => do Effect {
+  poolResult <- Pool.create (mkIntPoolConfig options harness)
+  assertOk poolResult
+}
+
+expectAcquireInt = pool => do Effect {
+  connResult <- Pool.acquire pool
+  assertOk connResult
+}
+
+exerciseQueuePolicy = queuePolicy => expected => do Effect {
+  harness = mkHarness Unit
+  options = {
+    maxSize: 2
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: queuePolicy
+  }
+
+  pool   <- createIntPool options harness
+  first  <- expectAcquireInt pool
+  second <- expectAcquireInt pool
+  _      <- Pool.release pool first
+  _      <- Pool.release pool second
+  reused <- expectAcquireInt pool
+  _      <- assertEq reused expected
+  _      <- Pool.release pool reused
+  _      <- Pool.close pool
+  assertEq (List.length (get harness.released)) 2
+}
+
+boomConn : Int -> Effect Text Int
+boomConn = _ => fail "boom"
 
 @test "pool error construct"
 poolError_construct = do Effect {
@@ -29,6 +121,23 @@ queuePolicy_construct = do Effect {
   assertEq q2 Pool.Lifo
 }
 
+@test "backoff policy construct"
+backoffPolicy_construct = do Effect {
+  fixed       = Pool.Fixed ({ millis: 25 })
+  exponential = Pool.Exponential { base: { millis: 5 }, max: { millis: 40 } }
+
+  fixed match
+    | Fixed span => assertEq span.millis 25
+    | _          => assert False
+
+  exponential match
+    | Exponential opts => do Effect {
+        _ <- assertEq opts.base.millis 5
+        assertEq opts.max.millis 40
+      }
+    | _ => assert False
+}
+
 @test "pool stats type"
 poolStats_type = do Effect {
   s = { size: 4, idle: 2, inUse: 2, waiters: 0, closed: False }
@@ -37,10 +146,238 @@ poolStats_type = do Effect {
   assert (s.closed == False)
 }
 
+@test "create validates pool config"
+create_validates_pool_config = do Effect {
+  harness = mkHarness Unit
+
+  zeroSize = {
+    maxSize: 0
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+  zeroSizeResult <- Pool.create (mkIntPoolConfig zeroSize harness)
+  _              <- assertInvalidConfig zeroSizeResult "maxSize must be > 0"
+
+  tooManyIdle = {
+    maxSize: 1
+    minIdle: 2
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+  tooManyIdleResult <- Pool.create (mkIntPoolConfig tooManyIdle harness)
+  _                 <- assertInvalidConfig tooManyIdleResult "minIdle must be <= maxSize"
+
+  negativeAcquireTimeout = {
+    maxSize: 1
+    minIdle: 0
+    acquireTimeout: { millis: -1 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+  negativeAcquireTimeoutResult <- Pool.create (mkIntPoolConfig negativeAcquireTimeout harness)
+  _                            <- assertInvalidConfig negativeAcquireTimeoutResult "acquireTimeout must be >= 0"
+
+  negativeIdleTimeout = {
+    maxSize: 1
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: Some { millis: -1 }
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+  negativeIdleTimeoutResult <- Pool.create (mkIntPoolConfig negativeIdleTimeout harness)
+  _                         <- assertInvalidConfig negativeIdleTimeoutResult "idleTimeout must be >= 0 when present"
+
+  invalidBackoff = {
+    maxSize: 1
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Exponential { base: { millis: 10 }, max: { millis: 5 } }
+    queuePolicy: Pool.Fifo
+  }
+  invalidBackoffResult <- Pool.create (mkIntPoolConfig invalidBackoff harness)
+  _                    <- assertInvalidConfig invalidBackoffResult "backoffPolicy.Exponential.max must be >= base"
+
+  unexpectedFieldResult <- Pool.create {
+    maxSize: 1
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    extraSetting: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+    acquire: _ => pure 1
+    release: _ => pure Unit
+    healthCheck: _ => pure True
+  }
+  _ <- assertInvalidConfig unexpectedFieldResult "unexpected pool config field(s): extraSetting"
+  assertEq (get harness.released) []
+}
+
+@test "queue policy controls idle reuse order"
+queue_policy_controls_idle_reuse_order = do Effect {
+  _ <- exerciseQueuePolicy Pool.Fifo 0
+  exerciseQueuePolicy Pool.Lifo 1
+}
+
+@test "stats reflect pool lifecycle"
+stats_reflect_pool_lifecycle = do Effect {
+  harness = mkHarness Unit
+  options = {
+    maxSize: 2
+    minIdle: 1
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+
+  pool    <- createIntPool options harness
+  initial <- Pool.stats pool
+  _       <- assertEq initial.size 1
+  _       <- assertEq initial.idle 1
+  _       <- assertEq initial.inUse 0
+  _       <- assertEq initial.waiters 0
+  _       <- assertEq initial.closed False
+
+  conn     <- expectAcquireInt pool
+  borrowed <- Pool.stats pool
+  _        <- assertEq conn 0
+  _        <- assertEq borrowed.size 1
+  _        <- assertEq borrowed.idle 0
+  _        <- assertEq borrowed.inUse 1
+  _        <- assertEq (get harness.released) []
+
+  _        <- Pool.release pool conn
+  returned <- Pool.stats pool
+  _        <- assertEq returned.size 1
+  _        <- assertEq returned.idle 1
+  _        <- assertEq returned.inUse 0
+  _        <- assertEq returned.closed False
+
+  _      <- Pool.close pool
+  closed <- Pool.stats pool
+  _      <- assertEq closed.size 0
+  _      <- assertEq closed.idle 0
+  _      <- assertEq closed.inUse 0
+  _      <- assertEq closed.closed True
+  _      <- assertEq (get harness.released) [0]
+
+  closedResult <- Pool.acquire pool
+  closedErr    <- assertErr closedResult
+  assertEq closedErr Pool.Closed
+}
+
+@test "acquire times out when pool is exhausted"
+acquire_times_out_when_pool_is_exhausted = do Effect {
+  harness = mkHarness Unit
+  options = {
+    maxSize: 1
+    minIdle: 1
+    acquireTimeout: { millis: 10 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+
+  pool       <- createIntPool options harness
+  conn       <- expectAcquireInt pool
+  timeoutRes <- Pool.acquire pool
+  timeoutErr <- assertErr timeoutRes
+  busyStats  <- Pool.stats pool
+  _          <- assertEq timeoutErr Pool.Timeout
+  _          <- assertEq busyStats.inUse 1
+  _          <- assertEq busyStats.idle 0
+  _          <- Pool.release pool conn
+  _          <- Pool.close pool
+  assertEq (get harness.released) [0]
+}
+
+@test "withConn releases connection after user failure"
+withConn_releases_connection_after_user_failure = do Effect {
+  harness = mkHarness Unit
+  options = {
+    maxSize: 1
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+
+  pool   <- createIntPool options harness
+  result <- attempt (Pool.withConn pool boomConn)
+  result match
+    | Err msg => assertEq msg "boom"
+    | Ok _    => assert False
+
+  stats <- Pool.stats pool
+  _     <- assertEq stats.idle 1
+  _     <- assertEq stats.inUse 0
+  _     <- Pool.close pool
+  assertEq (get harness.released) [0]
+}
+
+@test "drain releases idle connections and keeps pool open"
+drain_releases_idle_connections_and_keeps_pool_open = do Effect {
+  harness = mkHarness Unit
+  options = {
+    maxSize: 2
+    minIdle: 0
+    acquireTimeout: { millis: 20 }
+    idleTimeout: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 1 })
+    queuePolicy: Pool.Fifo
+  }
+
+  pool     <- createIntPool options harness
+  conn0    <- expectAcquireInt pool
+  conn1    <- expectAcquireInt pool
+  _        <- Pool.release pool conn0
+  releaser <- spawn (do Effect {
+      _        <- sleep 10
+      Pool.release pool conn1
+  })
+  _       <- Pool.drain pool
+  _       <- releaser.join
+  drained <- Pool.stats pool
+  _       <- assertEq drained.size 0
+  _       <- assertEq drained.idle 0
+  _       <- assertEq drained.inUse 0
+  _       <- assertEq drained.closed False
+  _       <- assertEq (get harness.released) [0, conn1]
+
+  reused <- expectAcquireInt pool
+  _      <- assertEq reused 2
+  _      <- Pool.release pool reused
+  _      <- Pool.close pool
+  assertEq (get harness.released) [0, conn1, 2]
+}
+
 poolPath = "/tmp/aivi-db-pool-transaction.sqlite"
 
 users : Table { id: Int, name: Text }
-users = Db.table "pool_users"[]
+users = Db.table "pool_users" [
+  { name: "id",   type: Db.IntType,     constraints: [Db.NotNull], default: None }
+  { name: "name", type: Db.Varchar 255, constraints: [Db.NotNull], default: None }
+]
 
 poolCfg : Pool.Config DbConnection
 poolCfg = {
@@ -48,7 +385,6 @@ poolCfg = {
   minIdle: 0
   acquireTimeout: { millis: 1000 }
   idleTimeout: None
-  maxLifetime: None
   healthCheckInterval: None
   backoffPolicy: Pool.Fixed ({ millis: 25 })
   queuePolicy: Pool.Fifo
@@ -56,11 +392,6 @@ poolCfg = {
   release: Db.close
   healthCheck: _ => pure True
 }
-
-expectPoolOk : Result PoolError A -> Effect Text A
-expectPoolOk = result => result match
-  | Ok value => pure value
-  | Err _    => fail "expected pool result ok"
 
 @test "pooled connections isolate uncommitted writes"
 pooled_connections_isolate_uncommitted_writes = do Effect {
@@ -70,24 +401,24 @@ pooled_connections_isolate_uncommitted_writes = do Effect {
   _    <- Db.close init
 
   poolResult <- Pool.create poolCfg
-  pool       <- expectPoolOk poolResult
+  pool       <- assertOk poolResult
 
   outerResult <- Pool.withConn pool (conn1 => do Effect {
       _           <- Db.beginTxOn conn1
       _           <- Db.applyDeltaOn conn1 users (Db.Insert { id: 1, name: "Outer" })
 
       beforeResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
-      rowsBefore   <- expectPoolOk beforeResult
+      rowsBefore   <- assertOk beforeResult
       assertEq (List.length rowsBefore) 0
 
       _ <- Db.commitTxOn conn1
 
       afterResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
-      rowsAfter   <- expectPoolOk afterResult
+      rowsAfter   <- assertOk afterResult
       pure rowsAfter
   })
 
-  rows <- expectPoolOk outerResult
+  rows <- assertOk outerResult
   _    <- Pool.close pool
   _    <- File.delete poolPath
   assertEq (List.length rows) 1
