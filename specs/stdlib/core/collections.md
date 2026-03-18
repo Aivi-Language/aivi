@@ -13,8 +13,8 @@ That makes them a good fit for AIVI programs where you want predictable data flo
 
 ## Imports at a glance
 
-- `List` is available as a built-in type; use `aivi.list` for top-level helper functions such as `chunk`, `findMap`, and `forM_`.
-- `Map` helpers are available either as `Map.get`, `Map.insert`, and so on through `aivi.collections`, or as unqualified functions through `aivi.map`.
+- `List` is available as a built-in type; use `aivi.list` for top-level helper functions such as `chunk`, `findMap`, and `traverse_`, and use [`aivi.logic`](logic.md) for the shared `traverse` operation.
+- `Map` helpers use the qualified `Map.*` namespace from `aivi.collections` or `aivi`.
 - `Set`, `Queue`, `Deque`, and `Heap` are used through their qualified namespaces (`Set.*`, `Queue.*`, `Deque.*`, `Heap.*`) from `aivi.collections` or `aivi`.
 
 ## Start here
@@ -121,15 +121,10 @@ Those class instances give you shared operations such as `map`, `filter`, `reduc
 | **uniqueBy** key list<br><code>(a -> k) -> List a -> List a</code> | Keeps the first occurrence of each key and discards later duplicates. |
 | **traverse_** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Runs an effect for each item and discards the collected results. |
 | **sequence_** list<br><code>List (Effect e a) -> Effect e Unit</code> | Executes a list of effects from left to right and discards their results. |
-| **mapM** f list<br><code>(a -> Effect e b) -> List a -> Effect e (List b)</code> | Effectful mapping; an alias of `traverse`. |
-| **mapM_** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Effectful mapping for side effects only; an alias of `traverse_`. |
-| **forM** list f<br><code>List a -> (a -> Effect e b) -> Effect e (List b)</code> | `traverse` with the arguments flipped, which reads well in pipelines. |
-| **forM_** list f<br><code>List a -> (a -> Effect e b) -> Effect e Unit</code> | `traverse_` with the arguments flipped. |
-| **forEachEffect** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | A descriptive alias for effectful iteration. |
 
-The effect-related helpers (`traverse_`, `sequence_`, `mapM`, `forM`, and their `_` variants) work with AIVI's [`Effect`](../../syntax/effects.md) type. Reach for them when each list item triggers logging, I/O, validation, or another effectful step.
+Use `traverse` from [`aivi.logic`](logic.md) when you need to map each list item through an effect and collect the resulting values. `aivi.list` keeps `traverse_` and `sequence_` for result-discarding `Effect` workflows.
 
-## Map helpers (`aivi.map` / `Map.*`)
+## Map helpers (`Map.*`)
 
 Use `Map` when your program needs named lookups, caches, indexes, or configuration tables.
 
@@ -137,32 +132,32 @@ Choose `Map` when the first question is “what value belongs to this key?” ra
 
 **Class instances** (via [`aivi.logic`](logic.md)): `Setoid` · `Functor` · `Filterable` · `Foldable` · `Semigroup` · `Monoid`
 
-The shared class methods operate on map **values**. Use the functions below when you need key-aware behavior. `aivi.map` exposes these as unqualified helpers; `aivi.collections` exposes the same operations as `Map.empty`, `Map.get`, `Map.insert`, and so on.
+The shared class methods operate on map **values**. Use the qualified `Map.*` functions below when you need key-aware behavior.
 
 <<< ../../snippets/from_md/stdlib/core/collections/block_06.aivi{aivi}
 
 
 | Function | Explanation |
 | --- | --- |
-| **empty**<br><code>Map k v</code> | Creates an empty map. |
-| **size** map<br><code>Map k v -> Int</code> | Returns the number of entries. |
-| **has** key map<br><code>k -> Map k v -> Bool</code> | Checks whether a key is present. |
-| **get** key map<br><code>k -> Map k v -> Option v</code> | Safely looks up a key and returns `Some value` or `None`. |
-| **insert** key value map<br><code>k -> v -> Map k v -> Map k v</code> | Returns a new map with the entry inserted. |
-| **update** key f map<br><code>k -> (v -> v) -> Map k v -> Map k v</code> | Changes an existing value in place conceptually; if the key is missing, nothing happens. |
-| **remove** key map<br><code>k -> Map k v -> Map k v</code> | Returns a new map without that key. |
-| **mapWithKey** f m<br><code>(k -> v -> v2) -> Map k v -> Map k v2</code> | Transforms each value while also seeing its key. |
-| **keys** m<br><code>Map k v -> List k</code> | Returns all keys as a list. |
-| **values** m<br><code>Map k v -> List v</code> | Returns all values as a list. |
-| **entries** m<br><code>Map k v -> List (k, v)</code> | Returns key/value pairs. |
-| **fromList** entries<br><code>List (k, v) -> Map k v</code> | Builds a map from a list of pairs. |
-| **toList** m<br><code>Map k v -> List (k, v)</code> | Converts a map back into key/value pairs. |
-| **union** left right<br><code>Map k v -> Map k v -> Map k v</code> | Merges two maps; when the same key appears in both, the right map wins. |
-| **getOrElse** key default m<br><code>k -> v -> Map k v -> v</code> | Reads a key or returns `default` when it is missing. |
-| **alter** key f m<br><code>k -> (Option v -> Option v) -> Map k v -> Map k v</code> | Handles insert, update, and remove in one function by transforming `Option v`. |
-| **mergeWith** combine left right<br><code>(k -> v -> v -> v) -> Map k v -> Map k v -> Map k v</code> | Merges two maps and uses `combine` only for keys that exist on both sides. |
-| **filterWithKey** pred m<br><code>(k -> v -> Bool) -> Map k v -> Map k v</code> | Keeps entries that satisfy a key-aware predicate. |
-| **foldWithKey** f init m<br><code>(b -> k -> v -> b) -> b -> Map k v -> b</code> | Folds over entries when you need both key and value. |
+| **Map.empty**<br><code>Map k v</code> | Creates an empty map. |
+| **Map.size** map<br><code>Map k v -> Int</code> | Returns the number of entries. |
+| **Map.has** key map<br><code>k -> Map k v -> Bool</code> | Checks whether a key is present. |
+| **Map.get** key map<br><code>k -> Map k v -> Option v</code> | Safely looks up a key and returns `Some value` or `None`. |
+| **Map.insert** key value map<br><code>k -> v -> Map k v -> Map k v</code> | Returns a new map with the entry inserted. |
+| **Map.update** key f map<br><code>k -> (v -> v) -> Map k v -> Map k v</code> | Changes an existing value in place conceptually; if the key is missing, nothing happens. |
+| **Map.remove** key map<br><code>k -> Map k v -> Map k v</code> | Returns a new map without that key. |
+| **Map.mapWithKey** f m<br><code>(k -> v -> v2) -> Map k v -> Map k v2</code> | Transforms each value while also seeing its key. |
+| **Map.keys** m<br><code>Map k v -> List k</code> | Returns all keys as a list. |
+| **Map.values** m<br><code>Map k v -> List v</code> | Returns all values as a list. |
+| **Map.entries** m<br><code>Map k v -> List (k, v)</code> | Returns key/value pairs. |
+| **Map.fromList** entries<br><code>List (k, v) -> Map k v</code> | Builds a map from a list of pairs. |
+| **Map.toList** m<br><code>Map k v -> List (k, v)</code> | Converts a map back into key/value pairs. |
+| **Map.union** left right<br><code>Map k v -> Map k v -> Map k v</code> | Merges two maps; when the same key appears in both, the right map wins. |
+| **Map.getOrElse** key default m<br><code>k -> v -> Map k v -> v</code> | Reads a key or returns `default` when it is missing. |
+| **Map.alter** key f m<br><code>k -> (Option v -> Option v) -> Map k v -> Map k v</code> | Handles insert, update, and remove in one function by transforming `Option v`. |
+| **Map.mergeWith** combine left right<br><code>(k -> v -> v -> v) -> Map k v -> Map k v -> Map k v</code> | Merges two maps and uses `combine` only for keys that exist on both sides. |
+| **Map.filterWithKey** pred m<br><code>(k -> v -> Bool) -> Map k v -> Map k v</code> | Keeps entries that satisfy a key-aware predicate. |
+| **Map.foldWithKey** f init m<br><code>(b -> k -> v -> b) -> b -> Map k v -> b</code> | Folds over entries when you need both key and value. |
 
 Notes:
 

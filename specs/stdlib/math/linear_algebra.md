@@ -7,7 +7,7 @@ Use it when you want algebraic operations such as dot products, matrix multiplic
 <div class="import-badge">use aivi.linear_algebra<span class="domain-badge">domain</span></div>
 
 If [`aivi.vector`](./vector.md) and [`aivi.matrix`](./matrix.md) are about data shapes, `aivi.linear_algebra` is about the calculations you perform with those shapes.
-If you prefer a shorter import, `aivi.linalg` re-exports the same API.
+If you prefer a shorter import, `aivi.linalg` re-exports the same API, including `domain LinearAlgebra`.
 
 ## Start here
 
@@ -65,6 +65,8 @@ The exported domain is defined over `Vec` records and provides component-wise ad
 
 The current runtime checks the following conditions before computing a result:
 
+- vector `+`, `-`, and `*` require every `Vec` operand to have a non-negative `size` that matches `data`.
+- vector `+` and `-` also require both vectors to have the same size.
 - `dot` requires both vectors to have the same size.
 - `matMul` requires the left matrix column count to match the right matrix row count.
 - `solve2x2` requires a 2×2 matrix, a size-2 vector, and a non-zero determinant.
@@ -75,7 +77,7 @@ The current runtime checks the following conditions before computing a result:
 
 
 In this example, `alignment` is `11.0`, `composed.data` stays `[2.0, 3.0, 4.0, 5.0]`, and `solution.data` becomes `[2.0, 1.0]`.
-These cases are covered by `integration-tests/stdlib/aivi/linear_algebra/linear_algebra.aivi`.
+The success-path examples are covered by `integration-tests/stdlib/aivi/linear_algebra/linear_algebra.aivi`, and the runtime validation bullets above are regression-tested in `crates/aivi/tests/linalg_runtime.rs`.
 
 ## See also
 

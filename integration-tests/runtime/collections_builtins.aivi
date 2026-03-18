@@ -3,110 +3,109 @@ module integrationTests.runtime.collectionsBuiltins
 
 use aivi
 use aivi.testing
-use aivi.map
 
 // --- Map.empty and basic operations ---
 
 @test "map empty has size 0"
 mapEmptySize = do Effect {
-  m = empty
-  assertEq (size m) 0
+  m = Map.empty
+  assertEq (Map.size m) 0
 }
 
 @test "map insert and get"
 mapInsertGet = do Effect {
-  m = insert "a" 1 empty
-  assertEq (get "a" m) (Some 1)
-  assertEq (get "b" m) None
+  m = Map.insert "a" 1 Map.empty
+  assertEq (Map.get "a" m) (Some 1)
+  assertEq (Map.get "b" m) None
 }
 
 @test "map size after inserts"
 mapSizeInserts = do Effect {
-  m = insert "a" 1 (insert "b" 2 empty)
-  assertEq (size m) 2
+  m = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
+  assertEq (Map.size m) 2
 }
 
 @test "map has"
 mapHas = do Effect {
-  m = insert "x" 42 empty
-  assertEq (has "x" m) True
-  assertEq (has "y" m) False
+  m = Map.insert "x" 42 Map.empty
+  assertEq (Map.has "x" m) True
+  assertEq (Map.has "y" m) False
 }
 
 @test "map remove"
 mapRemove = do Effect {
-  m  = insert "a" 1 (insert "b" 2 empty)
-  m2 = remove "a" m
-  assertEq (get "a" m2) None
-  assertEq (get "b" m2) (Some 2)
+  m  = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
+  m2 = Map.remove "a" m
+  assertEq (Map.get "a" m2) None
+  assertEq (Map.get "b" m2) (Some 2)
 }
 
 @test "map update existing"
 mapUpdate = do Effect {
-  m  = insert "a" 10 empty
-  m2 = update "a" (v => v + 5) m
-  assertEq (get "a" m2) (Some 15)
+  m  = Map.insert "a" 10 Map.empty
+  m2 = Map.update "a" (v => v + 5) m
+  assertEq (Map.get "a" m2) (Some 15)
 }
 
 @test "map update missing key unchanged"
 mapUpdateMissing = do Effect {
-  m  = insert "a" 10 empty
-  m2 = update "b" (v => v + 5) m
-  assertEq (size m2) 1
+  m  = Map.insert "a" 10 Map.empty
+  m2 = Map.update "b" (v => v + 5) m
+  assertEq (Map.size m2) 1
 }
 
 @test "map keys"
 mapKeys = do Effect {
-  m  = insert "a" 1 empty
-  ks = keys m
+  m  = Map.insert "a" 1 Map.empty
+  ks = Map.keys m
   assertEq ks ["a"]
 }
 
 @test "map values"
 mapValues = do Effect {
-  m  = insert "a" 1 empty
-  vs = values m
+  m  = Map.insert "a" 1 Map.empty
+  vs = Map.values m
   assertEq vs [1]
 }
 
 @test "map fromList and toList"
 mapFromList = do Effect {
-  m = fromList [("a", 1), ("b", 2)]
-  assertEq (get "a" m) (Some 1)
-  assertEq (get "b" m) (Some 2)
-  assertEq (size m) 2
+  m = Map.fromList [("a", 1), ("b", 2)]
+  assertEq (Map.get "a" m) (Some 1)
+  assertEq (Map.get "b" m) (Some 2)
+  assertEq (Map.size m) 2
 }
 
 @test "map union"
 mapUnion = do Effect {
-  m1 = fromList [("a", 1)]
-  m2 = fromList [("b", 2)]
-  m3 = union m1 m2
-  assertEq (get "a" m3) (Some 1)
-  assertEq (get "b" m3) (Some 2)
+  m1 = Map.fromList [("a", 1)]
+  m2 = Map.fromList [("b", 2)]
+  m3 = Map.union m1 m2
+  assertEq (Map.get "a" m3) (Some 1)
+  assertEq (Map.get "b" m3) (Some 2)
 }
 
 @test "map union right overrides"
 mapUnionOverride = do Effect {
-  m1 = fromList [("a", 1)]
-  m2 = fromList [("a", 2)]
-  m3 = union m1 m2
-  assertEq (get "a" m3) (Some 2)
+  m1 = Map.fromList [("a", 1)]
+  m2 = Map.fromList [("a", 2)]
+  m3 = Map.union m1 m2
+  assertEq (Map.get "a" m3) (Some 2)
 }
 
 @test "map getOrElse"
 mapGetOrElse = do Effect {
-  m = fromList [("a", 1)]
-  assertEq (getOrElse "a" 0 m) 1
-  assertEq (getOrElse "b" 0 m) 0
+  m = Map.fromList [("a", 1)]
+  assertEq (Map.getOrElse "a" 0 m) 1
+  assertEq (Map.getOrElse "b" 0 m) 0
 }
 
 @test "map map values"
 mapMapValues = do Effect {
-  m  = fromList [("a", 1), ("b", 2)]
-  m2 = map (v => v * 10) m
-  assertEq (get "a" m2) (Some 10)
-  assertEq (get "b" m2) (Some 20)
+  m  = Map.fromList [("a", 1), ("b", 2)]
+  m2 = Map.map (v => v * 10) m
+  assertEq (Map.get "a" m2) (Some 10)
+  assertEq (Map.get "b" m2) (Some 20)
 }
 
 // --- Set operations ---
@@ -120,16 +119,16 @@ setEmptySize = do Effect {
 @test "set insert and contains"
 setInsertContains = do Effect {
   s = Set.insert 1 (Set.insert 2 Set.empty)
-  assertEq (Set.contains 1 s) True
-  assertEq (Set.contains 3 s) False
+  assertEq (Set.has 1 s) True
+  assertEq (Set.has 3 s) False
 }
 
 @test "set remove"
 setRemove = do Effect {
   s  = Set.insert 1 (Set.insert 2 Set.empty)
   s2 = Set.remove 1 s
-  assertEq (Set.contains 1 s2) False
-  assertEq (Set.contains 2 s2) True
+  assertEq (Set.has 1 s2) False
+  assertEq (Set.has 2 s2) True
 }
 
 @test "set union"
@@ -138,8 +137,8 @@ setUnion = do Effect {
   s2 = Set.fromList [3, 4, 5]
   s3 = Set.union s1 s2
   assertEq (Set.size s3) 5
-  assertEq (Set.contains 1 s3) True
-  assertEq (Set.contains 5 s3) True
+  assertEq (Set.has 1 s3) True
+  assertEq (Set.has 5 s3) True
 }
 
 @test "set intersection"
@@ -148,9 +147,9 @@ setIntersection = do Effect {
   s2 = Set.fromList [2, 3, 4]
   s3 = Set.intersection s1 s2
   assertEq (Set.size s3) 2
-  assertEq (Set.contains 2 s3) True
-  assertEq (Set.contains 3 s3) True
-  assertEq (Set.contains 1 s3) False
+  assertEq (Set.has 2 s3) True
+  assertEq (Set.has 3 s3) True
+  assertEq (Set.has 1 s3) False
 }
 
 @test "set difference"
@@ -159,8 +158,8 @@ setDifference = do Effect {
   s2 = Set.fromList [2, 3, 4]
   s3 = Set.difference s1 s2
   assertEq (Set.size s3) 1
-  assertEq (Set.contains 1 s3) True
-  assertEq (Set.contains 2 s3) False
+  assertEq (Set.has 1 s3) True
+  assertEq (Set.has 2 s3) False
 }
 
 @test "set fromList deduplicates"

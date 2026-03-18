@@ -8,7 +8,7 @@ export foldr, scanl
 export take, drop, takeWhile, dropWhile, partition, find, findMap
 export at, indexOf, zip, zipWith, unzip, intersperse, chunk, dedup, uniqueBy
 export any, all, elem, dropLast, last
-export traverse_, sequence_, mapM, mapM_, forM, forM_, forEachEffect
+export traverse_, sequence_
 
 use aivi
 
@@ -107,24 +107,4 @@ sequence_ = xs => {
   traverse_ run xs
 }
 
-mapM : (A -> Effect E B) -> List A -> Effect E (List B)
-mapM = f xs => xs match
-  | []           => pure []
-  | [x, ...rest] => do Effect {
-    y <- f x
-    ys <- mapM f rest
-    pure [y, ...ys]
-  }
-
-mapM_ : (A -> Effect E B) -> List A -> Effect E Unit
-mapM_ = traverse_
-
-forM : List A -> (A -> Effect E B) -> Effect E (List B)
-forM = xs f => mapM f xs
-
-forM_ : List A -> (A -> Effect E B) -> Effect E Unit
-forM_ = xs f => traverse_ f xs
-
-forEachEffect : (A -> Effect E B) -> List A -> Effect E Unit
-forEachEffect = mapM_
 "#;

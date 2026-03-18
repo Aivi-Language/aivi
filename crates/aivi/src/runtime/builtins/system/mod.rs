@@ -607,8 +607,8 @@ mod system_json_tests {
 
     #[test]
     fn json_to_runtime_with_schema_wraps_nested_optional_floats_inside_lists() {
-        let schema = crate::runtime::json_schema::JsonSchema::Record(
-            std::collections::BTreeMap::from([(
+        let schema =
+            crate::runtime::json_schema::JsonSchema::Record(std::collections::BTreeMap::from([(
                 "orders".to_string(),
                 crate::runtime::json_schema::JsonSchema::List(Box::new(
                     crate::runtime::json_schema::JsonSchema::Record(
@@ -620,8 +620,7 @@ mod system_json_tests {
                         )]),
                     ),
                 )),
-            )]),
-        );
+            )]));
 
         let value = json_to_runtime_with_schema(
             &json!({

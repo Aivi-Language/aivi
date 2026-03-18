@@ -1739,7 +1739,7 @@ mod tests {
 
         // Read from main thread while writer is going
         let mut read_count = 0u64;
-        while !done.load(std::sync::atomic::Ordering::Acquire) {
+        loop {
             let val = expect_int(
                 runtime
                     .reactive_get_signal(source.clone())
@@ -1747,6 +1747,9 @@ mod tests {
             );
             assert!((0..=200).contains(&val), "unexpected value: {val}");
             read_count += 1;
+            if done.load(std::sync::atomic::Ordering::Acquire) {
+                break;
+            }
         }
         writer.join().expect("writer thread should not panic");
         assert!(read_count > 0, "main thread should have read at least once");

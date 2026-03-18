@@ -39,7 +39,6 @@ mod linear_algebra;
 mod list;
 mod log;
 mod logic;
-mod map;
 mod math;
 mod matrix;
 mod network_facade;
@@ -327,10 +326,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: json::MODULE_NAME,
         source: json::SOURCE,
-    },
-    EmbeddedModule {
-        name: map::MODULE_NAME,
-        source: map::SOURCE,
     },
     EmbeddedModule {
         name: validation::MODULE_NAME,

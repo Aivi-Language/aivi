@@ -444,6 +444,38 @@ fn is_strict_record_subset(
     rlen > 0 && rlen < input_ks.len() && result_fields.keys().all(|k| input_ks.contains(k))
 }
 
+fn is_database_table_delta_operands(lhs: &Value, rhs: &Value) -> bool {
+    let lhs_keys = record_key_set(lhs);
+    let Some(lhs_keys) = lhs_keys else {
+        return false;
+    };
+    let looks_like_table = ["name", "columns", "rows"]
+        .into_iter()
+        .all(|key| lhs_keys.contains(key));
+    let looks_like_delta = matches!(
+        rhs,
+        Value::Constructor { name, .. }
+            if matches!(name.as_str(), "Insert" | "Update" | "Delete" | "Upsert")
+    );
+    looks_like_table && looks_like_delta
+}
+
+fn is_multiclause_shape_mismatch(err: &RuntimeError, lhs: &Value, rhs: &Value) -> bool {
+    if !matches!(lhs, Value::Record(_)) && !matches!(rhs, Value::Record(_)) {
+        return false;
+    }
+    match err {
+        RuntimeError::Context { source, .. } => is_multiclause_shape_mismatch(source, lhs, rhs),
+        RuntimeError::Message(message) => {
+            (message.starts_with("field `") && message.ends_with("does not exist on this record"))
+                || message.starts_with("tried to access field `")
+        }
+        RuntimeError::InvalidArgument { reason, .. } => reason.starts_with("missing field '"),
+        RuntimeError::TypeError { .. } => true,
+        _ => false,
+    }
+}
+
 /// Uses the built-in evaluation first, then falls back to looking up the
 /// operator in globals if not found.
 ///
@@ -495,6 +527,14 @@ pub extern "C" fn rt_binary_op(
                 let rhs_keys = record_key_set(&rhs);
                 let mut subset_fallback: Option<Value> = None;
                 let mut fallback_result: Option<Value> = None;
+                let mut shape_error: Option<(
+                    RuntimeError,
+                    Option<crate::runtime::RuntimeSnapshot>,
+                )> = None;
+                let mut last_error: Option<(
+                    RuntimeError,
+                    Option<crate::runtime::RuntimeSnapshot>,
+                )> = None;
                 for clause in clauses.into_iter() {
                     let wc = runtime.jit_rt_warning_count;
                     // Save global state so each clause trial starts clean.
@@ -506,47 +546,110 @@ pub extern "C" fn rt_binary_op(
                     let saved_loc = runtime.jit_current_loc.clone();
                     runtime.jit_match_failed = false;
                     runtime.jit_match_snapshot = None;
-                    if let Ok(applied) = runtime.apply(clause, lhs.clone()) {
-                        if let Ok(result) = runtime.apply(applied, rhs.clone()) {
-                            let warns = runtime.jit_rt_warning_count - wc;
-                            if warns == 0
-                                && !runtime.jit_match_failed
-                                && runtime.jit_pending_error.is_none()
-                            {
-                                // Skip Effect results when operands are non-Effect
-                                // values. Domain operators like aivi.database.(+)
-                                // accept any args and return an Effect thunk without
-                                // validating input types; prefer a pure clause.
-                                let is_effect_mismatch = matches!(&result, Value::Effect(_))
-                                    && !matches!(&lhs, Value::Effect(_))
-                                    && !matches!(&rhs, Value::Effect(_));
-                                if is_effect_mismatch {
-                                    if fallback_result.is_none() {
-                                        fallback_result = Some(result);
+                    match runtime.apply(clause, lhs.clone()) {
+                        Ok(applied) => match runtime.apply(applied, rhs.clone()) {
+                            Ok(result) => {
+                                let warns = runtime.jit_rt_warning_count - wc;
+                                let pending_error = runtime
+                                    .jit_pending_error
+                                    .take()
+                                    .map(|err| (err, runtime.jit_pending_snapshot.take()));
+                                if let Some((err, snapshot)) = pending_error {
+                                    if is_multiclause_shape_mismatch(&err, &lhs, &rhs) {
+                                        if shape_error.is_none() {
+                                            shape_error = Some((err, snapshot));
+                                        }
+                                    } else {
+                                        last_error = Some((err, snapshot));
                                     }
-                                } else if is_strict_record_subset(&result, &input_keys)
-                                    || is_strict_record_subset(&result, &rhs_keys)
-                                {
-                                    // If the result is a record with strictly fewer
-                                    // fields that are all a subset of either operand's
-                                    // record fields, this is a sub-type match (e.g. Point2.(+)
-                                    // on Point3 args or Mat2.(×) on Mat3/Vec3 args). Skip it in
-                                    // favor of a more specific clause, but keep as fallback.
-                                    if subset_fallback.is_none() {
-                                        subset_fallback = Some(result);
+                                } else if warns == 0 && !runtime.jit_match_failed {
+                                    // Skip Effect results when operands are non-Effect
+                                    // values. Domain operators like aivi.database.(+)
+                                    // accept any args and return an Effect thunk without
+                                    // validating input types; prefer a pure clause.
+                                    let is_effect_mismatch = matches!(&result, Value::Effect(_))
+                                        && !matches!(&lhs, Value::Effect(_))
+                                        && !matches!(&rhs, Value::Effect(_));
+                                    if is_effect_mismatch {
+                                        if op == "+"
+                                            && is_database_table_delta_operands(&lhs, &rhs)
+                                        {
+                                            runtime.jit_binary_op_dispatching = false;
+                                            runtime.jit_pending_error = saved_pending;
+                                            runtime.jit_pending_snapshot = saved_pending_snapshot;
+                                            runtime.jit_match_failed = saved_match_failed;
+                                            runtime.jit_match_snapshot = saved_match_snapshot;
+                                            return abi::box_value(result);
+                                        }
+                                        if fallback_result.is_none() {
+                                            fallback_result = Some(result);
+                                        }
+                                    } else if is_strict_record_subset(&result, &input_keys)
+                                        || is_strict_record_subset(&result, &rhs_keys)
+                                    {
+                                        // If the result is a record with strictly fewer
+                                        // fields that are all a subset of either operand's
+                                        // record fields, this is a sub-type match (e.g. Point2.(+)
+                                        // on Point3 args or Mat2.(×) on Mat3/Vec3 args). Skip it in
+                                        // favor of a more specific clause, but keep as fallback.
+                                        if subset_fallback.is_none() {
+                                            subset_fallback = Some(result);
+                                        }
+                                    } else {
+                                        // Clean match — accept.
+                                        runtime.jit_binary_op_dispatching = false;
+                                        runtime.jit_pending_error = saved_pending;
+                                        runtime.jit_pending_snapshot = saved_pending_snapshot;
+                                        runtime.jit_match_failed = saved_match_failed;
+                                        runtime.jit_match_snapshot = saved_match_snapshot;
+                                        return abi::box_value(result);
+                                    }
+                                } else if fallback_result.is_none() && !runtime.jit_match_failed {
+                                    // Produced warnings — keep as fallback.
+                                    fallback_result = Some(result);
+                                }
+                            }
+                            Err(err) => {
+                                let is_match_failure = matches!(
+                                    &err,
+                                    RuntimeError::NonExhaustiveMatch { .. }
+                                ) || matches!(
+                                    &err,
+                                    RuntimeError::Message(message)
+                                        if message == "non-exhaustive match"
+                                            || message.starts_with("non-exhaustive match ")
+                                );
+                                if !is_match_failure {
+                                    let snapshot = runtime.take_snapshot_for_error(&err);
+                                    if is_multiclause_shape_mismatch(&err, &lhs, &rhs) {
+                                        if shape_error.is_none() {
+                                            shape_error = Some((err, snapshot));
+                                        }
+                                    } else {
+                                        last_error = Some((err, snapshot));
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            let is_match_failure = matches!(
+                                &err,
+                                RuntimeError::NonExhaustiveMatch { .. }
+                            ) || matches!(
+                                &err,
+                                RuntimeError::Message(message)
+                                    if message == "non-exhaustive match"
+                                        || message.starts_with("non-exhaustive match ")
+                            );
+                            if !is_match_failure {
+                                let snapshot = runtime.take_snapshot_for_error(&err);
+                                if is_multiclause_shape_mismatch(&err, &lhs, &rhs) {
+                                    if shape_error.is_none() {
+                                        shape_error = Some((err, snapshot));
                                     }
                                 } else {
-                                    // Clean match — accept.
-                                    runtime.jit_binary_op_dispatching = false;
-                                    runtime.jit_pending_error = saved_pending;
-                                    runtime.jit_pending_snapshot = saved_pending_snapshot;
-                                    runtime.jit_match_failed = saved_match_failed;
-                                    runtime.jit_match_snapshot = saved_match_snapshot;
-                                    return abi::box_value(result);
+                                    last_error = Some((err, snapshot));
                                 }
-                            } else if fallback_result.is_none() && !runtime.jit_match_failed {
-                                // Produced warnings — keep as fallback.
-                                fallback_result = Some(result);
                             }
                         }
                     }
@@ -560,8 +663,18 @@ pub extern "C" fn rt_binary_op(
                     runtime.jit_rt_warning_count = wc;
                 }
                 runtime.jit_binary_op_dispatching = false;
+                if let Some((err, snapshot)) = last_error {
+                    runtime.jit_pending_error = Some(err);
+                    runtime.jit_pending_snapshot = snapshot;
+                    return abi::box_value(Value::Unit);
+                }
                 if let Some(result) = subset_fallback {
                     return abi::box_value(result);
+                }
+                if let Some((err, snapshot)) = shape_error {
+                    runtime.jit_pending_error = Some(err);
+                    runtime.jit_pending_snapshot = snapshot;
+                    return abi::box_value(Value::Unit);
                 }
                 if let Some(result) = fallback_result {
                     return abi::box_value(result);
@@ -683,6 +796,137 @@ mod patterns_tests {
                 .start_position_text(),
             "caller:1:1"
         );
+        assert!(runtime.jit_pending_error.is_none());
+    }
+
+    #[test]
+    fn multiclause_propagates_hard_error_over_warning_fallback() {
+        let mut runtime = test_runtime();
+        runtime.ctx.globals.set(
+            "(/)".to_string(),
+            Value::MultiClause(vec![
+                builtin2("rational-div", |_args, _runtime| {
+                    Err(RuntimeError::DivisionByZero {
+                        context: "rational.div".into(),
+                    })
+                }),
+                builtin2("path-fallback", |_args, runtime| {
+                    runtime.jit_rt_warning_count += 1;
+                    Ok(Value::Unit)
+                }),
+            ]),
+        );
+
+        let lhs = Value::Rational(Arc::new(num_rational::BigRational::new(
+            num_bigint::BigInt::from(1),
+            num_bigint::BigInt::from(2),
+        )));
+        let rhs = Value::Rational(Arc::new(num_rational::BigRational::new(
+            num_bigint::BigInt::from(0),
+            num_bigint::BigInt::from(1),
+        )));
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+        let result_ptr = rt_binary_op(&mut ctx, b"/".as_ptr(), 1, &lhs, &rhs);
+        let result = unsafe { crate::cranelift_backend::abi::unbox_value(result_ptr) };
+
+        assert!(matches!(result, Value::Unit));
+        assert!(matches!(
+            runtime.jit_pending_error,
+            Some(RuntimeError::DivisionByZero { ref context }) if context == "rational.div"
+        ));
+    }
+
+    #[test]
+    fn multiclause_prefers_domain_error_over_record_shape_mismatch() {
+        let mut runtime = test_runtime();
+        runtime.ctx.globals.set(
+            "(+)".to_string(),
+            Value::MultiClause(vec![
+                builtin2("quaternion-clause", |_args, runtime| {
+                    runtime.jit_pending_error = Some(RuntimeError::Message(
+                        "field `w` does not exist on this record".to_string(),
+                    ));
+                    Ok(Value::Unit)
+                }),
+                builtin2("linalg-clause", |_args, _runtime| {
+                    Err(RuntimeError::Message(
+                        "linalg.addVec expects vectors of equal size".to_string(),
+                    ))
+                }),
+            ]),
+        );
+
+        let lhs = Value::Record(Arc::new(std::collections::HashMap::from([
+            ("size".to_string(), Value::Int(2)),
+            (
+                "data".to_string(),
+                Value::List(Arc::new(vec![Value::Float(1.0), Value::Float(2.0)])),
+            ),
+        ])));
+        let rhs = Value::Record(Arc::new(std::collections::HashMap::from([
+            ("size".to_string(), Value::Int(3)),
+            (
+                "data".to_string(),
+                Value::List(Arc::new(vec![
+                    Value::Float(3.0),
+                    Value::Float(4.0),
+                    Value::Float(5.0),
+                ])),
+            ),
+        ])));
+
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+        let result_ptr = rt_binary_op(&mut ctx, b"+".as_ptr(), 1, &lhs, &rhs);
+        let result = unsafe { crate::cranelift_backend::abi::unbox_value(result_ptr) };
+
+        assert!(matches!(result, Value::Unit));
+        assert!(matches!(
+            runtime.jit_pending_error,
+            Some(RuntimeError::Message(ref message))
+                if message == "linalg.addVec expects vectors of equal size"
+        ));
+    }
+
+    #[test]
+    fn multiclause_prefers_database_effect_for_table_delta_operands() {
+        let mut runtime = test_runtime();
+        runtime.ctx.globals.set(
+            "(+)".to_string(),
+            Value::MultiClause(vec![
+                builtin2("database-clause", |_args, _runtime| {
+                    Ok(Value::Effect(Arc::new(
+                        crate::runtime::values::EffectValue::Thunk {
+                            func: Arc::new(|_runtime| Ok(Value::Unit)),
+                        },
+                    )))
+                }),
+                builtin2("color-clause", |_args, runtime| {
+                    runtime.jit_pending_error = Some(RuntimeError::NonExhaustiveMatch {
+                        scrutinee: Some("Insert".to_string()),
+                    });
+                    Ok(Value::Unit)
+                }),
+            ]),
+        );
+
+        let lhs = Value::Record(Arc::new(std::collections::HashMap::from([
+            ("name".to_string(), Value::Text("users".to_string())),
+            ("columns".to_string(), Value::List(Arc::new(Vec::new()))),
+            ("rows".to_string(), Value::List(Arc::new(Vec::new()))),
+        ])));
+        let rhs = Value::Constructor {
+            name: "Insert".to_string(),
+            args: vec![Value::Record(Arc::new(std::collections::HashMap::from([(
+                "id".to_string(),
+                Value::Int(1),
+            )])))],
+        };
+
+        let mut ctx = unsafe { JitRuntimeCtx::from_runtime(&mut runtime) };
+        let result_ptr = rt_binary_op(&mut ctx, b"+".as_ptr(), 1, &lhs, &rhs);
+        let result = unsafe { crate::cranelift_backend::abi::unbox_value(result_ptr) };
+
+        assert!(matches!(result, Value::Effect(_)));
         assert!(runtime.jit_pending_error.is_none());
     }
 }

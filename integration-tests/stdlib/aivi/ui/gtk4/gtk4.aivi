@@ -190,23 +190,32 @@ keyed_each_mounts = do Effect {
     assertEq True True
 }
 
-@test "manual mount helpers remain available"
-manual_mount_helpers_available = do Effect {
-  _ = init
-  _ = appNew
-  _ = windowNew
-  _ = mountAppWindow
-  _ = runGtkApp
-  _ = windowSetChild
-  _ = windowPresent
-  _ = appRun
-  _ = buildFromNode
-  _ = buildWithIds
-  _ = reconcileNode
-  _ = signalPoll
-  _ = signalStream
-  _ = signalEmit
-  _ = gtkSetInterval
+@test "curated gtk imperative escape hatches remain available"
+curated_gtk_escape_hatches_available = do Effect {
+  _               = init
+  _               = appNew
+  _               = windowNew
+  _               = mountAppWindow
+  _               = runGtkApp
+  _               = windowSetChild
+  _               = windowPresent
+  _               = appRun
+  _               = buildFromNode
+  _               = buildWithIds
+  _               = reconcileNode
+  _               = signalPoll
+  _               = signalStream
+  _               = signalEmit
+  makeMenuModel   = () => menuModelNew Unit
+  appendMenuItem  = menuId => menuModelAppendItem menuId "Preferences" "app.preferences"
+  attachMenuModel = buttonId => modelId => menuButtonSetMenuModel buttonId modelId
+  openDocs        = () => osOpenUri "https://example.com/docs"
+  startTickFeed   = () => gtkSetInterval 1000
+  _               = makeMenuModel
+  _               = appendMenuItem
+  _               = attachMenuModel
+  _               = openDocs
+  _               = startTickFeed
   assertEq True True
 }
 

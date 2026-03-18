@@ -122,8 +122,8 @@ pub(super) fn build_sockets_record() -> Value {
                 func: Arc::new(move |_| {
                     let addr = address_from_value(address.clone(), "sockets.listen")
                         .map_err(socket_error_from_runtime)?;
-                    let listener = TcpListener::bind(addr)
-                        .map_err(|err| socket_error(err.to_string()))?;
+                    let listener =
+                        TcpListener::bind(addr).map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Listener(Arc::new(Mutex::new(Some(listener)))))
                 }),
             };
@@ -159,8 +159,8 @@ pub(super) fn build_sockets_record() -> Value {
                 func: Arc::new(move |_| {
                     let addr = address_from_value(address.clone(), "sockets.connect")
                         .map_err(socket_error_from_runtime)?;
-                    let stream = TcpStream::connect(addr)
-                        .map_err(|err| socket_error(err.to_string()))?;
+                    let stream =
+                        TcpStream::connect(addr).map_err(|err| socket_error(err.to_string()))?;
                     Ok(Value::Connection(Arc::new(Mutex::new(stream))))
                 }),
             };
@@ -295,7 +295,8 @@ mod tests {
 
     #[test]
     fn list_int_to_bytes_rejects_out_of_range_bytes() {
-        let err = list_int_to_bytes(Value::List(Arc::new(vec![Value::Int(256)])), "ctx").unwrap_err();
+        let err =
+            list_int_to_bytes(Value::List(Arc::new(vec![Value::Int(256)])), "ctx").unwrap_err();
         assert!(matches!(
             err,
             RuntimeError::InvalidArgument { reason, .. } if reason == "byte value must be in 0..255"

@@ -201,8 +201,6 @@ dependencies = [
  "image",
  "serde",
  "serde_json",
- "tokio",
- "zbus",
 ]
 
 [[package]]

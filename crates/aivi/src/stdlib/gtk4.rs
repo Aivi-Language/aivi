@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.ui.gtk4";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui.gtk4
-export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, MenuModelId, MenuButtonId, DialogId, ImageId, GestureClickId, ActionId, OverlayId, SeparatorId, GtkError
+export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, MenuModelId, ImageId, GestureClickId, ActionId, OverlayId, SeparatorId, GtkError
 export GtkBindingHandle
 export GtkNode, GtkAttr
 export GtkElement, GtkTextNode, GtkBoundText, GtkShowNode, GtkEachNode
@@ -28,18 +28,15 @@ export drawAreaNew, drawAreaSetContentSize, drawAreaQueueDraw
 export widgetSetCss, appSetCss
 export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource, imageNewFromIconName, imageSetPixelSize
 export iconThemeAddSearchPath
-export TrayIconId, trayIconNew, trayIconSetTooltip, trayIconSetVisible, trayIconSetMenuItems
-export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
-export dialogNew, dialogSetTitle, dialogSetChild, dialogPresent, dialogClose, adwDialogPresent, signalBindDialogPresent
+export menuModelNew, menuModelAppendItem, menuButtonSetMenuModel
 export gestureClickNew, gestureClickLastButton, widgetAddController
 export actionNew, actionSetEnabled, appAddAction
-export osOpenUri, osSetBadgeCount, osThemePreference
+export osOpenUri
 export gtkElement, gtkTextNode, gtkBoundText, gtkShow, gtkEach, gtkEachKeyed
 export gtkStaticAttr, gtkBoundAttr, gtkStaticProp, gtkBoundProp, gtkEventAttr, gtkEventSugarAttr, gtkIdAttr, gtkRefAttr
 export buildFromNode, buildWithIds, reconcileNode
-export signalPoll, signalEmit, signalStream, dbusServerStart
+export signalPoll, signalEmit, signalStream
 export widgetById, widgetGetBoolProperty, widgetGetCalendarDate, widgetSetBoolProperty, widgetSetCalendarDate
-export trayNotifyPersonalEmail, traySetEmailSuggestions
 export gtkSetInterval
 
 use aivi
@@ -54,8 +51,6 @@ EntryId = Int
 ScrollAreaId = Int
 DrawAreaId = Int
 MenuModelId = Int
-MenuButtonId = Int
-DialogId = Int
 ImageId = Int
 GestureClickId = Int
 ActionId = Int
@@ -158,10 +153,6 @@ signalPoll = gtk4.signalPoll
 
 signalStream : Unit -> Effect GtkError (Recv GtkSignalEvent)
 signalStream = gtk4.signalStream
-
-dbusServerStart : Unit -> Effect GtkError Unit
-dbusServerStart = gtk4.dbusServerStart
-
 signalEmit : WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 signalEmit = gtk4.signalEmit
 
@@ -365,52 +356,14 @@ widgetSetCss = gtk4.widgetSetCss
 appSetCss : AppId -> Text -> Effect GtkError Unit
 appSetCss = gtk4.appSetCss
 
-TrayIconId = Int
-
-trayIconNew : Text -> Text -> Effect GtkError TrayIconId
-trayIconNew = gtk4.trayIconNew
-
-trayIconSetTooltip : TrayIconId -> Text -> Effect GtkError Unit
-trayIconSetTooltip = gtk4.trayIconSetTooltip
-
-trayIconSetVisible : TrayIconId -> Bool -> Effect GtkError Unit
-trayIconSetVisible = gtk4.trayIconSetVisible
-
-trayIconSetMenuItems : TrayIconId -> List { label: Text, action: Text } -> Effect GtkError Unit
-trayIconSetMenuItems = gtk4.trayIconSetMenuItems
-
 menuModelNew : Unit -> Effect GtkError MenuModelId
 menuModelNew = gtk4.menuModelNew
 
 menuModelAppendItem : MenuModelId -> Text -> Text -> Effect GtkError Unit
 menuModelAppendItem = gtk4.menuModelAppendItem
 
-menuButtonNew : Text -> Effect GtkError MenuButtonId
-menuButtonNew = gtk4.menuButtonNew
-
-menuButtonSetMenuModel : MenuButtonId -> MenuModelId -> Effect GtkError Unit
+menuButtonSetMenuModel : WidgetId -> MenuModelId -> Effect GtkError Unit
 menuButtonSetMenuModel = gtk4.menuButtonSetMenuModel
-
-dialogNew : AppId -> Effect GtkError DialogId
-dialogNew = gtk4.dialogNew
-
-dialogSetTitle : DialogId -> Text -> Effect GtkError Unit
-dialogSetTitle = gtk4.dialogSetTitle
-
-dialogSetChild : DialogId -> WidgetId -> Effect GtkError Unit
-dialogSetChild = gtk4.dialogSetChild
-
-dialogPresent : DialogId -> WindowId -> Effect GtkError Unit
-dialogPresent = gtk4.dialogPresent
-
-dialogClose : DialogId -> Effect GtkError Unit
-dialogClose = gtk4.dialogClose
-
-adwDialogPresent : WidgetId -> WindowId -> Effect GtkError Unit
-adwDialogPresent = gtk4.adwDialogPresent
-
-signalBindDialogPresent : Text -> WidgetId -> WindowId -> Effect GtkError Unit
-signalBindDialogPresent = gtk4.signalBindDialogPresent
 
 imageNewFromFile : Text -> Effect GtkError ImageId
 imageNewFromFile = gtk4.imageNewFromFile
@@ -451,19 +404,7 @@ actionSetEnabled = gtk4.actionSetEnabled
 appAddAction : AppId -> ActionId -> Effect GtkError Unit
 appAddAction = gtk4.appAddAction
 
-osOpenUri : AppId -> Text -> Effect GtkError Unit
-osOpenUri = gtk4.osOpenUri
-
-osSetBadgeCount : AppId -> Int -> Effect GtkError Unit
-osSetBadgeCount = gtk4.osSetBadgeCount
-
-osThemePreference : Unit -> Effect GtkError Text
-osThemePreference = gtk4.osThemePreference
-
-trayNotifyPersonalEmail : Text -> Text -> Text -> Text -> Effect GtkError Unit
-trayNotifyPersonalEmail = gtk4.trayNotifyPersonalEmail
-
-traySetEmailSuggestions : List Text -> Effect GtkError Unit
-traySetEmailSuggestions = gtk4.traySetEmailSuggestions
+osOpenUri : Text -> Effect GtkError Unit
+osOpenUri = uri => gtk4.osOpenUri uri
 
 "#;

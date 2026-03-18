@@ -120,7 +120,10 @@ fn at_zone_value(zdt_val: Value, target_zone_val: Value) -> Result<Value, Runtim
     let offset_millis = i64::from(target_zdt.offset().fix().local_minus_utc()) * 1000;
 
     let mut result = HashMap::new();
-    result.insert("dateTime".to_string(), datetime_to_value(target_zdt.naive_local()));
+    result.insert(
+        "dateTime".to_string(),
+        datetime_to_value(target_zdt.naive_local()),
+    );
     result.insert("zone".to_string(), target_zone_val);
     result.insert("offset".to_string(), span_value(offset_millis));
 
@@ -175,10 +178,7 @@ mod tests {
         offset_map.insert("millis".to_string(), Value::Int(offset_millis));
 
         let mut zdt_map = HashMap::new();
-        zdt_map.insert(
-            "dateTime".to_string(),
-            Value::DateTime(format!("{local}Z")),
-        );
+        zdt_map.insert("dateTime".to_string(), Value::DateTime(format!("{local}Z")));
         zdt_map.insert("zone".to_string(), zone_value(zone_id));
         zdt_map.insert("offset".to_string(), Value::Record(Arc::new(offset_map)));
 
@@ -195,10 +195,7 @@ mod tests {
         }
     }
 
-    fn record_field<'a>(
-        fields: &'a Arc<HashMap<String, Value>>,
-        name: &str,
-    ) -> &'a Value {
+    fn record_field<'a>(fields: &'a Arc<HashMap<String, Value>>, name: &str) -> &'a Value {
         fields
             .get(name)
             .unwrap_or_else(|| panic!("missing field {name}"))
@@ -238,14 +235,14 @@ mod tests {
             "2024-05-21T19:00:00.123456789Z",
         );
         let offset_fields = unwrap_ok(
-            expect_record(record_field(&tokyo_fields, "offset").clone(), "timezone test"),
+            expect_record(
+                record_field(&tokyo_fields, "offset").clone(),
+                "timezone test",
+            ),
             "offset record",
         );
         expect_int_field(&offset_fields, "millis", 32_400_000);
-        let instant = unwrap_ok(
-            to_instant_value(tokyo),
-            "toInstant should preserve instant",
-        );
+        let instant = unwrap_ok(to_instant_value(tokyo), "toInstant should preserve instant");
         expect_datetime(instant, "2024-05-21T10:00:00.123456789Z");
     }
 

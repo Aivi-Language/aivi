@@ -72,6 +72,84 @@ impl CancelToken {
     }
 }
 
+#[derive(Clone)]
+struct DomainExportSource {
+    module_name: String,
+    members: Vec<String>,
+}
+
+fn local_domain_members(module: &crate::surface::Module, domain_name: &str) -> Option<Vec<String>> {
+    for item in &module.items {
+        let crate::surface::ModuleItem::DomainDecl(domain) = item else {
+            continue;
+        };
+        if domain.name.name != domain_name {
+            continue;
+        }
+        let members = domain
+            .items
+            .iter()
+            .filter_map(|domain_item| match domain_item {
+                crate::surface::DomainItem::Def(def)
+                | crate::surface::DomainItem::LiteralDef(def) => Some(def.name.name.clone()),
+                crate::surface::DomainItem::TypeAlias(_)
+                | crate::surface::DomainItem::TypeSig(_) => None,
+            })
+            .collect();
+        return Some(members);
+    }
+    None
+}
+
+fn resolve_exported_domain_sources(
+    module: &crate::surface::Module,
+    domain_name: &str,
+    surface_by_name: &HashMap<String, &crate::surface::Module>,
+    visited: &mut HashSet<(String, String)>,
+) -> Vec<DomainExportSource> {
+    if !visited.insert((module.name.name.clone(), domain_name.to_string())) {
+        return Vec::new();
+    }
+    if let Some(members) = local_domain_members(module, domain_name) {
+        return vec![DomainExportSource {
+            module_name: module.name.name.clone(),
+            members,
+        }];
+    }
+
+    let mut sources = Vec::new();
+    let mut seen_modules = HashSet::new();
+    for use_decl in &module.uses {
+        let imports_domain = if use_decl.wildcard {
+            surface_by_name
+                .get(&use_decl.module.name)
+                .is_some_and(|target| {
+                    target.exports.iter().any(|export| {
+                        export.kind == crate::surface::ScopeItemKind::Domain
+                            && export.name.name == domain_name
+                    })
+                })
+        } else {
+            use_decl.items.iter().any(|item| {
+                item.kind == crate::surface::ScopeItemKind::Domain && item.name.name == domain_name
+            })
+        };
+        if !imports_domain {
+            continue;
+        }
+        let Some(target) = surface_by_name.get(&use_decl.module.name).copied() else {
+            continue;
+        };
+        for source in resolve_exported_domain_sources(target, domain_name, surface_by_name, visited)
+        {
+            if seen_modules.insert(source.module_name.clone()) {
+                sources.push(source);
+            }
+        }
+    }
+    sources
+}
+
 pub(crate) struct Runtime {
     pub(crate) ctx: Arc<RuntimeContext>,
     cancel: Arc<CancelToken>,
@@ -503,6 +581,7 @@ fn build_runtime_from_program_scoped(
     }
     let mut value_exports: HashMap<String, Vec<String>> = HashMap::new();
     let mut domain_members: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut domain_sources: HashMap<(String, String), Vec<DomainExportSource>> = HashMap::new();
     let mut method_names: HashSet<String> = HashSet::new();
     for module in surface_modules {
         value_exports.insert(
@@ -519,26 +598,26 @@ fn build_runtime_from_program_scoped(
                 continue;
             }
             let domain_name = export.name.name.clone();
+            let sources = resolve_exported_domain_sources(
+                module,
+                &domain_name,
+                &surface_by_name,
+                &mut HashSet::new(),
+            );
             let mut members = Vec::new();
-            for item in &module.items {
-                let crate::surface::ModuleItem::DomainDecl(domain) = item else {
-                    continue;
-                };
-                if domain.name.name != domain_name {
-                    continue;
-                }
-                for domain_item in &domain.items {
-                    match domain_item {
-                        crate::surface::DomainItem::Def(def)
-                        | crate::surface::DomainItem::LiteralDef(def) => {
-                            members.push(def.name.name.clone());
-                        }
-                        crate::surface::DomainItem::TypeAlias(_)
-                        | crate::surface::DomainItem::TypeSig(_) => {}
+            let mut seen_members = HashSet::new();
+            for source in &sources {
+                for member in &source.members {
+                    if seen_members.insert(member.clone()) {
+                        members.push(member.clone());
                     }
                 }
             }
             domain_members.insert((module.name.name.clone(), domain_name), members);
+            domain_sources.insert(
+                (module.name.name.clone(), export.name.name.clone()),
+                sources,
+            );
         }
 
         // Methods (class members) behave like open multi-clause functions at runtime: instances can
@@ -654,6 +733,24 @@ fn build_runtime_from_program_scoped(
                         }
                     }
                 }
+                for ((domain_module, _domain_name), members) in &domain_members {
+                    if domain_module != &imported_mod {
+                        continue;
+                    }
+                    for member in members {
+                        let qualified = format!("{imported_mod}.{member}");
+                        if let Some(value) = globals.get(&qualified) {
+                            if let Some(existing) = module_env.get(member) {
+                                if method_names.contains(member) {
+                                    module_env
+                                        .set(member.clone(), merge_method_binding(existing, value));
+                                    continue;
+                                }
+                            }
+                            module_env.set(member.clone(), value);
+                        }
+                    }
+                }
                 continue;
             }
             for item in &use_decl.items {
@@ -713,21 +810,43 @@ fn build_runtime_from_program_scoped(
             }
         }
 
-        // Re-export forwarding: a module can `export x` where `x` is brought into scope via `use`
-        // (e.g. facade modules like `aivi.linalg`). Ensure qualified access `Module.x` resolves by
-        // registering exported bindings that exist in the module env, even when they aren't local
-        // definitions.
+        // Re-export forwarding: a module can `export x` or `export domain D` where the binding is
+        // brought into scope via `use` (e.g. facade modules like `aivi.linalg`). Ensure qualified
+        // access resolves even when the export is not a local definition.
         for export in &surface_module.exports {
-            if export.kind != crate::surface::ScopeItemKind::Value {
-                continue;
-            }
-            let name = export.name.name.clone();
-            let qualified = format!("{module_name}.{name}");
-            if globals.get(&qualified).is_some() {
-                continue;
-            }
-            if let Some(value) = module_env.get(&name) {
-                globals.set(qualified, value);
+            match export.kind {
+                crate::surface::ScopeItemKind::Value => {
+                    let name = export.name.name.clone();
+                    let qualified = format!("{module_name}.{name}");
+                    if globals.get(&qualified).is_some() {
+                        continue;
+                    }
+                    if let Some(value) = module_env.get(&name) {
+                        globals.set(qualified, value);
+                    }
+                }
+                crate::surface::ScopeItemKind::Domain => {
+                    let key = (module_name.clone(), export.name.name.clone());
+                    let Some(sources) = domain_sources.get(&key) else {
+                        continue;
+                    };
+                    let mut seen_members = HashSet::new();
+                    for source in sources {
+                        for member in &source.members {
+                            if !seen_members.insert(member.clone()) {
+                                continue;
+                            }
+                            let qualified = format!("{module_name}.{member}");
+                            if globals.get(&qualified).is_some() {
+                                continue;
+                            }
+                            let source_qualified = format!("{}.{}", source.module_name, member);
+                            if let Some(value) = globals.get(&source_qualified) {
+                                globals.set(qualified, value);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

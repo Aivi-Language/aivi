@@ -30,7 +30,7 @@ The everyday surface is:
 - input: `onClick`, `onInput`, `onToggle`, `onSelect`, `onKeyPress`, and raw `<signal ... />`
 - effectful actions: `do Event { ... }`
 - app startup: `runGtkApp`
-- lower-level escape hatches: `mountAppWindow`, `buildFromNode`, `buildWithIds`, `reconcileNode`, `signalStream`, `signalPoll`, `signalEmit`
+- lower-level escape hatches: `mountAppWindow`, `buildFromNode`, `buildWithIds`, `reconcileNode`, `signalStream`, `signalPoll`, `signalEmit`, `menuModelNew`, `menuModelAppendItem`, `menuButtonSetMenuModel`, `osOpenUri`, `gtkSetInterval`
 
 ## Lower-level helpers
 
@@ -46,7 +46,13 @@ The everyday surface is:
 | `widgetById` | you want to look up a named widget programmatically |
 | `widgetSetCss` / `appSetCss` | you want imperative CSS injection |
 | `drawAreaQueueDraw` | you want to queue redraw for a custom drawing surface |
-| `menuButtonSetMenuModel` | you are wiring programmatic GMenu infrastructure |
+| `menuModelNew` / `menuModelAppendItem` / `menuButtonSetMenuModel` | you are wiring programmatic GMenu infrastructure around a declarative `GtkMenuButton` |
+| `osOpenUri` | you want to hand a URI to the desktop from a callback or helper |
+| `gtkSetInterval` | you want a repeating low-level `GtkTick` feed for custom integrations |
+
+The imperative escape-hatch surface is intentionally small. Public GTK helpers in this bucket are limited to menu plumbing, desktop URI handoff, and low-level tick feeds.
+
+Imperative dialog construction (`dialog*`, `adwDialogPresent`, `signalBindDialogPresent`), tray/mail helpers, D-Bus server startup, badge counters, and theme probes are intentionally **not** part of the public GTK contract. Use mounted dialog roots with `open={...}` / `onClosed={...}` and ordinary callbacks instead.
 
 For the tutorial flow around those helpers, read [Lifecycle](./gtk4/lifecycle.md). For live inspection and automation, read [MCP Debugging](./gtk4/mcp_debugging.md).
 
@@ -65,12 +71,11 @@ The public contract is:
 
 That means the declarative tree is not limited to a tiny hand-wrapped widget set. In addition to `GtkBox`, `GtkButton`, and `GtkEntry`, the current surface also covers broader families such as `GtkListView`, `GtkColumnView`, `GtkGridView`, `GtkPopover`, `GtkPopoverMenu`, `GtkPopoverMenuBar`, `GtkVideo`, `GtkMediaControls`, `GtkStringList`, `GtkAdjustment`, `GtkSelectionModel` implementations, `GtkFilterListModel`, `GtkSortListModel`, `GtkSignalListItemFactory`, `GtkBuilderListItemFactory`, and layout-manager objects when they are connected through the right property.
 
-Some GTK and libadwaita APIs still make more sense as programmatic helpers than as ordinary tree nodes:
+Some GTK and libadwaita concerns still make more sense as dedicated imperative helpers than as ordinary tree nodes. The current public surface keeps only:
 
-- `GtkAlertDialog` and `GtkFileDialog`, which are asynchronous helper objects,
-- `GSimpleAction` and `GMenu`, which are application-level action/menu infrastructure,
-- animation objects such as `AdwTimedAnimation` and `AdwSpringAnimation`,
-- printing, settings, builder, and other lifecycle-oriented infrastructure such as `GtkPrintOperation`, `GtkSettings`, `GtkStyleContext`, `GtkBuilder`, and `GtkApplication`.
+- application-level action/menu plumbing via `menuModelNew`, `menuModelAppendItem`, and `menuButtonSetMenuModel`,
+- desktop URI handoff via `osOpenUri`,
+- raw main-loop tick feeds via `gtkSetInterval`.
 
 ## Diagnostics
 

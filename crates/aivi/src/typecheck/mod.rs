@@ -155,8 +155,17 @@ fn module_interface_from_setup(
     module: &Module,
     checker: &TypeChecker,
     setup: &ModuleSetup,
+    module_exports: &HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_domain_exports: &HashMap<String, HashMap<String, Vec<String>>>,
 ) -> ModuleInterface {
-    build_module_interface(module, checker, &setup.sigs, &setup.env)
+    build_module_interface(
+        module,
+        checker,
+        &setup.sigs,
+        &setup.env,
+        module_exports,
+        module_domain_exports,
+    )
 }
 
 fn checked_module_env(module: &Module, checker: &mut TypeChecker, setup: &ModuleSetup) -> TypeEnv {
@@ -172,37 +181,32 @@ fn build_module_interface(
     checker: &TypeChecker,
     sigs: &HashMap<String, Vec<Scheme>>,
     env: &TypeEnv,
+    module_exports: &HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_domain_exports: &HashMap<String, HashMap<String, Vec<String>>>,
 ) -> ModuleInterface {
     let mut exports = HashMap::new();
-    let mut insert_export_schemes = |name: &str| {
-        if let Some(schemes) = sigs.get(name) {
-            exports.insert(name.to_string(), schemes.clone());
-        } else if let Some(schemes) = env.get_all(name) {
-            exports.insert(name.to_string(), schemes.to_vec());
-        }
-    };
     for export in &module.exports {
         match export.kind {
             crate::surface::ScopeItemKind::Value => {
-                insert_export_schemes(&export.name.name);
+                insert_export_schemes(&mut exports, &export.name.name, sigs, env);
             }
             crate::surface::ScopeItemKind::Domain => {
                 let domain_name = export.name.name.as_str();
-                for item in &module.items {
-                    let crate::surface::ModuleItem::DomainDecl(domain) = item else {
+                if let Some(members) = local_domain_members(module, domain_name) {
+                    for member in &members {
+                        insert_export_schemes(&mut exports, member, sigs, env);
+                    }
+                    continue;
+                }
+                for (source_module, members) in
+                    imported_domain_sources(module, domain_name, module_domain_exports)
+                {
+                    let Some(source_exports) = module_exports.get(&source_module) else {
                         continue;
                     };
-                    if domain.name.name != domain_name {
-                        continue;
-                    }
-                    for domain_item in &domain.items {
-                        match domain_item {
-                            crate::surface::DomainItem::Def(def)
-                            | crate::surface::DomainItem::LiteralDef(def) => {
-                                insert_export_schemes(&def.name.name);
-                            }
-                            crate::surface::DomainItem::TypeAlias(_)
-                            | crate::surface::DomainItem::TypeSig(_) => {}
+                    for member in members {
+                        if let Some(schemes) = source_exports.get(&member) {
+                            exports.insert(member, schemes.clone());
                         }
                     }
                 }
@@ -239,25 +243,20 @@ fn build_module_interface(
             continue;
         }
         let domain_name = export.name.name.as_str();
-        let mut members = Vec::new();
-        for item in &module.items {
-            let crate::surface::ModuleItem::DomainDecl(domain) = item else {
-                continue;
-            };
-            if domain.name.name != domain_name {
-                continue;
-            }
-            for domain_item in &domain.items {
-                match domain_item {
-                    crate::surface::DomainItem::Def(def)
-                    | crate::surface::DomainItem::LiteralDef(def) => {
-                        members.push(def.name.name.clone());
+        let members = local_domain_members(module, domain_name).unwrap_or_else(|| {
+            let mut members = Vec::new();
+            let mut seen = HashSet::new();
+            for (_, imported_members) in
+                imported_domain_sources(module, domain_name, module_domain_exports)
+            {
+                for member in imported_members {
+                    if seen.insert(member.clone()) {
+                        members.push(member);
                     }
-                    crate::surface::DomainItem::TypeAlias(_)
-                    | crate::surface::DomainItem::TypeSig(_) => {}
                 }
             }
-        }
+            members
+        });
         domain_exports.insert(domain_name.to_string(), members);
     }
 
@@ -270,5 +269,74 @@ fn build_module_interface(
         domain_exports,
         class_exports,
         instance_exports,
+    }
+}
+
+fn local_domain_members(module: &Module, domain_name: &str) -> Option<Vec<String>> {
+    for item in &module.items {
+        let crate::surface::ModuleItem::DomainDecl(domain) = item else {
+            continue;
+        };
+        if domain.name.name != domain_name {
+            continue;
+        }
+        let members = domain
+            .items
+            .iter()
+            .filter_map(|domain_item| match domain_item {
+                crate::surface::DomainItem::Def(def)
+                | crate::surface::DomainItem::LiteralDef(def) => Some(def.name.name.clone()),
+                crate::surface::DomainItem::TypeAlias(_)
+                | crate::surface::DomainItem::TypeSig(_) => None,
+            })
+            .collect();
+        return Some(members);
+    }
+    None
+}
+
+fn imported_domain_sources(
+    module: &Module,
+    domain_name: &str,
+    module_domain_exports: &HashMap<String, HashMap<String, Vec<String>>>,
+) -> Vec<(String, Vec<String>)> {
+    let mut sources = Vec::new();
+    let mut seen_modules = HashSet::new();
+    for use_decl in &module.uses {
+        let imports_domain = if use_decl.wildcard {
+            module_domain_exports
+                .get(&use_decl.module.name)
+                .is_some_and(|domains| domains.contains_key(domain_name))
+        } else {
+            use_decl.items.iter().any(|item| {
+                item.kind == crate::surface::ScopeItemKind::Domain && item.name.name == domain_name
+            })
+        };
+        if !imports_domain {
+            continue;
+        }
+        let Some(domains) = module_domain_exports.get(&use_decl.module.name) else {
+            continue;
+        };
+        let Some(members) = domains.get(domain_name) else {
+            continue;
+        };
+        if seen_modules.insert(use_decl.module.name.clone()) {
+            sources.push((use_decl.module.name.clone(), members.clone()));
+        }
+    }
+    sources
+}
+
+fn insert_export_schemes(
+    exports: &mut HashMap<String, Vec<Scheme>>,
+    name: &str,
+    sigs: &HashMap<String, Vec<Scheme>>,
+    env: &TypeEnv,
+) {
+    if let Some(schemes) = sigs.get(name) {
+        exports.insert(name.to_string(), schemes.clone());
+    } else if let Some(schemes) = env.get_all(name) {
+        exports.insert(name.to_string(), schemes.to_vec());
     }
 }

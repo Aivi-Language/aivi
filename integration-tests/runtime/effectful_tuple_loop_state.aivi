@@ -2,7 +2,6 @@
 module integrationTests.runtime.effectfulTupleLoopState
 
 use aivi
-use aivi.map
 use aivi.testing
 
 @test "tuple loop carries effectful record state"

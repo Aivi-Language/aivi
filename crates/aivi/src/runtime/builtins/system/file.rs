@@ -492,7 +492,9 @@ fn file_source_path(arg: Value, context: &str) -> Result<String, RuntimeError> {
                 expected: "Text".to_string(),
                 got: super::super::util::value_type_name(other).to_string(),
             }),
-            None => Err(RuntimeError::Message(format!("{context} expects config.path"))),
+            None => Err(RuntimeError::Message(format!(
+                "{context} expects config.path"
+            ))),
         },
         other => Err(RuntimeError::TypeError {
             context: context.to_string(),
@@ -607,8 +609,8 @@ fn csv_scalar_to_json(raw: &str, schema: &JsonSchema) -> Result<JsonValue, Strin
             }
             Ok(JsonValue::String(raw.to_string()))
         }
-        JsonSchema::List(_) | JsonSchema::Tuple(_) | JsonSchema::Record(_) => Err(format!(
-            "expected scalar CSV field, got `{schema}`"
-        )),
+        JsonSchema::List(_) | JsonSchema::Tuple(_) | JsonSchema::Record(_) => {
+            Err(format!("expected scalar CSV field, got `{schema}`"))
+        }
     }
 }

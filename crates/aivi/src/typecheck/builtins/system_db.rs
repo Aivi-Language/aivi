@@ -1106,53 +1106,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "menuButtonNew".to_string(),
-                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
-            ),
-            (
                 "menuButtonSetMenuModel".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "dialogNew".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
-            ),
-            (
-                "dialogSetTitle".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "dialogSetChild".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "dialogPresent".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
-            ),
-            (
-                "dialogClose".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
-            ),
-            (
-                "adwDialogPresent".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
@@ -1272,13 +1226,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "dbusServerStart".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect_text_unit.clone()),
-                ),
-            ),
-            (
                 "signalEmit".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),
@@ -1301,26 +1248,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             (
                 "osOpenUri".to_string(),
                 Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(text_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
+                    Box::new(text_ty.clone()),
+                    Box::new(effect_text_unit.clone()),
                 ),
-            ),
-            (
-                "osSetBadgeCount".to_string(),
-                Type::Func(
-                    Box::new(int_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(int_ty.clone()),
-                        Box::new(effect_text_unit.clone()),
-                    )),
-                ),
-            ),
-            (
-                "osThemePreference".to_string(),
-                Type::Func(Box::new(Type::con("Unit")), Box::new(effect_text_text)),
             ),
             (
                 "widgetSetCss".to_string(),

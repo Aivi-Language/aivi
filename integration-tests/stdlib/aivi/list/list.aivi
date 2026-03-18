@@ -17,8 +17,8 @@ list_wrappers = do Effect {
 
 @test "effect traversal helpers"
 effect_traversal_helpers = do Effect {
-  ys <- mapM (x => pure (x + 10)) [1, 2, 3]
+  ys <- traverse (x => pure (x + 10)) [1, 2, 3]
   assertEq ys [11, 12, 13]
-  _ <- forEachEffect (_ => pure Unit) [1, 2, 3]
+  _ <- traverse_ (_ => pure Unit) [1, 2, 3]
   pure Unit
 }

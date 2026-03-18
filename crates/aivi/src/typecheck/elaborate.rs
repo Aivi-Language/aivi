@@ -221,7 +221,14 @@ fn elaborate_modules(
             diagnostics.extend(check_reactive_signal_cycles(module));
         }
 
-        let interface = build_module_interface(module, checker, &setup.sigs, &elaboration_env);
+        let interface = build_module_interface(
+            module,
+            checker,
+            &setup.sigs,
+            &elaboration_env,
+            &state.module_exports,
+            &state.module_domain_exports,
+        );
         state.apply_module_interface(&module.name.name, &interface);
         module_results.push(ElaboratedModule {
             module_name: module.name.name.clone(),

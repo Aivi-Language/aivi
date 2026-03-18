@@ -4,7 +4,7 @@ module integrationTests.stdlib.aivi.database.domain_Database.tests
 use aivi
 use aivi.testing
 use aivi (
-  database (Delete, Insert, Table, Update, Upsert, load, table)
+  database (Delete, Insert, Update, Upsert, load, table)
   database (domain Database)
 )
 

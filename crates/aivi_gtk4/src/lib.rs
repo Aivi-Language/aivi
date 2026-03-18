@@ -608,27 +608,6 @@ mod linux_impl {
     }
 
     static GTK_MAIN_THREAD_ID: OnceLock<ThreadId> = OnceLock::new();
-    static PENDING_TRAY_ACTIONS: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
-    fn pending_tray_actions() -> &'static Mutex<VecDeque<String>> {
-        PENDING_TRAY_ACTIONS.get_or_init(|| Mutex::new(VecDeque::new()))
-    }
-
-    static PENDING_BADGE_UPDATES: OnceLock<Mutex<VecDeque<i64>>> = OnceLock::new();
-    fn pending_badge_updates() -> &'static Mutex<VecDeque<i64>> {
-        PENDING_BADGE_UPDATES.get_or_init(|| Mutex::new(VecDeque::new()))
-    }
-
-    struct PersonalEmailNotif {
-        id: String,
-        from: String,
-        subject: String,
-        markdown_body: String,
-    }
-
-    static PENDING_PERSONAL_EMAILS: OnceLock<Mutex<VecDeque<PersonalEmailNotif>>> = OnceLock::new();
-    fn pending_personal_emails() -> &'static Mutex<VecDeque<PersonalEmailNotif>> {
-        PENDING_PERSONAL_EMAILS.get_or_init(|| Mutex::new(VecDeque::new()))
-    }
 
     static UI_DEBUG_REQUEST_HANDLER: OnceLock<Mutex<Option<Arc<super::UiDebugRequestHandler>>>> =
         OnceLock::new();
@@ -685,11 +664,6 @@ mod linux_impl {
             Some(handler) => handler(),
             None => Ok(()),
         }
-    }
-
-    static EMAIL_SUGGESTIONS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
-    fn email_suggestions() -> &'static Mutex<Vec<String>> {
-        EMAIL_SUGGESTIONS.get_or_init(|| Mutex::new(Vec::new()))
     }
 
     // ── Types ──
@@ -862,10 +836,6 @@ mod linux_impl {
         ToggleCssClass {
             widget_id: i64,
             class_name: String,
-        },
-        PresentDialog {
-            dialog_id: i64,
-            parent_id: i64,
         },
         CleanupRoot {
             root_id: i64,
@@ -2010,37 +1980,6 @@ mod linux_impl {
             assert!(err.message.contains("abstract base class"));
             assert!(err.message.contains("AdwTimedAnimation"));
             assert!(err.message.contains("AdwSpringAnimation"));
-        }
-
-        #[test]
-        fn main_loop_tick_flushes_pending_tray_actions_to_signal_stream() {
-            let _guard = gtk_state_test_guard();
-            pending_tray_actions()
-                .lock()
-                .expect("pending tray actions lock poisoned")
-                .clear();
-            GTK_STATE.with(|state| {
-                let mut state = state.borrow_mut();
-                state.signal_senders.clear();
-                state.signal_events.clear();
-            });
-
-            let receiver = signal_stream().expect("signal stream");
-            pending_tray_actions()
-                .lock()
-                .expect("pending tray actions lock poisoned")
-                .push_back("quit".to_string());
-
-            unsafe {
-                main_loop_tick_cb(std::ptr::null_mut());
-            }
-
-            let event = receiver
-                .recv_timeout(Duration::from_millis(100))
-                .expect("tray action should reach signal stream");
-            assert_eq!(event.signal, "mailfox.tray.action");
-            assert_eq!(event.handler, "quit");
-            assert_eq!(event.payload, "");
         }
 
         #[test]
@@ -3326,8 +3265,7 @@ mod linux_impl {
         #[test]
         fn os_open_uri_rejects_empty_uri_from_background_thread() {
             let _guard = gtk_state_test_guard();
-            let _app_id =
-                app_new("app.mailfox.os-open-uri-background-test").expect("create GTK app");
+            let _app_id = app_new("app.aivi.os-open-uri-background-test").expect("create GTK app");
             let handle = std::thread::spawn(|| os_open_uri(0, ""));
             for _ in 0..20 {
                 crate::pump_events();
@@ -4762,14 +4700,6 @@ mod linux_impl {
                 "kind": "toggleCssClass",
                 "widgetId": widget_id,
                 "className": class_name,
-            }),
-            SignalAction::PresentDialog {
-                dialog_id,
-                parent_id,
-            } => json!({
-                "kind": "presentDialog",
-                "dialogId": dialog_id,
-                "parentId": parent_id,
             }),
             SignalAction::CleanupRoot { root_id } => json!({
                 "kind": "cleanupRoot",
@@ -6632,26 +6562,6 @@ mod linux_impl {
         Ok(())
     }
 
-    fn flush_pending_tray_actions() {
-        let actions: Vec<String> = pending_tray_actions()
-            .lock()
-            .map(|mut q| q.drain(..).collect())
-            .unwrap_or_default();
-        for raw_action in actions {
-            let (action_name, coords) = raw_action
-                .split_once(':')
-                .map(|(a, rest)| (a.to_string(), rest.to_string()))
-                .unwrap_or_else(|| (raw_action.clone(), String::new()));
-            let event = SignalEventState {
-                widget_id: 0,
-                signal: "mailfox.tray.action".to_string(),
-                handler: action_name,
-                payload: coords,
-            };
-            try_record_signal_event(event);
-        }
-    }
-
     unsafe extern "C" fn main_loop_tick_cb(_data: *mut c_void) -> c_int {
         if let Err(err) = call_main_loop_tick_handler() {
             eprintln!("AIVI GTK main-loop tick error:\n{}", err);
@@ -6663,7 +6573,6 @@ mod linux_impl {
         if let Err(err) = process_ui_debug_requests() {
             eprintln!("AIVI GTK UI debug server error: {}", err);
         }
-        flush_pending_tray_actions();
         1
     }
 
@@ -7374,10 +7283,6 @@ mod linux_impl {
                 widget: *mut c_void,
                 class: CString,
             },
-            PresentDialog {
-                dialog: *mut c_void,
-                parent: *mut c_void,
-            },
             CleanupRoot {
                 root_id: i64,
             },
@@ -7472,16 +7377,6 @@ mod linux_impl {
                                 }
                             }
                         }
-                        SignalAction::PresentDialog {
-                            dialog_id,
-                            parent_id,
-                        } => {
-                            if let (Some(&dialog), Some(&parent)) =
-                                (state.widgets.get(&dialog_id), state.widgets.get(&parent_id))
-                            {
-                                mutations.push(DeferredMutation::PresentDialog { dialog, parent });
-                            }
-                        }
                         SignalAction::CleanupRoot { root_id } => {
                             mutations.push(DeferredMutation::CleanupRoot { root_id });
                         }
@@ -7543,9 +7438,6 @@ mod linux_impl {
                         gtk_widget_add_css_class(widget, class.as_ptr());
                     }
                 },
-                DeferredMutation::PresentDialog { dialog, parent } => {
-                    call_adw_fn_pp("adw_dialog_present", dialog, parent);
-                }
                 DeferredMutation::CleanupRoot { root_id } => {
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
@@ -7806,147 +7698,6 @@ mod linux_impl {
             instance: widget as usize,
             handler_id,
         })
-    }
-
-    /// Starts the D-Bus server (MailfoxDesktopObject).
-    fn spawn_dbus_server() -> Result<(), String> {
-        std::thread::Builder::new()
-            .name("mailfox-dbus".to_string())
-            .spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("tokio rt");
-                rt.block_on(async {
-                    let conn = match zbus::Connection::session().await {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!("mailfox-dbus: session error: {e}");
-                            return;
-                        }
-                    };
-                    let mailfox_dbus = MailfoxDesktopObject;
-                    if let Err(e) = conn
-                        .object_server()
-                        .at("/com/mailfox/desktop", mailfox_dbus)
-                        .await
-                    {
-                        eprintln!("mailfox-dbus: register error: {e}");
-                    }
-                    if let Err(e) = conn.request_name("com.mailfox.desktop.tray").await {
-                        eprintln!("mailfox-dbus: request_name error: {e}");
-                    }
-                    // Emit BadgeUpdate and NewPersonalEmail D-Bus signals
-                    let conn_dbus_sigs = conn.clone();
-                    tokio::spawn(async move {
-                        loop {
-                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                            let badge_updates: Vec<i64> = pending_badge_updates()
-                                .lock()
-                                .map(|mut q| q.drain(..).collect())
-                                .unwrap_or_default();
-                            for count in badge_updates {
-                                if let Ok(iface_ref) = conn_dbus_sigs
-                                    .object_server()
-                                    .interface::<_, MailfoxDesktopObject>("/com/mailfox/desktop")
-                                    .await
-                                {
-                                    let _ = MailfoxDesktopObject::badge_update(
-                                        iface_ref.signal_emitter(),
-                                        count as i32,
-                                    )
-                                    .await;
-                                }
-                            }
-                            let emails: Vec<PersonalEmailNotif> = pending_personal_emails()
-                                .lock()
-                                .map(|mut q| q.drain(..).collect())
-                                .unwrap_or_default();
-                            for email in emails {
-                                if let Ok(iface_ref) = conn_dbus_sigs
-                                    .object_server()
-                                    .interface::<_, MailfoxDesktopObject>("/com/mailfox/desktop")
-                                    .await
-                                {
-                                    let _ = MailfoxDesktopObject::new_personal_email(
-                                        iface_ref.signal_emitter(),
-                                        &email.id,
-                                        &email.from,
-                                        &email.subject,
-                                        &email.markdown_body,
-                                    )
-                                    .await;
-                                }
-                            }
-                        }
-                    });
-                    std::future::pending::<()>().await;
-                });
-            })
-            .map(|_| ())
-            .map_err(|e| format!("spawn dbus server thread: {e}"))
-    }
-
-    pub(super) fn dbus_server_start() -> Result<(), Gtk4Error> {
-        spawn_dbus_server().map_err(|e| Gtk4Error::new(format!("gtk4.dbusServerStart: {e}")))
-    }
-
-    struct MailfoxDesktopObject;
-
-    #[zbus::interface(name = "com.mailfox.Desktop")]
-    impl MailfoxDesktopObject {
-        fn action(&self, action: String) {
-            eprintln!("mailfox-dbus: Action({}) called", action);
-            if let Ok(mut q) = pending_tray_actions().lock() {
-                q.push_back(action);
-            }
-        }
-
-        fn send_reply(&self, email_id: String, body: String) {
-            if let Ok(mut q) = pending_tray_actions().lock() {
-                q.push_back(format!("send_reply:{email_id}:{body}"));
-            }
-        }
-
-        fn send_compose(&self, to: String, subject: String, body: String) {
-            if let Ok(mut q) = pending_tray_actions().lock() {
-                q.push_back(format!("send_compose:{to}:{subject}:{body}"));
-            }
-        }
-
-        fn open_email(&self, email_id: String) {
-            if let Ok(mut q) = pending_tray_actions().lock() {
-                q.push_back(format!("open_email:{email_id}"));
-            }
-        }
-
-        fn get_email_suggestions(&self, prefix: String) -> Vec<String> {
-            email_suggestions()
-                .lock()
-                .map(|sug| {
-                    let lc = prefix.to_lowercase();
-                    sug.iter()
-                        .filter(|s| s.to_lowercase().contains(&lc))
-                        .cloned()
-                        .collect()
-                })
-                .unwrap_or_default()
-        }
-
-        #[zbus(signal)]
-        async fn badge_update(
-            emitter: &zbus::object_server::SignalEmitter<'_>,
-            count: i32,
-        ) -> zbus::Result<()>;
-
-        #[zbus(signal)]
-        async fn new_personal_email(
-            emitter: &zbus::object_server::SignalEmitter<'_>,
-            id: &str,
-            from: &str,
-            subject: &str,
-            markdown_body: &str,
-        ) -> zbus::Result<()>;
     }
 
     // ── Widget Builder ──
@@ -11273,7 +11024,6 @@ mod linux_impl {
                 if let Err(err) = process_ui_debug_requests() {
                     eprintln!("AIVI GTK UI debug server error: {}", err);
                 }
-                flush_pending_tray_actions();
             }
         });
     }
@@ -12736,64 +12486,6 @@ mod linux_impl {
         })
     }
 
-    pub(super) fn dialog_new() -> Result<i64, Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let mut state = state.borrow_mut();
-            let window = unsafe { gtk_window_new() };
-            if window.is_null() {
-                return Err(Gtk4Error::new("gtk4.dialogNew failed"));
-            }
-            unsafe { gtk_window_set_modal(window, 1) };
-            let id = state.alloc_id();
-            state.windows.insert(id, window);
-            state.widgets.insert(id, window);
-            Ok(id)
-        })
-    }
-
-    pub(super) fn dialog_set_title(id: i64, title: &str) -> Result<(), Gtk4Error> {
-        let c = c_text(title, "gtk4.dialogSetTitle invalid title")?;
-        GTK_STATE.with(|state| {
-            let state = state.borrow();
-            let d = widget_ptr(&state, id, "dialogSetTitle")?;
-            unsafe { gtk_window_set_title(d, c.as_ptr()) };
-            Ok(())
-        })
-    }
-
-    pub(super) fn dialog_set_child(id: i64, child_id: i64) -> Result<(), Gtk4Error> {
-        GTK_STATE.with(|state| {
-            let state = state.borrow();
-            let d = widget_ptr(&state, id, "dialogSetChild")?;
-            let c = widget_ptr(&state, child_id, "dialogSetChild")?;
-            unsafe { gtk_window_set_child(d, c) };
-            Ok(())
-        })
-    }
-
-    pub(super) fn dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error> {
-        let (dialog, parent) = GTK_STATE.with(|state| {
-            let state = state.borrow();
-            let dialog = widget_ptr(&state, dialog_id, "dialogPresent")?;
-            let parent = widget_ptr(&state, parent_id, "dialogPresent")?;
-            Ok((dialog, parent))
-        })?;
-        unsafe {
-            gtk_window_set_transient_for(dialog, parent);
-            gtk_window_present(dialog);
-        }
-        Ok(())
-    }
-
-    pub(super) fn dialog_close(id: i64) -> Result<(), Gtk4Error> {
-        let dialog = GTK_STATE.with(|state| {
-            let state = state.borrow();
-            widget_ptr(&state, id, "dialogClose")
-        })?;
-        unsafe { gtk_window_close(dialog) };
-        Ok(())
-    }
-
     pub(super) fn adw_dialog_force_close(id: i64) -> Result<(), Gtk4Error> {
         let dialog = GTK_STATE.with(|state| {
             let state = state.borrow();
@@ -12946,17 +12638,6 @@ mod linux_impl {
         }
     }
 
-    pub(super) fn adw_dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error> {
-        let (dialog, parent) = GTK_STATE.with(|state| {
-            let state = state.borrow();
-            let dialog = widget_ptr(&state, dialog_id, "adwDialogPresent")?;
-            let parent = widget_ptr(&state, parent_id, "adwDialogPresent")?;
-            Ok((dialog, parent))
-        })?;
-        call_adw_fn_pp("adw_dialog_present", dialog, parent);
-        Ok(())
-    }
-
     pub(super) fn dialog_root_on_closed(root_id: i64, handler: &str) -> Result<(), Gtk4Error> {
         GTK_STATE.with(|state| {
             let state = state.borrow();
@@ -13077,16 +12758,6 @@ mod linux_impl {
         } else {
             launch_default_uri_on_main_thread(uri_c, uri)
         }
-    }
-    pub(super) fn os_set_badge_count(_app_id: i64, count: i64) -> Result<(), Gtk4Error> {
-        if let Ok(mut q) = pending_badge_updates().lock() {
-            q.push_back(count);
-        }
-        Ok(())
-    }
-
-    pub(super) fn os_theme_preference() -> Result<String, Gtk4Error> {
-        Ok("default".to_string())
     }
 
     pub(super) fn signal_poll() -> Result<Option<SignalEvent>, Gtk4Error> {
@@ -13220,22 +12891,6 @@ mod linux_impl {
             },
             &[widget_id],
             "signalToggleCssClass",
-        )
-    }
-
-    pub(super) fn signal_bind_dialog_present(
-        handler: &str,
-        dialog_id: i64,
-        parent_id: i64,
-    ) -> Result<(), Gtk4Error> {
-        push_signal_action(
-            handler,
-            SignalAction::PresentDialog {
-                dialog_id,
-                parent_id,
-            },
-            &[dialog_id, parent_id],
-            "signalBindDialogPresent",
         )
     }
 
@@ -13742,25 +13397,16 @@ delegate!(gesture_click_last_button(id: i64) -> Result<i64, Gtk4Error>);
 delegate!(action_new(name: &str) -> Result<i64, Gtk4Error>);
 delegate!(action_set_enabled(id: i64, enabled: bool) -> Result<(), Gtk4Error>);
 delegate!(app_add_action(app_id: i64, action_id: i64) -> Result<(), Gtk4Error>);
-delegate!(dbus_server_start() -> Result<(), Gtk4Error>);
 delegate!(menu_model_new() -> Result<i64, Gtk4Error>);
 delegate!(menu_model_append_item(id: i64, label: &str, action: &str) -> Result<(), Gtk4Error>);
 delegate!(menu_button_new(label: &str) -> Result<i64, Gtk4Error>);
 delegate!(menu_button_set_menu_model(button_id: i64, model_id: i64) -> Result<(), Gtk4Error>);
-delegate!(dialog_new() -> Result<i64, Gtk4Error>);
-delegate!(dialog_set_title(id: i64, title: &str) -> Result<(), Gtk4Error>);
-delegate!(dialog_set_child(id: i64, child_id: i64) -> Result<(), Gtk4Error>);
-delegate!(dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error>);
-delegate!(dialog_close(id: i64) -> Result<(), Gtk4Error>);
 delegate!(adw_dialog_close(id: i64) -> Result<(), Gtk4Error>);
 delegate!(adw_dialog_force_close(id: i64) -> Result<(), Gtk4Error>);
-delegate!(adw_dialog_present(dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error>);
 delegate!(dialog_root_is_persistent(root_id: i64) -> Result<bool, Gtk4Error>);
 delegate!(dialog_set_open(root_id: i64, open: bool) -> Result<(), Gtk4Error>);
 delegate!(dialog_sync_open_state(root_id: i64) -> Result<(), Gtk4Error>);
 delegate!(os_open_uri(app_id: i64, uri: &str) -> Result<(), Gtk4Error>);
-delegate!(os_set_badge_count(app_id: i64, count: i64) -> Result<(), Gtk4Error>);
-delegate!(os_theme_preference() -> Result<String, Gtk4Error>);
 delegate!(signal_poll() -> Result<Option<SignalEvent>, Gtk4Error>);
 delegate!(signal_stream() -> Result<std::sync::mpsc::Receiver<SignalEvent>, Gtk4Error>);
 delegate!(signal_emit(widget_id: i64, signal: &str, handler: &str, payload: &str) -> Result<(), Gtk4Error>);
@@ -13768,7 +13414,6 @@ delegate!(signal_bind_bool_property(handler: &str, widget_id: i64, prop: &str, v
 delegate!(signal_bind_css_class(handler: &str, widget_id: i64, class: &str, add: bool) -> Result<(), Gtk4Error>);
 delegate!(signal_bind_toggle_bool_property(handler: &str, widget_id: i64, prop: &str) -> Result<(), Gtk4Error>);
 delegate!(signal_toggle_css_class(handler: &str, widget_id: i64, class: &str) -> Result<(), Gtk4Error>);
-delegate!(signal_bind_dialog_present(handler: &str, dialog_id: i64, parent_id: i64) -> Result<(), Gtk4Error>);
 delegate!(signal_bind_cleanup_root(handler: &str, root_id: i64) -> Result<(), Gtk4Error>);
 delegate!(signal_bind_stack_page(handler: &str, stack_id: i64, page_name: &str) -> Result<(), Gtk4Error>);
 delegate!(build_from_node(node: &GtkNode) -> Result<i64, Gtk4Error>);

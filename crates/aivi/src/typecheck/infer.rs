@@ -364,7 +364,14 @@ fn infer_value_types_incremental_impl(
         cg_types.insert(module.name.name.clone(), module_cg_types.clone());
 
         timed!(t_export_collect, {
-            let interface = build_module_interface(module, &checker, &sigs, &env);
+            let interface = build_module_interface(
+                module,
+                &checker,
+                &sigs,
+                &env,
+                &state.module_exports,
+                &state.module_domain_exports,
+            );
             state.apply_module_interface(&module.name.name, &interface);
             let invalidate_fingerprint = infer_invalidation_fingerprint(module, &module_types);
             module_results.push(InferModuleCache {
