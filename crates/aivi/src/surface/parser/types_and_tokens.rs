@@ -655,6 +655,71 @@ impl Parser {
         });
     }
 
+    fn skip_same_line_tokens_until_terminator(&mut self, line: usize) {
+        while self.pos < self.tokens.len() {
+            let tok = &self.tokens[self.pos];
+            if tok.kind == TokenKind::Newline
+                || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                || tok.span.start.line != line
+            {
+                break;
+            }
+            self.pos += 1;
+        }
+    }
+
+    fn reject_trailing_same_line_tokens_after_item(
+        &mut self,
+        span: &Span,
+        code: &str,
+        message: &str,
+    ) -> bool {
+        let Some(next) = self.tokens.get(self.pos) else {
+            return false;
+        };
+        let same_line = next.span.start.line == span.end.line;
+        let allowed_terminator = next.kind == TokenKind::Newline
+            || (next.kind == TokenKind::Symbol && next.text == "}");
+        if !same_line || allowed_terminator {
+            return false;
+        }
+
+        let next_span = next.span.clone();
+        let line = next_span.start.line;
+        self.emit_diag(code, message, merge_span(span.clone(), next_span));
+        self.skip_same_line_tokens_until_terminator(line);
+        true
+    }
+
+    fn reject_missing_same_line_separator(
+        &mut self,
+        item_span: &Span,
+        allowed_same_line_symbols: &[&str],
+        code: &str,
+        message: &str,
+    ) -> bool {
+        let Some(next) = self.tokens.get(self.pos) else {
+            return false;
+        };
+        if next.span.start.line != item_span.end.line {
+            return false;
+        }
+        if next.kind == TokenKind::Symbol
+            && allowed_same_line_symbols.contains(&next.text.as_str())
+        {
+            return false;
+        }
+        if next.kind == TokenKind::Newline {
+            return false;
+        }
+
+        let next_span = next.span.clone();
+        let line = next_span.start.line;
+        self.emit_diag(code, message, merge_span(item_span.clone(), next_span));
+        self.skip_same_line_tokens_until_terminator(line);
+        true
+    }
+
     fn recover_to_item(&mut self) {
         let start = self.pos;
         while self.pos < self.tokens.len() {

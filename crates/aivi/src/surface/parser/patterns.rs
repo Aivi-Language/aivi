@@ -337,6 +337,11 @@ impl Parser {
                 .map(|ctor| ctor.span.clone())
                 .unwrap_or(name.span.clone()),
         );
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1547",
+            "type declarations must end after the constructor list; unexpected trailing tokens",
+        );
         Some(TypeDecl {
             decorators,
             name,

@@ -478,25 +478,47 @@ impl Parser {
             }
             if self.match_keyword("domain") {
                 if let Some(name) = self.consume_ident() {
+                    let item_span = name.span.clone();
                     exports.push(crate::surface::ExportItem {
                         kind: crate::surface::ScopeItemKind::Domain,
                         name,
                     });
+                    if self.consume_symbol(",") {
+                        continue;
+                    }
+                    if self.reject_missing_same_line_separator(
+                        &item_span,
+                        &["}"],
+                        "E1548",
+                        "same-line export items must be separated by ','",
+                    ) {
+                        break;
+                    }
                 } else {
                     let span = self.peek_span().unwrap_or_else(|| self.previous_span());
                     self.emit_diag("E1500", "expected domain name after 'domain'", span);
                     break;
                 }
             } else if let Some(name) = self.consume_ident() {
+                let item_span = name.span.clone();
                 exports.push(crate::surface::ExportItem {
                     kind: crate::surface::ScopeItemKind::Value,
                     name,
                 });
+                if self.consume_symbol(",") {
+                    continue;
+                }
+                if self.reject_missing_same_line_separator(
+                    &item_span,
+                    &["}"],
+                    "E1548",
+                    "same-line export items must be separated by ','",
+                ) {
+                    break;
+                }
             } else {
                 break;
             }
-            // Commas and newlines both separate export items.
-            self.consume_symbol(",");
         }
         exports
     }
@@ -599,6 +621,22 @@ impl Parser {
         } else {
             None
         };
+        if let Some(alias_name) = alias {
+            let span = merge_span(start.clone(), alias_name.span.clone());
+            let decl = UseDecl {
+                module,
+                items: Vec::new(),
+                span: span.clone(),
+                wildcard: true,
+                alias: Some(alias_name),
+            };
+            self.reject_trailing_same_line_tokens_after_item(
+                &span,
+                "E1547",
+                "use statements must end after the module path, alias, or import list; unexpected trailing tokens",
+            );
+            return vec![decl];
+        }
         if self.consume_symbol("(") {
             // Disambiguate grouped vs selective import by lookahead:
             // after `(`, skip newlines; if we see a lowercase non-keyword ident
@@ -609,33 +647,49 @@ impl Parser {
             self.pos = checkpoint;
 
             if is_grouped {
-                return self.parse_grouped_import_items(&module, &start);
+                let decls = self.parse_grouped_import_items(&module, &start);
+                let span = merge_span(start.clone(), self.previous_span());
+                self.reject_trailing_same_line_tokens_after_item(
+                    &span,
+                    "E1547",
+                    "use statements must end after the module path, alias, or import list; unexpected trailing tokens",
+                );
+                return decls;
             }
 
             // Selective import (existing logic)
             let items = self.parse_use_item_list();
             self.expect_symbol(")", "expected ')' to close import list");
             let span = merge_span(start, self.previous_span());
-            return vec![UseDecl {
+            let decls = vec![UseDecl {
                 module,
                 items,
-                span,
+                span: span.clone(),
                 wildcard: false,
-                alias,
+                alias: None,
             }];
+            self.reject_trailing_same_line_tokens_after_item(
+                &span,
+                "E1547",
+                "use statements must end after the module path, alias, or import list; unexpected trailing tokens",
+            );
+            return decls;
         }
         // Wildcard import (no parens)
-        let span = match &alias {
-            Some(alias) => merge_span(start, alias.span.clone()),
-            None => merge_span(start, module.span.clone()),
-        };
-        vec![UseDecl {
+        let span = merge_span(start, module.span.clone());
+        let decl = UseDecl {
             module,
             items: Vec::new(),
-            span,
+            span: span.clone(),
             wildcard: true,
-            alias,
-        }]
+            alias: None,
+        };
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1547",
+            "use statements must end after the module path, alias, or import list; unexpected trailing tokens",
+        );
+        vec![decl]
     }
 
     /// Parse the comma/newline-separated list of import items inside `(...)`.
@@ -645,13 +699,15 @@ impl Parser {
         let mut items = Vec::new();
         self.consume_newlines();
         while !self.check_symbol(")") && self.pos < self.tokens.len() {
-            if self.match_keyword("domain") {
+            let item_span = if self.match_keyword("domain") {
                 if let Some(name) = self.consume_ident() {
+                    let item_span = name.span.clone();
                     items.push(crate::surface::UseItem {
                         kind: crate::surface::ScopeItemKind::Domain,
                         name,
                         alias: None,
                     });
+                    item_span
                 } else {
                     let span = self.peek_span().unwrap_or_else(|| self.previous_span());
                     self.emit_diag("E1500", "expected domain name after 'domain'", span);
@@ -674,15 +730,32 @@ impl Parser {
                 } else {
                     None
                 };
+                let item_span = alias
+                    .as_ref()
+                    .map(|a| a.span.clone())
+                    .unwrap_or_else(|| name.span.clone());
                 items.push(crate::surface::UseItem {
                     kind: crate::surface::ScopeItemKind::Value,
                     name,
                     alias,
                 });
-            }
+                item_span
+            } else {
+                break;
+            };
             let pos_before = self.pos;
-            self.consume_newlines();
-            self.consume_symbol(",");
+            if self.consume_symbol(",") {
+                self.consume_newlines();
+                continue;
+            }
+            if self.reject_missing_same_line_separator(
+                &item_span,
+                &[")"],
+                "E1548",
+                "import items must be separated by ',' or a newline",
+            ) {
+                break;
+            }
             self.consume_newlines();
             if self.pos == pos_before && !self.check_symbol(")") {
                 break;
@@ -766,9 +839,20 @@ impl Parser {
                 alias: None,
             });
 
+            let item_span = self.previous_span();
             let pos_before = self.pos;
-            self.consume_newlines();
-            self.consume_symbol(",");
+            if self.consume_symbol(",") {
+                self.consume_newlines();
+                continue;
+            }
+            if self.reject_missing_same_line_separator(
+                &item_span,
+                &[")"],
+                "E1548",
+                "grouped import items must be separated by ',' or a newline",
+            ) {
+                break;
+            }
             self.consume_newlines();
             if self.pos == pos_before && !self.check_symbol(")") {
                 break;

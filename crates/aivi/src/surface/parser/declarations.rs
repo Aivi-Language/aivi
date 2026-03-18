@@ -47,33 +47,11 @@ impl Parser {
         });
         let span = merge_span(start, type_span(&ty));
 
-        // `name : Type` is a standalone item; `name : Type = expr` is not valid syntax.
-        // If there are more tokens on the same line, emit a targeted diagnostic and
-        // skip the rest of the line to avoid cascading errors.
-        if let Some(next) = self.tokens.get(self.pos) {
-            let same_line = next.span.start.line == span.end.line;
-            let allowed_terminator = next.kind == TokenKind::Newline
-                || (next.kind == TokenKind::Symbol && next.text == "}");
-            if same_line && !allowed_terminator {
-                let next_span = next.span.clone();
-                let line = next.span.start.line;
-                self.emit_diag(
-                    "E1528",
-                    "type signatures must be written on their own line (write `name = ...` on the next line)",
-                    merge_span(span.clone(), next_span.clone()),
-                );
-                while self.pos < self.tokens.len() {
-                    let tok = &self.tokens[self.pos];
-                    if tok.kind == TokenKind::Newline
-                        || (tok.kind == TokenKind::Symbol && tok.text == "}")
-                        || tok.span.start.line != line
-                    {
-                        break;
-                    }
-                    self.pos += 1;
-                }
-            }
-        }
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1528",
+            "type signatures must be written on their own line (write `name = ...` on the next line)",
+        );
         Some(TypeSig {
             decorators,
             name,
@@ -113,6 +91,11 @@ impl Parser {
         if let Some(mut decl) = self.parse_type_decl(decorators.clone()) {
             if !decl.constructors.is_empty() {
                 decl.opaque = opaque;
+                self.reject_trailing_same_line_tokens_after_item(
+                    &decl.span,
+                    "E1547",
+                    "type declarations must end after the constructor list; unexpected trailing tokens",
+                );
                 return Some(ModuleItem::TypeDecl(decl));
             }
         }
@@ -134,21 +117,37 @@ impl Parser {
                     args: vec![alias.aliased.clone()],
                     span: ctor_span,
                 };
-                return Some(ModuleItem::TypeDecl(TypeDecl {
+                let type_decl = TypeDecl {
                     decorators: alias.decorators,
                     name: alias.name,
                     params: alias.params,
                     constructors: vec![constructor],
                     opaque,
                     span: alias.span,
-                }));
+                };
+                self.reject_trailing_same_line_tokens_after_item(
+                    &type_decl.span,
+                    "E1547",
+                    "type declarations must end after the constructor list; unexpected trailing tokens",
+                );
+                return Some(ModuleItem::TypeDecl(type_decl));
             }
             alias.opaque = opaque;
+            self.reject_trailing_same_line_tokens_after_item(
+                &alias.span,
+                "E1547",
+                "type aliases must end after the aliased type; unexpected trailing tokens",
+            );
             return Some(ModuleItem::TypeAlias(alias));
         }
         self.pos = checkpoint;
         if let Some(mut opaque_decl) = self.parse_opaque_type_decl(decorators) {
             opaque_decl.opaque = opaque_decl.opaque || opaque;
+            self.reject_trailing_same_line_tokens_after_item(
+                &opaque_decl.span,
+                "E1547",
+                "opaque type declarations must be written on their own line; unexpected trailing tokens",
+            );
             return Some(ModuleItem::TypeDecl(opaque_decl));
         }
         self.diagnostics.truncate(diag_checkpoint);
@@ -504,6 +503,11 @@ impl Parser {
         };
 
         let span = merge_span(start, self.previous_span());
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1547",
+            "class declarations must end after the parsed item; unexpected trailing tokens",
+        );
         Some(ClassDecl {
             decorators,
             name,
@@ -582,6 +586,11 @@ impl Parser {
         }
         let end = self.expect_symbol("}", "expected '}' to close instance body");
         let span = merge_span(start, end.unwrap_or(name.span.clone()));
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1547",
+            "instance declarations must end after the parsed item; unexpected trailing tokens",
+        );
         Some(InstanceDecl {
             decorators,
             name,
@@ -720,6 +729,11 @@ impl Parser {
         }
         let end = self.expect_symbol("}", "expected '}' to close domain body");
         let span = merge_span(start, end.unwrap_or(name.span.clone()));
+        self.reject_trailing_same_line_tokens_after_item(
+            &span,
+            "E1547",
+            "domain declarations must end after the parsed item; unexpected trailing tokens",
+        );
         Some(DomainDecl {
             decorators,
             name,

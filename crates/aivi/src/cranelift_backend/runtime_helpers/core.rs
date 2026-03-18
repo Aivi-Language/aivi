@@ -170,36 +170,46 @@ thread_local! {
     static FN_HISTORY: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Called at the start of every JIT-compiled function to record its name.
-/// This makes subsequent runtime warnings show which function triggered them.
-fn decode_source_origin(
-    ctx: *mut JitRuntimeCtx,
+struct EncodedSourcePath<'a> {
     ptr: *const u8,
     len: usize,
+    label: &'a str,
+}
+
+struct RawSourceSpan {
     start_line: i64,
     start_col: i64,
     end_line: i64,
     end_col: i64,
     kind: i64,
-    label: &str,
+}
+
+/// Called at the start of every JIT-compiled function to record its name.
+/// This makes subsequent runtime warnings show which function triggered them.
+fn decode_source_origin(
+    ctx: *mut JitRuntimeCtx,
+    path: EncodedSourcePath<'_>,
+    raw_span: RawSourceSpan,
 ) -> Option<SourceOrigin> {
-    if ptr.is_null() || len == 0 {
+    if path.ptr.is_null() || path.len == 0 {
         return None;
     }
-    let Some(path) = decode_utf8_owned(ctx, ptr, len, label) else {
-        return None;
-    };
+    let path = decode_utf8_owned(ctx, path.ptr, path.len, path.label)?;
     let span = Span {
         start: crate::diagnostics::Position {
-            line: start_line.max(1) as usize,
-            column: start_col.max(1) as usize,
+            line: raw_span.start_line.max(1) as usize,
+            column: raw_span.start_col.max(1) as usize,
         },
         end: crate::diagnostics::Position {
-            line: end_line.max(1) as usize,
-            column: end_col.max(1) as usize,
+            line: raw_span.end_line.max(1) as usize,
+            column: raw_span.end_col.max(1) as usize,
         },
     };
-    Some(SourceOrigin::with_kind(path, span, SourceKind::from_i64(kind)))
+    Some(SourceOrigin::with_kind(
+        path,
+        span,
+        SourceKind::from_i64(raw_span.kind),
+    ))
 }
 
 #[no_mangle]
@@ -223,14 +233,18 @@ pub extern "C" fn rt_enter_fn(
     };
     let fallback_origin = decode_source_origin(
         ctx,
-        fallback_ptr,
-        fallback_len,
-        start_line,
-        start_col,
-        end_line,
-        end_col,
-        kind,
-        "rt_enter_fn",
+        EncodedSourcePath {
+            ptr: fallback_ptr,
+            len: fallback_len,
+            label: "rt_enter_fn",
+        },
+        RawSourceSpan {
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+            kind,
+        },
     );
     let runtime = unsafe { (*ctx).runtime_mut() };
     let inherited_origin = runtime.jit_pending_call_loc.take().or(fallback_origin);
@@ -285,14 +299,18 @@ pub extern "C" fn rt_set_location(
     }
     let Some(origin) = decode_source_origin(
         ctx,
-        ptr,
-        len,
-        start_line,
-        start_col,
-        end_line,
-        end_col,
-        kind,
-        "rt_set_location",
+        EncodedSourcePath {
+            ptr,
+            len,
+            label: "rt_set_location",
+        },
+        RawSourceSpan {
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+            kind,
+        },
     ) else {
         return;
     };
@@ -319,14 +337,18 @@ pub extern "C" fn rt_prepare_call_location(
     }
     let Some(origin) = decode_source_origin(
         ctx,
-        ptr,
-        len,
-        start_line,
-        start_col,
-        end_line,
-        end_col,
-        kind,
-        "rt_prepare_call_location",
+        EncodedSourcePath {
+            ptr,
+            len,
+            label: "rt_prepare_call_location",
+        },
+        RawSourceSpan {
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+            kind,
+        },
     ) else {
         return;
     };
