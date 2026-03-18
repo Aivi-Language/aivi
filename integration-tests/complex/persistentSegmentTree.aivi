@@ -12,16 +12,15 @@ maxInt = a b => if a > b then a else b
 SegmentMeta = { sum: Int, min: Int, max: Int }
 
 // Persistent segment tree ADT
-SegmentTree =
-  Empty
+SegmentTree = Empty
 | Node {
-    start: Int
-    end: Int
-    sum: Int
-    min: Int
-    max: Int
-    left: SegmentTree
-    right: SegmentTree
+  start: Int
+  end: Int
+  sum: Int
+  min: Int
+  max: Int
+  left: SegmentTree
+  right: SegmentTree
 }
 
 // Extract metadata from a tree node

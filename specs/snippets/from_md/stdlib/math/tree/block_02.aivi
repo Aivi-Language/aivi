@@ -1,5 +1,5 @@
 sample = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
 
-dfsPreorder sample  // [1, 2, 3, 4, 5, 6]
+dfsPreorder sample // [1, 2, 3, 4, 5, 6]
 dfsPostorder sample // [2, 4, 5, 3, 6, 1]
-bfs sample          // [1, 2, 3, 6, 4, 5]
+bfs sample // [1, 2, 3, 6, 4, 5]

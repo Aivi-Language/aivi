@@ -5,4 +5,3 @@ right = fromEdges [(2, 3), (1, 2)]
 
 combined = left + right
 deduped  = dedupEdges combined
- 

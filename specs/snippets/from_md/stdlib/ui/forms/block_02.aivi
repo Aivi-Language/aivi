@@ -28,30 +28,29 @@ form = signal {
   email: field ""
 }
 
-onNameChange = txt => update form (s => s <| { name: setValue txt s.name })
+onNameChange  = txt => update form (s => s <| { name: setValue txt s.name })
 onEmailChange = txt => update form (s => s <| { email: setValue txt s.email })
-onNameBlur = _ => update form (s => s <| { name: touch s.name })
-onEmailBlur = _ => update form (s => s <| { email: touch s.email })
-onSubmit = _ => update form (s => s <| { submitted: True })
+onNameBlur    = _ => update form (s => s <| { name: touch s.name })
+onEmailBlur   = _ => update form (s => s <| { email: touch s.email })
+onSubmit      = _ => update form (s => s <| { submitted: True })
 
 view : GtkNode
-view =
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
-      <GtkEntry
-        id="nameInput"
-        text={form ->> map (s => s.name.value)}
-        placeholderText="Name"
-        onInput={onNameChange}
-        onFocusOut={onNameBlur} />
-      <GtkLabel label={form ->> map (s => text.join ", " (nameErrors s))} />
-      <GtkEntry
-        id="emailInput"
-        text={form ->> map (s => s.email.value)}
-        placeholderText="Email"
-        onInput={onEmailChange}
-        onFocusOut={onEmailBlur} />
-      <GtkLabel label={form ->> map (s => text.join ", " (emailErrors s))} />
-      <GtkButton id="submitBtn" label="Save" onClick={onSubmit} />
-    </GtkBox>
-  </gtk>
+view = ~<gtk>
+  <GtkBox orientation="vertical" spacing="8" marginTop="12" marginStart="12" marginEnd="12">
+    <GtkEntry
+      id="nameInput"
+      text={form ->> map (s => s.name.value)}
+      placeholderText="Name"
+      onInput={onNameChange}
+      onFocusOut={onNameBlur} />
+    <GtkLabel label={form ->> map (s => text.join ", " (nameErrors s))} />
+    <GtkEntry
+      id="emailInput"
+      text={form ->> map (s => s.email.value)}
+      placeholderText="Email"
+      onInput={onEmailChange}
+      onFocusOut={onEmailBlur} />
+    <GtkLabel label={form ->> map (s => text.join ", " (emailErrors s))} />
+    <GtkButton id="submitBtn" label="Save" onClick={onSubmit} />
+  </GtkBox>
+</gtk>

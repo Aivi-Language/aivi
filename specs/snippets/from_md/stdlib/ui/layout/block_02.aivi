@@ -1,5 +1,5 @@
 domain Layout over UnitVal = {
-  Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
+  Length     = Px Int | Em Int | Rem Int | Vh Int | Vw Int
   Percentage = Pct Int
 
   1px  = Px 1

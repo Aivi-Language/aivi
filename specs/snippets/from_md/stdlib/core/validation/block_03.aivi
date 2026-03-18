@@ -1,4 +1,4 @@
 DecodeError = {
-  path: List Text,
+  path: List Text
   message: Text
 }

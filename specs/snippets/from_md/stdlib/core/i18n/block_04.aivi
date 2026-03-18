@@ -11,5 +11,5 @@ systemLocale = do Effect {
     | Some t => t
     | None   => defaultLocale.tag
 
-    pure (parseLocale tag or defaultLocale)
+  pure (parseLocale tag or defaultLocale)
 }

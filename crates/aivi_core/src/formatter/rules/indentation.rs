@@ -281,10 +281,17 @@
             if ends_with_eq && i + 1 < raw_lines.len() {
                 let next_tokens = &tokens_by_line[i + 1];
                 let next_has_comment = next_tokens.iter().any(|t| t.kind == "comment");
-                let next_starts_with_pipe = first_code_index(next_tokens)
-                    .is_some_and(|fi| next_tokens[fi].text == "|");
+                let next_first = first_code_index(next_tokens);
+                let next_starts_with_pipe =
+                    next_first.is_some_and(|fi| next_tokens[fi].text == "|");
+                let next_starts_with_decorator =
+                    next_first.is_some_and(|fi| next_tokens[fi].text == "@");
 
-                if !next_tokens.is_empty() && !next_has_comment && !next_starts_with_pipe {
+                if !next_tokens.is_empty()
+                    && !next_has_comment
+                    && !next_starts_with_pipe
+                    && !next_starts_with_decorator
+                {
                     let mut combined = tokens;
                     combined.extend(next_tokens.clone());
                     merged_raw_lines.push(raw_lines[i]);

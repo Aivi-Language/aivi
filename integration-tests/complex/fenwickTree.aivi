@@ -80,7 +80,7 @@ verifyIndices = indices fen arr =>
       result   = rangeSum fen i i match
         | Some got => got == expected
         | None     => False
-        acc && result
+      acc && result
   }) True indices
 
 @test "Fenwick tree prefix sums"

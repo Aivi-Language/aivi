@@ -1,1 +1,1 @@
-reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId
+reconcileNode: WidgetId -> GtkNode -> Effect GtkError WidgetId

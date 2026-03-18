@@ -1,10 +1,10 @@
 use aivi.path
 
-root = ~path[/usr/local]
-bin = root / ~path[bin]
+root = ~path[/ usr / local]
+bin  = root / ~path[bin]
 
-cfg = ~path[config/../config/app.json]
+cfg     = ~path[config / .. / config / app.json]
 cfgText = toString cfg
 
 cfgParent = parent cfg
-cfgName = fileName cfg
+cfgName   = fileName cfg

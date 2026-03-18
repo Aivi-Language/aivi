@@ -1,10 +1,10 @@
 rows = [
-  { id: 1, parentId: None, label: "root" },
-  { id: 2, parentId: Some 1, label: "drafts" },
+  { id: 1, parentId: None,   label: "root" }
+  { id: 2, parentId: Some 1, label: "drafts" }
   { id: 3, parentId: Some 1, label: "published" }
 ]
 
-idOf = row => row.id
+idOf     = row => row.id
 parentOf = row => row.parentId
 
 tree = fromListBy idOf parentOf rows

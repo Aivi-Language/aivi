@@ -5,5 +5,5 @@ loadTranslator = locale path => do Effect {
     | Ok b  => b
     | Err e => fail e
 
-    pure (t bundle)
+  pure (t bundle)
 }
