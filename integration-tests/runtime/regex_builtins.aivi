@@ -151,7 +151,7 @@ matchGroups = do Effect {
             }
           | None => fail "expected match"
       }
-    | Err _ => fail "compile failed"
+  | Err _ => fail "compile failed"
 }
 
 @test "regex match no match"

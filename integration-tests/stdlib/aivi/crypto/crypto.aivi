@@ -37,11 +37,11 @@ hmacSha256_functional = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" match
     | Ok b  => b
     | Err _ => panic "bad hex"
-    msg = fromHex "4869205468657265" match
-      | Ok b  => b
-      | Err _ => panic "bad hex"
-    tag = hmacSha256 key msg
-    assert (length (toHex tag) > 0)
+  msg = fromHex "4869205468657265" match
+    | Ok b  => b
+    | Err _ => panic "bad hex"
+  tag = hmacSha256 key msg
+  assert (length (toHex tag) > 0)
 }
 
 @test "hmac sha512"
@@ -49,11 +49,11 @@ hmacSha512_functional = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" match
     | Ok b  => b
     | Err _ => panic "bad hex"
-    msg = fromHex "4869205468657265" match
-      | Ok b  => b
-      | Err _ => panic "bad hex"
-    tag = hmacSha512 key msg
-    assert (length (toHex tag) > 0)
+  msg = fromHex "4869205468657265" match
+    | Ok b  => b
+    | Err _ => panic "bad hex"
+  tag = hmacSha512 key msg
+  assert (length (toHex tag) > 0)
 }
 
 @test "hmac verify roundtrip"
@@ -61,12 +61,12 @@ hmacVerify_roundtrip = do Effect {
   key = fromHex "aabbccdd" match
     | Ok b  => b
     | Err _ => panic "bad hex"
-    msg = fromHex "deadbeef" match
-      | Ok b  => b
-      | Err _ => panic "bad hex"
-    tag   = hmacSha256 key msg
-    valid = hmacVerify key msg tag
-    assert valid
+  msg = fromHex "deadbeef" match
+    | Ok b  => b
+    | Err _ => panic "bad hex"
+  tag   = hmacSha256 key msg
+  valid = hmacVerify key msg tag
+  assert valid
 }
 
 // -- Password Hashing --
@@ -108,7 +108,7 @@ toHex_fromHex_roundtrip = do Effect {
   decoded = fromHex hex match
     | Ok b  => b
     | Err _ => panic "fromHex failed"
-    assert (secureEquals original decoded)
+  assert (secureEquals original decoded)
 }
 
 @test "to base64url encodes url safe text without padding"
@@ -116,8 +116,8 @@ toBase64Url_known_vector = do Effect {
   original = fromHex "fbff" match
     | Ok b  => b
     | Err _ => panic "fromHex failed"
-    encoded = toBase64Url original
-    assert (encoded == "-_8")
+  encoded = toBase64Url original
+  assert (encoded == "-_8")
 }
 
 @test "secure equals same"

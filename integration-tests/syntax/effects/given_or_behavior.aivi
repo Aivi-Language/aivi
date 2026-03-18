@@ -57,12 +57,12 @@ multipleGivenGuards = do Effect {
   ok match
     | Ok v  => assertEq v 50
     | Err _ => fail "unexpected error"
-    tooSmall <- attempt (checkBoth (-1))
-    tooSmall match
-      | Err e => assertEq e "must be positive"
-      | Ok _  => fail "should have failed"
-    tooBig <- attempt (checkBoth 200)
-    tooBig match
-      | Err e => assertEq e "must be less than 100"
-      | Ok _  => fail "should have failed"
+  tooSmall <- attempt (checkBoth (-1))
+  tooSmall match
+    | Err e => assertEq e "must be positive"
+    | Ok _  => fail "should have failed"
+  tooBig <- attempt (checkBoth 200)
+  tooBig match
+    | Err e => assertEq e "must be less than 100"
+    | Ok _  => fail "should have failed"
 }

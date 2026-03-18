@@ -30,7 +30,7 @@ armBindingsIndependent = do Effect {
         result = "arm-other"
         pure result
       }
-      assertEq out "arm-two"
+    assertEq out "arm-two"
 }
 
 // --- Pattern-bound variable scoped to arm expression only ---

@@ -56,22 +56,20 @@ closedPayloadHandler : Unit -> Unit
 closedPayloadHandler = _ => Unit
 
 payloadCallbackView : GtkNode
-payloadCallbackView =
-  ~<gtk>
-    <GtkBox orientation="vertical" spacing="4">
-      <GtkEntry onInput={inputPayloadHandler} />
-      <GtkSwitch onToggle={togglePayloadHandler} />
-      <GtkDropDown strings="One\nTwo" selected={0} onSelect={selectPayloadHandler} />
-    </GtkBox>
-  </gtk>
+payloadCallbackView = ~<gtk>
+  <GtkBox orientation="vertical" spacing="4">
+    <GtkEntry onInput={inputPayloadHandler} />
+    <GtkSwitch onToggle={togglePayloadHandler} />
+    <GtkDropDown strings="One\nTwo" selected={0} onSelect={selectPayloadHandler} />
+  </GtkBox>
+</gtk>
 
 payloadClosedDialogView : GtkNode
-payloadClosedDialogView =
-  ~<gtk>
-    <AdwPreferencesDialog open={True} onClosed={closedPayloadHandler}>
-      <AdwPreferencesPage title="General" />
-    </AdwPreferencesDialog>
-  </gtk>
+payloadClosedDialogView = ~<gtk>
+  <AdwPreferencesDialog open={True} onClosed={closedPayloadHandler}>
+    <AdwPreferencesPage title="General" />
+  </AdwPreferencesDialog>
+</gtk>
 
 @test "GtkClicked carries widget name"
 signal_clicked = do Effect {
@@ -98,19 +96,19 @@ signal_event_pattern_matching = do Effect {
   clickHandled = (GtkClicked 1 "btn") match
     | GtkClicked _ _ => True
     | _              => False
-    assertEq clickHandled True
-    inputText = (GtkInputChanged 2 "inp" "hi") match
-      | GtkInputChanged _ _ txt => txt
-      | _                       => ""
-    assertEq inputText "hi"
-    toggleActive = (GtkToggled 3 "chk" True) match
-      | GtkToggled _ _ active => active
-      | _                     => False
-    assertEq toggleActive True
-    focusHandled = (GtkFocusIn 4 "x") match
-      | GtkFocusIn _ _ => True
-      | _              => False
-    assertEq focusHandled True
+  assertEq clickHandled True
+  inputText = (GtkInputChanged 2 "inp" "hi") match
+    | GtkInputChanged _ _ txt => txt
+    | _                       => ""
+  assertEq inputText "hi"
+  toggleActive = (GtkToggled 3 "chk" True) match
+    | GtkToggled _ _ active => active
+    | _                     => False
+  assertEq toggleActive True
+  focusHandled = (GtkFocusIn 4 "x") match
+    | GtkFocusIn _ _ => True
+    | _              => False
+  assertEq focusHandled True
 }
 
 @test "GtkSignalEvent match by widget name"
@@ -118,12 +116,12 @@ signal_event_match_by_name = do Effect {
   getTitleText = event => event match
     | GtkInputChanged _ "titleInput" txt => Some txt
     | _                                  => None
-    getBodyText = event => event match
-      | GtkInputChanged _ "bodyInput" txt => Some txt
-      | _                                 => None
-    assertEq (getTitleText (GtkInputChanged 1 "titleInput" "hi")) (Some "hi")
-    assertEq (getBodyText (GtkInputChanged 2 "bodyInput" "lo")) (Some "lo")
-    assertEq (getTitleText (GtkInputChanged 3 "other" "x")) None
+  getBodyText = event => event match
+    | GtkInputChanged _ "bodyInput" txt => Some txt
+    | _                                 => None
+  assertEq (getTitleText (GtkInputChanged 1 "titleInput" "hi")) (Some "hi")
+  assertEq (getBodyText (GtkInputChanged 2 "bodyInput" "lo")) (Some "lo")
+  assertEq (getTitleText (GtkInputChanged 3 "other" "x")) None
 }
 
 @test "GtkNode constructors"
@@ -132,7 +130,7 @@ gtk_node_constructors = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkBox"
+  assertEq tag "GtkBox"
 }
 
 @test "gtk4 helper constructors are accessible"
@@ -141,7 +139,7 @@ type_signatures = do Effect {
   childCount = node match
     | GtkElement _ _ children => List.length children
     | _                       => 0
-    assertEq childCount 1
+  assertEq childCount 1
 }
 
 @test "gtk sugar callbacks compile with ergonomic payloads"
@@ -159,10 +157,9 @@ signal_first_sigil_shapes = do Effect {
     { id: "one", name: "First" }
     { id: "two", name: "Second" }
   ]
-  combined =
-    combineAll (title, visible) ((title, visible) =>
-      if visible then "{title}!" else title
-    )
+  combined = combineAll (title, visible) ((title, visible) =>
+    if visible then "{title}!" else title
+  )
   _ = combined
   _ = signalDrivenView title visible rows
   assertEq (get title) "Hello"
@@ -177,17 +174,16 @@ keyed_each_mounts = do Effect {
     { id: "one", name: "First" }
     { id: "two", name: "Second" }
   ]
-  view =
-    ~<gtk>
-      <GtkBox orientation="vertical" spacing="4">
-        <each items={rows} as={row} key={row => row.id}>
-          <GtkLabel label={row.name} />
-        </each>
-      </GtkBox>
-    </gtk>
-    root <- buildFromNode view
-    _    <- windowSetChild win root
-    assertEq True True
+  view = ~<gtk>
+    <GtkBox orientation="vertical" spacing="4">
+      <each items={rows} as={row} key={row => row.id}>
+        <GtkLabel label={row.name} />
+      </each>
+    </GtkBox>
+  </gtk>
+  root <- buildFromNode view
+  _    <- windowSetChild win root
+  assertEq True True
 }
 
 @test "curated gtk imperative escape hatches remain available"
@@ -236,47 +232,44 @@ root_application_window_sigil = do Effect {
 mount_app_window_accepts_multiple_live_roots = do Effect {
   _   <- init Unit
   app <- appNew "integration-tests.multi-root"
-  windowRoot =
-    ~<gtk>
-      <AdwApplicationWindow id="root-window" title="Counter" defaultWidth={320} defaultHeight={180}>
-        <GtkBox orientation="vertical" spacing={8}>
-          <GtkLabel label="Hello" />
-        </GtkBox>
-      </AdwApplicationWindow>
-    </gtk>
-  dialogRoot =
-    ~<gtk>
-      <AdwPreferencesDialog id="prefs-dialog" title="Preferences" open={True}>
-        <AdwPreferencesPage title="General" />
-      </AdwPreferencesDialog>
-    </gtk>
-    win      <- mountAppWindow app [windowRoot, dialogRoot]
-    lookedUp <- widgetById "root-window"
-    dialogId <- widgetById "prefs-dialog"
-    assertEq lookedUp win
-    assertEq False (dialogId == 0)
-    _ <- windowClose win
+  windowRoot = ~<gtk>
+    <AdwApplicationWindow id="root-window" title="Counter" defaultWidth={320} defaultHeight={180}>
+      <GtkBox orientation="vertical" spacing={8}>
+        <GtkLabel label="Hello" />
+      </GtkBox>
+    </AdwApplicationWindow>
+  </gtk>
+  dialogRoot = ~<gtk>
+    <AdwPreferencesDialog id="prefs-dialog" title="Preferences" open={True}>
+      <AdwPreferencesPage title="General" />
+    </AdwPreferencesDialog>
+  </gtk>
+  win      <- mountAppWindow app [windowRoot, dialogRoot]
+  lookedUp <- widgetById "root-window"
+  dialogId <- widgetById "prefs-dialog"
+  assertEq lookedUp win
+  assertEq False (dialogId == 0)
+  _ <- windowClose win
 }
 
 @test "GtkMenuButton accepts nested GtkPopover property graphs"
 menu_button_accepts_nested_popover_property_graphs = do Effect {
-  view =
-    ~<gtk>
-      <GtkMenuButton id="settings-btn" iconName="preferences-system-symbolic">
-        <property name="popover">
-          <GtkPopover id="settings-popover">
-            <GtkBox id="settings-menu" orientation="vertical" spacing={4}>
-              <GtkButton id="settings-ai-btn" label="AI settings" />
-            </GtkBox>
-          </GtkPopover>
-        </property>
-      </GtkMenuButton>
-    </gtk>
-    _         <- buildWithIds view
-    buttonId  <- widgetById "settings-btn"
-    popoverId <- widgetById "settings-popover"
-    assertEq False (buttonId == 0)
-    assertEq False (popoverId == 0)
+  view = ~<gtk>
+    <GtkMenuButton id="settings-btn" iconName="preferences-system-symbolic">
+      <property name="popover">
+        <GtkPopover id="settings-popover">
+          <GtkBox id="settings-menu" orientation="vertical" spacing={4}>
+            <GtkButton id="settings-ai-btn" label="AI settings" />
+          </GtkBox>
+        </GtkPopover>
+      </property>
+    </GtkMenuButton>
+  </gtk>
+  _         <- buildWithIds view
+  buttonId  <- widgetById "settings-btn"
+  popoverId <- widgetById "settings-popover"
+  assertEq False (buttonId == 0)
+  assertEq False (popoverId == 0)
 }
 
 @test "GtkValueChanged carries widget name and float value"
@@ -290,7 +283,7 @@ gtk_grid_node_constructors = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkGrid"
+  assertEq tag "GtkGrid"
 }
 
 @test "GtkSpinButton node is constructable"
@@ -299,7 +292,7 @@ gtk_spin_button_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkSpinButton"
+  assertEq tag "GtkSpinButton"
 }
 
 @test "GtkAspectFrame node is constructable"
@@ -308,7 +301,7 @@ gtk_aspect_frame_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkAspectFrame"
+  assertEq tag "GtkAspectFrame"
 }
 
 @test "GtkComboBoxText node is constructable"
@@ -317,7 +310,7 @@ gtk_combo_box_text_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkComboBoxText"
+  assertEq tag "GtkComboBoxText"
 }
 
 @test "GtkSearchBar node is constructable"
@@ -326,7 +319,7 @@ gtk_search_bar_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkSearchBar"
+  assertEq tag "GtkSearchBar"
 }
 
 @test "GtkPicture node is constructable"
@@ -335,7 +328,7 @@ gtk_picture_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkPicture"
+  assertEq tag "GtkPicture"
 }
 
 @test "GtkCalendar node is constructable"
@@ -344,7 +337,7 @@ gtk_calendar_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkCalendar"
+  assertEq tag "GtkCalendar"
 }
 
 @test "GtkCalendar day-selected signal is known"
@@ -353,7 +346,7 @@ gtk_calendar_signal = do Effect {
   pair  = event match
     | GtkActivated wid name => (wid, name)
     | _                     => (0, "")
-    assertEq pair (1, "calendar")
+  assertEq pair (1, "calendar")
 }
 
 @test "GtkActionBar node is constructable"
@@ -362,7 +355,7 @@ gtk_action_bar_node = do Effect {
   tag  = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkActionBar"
+  assertEq tag "GtkActionBar"
 }
 
 @test "GtkCenterBox node is constructable"
@@ -374,7 +367,7 @@ gtk_center_box_node = do Effect {
   tag         = elem match
     | GtkElement name _ _ => name
     | _                   => ""
-    assertEq tag "GtkCenterBox"
+  assertEq tag "GtkCenterBox"
 }
 
 @test "GtkEventControllerMotion mounts as a controller child"
@@ -383,8 +376,7 @@ gtk_motion_controller_mounts = do Effect {
   app <- appNew "integration-tests.motion-controller"
   win <- windowNew app "MotionController" 320 120
   hovered = signal False
-  view    =
-    ~<gtk>
+  view    = ~<gtk>
       <GtkBox id="hover-target" orientation="vertical" spacing="4">
         <child type="controller">
           <GtkEventControllerMotion>
@@ -395,7 +387,7 @@ gtk_motion_controller_mounts = do Effect {
         <GtkLabel label="Hover target" />
       </GtkBox>
     </gtk>
-    root <- buildFromNode view
-    _    <- windowSetChild win root
-    assertEq (get hovered) False
+  root <- buildFromNode view
+  _    <- windowSetChild win root
+  assertEq (get hovered) False
 }
