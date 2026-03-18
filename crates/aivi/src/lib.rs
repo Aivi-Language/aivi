@@ -65,7 +65,8 @@ pub mod resolver {
 
 pub mod typecheck {
     pub use aivi_core::{
-        check_types, check_types_including_stdlib, check_types_with_checkpoint_incremental,
+        check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
+        check_types_with_checkpoint, check_types_with_checkpoint_incremental,
         elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
         elaborate_with_checkpoint_incremental, infer_value_types, infer_value_types_fast,
         infer_value_types_fast_incremental, infer_value_types_full,
@@ -99,7 +100,8 @@ pub use aivi_core::lex_cst;
 pub use aivi_core::check_modules;
 pub use aivi_core::desugar_blocks;
 pub use aivi_core::{
-    check_types, check_types_including_stdlib, check_types_with_checkpoint_incremental,
+    check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
+    check_types_with_checkpoint, check_types_with_checkpoint_incremental,
     elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
     elaborate_with_checkpoint_incremental, infer_value_types, infer_value_types_fast,
     infer_value_types_fast_incremental, infer_value_types_full, infer_value_types_full_incremental,
