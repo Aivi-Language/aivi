@@ -15,6 +15,12 @@ enum BackoffPolicy {
     Exponential { base: Duration, max: Duration },
 }
 
+#[derive(Clone, Copy, Debug)]
+enum BackoffPolicyConfig {
+    Fixed(i64),
+    Exponential { base_ms: i64, max_ms: i64 },
+}
+
 #[derive(Clone)]
 struct ConnEntry {
     conn: Value,
@@ -95,11 +101,11 @@ fn option_span_millis(value: Value, ctx: &str) -> Result<Option<i64>, RuntimeErr
     }
 }
 
-fn backoff_policy(value: Value, ctx: &str) -> Result<BackoffPolicy, RuntimeError> {
+fn backoff_policy_config(value: Value, ctx: &str) -> Result<BackoffPolicyConfig, RuntimeError> {
     match value {
         Value::Constructor { name, args } if name == "Fixed" && args.len() == 1 => {
             let ms = span_millis(args[0].clone(), ctx)?;
-            Ok(BackoffPolicy::Fixed(Duration::from_millis(ms.max(0) as u64)))
+            Ok(BackoffPolicyConfig::Fixed(ms))
         }
         Value::Constructor { name, args } if name == "Exponential" && args.len() == 1 => {
             let rec = expect_record(args[0].clone(), ctx)?;
@@ -117,10 +123,7 @@ fn backoff_policy(value: Value, ctx: &str) -> Result<BackoffPolicy, RuntimeError
                 })?;
             let base_ms = span_millis(base.clone(), ctx)?;
             let max_ms = span_millis(max.clone(), ctx)?;
-            Ok(BackoffPolicy::Exponential {
-                base: Duration::from_millis(base_ms.max(0) as u64),
-                max: Duration::from_millis(max_ms.max(0) as u64),
-            })
+            Ok(BackoffPolicyConfig::Exponential { base_ms, max_ms })
         }
         other => Err(RuntimeError::TypeError {
             context: ctx.to_string(),
@@ -650,6 +653,32 @@ pub(super) fn build_database_pool_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: std::sync::Arc::new(move |runtime| {
                     let cfg = expect_record(config.clone(), "database.pool.create")?;
+                    let mut unexpected_fields = cfg
+                        .keys()
+                        .filter(|field| {
+                            !matches!(
+                                field.as_str(),
+                                "maxSize"
+                                    | "minIdle"
+                                    | "acquireTimeout"
+                                    | "idleTimeout"
+                                    | "healthCheckInterval"
+                                    | "backoffPolicy"
+                                    | "queuePolicy"
+                                    | "acquire"
+                                    | "release"
+                                    | "healthCheck"
+                            )
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if !unexpected_fields.is_empty() {
+                        unexpected_fields.sort();
+                        return Ok(result_err(pool_error_invalid_config(format!(
+                            "unexpected pool config field(s): {}",
+                            unexpected_fields.join(", ")
+                        ))));
+                    }
 
                     let max_size = cfg
                         .get("maxSize")
@@ -750,10 +779,58 @@ pub(super) fn build_database_pool_record() -> Value {
 
                     let idle_timeout_ms =
                         option_span_millis(idle_timeout, "pool.create.idleTimeout")?;
+                    if let Some(ms) = idle_timeout_ms {
+                        if ms < 0 {
+                            return Ok(result_err(pool_error_invalid_config(
+                                "idleTimeout must be >= 0 when present".to_string(),
+                            )));
+                        }
+                    }
                     let health_interval_ms =
                         option_span_millis(health_interval, "pool.create.healthCheckInterval")?;
+                    if let Some(ms) = health_interval_ms {
+                        if ms < 0 {
+                            return Ok(result_err(pool_error_invalid_config(
+                                "healthCheckInterval must be >= 0 when present".to_string(),
+                            )));
+                        }
+                    }
 
-                    let backoff_policy = backoff_policy(backoff, "pool.create.backoffPolicy")?;
+                    let backoff_policy =
+                        match backoff_policy_config(backoff, "pool.create.backoffPolicy")? {
+                            BackoffPolicyConfig::Fixed(ms) => {
+                                if ms < 0 {
+                                    return Ok(result_err(pool_error_invalid_config(
+                                        "backoffPolicy.Fixed.millis must be >= 0".to_string(),
+                                    )));
+                                }
+                                BackoffPolicy::Fixed(Duration::from_millis(ms as u64))
+                            }
+                            BackoffPolicyConfig::Exponential { base_ms, max_ms } => {
+                                if base_ms < 0 {
+                                    return Ok(result_err(pool_error_invalid_config(
+                                        "backoffPolicy.Exponential.base.millis must be >= 0"
+                                            .to_string(),
+                                    )));
+                                }
+                                if max_ms < 0 {
+                                    return Ok(result_err(pool_error_invalid_config(
+                                        "backoffPolicy.Exponential.max.millis must be >= 0"
+                                            .to_string(),
+                                    )));
+                                }
+                                if max_ms < base_ms {
+                                    return Ok(result_err(pool_error_invalid_config(
+                                        "backoffPolicy.Exponential.max must be >= base"
+                                            .to_string(),
+                                    )));
+                                }
+                                BackoffPolicy::Exponential {
+                                    base: Duration::from_millis(base_ms as u64),
+                                    max: Duration::from_millis(max_ms as u64),
+                                }
+                            }
+                        };
                     let queue_policy = queue_policy(queue, "pool.create.queuePolicy")?;
 
                     let inner = std::sync::Arc::new(PoolInner {
@@ -761,10 +838,9 @@ pub(super) fn build_database_pool_record() -> Value {
                             closed: false,
                             max_size: max_size as usize,
                             acquire_timeout: Duration::from_millis(timeout_ms as u64),
-                            idle_timeout: idle_timeout_ms
-                                .map(|ms| Duration::from_millis(ms.max(0) as u64)),
+                            idle_timeout: idle_timeout_ms.map(|ms| Duration::from_millis(ms as u64)),
                             health_check_interval: health_interval_ms
-                                .map(|ms| Duration::from_millis(ms.max(0) as u64)),
+                                .map(|ms| Duration::from_millis(ms as u64)),
                             backoff_policy,
                             queue_policy,
                             creating: 0,

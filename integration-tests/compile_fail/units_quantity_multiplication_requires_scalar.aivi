@@ -1,0 +1,14 @@
+// EXPECT-ERROR: type mismatch
+@no_prelude
+module integrationTests.compileFail.unitsQuantityMultiplicationRequiresScalar
+
+use aivi
+use aivi.units (Quantity, defineUnit, domain Units)
+
+width : Quantity
+width = { value: 3.0, unit: defineUnit "m" 1.0 }
+
+height : Quantity
+height = { value: 4.0, unit: defineUnit "m" 1.0 }
+
+area = width * height

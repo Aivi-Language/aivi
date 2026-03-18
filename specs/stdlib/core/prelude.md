@@ -20,10 +20,10 @@ That is why simple code can use names such as `Int`, `Text`, `Option`, `Some`, `
 ```aivi
 toText 42
 // => "42"
-Some "hello" |> isSome
+not False
 // => True
-constructorName (Ok 1)
-// => "Ok"
+any (n => n > 10) [3, 12, 5]
+// => True
 ```
 :::
 
@@ -34,9 +34,8 @@ The Prelude is a curated surface, not the entire standard library. In practice i
 - core types and constructors such as `Int`, `Float`, `Bool`, `Text`, `List`, `Option`, `Result`, `Tuple`, `Some`, `None`, `Ok`, and `Err`
 - common interfaces and helpers such as `ToText`, `toText`, `not`, and `any`
 - commonly used domains such as `Calendar`, `Duration`, `Color`, and `Vector`
-- constructor introspection helpers such as `constructorName` and `constructorOrdinal`
 
-When you need a broader API, import the specific module directly instead of treating the Prelude as a replacement for the rest of the standard library. For example, see [`aivi.text`](/stdlib/core/text) and [`aivi.logic`](/stdlib/core/logic) for the full text and logic toolboxes.
+When you need a broader API, import the specific module directly instead of treating the Prelude as a replacement for the rest of the standard library. For example, `length` and `toUpper` come from [`aivi.text`](/stdlib/core/text), while `isSome` comes from [`aivi.option`](/stdlib/core/option).
 
 ## Opting out
 
@@ -53,16 +52,11 @@ Once you opt out, even basic names must be imported explicitly. This is mainly u
 - The most common names should be available consistently across examples, tutorials, and production modules.
 - A clear opt-out path keeps the language convenient without taking away control.
 
-## Constructor introspection
+## Focused helpers stay explicit
 
-The Prelude also makes constructor introspection available for algebraic data type values. These helpers are most useful for logging, diagnostics, tests, and generic UI tooling; when you are making control-flow decisions, pattern matching is usually clearer.
-
-| Function | Type | Description |
-| --- | --- | --- |
-| `constructorName value` | `A -> Text` | Returns the constructor tag name, such as `Some`, `Err`, or `Published`. |
-| `constructorOrdinal value` | `A -> Int` | Returns the zero-based declaration index of the constructor inside its ADT definition. |
+The Prelude stays intentionally small. Module-specific helpers still live in their home modules, so import them directly when you need that broader API.
 
 <<< ../../snippets/from_md/stdlib/core/prelude/block_03.aivi{aivi}
 
 
-In this example, `tag` is `"Published"` and `position` is `1` because `Draft` is the first constructor.
+In this example, `length` comes from `aivi.text`, while `Int`, `Text`, and `toText` still come from the Prelude.

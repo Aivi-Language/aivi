@@ -30,7 +30,6 @@ Config Conn = {
   minIdle: Int
   acquireTimeout: Span
   idleTimeout: Option Span
-  maxLifetime: Option Span
   healthCheckInterval: Option Span
   backoffPolicy: BackoffPolicy
   queuePolicy: QueuePolicy

@@ -49,6 +49,50 @@ fn stdlib_ui_exports_v_element() {
             "expected aivi.ui to export {expected}; exports={export_names:?}"
         );
     }
+    let mut actual_event_exports: Vec<&str> = export_names
+        .iter()
+        .copied()
+        .filter(|name| {
+            name.starts_with("On")
+                || name.starts_with("vOn")
+                || name.ends_with("Event")
+                || matches!(*name, "Click" | "Input")
+        })
+        .collect();
+    actual_event_exports.sort_unstable();
+    assert_eq!(
+        actual_event_exports,
+        vec![
+            "Click",
+            "ClickEvent",
+            "Input",
+            "InputEvent",
+            "KeyboardEvent",
+            "OnBlur",
+            "OnClick",
+            "OnClickE",
+            "OnFocus",
+            "OnInput",
+            "OnInputE",
+            "OnKeyDown",
+            "OnKeyUp",
+            "OnPointerDown",
+            "OnPointerMove",
+            "OnPointerUp",
+            "PointerEvent",
+            "vOnBlur",
+            "vOnClick",
+            "vOnClickE",
+            "vOnFocus",
+            "vOnInput",
+            "vOnInputE",
+            "vOnKeyDown",
+            "vOnKeyUp",
+            "vOnPointerDown",
+            "vOnPointerMove",
+            "vOnPointerUp",
+        ]
+    );
 
     let _def = v_element_def.expect("vElement def");
 }

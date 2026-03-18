@@ -25,6 +25,19 @@ dot_functional = do Effect {
   assert (d == 11.0)
 }
 
+@test "linalg domain operators"
+linalg_domain_operators = do Effect {
+  a          = { size: 2, data: [2.0, -1.0] }
+  b          = { size: 2, data: [3.0, 5.0] }
+  added      = a + b
+  subtracted = b - a
+  scaled     = a * 3.0
+
+  assertEq added { size: 2, data: [5.0, 4.0] }
+  assertEq subtracted { size: 2, data: [1.0, 6.0] }
+  assertEq scaled { size: 2, data: [6.0, -3.0] }
+}
+
 @test "mat mul"
 matMul_functional = do Effect {
   m1 = { rows: 1, cols: 2, data: [1.0, 2.0] }

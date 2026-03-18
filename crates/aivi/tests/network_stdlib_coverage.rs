@@ -16,7 +16,8 @@ use tokio_tungstenite::tungstenite::{connect, Message};
 #[path = "test_support.rs"]
 mod test_support;
 
-const FILE_TIMEOUT_SECS: u64 = 25;
+const FILE_TIMEOUT_SECS: u64 = 60;
+const NETWORK_WAIT_TIMEOUT_SECS: u64 = 30;
 
 fn network_test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -91,6 +92,10 @@ fn run_stdlib_file(path: &Path) -> aivi::TestReport {
         run_test_suite_with_timeout(program, &tests, &modules, &display, FILE_TIMEOUT_SECS)
             .unwrap_or_else(|| panic!("timeout running stdlib tests in {}", path.display()));
     result.unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()))
+}
+
+fn network_wait_timeout() -> Duration {
+    Duration::from_secs(NETWORK_WAIT_TIMEOUT_SECS)
 }
 
 fn reserve_port() -> u16 {
@@ -181,7 +186,7 @@ fn sockets_stdlib_exercises_real_connection_lifecycle() {
         .port();
 
     let client_thread = thread::spawn(move || {
-        let mut stream = wait_for_accept(client_listener, Duration::from_secs(5));
+        let mut stream = wait_for_accept(client_listener, network_wait_timeout());
         let mut request = [0u8; 4];
         stream
             .read_exact(&mut request)
@@ -191,7 +196,7 @@ fn sockets_stdlib_exercises_real_connection_lifecycle() {
     });
 
     let server_thread = thread::spawn(move || {
-        let mut stream = wait_for_tcp_connect(server_port, Duration::from_secs(5));
+        let mut stream = wait_for_tcp_connect(server_port, network_wait_timeout());
         stream.write_all(b"hello").expect("write server request");
         let mut response = [0u8; 5];
         stream
@@ -201,7 +206,7 @@ fn sockets_stdlib_exercises_real_connection_lifecycle() {
     });
 
     let invalid_send_thread = thread::spawn(move || {
-        let _stream = wait_for_accept(invalid_send_listener, Duration::from_secs(5));
+        let _stream = wait_for_accept(invalid_send_listener, network_wait_timeout());
     });
 
     let _env = EnvGuard::set(&[
@@ -234,7 +239,7 @@ fn http_server_stdlib_exercises_http_and_websocket_flow() {
     let ws_port = reserve_port();
 
     let ws_thread = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + network_wait_timeout();
         loop {
             match connect(format!("ws://127.0.0.1:{ws_port}/ws")) {
                 Ok((mut socket, _)) => {

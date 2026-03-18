@@ -2,5 +2,7 @@
 @no_prelude
 module integrationTests.compileFail.preludeNotImported
 
-// length is provided by the prelude; @no_prelude removes it from scope
+use aivi.prelude
+
+// The prelude restores core names, but focused text helpers still require `aivi.text`.
 bad = length "hello"

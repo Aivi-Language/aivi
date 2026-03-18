@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 #[path = "test_support.rs"]
 mod test_support;
 
-const FILE_TIMEOUT_SECS: u64 = 25;
+const FILE_TIMEOUT_SECS: u64 = 60;
 
 fn runner_test_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();

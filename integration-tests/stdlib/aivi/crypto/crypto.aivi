@@ -111,6 +111,15 @@ toHex_fromHex_roundtrip = do Effect {
     assert (secureEquals original decoded)
 }
 
+@test "to base64url encodes url safe text without padding"
+toBase64Url_known_vector = do Effect {
+  original = fromHex "fbff" match
+    | Ok b  => b
+    | Err _ => panic "fromHex failed"
+    encoded = toBase64Url original
+    assert (encoded == "-_8")
+}
+
 @test "secure equals same"
 secureEquals_same = do Effect {
   a <- randomBytes 8

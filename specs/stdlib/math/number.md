@@ -14,6 +14,8 @@ The facade is the best starting point when you want the common names in one plac
 - `aivi.number.complex` for complex arithmetic and the `i` constant
 - `aivi.number.quaternion` for 3D rotations; it belongs to the number family, but it is imported directly rather than re-exported by the `aivi.number` facade
 
+The facade re-exports `fromInt`, `toInt`, `fromFloat`, `toFloat`, `round`, `fromBigInts`, `normalize`, `numerator`, `denominator`, and `i`. Import the matching direct submodule when you also want that type's domain operators or literal sugar.
+
 ## Choosing between `Decimal` and `Rational`
 
 Both types avoid the usual “floating-point surprise” problems, but they are optimized for different kinds of work.
@@ -51,6 +53,8 @@ A common import setup looks like this:
 
 `fromFloat` accepts only finite `Float` values. If NaN or infinity matters to your algorithm, stay in `Float` or switch to another exact representation before crossing the API boundary.
 
+Division through the `Decimal` domain requires a non-zero divisor. Dividing by zero raises the standard runtime division-by-zero diagnostic instead of aborting the process.
+
 <<< ../../snippets/from_md/stdlib/math/number/block_02.aivi{aivi}
 
 
@@ -64,7 +68,9 @@ A common import setup looks like this:
 
 `Rational` is an opaque native type for exact fractions of the form `num/den`. Import `aivi.number.rational` directly when you want exact `+`, `-`, `*`, and `/` on fractions.
 
-Create values with `fromBigInts`; the denominator must be non-zero.
+Create values with `fromBigInts`; passing `0` as the denominator raises an invalid-argument runtime diagnostic.
+
+Dividing by a zero rational raises the standard runtime division-by-zero diagnostic.
 
 <<< ../../snippets/from_md/stdlib/math/number/block_03.aivi{aivi}
 

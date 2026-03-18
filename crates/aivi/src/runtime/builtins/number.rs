@@ -12,6 +12,12 @@ use super::util::{
 };
 use crate::runtime::{RuntimeError, Value};
 
+fn division_by_zero(context: &str) -> RuntimeError {
+    RuntimeError::DivisionByZero {
+        context: context.to_string(),
+    }
+}
+
 pub(super) fn build_bigint_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
@@ -72,9 +78,10 @@ pub(super) fn build_rational_record() -> Value {
             let denom = expect_bigint(args.pop().unwrap(), "rational.fromBigInts")?;
             let numer = expect_bigint(args.pop().unwrap(), "rational.fromBigInts")?;
             if denom.is_zero() {
-                return Err(RuntimeError::Message(
-                    "rational.fromBigInts expects non-zero denominator".to_string(),
-                ));
+                return Err(RuntimeError::InvalidArgument {
+                    context: "rational.fromBigInts".to_string(),
+                    reason: "denominator must be non-zero".to_string(),
+                });
             }
             Ok(Value::Rational(Arc::new(BigRational::new(
                 (*numer).clone(),
@@ -132,6 +139,9 @@ pub(super) fn build_rational_record() -> Value {
         builtin("rational.div", 2, |mut args, _| {
             let right = expect_rational(args.pop().unwrap(), "rational.div")?;
             let left = expect_rational(args.pop().unwrap(), "rational.div")?;
+            if right.is_zero() {
+                return Err(division_by_zero("rational.div"));
+            }
             Ok(Value::Rational(Arc::new(&*left / &*right)))
         }),
     );
@@ -199,6 +209,9 @@ pub(super) fn build_decimal_record() -> Value {
         builtin("decimal.div", 2, |mut args, _| {
             let right = expect_decimal(args.pop().unwrap(), "decimal.div")?;
             let left = expect_decimal(args.pop().unwrap(), "decimal.div")?;
+            if right.is_zero() {
+                return Err(division_by_zero("decimal.div"));
+            }
             Ok(Value::Decimal(left / right))
         }),
     );

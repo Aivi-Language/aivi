@@ -49,3 +49,21 @@ timezone_functional = do Effect {
   tsTokyo = toInstant zdtTokyo
   assertEq ts tsTokyo
 }
+
+@test "timezone preserves fractional seconds across conversions"
+timezone_preserves_fractional_seconds = do Effect {
+  paris = ~tz(Europe/Paris)
+  tokyo = ~tz(Asia/Tokyo)
+  zdt   = ~zdt(2024-05-21T12:00:00.123456789[Europe/Paris])
+
+  assertEq zdt.dateTime 2024-05-21T12:00:00.123456789Z
+
+  ts = toInstant zdt
+  assertEq ts 2024-05-21T10:00:00.123456789Z
+  assertEq (getOffset paris ts).millis 7200000
+
+  tokyoView = atZone zdt tokyo
+  assertEq tokyoView.dateTime 2024-05-21T19:00:00.123456789Z
+  assertEq tokyoView.offset.millis 32400000
+  assertEq (toInstant tokyoView) ts
+}

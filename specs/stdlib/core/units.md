@@ -25,7 +25,7 @@ Reach for a more specialized domain when the standard library already models the
 ## Import patterns
 
 - `use aivi.units` brings `Unit`, `Quantity`, `defineUnit`, `convert`, and `sameUnit` into scope.
-- The exported `Units` domain supplies `+`, `-`, `*`, and `/` for `Quantity`.
+- The exported `Units` domain supplies `+` and `-` between `Quantity` values, plus scalar `*` and `/`.
 - For the general language rules around domains and operator ownership, see [Domains](/syntax/domains) and [Operators](/syntax/operators).
 
 ## Overview
@@ -60,12 +60,14 @@ When the `Units` domain is in scope, `Quantity` supports a small arithmetic surf
 ::: repl
 ```aivi
 /use aivi.units
-distance = 100.0 m
-time = 9.58 s
-speed = distance / time
-// => 10.438... m/s
+meter = defineUnit "m" 1.0
+distance = { value: 100.0, unit: meter }
+halfDistance = distance / 2.0
+// => { value: 50.0, unit: meter }
 ```
 :::
+
+If you need something like “meters per second,” divide the numeric magnitudes yourself and then wrap the result in a unit you define explicitly. `distance / time` is not a supported `Quantity` operation in v0.1.
 
 ## Helper functions
 
@@ -82,12 +84,13 @@ The usual workflow is: define or pick a unit, do your arithmetic in one consiste
 - Use `Quantity` for values that cross module boundaries so the unit stays visible in the data shape.
 - Pick one canonical unit per measurement family inside a module, and convert at the edges for display or input.
 - Convert to a common unit before addition or subtraction; the domain operators do not silently normalize mismatched units for you.
+- `+` and `-` always keep the left-hand unit record exactly as written, even when the right-hand quantity uses a different scale.
 - Keep unit names stable and meaningful. `sameUnit` compares labels, not conversion factors.
 
 ## Limitations in v0.1
 
 - There are no built-in `10m`, `5kg`, or `3s` suffix literals in `aivi.units`; define units explicitly with `defineUnit`.
-- The module does not derive composite units such as “meters per second” for you.
+- There are no `Quantity * Quantity` or `Quantity / Quantity` operators, so the module does not derive composite units such as “meters per second” for you.
 - The API helps document and convert units at runtime, but it does not prove physical correctness in the type checker.
 
 ## Usage examples

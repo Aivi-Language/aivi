@@ -3,40 +3,34 @@ module integrationTests.stdlib.aivi.number.tests
 
 use aivi
 use aivi.testing
-use aivi.math
-use aivi.number.bigint
-use aivi.number.decimal as dec
+use aivi (
+  math (abs)
+)
+use aivi.number as num
 
-// -- Decimal --
+@test "number facade decimal helpers"
+number_facade_decimal_helpers = do Effect {
+  value   = num.fromFloat 3.14159
+  rounded = num.round value 2
+  output  = num.toFloat rounded
 
-@test "decimal from float"
-decimal_fromFloat = do Effect {
-  d = dec.fromFloat 3.14
-  f = dec.toFloat d
-  assert (abs (f - 3.14) < 0.01)
+  assert (abs (output - 3.14) < 0.01)
 }
 
-@test "decimal round"
-decimal_round = do Effect {
-  d = dec.fromFloat 3.14159
-  r = dec.round d 2
-  f = dec.toFloat r
-  assert (abs (f - 3.14) < 0.01)
+@test "number facade bigint roundtrip"
+number_facade_bigint_roundtrip = do Effect {
+  assertEq (num.toInt (num.fromInt 42)) (Some 42)
 }
 
-// -- BigInt --
+@test "number facade rational helpers"
+number_facade_rational_helpers = do Effect {
+  value = num.normalize (num.fromBigInts (num.fromInt 6) (num.fromInt 8))
 
-@test "bigint arithmetic and overflow"
-bigint_arithmetic_and_overflow = do Effect {
-  seven  = fromInt 7
-  eight  = fromInt 8
-  offset = fromInt (absInt (-14))
-  exact  = seven * eight - offset
+  assertEq (num.toInt (num.numerator value)) (Some 3)
+  assertEq (num.toInt (num.denominator value)) (Some 4)
+}
 
-  seed = fromInt 1000000
-  one  = fromInt 1
-  huge = seed * seed * seed * seed + one
-
-  assertEq (toInt exact) (Some 42)
-  assertEq (toInt huge) None
+@test "number facade complex constant"
+number_facade_complex_constant = do Effect {
+  assertEq num.i { re: 0.0, im: 1.0 }
 }

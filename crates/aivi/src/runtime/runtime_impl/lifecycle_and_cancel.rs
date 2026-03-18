@@ -162,8 +162,8 @@ fn parse_naive_datetime(text: &str) -> Result<chrono::NaiveDateTime, RuntimeErro
         return Err(zdt_parse_error(text));
     }
 
+    let time_part = time_part.strip_suffix('Z').unwrap_or(time_part);
     let (time_main, frac_part) = time_part.split_once('.').unwrap_or((time_part, ""));
-    let time_main = time_main.strip_suffix('Z').unwrap_or(time_main);
     let mut time_iter = time_main.splitn(3, ':');
     let hour = parse_u32(time_iter.next(), text)?;
     let minute = parse_u32(time_iter.next(), text)?;
@@ -172,9 +172,9 @@ fn parse_naive_datetime(text: &str) -> Result<chrono::NaiveDateTime, RuntimeErro
         return Err(zdt_parse_error(text));
     }
 
-    let millis = parse_millis(frac_part, text)?;
+    let nanos = parse_subsecond_nanos(frac_part, text)?;
     chrono::NaiveDate::from_ymd_opt(year, month, day)
-        .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millis))
+        .and_then(|d| d.and_hms_nano_opt(hour, minute, second, nanos))
         .ok_or_else(|| zdt_parse_error(text))
 }
 
@@ -188,15 +188,15 @@ fn parse_u32(value: Option<&str>, input: &str) -> Result<u32, RuntimeError> {
     value.parse::<u32>().map_err(|_| zdt_parse_error(input))
 }
 
-fn parse_millis(text: &str, input: &str) -> Result<u32, RuntimeError> {
+fn parse_subsecond_nanos(text: &str, input: &str) -> Result<u32, RuntimeError> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Ok(0);
     }
-    if !trimmed.chars().all(|ch| ch.is_ascii_digit()) || trimmed.len() > 3 {
+    if !trimmed.chars().all(|ch| ch.is_ascii_digit()) || trimmed.len() > 9 {
         return Err(zdt_parse_error(input));
     }
     let value: u32 = trimmed.parse().map_err(|_| zdt_parse_error(input))?;
-    let scale = 10u32.pow((3 - trimmed.len()) as u32);
+    let scale = 10u32.pow((9 - trimmed.len()) as u32);
     Ok(value.saturating_mul(scale))
 }

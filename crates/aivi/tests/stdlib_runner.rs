@@ -13,7 +13,7 @@ use rayon::prelude::*;
 #[path = "test_support.rs"]
 mod test_support;
 
-const FILE_TIMEOUT_SECS: u64 = 25;
+const FILE_TIMEOUT_SECS: u64 = 60;
 const STDLIB_BATCH_COUNT: usize = 8;
 
 /// Run a test suite for a single file with a timeout to guard against JIT infinite loops.

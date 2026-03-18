@@ -3,7 +3,7 @@
 <!-- quick-info: {"kind":"module","name":"aivi.crypto"} -->
 The `Crypto` domain provides building blocks for hashing, password verification, keyed message authentication, and secure random values.
 
-Use it when you need stable fingerprints of data, password-safe storage, verification tags, random IDs, or raw cryptographically secure bytes.
+Use it when you need stable fingerprints of data, password-safe storage, verification tags, compact URL-safe tokens, random IDs, or raw cryptographically secure bytes.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.crypto</div>
@@ -15,7 +15,7 @@ Use it when you need stable fingerprints of data, password-safe storage, verific
 - creating deterministic fingerprints of text,
 - signing and verifying byte payloads with a shared secret,
 - hashing passwords for storage,
-- generating secure random identifiers, salts, and token bytes.
+- generating secure random identifiers, salts, token bytes, and compact URL-safe token text.
 
 Two distinctions matter right away:
 
@@ -61,6 +61,7 @@ All HMAC helpers operate on `Bytes`, so they fit best when your protocol already
 | **hmacVerify** key message tag<br><code>Bytes -> Bytes -> Bytes -> Bool</code> | Verifies a tag produced by `hmacSha256`. |
 
 If you need a text form for storage or logging, convert the resulting tag with `toHex`.
+If you need a shorter transport form for URLs, cookies, or headers, convert the tag with `toBase64Url`.
 
 ## Password hashing
 
@@ -87,13 +88,18 @@ Store the returned hash string as an opaque value and hand it back to `verifyPas
 | **secureEquals** a b<br><code>Bytes -> Bytes -> Bool</code> | Compares two byte arrays in constant time to reduce timing-leak risk. |
 | **toHex** bytes<br><code>Bytes -> Text</code> | Encodes bytes as lowercase hexadecimal text. |
 | **fromHex** text<br><code>Text -> Result Text Bytes</code> | Decodes hexadecimal text into raw bytes. Returns `Err message` when the input is not valid hexadecimal. |
+| **toBase64Url** bytes<br><code>Bytes -> Text</code> | Encodes bytes as unpadded RFC 4648 URL-safe base64 text, using `-` and `_` instead of `+` and `/`. |
+
+Use `toBase64Url` when you need a shorter text form for opaque bytes in cookies, query parameters, bearer tokens, or other URL-safe identifiers.
+If you need a reversible encoding entirely inside AIVI today, prefer `toHex`/`fromHex`, because `aivi.crypto` does not yet expose a base64url decoder.
 
 ## Verification
 
-The exported `aivi.crypto` module surface is exercised in `integration-tests/stdlib/aivi/crypto/crypto.aivi`, covering digest lengths, HMAC round-trips, password hashing and verification, random byte lengths, UUID generation, and hex encode/decode helpers.
+The exported `aivi.crypto` module surface is exercised in `integration-tests/stdlib/aivi/crypto/crypto.aivi`, covering digest lengths, HMAC round-trips, password hashing and verification, random byte lengths, UUID generation, hex encode/decode helpers, and the URL-safe no-padding `toBase64Url` encoding.
 
 ## Practical guidance
 
 - If you need to store passwords, use `hashPassword` and `verifyPassword` together.
 - If you need to sign API payloads or webhook bodies, use an HMAC helper rather than a plain hash.
 - If you need a human-readable digest, call `toHex` on raw bytes instead of inventing your own encoding.
+- If you need compact text tokens that are safe in URLs, cookies, or headers, call `toBase64Url` on random bytes or HMAC output.

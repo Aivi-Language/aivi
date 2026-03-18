@@ -1,7 +1,9 @@
-Status = Draft | Published | Archived
+module docs.prelude.focused_helpers
 
-tag : Text
-tag = constructorName Published
+use aivi.text (length)
 
-position : Int
-position = constructorOrdinal Published
+size : Int
+size = length "hello"
+
+summary : Text
+summary = "items = {toText size}"

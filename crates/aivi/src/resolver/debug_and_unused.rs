@@ -359,9 +359,6 @@ fn call_arg_allows_function_lifting(func: &Expr, index: usize) -> bool {
             | ("uniqueBy", 0)
             | ("sortBy", 0)
             | ("where", 0)
-            | ("upd", 0)
-            | ("del", 0)
-            | ("ups", 0)
             | ("derive", 1)
     )
 }
@@ -592,7 +589,8 @@ userTable = db.table "users"[]
 main = do Effect {
   _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
   _ <- db.runMigrations[userTable]
-  _ <- userTable + db.ins { id: 1, name: "Alice" }
+  _ <- db.insert userTable { id: 1, name: "Alice" }
+  _ <- db.rows userTable[name == "Alice"]
   db.load userTable
 }
 "#;
@@ -791,9 +789,6 @@ productTable = table "products" [
   { name: "active", type: BoolType, constraints: [], default: None }
 ]
 query = where active (from productTable)
-
-tableRows = table "rows"[]
-updated = tableRows + upd (id == 1) (row => row)
 "#;
 
         let path = std::path::Path::new("test.aivi");

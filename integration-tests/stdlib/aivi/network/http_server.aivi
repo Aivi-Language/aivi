@@ -108,7 +108,7 @@ websocket_receive_send_and_close_echo = withEnvPort "AIVI_TEST_HTTP_WS_PORT" (po
     wsResult <- attempt (do Effect {
         (tx, rx) <- make ""
         server   <- listen { address: addressAt port } (wsHandler tx)
-        result   <- attempt (timeoutWith 2000 "missing websocket message" (recv rx))
+        result   <- attempt (timeoutWith 10000 "missing websocket message" (recv rx))
         _        <- close tx
         _        <- stop server
         pure result

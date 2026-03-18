@@ -52,8 +52,11 @@ domain Graph over Graph = {
   (+) = a b => { nodes: uniqueNodeIds (append a.nodes b.nodes), edges: append a.edges b.edges }
 }
 
+emptyGraph : Graph
+emptyGraph = { nodes: [], edges: [] }
+
 empty : Graph
-empty = { nodes: [], edges: [] }
+empty = emptyGraph
 
 addNode : Graph -> NodeId -> Graph
 addNode = g node =>
@@ -68,7 +71,7 @@ fromEdgesHelp = g pairs => pairs match
   | [(from, to), ...rest] => fromEdgesHelp (addEdge g { from: from, to: to, weight: 1.0 }) rest
 
 fromEdges : List (NodeId, NodeId) -> Graph
-fromEdges = pairs => fromEdgesHelp empty pairs
+fromEdges = pairs => fromEdgesHelp emptyGraph pairs
 
 fromWeightedEdgesHelp : Graph -> List (NodeId, NodeId, Float) -> Graph
 fromWeightedEdgesHelp = g triples => triples match
@@ -76,7 +79,7 @@ fromWeightedEdgesHelp = g triples => triples match
   | [(from, to, w), ...rest] => fromWeightedEdgesHelp (addEdge g { from: from, to: to, weight: w }) rest
 
 fromWeightedEdges : List (NodeId, NodeId, Float) -> Graph
-fromWeightedEdges = triples => fromWeightedEdgesHelp empty triples
+fromWeightedEdges = triples => fromWeightedEdgesHelp emptyGraph triples
 
 edgeEq : Edge -> Edge -> Bool
 edgeEq = a b => a.from == b.from && a.to == b.to && a.weight == b.weight
