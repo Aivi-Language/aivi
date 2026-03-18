@@ -13,7 +13,7 @@ That makes them a good fit for AIVI programs where you want predictable data flo
 
 ## Imports at a glance
 
-- `List` is available as a built-in type; use `aivi.list` for top-level helper functions such as `chunk`, `findMap`, and `traverse_`, and use [`aivi.logic`](logic.md) for the shared `traverse` operation.
+- `List` is available as a built-in type; use `aivi.list` for top-level helper functions such as `chunk`, `findMap`, and `traverseEffects`, and use [`aivi.logic`](logic.md) for the shared `traverse` operation.
 - `Map` helpers use the qualified `Map.*` namespace from `aivi.collections` or `aivi`.
 - `Set`, `Queue`, `Deque`, and `Heap` are used through their qualified namespaces (`Set.*`, `Queue.*`, `Deque.*`, `Heap.*`) from `aivi.collections` or `aivi`.
 
@@ -119,10 +119,10 @@ Those class instances give you shared operations such as `map`, `filter`, `reduc
 | **chunk** size list<br><code>Int -> List a -> List (List a)</code> | Breaks a list into sublists of length `size`. For `size <= 0`, the result is `[]`. |
 | **dedup** list<br><code>List a -> List a</code> | Removes only **consecutive** duplicates. |
 | **uniqueBy** key list<br><code>(a -> k) -> List a -> List a</code> | Keeps the first occurrence of each key and discards later duplicates. |
-| **traverse_** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Runs an effect for each item and discards the collected results. |
-| **sequence_** list<br><code>List (Effect e a) -> Effect e Unit</code> | Executes a list of effects from left to right and discards their results. |
+| **traverseEffects** f list<br><code>(a -> Effect e b) -> List a -> Effect e Unit</code> | Runs an effect for each item and discards the collected results. |
+| **sequenceEffects** list<br><code>List (Effect e a) -> Effect e Unit</code> | Executes a list of effects from left to right and discards their results. |
 
-Use `traverse` from [`aivi.logic`](logic.md) when you need to map each list item through an effect and collect the resulting values. `aivi.list` keeps `traverse_` and `sequence_` for result-discarding `Effect` workflows.
+Use `traverse` from [`aivi.logic`](logic.md) when you need to map each list item through an effect and collect the resulting values. `aivi.list` keeps `traverseEffects` and `sequenceEffects` for result-discarding `Effect` workflows.
 
 ## Map helpers (`Map.*`)
 
