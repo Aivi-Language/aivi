@@ -415,6 +415,64 @@ mod lsp_protocol_edits {
     }
 
     #[tokio::test]
+    async fn formatting_after_did_open_returns_edits() {
+        let (mut client_read, mut client_write, server_task) = start_lsp().await;
+        initialize_lsp(&mut client_read, &mut client_write).await;
+
+        let uri = Url::parse("file:///lsp/formatting.aivi").expect("uri");
+        let text = "@no_prelude\nmodule lsp.formatting\n\nmain = do Effect { _<-print \"hi\" }\n";
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri.to_string(),
+                        "languageId": "aivi",
+                        "version": 1,
+                        "text": text
+                    }
+                }
+            }),
+        )
+        .await;
+        write_lsp_msg(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "textDocument/formatting",
+                "params": {
+                    "textDocument": { "uri": uri.to_string() },
+                    "options": { "tabSize": 2, "insertSpaces": true }
+                }
+            }),
+        )
+        .await;
+
+        let response = timeout(LSP_TEST_TIMEOUT, wait_for_response_id(&mut client_read, 7))
+            .await
+            .expect("formatting response");
+        let edits = response
+            .get("result")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(!edits.is_empty(), "expected formatting edits after didOpen");
+        let new_text = edits[0]
+            .get("newText")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(
+            new_text.contains("main = do Effect { _ <- print \"hi\" }"),
+            "expected formatted effect block spacing, got: {new_text:?}"
+        );
+
+        shutdown_lsp(client_write, server_task).await;
+    }
+
+    #[tokio::test]
     async fn unrelated_workspace_errors_do_not_hide_current_file_type_diagnostics() {
         let diagnostics_timeout = LSP_TEST_TIMEOUT;
         let dir = std::env::temp_dir().join(format!(

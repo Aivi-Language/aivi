@@ -35,7 +35,13 @@ fn compile_definition_body<M: Module>(
     let mut pending_lambdas: Vec<CompiledLambdaInfo> = Vec::new();
 
     for (lambda_expr, captured_vars) in &lambdas {
-        let RustIrExpr::Lambda { id, param, body } = lambda_expr else {
+        let RustIrExpr::Lambda {
+            id,
+            param,
+            body,
+            location,
+        } = lambda_expr
+        else {
             continue;
         };
 
@@ -147,7 +153,7 @@ fn compile_definition_body<M: Module>(
                 format!("{module_name}.{}", def.name)
             };
             let lambda_display = format!("{def_display} (lambda)");
-            lower_ctx.emit_enter_fn(&mut builder, &lambda_display);
+            lower_ctx.emit_enter_fn(&mut builder, &lambda_display, location.as_ref());
 
             // Perceus: run use analysis on the lambda body
             let use_map = super::use_analysis::analyze_uses(body);
@@ -345,7 +351,7 @@ fn compile_definition_body<M: Module>(
         } else {
             format!("{module_name}.{}", def.name)
         };
-        lower_ctx.emit_enter_fn(&mut builder, &display_name);
+        lower_ctx.emit_enter_fn(&mut builder, &display_name, def.location.as_ref());
 
         // Perceus: run use analysis on the function body
         let use_map = super::use_analysis::analyze_uses(body);

@@ -180,7 +180,12 @@ fn rewrite_implicit_field_vars(
             field: name,
             location: None,
         },
-        HirExpr::Lambda { id, param, body } => HirExpr::Lambda {
+        HirExpr::Lambda {
+            id,
+            param,
+            body,
+            location,
+        } => HirExpr::Lambda {
             id,
             param: param.clone(),
             body: {
@@ -196,6 +201,7 @@ fn rewrite_implicit_field_vars(
                     Box::new(rewrite_implicit_field_vars(*body, implicit_param, unbound))
                 }
             },
+            location,
         },
         HirExpr::App {
             id,

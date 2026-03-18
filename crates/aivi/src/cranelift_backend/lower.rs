@@ -429,8 +429,12 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_reuse_list: decl!("rt_reuse_list", [PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, token, items_ptr, len) -> ptr
         rt_reuse_tuple: decl!("rt_reuse_tuple", [PTR, PTR, PTR, PTR], [PTR]),
-        // (ctx, name_ptr, name_len) -> void
-        rt_enter_fn: decl!("rt_enter_fn", [PTR, PTR, PTR], []),
+        // (ctx, name_ptr, name_len, path_ptr, path_len, start_line, start_col, end_line, end_col, kind) -> void
+        rt_enter_fn: decl!(
+            "rt_enter_fn",
+            [PTR, PTR, PTR, PTR, PTR, PTR, PTR, PTR, PTR, PTR],
+            []
+        ),
         // (ctx) -> void
         rt_leave_fn: decl!("rt_leave_fn", [PTR], []),
         // (ctx, path_ptr, path_len, start_line, start_col, end_line, end_col, kind) -> void
@@ -781,11 +785,51 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     }
 
     /// Emit a call to `rt_enter_fn` to record the current function name for diagnostics.
-    pub(crate) fn emit_enter_fn(&mut self, builder: &mut FunctionBuilder<'_>, fn_name: &str) {
+    pub(crate) fn emit_enter_fn(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        fn_name: &str,
+        location: Option<&SourceOrigin>,
+    ) {
         let (ptr, len) = self.embed_str(builder, fn_name.as_bytes());
-        builder
-            .ins()
-            .call(self.helpers.rt_enter_fn, &[self.ctx_param, ptr, len]);
+        let (path_ptr, path_len, start_line, start_col, end_line, end_col, kind) =
+            if let Some(location) = location {
+                let (path_ptr, path_len) = self.embed_str(builder, location.path.as_bytes());
+                (
+                    path_ptr,
+                    path_len,
+                    builder.ins().iconst(PTR, location.span.start.line as i64),
+                    builder.ins().iconst(PTR, location.span.start.column as i64),
+                    builder.ins().iconst(PTR, location.span.end.line as i64),
+                    builder.ins().iconst(PTR, location.span.end.column as i64),
+                    builder.ins().iconst(PTR, location.source_kind.as_i64()),
+                )
+            } else {
+                (
+                    builder.ins().iconst(PTR, 0),
+                    builder.ins().iconst(PTR, 0),
+                    builder.ins().iconst(PTR, 0),
+                    builder.ins().iconst(PTR, 0),
+                    builder.ins().iconst(PTR, 0),
+                    builder.ins().iconst(PTR, 0),
+                    builder.ins().iconst(PTR, 0),
+                )
+            };
+        builder.ins().call(
+            self.helpers.rt_enter_fn,
+            &[
+                self.ctx_param,
+                ptr,
+                len,
+                path_ptr,
+                path_len,
+                start_line,
+                start_col,
+                end_line,
+                end_col,
+                kind,
+            ],
+        );
     }
 
     pub(crate) fn emit_leave_fn(&mut self, builder: &mut FunctionBuilder<'_>) {

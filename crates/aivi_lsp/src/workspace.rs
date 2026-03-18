@@ -397,6 +397,11 @@ impl Backend {
     where
         F: FnOnce(&str) -> R,
     {
+        // Request handlers should observe the same per-document ordering as didOpen/didChange/
+        // didClose so release builds cannot read the document map before a preceding notification
+        // has committed the latest text.
+        let change_lock = self.document_change_lock(uri).await;
+        let _change_guard = change_lock.lock().await;
         let state = self.state.lock().await;
         state.documents.get(uri).map(|doc| f(&doc.text))
     }

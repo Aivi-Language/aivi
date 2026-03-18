@@ -50,6 +50,7 @@ fn desugar_module(module: HirModule, id_gen: &mut IdGen) -> HirModule {
 fn desugar_def(def: HirDef, id_gen: &mut IdGen) -> HirDef {
     HirDef {
         name: def.name,
+        location: def.location,
         expr: desugar_expr(def.expr, id_gen),
     }
 }
@@ -77,10 +78,16 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
                 })
                 .collect(),
         },
-        HirExpr::Lambda { id, param, body } => HirExpr::Lambda {
+        HirExpr::Lambda {
+            id,
+            param,
+            body,
+            location,
+        } => HirExpr::Lambda {
             id,
             param,
             body: Box::new(desugar_expr(*body, id_gen)),
+            location,
         },
         HirExpr::App {
             id,
@@ -360,7 +367,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                     id: id_gen.next(),
                     param: param_name,
                     body: Box::new(body),
-                };
+                                location: None,
+};
                 gen_bind(src, func, id_gen)
             } else {
                 // `s = expr` in a generate block: plain let-binding.
@@ -399,7 +407,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         id: id_gen.next(),
                         param: loop_name,
                         body: Box::new(raw_src),
-                    };
+                                        location: None,
+};
                     HirExpr::App {
                         id: id_gen.next(),
                         func: Box::new(HirExpr::Var {
@@ -422,7 +431,8 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr
                         id: id_gen.next(),
                         param: param_name,
                         body: Box::new(body),
-                    }),
+                                        location: None,
+}),
                     arg: Box::new(value),
                     location: None,
                 }
@@ -479,7 +489,11 @@ fn gen_empty(id_gen: &mut IdGen) -> HirExpr {
             
                 location: None,
             }),
+        
+            location: None,
         }),
+    
+        location: None,
     }
 }
 
@@ -521,8 +535,11 @@ fn gen_yield(val: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             param: z_name,
             body: Box::new(k_app_z_val),
+        
+            location: None,
         }),
-    }
+        location: None,
+}
 }
 
 // \k -> \z -> g2 k (g1 k z)
@@ -577,8 +594,11 @@ fn gen_append(g1: HirExpr, g2: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             param: z_name,
             body: Box::new(g2_k_res),
+        
+            location: None,
         }),
-    }
+        location: None,
+}
 }
 
 // \k -> \z -> if cond then next(k, z) else z
@@ -627,8 +647,11 @@ fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             param: z_name,
             body: Box::new(if_expr),
+        
+            location: None,
         }),
-    }
+        location: None,
+}
 }
 
 // ── do Effect { ... } desugaring ──────────────────────────────────────────────
@@ -696,7 +719,8 @@ fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen)
                         id: id_gen.next(),
                         param,
                         body: Box::new(body),
-                    },
+                                        location: None,
+},
                     id_gen,
                 );
             } else {
@@ -712,7 +736,8 @@ fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen)
                     id: id_gen.next(),
                     param,
                     body: Box::new(body),
-                },
+                                location: None,
+},
                 id_gen,
             )
         }
@@ -731,7 +756,8 @@ fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen)
                         id: id_gen.next(),
                         param,
                         body: Box::new(rest),
-                    },
+                                        location: None,
+},
                     id_gen,
                 )
             }
@@ -753,7 +779,8 @@ fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen)
                         id: id_gen.next(),
                         param,
                         body: Box::new(rest),
-                    },
+                                        location: None,
+},
                     id_gen,
                 )
             }
@@ -900,7 +927,8 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
                 id: id_gen.next(),
                 param: format!("_res_unused_{}", id_gen.next()),
                 body: Box::new(cleanup_body),
-            };
+                        location: None,
+};
             let mut bundled_acquire_items = acquire_items;
             bundled_acquire_items.push(HirBlockItem::Yield {
                 expr: HirExpr::Tuple {
@@ -916,7 +944,8 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
                 id: id_gen.next(),
                 param: format!("_res_unused_{}", id_gen.next()),
                 body: Box::new(effect_pure_unit(id_gen)),
-            };
+                        location: None,
+};
             let value_param = format!("_resource_value_{}", id_gen.next());
             effect_bind(
                 acquire_effect,
@@ -938,7 +967,9 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
                         },
                         id_gen,
                     )),
-                },
+                
+                    location: None,
+    },
                 id_gen,
             )
         }
@@ -947,7 +978,8 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
         id: id_gen.next(),
         param: format!("_res_unused_{}", id_gen.next()),
         body: Box::new(acquire_body),
-    };
+        location: None,
+};
 
     HirExpr::Call {
         id,
@@ -1006,7 +1038,8 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                         id: id_gen.next(),
                         param,
                         body: Box::new(body),
-                    }),
+                                        location: None,
+}),
                     arg: Box::new(lowered_expr),
                     location: None,
                 }
@@ -1025,7 +1058,8 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
                         id: id_gen.next(),
                         param,
                         body: Box::new(rest),
-                    }),
+                                        location: None,
+}),
                     arg: Box::new(lowered_expr),
                     location: None,
                 }

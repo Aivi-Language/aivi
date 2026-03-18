@@ -1,0 +1,4 @@
+@no_prelude
+module fixture.formatting
+
+main = do Effect { _<-print "hi" }

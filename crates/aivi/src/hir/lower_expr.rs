@@ -224,12 +224,15 @@ fn lower_expr_inner_ctx(
                 field: field.name,
                 location: ctx
                     .source_path
-                    .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
+                    .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())),
             };
             HirExpr::Lambda {
                 id: id_gen.next(),
                 param,
                 body: Box::new(body),
+                location: ctx
+                    .source_path
+                    .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
             }
         }
         Expr::Index { base, index, span } => HirExpr::Index {
@@ -251,9 +254,12 @@ fn lower_expr_inner_ctx(
                 .source_path
                 .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
         },
-        Expr::Lambda { params, body, .. } => {
+        Expr::Lambda { params, body, span } => {
             let body = lower_expr_ctx(*body, id_gen, ctx, false);
-            lower_lambda_hir(params, body, id_gen)
+            let location = ctx
+                .source_path
+                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span));
+            lower_lambda_hir(params, body, location, id_gen)
         }
         Expr::Match {
             scrutinee, arms, span,
@@ -290,6 +296,7 @@ fn lower_expr_inner_ctx(
                     id: id_gen.next(),
                     param,
                     body: Box::new(match_expr),
+                    location,
                 };
             };
             HirExpr::Match {
@@ -722,7 +729,12 @@ fn lower_pipe_chain(
     acc
 }
 
-fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> HirExpr {
+fn lower_lambda_hir(
+    params: Vec<Pattern>,
+    body: HirExpr,
+    location: Option<crate::diagnostics::SourceOrigin>,
+    id_gen: &mut IdGen,
+) -> HirExpr {
     let mut acc = body;
     for (index, param) in params.into_iter().rev().enumerate() {
         match param {
@@ -731,6 +743,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     id: id_gen.next(),
                     param: name.name,
                     body: Box::new(acc),
+                    location: location.clone(),
                 };
             }
             Pattern::SubjectIdent(name) => {
@@ -738,6 +751,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     id: id_gen.next(),
                     param: name.name,
                     body: Box::new(acc),
+                    location: location.clone(),
                 };
             }
             Pattern::Wildcard(_) => {
@@ -745,6 +759,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     id: id_gen.next(),
                     param: format!("_arg{}", index),
                     body: Box::new(acc),
+                    location: location.clone(),
                 };
             }
             other => {
@@ -769,6 +784,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     id: id_gen.next(),
                     param: param_name,
                     body: Box::new(match_expr),
+                    location: location.clone(),
                 };
             }
         }
@@ -1067,7 +1083,7 @@ fn desugar_do_items(
             }
         }
         // Expression statement: `e`
-        BlockItem::Expr { expr, .. } => {
+        BlockItem::Expr { expr, span } => {
             let rhs = lower_expr_ctx(expr.clone(), id_gen, ctx, false);
             if is_last {
                 // Final expression: must have type `M A`, returned directly.
@@ -1075,10 +1091,14 @@ fn desugar_do_items(
             } else {
                 let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, ops, id_gen, ctx);
                 let param = format!("__do_seq{}", id_gen.next());
+                let continuation_location = ctx.source_path.map(|path| {
+                    crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())
+                });
                 let continuation = HirExpr::Lambda {
                     id: id_gen.next(),
                     param,
                     body: Box::new(rest),
+                    location: continuation_location,
                 };
                 // chain (λ_. rest) rhs
                 HirExpr::Call {
@@ -1125,16 +1145,19 @@ fn make_pattern_lambda(
             id: id_gen.next(),
             param: name.name.clone(),
             body: Box::new(body),
+            location: None,
         },
         Pattern::SubjectIdent(name) => HirExpr::Lambda {
             id: id_gen.next(),
             param: name.name.clone(),
             body: Box::new(body),
+            location: None,
         },
         Pattern::Wildcard(_) => HirExpr::Lambda {
             id: id_gen.next(),
             param: fallback_param.to_string(),
             body: Box::new(body),
+            location: None,
         },
         _ => {
             let match_expr = HirExpr::Match {
@@ -1157,6 +1180,7 @@ fn make_pattern_lambda(
                 id: id_gen.next(),
                 param: fallback_param.to_string(),
                 body: Box::new(match_expr),
+                location: None,
             }
         }
     }
@@ -1362,6 +1386,7 @@ fn build_patch_lambda_hir(
         id: id_gen.next(),
         param,
         body: Box::new(patch),
+        location: None,
     }
 }
 

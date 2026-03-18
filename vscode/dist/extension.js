@@ -76,8 +76,8 @@ var require_is = __commonJS({
       if (value instanceof Promise) {
         return value;
       } else if (thenable(value)) {
-        return new Promise((resolve, reject) => {
-          value.then((resolved) => resolve(resolved), (error2) => reject(error2));
+        return new Promise((resolve2, reject) => {
+          value.then((resolved) => resolve2(resolved), (error2) => reject(error2));
         });
       } else {
         return Promise.resolve(value);
@@ -1088,8 +1088,8 @@ var require_semaphore = __commonJS({
         this._waiting = [];
       }
       lock(thunk) {
-        return new Promise((resolve, reject) => {
-          this._waiting.push({ thunk, resolve, reject });
+        return new Promise((resolve2, reject) => {
+          this._waiting.push({ thunk, resolve: resolve2, reject });
           this.runNext();
         });
       }
@@ -2579,9 +2579,9 @@ ${JSON.stringify(message, null, 4)}`);
           if (typeof cancellationStrategy.sender.enableCancellation === "function") {
             cancellationStrategy.sender.enableCancellation(requestMessage);
           }
-          return new Promise(async (resolve, reject) => {
+          return new Promise(async (resolve2, reject) => {
             const resolveWithCleanup = (r) => {
-              resolve(r);
+              resolve2(r);
               cancellationStrategy.sender.cleanup(id);
               disposable?.dispose();
             };
@@ -2992,10 +2992,10 @@ var require_ril = __commonJS({
         return api_1.Disposable.create(() => this.stream.off("end", listener));
       }
       write(data, encoding) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve2, reject) => {
           const callback = (error) => {
             if (error === void 0 || error === null) {
-              resolve();
+              resolve2();
             } else {
               reject(error);
             }
@@ -3098,7 +3098,7 @@ var require_main = __commonJS({
     exports2.createMessageConnection = exports2.createServerSocketTransport = exports2.createClientSocketTransport = exports2.createServerPipeTransport = exports2.createClientPipeTransport = exports2.generateRandomPipeName = exports2.StreamMessageWriter = exports2.StreamMessageReader = exports2.SocketMessageWriter = exports2.SocketMessageReader = exports2.PortMessageWriter = exports2.PortMessageReader = exports2.IPCMessageWriter = exports2.IPCMessageReader = void 0;
     var ril_1 = require_ril();
     ril_1.default.install();
-    var path2 = require("path");
+    var path3 = require("path");
     var os = require("os");
     var crypto_1 = require("crypto");
     var net_1 = require("net");
@@ -3234,9 +3234,9 @@ var require_main = __commonJS({
       }
       let result;
       if (XDG_RUNTIME_DIR) {
-        result = path2.join(XDG_RUNTIME_DIR, `vscode-ipc-${randomSuffix}.sock`);
+        result = path3.join(XDG_RUNTIME_DIR, `vscode-ipc-${randomSuffix}.sock`);
       } else {
-        result = path2.join(os.tmpdir(), `vscode-${randomSuffix}.sock`);
+        result = path3.join(os.tmpdir(), `vscode-${randomSuffix}.sock`);
       }
       const limit = safeIpcPathLengths.get(process.platform);
       if (limit !== void 0 && result.length > limit) {
@@ -3247,10 +3247,10 @@ var require_main = __commonJS({
     exports2.generateRandomPipeName = generateRandomPipeName;
     function createClientPipeTransport(pipeName, encoding = "utf-8") {
       let connectResolve;
-      const connected = new Promise((resolve, _reject) => {
-        connectResolve = resolve;
+      const connected = new Promise((resolve2, _reject) => {
+        connectResolve = resolve2;
       });
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve2, reject) => {
         let server = (0, net_1.createServer)((socket) => {
           server.close();
           connectResolve([
@@ -3261,7 +3261,7 @@ var require_main = __commonJS({
         server.on("error", reject);
         server.listen(pipeName, () => {
           server.removeListener("error", reject);
-          resolve({
+          resolve2({
             onConnected: () => {
               return connected;
             }
@@ -3280,10 +3280,10 @@ var require_main = __commonJS({
     exports2.createServerPipeTransport = createServerPipeTransport;
     function createClientSocketTransport(port, encoding = "utf-8") {
       let connectResolve;
-      const connected = new Promise((resolve, _reject) => {
-        connectResolve = resolve;
+      const connected = new Promise((resolve2, _reject) => {
+        connectResolve = resolve2;
       });
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve2, reject) => {
         const server = (0, net_1.createServer)((socket) => {
           server.close();
           connectResolve([
@@ -3294,7 +3294,7 @@ var require_main = __commonJS({
         server.on("error", reject);
         server.listen(port, "127.0.0.1", () => {
           server.removeListener("error", reject);
-          resolve({
+          resolve2({
             onConnected: () => {
               return connected;
             }
@@ -6390,8 +6390,8 @@ var require_async = __commonJS({
           this.cancelTimeout();
         }
         if (!this.completionPromise) {
-          this.completionPromise = new Promise((resolve) => {
-            this.onSuccess = resolve;
+          this.completionPromise = new Promise((resolve2) => {
+            this.onSuccess = resolve2;
           }).then(() => {
             this.completionPromise = void 0;
             this.onSuccess = void 0;
@@ -6444,8 +6444,8 @@ var require_async = __commonJS({
         this._waiting = [];
       }
       lock(thunk) {
-        return new Promise((resolve, reject) => {
-          this._waiting.push({ thunk, resolve, reject });
+        return new Promise((resolve2, reject) => {
+          this._waiting.push({ thunk, resolve: resolve2, reject });
           this.runNext();
         });
       }
@@ -6560,9 +6560,9 @@ var require_async = __commonJS({
         if (token !== void 0 && token.isCancellationRequested) {
           break;
         }
-        index = await new Promise((resolve) => {
+        index = await new Promise((resolve2) => {
           (0, vscode_languageserver_protocol_1.RAL)().timer.setImmediate(() => {
-            resolve(convertBatch(index));
+            resolve2(convertBatch(index));
           });
         });
       }
@@ -6591,9 +6591,9 @@ var require_async = __commonJS({
         if (token !== void 0 && token.isCancellationRequested) {
           break;
         }
-        index = await new Promise((resolve) => {
+        index = await new Promise((resolve2) => {
           (0, vscode_languageserver_protocol_1.RAL)().timer.setImmediate(() => {
-            resolve(convertBatch(index));
+            resolve2(convertBatch(index));
           });
         });
       }
@@ -6621,9 +6621,9 @@ var require_async = __commonJS({
         if (token !== void 0 && token.isCancellationRequested) {
           break;
         }
-        index = await new Promise((resolve) => {
+        index = await new Promise((resolve2) => {
           (0, vscode_languageserver_protocol_1.RAL)().timer.setImmediate(() => {
-            resolve(runBatch(index));
+            resolve2(runBatch(index));
           });
         });
       }
@@ -8867,8 +8867,8 @@ var require_progressPart = __commonJS({
             this._client.sendNotification(vscode_languageserver_protocol_1.WorkDoneProgressCancelNotification.type, { token: this._token });
           });
           this.report(params);
-          return new Promise((resolve, reject) => {
-            this._resolve = resolve;
+          return new Promise((resolve2, reject) => {
+            this._resolve = resolve2;
             this._reject = reject;
           });
         });
@@ -9417,8 +9417,8 @@ var require_minimatch = __commonJS({
       return new Minimatch(pattern, options).match(p);
     };
     module2.exports = minimatch;
-    var path2 = require_path();
-    minimatch.sep = path2.sep;
+    var path3 = require_path();
+    minimatch.sep = path3.sep;
     var GLOBSTAR = Symbol("globstar **");
     minimatch.GLOBSTAR = GLOBSTAR;
     var expand = require_brace_expansion();
@@ -9927,8 +9927,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f === "";
         if (f === "/" && partial) return true;
         const options = this.options;
-        if (path2.sep !== "/") {
-          f = f.split(path2.sep).join("/");
+        if (path3.sep !== "/") {
+          f = f.split(path3.sep).join("/");
         }
         f = f.split(slashSplit);
         this.debug(this.pattern, "split", f);
@@ -11653,13 +11653,13 @@ var require_configuration = __commonJS({
         });
       }
       extractSettingsInformation(keys) {
-        function ensurePath(config, path2) {
+        function ensurePath(config, path3) {
           let current = config;
-          for (let i = 0; i < path2.length - 1; i++) {
-            let obj = current[path2[i]];
+          for (let i = 0; i < path3.length - 1; i++) {
+            let obj = current[path3[i]];
             if (!obj) {
               obj = /* @__PURE__ */ Object.create(null);
-              current[path2[i]] = obj;
+              current[path3[i]] = obj;
             }
             current = obj;
           }
@@ -11677,8 +11677,8 @@ var require_configuration = __commonJS({
             config = vscode_1.workspace.getConfiguration(void 0, resource).get(key);
           }
           if (config) {
-            let path2 = keys[i].split(".");
-            ensurePath(result, path2)[path2[path2.length - 1]] = toJSONObject(config);
+            let path3 = keys[i].split(".");
+            ensurePath(result, path3)[path3[path3.length - 1]] = toJSONObject(config);
           }
         }
         return result;
@@ -14245,13 +14245,13 @@ var require_fileOperations = __commonJS({
       async filter(event, prop) {
         const fileMatches = await Promise.all(event.files.map(async (item) => {
           const uri = prop(item);
-          const path2 = uri.fsPath.replace(/\\/g, "/");
+          const path3 = uri.fsPath.replace(/\\/g, "/");
           for (const filters of this._filters.values()) {
             for (const filter of filters) {
               if (filter.scheme !== void 0 && filter.scheme !== uri.scheme) {
                 continue;
               }
-              if (filter.matcher.match(path2)) {
+              if (filter.matcher.match(path3)) {
                 if (filter.kind === void 0) {
                   return true;
                 }
@@ -14265,7 +14265,7 @@ var require_fileOperations = __commonJS({
                 }
               } else if (filter.kind === proto.FileOperationPatternKind.folder) {
                 const fileType = await _FileOperationFeature.getFileType(uri);
-                if (fileType === code.FileType.Directory && filter.matcher.match(`${path2}/`)) {
+                if (fileType === code.FileType.Directory && filter.matcher.match(`${path3}/`)) {
                   return true;
                 }
               }
@@ -15367,7 +15367,7 @@ var require_client = __commonJS({
         if (this._onStart !== void 0) {
           return this._onStart;
         }
-        const [promise, resolve, reject] = this.createOnStartPromise();
+        const [promise, resolve2, reject] = this.createOnStartPromise();
         this._onStart = promise;
         if (this._diagnostics === void 0) {
           this._diagnostics = this._clientOptions.diagnosticCollectionName ? vscode_1.languages.createDiagnosticCollection(this._clientOptions.diagnosticCollectionName) : vscode_1.languages.createDiagnosticCollection();
@@ -15477,7 +15477,7 @@ var require_client = __commonJS({
           });
           connection.listen();
           await this.initialize(connection);
-          resolve();
+          resolve2();
         } catch (error) {
           this.$state = ClientState.StartFailed;
           this.error(`${this._name} client: couldn't create connection to server.`, error, "force");
@@ -15486,13 +15486,13 @@ var require_client = __commonJS({
         return this._onStart;
       }
       createOnStartPromise() {
-        let resolve;
+        let resolve2;
         let reject;
         const promise = new Promise((_resolve, _reject) => {
-          resolve = _resolve;
+          resolve2 = _resolve;
           reject = _reject;
         });
-        return [promise, resolve, reject];
+        return [promise, resolve2, reject];
       }
       async initialize(connection) {
         this.refreshTrace(connection, false);
@@ -17491,8 +17491,8 @@ var require_main4 = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.SettingMonitor = exports2.LanguageClient = exports2.TransportKind = void 0;
     var cp = require("child_process");
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var vscode_1 = require("vscode");
     var Is = require_is();
     var client_1 = require_client();
@@ -17602,7 +17602,7 @@ var require_main4 = __commonJS({
       async restart() {
         await this.stop();
         if (this.isInDebugMode) {
-          await new Promise((resolve) => setTimeout(resolve, 1e3));
+          await new Promise((resolve2) => setTimeout(resolve2, 1e3));
           await this.start();
         } else {
           await this.start();
@@ -17785,7 +17785,7 @@ var require_main4 = __commonJS({
               }
             } else {
               let pipeName = void 0;
-              return new Promise((resolve, reject) => {
+              return new Promise((resolve2, reject) => {
                 const args = (node.args && node.args.slice()) ?? [];
                 if (transport === TransportKind.ipc) {
                   args.push("--node-ipc");
@@ -17810,9 +17810,9 @@ var require_main4 = __commonJS({
                   sp.stderr.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                   if (transport === TransportKind.ipc) {
                     sp.stdout.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
-                    resolve({ reader: new node_1.IPCMessageReader(this._serverProcess), writer: new node_1.IPCMessageWriter(this._serverProcess) });
+                    resolve2({ reader: new node_1.IPCMessageReader(this._serverProcess), writer: new node_1.IPCMessageWriter(this._serverProcess) });
                   } else {
-                    resolve({ reader: new node_1.StreamMessageReader(sp.stdout), writer: new node_1.StreamMessageWriter(sp.stdin) });
+                    resolve2({ reader: new node_1.StreamMessageReader(sp.stdout), writer: new node_1.StreamMessageWriter(sp.stdin) });
                   }
                 } else if (transport === TransportKind.pipe) {
                   (0, node_1.createClientPipeTransport)(pipeName).then((transport2) => {
@@ -17822,7 +17822,7 @@ var require_main4 = __commonJS({
                     sp.stderr.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                     sp.stdout.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                     transport2.onConnected().then((protocol) => {
-                      resolve({ reader: protocol[0], writer: protocol[1] });
+                      resolve2({ reader: protocol[0], writer: protocol[1] });
                     }, reject);
                   }, reject);
                 } else if (Transport.isSocket(transport)) {
@@ -17833,7 +17833,7 @@ var require_main4 = __commonJS({
                     sp.stderr.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                     sp.stdout.on("data", (data) => this.outputChannel.append(Is.string(data) ? data : data.toString(encoding)));
                     transport2.onConnected().then((protocol) => {
-                      resolve({ reader: protocol[0], writer: protocol[1] });
+                      resolve2({ reader: protocol[0], writer: protocol[1] });
                     }, reject);
                   }, reject);
                 }
@@ -17910,19 +17910,19 @@ var require_main4 = __commonJS({
         });
       }
       _getRuntimePath(runtime, serverWorkingDirectory) {
-        if (path2.isAbsolute(runtime)) {
+        if (path3.isAbsolute(runtime)) {
           return runtime;
         }
         const mainRootPath = this._mainGetRootPath();
         if (mainRootPath !== void 0) {
-          const result = path2.join(mainRootPath, runtime);
-          if (fs2.existsSync(result)) {
+          const result = path3.join(mainRootPath, runtime);
+          if (fs3.existsSync(result)) {
             return result;
           }
         }
         if (serverWorkingDirectory !== void 0) {
-          const result = path2.join(serverWorkingDirectory, runtime);
-          if (fs2.existsSync(result)) {
+          const result = path3.join(serverWorkingDirectory, runtime);
+          if (fs3.existsSync(result)) {
             return result;
           }
         }
@@ -17946,7 +17946,7 @@ var require_main4 = __commonJS({
         }
         if (cwd) {
           return new Promise((s) => {
-            fs2.lstat(cwd, (err, stats) => {
+            fs3.lstat(cwd, (err, stats) => {
               s(!err && stats.isDirectory() ? cwd : void 0);
             });
           });
@@ -18013,8 +18013,8 @@ __export(extension_exports, {
 });
 module.exports = __toCommonJS(extension_exports);
 var vscode = __toESM(require("vscode"));
-var fs = __toESM(require("node:fs"));
-var path = __toESM(require("node:path"));
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
 var import_node_child_process = require("node:child_process");
 var import_node = __toESM(require_node3());
 
@@ -18095,6 +18095,98 @@ function fallbackHoverMarkdownForToken(token) {
   return HOVER_FALLBACK_DOCS[token] ?? HOVER_FALLBACK_DOCS[token.toLowerCase()];
 }
 
+// src/serverResolution.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function safeMtimeMs(filePath, existsSync3, statSync2) {
+  if (!existsSync3(filePath)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  try {
+    return statSync2(filePath).mtimeMs;
+  } catch {
+    return Number.NEGATIVE_INFINITY;
+  }
+}
+function repoRootForSourceCheckout(extensionPath, existsSync3) {
+  const repoRoot = path.resolve(extensionPath, "..");
+  const requiredPaths = [
+    path.join(repoRoot, "Cargo.toml"),
+    path.join(repoRoot, "crates", "aivi_lsp", "Cargo.toml"),
+    path.join(repoRoot, "vscode", "package.json")
+  ];
+  return requiredPaths.every((candidate) => existsSync3(candidate)) ? repoRoot : void 0;
+}
+function resolveServerCommand({
+  extensionPath,
+  configuredCommand,
+  configuredArgs = [],
+  isWindows = process.platform === "win32",
+  existsSync: existsSync3 = fs.existsSync,
+  hasCommand: hasCommand2 = () => false,
+  statSync: statSync2 = fs.statSync
+}) {
+  if (configuredCommand && configuredCommand.trim().length > 0) {
+    return {
+      command: configuredCommand,
+      args: configuredArgs,
+      source: "configured"
+    };
+  }
+  const exeName = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
+  const bundledServerPath = path.join(extensionPath, "bin", exeName);
+  const bundledMtimeMs = safeMtimeMs(bundledServerPath, existsSync3, statSync2);
+  const repoRoot = repoRootForSourceCheckout(extensionPath, existsSync3);
+  if (repoRoot) {
+    const workspaceCandidates = [
+      {
+        source: "workspace-debug",
+        command: path.join(repoRoot, "target", "debug", exeName)
+      },
+      {
+        source: "workspace-release",
+        command: path.join(repoRoot, "target", "release", exeName)
+      }
+    ].filter((candidate) => existsSync3(candidate.command)).sort(
+      (left, right) => safeMtimeMs(right.command, existsSync3, statSync2) - safeMtimeMs(left.command, existsSync3, statSync2)
+    );
+    const newestWorkspaceBuild = workspaceCandidates[0];
+    if (newestWorkspaceBuild && safeMtimeMs(newestWorkspaceBuild.command, existsSync3, statSync2) >= bundledMtimeMs) {
+      return {
+        command: newestWorkspaceBuild.command,
+        args: [],
+        source: newestWorkspaceBuild.source
+      };
+    }
+  }
+  if (existsSync3(bundledServerPath)) {
+    return {
+      command: bundledServerPath,
+      args: [],
+      source: "bundled"
+    };
+  }
+  if (hasCommand2("aivi-lsp")) {
+    return {
+      command: "aivi-lsp",
+      args: [],
+      source: "path-aivi-lsp"
+    };
+  }
+  if (hasCommand2("aivi")) {
+    return {
+      command: "aivi",
+      args: ["lsp"],
+      source: "path-aivi"
+    };
+  }
+  return {
+    command: "aivi-lsp",
+    args: [],
+    source: "fallback-aivi-lsp"
+  };
+}
+
 // src/extension.ts
 var client;
 function hasCommand(cmd) {
@@ -18153,7 +18245,7 @@ function inferWorkspaceFolderForTarget(target) {
     return void 0;
   }
   const base = target.replace(/(\/\.\.\.|\/\*\*)$/, "");
-  if (path.isAbsolute(base)) {
+  if (path2.isAbsolute(base)) {
     const uri = vscode.Uri.file(base);
     return vscode.workspace.getWorkspaceFolder(uri) ?? wsFolders[0];
   }
@@ -18176,7 +18268,7 @@ async function runAiviTest(target, ws) {
 }
 async function runAiviTestProcess(args, cwd, token, onStdout, onStderr) {
   const cli = getCliInvocation();
-  return await new Promise((resolve) => {
+  return await new Promise((resolve2) => {
     const child = (0, import_node_child_process.spawn)(cli.command, [...cli.baseArgs, ...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
     const cancel = token?.onCancellationRequested(() => {
       try {
@@ -18188,7 +18280,7 @@ async function runAiviTestProcess(args, cwd, token, onStdout, onStderr) {
     child.stderr.on("data", (buf) => onStderr(buf.toString("utf8")));
     child.on("close", (code) => {
       cancel?.dispose();
-      resolve(typeof code === "number" ? code : 1);
+      resolve2(typeof code === "number" ? code : 1);
     });
   });
 }
@@ -18246,7 +18338,7 @@ function activate(context) {
     if (!ws) {
       return;
     }
-    const rel = path.relative(ws.uri.fsPath, meta.uri.fsPath).replace(/\\/g, "/");
+    const rel = path2.relative(ws.uri.fsPath, meta.uri.fsPath).replace(/\\/g, "/");
     const pattern = new vscode.RelativePattern(ws, `${rel}/**/*.aivi`);
     const files = await vscode.workspace.findFiles(pattern, "**/target/**");
     for (const uri of files) {
@@ -18259,7 +18351,7 @@ function activate(context) {
       if (discovered.tests.length === 0) {
         continue;
       }
-      const label = path.posix.basename(toCliPath(uri));
+      const label = path2.posix.basename(toCliPath(uri));
       const fileItem = testController.createTestItem(`aiviFile:${uri.toString()}`, label, uri);
       fileItem.canResolveChildren = false;
       fileItem.description = discovered.moduleName;
@@ -18369,37 +18461,30 @@ function activate(context) {
     (request, token) => void runHandler(request, token),
     true
   );
-  const isWindows = process.platform === "win32";
-  const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
-  const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
   const config = vscode.workspace.getConfiguration("aivi");
   const configuredCommand = config.get("server.command");
   const configuredArgs = config.get("server.args") ?? [];
-  let serverCommand;
-  let serverArgs;
-  if (configuredCommand && configuredCommand.trim().length > 0) {
-    serverCommand = configuredCommand;
-    serverArgs = configuredArgs;
-  } else if (fs.existsSync(bundledServerPath)) {
-    serverCommand = bundledServerPath;
-    serverArgs = [];
-  } else if (hasCommand("aivi-lsp")) {
-    serverCommand = "aivi-lsp";
-    serverArgs = [];
-  } else if (hasCommand("aivi")) {
-    serverCommand = "aivi";
-    serverArgs = ["lsp"];
-  } else {
-    serverCommand = "aivi-lsp";
-    serverArgs = [];
-  }
-  if (!isWindows && serverCommand === bundledServerPath && fs.existsSync(bundledServerPath)) {
+  const isWindows = process.platform === "win32";
+  const serverResolution = resolveServerCommand({
+    extensionPath: context.extensionPath,
+    configuredCommand,
+    configuredArgs,
+    isWindows,
+    hasCommand
+  });
+  const serverCommand = serverResolution.command;
+  const serverArgs = serverResolution.args;
+  if (!isWindows && serverResolution.source === "bundled" && fs2.existsSync(serverCommand)) {
     try {
-      fs.chmodSync(bundledServerPath, 493);
+      fs2.chmodSync(serverCommand, 493);
     } catch (err) {
       outputChannel.appendLine(`Failed to chmod aivi-lsp: ${String(err)}`);
     }
   }
+  const renderedServerArgs = serverArgs.length > 0 ? ` ${serverArgs.join(" ")}` : "";
+  outputChannel.appendLine(
+    `Using AIVI Language Server (${serverResolution.source}): ${serverCommand}${renderedServerArgs}`
+  );
   const serverOptions = {
     command: serverCommand,
     args: serverArgs
@@ -18515,8 +18600,8 @@ ${fallback}`);
       }
       const failedPath = vscode.Uri.joinPath(ws.uri, "target", "aivi-test-failed-files.txt").fsPath;
       const passedPath = vscode.Uri.joinPath(ws.uri, "target", "aivi-test-passed-files.txt").fsPath;
-      const failedFiles = fs.existsSync(failedPath) ? fs.readFileSync(failedPath, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0) : [];
-      const passedFiles = fs.existsSync(passedPath) ? fs.readFileSync(passedPath, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0) : [];
+      const failedFiles = fs2.existsSync(failedPath) ? fs2.readFileSync(failedPath, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0) : [];
+      const passedFiles = fs2.existsSync(passedPath) ? fs2.readFileSync(passedPath, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0) : [];
       testOutput.clear();
       testOutput.appendLine(`exitCode: ${String(e.exitCode)}`);
       testOutput.appendLine(`passedFiles: ${passedFiles.length}`);

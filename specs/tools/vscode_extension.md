@@ -31,7 +31,7 @@ All settings live under the `aivi` namespace in VS Code settings.
 
 | Setting | Type | Default | Description |
 |:-------- |:---- |:------- |:----------- |
-| `aivi.server.command` | string | `""` | Override the language server command. If unset, the extension prefers the bundled `aivi-lsp`, then `aivi-lsp` on `PATH`, then `aivi lsp`. |
+| `aivi.server.command` | string | `""` | Override the language server command. If unset, source checkouts prefer a newer workspace-built `aivi-lsp` from `target/{debug,release}`; otherwise the extension prefers the bundled `aivi-lsp`, then `aivi-lsp` on `PATH`, then `aivi lsp`. |
 | `aivi.server.args` | string[] | `[]` | Extra arguments for `aivi.server.command`. |
 
 ### Format settings

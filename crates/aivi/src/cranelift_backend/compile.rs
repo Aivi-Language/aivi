@@ -1475,10 +1475,12 @@ mod runtime_warning_tests {
                 defs: vec![
                     HirDef {
                         name: "helper".to_string(),
+                        location: None,
                         expr: HirExpr::LitBool { id: 1, value: true },
                     },
                     HirDef {
                         name: "main".to_string(),
+                        location: None,
                         expr: HirExpr::Binary {
                             id: 2,
                             op: "+".to_string(),
@@ -1569,6 +1571,7 @@ mod runtime_warning_tests {
                 defs: vec![
                     HirDef {
                         name: "helper".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 10,
                             param: "ignored".to_string(),
@@ -1590,10 +1593,12 @@ mod runtime_warning_tests {
                                 else_branch: Box::new(tuple_else_branch(20)),
                                 location: None,
                             }),
+                            location: None,
                         },
                     },
                     HirDef {
                         name: "apply".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 40,
                             param: "f".to_string(),
@@ -1616,10 +1621,12 @@ mod runtime_warning_tests {
                                 else_branch: Box::new(tuple_else_branch(50)),
                                 location: None,
                             }),
+                            location: None,
                         },
                     },
                     HirDef {
                         name: "entry".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 70,
                             param: "_".to_string(),
@@ -1645,13 +1652,16 @@ mod runtime_warning_tests {
                                         }),
                                         location: None,
                                     }),
+                                    location: None,
                                 }),
                                 location: None,
                             }),
+                            location: None,
                         },
                     },
                     HirDef {
                         name: "safe".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 90,
                             param: "value".to_string(),
@@ -1660,6 +1670,7 @@ mod runtime_warning_tests {
                                 name: "value".to_string(),
                                 location: Some(origin("src/demo/main.aivi", 11, 9)),
                             }),
+                            location: None,
                         },
                     },
                 ],
@@ -1713,6 +1724,118 @@ mod runtime_warning_tests {
     }
 
     #[test]
+    fn runtime_stack_frames_fallback_to_definition_and_lambda_locations() {
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "demo.main".to_string(),
+                defs: vec![
+                    HirDef {
+                        name: "zero".to_string(),
+                        location: Some(origin("src/demo/main.aivi", 3, 1)),
+                        expr: HirExpr::App {
+                            id: 1,
+                            func: Box::new(HirExpr::LitBool { id: 2, value: true }),
+                            arg: Box::new(lit_int(3, "1")),
+                            location: None,
+                        },
+                    },
+                    HirDef {
+                        name: "makeClosure".to_string(),
+                        location: Some(origin("src/demo/main.aivi", 6, 1)),
+                        expr: HirExpr::Lambda {
+                            id: 10,
+                            param: "_".to_string(),
+                            body: Box::new(HirExpr::If {
+                                id: 11,
+                                cond: Box::new(HirExpr::LitBool {
+                                    id: 12,
+                                    value: true,
+                                }),
+                                then_branch: Box::new(HirExpr::Lambda {
+                                    id: 13,
+                                    param: "value".to_string(),
+                                    body: Box::new(HirExpr::App {
+                                        id: 14,
+                                        func: Box::new(HirExpr::LitBool {
+                                            id: 15,
+                                            value: true,
+                                        }),
+                                        arg: Box::new(lit_int(16, "1")),
+                                        location: None,
+                                    }),
+                                    location: Some(origin("src/demo/main.aivi", 7, 5)),
+                                }),
+                                else_branch: Box::new(HirExpr::Lambda {
+                                    id: 17,
+                                    param: "value".to_string(),
+                                    body: Box::new(HirExpr::Var {
+                                        id: 18,
+                                        name: "value".to_string(),
+                                        location: None,
+                                    }),
+                                    location: Some(origin("src/demo/main.aivi", 8, 5)),
+                                }),
+                                location: None,
+                            }),
+                            location: None,
+                        },
+                    },
+                ],
+            }],
+        };
+
+        let mut runtime = build_runtime_from_program(&program).expect("build runtime");
+        let module = jit_compile_into_runtime(
+            program,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            &mut runtime,
+            &HashSet::new(),
+        )
+        .expect("compile runtime");
+
+        let zero = runtime
+            .ctx
+            .globals
+            .get("demo.main.zero")
+            .expect("zero binding should exist");
+        let zero_err = runtime.force_value(zero).expect_err("zero should fail");
+        let zero_rendered =
+            aivi_driver::render_runtime_report(&runtime.runtime_report(zero_err), false);
+        assert!(
+            zero_rendered.contains("demo.main.zero at src/demo/main.aivi:3:1"),
+            "expected nullary def fallback location, got:\n{zero_rendered}"
+        );
+
+        let make_closure = runtime
+            .ctx
+            .globals
+            .get("demo.main.makeClosure")
+            .expect("makeClosure binding should exist")
+            .clone();
+        let closure = runtime
+            .apply(make_closure, Value::Unit)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "makeClosure should return a closure, got error: {}",
+                    crate::runtime::format_runtime_error(err)
+                )
+            });
+        let lambda_err = runtime
+            .apply(closure, Value::Int(1))
+            .expect_err("returned closure should fail");
+        let lambda_rendered =
+            aivi_driver::render_runtime_report(&runtime.runtime_report(lambda_err), false);
+        assert!(
+            lambda_rendered.contains("demo.main.makeClosure (lambda) at src/demo/main.aivi:7:5"),
+            "expected lambda fallback location, got:\n{lambda_rendered}"
+        );
+
+        drop(module);
+    }
+
+    #[test]
     fn jit_errors_keep_renderable_context_after_later_jit_calls() {
         let program = HirProgram {
             modules: vec![HirModule {
@@ -1720,6 +1843,7 @@ mod runtime_warning_tests {
                 defs: vec![
                     HirDef {
                         name: "helper".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 10,
                             param: "ignored".to_string(),
@@ -1741,10 +1865,12 @@ mod runtime_warning_tests {
                                 else_branch: Box::new(tuple_else_branch(20)),
                                 location: None,
                             }),
+                            location: None,
                         },
                     },
                     HirDef {
                         name: "entry".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 40,
                             param: "_".to_string(),
@@ -1761,10 +1887,12 @@ mod runtime_warning_tests {
                                 }),
                                 location: None,
                             }),
+                            location: None,
                         },
                     },
                     HirDef {
                         name: "safe".to_string(),
+                        location: None,
                         expr: HirExpr::Lambda {
                             id: 50,
                             param: "value".to_string(),
@@ -1773,6 +1901,7 @@ mod runtime_warning_tests {
                                 name: "value".to_string(),
                                 location: Some(origin("src/demo/main.aivi", 9, 9)),
                             }),
+                            location: None,
                         },
                     },
                 ],
@@ -1836,6 +1965,7 @@ mod runtime_warning_tests {
                 name: "demo.main".to_string(),
                 defs: vec![HirDef {
                     name: "main".to_string(),
+                    location: None,
                     expr: HirExpr::If {
                         id: 1,
                         cond: Box::new(HirExpr::Tuple {
@@ -1896,6 +2026,7 @@ mod runtime_warning_tests {
                 name: "demo.main".to_string(),
                 defs: vec![HirDef {
                     name: "helper".to_string(),
+                    location: None,
                     expr: HirExpr::Lambda {
                         id: 10,
                         param: "_".to_string(),
@@ -1908,6 +2039,7 @@ mod runtime_warning_tests {
                             field: "provider".to_string(),
                             location: Some(origin("src/demo/main.aivi", 4, 13)),
                         }),
+                        location: None,
                     },
                 }],
             }],
@@ -2081,6 +2213,7 @@ mod runtime_warning_tests {
             name: "demo.main".to_string(),
             defs: vec![rust_ir::RustIrDef {
                 name: "demo.main.parseValue".to_string(),
+                location: None,
                 expr: RustIrExpr::Call {
                     id: 1,
                     func: Box::new(RustIrExpr::Builtin {
