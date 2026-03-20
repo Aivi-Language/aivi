@@ -1,9 +1,6 @@
-do Effect {
-  users <- load (
-    rest.get {
-      url: ~u(https://api.example.com/users)
-      schema: source.schema.derive
-    }
-  )
-  pure users
-}
+load (
+  rest.get {
+    url: ~u(https://api.example.com/users)
+    schema: source.schema.derive
+  }
+)

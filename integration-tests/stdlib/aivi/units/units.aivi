@@ -9,7 +9,7 @@ use aivi (
 use aivi.testing
 
 @test "quantity operators"
-quantity_functional = do Effect {
+quantity_functional = {
   meter     = defineUnit "m" 1.0
   kilometer = defineUnit "km" 1000.0
   base      = { value: 750.0, unit: meter }
@@ -29,7 +29,7 @@ quantity_functional = do Effect {
 }
 
 @test "quantity operators keep the left-hand unit"
-quantity_preserves_left_unit_functional = do Effect {
+quantity_preserves_left_unit_functional = {
   meter     = defineUnit "m" 1.0
   kilometer = defineUnit "km" 1000.0
   total     = { value: 1.0, unit: meter } + { value: 1.0, unit: kilometer }
@@ -41,14 +41,14 @@ quantity_preserves_left_unit_functional = do Effect {
 }
 
 @test "unit"
-unit_functional = do Effect {
+unit_functional = {
   u = defineUnit "s" 1.0
   assert (u.name == "s")
   assert (u.factor == 1.0)
 }
 
 @test "convert"
-convert_functional = do Effect {
+convert_functional = {
   m   = defineUnit "m" 1.0
   km  = defineUnit "km" 1000.0
   q   = { value: 1500.0, unit: m }
@@ -58,7 +58,7 @@ convert_functional = do Effect {
 }
 
 @test "define unit"
-defineUnit_functional = do Effect {
+defineUnit_functional = {
   m  = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0
   assert (m.name == "m")
@@ -66,7 +66,7 @@ defineUnit_functional = do Effect {
 }
 
 @test "same unit"
-sameUnit_functional = do Effect {
+sameUnit_functional = {
   m            = defineUnit "m" 1.0
   km           = defineUnit "km" 1000.0
   renamedMeter = defineUnit "m" 100.0

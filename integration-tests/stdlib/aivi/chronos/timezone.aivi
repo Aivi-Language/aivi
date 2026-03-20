@@ -7,7 +7,7 @@ use aivi.testing
 use aivi.chronos.timezone (getOffset, toInstant, atZone, format)
 
 @test "timezone functional"
-timezone_functional = do Effect {
+timezone_functional = {
   // Test basic timezone creation and offset
   utc   = ~tz(UTC)
   paris = ~tz(Europe/Paris)
@@ -51,7 +51,7 @@ timezone_functional = do Effect {
 }
 
 @test "timezone preserves fractional seconds across conversions"
-timezone_preserves_fractional_seconds = do Effect {
+timezone_preserves_fractional_seconds = {
   paris = ~tz(Europe/Paris)
   tokyo = ~tz(Asia/Tokyo)
   zdt   = ~zdt(2024-05-21T12:00:00.123456789[Europe/Paris])

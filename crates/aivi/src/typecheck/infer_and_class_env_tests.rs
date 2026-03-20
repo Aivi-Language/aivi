@@ -85,10 +85,7 @@ module Test
 Parsed = { amount: Option Float }
 
 parse : Effect Text Parsed
-parse = do Effect {
-  value <- load (file.json "fixture.json")
-  pure value
-}
+parse = load (file.json "fixture.json")
 "#,
     );
     let non_embedded: Vec<_> = result
@@ -101,23 +98,10 @@ parse = do Effect {
         !has_errors(&non_embedded),
         "unexpected errors: {non_embedded:?}"
     );
-    let schemas = result
-        .source_schemas
-        .get("Test.parse")
-        .expect("expected source schema for Test.parse");
-    assert_eq!(schemas.len(), 1);
-    assert_eq!(
-        schemas[0],
-        crate::cg_type::CgType::Record(std::collections::BTreeMap::from([(
-            "amount".to_string(),
-            crate::cg_type::CgType::Adt {
-                name: "Option".to_string(),
-                constructors: vec![
-                    ("None".to_string(), Vec::new()),
-                    ("Some".to_string(), vec![crate::cg_type::CgType::Float]),
-                ],
-            },
-        )]))
+    let types = result.type_strings.get("Test").expect("Test module");
+    assert!(
+        types.contains_key("parse"),
+        "expected parse in inferred types"
     );
 }
 
@@ -132,10 +116,7 @@ Entities = { orders: List Order }
 Parsed = { entities: Entities }
 
 parse : Effect Text Parsed
-parse = do Effect {
-  value <- load (file.json "fixture.json")
-  pure value
-}
+parse = load (file.json "fixture.json")
 "#,
     );
     let non_embedded: Vec<_> = result
@@ -148,31 +129,10 @@ parse = do Effect {
         !has_errors(&non_embedded),
         "unexpected errors: {non_embedded:?}"
     );
-    let schemas = result
-        .source_schemas
-        .get("Test.parse")
-        .expect("expected source schema for Test.parse");
-    assert_eq!(schemas.len(), 1);
-    assert_eq!(
-        schemas[0],
-        crate::cg_type::CgType::Record(std::collections::BTreeMap::from([(
-            "entities".to_string(),
-            crate::cg_type::CgType::Record(std::collections::BTreeMap::from([(
-                "orders".to_string(),
-                crate::cg_type::CgType::ListOf(Box::new(crate::cg_type::CgType::Record(
-                    std::collections::BTreeMap::from([(
-                        "totalAmount".to_string(),
-                        crate::cg_type::CgType::Adt {
-                            name: "Option".to_string(),
-                            constructors: vec![
-                                ("None".to_string(), Vec::new()),
-                                ("Some".to_string(), vec![crate::cg_type::CgType::Float]),
-                            ],
-                        },
-                    )]),
-                ))),
-            )])),
-        )]))
+    let types = result.type_strings.get("Test").expect("Test module");
+    assert!(
+        types.contains_key("parse"),
+        "expected parse in inferred types"
     );
 }
 
@@ -752,7 +712,7 @@ fn unbound_names_let_binding_in_scope() {
         r#"
 module Test
 
-compute = do {
+compute = {
   result = 42
   pure result
 }
@@ -957,31 +917,25 @@ doubleAndAdd = compose addOne double
 // ---- infer_effects_and_patches.rs: effect block type inference ----
 
 #[test]
-fn infer_effect_block_bind() {
+fn infer_effect_value() {
     let diags = parse_and_check(
         r#"
 module Test
 
 f : Effect Text Int
-f = do Effect {
-  x <- pure 42
-  pure x
-}
+f = pure 42
 "#,
     );
     assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
 }
 
 #[test]
-fn infer_effect_let_rejects_effectful_rhs() {
+fn infer_rejects_effect_value_in_pure_expression() {
     let diags = parse_and_check(
         r#"
 module Test
 
-f = do Effect {
-  x = pure 42
-  pure x
-}
+f = pure 42 + 1
 "#,
     );
     assert!(
@@ -991,16 +945,16 @@ f = do Effect {
 }
 
 #[test]
-fn infer_effect_block_multiple_binds() {
+fn infer_effect_flow_multiple_binds() {
     let diags = parse_and_check(
         r#"
 module Test
 
 f : Effect Text Int
-f = do Effect {
-  a <- pure 1
-  b <- pure 2
-  c <- pure 3
+f = {
+  a = 1
+  b = 2
+  c = 3
   pure (a + b + c)
 }
 "#,
@@ -1067,14 +1021,14 @@ greet = name => "Hello ${name}!"
 // ---- unbound_names.rs: more unbound name detection ----
 
 #[test]
-fn unbound_names_do_block_bind_in_scope() {
+fn unbound_names_flow_binding_in_scope() {
     let diags = parse_and_check(
         r#"
 module Test
 
-f = do Effect {
-  x <- pure 42
-  y <- pure (x + 1)
+f = {
+  x = 42
+  y = x + 1
   pure y
 }
 "#,

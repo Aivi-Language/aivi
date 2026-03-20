@@ -141,9 +141,7 @@ msg : Text
 msg = "hello"
 
 main : Effect Text Unit
-main = do Effect {
-  print msg
-}
+main = print msg
 "#;
     let paths = write_temp_aivi(src);
     let modules = load_modules_from_paths(&paths).expect("load");

@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.graph
 
 @test "relax updates when shorter"
-relax_updatesWhenShorter = do Effect {
+relax_updatesWhenShorter = {
   dists = Map.insert 1 0.0 Map.empty
   edge  = { from: 1, to: 2, weight: 3.5 }
   out   = relax dists 0.0 edge
@@ -16,7 +16,7 @@ relax_updatesWhenShorter = do Effect {
 }
 
 @test "relax skips when longer"
-relax_skipsWhenLonger = do Effect {
+relax_skipsWhenLonger = {
   dists = Map.insert 1 0.0 (Map.insert 2 1.0 Map.empty)
   edge  = { from: 1, to: 2, weight: 5.0 }
   out   = relax dists 0.0 edge
@@ -26,7 +26,7 @@ relax_skipsWhenLonger = do Effect {
 }
 
 @test "relax edges counts updates"
-relaxEdges_countsUpdates = do Effect {
+relaxEdges_countsUpdates = {
   dists = Map.insert 0 0.0 Map.empty
   edges = [
     { from: 0, to: 1, weight: 2.0 }

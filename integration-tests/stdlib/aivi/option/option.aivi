@@ -9,53 +9,53 @@ use aivi.option
 // -- Predicates --
 
 @test "isSome returns True for Some"
-test_isSome_some = do Effect {
+test_isSome_some = {
   assert (isSome (Some 42))
 }
 
 @test "isSome returns False for None"
-test_isSome_none = do Effect {
+test_isSome_none = {
   assert (isSome None == False)
 }
 
 @test "isNone returns True for None"
-test_isNone_none = do Effect {
+test_isNone_none = {
   assert (isNone None)
 }
 
 @test "isNone returns False for Some"
-test_isNone_some = do Effect {
+test_isNone_some = {
   assert (isNone (Some 42) == False)
 }
 
 // -- Extracting Values --
 
 @test "getOrElse returns value for Some"
-test_getOrElse_some = do Effect {
+test_getOrElse_some = {
   result = getOrElse 0 (Some 42)
   assertEq result 42
 }
 
 @test "getOrElse returns default for None"
-test_getOrElse_none = do Effect {
+test_getOrElse_none = {
   result = getOrElse 0 None
   assertEq result 0
 }
 
 @test "getOrElse is pipe-friendly"
-test_getOrElse_pipe = do Effect {
+test_getOrElse_pipe = {
   result = Some 42 |> getOrElse 0
   assertEq result 42
 }
 
 @test "getOrElseLazy returns value for Some"
-test_getOrElseLazy_some = do Effect {
+test_getOrElseLazy_some = {
   result = getOrElseLazy (_ => 999) (Some 42)
   assertEq result 42
 }
 
 @test "getOrElseLazy calls thunk for None"
-test_getOrElseLazy_none = do Effect {
+test_getOrElseLazy_none = {
   result = getOrElseLazy (_ => 999) None
   assertEq result 999
 }
@@ -63,49 +63,49 @@ test_getOrElseLazy_none = do Effect {
 // -- Transformations --
 
 @test "map transforms Some value"
-test_map_some = do Effect {
+test_map_some = {
   result = Some 5 |> map (_ * 2)
   assertEq result (Some 10)
 }
 
 @test "map preserves None"
-test_map_none = do Effect {
+test_map_none = {
   result = None |> map (_ * 2)
   assertEq result None
 }
 
 @test "chain chains Some values"
-test_flatMap_some = do Effect {
+test_flatMap_some = {
   result = chain (x => Some (x + 1)) (Some 5)
   assertEq result (Some 6)
 }
 
 @test "chain short-circuits on None"
-test_flatMap_none = do Effect {
+test_flatMap_none = {
   result = chain (x => Some (x + 1)) None
   assertEq result None
 }
 
 @test "chain propagates None from function"
-test_flatMap_returns_none = do Effect {
+test_flatMap_returns_none = {
   result = chain (_ => None) (Some 5)
   assertEq result None
 }
 
 @test "filter keeps value when predicate is true"
-test_filter_true = do Effect {
+test_filter_true = {
   result = filter (_ > 10) (Some 42)
   assertEq result (Some 42)
 }
 
 @test "filter removes value when predicate is false"
-test_filter_false = do Effect {
+test_filter_false = {
   result = filter (_ > 100) (Some 42)
   assertEq result None
 }
 
 @test "filter preserves None"
-test_filter_none = do Effect {
+test_filter_none = {
   result = filter (_ > 10) None
   assertEq result None
 }
@@ -113,25 +113,25 @@ test_filter_none = do Effect {
 // -- Conversions --
 
 @test "toList returns singleton for Some"
-test_toList_some = do Effect {
+test_toList_some = {
   result = toList (Some 42)
   assertEq result [42]
 }
 
 @test "toList returns empty for None"
-test_toList_none = do Effect {
+test_toList_none = {
   result = toList None
   assertEq result []
 }
 
 @test "toResult returns Ok for Some"
-test_toResult_some = do Effect {
+test_toResult_some = {
   result = toResult "error" (Some 42)
   assertEq result (Ok 42)
 }
 
 @test "toResult returns Err for None"
-test_toResult_none = do Effect {
+test_toResult_none = {
   result = toResult "not found" None
   assertEq result (Err "not found")
 }
@@ -139,37 +139,37 @@ test_toResult_none = do Effect {
 // -- Combining --
 
 @test "flatten removes nesting from Some Some"
-test_flatten_some_some = do Effect {
+test_flatten_some_some = {
   result = chain (x => x) (Some (Some 42))
   assertEq result (Some 42)
 }
 
 @test "flatten returns None for Some None"
-test_flatten_some_none = do Effect {
+test_flatten_some_none = {
   result = chain (x => x) (Some None)
   assertEq result None
 }
 
 @test "flatten returns None for None"
-test_flatten_none = do Effect {
+test_flatten_none = {
   result = chain (x => x) None
   assertEq result None
 }
 
 @test "alt returns first Some"
-test_orElse_first_some = do Effect {
+test_orElse_first_some = {
   result = Some 1 |> alt (Some 2)
   assertEq result (Some 1)
 }
 
 @test "alt returns fallback for None"
-test_orElse_fallback = do Effect {
+test_orElse_fallback = {
   result = None |> alt (Some 2)
   assertEq result (Some 2)
 }
 
 @test "alt returns None when both None"
-test_orElse_both_none = do Effect {
+test_orElse_both_none = {
   result = None |> alt None
   assertEq result None
 }
@@ -177,7 +177,7 @@ test_orElse_both_none = do Effect {
 // -- Pipeline --
 
 @test "option pipeline"
-test_pipeline = do Effect {
+test_pipeline = {
   result = Some 5 |> map (_ * 2) |> filter (_ > 5) |> getOrElse 0
   assertEq result 10
 }

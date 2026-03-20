@@ -472,7 +472,7 @@ fn lower_expr_inner_ctx(
         }
         Expr::Block { kind, items, .. } => {
             let block_kind = lower_block_kind(&kind);
-            // `do Event { ... }` desugars to `reactive.event (do Effect { ... })`.
+            // Event blocks desugar to `reactive.eventFrom(...)` around an effect-style block.
             if let BlockKind::Do { ref monad } = kind {
                 if monad.name == "Event" {
                     let effect_monad = SpannedName {
@@ -509,7 +509,7 @@ fn lower_expr_inner_ctx(
                             
                                 location: None,
                             }),
-                            field: "event".to_string(),
+                            field: "eventFrom".to_string(),
                             location: None,
                         }),
                         args: vec![effect_block],

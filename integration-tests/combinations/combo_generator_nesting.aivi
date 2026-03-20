@@ -3,119 +3,73 @@ module integrationTests.combinations.comboGeneratorNesting
 
 use aivi
 use aivi.testing
-use aivi.generator
 
-// Generators combined with other scope-creating constructs.
-// Tests lazy evaluation with closures over various outer scopes.
+// List transforms replacing the older generator-shaped examples.
+// Verifies captures and nesting still behave correctly in direct collection code.
 
-// --- Generator with match function ---
+// --- Conditional mapping over a list ---
 
 classify = n => if n % 2 == 0 then n * 10 else n
+scaleBy  = factor => n => n * factor
 
-@test "generator uses function with conditional logic"
-generatorWithMatch = do Effect {
-  g = generate {
-    n <- [1, 2, 3, 4, 5]
-    yield (classify n)
-  }
-  assertEq (toList g) [1, 20, 3, 40, 5]
-}
+@test "list mapping uses function with conditional logic"
+generatorWithMatch = assertEq (List.map classify [1, 2, 3, 4, 5]) [1, 20, 3, 40, 5]
 
-// --- Generator with lambda filter capturing outer scope ---
+// --- Plain collection filtering with outer capture ---
 
-@test "generator with lambda predicate capturing outer"
-generatorLambdaFilter = do Effect {
-  threshold = 3
-  g         = generate {
-    n <- [1, 2, 3, 4, 5]
-    n -> n > threshold
-    yield (n * 2)
-  }
-  assertEq (toList g) [8, 10]
-}
+@test "list filtering captures outer scope"
+generatorLambdaFilter =
+  assertEq (
+    [1, 2, 3, 4, 5]
+       |> List.filter (n => n > 3)
+       |> List.map (n => n * 2)
+  ) [8, 10]
 
-// --- Generator inside do Effect, consumed with toList ---
+assertValuesWithBase = base => assertEq (List.map (n => n + base) [1, 2, 3]) [101, 102, 103]
 
-@test "generator created inside do Effect consumed with toList"
-generatorInDoEffect = do Effect {
-  base <- pure 100
-  g = generate {
-    n <- [1, 2, 3]
-    yield (n + base)
-  }
-  result = toList g
-  assertEq result [101, 102, 103]
-}
+@test "effect-bound values can feed later list shaping"
+generatorInDoEffect = pure 100
+   |> assertValuesWithBase
 
-// --- Generator returned from function, captures function arg ---
+// --- Fan-out returned from function captures function arg ---
 
-makeScaledGen = factor => generate {
-  n <- [1, 2, 3, 4]
-  yield (n * factor)
-}
+makeScaledGen = factor => List.map (scaleBy factor) [1, 2, 3, 4]
 
-@test "generator returned from function captures arg"
-generatorFromFunction = do Effect {
-  g = makeScaledGen 5
-  assertEq (toList g) [5, 10, 15, 20]
-}
+@test "mapped list returned from function captures arg"
+generatorFromFunction = assertEq (makeScaledGen 5) [5, 10, 15, 20]
 
-// --- Nested generators: generator binding from another generator ---
+// --- Nested list expansion flattened after per-item expansion ---
 
-@test "nested generators: inner binds from outer"
-nestedGenerators = do Effect {
-  outer = generate {
-    yield 10
-    yield 20
-  }
-  inner = generate {
-    base <- outer
-    yield (base + 1)
-    yield (base + 2)
-  }
-  assertEq (toList inner) [11, 12, 21, 22]
-}
+pairWithOffsets = base => [base + 1, base + 2]
 
-// --- Generator with pipe chain ---
+nestedValues = List.flatMap pairWithOffsets [10, 20]
+
+@test "nested list expansion flattens per item"
+nestedGenerators = assertEq nestedValues [11, 12, 21, 22]
+
+// --- Pipe chain stays ordinary collection code ---
 
 double = x => x * 2
 inc    = x => x + 1
 
-@test "generator with pipe chain in yield"
-generatorPipeChain = do Effect {
-  g = generate {
-    n <- [1, 2, 3]
-    yield (n |> double |> inc)
-  }
-  assertEq (toList g) [3, 5, 7]
-}
+@test "list mapping can keep pipe chains in element logic"
+generatorPipeChain = assertEq (List.map (n => n |> double |> inc) [1, 2, 3]) [3, 5, 7]
 
-// --- Generator cartesian with guard capturing outer state ---
+// --- Per-item expansion and guard-like filtering ---
 
-@test "generator cartesian with guard captures outer"
-generatorCartesianGuard = do Effect {
-  target = 10
-  pairs  = generate {
-    x <- [1, 2, 3, 4]
-    y <- [6, 7, 8, 9]
-    s = x + y
-    s -> s == target
-    yield (x, y)
-  }
-  assertEq (toList pairs) [(1, 9), (2, 8), (3, 7), (4, 6)]
-}
+matchingPairsFor = target => x =>
+  [6, 7, 8, 9]
+     |> List.filter (y => x + y == target)
+     |> List.map (y => (x, y))
 
-// --- Generator with loop/recurse capturing outer ---
+cartesianPairs = List.flatMap (matchingPairsFor 10) [1, 2, 3, 4]
 
-@test "generator loop captures outer scope"
-generatorLoopCapturesOuter = do Effect {
-  factor = 2
-  g      = generate {
-    loop n = 1 => {
-      yield (n * factor)
-      if n >= 5 then {}
-      else recurse (n + 1)
-    }
-  }
-  assertEq (toList g) [2, 4, 6, 8, 10]
-}
+@test "cartesian expansion can capture outer state"
+generatorCartesianGuard = assertEq cartesianPairs [(1, 9), (2, 8), (3, 7), (4, 6)]
+
+// --- Mapping can still capture outer state directly ---
+
+scaledOuterValues = factor => List.map (scaleBy factor) [1, 2, 3, 4, 5]
+
+@test "mapping captures outer scope"
+generatorLoopCapturesOuter = assertEq (scaledOuterValues 2) [2, 4, 6, 8, 10]

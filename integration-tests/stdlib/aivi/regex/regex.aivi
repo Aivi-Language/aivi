@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.regex
 
 @test "compile valid"
-compile_valid = do Effect {
+compile_valid = {
   res = compile "^hello"
   res match
     | Ok r  => assert (test r "hello")
@@ -14,7 +14,7 @@ compile_valid = do Effect {
 }
 
 @test "compile invalid"
-compile_invalid = do Effect {
+compile_invalid = {
   res = compile "[invalid"
   res match
     | Ok _                     => assert False
@@ -22,78 +22,57 @@ compile_invalid = do Effect {
 }
 
 @test "test match"
-test_match = do Effect {
-  r <- (compile "\\d+" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  assert (test r "abc123def")
-  assert (test r "42")
-  assert (!(test r "no digits"))
-}
+test_match = assertOk (compile "\\d+")
+  |> r => {
+       assert (test r "abc123def")
+       assert (test r "42")
+       assert (!(test r "no digits"))
+     }
 
 @test "test no match"
-test_no_match = do Effect {
-  r <- (compile "^hello$" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  assert (test r "hello")
-  assert (!(test r "say hello"))
-}
+test_no_match = assertOk (compile "^hello$")
+  |> r => {
+       assert (test r "hello")
+       assert (!(test r "say hello"))
+     }
 
 @test "match first"
-match_first = do Effect {
-  r <- (compile "\\d+" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  m = match r "abc 123 def 456"
-  m match
-    | Some first => do Effect {
-        assertEq first.full "123"
-        assertEq first.start 4
-        assertEq first.end 7
-      }
-    | None => assert False
-}
+match_first = assertOk (compile "\\d+")
+  |> r => {
+       m = match r "abc 123 def 456"
+       m match
+         | Some first => {
+             assertEq first.full "123"
+             assertEq first.start 4
+             assertEq first.end 7
+           }
+         | None => assert False
+     }
 
 @test "matches all"
-matches_all = do Effect {
-  r <- (compile "\\d+" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  ms = matches r "a1b2c3"
-  assert (List.length ms == 3)
-}
+matches_all = assertOk (compile "\\d+")
+  |> r => {
+       ms = matches r "a1b2c3"
+       assert (List.length ms == 3)
+     }
 
 @test "split"
-split_functional = do Effect {
-  r <- (compile "[,;]" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  parts = split r "a,b;c,d"
-  assert (List.length parts == 4)
-}
+split_functional = assertOk (compile "[,;]")
+  |> r => {
+       parts = split r "a,b;c,d"
+       assert (List.length parts == 4)
+     }
 
 @test "replace"
-replace_functional = do Effect {
-  r <- (compile "\\d+" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  result = replace r "abc123def456" "NUM"
-  assert (result == "abcNUMdef456")
-}
+replace_functional = assertOk (compile "\\d+")
+  |> r => {
+       result = replace r "abc123def456" "NUM"
+       assert (result == "abcNUMdef456")
+     }
 
 @test "replace all"
-replaceAll_functional = do Effect {
-  r <- (compile "\\d+" match
-    | Ok rx => pure rx
-    | Err _ => fail "compile failed"
-  )
-  result = replaceAll r "abc123def456" "NUM"
-  assert (result == "abcNUMdefNUM")
-}
+replaceAll_functional = assertOk (compile "\\d+")
+  |> r => {
+       result = replaceAll r "abc123def456" "NUM"
+       assert (result == "abcNUMdefNUM")
+     }

@@ -5,7 +5,7 @@ use aivi.prelude
 use aivi.testing
 
 @test "bool"
-bool_functional = do Effect {
+bool_functional = {
   assert (True && True)
   assert (True || False)
   assert (False || True)
@@ -16,7 +16,7 @@ bool_functional = do Effect {
 }
 
 @test "float"
-float_functional = do Effect {
+float_functional = {
   assert (1.0 + 2.0 == 3.0)
   assert (2.0 * 3.0 == 6.0)
   assert (4.0 / 2.0 == 2.0)
@@ -27,7 +27,7 @@ float_functional = do Effect {
 }
 
 @test "int"
-int_functional = do Effect {
+int_functional = {
   assertEq (1 + 2) 3
   assertEq (2 * 3) 6
   assertEq (4 / 2) 2
@@ -50,7 +50,7 @@ map = f xs => xs match
   | [x, ...rest] => [f x, ...(map f rest)]
 
 @test "list"
-list_functional = do Effect {
+list_functional = {
   l      = [1, 2, 3]
   mapped = map (x => x + 1) l
   assertEq (len l) 3
@@ -58,7 +58,7 @@ list_functional = do Effect {
 }
 
 @test "option"
-option_functional = do Effect {
+option_functional = {
   some = Some 1
   some match
     | Some n => assertEq n 1
@@ -69,14 +69,14 @@ option_functional = do Effect {
 }
 
 @test "patch"
-patch_functional = do Effect {
+patch_functional = {
   user  = { name: "A", age: 30 }
   older = user <| { age: _ + 1 }
   assertEq older.age 31
 }
 
 @test "result"
-result_functional = do Effect {
+result_functional = {
   ok = Ok 1
   ok match
     | Ok n  => assertEq n 1
@@ -89,7 +89,7 @@ result_functional = do Effect {
 }
 
 @test "prelude helpers"
-prelude_helpers = do Effect {
+prelude_helpers = {
   assertEq (not False) True
   assertEq (not True) False
   assertEq (any (n => n > 2) [1, 2, 3]) True
@@ -97,18 +97,18 @@ prelude_helpers = do Effect {
 }
 
 @test "to text"
-toText_functional = do Effect {
+toText_functional = {
   assertEq (toText "abc") "abc"
   assertEq (toText 123) "123"
 }
 
 @test "tuple"
-tuple_functional = do Effect {
+tuple_functional = {
   pair = (1, "two")
   assertEq pair (1, "two")
 }
 
 @test "to text 2"
-toText_functional_2 = do Effect {
+toText_functional_2 = {
   assertEq (toText 0) "0"
 }

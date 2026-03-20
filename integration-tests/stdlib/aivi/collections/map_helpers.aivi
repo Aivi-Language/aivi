@@ -5,14 +5,14 @@ use aivi
 use aivi.testing
 
 @test "map insert and get"
-map_insertAndGet = do Effect {
+map_insertAndGet = {
   m = Map.insert "a" 1 Map.empty
-  value <- assertSome (Map.get "a" m)
-  assertEq value 1
+  assertSome (Map.get "a" m)
+   |> assertEq 1
 }
 
 @test "map get or else"
-map_getOrElse = do Effect {
+map_getOrElse = {
   m   = Map.insert "found" 7 Map.empty
   val = Map.getOrElse "found" 99 m
   assertEq val 7
@@ -21,21 +21,21 @@ map_getOrElse = do Effect {
 }
 
 @test "map get or else is pipe-friendly"
-map_getOrElse_pipe = do Effect {
+map_getOrElse_pipe = {
   m = Map.insert "found" 7 Map.empty
   assertEq (m |> Map.getOrElse "found" 99) 7
   assertEq (m |> Map.getOrElse "missing" 99) 99
 }
 
 @test "map remove"
-map_remove = do Effect {
+map_remove = {
   m  = Map.insert "a" 1 Map.empty
   m2 = Map.remove "a" m
   assertNone (Map.get "a" m2)
 }
 
 @test "map has"
-map_has = do Effect {
+map_has = {
   m      = Map.insert "key" 10 Map.empty
   exists = Map.has "key" m
   assert exists
@@ -44,7 +44,7 @@ map_has = do Effect {
 }
 
 @test "map size"
-map_size = do Effect {
+map_size = {
   m  = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
   s0 = Map.size Map.empty
   assertEq s0 0
@@ -53,15 +53,15 @@ map_size = do Effect {
 }
 
 @test "from list keeps last value for duplicate key"
-map_fromList_lastValueWins = do Effect {
+map_fromList_lastValueWins = {
   m = Map.fromList [("a", 1), ("a", 2), ("b", 3)]
-  value <- assertSome (Map.get "a" m)
-  assertEq value 2
+  assertSome (Map.get "a" m)
+   |> assertEq 2
   assertEq (Map.size m) 2
 }
 
 @test "entries round-trip preserves map values"
-map_entries_roundTrip = do Effect {
+map_entries_roundTrip = {
   original = Map.fromList [("a", 1), ("b", 2)]
   rebuilt  = Map.fromList (Map.entries original)
   assertEq (Map.size rebuilt) 2
@@ -70,7 +70,7 @@ map_entries_roundTrip = do Effect {
 }
 
 @test "keys and values include every entry"
-map_keysAndValues_coverAllEntries = do Effect {
+map_keysAndValues_coverAllEntries = {
   m  = Map.fromList [("a", 1), ("b", 2)]
   ks = Map.keys m
   vs = Map.values m
@@ -83,26 +83,26 @@ map_keysAndValues_coverAllEntries = do Effect {
 }
 
 @test "union is right biased"
-map_union_rightBiased = do Effect {
+map_union_rightBiased = {
   left   = Map.fromList [("a", 1), ("shared", 2)]
   right  = Map.fromList [("shared", 5), ("b", 3)]
   merged = Map.union left right
-  shared <- assertSome (Map.get "shared" merged)
-  assertEq shared 5
+  assertSome (Map.get "shared" merged)
+   |> assertEq 5
   assertEq (Map.size merged) 3
 }
 
 @test "update missing key is noop"
-map_update_missing_key_is_noop = do Effect {
+map_update_missing_key_is_noop = {
   original = Map.insert "a" 1 Map.empty
   updated  = Map.update "missing" (_ => 99) original
-  value <- assertSome (Map.get "a" updated)
-  assertEq value 1
+  assertSome (Map.get "a" updated)
+   |> assertEq 1
   assertEq (Map.size updated) 1
 }
 
 @test "mapWithKey sees the key"
-map_mapWithKey_seesKey = do Effect {
+map_mapWithKey_seesKey = {
   original = Map.fromList [("a", 1), ("b", 2)]
   mapped   = Map.mapWithKey (key value => "{key}:{text.toText value}") original
   assertEq (Map.get "a" mapped) (Some "a:1")
@@ -110,29 +110,29 @@ map_mapWithKey_seesKey = do Effect {
 }
 
 @test "alter inserts and removes"
-map_alter_insertAndRemove = do Effect {
+map_alter_insertAndRemove = {
   inserted = Map.alter "a" (_ => Some 1) Map.empty
-  value <- assertSome (Map.get "a" inserted)
-  assertEq value 1
+  assertSome (Map.get "a" inserted)
+   |> assertEq 1
   removed = Map.alter "a" (_ => None) inserted
   assertNone (Map.get "a" removed)
 }
 
 @test "mergeWith combines overlaps"
-map_mergeWith_combines_overlap = do Effect {
+map_mergeWith_combines_overlap = {
   left   = Map.fromList [("a", 1), ("shared", 2)]
   right  = Map.fromList [("shared", 3), ("b", 4)]
   merged = Map.mergeWith (_ leftValue rightValue => leftValue + rightValue) left right
-  shared <- assertSome (Map.get "shared" merged)
-  assertEq shared 5
-  onlyLeft <- assertSome (Map.get "a" merged)
-  assertEq onlyLeft 1
-  onlyRight <- assertSome (Map.get "b" merged)
-  assertEq onlyRight 4
+  assertSome (Map.get "shared" merged)
+   |> assertEq 5
+  assertSome (Map.get "a" merged)
+   |> assertEq 1
+  assertSome (Map.get "b" merged)
+   |> assertEq 4
 }
 
 @test "filterWithKey keeps matching entries"
-map_filterWithKey_filtersByKeyAndValue = do Effect {
+map_filterWithKey_filtersByKeyAndValue = {
   original = Map.fromList [(1, 10), (2, 20), (3, 30)]
   filtered = Map.filterWithKey (key value => key % 2 == 1 && value >= 10) original
   assertEq (Map.size filtered) 2
@@ -142,7 +142,7 @@ map_filterWithKey_filtersByKeyAndValue = do Effect {
 }
 
 @test "foldWithKey can aggregate keys and values"
-map_foldWithKey_aggregatesEntries = do Effect {
+map_foldWithKey_aggregatesEntries = {
   m     = Map.fromList [(1, 10), (2, 20), (3, 30)]
   total = Map.foldWithKey (acc key value => acc + key + value) 0 m
   assertEq total 66

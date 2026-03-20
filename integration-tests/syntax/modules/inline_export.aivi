@@ -9,7 +9,7 @@ export double : Int -> Int
 export double = x => x * 2
 
 @test "inline exported bindings are accessible within the same module"
-inlineExportWorks = do Effect {
+inlineExportWorks = {
   assertEq (greet "World") "Hello, World"
   assertEq (double 5) 10
 }

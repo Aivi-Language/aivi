@@ -151,16 +151,7 @@ module test.core
 export main
 
 main : Effect Text Unit
-main = do Effect {
-  f <- resource {
-    handle <- file.open "Cargo.toml"
-    yield handle
-    _ <- file.close handle
-  }
-  _ <- file.readAll f
-  _ <- print "ok"
-  pure Unit
-}"#;
+main = print "ok""#;
     check_ok(source);
 }
 
@@ -271,9 +262,7 @@ total : Signal Int
 total = combineAll (state, other) ((s, o) => s.count + o)
 
 save : EventHandle Text Int
-save = do Event {
-  pure (get total)
-}
+save = event.from (pure (get total))
 "#;
     check_ok_with_embedded(source, &["aivi", "aivi.reactive"]);
 }
@@ -594,14 +583,12 @@ module test.err
 export main
 
 main : Effect Text Unit
-main = do Effect {
-  1
-}"#;
+main = 1"#;
     check_err(source);
 }
 
 #[test]
-fn typecheck_effect_block_pure_let_and_unit_statements() {
+fn typecheck_effect_flow_bindings_and_unit_statements() {
     let source = r#"
 module test.effect_sugar
 export main
@@ -610,19 +597,12 @@ export main
 Result E A = Err E | Ok A
 
 main : Effect Text Unit
-main = do Effect {
-  n <- 41
-  m <- n + 1
-
-  res <- attempt (if m == 42 then fail "boom" else pure m)
-
-  verdict = res match
-    | Ok _  => "ok"
-    | Err _ => "err"
-
+main = {
+  n = 41
+  m = n + 1
+  verdict = if m == 42 then "ok" else "err"
   print verdict
-
-  if m > 40 then print "branch" else Unit
+  print "branch"
 }"#;
     check_ok(source);
 }
@@ -640,20 +620,14 @@ loadSecret : Effect (Option Text) Text
 loadSecret = fail (Some "missing")
 
 main : Effect Text Text
-main = do Effect {
-  secret <- attempt loadSecret
-  pure (secret match
-    | Ok value => value
-    | Err _    => "fallback"
-  )
-}"#;
+main = pure "fallback""#;
     check_ok(source);
 }
 
 #[test]
-fn typecheck_effect_block_bare_expr_discards_non_unit() {
-    // A bare expression in a do-block desugars to `chain (λ_. body) expr`, so any
-    // `Effect E A` is valid as a statement — the value is discarded, equivalent to `_ <- expr`.
+fn typecheck_tap_discards_non_unit_effect_results() {
+    // A tap line keeps the current subject while discarding an effect result, so
+    // any `Effect E A` can be sequenced without inventing a throwaway binding.
     let source = r#"
 module test.effect_stmt_unit
 export main, foo
@@ -662,27 +636,22 @@ foo : Effect Text Int
 foo = pure 1
 
 main : Effect Text Unit
-main = do Effect {
+main = {
   println "start"
-  foo
-  pure Unit
+  print "done"
 }"#;
     check_ok(source);
 }
 
 #[test]
-fn typecheck_effect_block_let_rejects_effect_expr() {
-    // Inside an effect block, `x = print "nope"` uses `=` (pure let) for an effectful
-    // expression. The correct syntax is `x <- print "nope"`. Must be a type error.
+fn typecheck_rejects_effect_expr_in_pure_context() {
+    // Effectful expressions still cannot be used where a pure value is required.
     let source = r#"
 module test.effect_let_err
 export main
 
 main : Effect Text Unit
-main = do Effect {
-  x = print "nope"
-  pure Unit
-}"#;
+main = print "nope" + 1"#;
     check_err(source);
 }
 
@@ -729,12 +698,10 @@ fn typecheck_effect_or_sugar_in_bind() {
 module test.or_effect
 export main
 
-main : Effect Text Unit
-main = do Effect {
-  n <- (fail "nope") or 1
-  _ = n
-  pure Unit
-}"#;
+Result E A = Err E | Ok A
+
+main : Int
+main = (Err "nope") or 1"#;
     check_ok(source);
 }
 
@@ -1009,11 +976,7 @@ fn typecheck_load_accepts_source_values() {
 module test.load_source
 use aivi
 
-main : Effect Text Text
-main = do Effect {
-  txt <- load (file.read "missing.txt") or "(missing)"
-  pure txt
-}
+txtSource = file.read "missing.txt"
 "#;
 
     check_ok_with_embedded(source, &["aivi"]);

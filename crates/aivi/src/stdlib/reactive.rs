@@ -6,7 +6,7 @@ module aivi.reactive
 export Signal, Disposable, EventHandle
 export signal, get, peek, set, update
 export derive, combineAll
-export watch, on, batch, dispose
+export watch, on, batch, dispose, event
 
 use aivi
 
@@ -56,4 +56,11 @@ batch = callback => reactive.batch callback
 
 dispose : Disposable -> Unit
 dispose = disposable => disposable.dispose Unit
+
+eventFrom = action => reactive.eventFrom action
+
+event : { from: Effect E A -> EventHandle E A }
+event = {
+  from: eventFrom
+}
 "#;

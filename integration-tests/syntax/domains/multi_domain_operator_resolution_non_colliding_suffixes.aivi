@@ -15,7 +15,7 @@ rgb0 = { r: 20, g: 20, b: 20 }
 rgb1 = rgb0 + 10r
 
 @test "operators resolve across domains; non-colliding suffixes work"
-operatorsResolveAcrossDomains = do Effect {
+operatorsResolveAcrossDomains = {
   assertEq span1.millis 60000
   assertEq rgb1.r 30
   assertEq rgb1.g 20

@@ -13,6 +13,6 @@ out      = values |> map (n => n * 2 + 1)
 expected = [3, 5, 7]
 
 @test "operators work"
-operatorsWork = do Effect {
+operatorsWork = {
   assertEq out expected
 }

@@ -5,7 +5,7 @@ use aivi.text (length as len, toUpper)
 use aivi.testing
 
 @test "selective import alias"
-aliasWorks = do Effect {
+aliasWorks = {
   assertEq (len "hello") 5
   assertEq (toUpper "hi") "HI"
 }

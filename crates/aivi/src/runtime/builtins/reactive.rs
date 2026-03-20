@@ -71,8 +71,8 @@ pub(super) fn build_reactive_record() -> Value {
         }),
     );
     fields.insert(
-        "event".to_string(),
-        builtin("reactive.event", 1, |mut args, runtime| {
+        "eventFrom".to_string(),
+        builtin("reactive.eventFrom", 1, |mut args, runtime| {
             runtime.reactive_create_event(args.remove(0))
         }),
     );

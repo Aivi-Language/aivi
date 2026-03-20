@@ -15,7 +15,7 @@ h : Int
 h = 3 |> x <| _ + 1 => x * 2
 
 @test "patch can work on arguments"
-argPatch = do Effect {
+argPatch = {
   assertEq (f 3) 7
   assertEq (g 2 4) 10
   assertEq h 8

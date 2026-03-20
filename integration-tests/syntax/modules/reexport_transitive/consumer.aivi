@@ -5,6 +5,6 @@ module integrationTests.syntax.modules.reexportTransitive.consumer
 use integrationTests.syntax.modules.reexportTransitive.facade (compute)
 
 @test "transitive re-export: compute imported via facade resolves correctly"
-reexportTransitiveWorks = do Effect {
+reexportTransitiveWorks = {
   assertEq (compute 4) 12
 }

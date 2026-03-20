@@ -10,10 +10,9 @@ InboxMessage = {
 }
 
 fetchUnread : ImapConfig -> Effect Text (List InboxMessage)
-fetchUnread = config => do Effect {
-  session <- imapOpen config
-  _       <- imapSelect "INBOX" session
-  uids    <- imapSearch "UNSEEN" session
-  msgs    <- imapFetch uids session
-  pure msgs
-}
+fetchUnread = config =>
+  config
+   |> imapOpen#session
+  ~|>imapSelect "INBOX" session
+   |> imapSearch "UNSEEN"
+   |> uids => imapFetch uids session

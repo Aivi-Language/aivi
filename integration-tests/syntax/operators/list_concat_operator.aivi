@@ -13,7 +13,7 @@ emptyInts = []
 out2 = emptyInts ++ [1] ++ [2, 3]
 
 @test "list concat"
-listConcatWorks = do Effect {
+listConcatWorks = {
   assertEq out1 [1, 2, 3]
   assertEq out2 [1, 2, 3]
 }

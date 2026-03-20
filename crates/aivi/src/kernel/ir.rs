@@ -258,7 +258,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
         } => match block_kind {
             HirBlockKind::Generate => lower_generate_block(items, id_gen),
             HirBlockKind::Do { monad } if monad == "Effect" => {
-                lower_do_effect_block(items, id_gen)
+                lower_effect_block(items, id_gen)
             }
             HirBlockKind::Do { .. } => {
                 // Generic `do M` is already desugared at HIR level into chain/lambda calls.
@@ -654,7 +654,7 @@ fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
 }
 }
 
-// ── do Effect { ... } desugaring ──────────────────────────────────────────────
+// ── effect-style block desugaring ─────────────────────────────────────────────
 //
 // Transforms:
 //   x <- e1; e2        →  bind e1 (λx → e2)
@@ -665,7 +665,7 @@ fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
 //
 // Empty block → pure Unit
 
-fn lower_do_effect_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
+fn lower_effect_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
     if items.is_empty() {
         return effect_pure_unit(id_gen);
     }
@@ -936,10 +936,10 @@ fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -
                     items: vec![yield_expr, cleanup_lambda],
                 },
             });
-            lower_do_effect_block(bundled_acquire_items, id_gen)
+            lower_effect_block(bundled_acquire_items, id_gen)
         }
         None => {
-            let acquire_effect = lower_do_effect_block(items, id_gen);
+            let acquire_effect = lower_effect_block(items, id_gen);
             let cleanup_lambda = HirExpr::Lambda {
                 id: id_gen.next(),
                 param: format!("_res_unused_{}", id_gen.next()),

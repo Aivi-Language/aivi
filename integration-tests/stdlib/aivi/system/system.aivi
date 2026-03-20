@@ -39,114 +39,107 @@ imapSource          = reader => reader {
 }
 
 @test "args"
-args_functional = do Effect {
-  a <- args
-  assert (List.length a >= 0)
-}
+args_functional = args
+  |> values => assert (List.length values >= 0)
 
 @test "locale tag"
-localeTag_functional = do Effect {
-  tag <- localeTag
-  assertEq (tag match
+localeTag_functional = localeTag
+  |> tag => assertEq (tag match
     | Some t => !(text.isEmpty t)
     | None   => True
   ) True
-}
 
 @test "env record shape"
-env_record_shape = do Effect {
-  result <- attempt (env.get "__AIVI_TEST_MISSING_ENV_VAR__")
-  result match
-    | Ok _    => assert False
-    | Err msg => assert (!(text.isEmpty msg))
-}
+env_record_shape = attempt (env.get "__AIVI_TEST_MISSING_ENV_VAR__")
+  |> assertErr
+  |> text.isEmpty
+  |> assertEq False
 
 @test "live source adapters typecheck"
-live_source_adapters_typecheck = do Effect {
-  _ <- pure (readTextSource file.readText)
-  _ <- pure (readJsonSource file.readJson)
-  _ <- pure (readCsvSource file.readCsv)
-  _ <- pure (readImageMetaSource file.imageMeta)
-  _ <- pure (readImageSource file.image)
-  _ <- pure (envGetSource env.get)
-  _ <- pure (envDecodeSource env.decode)
-  _ <- pure (httpGetSource http.get)
-  _ <- pure (httpsGetSource https.get)
-  _ <- pure (restGetSource rest.get)
-  _ <- pure (imapSource email.imap)
+live_source_adapters_typecheck = {
+  _ = (readTextSource file.readText)
+  _ = (readJsonSource file.readJson)
+  _ = (readCsvSource file.readCsv)
+  _ = (readImageMetaSource file.imageMeta)
+  _ = (readImageSource file.image)
+  _ = (envGetSource env.get)
+  _ = (envDecodeSource env.decode)
+  _ = (httpGetSource http.get)
+  _ = (httpsGetSource https.get)
+  _ = (restGetSource rest.get)
+  _ = (imapSource email.imap)
   assert True
 }
 
 @test "file and image sources can be mocked"
-file_and_image_sources_can_be_mocked = do Effect {
+file_and_image_sources_can_be_mocked = {
   mockReadText  = _ => pure (Ok "mock text")
   mockReadJson  = _ => pure { id: 1, name: "Ada" }
   mockReadCsv   = _ => pure [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }]
   mockImageMeta = _ => pure { width: 64, height: 64, format: "png" }
   mockImage     = _ => pure { width: 2, height: 2, pixels: [0, 1, 2, 3] }
 
-  textRes <- readTextSource mockReadText
-  user    <- readJsonSource mockReadJson
-  users   <- readCsvSource mockReadCsv
-  meta    <- readImageMetaSource mockImageMeta
-  img     <- readImageSource mockImage
-
-  _ <- (textRes match
-    | Ok txt => assertEq txt "mock text"
-    | Err _  => fail "expected mocked file text"
-  )
-  _ <- assertEq user.name "Ada"
-  _ <- assertEq (List.length users) 2
-  _ <- assertEq meta.format "png"
-  assertEq (List.length img.pixels) 4
+  readTextSource mockReadText
+   |> textRes => assertEq textRes (Ok "mock text")
+  readJsonSource mockReadJson
+   |> user => assertEq user.name "Ada"
+  readCsvSource mockReadCsv
+   |> users => assertEq (List.length users) 2
+  readImageMetaSource mockImageMeta
+   |> meta => assertEq meta.format "png"
+  readImageSource mockImage
+   |> img => assertEq (List.length img.pixels) 4
 }
 
 @test "env sources can be mocked"
-env_sources_can_be_mocked = do Effect {
+env_sources_can_be_mocked = {
   mockEnvGet    = _ => pure "token-123"
   mockEnvDecode = _ => pure { port: 8080, debug: True }
 
-  apiKey <- envGetSource mockEnvGet
-  cfg    <- envDecodeSource mockEnvDecode
-
-  _ <- assertEq apiKey "token-123"
-  _ <- assertEq cfg.port 8080
-  assertEq cfg.debug True
+  envGetSource mockEnvGet
+   |> assertEq "token-123"
+  envDecodeSource mockEnvDecode
+   |> cfg => {
+        assertEq cfg.port 8080
+        assertEq cfg.debug True
+      }
 }
 
 @test "http and https sources can be mocked"
-http_and_https_sources_can_be_mocked = do Effect {
+http_and_https_sources_can_be_mocked = {
   mockHttpGet  = _ => pure (Ok { status: 200, headers: [], body: "ok-http" })
   mockHttpsGet = _ => pure (Ok { status: 200, headers: [], body: "ok-https" })
 
-  httpRes  <- httpGetSource mockHttpGet
-  httpsRes <- httpsGetSource mockHttpsGet
-
-  _ <- (httpRes match
-    | Ok resp => assertEq resp.body "ok-http"
-    | Err _   => fail "expected mocked http response"
-  )
-  httpsRes match
-    | Ok resp => assertEq resp.body "ok-https"
-    | Err _   => fail "expected mocked https response"
+  httpGetSource mockHttpGet
+   |> assertOk
+   |> .body
+   |> assertEq "ok-http"
+  httpsGetSource mockHttpsGet
+   |> assertOk
+   |> .body
+   |> assertEq "ok-https"
 }
 
 @test "rest source can be mocked"
-rest_source_can_be_mocked = do Effect {
+rest_source_can_be_mocked = {
   mockRestGet = _ => pure [{ id: 42, name: "Mocked" }]
-  users <- restGetSource mockRestGet
-  _     <- assertEq (List.length users) 1
-  users match
-    | [u, ..._] => assertEq u.id 42
-    | []        => fail "expected mocked rest payload"
+  restGetSource mockRestGet
+   |> users => {
+        assertEq (List.length users) 1
+        users match
+          | [u, ..._] => assertEq u.id 42
+          | []        => fail "expected mocked rest payload"
+      }
 }
 
 @test "imap source can be mocked"
-imap_source_can_be_mocked = do Effect {
+imap_source_can_be_mocked = {
   mockImap = _ => pure [{ subject: Some "hello", body: "world" }]
-  msgs <- imapSource mockImap
-  _    <- assertEq (List.length msgs) 1
-  msgs match
-    | [msg, ..._] => assertEq msg.body "world"
-    | []          => fail "expected mocked imap payload"
+  imapSource mockImap
+   |> msgs => {
+        assertEq (List.length msgs) 1
+        msgs match
+          | [msg, ..._] => assertEq msg.body "world"
+          | []          => fail "expected mocked imap payload"
+      }
 }

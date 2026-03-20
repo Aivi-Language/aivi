@@ -54,9 +54,7 @@ result = 5 |> double
 
 @test "pipe preserves semantics"
 main : Effect Text Unit
-main = do Effect {
-  assertEq result 10
-}
+main = assertEq result 10
 "#,
     );
 }
@@ -75,8 +73,8 @@ makeAdder = n => x => n + x
 
 @test "closure captures"
 main : Effect Text Unit
-main = do Effect {
-  addFive <- pure (makeAdder 5)
+main = {
+  addFive = makeAdder 5
   assertEq (addFive 3) 8
   assertEq (addFive 10) 15
 }
@@ -102,7 +100,7 @@ unwrapOr = default => opt => opt match
 
 @test "pattern match lowering"
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (unwrapOr 0 (Some 42)) 42
   assertEq (unwrapOr 0 None) 0
 }
@@ -125,7 +123,7 @@ id = x => x
 
 @test "mono generics"
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (id 42) 42
   assertEq (id "hello") "hello"
 }
@@ -152,7 +150,7 @@ isOdd = n => if n == 0 then False else isEven (n - 1)
 
 @test "mutual recursion"
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (isEven 4) True
   assertEq (isOdd 3) True
   assertEq (isEven 5) False
@@ -188,7 +186,7 @@ mulF = a b => a * b
 
 @test "native int and float"
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (add 3 4) 7
   assertEq (sub 10 3) 7
   assertEq (mul 6 7) 42
@@ -213,7 +211,7 @@ clamp = x => if x > 10 then 10 else x
 
 @test "bool and control flow"
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (clamp 5) 5
   assertEq (clamp 15) 10
 }
@@ -242,7 +240,7 @@ square = n => n * n
 
 @test "ABI composition"
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (double 21) 42
   assertEq (square 7) 49
   assertEq (add (double 3) (square 2)) 10
@@ -280,7 +278,7 @@ describe = opt => opt match
 
 @test "full pipeline"
 main : Effect Text Unit
-main = do Effect {
+main = {
   nums = [1, 2, 3]
   doubled = map (n => n * 2) nums
   assertEq doubled [2, 4, 6]
@@ -313,9 +311,7 @@ add = a b => a + b
 
 @test "explicit types"
 main : Effect Text Unit
-main = do Effect {
-  assertEq (add 1 2) 3
-}
+main = assertEq (add 1 2) 3
 "#,
     );
     // Inferred (no annotation)
@@ -330,9 +326,7 @@ add = a b => a + b
 
 @test "inferred types"
 main : Effect Text Unit
-main = do Effect {
-  assertEq (add 1 2) 3
-}
+main = assertEq (add 1 2) 3
 "#,
     );
 }
@@ -353,9 +347,7 @@ z = x + y
 
 @test "order A"
 main : Effect Text Unit
-main = do Effect {
-  assertEq z 3
-}
+main = assertEq z 3
 "#,
     );
     run_jit(
@@ -371,9 +363,7 @@ z = x + y
 
 @test "order B"
 main : Effect Text Unit
-main = do Effect {
-  assertEq z 3
-}
+main = assertEq z 3
 "#,
     );
 }

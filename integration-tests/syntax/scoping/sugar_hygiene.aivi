@@ -16,9 +16,9 @@ use aivi.generator
 // --- `when` sugar: intermediate `_` does not shadow user bindings ---
 
 @test "when sugar does not affect user bindings"
-whenSugarNoShadow = do Effect {
+whenSugarNoShadow = {
   x = 42
-  when True <- pure Unit
+  when True = Unit
   // `_` from desugar must not shadow or clobber `x`
   assertEq x 42
 }
@@ -26,16 +26,16 @@ whenSugarNoShadow = do Effect {
 // --- `unless` sugar: same hygiene requirement ---
 
 @test "unless sugar does not affect user bindings"
-unlessSugarNoShadow = do Effect {
+unlessSugarNoShadow = {
   count = 7
-  unless False <- pure Unit
+  unless False = Unit
   assertEq count 7
 }
 
 // --- `loop` introduces its own binding that shadows outer only inside the loop ---
 
 @test "loop binding shadows outer n only inside loop body"
-loopBindingShadowsLocally = do Effect {
+loopBindingShadowsLocally = {
   n      = 100
   result = generate {
     loop n = 1 => {
@@ -52,13 +52,13 @@ loopBindingShadowsLocally = do Effect {
 // --- Multiple sugars in sequence: each desugar's internals stay isolated ---
 
 @test "multiple when/unless in sequence do not interfere with each other"
-multipleSugarsSequential = do Effect {
+multipleSugarsSequential = {
   value = 55
   flag1 = True
   flag2 = False
-  when flag1   <- pure Unit
-  unless flag2 <- pure Unit
-  when flag1   <- pure Unit
+  when flag1 = Unit
+  unless flag2 = Unit
+  when flag1 = Unit
   // After three sugar expansions, value is unchanged
   assertEq value 55
 }
@@ -66,7 +66,7 @@ multipleSugarsSequential = do Effect {
 // --- `loop` with same name as outer binding; outer survives after generate ---
 
 @test "outer binding survives after loop with same name"
-outerSurvivesAfterLoop = do Effect {
+outerSurvivesAfterLoop = {
   i = 99
   g = generate {
     loop i = 0 => {

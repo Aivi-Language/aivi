@@ -1,4 +1,2 @@
-val = do Effect {
-  x <- f
-  g x
-}
+val = f
+  |> g

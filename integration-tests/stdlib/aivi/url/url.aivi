@@ -6,47 +6,55 @@ use aivi.testing
 use aivi.url (parse, toString, protocol, host, port, path, query, hash, domain Url)
 
 @test "parse"
-parse_functional = do Effect {
-  value <- assertOk (parse "https://example.com:8080/path?q=v&lang=en#hash")
-  assertEq (protocol value) "https"
-  assertEq (host value) "example.com"
-  assertEq (port value) (Some 8080)
-  assertEq (path value) "/path"
-  assertEq (query value) [("q", "v"), ("lang", "en")]
-  assertEq (hash value) (Some "hash")
+parse_functional = {
+  assertOk (parse "https://example.com:8080/path?q=v&lang=en#hash")
+   |> value => {
+        assertEq (protocol value) "https"
+        assertEq (host value) "example.com"
+        assertEq (port value) (Some 8080)
+        assertEq (path value) "/path"
+        assertEq (query value) [("q", "v"), ("lang", "en")]
+        assertEq (hash value) (Some "hash")
+      }
 }
 
 @test "parse origin defaults path"
-parse_origin_defaults_path = do Effect {
-  value <- assertOk (parse "http://example.com")
-  assertEq (path value) "/"
-  assertEq (query value) []
-  assertNone (hash value)
+parse_origin_defaults_path = {
+  assertOk (parse "http://example.com")
+   |> value => {
+        assertEq (path value) "/"
+        assertEq (query value) []
+        assertNone (hash value)
+      }
 }
 
 @test "to string"
-toString_functional = do Effect {
-  value <- assertOk (parse "http://example.com/path?q=v#hash")
-  assertEq (toString value) "http://example.com/path?q=v#hash"
+toString_functional = {
+  assertOk (parse "http://example.com/path?q=v#hash")
+   |> toString
+   |> assertEq "http://example.com/path?q=v#hash"
 }
 
 @test "query add appends"
-query_add_appends = do Effect {
-  value <- assertOk (parse "https://example.com/search?q=old")
-  updated = value + ("page", "1")
-  assertEq (query updated) [("q", "old"), ("page", "1")]
+query_add_appends = {
+  assertOk (parse "https://example.com/search?q=old")
+   |> value => {
+        updated = value + ("page", "1")
+        assertEq (query updated) [("q", "old"), ("page", "1")]
+      }
 }
 
 @test "query remove removes all matching keys"
-query_remove_removes_all_matching_keys = do Effect {
-  value <- assertOk (parse "https://example.com/search?q=old&page=1")
-  updated = value + ("page", "2")
-  cleaned = updated - "page"
-  assertEq (query cleaned) [("q", "old")]
+query_remove_removes_all_matching_keys = {
+  assertOk (parse "https://example.com/search?q=old&page=1")
+   |> value => {
+        updated = value + ("page", "2")
+        cleaned = updated - "page"
+        assertEq (query cleaned) [("q", "old")]
+      }
 }
 
 @test "parse invalid returns error"
-parse_invalid_returns_error = do Effect {
-  err <- assertErr (parse "not a url")
-  assert (text.length err > 0)
-}
+parse_invalid_returns_error = assertErr (parse "not a url")
+  |> text.length
+  |> length => assert (length > 0)

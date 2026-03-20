@@ -1,14 +1,14 @@
-do Effect {
-  slow = _ => do Effect {
-    sleep 50
-    pure "left"
-  }
-  fast = _ => do Effect {
-    sleep 0
-    pure "right"
-  }
+after : Int -> A -> Effect Text A
+after = millis value => bind (sleep millis) (finished => pure value)
 
-  fastest <- race (slow Unit) (fast Unit)
-  guarded <- timeoutWith 100 "timeout" (pure 9)
-  pure (fastest, guarded)
-}
+slow : Effect Text Text
+slow = after 50 "left"
+
+fast : Effect Text Text
+fast = after 0 "right"
+
+firstResult : Effect Text Text
+firstResult = race slow fast
+
+guardedValue : Effect Text Int
+guardedValue = timeoutWith 100 "timeout" (pure 9)

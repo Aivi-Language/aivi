@@ -3,9 +3,7 @@ module integrationTests.complex.monadValidation
 
 use aivi
 use aivi.testing
-use aivi.collections
-use aivi.generator
-use aivi.text
+use aivi.text (isEmpty, length)
 
 // --- Typed validation errors ---
 
@@ -15,82 +13,91 @@ ValidationError =
   | TooLong Int
   | OutOfRange Int Int Int
 
-// --- do Result: multi-field validator ---
+andThenValidation : Result ValidationError A -> (A -> Result ValidationError B) -> Result ValidationError B
+andThenValidation = result next => result match
+  | Ok value => next value
+  | Err err  => Err err
 
-validateUsername = name => do Result {
-  ok  <- if isEmpty name then Err EmptyField else Ok name
-  ok2 <- if length ok < 3 then Err (TooShort (length ok)) else Ok ok
-  ok3 <- if length ok2 > 20 then Err (TooLong (length ok2)) else Ok ok2
-  Ok ok3
-}
+andThenText : Result Text A -> (A -> Result Text B) -> Result Text B
+andThenText = result next => result match
+  | Ok value => next value
+  | Err err  => Err err
 
-validateAge = n => do Result {
-  ok <- if n < 0 || n > 150 then Err (OutOfRange n 0 150) else Ok n
-  Ok ok
-}
+// --- Result-based multi-field validator ---
 
-validateScore = n => do Result {
-  ok  <- if n < 0 then Err (OutOfRange n 0 100) else Ok n
-  ok2 <- if ok > 100 then Err (OutOfRange ok 0 100) else Ok ok
-  Ok ok2
-}
+validateUsername = name =>
+  if isEmpty name then Err EmptyField
+  else if length name < 3 then Err (TooShort (length name))
+  else if length name > 20 then Err (TooLong (length name))
+  else Ok name
+
+validateAge = n => if n < 0 || n > 150 then Err (OutOfRange n 0 150) else Ok n
+
+validateScore = n =>
+  if n < 0 then Err (OutOfRange n 0 100)
+  else if n > 100 then Err (OutOfRange n 0 100)
+  else Ok n
 
 // Compose: validate all three fields, fail at first error
-validateUser = name age score => do Result {
-  n <- validateUsername name
-  a <- validateAge age
-  s <- validateScore score
-  Ok { name: n, age: a, score: s }
-}
+validateUser = name age score =>
+  andThenValidation (validateUsername name) (validName =>
+    andThenValidation (validateAge age) (validAge =>
+      andThenValidation (validateScore score) (validScore =>
+        Ok { name: validName, age: validAge, score: validScore }
+      )
+    )
+  )
 
-// --- do Option: safe nested map lookups ---
+// --- Option-based nested map lookups ---
 
 ConfigMap = Map Text (Map Text Int)
 
-lookupSetting = section key cfg => do Option {
-  section <- Map.get section cfg
-  value   <- Map.get key section
-  Some value
-}
+lookupSetting = section key cfg =>
+  Map.get section cfg match
+    | Some foundSection => Map.get key foundSection
+    | None              => None
 
-// --- generator + guard: non-deterministic pairing ---
+// --- List pairing with guard-like filtering ---
 
-pairsWithSum = target xs ys => generate {
-  x <- xs
-  y <- ys
-  s = x + y
-  s -> s == target
-  yield (x, y)
-}
+pairsWithSum = target xs ys =>
+  List.flatMap (x =>
+    ys
+      |> List.filter (y => x + y == target)
+      |> List.map (y => (x, y))
+  ) xs
+
+validateScoreText = score => validateScore score match
+  | Ok validScore => Ok validScore
+  | Err _         => Err "invalid score"
 
 // --- Tests ---
 
 @test "validateUsername: happy path"
-validateUsername_happy = do Effect {
+validateUsername_happy = {
   res = validateUsername "alice"
   assertEq res (Ok "alice")
 }
 
 @test "validateUsername: empty field"
-validateUsername_empty = do Effect {
+validateUsername_empty = {
   res = validateUsername ""
   assertEq res (Err EmptyField)
 }
 
 @test "validateUsername: too short"
-validateUsername_tooShort = do Effect {
+validateUsername_tooShort = {
   res = validateUsername "ab"
   assertEq res (Err (TooShort 2))
 }
 
 @test "validateUsername: too long"
-validateUsername_tooLong = do Effect {
+validateUsername_tooLong = {
   res = validateUsername "abcdefghijklmnopqrstu"
   assertEq res (Err (TooLong 21))
 }
 
 @test "validateAge: out of range"
-validateAge_outOfRange = do Effect {
+validateAge_outOfRange = {
   resNeg = validateAge (-1)
   assertEq resNeg (Err (OutOfRange (-1) 0 150))
 
@@ -102,13 +109,13 @@ validateAge_outOfRange = do Effect {
 }
 
 @test "validateUser: full happy path"
-validateUser_happy = do Effect {
+validateUser_happy = {
   res = validateUser "alice" 30 95
   assertEq res (Ok { name: "alice", age: 30, score: 95 })
 }
 
 @test "validateUser: short-circuits at first error"
-validateUser_shortCircuit = do Effect {
+validateUser_shortCircuit = {
   // Name fails first; age and score are never checked
   res = validateUser "" (-1) 999
   assertEq res (Err EmptyField)
@@ -118,8 +125,8 @@ validateUser_shortCircuit = do Effect {
   assertEq res2 (Err (OutOfRange 200 0 150))
 }
 
-@test "do Option: nested lookup success"
-doOption_nestedLookup = do Effect {
+@test "Option nested lookup succeeds"
+optionNestedLookup = {
   inner1 = Map.insert "timeout" 30 Map.empty
   inner2 = Map.insert "retries" 5 Map.empty
   cfg    = Map.insert "network" inner1 (Map.insert "app" inner2 Map.empty)
@@ -135,24 +142,24 @@ doOption_nestedLookup = do Effect {
   assertEq absent None
 }
 
-@test "do Option: short-circuit on missing key"
-doOption_shortCircuit = do Effect {
+@test "Option short-circuits on missing key"
+optionShortCircuit = {
   // Empty config: outer key missing, inner never evaluated
   emptyResult = lookupSetting "any" "key" Map.empty
   assertEq emptyResult None
 }
 
-@test "generator: pairs summing to target"
-doList_pairsSum = do Effect {
+@test "pairs summing to target"
+pairsSum = {
   xs    = [1, 2, 3, 4]
   ys    = [6, 7, 8, 9]
-  pairs = toList (pairsWithSum 10 xs ys)
+  pairs = pairsWithSum 10 xs ys
   // 1+9=10, 2+8=10, 3+7=10, 4+6=10
   assertEq pairs [(1, 9), (2, 8), (3, 7), (4, 6)]
 }
 
-@test "do Result and do Option interop"
-doResultOptionInterop = do Effect {
+@test "Result and Option interop"
+resultOptionInterop = {
   // Convert Option to Result for uniform error handling
   cfg = Map.insert "x" 42 Map.empty
 
@@ -168,10 +175,6 @@ doResultOptionInterop = do Effect {
   assertEq notFound (Err "missing key")
 
   // Compose validation on top of lookup
-  combined = do Result {
-    v <- found
-    s <- validateScore v
-    Ok s
-  }
+  combined = andThenText found validateScoreText
   assertEq combined (Ok 42)
 }

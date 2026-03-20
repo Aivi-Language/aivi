@@ -1,12 +1,13 @@
-// Attempt operation, providing a typed default on error
-getUser = id => do Effect {
-  res <- attempt (api.fetchUser id)
-  res match
-    | Ok user => pure user
-    | Err _   => pure GuestUser
-}
+// Attempt an operation, providing a typed default on error
+getUser = id =>
+  api.fetchUser id
+|> attempt
+|> res => res match
+  | Ok user => user
+  | Err _   => GuestUser
 
-validatedUser = do Effect {
-  u <- getUser 123
-  if u.age > 18 then pure (toAdmin u) else fail TooYoung
-}
+validatedUser = getUser 123
+  |> u => if u.age > 18 then
+    pure (toAdmin u)
+  else
+    fail TooYoung

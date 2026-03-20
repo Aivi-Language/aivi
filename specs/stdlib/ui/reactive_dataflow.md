@@ -130,7 +130,7 @@ This is the boundary that keeps long-lived reactive graphs from leaking after a 
 `Event` handles are not a separate async architecture. They are graph nodes with lifecycle signals.
 
 ```aivi
-refreshData = event.from (_ => fetchRows)
+refreshData = event.from fetchRows
 
 rows = combineAll (cachedRows, refreshData.result) ((cached, fresh) =>
   fresh match

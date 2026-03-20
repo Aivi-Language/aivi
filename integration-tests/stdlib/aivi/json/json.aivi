@@ -6,27 +6,28 @@ use aivi.testing
 use aivi.json
 
 @test "strict fields"
-strict_fields = do Effect {
+strict_fields = {
   payload = encodeObject [
     ("id", encodeInt 1)
     ("name", encodeText "a")
   ]
-  value <- assertOk (strictFields ["id", "name"] payload)
-  assertEq value payload
+  assertOk (strictFields ["id", "name"] payload)
+   |> assertEq payload
 }
 
 @test "strict fields rejects unknown key"
-strict_fields_reject_unknown_key = do Effect {
+strict_fields_reject_unknown_key = {
   payload = encodeObject [
     ("id", encodeInt 1)
     ("extra", encodeBool True)
   ]
-  err <- assertErr (strictFields ["id"] payload)
-  assertEq err.message "json.strictFields: unknown key"
+  assertErr (strictFields ["id"] payload)
+   |> .message
+   |> assertEq "json.strictFields: unknown key"
 }
 
 @test "schema required fields"
-schema_required_fields = do Effect {
+schema_required_fields = {
   payload = encodeObject [("id", encodeInt 1)]
   schema  = { required: ["id", "name"], strict: True }
   issues  = validateSchema schema payload
@@ -34,7 +35,7 @@ schema_required_fields = do Effect {
 }
 
 @test "validate schema ignores strict flag"
-validate_schema_ignores_strict_flag = do Effect {
+validate_schema_ignores_strict_flag = {
   payload = encodeObject [
     ("id", encodeInt 1)
     ("extra", encodeBool True)
@@ -45,36 +46,37 @@ validate_schema_ignores_strict_flag = do Effect {
 }
 
 @test "decode field missing"
-decode_field_missing = do Effect {
+decode_field_missing = {
   payload = encodeObject [("id", encodeInt 1)]
-  err <- assertErr (decodeField "name" payload)
-  assertEq err.message "missing field: name"
+  assertErr (decodeField "name" payload)
+   |> .message
+   |> assertEq "missing field: name"
 }
 
 @test "decode list decodes items"
-decode_list_decodes_items = do Effect {
+decode_list_decodes_items = {
   payload = encodeArray [encodeInt 1, encodeInt 2, encodeInt 3]
-  values <- assertOk (decodeList decodeInt payload)
-  assertEq values [1, 2, 3]
+  assertOk (decodeList decodeInt payload)
+   |> assertEq [1, 2, 3]
 }
 
 @test "decode list surfaces item errors"
-decode_list_surfaces_item_errors = do Effect {
+decode_list_surfaces_item_errors = {
   payload = encodeArray [encodeInt 1, encodeText "oops"]
-  err <- assertErr (decodeList decodeInt payload)
-  assertEq err.message "expected Int"
+  assertErr (decodeList decodeInt payload)
+   |> .message
+   |> assertEq "expected Int"
 }
 
 @test "decode unavailable"
-decode_unavailable = do Effect {
-  err <- assertErr (decode "[]")
-  assertEq err.message "json.decode: native JSON parsing not yet available"
-}
+decode_unavailable = assertErr (decode "[]")
+  |> .message
+  |> assertEq "json.decode: native JSON parsing not yet available"
 
 @test "migrate object"
-migrate_object = do Effect {
+migrate_object = {
   payload  = encodeObject [("name", encodeText "old")]
   migrated = migrateObject (entries => [("name", encodeText "new"), ...entries]) payload
-  field <- assertOk (decodeField "name" migrated)
-  assertEq field (encodeText "new")
+  assertOk (decodeField "name" migrated)
+   |> assertEq (encodeText "new")
 }

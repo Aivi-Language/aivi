@@ -62,27 +62,27 @@ baseUser : UserCore
 baseUser = { id: 10, name: "Dana" }
 
 @test "Pick single field"
-pickSingle = do Effect {
+pickSingle = {
   idVal = toIdOnly alice
   assertEq idVal.id 1
 }
 
 @test "Pick multiple fields"
-pickMulti = do Effect {
+pickMulti = {
   ne = toNameEmail alice
   assertEq ne.name "Alice"
   assertEq ne.email "alice@example.com"
 }
 
 @test "Omit admin field"
-omitAdmin = do Effect {
+omitAdmin = {
   pub = toPublic alice
   assertEq pub.id 1
   assertEq pub.name "Alice"
 }
 
 @test "Optional makes field Option type"
-optionalEmail = do Effect {
+optionalEmail = {
   withEmail : UserForm
   withEmail = { id: 1, name: "Bob", email: Some "bob@example.com", admin: True }
   withoutEmail : UserForm
@@ -92,7 +92,7 @@ optionalEmail = do Effect {
 }
 
 @test "Type-level pipe composes transforms"
-typePipe = do Effect {
+typePipe = {
   draft : UserDraft
   draft = { id: 3, name: "Carol", email: None }
   assertEq draft.id 3
@@ -100,7 +100,7 @@ typePipe = do Effect {
 }
 
 @test "Record type spread adds fields"
-recordTypeSpreadAddsFields = do Effect {
+recordTypeSpreadAddsFields = {
   extended = extendUser baseUser "dana@example.com"
   assertEq extended.id 10
   assertEq extended.name "Dana"
@@ -108,7 +108,7 @@ recordTypeSpreadAddsFields = do Effect {
 }
 
 @test "Later spread overrides earlier field type"
-recordTypeSpreadOverridesEarlierFields = do Effect {
+recordTypeSpreadOverridesEarlierFields = {
   normalized : UserNormalized
   normalized = { id: 11, name: "Eli" }
   assertEq (normalizedName normalized) "Eli"

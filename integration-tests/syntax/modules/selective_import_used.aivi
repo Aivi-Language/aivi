@@ -5,7 +5,7 @@ use aivi.list (filter, map, length)
 use aivi.testing
 
 @test "selective imports from single module work correctly"
-selectiveImportUsed = do Effect {
+selectiveImportUsed = {
   xs = [1, 2, 3, 4, 5]
   assertEq (filter (x => x > 2) xs) [3, 4, 5]
   assertEq (xs |> map (x => x + 10)) [11, 12, 13, 14, 15]

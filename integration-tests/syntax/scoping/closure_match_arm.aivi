@@ -25,7 +25,7 @@ offsetFn = shape => shape match
   | Triangle b h _ => x => x + b + h
 
 @test "match arm closures capture arm-specific integer bindings"
-matchArmIntCapture = do Effect {
+matchArmIntCapture = {
   circleFn = areaFn (Circle 5)
   rectFn   = areaFn (Rectangle 3 4)
   triFn    = areaFn (Triangle 6 8 10)
@@ -39,7 +39,7 @@ matchArmIntCapture = do Effect {
 }
 
 @test "match arm closures using offset function capture arm-specific binding"
-matchArmOffsetCapture = do Effect {
+matchArmOffsetCapture = {
   circleOff = offsetFn (Circle 10)
   rectOff   = offsetFn (Rectangle 3 5)
   triOff    = offsetFn (Triangle 2 4 99)
@@ -49,7 +49,7 @@ matchArmOffsetCapture = do Effect {
 }
 
 @test "closures from different arms on the same input are independent"
-matchArmIsolation = do Effect {
+matchArmIsolation = {
   fn1 = areaFn (Circle 3)
   fn2 = areaFn (Rectangle 2 5)
   fn3 = areaFn (Circle 10)
@@ -63,7 +63,7 @@ matchArmIsolation = do Effect {
 }
 
 @test "match arm closure from nested match captures correct binding"
-nestedMatchArmCapture = do Effect {
+nestedMatchArmCapture = {
   outer   = Rectangle 4 6
   inner   = Circle 3
   outerFn = areaFn outer

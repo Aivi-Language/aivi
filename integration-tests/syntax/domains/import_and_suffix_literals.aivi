@@ -12,7 +12,7 @@ span1 = span0 + 30s
 span2 = span0 + 1min
 
 @test "suffix literals work"
-suffixLiteralsWork = do Effect {
+suffixLiteralsWork = {
   assertEq span1.millis 30000
   assertEq span2.millis 60000
 }

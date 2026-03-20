@@ -223,7 +223,7 @@ impl TypeChecker {
         else {
             return Err(TypeError {
                 span: block_span.clone(),
-                message: "`do Applicative { ... }` requires a final pure result expression".to_string(),
+                message: "applicative blocks require a final pure result expression".to_string(),
                 expected: None,
                 found: None,
             });
@@ -258,7 +258,7 @@ impl TypeChecker {
                 BlockItem::Expr { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "non-final expression statements are not allowed in `do Applicative { ... }`; keep a single final result expression".to_string(),
+                        message: "non-final expression statements are not allowed in applicative blocks; keep a single final result expression".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -266,7 +266,7 @@ impl TypeChecker {
                 BlockItem::When { span, .. } | BlockItem::Unless { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`when`/`unless` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        message: "`when`/`unless` is only available in effect-style blocks, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -274,7 +274,7 @@ impl TypeChecker {
                 BlockItem::Given { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`given` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        message: "`given` is only available in effect-style blocks, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -282,7 +282,7 @@ impl TypeChecker {
                 BlockItem::Recurse { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`recurse` is only available in `do Effect { ... }` or `generate { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        message: "`recurse` is only available in effect-style blocks or `generate { ... }`, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -290,7 +290,7 @@ impl TypeChecker {
                 BlockItem::Filter { span, .. } | BlockItem::Yield { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`do Applicative { ... }` only supports `<-`, `=`, and a final result expression".to_string(),
+                        message: "applicative blocks only support `<-`, `=`, and a final result expression".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -377,7 +377,7 @@ impl TypeChecker {
                 BlockItem::When { span, .. } | BlockItem::Unless { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`when`/`unless` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        message: "`when`/`unless` is only available in effect-style blocks, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -385,7 +385,7 @@ impl TypeChecker {
                 BlockItem::Given { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`given` is only available in `do Effect { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        message: "`given` is only available in effect-style blocks, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -393,7 +393,7 @@ impl TypeChecker {
                 BlockItem::Recurse { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`recurse` is only available in `do Effect { ... }` or `generate { ... }` blocks, not `do Applicative { ... }`".to_string(),
+                        message: "`recurse` is only available in effect-style blocks or `generate { ... }`, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -401,7 +401,7 @@ impl TypeChecker {
                 BlockItem::Filter { span, .. } | BlockItem::Yield { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`do Applicative { ... }` only supports `<-`, `=`, and a final result expression".to_string(),
+                        message: "applicative blocks only support `<-`, `=`, and a final result expression".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -572,11 +572,11 @@ impl TypeChecker {
         Ok(Type::con("Effect").app(vec![err_ty, result_ty]))
     }
 
-    /// Type-check a `do Event { ... }` block.
+    /// Type-check an event block.
     ///
-    /// The body is type-checked as an effect block (same rules as `do Effect`),
+    /// The body is type-checked as an effect block with the same statement rules,
     /// but the overall type is `EventHandle E A` rather than `Effect E A`.
-    /// At the HIR level, `do Event { body }` desugars to `reactive.event(do Effect { body })`.
+    /// At the HIR level, event blocks desugar to `reactive.eventFrom(...)` around an effect block.
     pub(crate) fn infer_event_block(
         &mut self,
         items: &[BlockItem],
@@ -682,7 +682,7 @@ impl TypeChecker {
                     return Err(TypeError {
                         span: span.clone(),
                         message: format!(
-                            "`when`/`unless` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                            "`when`/`unless` is only available in effect-style blocks, not `{monad_name}` monadic blocks"
                         ),
                         expected: None,
                         found: None,
@@ -692,7 +692,7 @@ impl TypeChecker {
                     return Err(TypeError {
                         span: span.clone(),
                         message: format!(
-                            "`given` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                            "`given` is only available in effect-style blocks, not `{monad_name}` monadic blocks"
                         ),
                         expected: None,
                         found: None,
@@ -702,7 +702,7 @@ impl TypeChecker {
                     return Err(TypeError {
                         span: span.clone(),
                         message: format!(
-                            "`recurse` is only available in `do Effect {{ ... }}` or `generate {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                            "`recurse` is only available in effect-style blocks or `generate {{ ... }}`, not `{monad_name}` monadic blocks"
                         ),
                         expected: None,
                         found: None,

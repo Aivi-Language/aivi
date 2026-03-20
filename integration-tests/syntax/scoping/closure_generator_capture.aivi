@@ -16,7 +16,7 @@ makeFns = generate {
 }
 
 @test "generator closures each capture their own bound iteration value"
-generatorClosureCapture = do Effect {
+generatorClosureCapture = {
   fns     = toList makeFns
   results = map (f => f 5) fns
   // f10 5 = 15, f20 5 = 25, f30 5 = 35
@@ -24,7 +24,7 @@ generatorClosureCapture = do Effect {
 }
 
 @test "generator closures over two nested binds capture independently"
-generatorNestedBindCapture = do Effect {
+generatorNestedBindCapture = {
   fns = toList (generate {
       base <- [1, 2]
       mult <- [10, 100]
@@ -36,7 +36,7 @@ generatorNestedBindCapture = do Effect {
 }
 
 @test "generator closure captures correct x with guard filtering"
-generatorClosureWithGuard = do Effect {
+generatorClosureWithGuard = {
   fns = toList (generate {
       x <- [1, 2, 3, 4, 5]
       x -> x % 2 == 1
@@ -48,7 +48,7 @@ generatorClosureWithGuard = do Effect {
 }
 
 @test "generator loop captures per-iteration value in yielded closure"
-generatorLoopClosureCapture = do Effect {
+generatorLoopClosureCapture = {
   fns = toList (generate {
       loop n = 1 => {
         yield (x => x * n)

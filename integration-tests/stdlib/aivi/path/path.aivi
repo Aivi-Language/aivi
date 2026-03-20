@@ -7,25 +7,25 @@ use aivi.path
 use aivi.text
 
 @test "parse absolute"
-parse_absolute = do Effect {
+parse_absolute = {
   p = parse "/usr/local/bin"
   assert (isAbsolute p)
 }
 
 @test "parse relative"
-parse_relative = do Effect {
+parse_relative = {
   p = parse "src/main.aivi"
   assert (!(isAbsolute p))
 }
 
 @test "path segments"
-path_segments = do Effect {
+path_segments = {
   p = parse "a/b/c"
   assert (List.length p.segments >= 1)
 }
 
 @test "file name"
-fileName_functional = do Effect {
+fileName_functional = {
   p = parse "home/user/file.txt"
   fileName p match
     | Some name => assertEq name "file.txt"
@@ -33,10 +33,10 @@ fileName_functional = do Effect {
 }
 
 @test "parent"
-parent_functional = do Effect {
+parent_functional = {
   p = parse "a/b/c"
   parent p match
-    | Some par => do Effect {
+    | Some par => {
         fn = fileName par
         fn match
           | Some name => assertEq name "b"
@@ -46,14 +46,14 @@ parent_functional = do Effect {
 }
 
 @test "to string roundtrip"
-toString_roundtrip = do Effect {
+toString_roundtrip = {
   p = parse "a/b/c"
   s = toString p
   assert (text.length s > 0)
 }
 
 @test "normalize collapses parent segments"
-normalize_parent_segments = do Effect {
+normalize_parent_segments = {
   p = { absolute: False, segments: ["a", "..", "b"] }
   assertEq (toString (normalize p)) "b"
 }

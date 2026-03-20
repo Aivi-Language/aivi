@@ -19,7 +19,7 @@ describeOpt = value => value match
   | None                 => "absent"
 
 @test "unless guards work"
-unlessGuardsWork = do Effect {
+unlessGuardsWork = {
   assertEq (classify (-1)) "negative"
   assertEq (classify 0) "zero"
   assertEq (classify 7) "small"

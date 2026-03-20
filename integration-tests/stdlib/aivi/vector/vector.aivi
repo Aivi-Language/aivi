@@ -23,34 +23,34 @@ use aivi.vector (
 use aivi.matrix (identity2, identity3, identity4)
 
 @test "vec2 constructor"
-vec2_constructor = do Effect {
+vec2_constructor = {
   v = vec2 3.0 4.0
   assertEq v.x 3.0
   assertEq v.y 4.0
 }
 
 @test "vec3 constructor"
-vec3_constructor = do Effect {
+vec3_constructor = {
   v = vec3 1.0 2.0 3.0
   assertEq v.x 1.0
   assertEq v.z 3.0
 }
 
 @test "vec2 record"
-vec2_record = do Effect {
+vec2_record = {
   v = { x: 3.0, y: 4.0 }
   assertEq v.x 3.0
   assertEq v.y 4.0
 }
 
 @test "vec2 magnitude"
-vec2_magnitude = do Effect {
+vec2_magnitude = {
   v = vec2 3.0 4.0
   assert (abs (magnitude v - 5.0) < 0.0001)
 }
 
 @test "vec2 dot"
-vec2_dot = do Effect {
+vec2_dot = {
   v1 = vec2 1.0 0.0
   v2 = vec2 0.0 1.0
   assert (abs (dot v1 v2) < 0.0001)
@@ -60,7 +60,7 @@ vec2_dot = do Effect {
 }
 
 @test "vec3 cross"
-vec3_cross = do Effect {
+vec3_cross = {
   v1 = vec3 1.0 0.0 0.0
   v2 = vec3 0.0 1.0 0.0
   c  = cross v1 v2
@@ -70,7 +70,7 @@ vec3_cross = do Effect {
 }
 
 @test "vec2 negate"
-vec2_negate = do Effect {
+vec2_negate = {
   v = vec2 1.0 -2.0
   n = negate v
   assertEq n.x -1.0
@@ -78,7 +78,7 @@ vec2_negate = do Effect {
 }
 
 @test "vec2 lerp"
-vec2_lerp = do Effect {
+vec2_lerp = {
   a   = vec2 0.0 0.0
   b   = vec2 10.0 10.0
   mid = lerp a b 0.5
@@ -87,13 +87,13 @@ vec2_lerp = do Effect {
 }
 
 @test "vec4"
-vec4_functional = do Effect {
+vec4_functional = {
   v = vec4 1.0 2.0 3.0 4.0
   assertEq v.w 4.0
 }
 
 @test "vec2 domain operators"
-vec2_domain_operators = do Effect {
+vec2_domain_operators = {
   a          = vec2 1.0 2.0
   b          = vec2 4.0 6.0
   added      = a + b
@@ -108,7 +108,7 @@ vec2_domain_operators = do Effect {
 }
 
 @test "vec3 domain operators"
-vec3_domain_operators = do Effect {
+vec3_domain_operators = {
   a          = vec3 1.0 2.0 3.0
   b          = vec3 4.0 6.0 8.0
   added      = a + b
@@ -123,7 +123,7 @@ vec3_domain_operators = do Effect {
 }
 
 @test "vec4 domain operators"
-vec4_domain_operators = do Effect {
+vec4_domain_operators = {
   a          = vec4 1.0 2.0 3.0 4.0
   b          = vec4 4.0 6.0 8.0 10.0
   added      = a + b
@@ -138,7 +138,7 @@ vec4_domain_operators = do Effect {
 }
 
 @test "transform2 identity"
-transform2_identity = do Effect {
+transform2_identity = {
   v      = vec2 3.0 4.0
   result = transform2 identity2 v
   assert (abs (result.x - 3.0) < 0.0001)
@@ -146,7 +146,7 @@ transform2_identity = do Effect {
 }
 
 @test "transform3 identity"
-transform3_identity = do Effect {
+transform3_identity = {
   v      = vec3 1.0 2.0 3.0
   result = transform3 identity3 v
   assert (abs (result.x - 1.0) < 0.0001)
@@ -155,7 +155,7 @@ transform3_identity = do Effect {
 }
 
 @test "transform4 identity"
-transform4_identity = do Effect {
+transform4_identity = {
   v      = vec4 1.0 2.0 3.0 1.0
   result = transform4 identity4 v
   assert (abs (result.x - 1.0) < 0.0001)
@@ -164,7 +164,7 @@ transform4_identity = do Effect {
 }
 
 @test "transform point3 identity"
-transformPoint3_identity = do Effect {
+transformPoint3_identity = {
   p      = vec3 5.0 6.0 7.0
   result = transformPoint3 identity4 p
   assert (abs (result.x - 5.0) < 0.0001)
@@ -173,7 +173,7 @@ transformPoint3_identity = do Effect {
 }
 
 @test "transform dir3 ignores translation"
-transformDir3_ignores_translation = do Effect {
+transformDir3_ignores_translation = {
   withTranslation = ~mat[0.0 -1.0 0.0 10.0
     1.0 0.0 0.0 -5.0
     0.0 0.0 2.0 7.0

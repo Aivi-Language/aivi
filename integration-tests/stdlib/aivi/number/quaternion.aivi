@@ -7,7 +7,7 @@ use aivi.math
 use aivi.number.quaternion
 
 @test "quaternion domain arithmetic"
-quaternion_domain_arithmetic = do Effect {
+quaternion_domain_arithmetic = {
   halfTurnX = fromAxisAngle { x: 1.0, y: 0.0, z: 0.0 } pi
   doubled   = halfTurnX + halfTurnX
   restored  = doubled - halfTurnX
@@ -36,7 +36,7 @@ quaternion_domain_arithmetic = do Effect {
 }
 
 @test "quaternion helpers"
-quaternion_helpers = do Effect {
+quaternion_helpers = {
   axisTurn = fromAxisAngle { x: 0.0, y: 2.0, z: 0.0 } pi
   zero     = axisTurn - axisTurn
   unit     = normalize axisTurn

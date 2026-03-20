@@ -10,29 +10,29 @@ use aivi.result
 // --- SHA hashing ---
 
 @test "sha256 produces 64-char hex"
-sha256Len = do Effect {
+sha256Len = {
   hash = sha256 "hello"
   assertEq (text.length hash) 64
 }
 
 @test "sha256 deterministic"
-sha256Det = do Effect {
+sha256Det = {
   assertEq (sha256 "test") (sha256 "test")
 }
 
 @test "sha256 different inputs differ"
-sha256Diff = do Effect {
+sha256Diff = {
   assert (sha256 "a" != sha256 "b")
 }
 
 @test "sha384 produces 96-char hex"
-sha384Len = do Effect {
+sha384Len = {
   hash = sha384 "hello"
   assertEq (text.length hash) 96
 }
 
 @test "sha512 produces 128-char hex"
-sha512Len = do Effect {
+sha512Len = {
   hash = sha512 "hello"
   assertEq (text.length hash) 128
 }
@@ -40,25 +40,22 @@ sha512Len = do Effect {
 // --- randomUuid ---
 
 @test "randomUuid produces 36-char string"
-uuidLen = do Effect {
-  id <- randomUuid
-  assertEq (text.length id) 36
-}
+uuidLen = randomUuid
+  |> text.length
+  |> assertEq 36
 
 @test "randomUuid unique"
-uuidUnique = do Effect {
-  id1 <- randomUuid
-  id2 <- randomUuid
-  assert (id1 != id2)
-}
+uuidUnique = randomUuid
+  |> id1 => randomUuid
+    |> id2 => assert (id1 != id2)
 
 // --- toHex / fromHex ---
 
 @test "toHex and fromHex roundtrip"
-hexRoundtrip = do Effect {
+hexRoundtrip = {
   original = crypto.fromHex "48656c6c6f"
   original match
-    | Ok bytes => do Effect {
+    | Ok bytes => {
         hex = crypto.toHex bytes
         assertEq hex "48656c6c6f"
       }
@@ -66,7 +63,7 @@ hexRoundtrip = do Effect {
 }
 
 @test "fromHex invalid"
-fromHexInvalid = do Effect {
+fromHexInvalid = {
   result = crypto.fromHex "xyz"
   assertEq (isErr result) True
 }
@@ -74,7 +71,7 @@ fromHexInvalid = do Effect {
 // --- secureEquals ---
 
 @test "secureEquals same bytes"
-secureEqSame = do Effect {
+secureEqSame = {
   result = crypto.fromHex "aabb"
   result match
     | Ok b  => assertEq (secureEquals b b) True
@@ -82,7 +79,7 @@ secureEqSame = do Effect {
 }
 
 @test "secureEquals different bytes"
-secureEqDiff = do Effect {
+secureEqDiff = {
   r1 = crypto.fromHex "aabb"
   r2 = crypto.fromHex "ccdd"
   r1 match
@@ -95,24 +92,19 @@ secureEqDiff = do Effect {
 // --- randomBytes ---
 
 @test "randomBytes produces correct length"
-randomBytesLen = do Effect {
-  bytes <- randomBytes 16
-  hex = crypto.toHex bytes
-  assertEq (text.length hex) 32
-}
+randomBytesLen = randomBytes 16
+  |> toHex
+  |> text.length
+  |> assertEq 32
 
 // --- hashPassword / verifyPassword ---
 
 @test "hashPassword and verifyPassword"
-passwordRoundtrip = do Effect {
-  hash     <- hashPassword "mypassword"
-  verified <- verifyPassword "mypassword" hash
-  assertEq verified True
-}
+passwordRoundtrip = hashPassword "mypassword"
+  |> hash => verifyPassword "mypassword" hash
+    |> assertEq True
 
 @test "verifyPassword wrong password"
-passwordWrong = do Effect {
-  hash     <- hashPassword "correct"
-  verified <- verifyPassword "wrong" hash
-  assertEq verified False
-}
+passwordWrong = hashPassword "correct"
+  |> hash => verifyPassword "wrong" hash
+    |> assertEq False

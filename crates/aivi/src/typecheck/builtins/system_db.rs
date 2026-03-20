@@ -749,7 +749,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "event".to_string(),
+                "eventFrom".to_string(),
                 Type::Func(
                     Box::new(Type::con("Effect").app(vec![
                         Type::Var(reactive_event_e),

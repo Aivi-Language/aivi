@@ -40,6 +40,38 @@ impl Parser {
         }
     }
 
+    fn parse_flow_expr_with_implicit_unit(&mut self, min_alignment: usize) -> Option<Expr> {
+        let checkpoint = self.pos;
+        let (op, span) = self.peek_flow_operator()?;
+        let alignment = flow_operator_alignment(op, &span);
+        if alignment <= min_alignment {
+            return None;
+        }
+
+        let lines = self.parse_flow_lines(alignment);
+        if lines.is_empty() {
+            self.pos = checkpoint;
+            return None;
+        }
+
+        let unit_pos = span.start.clone();
+        let unit_span = Span {
+            start: unit_pos.clone(),
+            end: unit_pos,
+        };
+        let root = Expr::Ident(SpannedName {
+            name: "Unit".to_string(),
+            span: unit_span,
+        });
+        let root_span = expr_span(&root);
+        let end_span = flow_lines_last_span(&lines).unwrap_or_else(|| span.clone());
+        Some(Expr::Flow {
+            root: Box::new(root),
+            lines,
+            span: merge_span(root_span, end_span),
+        })
+    }
+
     fn parse_flow_lines(&mut self, alignment: usize) -> Vec<FlowLine> {
         let mut lines = Vec::new();
         loop {

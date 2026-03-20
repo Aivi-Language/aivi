@@ -10,7 +10,7 @@ upper        = toUpper
 qualifiedLen = text.length
 
 @test "use alias and selective imports"
-importsWork = do Effect {
+importsWork = {
   assertEq (len "abc") 3
   assertEq (upper "ab") "AB"
   assertEq (qualifiedLen "abcd") 4

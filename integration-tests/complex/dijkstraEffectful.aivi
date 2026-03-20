@@ -3,14 +3,13 @@ module integrationTests.complex.dijkstraEffectful
 
 use aivi.testing
 use aivi.graph (fromWeightedEdges, edgesFrom, Edge)
-use aivi.collections
 
 // Process edges from the current node: relax each edge
 // and push updated vertices onto the priority queue.
-processEdges : Map Int Float -> Float -> List Edge -> Heap (Float, Int) -> Effect e { dists: Map Int Float, pq: Heap (Float, Int) }
+processEdges : Map Int Float -> Float -> List Edge -> Heap (Float, Int) -> { dists: Map Int Float, pq: Heap (Float, Int) }
 processEdges = dists d edges pq => edges match
-  | []              => pure { dists: dists, pq: pq }
-  | [edge, ...rest] => do Effect {
+  | []              => { dists: dists, pq: pq }
+  | [edge, ...rest] => {
       currentDist = Map.getOrElse edge.to 999999.0 dists
       newDist     = d + edge.weight
       nextDists   = if newDist < currentDist
@@ -22,42 +21,39 @@ processEdges = dists d edges pq => edges match
       processEdges nextDists d rest nextPq
     }
 
+dijkstraLoop = graph => state => Heap.popMin state.pq match
+  | None                     => state.dists
+  | Some ((d, node), restPq) => {
+      dF          = d + 0.0
+      currentDist = Map.getOrElse node 999999.0 state.dists
+      if dF > currentDist then
+        dijkstraLoop graph { dists: state.dists, pq: restPq }
+      else {
+        nextState = processEdges state.dists dF (edgesFrom graph node) restPq
+        dijkstraLoop graph nextState
+      }
+    }
+
 @test "Dijkstra with mutable state"
-dijkstra_shortestPaths = do Effect {
+dijkstra_shortestPaths = {
   // Graph: 0->1 (2.0), 0->2 (5.0), 1->2 (1.0), 1->3 (4.0), 2->3 (1.0)
   g = fromWeightedEdges [(0, 1, 2.0), (0, 2, 5.0), (1, 2, 1.0), (1, 3, 4.0), (2, 3, 1.0)]
 
   // Distance table: source node 0 starts at 0.0
-  dists0 = Map.insert 0 0.0 Map.empty
-
-  // Dijkstra main loop with min-heap priority queue.
-  dists <- do Effect {
-    loop state = { dists: dists0, pq: Heap.push (0.0, 0) Heap.empty } => {
-      result = Heap.popMin state.pq
-      result match
-        | None                     => pure state.dists
-        | Some ((d, node), restPq) => do Effect {
-            dF          = d + 0.0
-            currentDist = Map.getOrElse node 999999.0 state.dists
-            if dF > currentDist
-              then do Effect { recurse { dists: state.dists, pq: restPq } }
-              else do Effect {
-                edges = edgesFrom g node
-                nextState <- processEdges state.dists dF edges restPq
-                recurse nextState
-              }
-          }
-    }
+  dists0       = Map.insert 0 0.0 Map.empty
+  initialState = {
+    dists: dists0
+    pq: Heap.push (0.0, 0) Heap.empty
   }
 
-  // Verify shortest distances from node 0
-  d0 = Map.getOrElse 0 999999.0 dists
-  d1 = Map.getOrElse 1 999999.0 dists
-  d2 = Map.getOrElse 2 999999.0 dists
-  d3 = Map.getOrElse 3 999999.0 dists
+  dists = dijkstraLoop g initialState
+  d0    = Map.getOrElse 0 999999.0 dists
+  d1    = Map.getOrElse 1 999999.0 dists
+  d2    = Map.getOrElse 2 999999.0 dists
+  d3    = Map.getOrElse 3 999999.0 dists
 
-  assert (d0 == 0.0)
-  assert (d1 == 2.0)
-  assert (d2 == 3.0)
-  assert (d3 == 4.0)
+  assertEq d0 0.0
+  assertEq d1 2.0
+  assertEq d2 3.0
+  assertEq d3 4.0
 }

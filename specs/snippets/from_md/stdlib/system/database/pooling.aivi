@@ -16,19 +16,13 @@ cfg = {
   backoffPolicy: Pool.Fixed ({ millis: 25 })
   queuePolicy: Pool.Fifo
 
-  acquire: _ => db.connect dbConfig
+  acquire: connectionConfig => db.connect dbConfig
   release: db.close
-  healthCheck: _ => pure True
+  healthCheck: conn => pure True
 }
 
 main : Effect DbError (Result Pool.PoolError (List User))
-main = do Effect {
-  poolRes <- Pool.create cfg
-  poolRes match
-    | Err e => pure (Err e)
-    | Ok pool => do Effect {
-        result <- Pool.withConn pool (conn => db.rowsOn conn users[active])
-        _ <- Pool.close pool
-        pure result
-      }
-}
+main = Pool.create cfg
+  |> poolRes => poolRes match
+    | Err e   => pure (Err e)
+    | Ok pool => Pool.withConn pool (conn => db.rowsOn conn users[active])

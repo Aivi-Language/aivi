@@ -6,26 +6,26 @@ use aivi.testing
 use aivi.linear_algebra
 
 @test "mat"
-mat_functional = do Effect {
+mat_functional = {
   m = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
   assert (m.rows == 2)
 }
 
 @test "vec"
-vec_functional = do Effect {
+vec_functional = {
   v = { size: 2, data: [1.0, 2.0] }
   assert (v.size == 2)
 }
 
 @test "dot"
-dot_functional = do Effect {
+dot_functional = {
   v1 = { size: 2, data: [1.0, 2.0] }
   v2 = { size: 2, data: [3.0, 4.0] }
   assert (dot v1 v2 == 11.0)
 }
 
 @test "linear algebra domain operators"
-linear_algebra_domain_operators = do Effect {
+linear_algebra_domain_operators = {
   a          = { size: 3, data: [1.0, 2.0, 3.0] }
   b          = { size: 3, data: [4.0, 6.0, 8.0] }
   added      = a + b
@@ -38,7 +38,7 @@ linear_algebra_domain_operators = do Effect {
 }
 
 @test "mat mul"
-matMul_functional = do Effect {
+matMul_functional = {
   m1 = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
   m2 = { rows: 2, cols: 2, data: [2.0, 3.0, 4.0, 5.0] }
   m3 = matMul m1 m2
@@ -46,7 +46,7 @@ matMul_functional = do Effect {
 }
 
 @test "solve2x2"
-solve2x2_functional = do Effect {
+solve2x2_functional = {
   m   = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
   v   = { size: 2, data: [3.0, 1.0] }
   res = solve2x2 m v

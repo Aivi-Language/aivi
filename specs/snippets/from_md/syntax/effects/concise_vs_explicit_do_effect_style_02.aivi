@@ -1,11 +1,13 @@
+resultToVerdict = result => result match
+  | Ok _  => "ok"
+  | Err _ => "err"
+
+showVerdict = verdict =>
+  print verdict
+  ~|>if cond then print "branch" else pure Unit
+
 // More explicit (same semantics)
-main = do Effect {
-  res <- attempt (foo x)
-  verdict = res match
-    | Ok _  => "ok"
-    | Err _ => "err"
-
-    _ <- print verdict
-
-    _ <- if cond then print "branch" else pure Unit
-}
+main = foo x
+  |> attempt
+  |> resultToVerdict
+  |> showVerdict

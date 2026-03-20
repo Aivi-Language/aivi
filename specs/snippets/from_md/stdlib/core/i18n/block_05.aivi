@@ -1,9 +1,8 @@
 use aivi.i18n
 
 loadBundle : Locale -> Text -> Effect Text Bundle
-loadBundle = locale path => do Effect {
-  bundleResult <- bundleFromPropertiesFile locale path
-  bundleResult match
-    | Ok bundle => pure bundle
-    | Err e     => fail e
-}
+loadBundle = locale path =>
+  bundleFromPropertiesFile locale path
+|> bundleResult => bundleResult match
+  | Ok bundle => pure bundle
+  | Err e     => fail e

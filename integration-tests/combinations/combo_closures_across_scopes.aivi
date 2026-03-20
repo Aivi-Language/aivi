@@ -7,18 +7,22 @@ use aivi.testing
 // Multi-level variable capture through different scope boundaries.
 // Verifies captured variables survive helper, match, and effect boundaries.
 
+assertCapturedOffset = offset => assertEq ((x => x + 100 + offset) 5) 125
+assertIs42           = value => assertEq value 42
+assertIs132          = value => assertEq value 132
+
 @test "three-level lambda capture"
 threeLevelCapture = assertEq ((x => y => 10 + x + y) 20 12) 42
 
 @test "capture through effect subject then lambda"
 captureThroughEffectSubjectThenLambda = pure 20
-~|>offset => assertEq ((x => x + 100 + offset) 5) 125
+  |> assertCapturedOffset
 
 effectDerivedValue = base => pure (base + 20 + 12)
 
 @test "capture across helper returning an effect"
 helperReturningEffect = effectDerivedValue 10
-~|>result => assertEq result 42
+  |> assertIs42
 
 Wrapper = Val Int | Empty
 
@@ -26,30 +30,42 @@ makeAreaFn = multiplier shape => shape match
   | Val n => x => n * n * multiplier + x
   | Empty => x => x
 
+checkAreaAtZero = area => assertEq (area 0) 90
+checkAreaAtTwo  = area => assertEq (area 2) 92
+
 @test "match arm closure captures pattern var and outer scope"
-matchArmClosure = Unit
-~|>_ => assertEq (makeAreaFn 10 (Val 3) 0) 90
-~|>_ => assertEq (makeAreaFn 10 (Val 3) 2) 92
+matchArmClosure = makeAreaFn 10 (Val 3)
+&|>checkAreaAtZero
+&|>checkAreaAtTwo
 
 middleShadow  = x => ((x => x) 100) + x
 shadowOutcome = outerX => { result: middleShadow 10, outer: outerX }
 
+checkShadowResult = outcome => assertEq outcome.result 110
+checkShadowOuter  = outcome => assertEq outcome.outer 1
+
 @test "shadowing innermost wins without affecting outer"
-shadowingLevels = Unit
-~|>_ => assertEq (shadowOutcome 1).result 110
-~|>_ => assertEq (shadowOutcome 1).outer 1
+shadowingLevels = shadowOutcome 1
+&|>checkShadowResult
+&|>checkShadowOuter
+
+checkLambdaAt10 = offset => assertEq ((n => n + offset) 10) 60
+checkLambdaAt20 = offset => assertEq ((n => n + offset) 20) 70
 
 @test "lambda captures effect subject"
 lambdaCapturesEffectSubject = pure 50
-~|>offset => assertEq ((n => n + offset) 10) 60
-~|>offset => assertEq ((n => n + offset) 20) 70
+&|>checkLambdaAt10
+&|>checkLambdaAt20
 
 makeProcessor = base => scale => x => (x + base) * scale
 
+checkProcessorAt2  = processor => assertEq (processor 2) 21
+checkProcessorAt10 = processor => assertEq (processor 10) 45
+
 @test "three-arg curried closure preserves all captures"
-curriedThreeArg = Unit
-~|>_ => assertEq ((makeProcessor 5 3) 2) 21
-~|>_ => assertEq ((makeProcessor 5 3) 10) 45
+curriedThreeArg = makeProcessor 5 3
+&|>checkProcessorAt2
+&|>checkProcessorAt10
 
 adtPayloadTotal = w => w match
   | Empty => 0
@@ -62,4 +78,4 @@ deepCapture = base => pure ((x => x + base + 10) 22)
 
 @test "function arg captured through helper and effect boundary"
 funcArgDeepCapture = deepCapture 100
-~|>result => assertEq result 132
+  |> assertIs132

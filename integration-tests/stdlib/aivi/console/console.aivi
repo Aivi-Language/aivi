@@ -6,39 +6,23 @@ use aivi.testing
 use aivi.console (Blue, Red, Yellow, bgColor, color, error, log, print, println, strip, style)
 
 @test "error"
-error_functional = do Effect {
-  result <- attempt (error "err")
-  result match
-    | Ok unit => assertEq unit Unit
-    | Err _   => assert False
-}
+error_functional = attempt (error "err")
+  |> assertEq (Ok Unit)
 
 @test "log"
-log_functional = do Effect {
-  result <- attempt (log "log")
-  result match
-    | Ok unit => assertEq unit Unit
-    | Err _   => assert False
-}
+log_functional = attempt (log "log")
+  |> assertEq (Ok Unit)
 
 @test "print"
-print_functional = do Effect {
-  result <- attempt (print "p")
-  result match
-    | Ok unit => assertEq unit Unit
-    | Err _   => assert False
-}
+print_functional = attempt (print "p")
+  |> assertEq (Ok Unit)
 
 @test "println"
-println_functional = do Effect {
-  result <- attempt (println "pl")
-  result match
-    | Ok unit => assertEq unit Unit
-    | Err _   => assert False
-}
+println_functional = attempt (println "pl")
+  |> assertEq (Ok Unit)
 
 @test "color"
-color_functional = do Effect {
+color_functional = {
   styled = color Red "warning"
   assert (styled != "warning")
   assert (text.contains styled "[31m")
@@ -46,7 +30,7 @@ color_functional = do Effect {
 }
 
 @test "background color"
-bgColor_functional = do Effect {
+bgColor_functional = {
   styled = bgColor Blue "warning"
   assert (styled != "warning")
   assert (text.contains styled "[44m")
@@ -54,7 +38,7 @@ bgColor_functional = do Effect {
 }
 
 @test "style"
-style_functional = do Effect {
+style_functional = {
   styled = style {
     fg: Some Yellow
     bg: Some Blue
@@ -72,7 +56,7 @@ style_functional = do Effect {
 }
 
 @test "strip"
-strip_functional = do Effect {
+strip_functional = {
   styled = color Red "plain"
   assertEq (strip styled) "plain"
 }

@@ -17,7 +17,7 @@ emptySet : Set Int
 emptySet = ~set{}
 
 @test "set ++ produces union"
-setConcatWorks = do Effect {
+setConcatWorks = {
   assertEq (set.size union) 5
   assert (set.member 1 union)
   assert (set.member 3 union)
@@ -25,11 +25,11 @@ setConcatWorks = do Effect {
 }
 
 @test "set ++ with empty right is identity"
-setConcatEmptyRight = do Effect {
+setConcatEmptyRight = {
   assertEq (s1 ++ emptySet) s1
 }
 
 @test "set ++ with empty left is identity"
-setConcatEmptyLeft = do Effect {
+setConcatEmptyLeft = {
   assertEq (emptySet ++ s1) s1
 }

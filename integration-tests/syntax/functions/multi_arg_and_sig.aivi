@@ -13,7 +13,7 @@ applyTwice = f x => f (f x)
 inc = n => n + 1
 
 @test "multi-arg functions and signatures"
-functionsWork = do Effect {
+functionsWork = {
   assertEq (add 2 3) 5
   assertEq (applyTwice inc 1) 3
 }

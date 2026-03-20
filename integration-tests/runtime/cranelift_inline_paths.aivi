@@ -19,7 +19,7 @@ dec : Int -> Int
 dec = x => x - 1
 
 @test "simple inlined functions"
-simpleInlined = do Effect {
+simpleInlined = {
   assertEq (double 5) 10
   assertEq (triple 5) 15
   assertEq (inc 5) 6
@@ -29,7 +29,7 @@ simpleInlined = do Effect {
 // --- Chained inline calls (triggers inline_children recursion) ---
 
 @test "chained inlined calls"
-chainedInlines = do Effect {
+chainedInlines = {
   result = inc (double 5)
   assertEq result 11
   result2 = double (triple 2)
@@ -41,7 +41,7 @@ chainedInlines = do Effect {
 // --- Inline function used multiple times (triggers freshen_ids for duplication) ---
 
 @test "same function inlined multiple times"
-multipleInlines = do Effect {
+multipleInlines = {
   a = double 3
   b = double 7
   c = double 10
@@ -57,7 +57,7 @@ mul : Int -> Int -> Int
 mul = a b => a * b
 
 @test "binary function inlined"
-binaryInlined = do Effect {
+binaryInlined = {
   assertEq (add 3 4) 7
   assertEq (mul 6 7) 42
   assertEq (add (mul 2 3) (mul 4 5)) 26
@@ -69,7 +69,7 @@ id : a -> a
 id = x => x
 
 @test "polymorphic identity monomorphized"
-polyIdentity = do Effect {
+polyIdentity = {
   assertEq (id 42) 42
   assertEq (id "hello") "hello"
   assertEq (id True) True
@@ -82,7 +82,7 @@ const : a -> b -> a
 const = x _ => x
 
 @test "polymorphic const monomorphized"
-polyConst = do Effect {
+polyConst = {
   assertEq (const 42 "ignored") 42
   assertEq (const "kept" 0) "kept"
 }
@@ -93,7 +93,7 @@ factorial : Int -> Int
 factorial = n => if n <= 1 then 1 else n * factorial (n - 1)
 
 @test "recursive factorial"
-recursiveFactorial = do Effect {
+recursiveFactorial = {
   assertEq (factorial 0) 1
   assertEq (factorial 1) 1
   assertEq (factorial 5) 120
@@ -109,7 +109,7 @@ sumOfSquares : Int -> Int -> Int
 sumOfSquares = a b => add (square a) (square b)
 
 @test "functions calling other functions"
-funcCallingFunc = do Effect {
+funcCallingFunc = {
   assertEq (square 5) 25
   assertEq (sumOfSquares 3 4) 25
 }
@@ -126,7 +126,7 @@ step4 : Int -> Int
 step4 = x => step2 (step2 x)
 
 @test "deep expression nesting"
-deepNesting = do Effect {
+deepNesting = {
   assertEq (step4 0) 4
   assertEq (step4 10) 14
 }
@@ -142,7 +142,7 @@ classify =
   | _               => "large"
 
 @test "pattern guards with comparisons"
-patternGuardsComparisons = do Effect {
+patternGuardsComparisons = {
   assertEq (classify (-5)) "negative"
   assertEq (classify 0) "zero"
   assertEq (classify 5) "small"
@@ -157,7 +157,7 @@ patternGuardsComparisons = do Effect {
 swap = (a, b) => (b, a)
 
 @test "tuple swap"
-tupleSwap = do Effect {
+tupleSwap = {
   assertEq (swap (1, 2)) (2, 1)
   assertEq (swap ("a", "b")) ("b", "a")
 }
@@ -165,7 +165,7 @@ tupleSwap = do Effect {
 // --- Record pattern matching (triggers emit_pattern_test record) ---
 
 @test "record in match"
-recordInMatch = do Effect {
+recordInMatch = {
   getName = person => person match
     | { name: n } => n
   assertEq (getName { name: "Alice", age: 30 }) "Alice"
@@ -176,7 +176,7 @@ recordInMatch = do Effect {
 makeMultiplier = factor => x => x * factor
 
 @test "closure factory"
-closureFactory = do Effect {
+closureFactory = {
   times3 = makeMultiplier 3
   times5 = makeMultiplier 5
   assertEq (times3 10) 30
@@ -187,19 +187,19 @@ closureFactory = do Effect {
 // --- Do-block with multiple effect binds (triggers rt_bind_effect chain) ---
 
 @test "do block chain"
-doBlockChain = do Effect {
-  a <- pure 1
-  b <- pure 2
-  c <- pure 3
-  d <- pure 4
-  e <- pure 5
+doBlockChain = {
+  a = 1
+  b = 2
+  c = 3
+  d = 4
+  e = 5
   assertEq (a + b + c + d + e) 15
 }
 
 // --- List of records (triggers multiple alloc paths) ---
 
 @test "list of records"
-listOfRecords = do Effect {
+listOfRecords = {
   people = [
     { name: "Alice", age: 30 }
     { name: "Bob",   age: 25 }
@@ -225,7 +225,7 @@ colorToInt =
   | Magenta => 6
 
 @test "many constructors"
-manyConstructors = do Effect {
+manyConstructors = {
   assertEq (colorToInt Red) 1
   assertEq (colorToInt Green) 2
   assertEq (colorToInt Blue) 3
@@ -237,7 +237,7 @@ manyConstructors = do Effect {
 // --- Nested closures with multiple captures (triggers collect_free_locals, collect_inner_lambdas) ---
 
 @test "nested closures multi capture"
-nestedClosuresMultiCapture = do Effect {
+nestedClosuresMultiCapture = {
   a = 1
   b = 2
   c = 3

@@ -1,6 +1,4 @@
-// Define a reusable resource
-managedFile = path => resource {
-  handle <- file.open path // Acquire
-  yield handle // Provide to user
-  file.close handle // Release
-}
+// Define a reusable managed file helper
+managedFile = path =>
+  path
+|> file.open@cleanup file.close

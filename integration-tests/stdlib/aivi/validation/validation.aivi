@@ -10,53 +10,53 @@ use aivi.collections
 // -- Predicates --
 
 @test "isValid returns True for Valid"
-test_isValid_valid = do Effect {
+test_isValid_valid = {
   assert (isValid (Valid 42))
 }
 
 @test "isValid returns False for Invalid"
-test_isValid_invalid = do Effect {
+test_isValid_invalid = {
   assert (isValid (Invalid "error") == False)
 }
 
 @test "isInvalid returns True for Invalid"
-test_isInvalid_invalid = do Effect {
+test_isInvalid_invalid = {
   assert (isInvalid (Invalid "error"))
 }
 
 @test "isInvalid returns False for Valid"
-test_isInvalid_valid = do Effect {
+test_isInvalid_valid = {
   assert (isInvalid (Valid 42) == False)
 }
 
 // -- Constructors --
 
 @test "valid creates Valid"
-test_valid = do Effect {
+test_valid = {
   assertEq (valid 42) (Valid 42)
 }
 
 @test "invalid creates Invalid"
-test_invalid = do Effect {
+test_invalid = {
   assertEq (invalid "oops") (Invalid "oops")
 }
 
 // -- Extracting Values --
 
 @test "getOrElse returns value for Valid"
-test_getOrElse_valid = do Effect {
+test_getOrElse_valid = {
   result = getOrElse 0 (Valid 42)
   assertEq result 42
 }
 
 @test "getOrElse returns default for Invalid"
-test_getOrElse_invalid = do Effect {
+test_getOrElse_invalid = {
   result = getOrElse 0 (Invalid ["error"])
   assertEq result 0
 }
 
 @test "getOrElse is pipe-friendly"
-test_getOrElse_pipe = do Effect {
+test_getOrElse_pipe = {
   result = Valid 42 |> getOrElse 0
   assertEq result 42
 }
@@ -64,13 +64,13 @@ test_getOrElse_pipe = do Effect {
 // -- Fold --
 
 @test "fold applies onValid for Valid"
-test_fold_valid = do Effect {
+test_fold_valid = {
   result = fold (_ => "bad") (x => text.concat ["got: ", text.toText x]) (Valid 42)
   assertEq result "got: 42"
 }
 
 @test "fold applies onInvalid for Invalid"
-test_fold_invalid = do Effect {
+test_fold_invalid = {
   result = fold (e => text.concat ["error: ", e]) (_ => "ok") (Invalid "nope")
   assertEq result "error: nope"
 }
@@ -78,13 +78,13 @@ test_fold_invalid = do Effect {
 // -- Map --
 
 @test "map transforms Valid value"
-test_map_valid = do Effect {
+test_map_valid = {
   result = Valid 5 |> map (_ * 2)
   assertEq result (Valid 10)
 }
 
 @test "map preserves Invalid"
-test_map_invalid = do Effect {
+test_map_invalid = {
   result = Invalid "error" |> map (_ * 2)
   assertEq result (Invalid "error")
 }
@@ -92,13 +92,13 @@ test_map_invalid = do Effect {
 // -- MapError --
 
 @test "mapError transforms Invalid value"
-test_mapError_invalid = do Effect {
+test_mapError_invalid = {
   result = mapError (e => text.concat ["wrapped: ", e]) (Invalid "original")
   assertEq result (Invalid "wrapped: original")
 }
 
 @test "mapError preserves Valid"
-test_mapError_valid = do Effect {
+test_mapError_valid = {
   result = mapError (e => "wrapped") (Valid 42)
   assertEq result (Valid 42)
 }
@@ -106,31 +106,31 @@ test_mapError_valid = do Effect {
 // -- Applicative (ap) with error accumulation --
 
 @test "ap applies function in Valid to Valid value"
-test_ap_valid_valid = do Effect {
+test_ap_valid_valid = {
   result = ap (Valid (_ + 1)) (Valid 5)
   assertEq result (Valid 6)
 }
 
 @test "ap preserves Invalid on left"
-test_ap_invalid_left = do Effect {
+test_ap_invalid_left = {
   result = ap (Invalid ["bad func"]) (Valid 5)
   assertEq result (Invalid ["bad func"])
 }
 
 @test "ap preserves Invalid on right"
-test_ap_invalid_right = do Effect {
+test_ap_invalid_right = {
   result = ap (Valid (_ + 1)) (Invalid ["bad value"])
   assertEq result (Invalid ["bad value"])
 }
 
 @test "ap accumulates errors from both sides"
-test_ap_both_invalid = do Effect {
+test_ap_both_invalid = {
   result = ap (Invalid ["error1"]) (Invalid ["error2"])
   assertEq result (Invalid ["error1", "error2"])
 }
 
 @test "ap accumulates multiple errors"
-test_ap_multi_error = do Effect {
+test_ap_multi_error = {
   result = ap (Invalid ["e1", "e2"]) (Invalid ["e3"])
   assertEq result (Invalid ["e1", "e2", "e3"])
 }
@@ -138,25 +138,25 @@ test_ap_multi_error = do Effect {
 // -- Conversions --
 
 @test "fromResult converts Ok to Valid"
-test_fromResult_ok = do Effect {
+test_fromResult_ok = {
   result = fromResult (Ok 42)
   assertEq result (Valid 42)
 }
 
 @test "fromResult converts Err to Invalid with list"
-test_fromResult_err = do Effect {
+test_fromResult_err = {
   result = fromResult (Err "error")
   assertEq result (Invalid ["error"])
 }
 
 @test "toResult converts Valid to Ok"
-test_toResult_valid = do Effect {
+test_toResult_valid = {
   result = toResult (Valid 42)
   assertEq result (Ok 42)
 }
 
 @test "toResult converts Invalid to Err"
-test_toResult_invalid = do Effect {
+test_toResult_invalid = {
   result = toResult (Invalid ["error"])
   assertEq result (Err ["error"])
 }
@@ -164,14 +164,14 @@ test_toResult_invalid = do Effect {
 // -- DecodeError --
 
 @test "formatDecodeError formats path and message"
-test_formatDecodeError = do Effect {
+test_formatDecodeError = {
   err    = { path: ["user", "preferences", "theme"], message: "Expected Text, got Int" }
   result = formatDecodeError err
   assertEq result "at $.user.preferences.theme: Expected Text, got Int"
 }
 
 @test "formatDecodeError with empty path"
-test_formatDecodeError_empty = do Effect {
+test_formatDecodeError_empty = {
   err    = { path: [], message: "unexpected type" }
   result = formatDecodeError err
   assertEq result "at $.: unexpected type"
@@ -195,31 +195,19 @@ MkPerson : Text -> Int -> { name: Text, age: Int }
 MkPerson = name age => { name: name, age: age }
 
 @test "form validation: all valid"
-test_form_valid = do Effect {
-  result = do Applicative {
-    name <- validateName "Alice"
-    age  <- validateAge 30
-    MkPerson name age
-  }
+test_form_valid = {
+  result = ap (ap (Valid MkPerson) (validateName "Alice")) (validateAge 30)
   assertEq result (Valid { name: "Alice", age: 30 })
 }
 
 @test "form validation: accumulates errors"
-test_form_errors = do Effect {
-  result = do Applicative {
-    name <- validateName ""
-    age  <- validateAge (-1)
-    MkPerson name age
-  }
+test_form_errors = {
+  result = ap (ap (Valid MkPerson) (validateName "")) (validateAge (-1))
   assertEq result (Invalid ["Name is required", "Age must be non-negative"])
 }
 
 @test "form validation: single error"
-test_form_single_error = do Effect {
-  result = do Applicative {
-    name <- validateName "Alice"
-    age  <- validateAge 200
-    MkPerson name age
-  }
+test_form_single_error = {
+  result = ap (ap (Valid MkPerson) (validateName "Alice")) (validateAge 200)
   assertEq result (Invalid ["Age must be at most 150"])
 }

@@ -51,6 +51,9 @@ impl Parser {
             let start = self.peek_span().unwrap_or_else(|| self.previous_span());
             return Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"));
         }
+        if let Some(flow) = self.parse_flow_expr_with_implicit_unit(self.min_flow_alignment) {
+            return Some(flow);
+        }
         let mut expr = self.parse_lambda_or_binary()?;
         expr = self.parse_flow_suffix_after(expr, self.min_flow_alignment);
         // Result fallback sugar:
@@ -95,6 +98,8 @@ impl Parser {
             // The bodies are parsed with the normal expression parser.
             let start = self.peek_span().unwrap_or_else(|| self.previous_span());
             Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"))
+        } else if let Some(flow) = self.parse_flow_expr_with_implicit_unit(min_flow_alignment) {
+            Some(flow)
         } else {
             self.parse_lambda_or_binary()
                 .map(|expr| self.parse_flow_suffix_after(expr, min_flow_alignment))

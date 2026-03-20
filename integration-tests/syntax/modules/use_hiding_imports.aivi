@@ -7,6 +7,6 @@ use aivi.testing
 upper = toUpper "ab"
 
 @test "use hiding imports"
-importsWork = do Effect {
+importsWork = {
   assertEq upper "AB"
 }

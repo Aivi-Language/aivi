@@ -7,33 +7,33 @@ use aivi.testing
 // --- Map.empty and basic operations ---
 
 @test "map empty has size 0"
-mapEmptySize = do Effect {
+mapEmptySize = {
   m = Map.empty
   assertEq (Map.size m) 0
 }
 
 @test "map insert and get"
-mapInsertGet = do Effect {
+mapInsertGet = {
   m = Map.insert "a" 1 Map.empty
   assertEq (Map.get "a" m) (Some 1)
   assertEq (Map.get "b" m) None
 }
 
 @test "map size after inserts"
-mapSizeInserts = do Effect {
+mapSizeInserts = {
   m = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
   assertEq (Map.size m) 2
 }
 
 @test "map has"
-mapHas = do Effect {
+mapHas = {
   m = Map.insert "x" 42 Map.empty
   assertEq (Map.has "x" m) True
   assertEq (Map.has "y" m) False
 }
 
 @test "map remove"
-mapRemove = do Effect {
+mapRemove = {
   m  = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
   m2 = Map.remove "a" m
   assertEq (Map.get "a" m2) None
@@ -41,35 +41,35 @@ mapRemove = do Effect {
 }
 
 @test "map update existing"
-mapUpdate = do Effect {
+mapUpdate = {
   m  = Map.insert "a" 10 Map.empty
   m2 = Map.update "a" (v => v + 5) m
   assertEq (Map.get "a" m2) (Some 15)
 }
 
 @test "map update missing key unchanged"
-mapUpdateMissing = do Effect {
+mapUpdateMissing = {
   m  = Map.insert "a" 10 Map.empty
   m2 = Map.update "b" (v => v + 5) m
   assertEq (Map.size m2) 1
 }
 
 @test "map keys"
-mapKeys = do Effect {
+mapKeys = {
   m  = Map.insert "a" 1 Map.empty
   ks = Map.keys m
   assertEq ks ["a"]
 }
 
 @test "map values"
-mapValues = do Effect {
+mapValues = {
   m  = Map.insert "a" 1 Map.empty
   vs = Map.values m
   assertEq vs [1]
 }
 
 @test "map fromList and toList"
-mapFromList = do Effect {
+mapFromList = {
   m = Map.fromList [("a", 1), ("b", 2)]
   assertEq (Map.get "a" m) (Some 1)
   assertEq (Map.get "b" m) (Some 2)
@@ -77,7 +77,7 @@ mapFromList = do Effect {
 }
 
 @test "map union"
-mapUnion = do Effect {
+mapUnion = {
   m1 = Map.fromList [("a", 1)]
   m2 = Map.fromList [("b", 2)]
   m3 = Map.union m1 m2
@@ -86,7 +86,7 @@ mapUnion = do Effect {
 }
 
 @test "map union right overrides"
-mapUnionOverride = do Effect {
+mapUnionOverride = {
   m1 = Map.fromList [("a", 1)]
   m2 = Map.fromList [("a", 2)]
   m3 = Map.union m1 m2
@@ -94,14 +94,14 @@ mapUnionOverride = do Effect {
 }
 
 @test "map getOrElse"
-mapGetOrElse = do Effect {
+mapGetOrElse = {
   m = Map.fromList [("a", 1)]
   assertEq (Map.getOrElse "a" 0 m) 1
   assertEq (Map.getOrElse "b" 0 m) 0
 }
 
 @test "map map values"
-mapMapValues = do Effect {
+mapMapValues = {
   m  = Map.fromList [("a", 1), ("b", 2)]
   m2 = Map.map (v => v * 10) m
   assertEq (Map.get "a" m2) (Some 10)
@@ -111,20 +111,20 @@ mapMapValues = do Effect {
 // --- Set operations ---
 
 @test "set empty has size 0"
-setEmptySize = do Effect {
+setEmptySize = {
   s = Set.empty
   assertEq (Set.size s) 0
 }
 
 @test "set insert and contains"
-setInsertContains = do Effect {
+setInsertContains = {
   s = Set.insert 1 (Set.insert 2 Set.empty)
   assertEq (Set.has 1 s) True
   assertEq (Set.has 3 s) False
 }
 
 @test "set remove"
-setRemove = do Effect {
+setRemove = {
   s  = Set.insert 1 (Set.insert 2 Set.empty)
   s2 = Set.remove 1 s
   assertEq (Set.has 1 s2) False
@@ -132,7 +132,7 @@ setRemove = do Effect {
 }
 
 @test "set union"
-setUnion = do Effect {
+setUnion = {
   s1 = Set.fromList [1, 2, 3]
   s2 = Set.fromList [3, 4, 5]
   s3 = Set.union s1 s2
@@ -142,7 +142,7 @@ setUnion = do Effect {
 }
 
 @test "set intersection"
-setIntersection = do Effect {
+setIntersection = {
   s1 = Set.fromList [1, 2, 3]
   s2 = Set.fromList [2, 3, 4]
   s3 = Set.intersection s1 s2
@@ -153,7 +153,7 @@ setIntersection = do Effect {
 }
 
 @test "set difference"
-setDifference = do Effect {
+setDifference = {
   s1 = Set.fromList [1, 2, 3]
   s2 = Set.fromList [2, 3, 4]
   s3 = Set.difference s1 s2
@@ -163,13 +163,13 @@ setDifference = do Effect {
 }
 
 @test "set fromList deduplicates"
-setFromListDedup = do Effect {
+setFromListDedup = {
   s = Set.fromList [1, 1, 2, 2, 3]
   assertEq (Set.size s) 3
 }
 
 @test "set toList"
-setToList = do Effect {
+setToList = {
   s  = Set.fromList [1]
   xs = Set.toList s
   assertEq xs [1]
@@ -178,7 +178,7 @@ setToList = do Effect {
 // --- Queue operations ---
 
 @test "queue basic"
-queueBasic = do Effect {
+queueBasic = {
   q = Queue.enqueue 1 (Queue.enqueue 2 Queue.empty)
   assertEq (Queue.peek q) (Some 2)
 }
@@ -186,14 +186,14 @@ queueBasic = do Effect {
 // --- Heap operations ---
 
 @test "heap basic"
-heapBasic = do Effect {
+heapBasic = {
   h = Heap.push 3 (Heap.push 1 (Heap.push 2 Heap.empty))
   assertEq (Heap.peekMin h) (Some 1)
   assertEq (Heap.size h) 3
 }
 
 @test "heap fromList"
-heapFromList = do Effect {
+heapFromList = {
   h = Heap.fromList [5, 3, 1, 4, 2]
   assertEq (Heap.peekMin h) (Some 1)
   assertEq (Heap.size h) 5

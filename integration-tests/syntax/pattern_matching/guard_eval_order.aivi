@@ -24,7 +24,7 @@ describeOpt = v => v match
   | None                => "absent"
 
 @test "guard evaluation order"
-guardEvalOrder = do Effect {
+guardEvalOrder = {
   assertEq (classify (-5)) "negative"
   assertEq (classify 0) "zero"
   assertEq (classify 7) "small"

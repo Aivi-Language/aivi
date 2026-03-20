@@ -7,7 +7,7 @@ AIVI v0.2 flow syntax is the flat, spine-aligned workflow surface for sequential
 
 This document defines AIVI v2 Flow Syntax as a flat, spine-aligned surface syntax for left-to-right flows across sequential, applicative, generator-shaped, resource-scoped, and event-shaped code.
 
-It is intended to subsume the common user-authored shapes currently expressed with `do Effect { ... }`, `do M { ... }`, `do Applicative { ... }`, `generate { ... }`, `resource { ... }`, and most handler bodies currently written with `do Event { ... }`.
+It is intended to subsume the common user-authored shapes currently expressed with dedicated effect blocks, generic chaining blocks, applicative sibling blocks, legacy fan-out blocks, cleanup blocks, and most handler bodies currently written as dedicated event workflows.
 
 If a carrier such as `Query` still needs specialized internal lowering or optimization, that is an implementation concern rather than a reason to preserve a separate user-surface `do` form.
 
@@ -346,7 +346,7 @@ Default continuation rule:
 - after a successful applicative block, the original incoming spine subject continues
 - use an ordinary `|> name` line when you want to continue from one of the applicative bindings
 
-This is the flat replacement for `do Applicative`, including but not limited to validation.
+This is the flat replacement for dedicated applicative workflow blocks, including but not limited to validation.
 
 ### 7.10 `@|>` — Anchor
 
@@ -622,7 +622,7 @@ This is the flat-flow equivalent of current local recursion support in effect an
 
 ## 12. Applicative cases
 
-`&|>` is the generic replacement for `do Applicative`, not only a validation-only form.
+`&|>` is the generic replacement for applicative workflow blocks, not only a validation-only form.
 
 Examples:
 
@@ -664,17 +664,7 @@ The block remains applicative even when the runtime can evaluate lines concurren
 
 ### 13.1 Generator replacement
 
-`*|>` plus ordinary pipes replaces `generate { ... }`.
-
-Current generator shape:
-
-```aivi
-generate {
-  x <- [1 .. 10]
-  x -> x % 2 == 0
-  yield x * 2
-}
-```
+`*|>` plus ordinary pipes replaces legacy generator blocks that used one line to bind items, another to guard them, and a final line to emit the transformed value.
 
 Flat replacement:
 
@@ -688,17 +678,7 @@ Flat replacement:
 
 ### 13.2 Resource replacement
 
-A line with `@cleanup` replaces `resource { ... }` acquisition and release.
-
-Current resource shape:
-
-```aivi
-resource {
-  handle <- file.open path
-  yield handle
-  file.close handle
-}
-```
+A line with `@cleanup` replaces legacy resource-scoped acquisition and release.
 
 Flat replacement:
 
@@ -725,18 +705,16 @@ main =
 
 Flow syntax replaces handler internals and event bodies, not the foreign runtime’s scheduling loop.
 
-`do Event { ... }` is replaced by a standard library lift from a flow-shaped handler into an event handle, for example `event.from`.
+Dedicated event workflow blocks are replaced by a standard library lift from an effect into an event handle, for example `event.from`.
 
 Illustrative form:
 
 ```aivi
 saveClicked =
-  event.from (payload =>
-    payload
-       |> draftFrom
-      &|> validateTitle #title
-      &|> validateEmail #email
-       |> api.saveUser { title, email }
+  event.from (
+    get draft
+       |> validateDraft
+       |> api.saveUser
   )
 ```
 
@@ -963,12 +941,10 @@ evenSquares = max =>
 
 ```aivi
 saveClicked =
-  event.from (payload =>
-    payload
-       |> draftFrom
-      &|> validateTitle #title
-      &|> validateEmail #email
-       |> api.saveUser { title, email }
+  event.from (
+    get draft
+       |> validateDraft
+       |> api.saveUser
   )
 ```
 
@@ -990,4 +966,4 @@ v2.0 defines five flow-line modifiers: `@timeout <duration>`, `@delay <duration>
 
 Subflows may remain inline on one line or be extracted to parent scope. Data shaping remains in ordinary functions and pipes. Tests keep `@test` and `mock ... in ...`. Hosted runtimes such as GTK keep their own outer app loop; flow syntax replaces handler bodies rather than the runtime pump itself.
 
-The intended language-surface result is that ordinary user code no longer needs `do Effect`, `do M`, `do Applicative`, `generate`, `resource`, or `do Event` blocks.
+The intended language-surface result is that ordinary user code no longer needs dedicated effect, generic chaining, applicative, fan-out, cleanup, or event workflow blocks.

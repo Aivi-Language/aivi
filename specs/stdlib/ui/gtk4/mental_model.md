@@ -8,7 +8,7 @@ AIVI native apps are built from five pieces that fit together directly:
 - `signal ->> ...` derives live read-only state.
 - `signal <<- ...` writes live state.
 - `~<gtk>...</gtk>` describes the mounted GTK tree.
-- callbacks and flow-shaped event handles connect user input to state changes and effects.
+- callbacks and event handles connect user input to state changes and effects.
 
 GTK runtime APIs are ordinary AIVI values and effects. A good default is:
 

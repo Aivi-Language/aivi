@@ -75,10 +75,7 @@ use aivi
 use aivi.testing
 
 @test "snapshot a record"
-snap_record = do Effect {
-  data = { name: "Ada", age: 42 }
-  assertSnapshot "record_test" data
-}
+snap_record = assertSnapshot "record_test" { name: "Ada", age: 42 }
 "#;
 
     // 1. Record (update mode)
@@ -123,10 +120,7 @@ use aivi
 use aivi.testing
 
 @test "snapshot mismatch"
-snap_mismatch = do Effect {
-  data = { value: 1 }
-  assertSnapshot "mismatch_test" data
-}
+snap_mismatch = assertSnapshot "mismatch_test" { value: 1 }
 "#;
 
     // 1. Record initial snapshot
@@ -142,10 +136,7 @@ use aivi
 use aivi.testing
 
 @test "snapshot mismatch"
-snap_mismatch = do Effect {
-  _ <- assertSnapshot "mismatch_test" { value: 999 }
-  pure Unit
-}
+snap_mismatch = assertSnapshot "mismatch_test" { value: 999 }
 "#;
     let report = run_snapshot_test(source_v2, false, dir.path());
     assert!(

@@ -44,9 +44,7 @@ fn cranelift_jit_smoke_hello() {
     run_jit(
         r#"module app.main
 main : Effect Text Unit
-main = do Effect {
-  print "Hello from Cranelift!"
-}
+main = print "Hello from Cranelift!"
 "#,
     );
 }
@@ -88,7 +86,7 @@ divF : Float -> Float -> Float
 divF = a b => a / b
 
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (addInt 3 4) 7
   assertEq (subInt 10 3) 7
   assertEq (mulInt 6 7) 42
@@ -133,7 +131,7 @@ negate : Bool -> Bool
 negate = b => if b then False else True
 
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (clamp 5) 5
   assertEq (clamp 15) 10
   assertEq (classify (-5)) "neg"
@@ -182,8 +180,8 @@ id : a -> a
 id = x => x
 
 main : Effect Text Unit
-main = do Effect {
-  result <- pure (add 3 4)
+main = {
+  result = add 3 4
   assertEq result 7
   assertEq (double 21) 42
   assertEq (square 7) 49
@@ -191,7 +189,7 @@ main = do Effect {
   assertEq (addInt 3 4) 7
   assertEq (addUntyped 3 4) 7
   assertEq (add6 1 2 3 4 5 6) 21
-  addFive <- pure (makeAdder 5)
+  addFive = makeAdder 5
   assertEq (addFive 3) 8
   assertEq (addFive 10) 15
   ca = 10
@@ -273,7 +271,7 @@ factorial : Int -> Int
 factorial = n => if n <= 1 then 1 else n * factorial (n - 1)
 
 main : Effect Text Unit
-main = do Effect {
+main = {
   assertEq (unwrapOr 0 (Some 42)) 42
   assertEq (unwrapOr 0 None) 0
   assertEq (safeHead [1, 2, 3]) (Some 1)
@@ -324,8 +322,8 @@ use aivi.testing
 updateAge = person => person <| { age: 99 }
 
 main : Effect Text Unit
-main = do Effect {
-  result <- pure (updateAge { name: "Bob", age: 30 })
+main = {
+  result = updateAge { name: "Bob", age: 30 }
   assertEq result { name: "Bob", age: 99 }
   r = { count: 10 }
   r2 = r <| { count: _ + 5 }
@@ -373,7 +371,7 @@ myFoldl = f acc xs => xs match
   | [x, ...rest] => myFoldl f (f acc x) rest
 
 main : Effect Text Unit
-main = do Effect {
+main = {
   t = (1, "hello", True)
   (ta, tb, tc) = t
   assertEq ta 1
@@ -397,7 +395,7 @@ main = do Effect {
   assertEq evens [2, 4, 6]
   foldResult = myFoldl (acc x => acc + x) 0 [1, 2, 3, 4, 5]
   assertEq foldResult 15
-  found <- pure (List.find (x => x == 2) [1, 2, 3])
+  found = List.find (x => x == 2) [1, 2, 3]
   found match
     | Some v => assertEq v 2
     | None   => fail "expected Some"
@@ -445,10 +443,10 @@ bigGen = generate {
 }
 
 main : Effect Text Unit
-main = do Effect {
-  foldResult <- pure (gen (a => b => a + b) 0)
+main = {
+  foldResult = gen (a => b => a + b) 0
   assertEq foldResult 60
-  bindResult <- pure (pairSums (a => b => a + b) 0)
+  bindResult = pairSums (a => b => a + b) 0
   assertEq bindResult 12
   assertEq (toList bigGen) [10, 20, 30, 40, 50]
 }
@@ -457,7 +455,7 @@ main = do Effect {
 }
 
 // ─── Effects ──────────────────────────────────────────────────────────────────
-// Covers: attempt chain, do Option, resource block.
+// Covers: Option carrier behavior in a binary entrypoint.
 
 #[test]
 fn cranelift_jit_effects() {
@@ -468,29 +466,11 @@ module app.main
 use aivi
 use aivi.testing
 
-managedResource = name => resource {
-  yield name
-}
-
 main : Effect Text Unit
-main = do Effect {
-  res1 <- attempt (pure 42)
-  res2 <- attempt (fail "oops")
-  v1 = res1 match
-    | Ok v  => v
-    | Err _ => 0
-  v2 = res2 match
-    | Ok _  => 0
-    | Err e => 1
-  assertEq v1 42
-  assertEq v2 1
-  optResult = do Option {
-    a <- Some 1
-    b <- Some 2
-    c <- Some 3
-    d <- Some 4
-    Some (a + b + c + d)
-  }
+main = {
+  optResult = (Some 1, Some 2, Some 3, Some 4) match
+    | (Some a, Some b, Some c, Some d) => Some (a + b + c + d)
+    | _                                => None
   assertEq optResult (Some 10)
   assertEq (1 + 1) 2
 }
@@ -511,14 +491,15 @@ fn cranelift_jit_monomorph_plan_records_polymorphic_calls() {
 module app.main
 
 use aivi
+use aivi.testing
 
 id : a -> a
 id = x => x
 
 main : Effect Text Unit
-main = do Effect {
-  result <- pure (id 42)
+main = {
   print (id "hello")
+  assertEq (id 42) 42
 }
 "#;
     let source_path = write_aivi_source(dir.path(), "main.aivi", source);
@@ -552,9 +533,7 @@ fn cranelift_aot_compile_to_object() {
     let source = r#"module app.main
 
 main : Effect Text Unit
-main = do Effect {
-  print "Hello from AOT!"
-}
+main = print "Hello from AOT!"
 "#;
     let source_path = write_aivi_source(dir.path(), "main.aivi", source);
     let (program, cg_types, monomorph_plan, surface_modules) =

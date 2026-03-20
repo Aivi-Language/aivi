@@ -2285,12 +2285,10 @@ Entities = {{ orders: List Order }}
 Parsed = {{ entities: Entities }}
 
 parse : Effect Text Parsed
-parse = do Effect {{
-  decoded <- attempt (load (file.json "{}"))
-  decoded match
-    | Ok value => pure value
-    | Err _ => fail "decode failed"
-}}
+parse =
+   |> attempt (load (file.json "{}"))#decoded
+  ||> Ok value => pure value
+  ||> Err _ => fail "decode failed"
 "#,
             temp_path.to_string_lossy()
         );

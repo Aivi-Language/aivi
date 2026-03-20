@@ -6,13 +6,13 @@ use aivi.testing
 use aivi.duration
 
 @test "span construct"
-span_construct = do Effect {
+span_construct = {
   s = { millis: 1000 }
   assertEq s.millis 1000
 }
 
 @test "span add"
-span_add = do Effect {
+span_add = {
   s1 = { millis: 500 }
   s2 = { millis: 300 }
   s3 = { millis: s1.millis + s2.millis }
@@ -20,26 +20,26 @@ span_add = do Effect {
 }
 
 @test "span zero"
-span_zero = do Effect {
+span_zero = {
   s = { millis: 0 }
   assertEq s.millis 0
 }
 
 @test "span negative"
-span_negative = do Effect {
+span_negative = {
   s = { millis: -100 }
   assertEq s.millis (-100)
 }
 
 @test "span to seconds"
-span_to_seconds = do Effect {
+span_to_seconds = {
   s    = { millis: 5000 }
   secs = s.millis / 1000
   assertEq secs 5
 }
 
 @test "span arithmetic"
-span_arithmetic = do Effect {
+span_arithmetic = {
   timeout = { millis: 30000 }
   delay   = { millis: timeout.millis + 500 }
   assertEq delay.millis 30500

@@ -6,12 +6,13 @@ User = { id: Int, name: Text }
 fetchUsers = rest.get ~u(https://api.example.com/users)
 
 @test "fetch users with a mocked request"
-fetchUsersWithMock =
-  mock rest.get      = _ => pure [{ id: 1, name: "Ada" }]
-in do Effect {
-  users <- fetchUsers
-  _     <- assertEq (length users) 1
-  users match
-    | [u, ..._] => assertEq u.name "Ada"
-    | []        => fail "expected one mocked user"
-}
+fetchUsersWithMock = mock rest.get = requestedUrl => pure [{ id: 1, name: "Ada" }]
+in fetchUsers
+|> users => users match
+  | [u, ...rest] =>
+      if length rest == 0 then
+        assertEq u.name "Ada"
+      else
+        fail "expected one mocked user"
+        | [] =>
+        fail "expected one mocked user"

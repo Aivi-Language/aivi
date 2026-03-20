@@ -8,7 +8,7 @@ use aivi.text (
 use aivi.testing
 
 @test "multiline use without commas"
-multilineUseWorks = do Effect {
+multilineUseWorks = {
   assertEq (length "hello") 5
   assertEq (toUpper "hi") "HI"
 }

@@ -5,7 +5,8 @@ use aivi
 use aivi.testing
 
 @test "env load with fallback"
-envDefaultWorks = do Effect {
-  port <- load (env.get "AIVI__MISSING_TEST_PORT__") or "3000"
-  assertEq port "3000"
-}
+envDefaultWorks = attempt (load (env.get "AIVI__MISSING_TEST_PORT__"))
+  |> result => assertEq (result match
+    | Ok port => port
+    | Err _   => "3000"
+  ) "3000"

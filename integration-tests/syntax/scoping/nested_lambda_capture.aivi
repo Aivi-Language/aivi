@@ -21,7 +21,7 @@ tripleNest : Int -> (Int -> (Int -> Int))
 tripleNest = x => (x => (x => x + 1))
 
 @test "inner lambda x shadows outer lambda x"
-innerShadowsOuter = do Effect {
+innerShadowsOuter = {
   f = makeDoubler 99
   // f 5 = 5 * 2 = 10, not 99 * 2 = 198
   assertEq (f 5) 10
@@ -30,7 +30,7 @@ innerShadowsOuter = do Effect {
 }
 
 @test "outer x used in argument position, inner x used in body"
-outerUsedAsArg = do Effect {
+outerUsedAsArg = {
   // applyThenDouble 3 = (x => x*2) (3+1) = 4*2 = 8
   assertEq (applyThenDouble 3) 8
   // applyThenDouble 0 = (x => x*2) (0+1) = 1*2 = 2
@@ -40,7 +40,7 @@ outerUsedAsArg = do Effect {
 }
 
 @test "triple nested x: innermost x only sees its own argument"
-tripleNestShadow = do Effect {
+tripleNestShadow = {
   f = tripleNest 100
   g = f 200
   // g n = n + 1, completely independent of 100 and 200
@@ -49,13 +49,13 @@ tripleNestShadow = do Effect {
   assertEq (g 99) 100
 }
 
-@test "closure inside do Effect with shadowed param"
-closureWithShadowedParam = do Effect {
+@test "closure inside a shadowing scope"
+closureWithShadowedParam = {
   x = 42
-  // This lambda introduces its own x, shadowing the do-block x = 42
+  // This lambda introduces its own x, shadowing the outer x = 42.
   double = x => x * 2
   assertEq (double 3) 6
   assertEq (double 10) 20
-  // The do-block x is still 42
+  // The outer x is still 42.
   assertEq x 42
 }

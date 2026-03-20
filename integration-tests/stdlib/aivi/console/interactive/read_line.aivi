@@ -6,9 +6,7 @@ use aivi.testing
 use aivi.console (readLine)
 
 @test "read line"
-readLine_functional = do Effect {
-  result <- readLine
-  result match
+readLine_functional = readLine
+  |> result => result match
     | Ok line => assert (text.length line >= 0)
     | Err err => assert (text.length err > 0)
-}

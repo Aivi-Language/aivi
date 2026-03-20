@@ -26,13 +26,12 @@ use aivi
 use aivi.number as num
 use aivi.number.decimal
 use aivi.number.decimal (domain Decimal)
+use aivi.testing
 
 main : Effect Text Unit
-main = do Effect {
-  quotient = num.fromFloat 1.0 / num.fromFloat 0.0
-  _ = num.toFloat quotient
-  pure Unit
-}
+main =
+   |> pure (num.toFloat (num.fromFloat 1.0 / num.fromFloat 0.0))#quotient
+   |> quotient => assertEq quotient quotient
 "#,
     );
 }
@@ -48,15 +47,12 @@ use aivi
 use aivi.number as num
 use aivi.number.rational
 use aivi.number.rational (domain Rational)
+use aivi.testing
 
 main : Effect Text Unit
-main = do Effect {
-  half = num.fromBigInts (num.fromInt 1) (num.fromInt 2)
-  zero = num.fromBigInts (num.fromInt 0) (num.fromInt 1)
-  quotient = rational.div half zero
-  _ = num.numerator quotient
-  pure Unit
-}
+main =
+   |> pure (num.numerator (rational.div (num.fromBigInts (num.fromInt 1) (num.fromInt 2)) (num.fromBigInts (num.fromInt 0) (num.fromInt 1))))#quotient
+   |> quotient => assertEq quotient quotient
 "#,
     );
 }

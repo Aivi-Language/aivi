@@ -4,7 +4,4 @@ usersApi = rest.get {
   schema: source.schema.derive
 }
 
-do Effect {
-  users <- load usersApi
-  pure users
-}
+load usersApi

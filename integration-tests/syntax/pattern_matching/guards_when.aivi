@@ -12,7 +12,7 @@ classify =
   | _              => "large"
 
 @test "guards work"
-guardsWork = do Effect {
+guardsWork = {
   assertEq (classify (-1)) "negative"
   assertEq (classify 0) "zero"
   assertEq (classify 42) "medium"

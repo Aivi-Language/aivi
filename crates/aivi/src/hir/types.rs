@@ -342,7 +342,7 @@ pub enum HirBlockKind {
 }
 
 impl HirBlockKind {
-    /// Returns `true` when the block is the special `do Effect { ... }` form
+    /// Returns `true` when the block is the special effect-style block form
     /// which supports effect-specific statements (`or`, `when`, `unless`, `given`, `on`,
     /// resource acquisition, `loop`/`recurse`).
     pub fn is_effect(&self) -> bool {

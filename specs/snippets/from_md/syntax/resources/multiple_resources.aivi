@@ -1,8 +1,9 @@
-compareFiles = leftPath rightPath => do Effect {
-  left  <- managedFile leftPath
-  right <- managedFile rightPath
+compareWithRight = rightPath => left =>
+  rightPath
+|> managedFile
+|> compareHandles left
 
-  leftContent  <- file.readAll left
-  rightContent <- file.readAll right
-  print "{leftContent} / {rightContent}"
-}
+compareFiles = leftPath rightPath =>
+  leftPath
+|> managedFile
+|> compareWithRight rightPath

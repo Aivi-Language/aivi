@@ -2,7 +2,7 @@
 
 Part of the [Writing Native Apps](../gtk4.md) guide.
 
-`event.from` lifts a flow-shaped handler into an `EventHandle E A`. The resulting value carries lifecycle state as signals.
+`event.from` lifts an `Effect E A` into an `EventHandle E A`. The resulting value carries lifecycle state as signals.
 
 ## The public shape
 
@@ -26,10 +26,9 @@ draft = signal { title: "Inbox" }
 
 saveDraft : EventHandle GtkError Text
 saveDraft =
-  event.from (_ =>
+  event.from (
     get draft
        |> persistDraft
-       |> _ => "Saved"
   )
 
 saveLabel = saveDraft.running ->>

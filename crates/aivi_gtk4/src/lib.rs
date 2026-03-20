@@ -2865,6 +2865,25 @@ mod linux_impl {
                 Map::from_iter([("name".to_string(), json!("menu-button-debug-settings"))]);
             let dialog_params =
                 Map::from_iter([("name".to_string(), json!("menu-button-debug-dialog"))]);
+            let inspect_dialog = || {
+                with_ui_debug_state_result(|state| {
+                    ui_debug_inspect_widget_result(state, &dialog_params)
+                })
+                .expect("inspect dialog")
+            };
+            let wait_for_dialog_state = |visible: bool, presented: bool| {
+                for _ in 0..50 {
+                    crate::pump_events();
+                    let dialog = inspect_dialog();
+                    if dialog["widget"]["state"]["visible"].as_bool() == Some(visible)
+                        && dialog["widget"]["state"]["presented"].as_bool() == Some(presented)
+                    {
+                        return dialog;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                inspect_dialog()
+            };
 
             let button_before = with_ui_debug_state_result(|state| {
                 ui_debug_inspect_widget_result(state, &button_params)
@@ -2883,10 +2902,7 @@ mod linux_impl {
                 Some("AI settings")
             );
 
-            let dialog_before = with_ui_debug_state_result(|state| {
-                ui_debug_inspect_widget_result(state, &dialog_params)
-            })
-            .expect("inspect dialog before opening");
+            let dialog_before = inspect_dialog();
             assert_eq!(
                 dialog_before["widget"]["state"]["visible"].as_bool(),
                 Some(false)
@@ -2927,14 +2943,7 @@ mod linux_impl {
             assert_eq!(event.handler, "settings-ai");
 
             dialog_set_open(dialog_id, true).expect("present dialog after action");
-            for _ in 0..20 {
-                crate::pump_events();
-            }
-
-            let dialog_open = with_ui_debug_state_result(|state| {
-                ui_debug_inspect_widget_result(state, &dialog_params)
-            })
-            .expect("inspect dialog after opening");
+            let dialog_open = wait_for_dialog_state(true, true);
             assert_eq!(
                 dialog_open["widget"]["state"]["visible"].as_bool(),
                 Some(true)
@@ -2949,14 +2958,7 @@ mod linux_impl {
             );
 
             dialog_set_open(dialog_id, false).expect("close dialog");
-            for _ in 0..20 {
-                crate::pump_events();
-            }
-
-            let dialog_closed = with_ui_debug_state_result(|state| {
-                ui_debug_inspect_widget_result(state, &dialog_params)
-            })
-            .expect("inspect dialog after closing");
+            let dialog_closed = wait_for_dialog_state(false, false);
             assert_eq!(
                 dialog_closed["widget"]["state"]["visible"].as_bool(),
                 Some(false)

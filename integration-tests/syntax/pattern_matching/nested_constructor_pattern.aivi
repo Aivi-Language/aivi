@@ -18,7 +18,7 @@ describeResult = v => v match
   | None                             => "absent"
 
 @test "nested constructor pattern"
-nestedConstructorPattern = do Effect {
+nestedConstructorPattern = {
   assertEq (describeResult (Some (Ok { name: "Alice", age: 30 }))) "Alice aged 30"
   assertEq (describeResult (Some (Ok { name: "Bob", age: 25 }))) "Bob aged 25"
   assertEq (describeResult (Some (Err "not found"))) "error: not found"

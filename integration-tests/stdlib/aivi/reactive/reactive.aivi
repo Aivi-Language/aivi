@@ -8,7 +8,7 @@ use aivi.testing
 ShellState = AiSettingsSection | SearchSection
 
 @test "signal stores and updates current value"
-signal_set_update = do Effect {
+signal_set_update = {
   count = signal 1
 
   assertEq (get count) 1
@@ -22,7 +22,7 @@ signal_set_update = do Effect {
 }
 
 @test "signal patch operator updates scalar signals"
-signal_patch_operator_updates_scalar = do Effect {
+signal_patch_operator_updates_scalar = {
   count = signal 1
 
   assertEq (count <<- (_ + 3)) Unit
@@ -30,7 +30,7 @@ signal_patch_operator_updates_scalar = do Effect {
 }
 
 @test "signal pipe derives a new signal from the current value"
-signal_pipe_derives_from_source = do Effect {
+signal_pipe_derives_from_source = {
   count   = signal 2
   doubled = count ->> (_ * 2)
 
@@ -40,7 +40,7 @@ signal_pipe_derives_from_source = do Effect {
 }
 
 @test "signal pipe accepts placeholder and pattern lambda sugar"
-signal_pipe_accepts_placeholder_and_pattern_lambda_sugar = do Effect {
+signal_pipe_accepts_placeholder_and_pattern_lambda_sugar = {
   state          = signal { count: 1 }
   viaPlaceholder = state ->> count + 1
   viaPattern     = state ->> { count } => count + 1
@@ -54,7 +54,7 @@ signal_pipe_accepts_placeholder_and_pattern_lambda_sugar = do Effect {
 }
 
 @test "signal pipe accepts bare matcher blocks"
-signal_pipe_accepts_bare_matcher_blocks = do Effect {
+signal_pipe_accepts_bare_matcher_blocks = {
   shellState     = signal (Some SearchSection)
   aiSettingsOpen = shellState ->>
     | Some AiSettingsSection => True
@@ -68,7 +68,7 @@ signal_pipe_accepts_bare_matcher_blocks = do Effect {
 }
 
 @test "signal patch operator accepts replacement values"
-signal_patch_operator_sets_scalar = do Effect {
+signal_patch_operator_sets_scalar = {
   count = signal 1
 
   assertEq (count <<- 9) Unit
@@ -76,7 +76,7 @@ signal_patch_operator_sets_scalar = do Effect {
 }
 
 @test "derive creates a derived signal from one source"
-derive_updates_from_source = do Effect {
+derive_updates_from_source = {
   count   = signal 2
   doubled = derive count (_ * 2)
 
@@ -86,7 +86,7 @@ derive_updates_from_source = do Effect {
 }
 
 @test "record signals accept patch updates"
-patch_updates_record_signal = do Effect {
+patch_updates_record_signal = {
   state = signal { count: 2 }
 
   assertEq (update state (patch { count: _ + 3 })) Unit
@@ -94,7 +94,7 @@ patch_updates_record_signal = do Effect {
 }
 
 @test "record signals accept signal updater operator sugar"
-signal_patch_operator_updates_record_signal = do Effect {
+signal_patch_operator_updates_record_signal = {
   state = signal { count: 2, enabled: False }
 
   assertEq (state <<- (current => current <| { count: _ + 3, enabled: True })) Unit
@@ -102,7 +102,7 @@ signal_patch_operator_updates_record_signal = do Effect {
 }
 
 @test "record signals accept direct patch operator sugar"
-signal_patch_operator_applies_record_patch = do Effect {
+signal_patch_operator_applies_record_patch = {
   state = signal { count: 2, enabled: False }
 
   assertEq (state <<- { count: _ + 3, enabled: True }) Unit
@@ -110,7 +110,7 @@ signal_patch_operator_applies_record_patch = do Effect {
 }
 
 @test "combineAll derives from a tuple of signals"
-combineAll_updates_from_inputs = do Effect {
+combineAll_updates_from_inputs = {
   firstName = signal "Ada"
   lastName  = signal "Lovelace"
   fullName  = combineAll (firstName, lastName) ((first, last) =>
@@ -127,7 +127,7 @@ combineAll_updates_from_inputs = do Effect {
 }
 
 @test "watch observes signal changes"
-watch_observes_changes = do Effect {
+watch_observes_changes = {
   count         = signal 0
   seen          = signal 0
   _subscription = watch count (value => set seen value)
@@ -137,7 +137,7 @@ watch_observes_changes = do Effect {
 }
 
 @test "dispose stops further watcher notifications"
-dispose_stops_notifications = do Effect {
+dispose_stops_notifications = {
   count         = signal 0
   notifications = signal 0
   subscription  = watch count (_ => update notifications (_ + 1))
@@ -151,7 +151,7 @@ dispose_stops_notifications = do Effect {
 }
 
 @test "batch can group multiple writes"
-batch_groups_writes = do Effect {
+batch_groups_writes = {
   first  = signal 1
   second = signal 2
   sum    = combineAll (first, second) ((a, b) => a + b)
@@ -161,7 +161,7 @@ batch_groups_writes = do Effect {
 }
 
 @test "chained signal pipe derives through multiple transforms"
-chained_pipe_derives_through_transforms = do Effect {
+chained_pipe_derives_through_transforms = {
   count  = signal 3
   result = count ->> (_ * 2) ->> (_ + 10)
 
@@ -171,7 +171,7 @@ chained_pipe_derives_through_transforms = do Effect {
 }
 
 @test "derived signal from another derived signal"
-derived_from_derived = do Effect {
+derived_from_derived = {
   base    = signal 2
   doubled = derive base (_ * 2)
   quad    = derive doubled (_ * 2)
@@ -183,7 +183,7 @@ derived_from_derived = do Effect {
 }
 
 @test "peek sees propagation through derived signal chains"
-peek_sees_propagation_through_derived_chain = do Effect {
+peek_sees_propagation_through_derived_chain = {
   base    = signal 2
   plusOne = derive base (_ + 1)
   doubled = derive plusOne (_ * 2)
@@ -197,7 +197,7 @@ peek_sees_propagation_through_derived_chain = do Effect {
 }
 
 @test "peek inside derive mapper does not subscribe to that signal"
-peek_inside_mapper_does_not_subscribe = do Effect {
+peek_inside_mapper_does_not_subscribe = {
   source  = signal 1
   bonus   = signal 10
   derived = derive source (value => value + peek bonus)
@@ -212,7 +212,7 @@ peek_inside_mapper_does_not_subscribe = do Effect {
 }
 
 @test "record patch propagates through derived combineAll graph"
-record_patch_propagates_through_derived_graph = do Effect {
+record_patch_propagates_through_derived_graph = {
   state        = signal { count: 1, enabled: False }
   count        = state ->> .count
   enabled      = state ->> .enabled
@@ -231,7 +231,7 @@ record_patch_propagates_through_derived_graph = do Effect {
 }
 
 @test "batch propagates latest values through derived combineAll graph"
-batch_propagates_latest_values_through_derived_graph = do Effect {
+batch_propagates_latest_values_through_derived_graph = {
   count = signal 1
   next  = derive count (_ + 1)
   bonus = signal 10
@@ -248,7 +248,7 @@ batch_propagates_latest_values_through_derived_graph = do Effect {
 }
 
 @test "peek does not create dependency for derived signals"
-peek_no_dependency = do Effect {
+peek_no_dependency = {
   source    = signal 1
   unrelated = signal 0
   calls     = signal 0
@@ -265,7 +265,7 @@ peek_no_dependency = do Effect {
 }
 
 @test "multiple watchers on the same signal"
-multiple_watchers_same_signal = do Effect {
+multiple_watchers_same_signal = {
   source = signal 0
   seen1  = signal 0
   seen2  = signal 0
@@ -278,7 +278,7 @@ multiple_watchers_same_signal = do Effect {
 }
 
 @test "batch coalesces multiple watcher notifications into one"
-batch_coalesces_watcher_calls = do Effect {
+batch_coalesces_watcher_calls = {
   count = signal 0
   calls = signal 0
   _sub  = watch count (_ => update calls (_ + 1))
@@ -293,7 +293,7 @@ batch_coalesces_watcher_calls = do Effect {
 }
 
 @test "signal pipe with record field access"
-signal_pipe_record_field = do Effect {
+signal_pipe_record_field = {
   state = signal { name: "Ada", score: 10 }
   name  = state ->> .name
 
@@ -302,20 +302,17 @@ signal_pipe_record_field = do Effect {
   assertEq (get name) "Grace"
 }
 
-@test "do Event exposes lifecycle signals"
-event_exposes_lifecycle_signals = do Effect {
-  saveEvent = do Event {
-    pure 42
-  }
+@test "event handle exposes lifecycle signals"
+event_exposes_lifecycle_signals = {
+  saveEvent = event.from (pure 42)
 
   assertEq (get saveEvent.result) None
   assertEq (get saveEvent.error) None
   assertEq (get saveEvent.done) False
   assertEq (get saveEvent.running) False
 
-  outcome <- attempt saveEvent.run
-
-  assertEq outcome (Ok 42)
+  attempt saveEvent.run
+  |> assertEq (Ok 42)
   assertEq (get saveEvent.result) (Some 42)
   assertEq (get saveEvent.error) None
   assertEq (get saveEvent.done) True
@@ -326,7 +323,7 @@ topCounter : Signal Int
 topCounter = signal 0
 
 @test "top-level signal preserves identity across references"
-top_level_signal_preserves_identity = do Effect {
+top_level_signal_preserves_identity = {
   assertEq (peek topCounter) 0
   _ = set topCounter 42
   assertEq (peek topCounter) 42

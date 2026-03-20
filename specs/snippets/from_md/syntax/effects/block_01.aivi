@@ -1,4 +1,2 @@
-do Effect {
-  user <- loadUser id   // run the effect and bind its result
-  pure user.name        // wrap the final plain value back into Effect
-}
+loadUser id
+|> user => user.name

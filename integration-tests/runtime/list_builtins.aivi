@@ -9,22 +9,22 @@ use aivi.list
 // --- Empty and basic queries ---
 
 @test "empty list"
-emptyTest = do Effect {
+emptyTest = {
   assertEq empty []
 }
 
 @test "isEmpty on empty"
-isEmptyEmpty = do Effect {
+isEmptyEmpty = {
   assertEq (isEmpty []) True
 }
 
 @test "isEmpty on non-empty"
-isEmptyNonEmpty = do Effect {
+isEmptyNonEmpty = {
   assertEq (isEmpty [1]) False
 }
 
 @test "length"
-lengthTest = do Effect {
+lengthTest = {
   assertEq (length [1, 2, 3]) 3
   assertEq (length []) 0
 }
@@ -32,90 +32,90 @@ lengthTest = do Effect {
 // --- Map ---
 
 @test "map"
-mapTest = do Effect {
+mapTest = {
   assertEq (map (x => x * 2) [1, 2, 3]) [2, 4, 6]
 }
 
 @test "map empty"
-mapEmpty = do Effect {
+mapEmpty = {
   assertEq (map (x => x + 1) []) []
 }
 
 // --- Filter ---
 
 @test "filter"
-filterTest = do Effect {
+filterTest = {
   assertEq (filter (x => x > 2) [1, 2, 3, 4]) [3, 4]
 }
 
 @test "filter none match"
-filterNone = do Effect {
+filterNone = {
   assertEq (filter (x => x > 10) [1, 2, 3]) []
 }
 
 @test "filter all match"
-filterAll = do Effect {
+filterAll = {
   assertEq (filter (x => x > 0) [1, 2, 3]) [1, 2, 3]
 }
 
 // --- FlatMap ---
 
 @test "chain"
-flatMapTest = do Effect {
+flatMapTest = {
   assertEq (chain (x => [x, x * 10]) [1, 2, 3]) [1, 10, 2, 20, 3, 30]
 }
 
 @test "chain empty"
-flatMapEmpty = do Effect {
+flatMapEmpty = {
   assertEq (chain (x => [x]) []) []
 }
 
 // --- Foldl / Foldr ---
 
 @test "reduce sum"
-foldlSum = do Effect {
+foldlSum = {
   assertEq (reduce (acc => x => acc + x) 0 [1, 2, 3, 4]) 10
 }
 
 @test "reduce empty"
-foldlEmpty = do Effect {
+foldlEmpty = {
   assertEq (reduce (acc => x => acc + x) 0 []) 0
 }
 
 @test "foldr builds right"
-foldrTest = do Effect {
+foldrTest = {
   result = foldr (x => acc => x - acc) 0 [1, 2, 3]
   assertEq result 2
 }
 
 @test "foldr empty"
-foldrEmpty = do Effect {
+foldrEmpty = {
   assertEq (foldr (x => acc => acc + x) 0 []) 0
 }
 
 // --- Scanl ---
 
 @test "scanl"
-scanlTest = do Effect {
+scanlTest = {
   assertEq (scanl (acc => x => acc + x) 0 [1, 2, 3]) [0, 1, 3, 6]
 }
 
 @test "scanl empty"
-scanlEmpty = do Effect {
+scanlEmpty = {
   assertEq (scanl (acc => x => acc + x) 0 []) [0]
 }
 
 // --- Take / Drop ---
 
 @test "take"
-takeTest = do Effect {
+takeTest = {
   assertEq (take 2 [1, 2, 3, 4]) [1, 2]
   assertEq (take 0 [1, 2]) []
   assertEq (take 10 [1, 2]) [1, 2]
 }
 
 @test "drop"
-dropTest = do Effect {
+dropTest = {
   assertEq (drop 2 [1, 2, 3, 4]) [3, 4]
   assertEq (drop 0 [1, 2]) [1, 2]
   assertEq (drop 10 [1, 2]) []
@@ -124,39 +124,39 @@ dropTest = do Effect {
 // --- TakeWhile / DropWhile ---
 
 @test "takeWhile"
-takeWhileTest = do Effect {
+takeWhileTest = {
   assertEq (takeWhile (x => x < 3) [1, 2, 3, 4]) [1, 2]
 }
 
 @test "takeWhile all"
-takeWhileAll = do Effect {
+takeWhileAll = {
   assertEq (takeWhile (x => x < 10) [1, 2, 3]) [1, 2, 3]
 }
 
 @test "takeWhile none"
-takeWhileNone = do Effect {
+takeWhileNone = {
   assertEq (takeWhile (x => x > 10) [1, 2, 3]) []
 }
 
 @test "dropWhile"
-dropWhileTest = do Effect {
+dropWhileTest = {
   assertEq (dropWhile (x => x < 3) [1, 2, 3, 4]) [3, 4]
 }
 
 @test "dropWhile all"
-dropWhileAll = do Effect {
+dropWhileAll = {
   assertEq (dropWhile (x => x < 10) [1, 2, 3]) []
 }
 
 @test "dropWhile none"
-dropWhileNone = do Effect {
+dropWhileNone = {
   assertEq (dropWhile (x => x > 10) [1, 2, 3]) [1, 2, 3]
 }
 
 // --- Partition ---
 
 @test "partition"
-partitionTest = do Effect {
+partitionTest = {
   result = partition (x => x > 2) [1, 2, 3, 4]
   assertEq result ([3, 4], [1, 2])
 }
@@ -164,30 +164,30 @@ partitionTest = do Effect {
 // --- Find ---
 
 @test "find found"
-findFound = do Effect {
+findFound = {
   assertEq (find (x => x > 2) [1, 2, 3, 4]) (Some 3)
 }
 
 @test "find not found"
-findNotFound = do Effect {
+findNotFound = {
   assertEq (find (x => x > 10) [1, 2, 3]) None
 }
 
 @test "find empty"
-findEmpty = do Effect {
+findEmpty = {
   assertEq (find (x => x > 0) []) None
 }
 
 // --- FindMap ---
 
 @test "findMap found"
-findMapFound = do Effect {
+findMapFound = {
   result = findMap (x => if x > 2 then Some (x * 10) else None) [1, 2, 3, 4]
   assertEq result (Some 30)
 }
 
 @test "findMap not found"
-findMapNotFound = do Effect {
+findMapNotFound = {
   result = findMap (x => None) [1, 2, 3]
   assertEq result None
 }
@@ -195,13 +195,13 @@ findMapNotFound = do Effect {
 // --- At ---
 
 @test "at valid index"
-atValid = do Effect {
+atValid = {
   assertEq (at 0 [10, 20, 30]) (Some 10)
   assertEq (at 2 [10, 20, 30]) (Some 30)
 }
 
 @test "at out of bounds"
-atOob = do Effect {
+atOob = {
   assertEq (at 5 [10, 20, 30]) None
   assertEq (at (-1) [10, 20, 30]) None
 }
@@ -209,84 +209,84 @@ atOob = do Effect {
 // --- IndexOf ---
 
 @test "indexOf found"
-indexOfFound = do Effect {
+indexOfFound = {
   assertEq (indexOf 20 [10, 20, 30]) (Some 1)
 }
 
 @test "indexOf not found"
-indexOfNotFound = do Effect {
+indexOfNotFound = {
   assertEq (indexOf 99 [10, 20, 30]) None
 }
 
 // --- Zip / ZipWith / Unzip ---
 
 @test "zip"
-zipTest = do Effect {
+zipTest = {
   assertEq (zip [1, 2, 3] ["a", "b", "c"]) [(1, "a"), (2, "b"), (3, "c")]
 }
 
 @test "zip unequal length"
-zipUnequal = do Effect {
+zipUnequal = {
   assertEq (zip [1, 2] ["a", "b", "c"]) [(1, "a"), (2, "b")]
 }
 
 @test "zipWith"
-zipWithTest = do Effect {
+zipWithTest = {
   assertEq (zipWith (a => b => a + b) [1, 2, 3] [10, 20, 30]) [11, 22, 33]
 }
 
 @test "unzip"
-unzipTest = do Effect {
+unzipTest = {
   assertEq (unzip [(1, "a"), (2, "b")]) ([1, 2], ["a", "b"])
 }
 
 // --- Intersperse ---
 
 @test "intersperse"
-intersperseTest = do Effect {
+intersperseTest = {
   assertEq (intersperse 0 [1, 2, 3]) [1, 0, 2, 0, 3]
 }
 
 @test "intersperse single"
-intersperseSingle = do Effect {
+intersperseSingle = {
   assertEq (intersperse 0 [1]) [1]
 }
 
 @test "intersperse empty"
-intersperseEmpty = do Effect {
+intersperseEmpty = {
   assertEq (intersperse 0 []) []
 }
 
 // --- Chunk ---
 
 @test "chunk"
-chunkTest = do Effect {
+chunkTest = {
   assertEq (chunk 2 [1, 2, 3, 4, 5]) [[1, 2], [3, 4], [5]]
 }
 
 @test "chunk even"
-chunkEven = do Effect {
+chunkEven = {
   assertEq (chunk 2 [1, 2, 3, 4]) [[1, 2], [3, 4]]
 }
 
 @test "chunk empty"
-chunkEmpty = do Effect {
+chunkEmpty = {
   assertEq (chunk 2 []) []
 }
 
 // --- Dedup ---
 
 @test "dedup"
-dedupTest = do Effect {
+dedupTest = {
   assertEq (dedup [1, 1, 2, 3, 3, 3, 4]) [1, 2, 3, 4]
 }
 
 @test "dedup no dupes"
-dedupNoDupes = do Effect {
+dedupNoDupes = {
   assertEq (dedup [1, 2, 3]) [1, 2, 3]
 }
 
 @test "dedup empty"
-dedupEmpty = do Effect {
+dedupEmpty = {
   assertEq (dedup []) []
 }

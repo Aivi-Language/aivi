@@ -19,7 +19,7 @@ use aivi.testing
 // --- Single-entry map: trivially ordered ---
 
 @test "single entry map toList"
-singleEntryToList = do Effect {
+singleEntryToList = {
   m = Map.insert "x" 42 Map.empty
   assertEq (Map.toList m) [("x", 42)]
 }
@@ -30,7 +30,7 @@ singleEntryToList = do Effect {
 // same list — determinism within a single run.
 
 @test "toList is stable on same map"
-toListStable = do Effect {
+toListStable = {
   m  = Map.fromList [("b", 2), ("a", 1), ("c", 3)]
   l1 = Map.toList m
   l2 = Map.toList m
@@ -40,7 +40,7 @@ toListStable = do Effect {
 // --- Round-trip: fromList -> toList -> fromList preserves all entries ---
 
 @test "fromList toList round-trip preserves all entries"
-fromListToListRoundTrip = do Effect {
+fromListToListRoundTrip = {
   entries = [("a", 1), ("b", 2), ("c", 3)]
   m       = Map.fromList entries
   xs      = Map.toList m
@@ -55,7 +55,7 @@ fromListToListRoundTrip = do Effect {
 // --- keys() returns all keys (order may vary) ---
 
 @test "map keys contains all keys"
-mapKeysContainsAll = do Effect {
+mapKeysContainsAll = {
   m = Map.fromList [("alpha", 1), ("beta", 2), ("gamma", 3)]
   assertEq (Map.size m) 3
   assertEq (Map.has "alpha" m) True
@@ -66,7 +66,7 @@ mapKeysContainsAll = do Effect {
 // --- values() length matches map size ---
 
 @test "map values length matches size"
-mapValuesLength = do Effect {
+mapValuesLength = {
   m = Map.fromList [("x", 10), ("y", 20), ("z", 30)]
   assertEq (Map.size m) 3
 }
@@ -74,7 +74,7 @@ mapValuesLength = do Effect {
 // --- entries() length matches map size ---
 
 @test "map entries length matches size"
-mapEntriesLength = do Effect {
+mapEntriesLength = {
   m = Map.fromList [("p", 100), ("q", 200)]
   assertEq (Map.size m) 2
 }
@@ -82,7 +82,7 @@ mapEntriesLength = do Effect {
 // --- Numeric keys: size and lookup correct ---
 
 @test "integer-keyed map size and lookup"
-intKeyedMapCorrect = do Effect {
+intKeyedMapCorrect = {
   m = Map.fromList [(3, "three"), (1, "one"), (2, "two")]
   assertEq (Map.size m) 3
   assertEq (Map.get 1 m) (Some "one")

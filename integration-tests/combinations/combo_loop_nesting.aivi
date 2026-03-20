@@ -5,83 +5,58 @@ use aivi
 use aivi.testing
 use aivi.generator
 
-// Loop/recurse combined with other scope-creating constructs.
-// Verifies loop state and outer captures interact correctly.
+accumulateWithFactor = factor => i => acc =>
+  if i > 5 then pure acc
+  else accumulateWithFactor factor (i + 1) (acc + i * factor)
 
-// --- Loop in do Effect capturing outer effect bindings ---
-
-@test "loop in do Effect captures outer bindings"
-loopCapturesOuter = do Effect {
-  factor <- pure 3
-  result <- do Effect {
-    loop state = { i: 1, acc: 0 } => {
-      if state.i > 5 then pure state.acc
-      else recurse { i: state.i + 1, acc: state.acc + state.i * factor }
+sumOptionalItems = remaining => acc => remaining match
+  | []           => acc
+  | [x, ...rest] => {
+      value = x match
+        | Some n => n
+        | None   => 0
+      sumOptionalItems rest (acc + value)
     }
+
+buildAdderFnsDescending = i => fns =>
+  if i > 3 then fns
+  else {
+    n = i
+    f = x => x + n
+    buildAdderFnsDescending (i + 1) [f, ...fns]
   }
-  assertEq result 45
-}
+
+sumScaledWithPure = base => i => acc =>
+  if i > 3 then pure acc
+  else sumScaledWithPure base (i + 1) (acc + i * base)
+
+@test "loop in effect captures outer bindings"
+loopCapturesOuter = pure 3
+   |> factor => accumulateWithFactor factor 1 0#result
+  ~|>_ => assertEq result 45
 
 @test "loop with match dispatching per iteration"
-loopWithMatch = do Effect {
-  items = [Some 1, None, Some 3, None, Some 5]
-  result <- do Effect {
-    loop state = { remaining: items, acc: 0 } => {
-      state.remaining match
-        | []           => pure state.acc
-        | [x, ...rest] => do Effect {
-            val = x match
-              | Some n => n
-              | None   => 0
-            recurse { remaining: rest, acc: state.acc + val }
-          }
-    }
-  }
+loopWithMatch = {
+  items  = [Some 1, None, Some 3, None, Some 5]
+  result = sumOptionalItems items 0
   assertEq result 9
 }
 
-// --- Loop creating lambda each iteration, capturing accumulator ---
-
 @test "loop creates closures capturing iteration state"
-loopCreatesClosures = do Effect {
-  result <- do Effect {
-    loop state = { i: 1, fns: [] } => {
-      if state.i > 3 then pure state.fns
-      else do Effect {
-        n = state.i
-        f = x => x + n
-        recurse { i: state.i + 1, fns: [f, ...state.fns] }
-      }
-    }
-  }
-  // fns = [f3, f2, f1] where f1 adds 1, f2 adds 2, f3 adds 3
-  results = result match
-    | [f3, f2, f1] => [f1 10, f2 10, f3 10]
-    | _            => [0, 0, 0]
-  assertEq results [11, 12, 13]
+loopCreatesClosures = {
+  fns = buildAdderFnsDescending 1 []
+  fns match
+    | [f3, f2, f1] => assertEq [f1 10, f2 10, f3 10] [11, 12, 13]
+    | _            => fail "expected three closures"
 }
 
-// --- Loop with nested do Effect ---
-
-@test "loop with nested do Effect preserves outer"
-loopNestedDoEffect = do Effect {
-  base = 100
-  result <- do Effect {
-    loop state = { i: 1, acc: 0 } => {
-      if state.i > 3 then pure state.acc
-      else do Effect {
-        partial <- pure (state.i * base)
-        recurse { i: state.i + 1, acc: state.acc + partial }
-      }
-    }
-  }
-  assertEq result 600
-}
-
-// --- Loop in generator capturing outer ---
+@test "loop with nested effect preserves outer"
+loopNestedEffectPreservesOuter = pure 100
+   |> base => sumScaledWithPure base 1 0#result
+  ~|>_ => assertEq result 600
 
 @test "loop in generator captures outer scope"
-loopInGeneratorCapturesOuter = do Effect {
+loopInGeneratorCapturesOuter = {
   multiplier = 10
   g          = generate {
     loop n = 1 => {

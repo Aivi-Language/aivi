@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn format_respects_indent_size() {
-        let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
+        let text = "module demo\n\nmain =\n|>pure 1#x\n|>print x\n";
         let formatted = format_text_with_options(
             text,
             FormatOptions {
@@ -625,12 +625,11 @@ reply = value =>
     #[test]
     fn mismatched_brackets_returns_input_unchanged() {
         // Unclosed paren
-        let input = "module demo\n\nmain = do Effect {\n  x <- foo\n  y <- bar (\n  z <- baz\n}\n";
+        let input = "module demo\n\nmain =\n   |> foo#x\n   |> bar (\n   |> baz\n";
         assert_eq!(format_text(input), input);
 
         // Unclosed bracket
-        let input2 =
-            "module demo\n\nmain = do Effect {\n  x <- foo\n  y <- [1, 2, 3\n  z <- baz\n}\n";
+        let input2 = "module demo\n\nmain =\n   |> foo#x\n   |> [1, 2, 3\n   |> baz\n";
         assert_eq!(format_text(input2), input2);
 
         // Unclosed brace leaking into unrelated definition
@@ -649,10 +648,10 @@ reply = value =>
     /// Balanced brackets must still be formatted normally.
     #[test]
     fn balanced_brackets_still_formatted() {
-        let input = "module demo\n\nmain = do Effect {\nx<-foo\n}\n";
+        let input = "module demo\n\nmain =\n|>foo#x\n|>pure x\n";
         let formatted = format_text(input);
         assert_ne!(formatted, input, "balanced input should be formatted");
-        assert!(formatted.contains("  x <- foo"));
+        assert!(formatted.contains("|> foo#x"));
     }
 
     #[test]
@@ -691,35 +690,32 @@ move = (x, y) =>
         let input = "\
 module demo
 
-loadConfig = do Effect {
-  resolvedBaseUrl = baseUrlText match
-    | Some \"\"  => defaultBaseUrl
-    | Some raw => raw
-    | None     => defaultBaseUrl
-
-    pure {
-      apiKey: apiKeyText ?? \"\"
-      model: modelText ?? defaultModel
-      baseUrl: resolvedBaseUrl
-      organization: organizationText
-    }
-}
+loadConfig =
+   |> pure (baseUrlText match
+     | Some \"\"  => defaultBaseUrl
+     | Some raw => raw
+     | None     => defaultBaseUrl
+   )#resolvedBaseUrl
+   |> pure {
+     apiKey: apiKeyText ?? \"\"
+     model: modelText ?? defaultModel
+     baseUrl: resolvedBaseUrl
+     organization: organizationText
+   }
 ";
         let expected = "\
 module demo
 
-loadConfig = do Effect {
-  resolvedBaseUrl = baseUrlText match
-    | Some \"\"  => defaultBaseUrl
-    | Some raw => raw
-    | None     => defaultBaseUrl
-
-  pure {
-    apiKey: apiKeyText ?? \"\"
-    model: modelText ?? defaultModel
-    baseUrl: resolvedBaseUrl
-    organization: organizationText
-  }
+loadConfig = |> pure (baseUrlText match
+  | Some \"\"  => defaultBaseUrl
+  | Some raw => raw
+  | None     => defaultBaseUrl
+)#resolvedBaseUrl
+|> pure {
+  apiKey: apiKeyText ?? \"\"
+  model: modelText ?? defaultModel
+  baseUrl: resolvedBaseUrl
+  organization: organizationText
 }
 ";
         let formatted = format_text(input);
@@ -830,7 +826,7 @@ mod align_tests {
 
     #[test]
     fn align_consecutive_eq_bindings() {
-        let input = "module demo\n\nmain = do Effect {\n  vendor = bill.billerName\n  amount = bill.amountDue ?? 0.0\n  dueAt = bill.dueDate ?? \"\"\n  logicalKey = sha256 \"{emailId}:{vendor}:{toText amount}\"\n  billId = sha256 \"{emailId}:{pv}:{logicalKey}\"\n}\n";
+        let input = "module demo\n\nvendor = bill.billerName\namount = bill.amountDue ?? 0.0\ndueAt = bill.dueDate ?? \"\"\nlogicalKey = sha256 \"{emailId}:{vendor}:{toText amount}\"\nbillId = sha256 \"{emailId}:{pv}:{logicalKey}\"\n";
         let out = format_text(input);
         let lines: Vec<&str> = out.lines().collect();
         let eq_cols: Vec<usize> = lines
@@ -968,16 +964,16 @@ mod garbage_bracket_tests {
         );
     }
 
-    /// Real-world scenario: user accidentally deletes a closing brace in a do-block.
+    /// Real-world scenario: user accidentally leaves a flow body unbalanced.
     #[test]
-    fn missing_closing_brace_in_do_block() {
+    fn missing_closing_delimiter_in_flow_body() {
         let input = "\
 module demo
 
-main = do Effect {
-  x <- foo
-  y <- bar
-  pure x
+main =
+   |> foo#x
+   |> bar (
+   |> pure x
 
 helper = a => a + 1
 ";
@@ -1008,11 +1004,10 @@ State = { count: Int, name: Text }
 f : State -> State
 f = s => s <| { count: s.count + 1 }
 
-g = do Effect {
-  x <- pure 1
-  y <- pure (x + 2)
-  pure (x + y)
-}
+g =
+   |> pure 1#x
+   |> pure (x + 2)#y
+   |> pure (x + y)
 
 view = state =>
   ~<gtk>

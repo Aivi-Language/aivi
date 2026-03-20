@@ -1,8 +1,5 @@
-do Effect {
-  // setup
-  loop state = initialValue => {
-    // body may use `<-` binds, pure `=` lets, and if/match
-    // `recurse newState` restarts the loop
-    // omitting `recurse` in a branch terminates the loop
-  }
-}
+initialValue
+@|>state
+ |> step#next
+||>Done value => pure value
+||>Continue state2 => recurse state state2

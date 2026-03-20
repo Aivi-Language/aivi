@@ -7,7 +7,7 @@ use aivi.testing
 // --- Record creation and field access ---
 
 @test "record field access"
-recordFieldAccess = do Effect {
+recordFieldAccess = {
   r = { x: 1, y: 2, name: "test" }
   assertEq r.x 1
   assertEq r.y 2
@@ -17,7 +17,7 @@ recordFieldAccess = do Effect {
 // --- Record patching ---
 
 @test "record patch updates field"
-patchUpdates = do Effect {
+patchUpdates = {
   r  = { x: 1, y: 2 }
   r2 = r <| { y: 9 }
   assertEq r2.y 9
@@ -25,7 +25,7 @@ patchUpdates = do Effect {
 }
 
 @test "record patch computed update"
-patchComputed = do Effect {
+patchComputed = {
   r  = { age: 30 }
   r2 = r <| { age: _ + 1 }
   assertEq r2.age 31
@@ -34,7 +34,7 @@ patchComputed = do Effect {
 // --- Nested records ---
 
 @test "nested record access"
-nestedRecordAccess = do Effect {
+nestedRecordAccess = {
   r = { user: { name: "A", age: 25 }, active: True }
   assertEq r.user.name "A"
   assertEq r.active True
@@ -45,6 +45,6 @@ nestedRecordAccess = do Effect {
 getName = person => person.name
 
 @test "record passed to function"
-recordToFunction = do Effect {
+recordToFunction = {
   assertEq (getName { name: "Bob", age: 30 }) "Bob"
 }

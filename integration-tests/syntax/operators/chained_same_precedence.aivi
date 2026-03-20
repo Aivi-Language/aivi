@@ -13,7 +13,7 @@ use aivi.testing
 addLeft = 1 + 2 + 3
 
 @test "addition is left-associative"
-addLeftAssoc = do Effect {
+addLeftAssoc = {
   assertEq addLeft 6
 }
 
@@ -23,7 +23,7 @@ addLeftAssoc = do Effect {
 subLeft = 10-3-2
 
 @test "subtraction is left-associative"
-subLeftAssoc = do Effect {
+subLeftAssoc = {
   assertEq subLeft 5
 }
 
@@ -32,7 +32,7 @@ subLeftAssoc = do Effect {
 mulLeft = 2 * 3 * 4
 
 @test "multiplication is left-associative"
-mulLeftAssoc = do Effect {
+mulLeftAssoc = {
   assertEq mulLeft 24
 }
 
@@ -42,7 +42,7 @@ mulLeftAssoc = do Effect {
 divLeft = 24 / 4 / 2
 
 @test "division is left-associative"
-divLeftAssoc = do Effect {
+divLeftAssoc = {
   assertEq divLeft 3
 }
 
@@ -51,6 +51,6 @@ divLeftAssoc = do Effect {
 mixedLeft = 10-3 + 2
 
 @test "mixed add/sub chain left"
-mixedAddSubLeft = do Effect {
+mixedAddSubLeft = {
   assertEq mixedLeft 9
 }

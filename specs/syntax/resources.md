@@ -4,7 +4,7 @@
 AIVI v0.2 manages acquisition and release with the `@cleanup` flow modifier. Register cleanup on the line that acquires a handle, and the runtime guarantees that finalization runs when the enclosing flow scope exits.
 <!-- /quick-info -->
 
-This page covers **resource-style cleanup semantics**. The user-authored `resource { ... }` block is no longer part of the current surface syntax.
+This page covers **resource-style cleanup semantics**. Legacy cleanup blocks are no longer part of the current surface syntax.
 
 ## Basic pattern
 
@@ -35,12 +35,15 @@ Cleanup registration is structural rather than ad hoc.
 ## Multiple managed handles
 
 ```aivi
-compareFiles = leftPath rightPath =>
-  leftPath
-     |> file.open @cleanup file.close #left
-     |> _ => rightPath
+compareWithRight = rightPath => left =>
+  rightPath
      |> file.open @cleanup file.close #right
      |> compareHandles left right
+
+compareFiles = leftPath rightPath =>
+  leftPath
+     |> file.open @cleanup file.close
+     |> compareWithRight rightPath
 ```
 
 When that flow exits, `right` closes before `left`.

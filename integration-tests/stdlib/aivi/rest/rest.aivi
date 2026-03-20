@@ -27,16 +27,16 @@ loadAttemptStatus = request => fetch request
 loadErrorPayload : Request -> Effect Text ErrorPayload
 loadErrorPayload = request => fetch request
 
-startServer = address => handler => do Effect {
+startServer = address => handler => {
   result <- attempt (httpServer.listen { address: address } handler)
   server <- assertOk result
-  _      <- sleep 25
+  sleep 25
   pure server
 }
 
-stopServer = server => do Effect {
+stopServer = server => {
   result <- attempt (httpServer.stop server)
-  _      <- assertOk result
+  assertOk result
   pure Unit
 }
 
@@ -64,7 +64,7 @@ missingJson    = [123, 34, 101, 114, 114, 111, 114, 34, 58, 34, 109, 105, 115, 1
 attemptOneJson = [123, 34, 97, 116, 116, 101, 109, 112, 116, 34, 58, 49, 125]
 
 @test "rest get decodes json response"
-restGetDecodesJsonResponse = do Effect {
+restGetDecodesJsonResponse = {
   handler = _ => pure (jsonReply 200 userJson)
 
   server <- startServer "127.0.0.1:39101" handler
@@ -75,7 +75,7 @@ restGetDecodesJsonResponse = do Effect {
 }
 
 @test "rest fetch uses bearer token and decodes body"
-restFetchUsesBearerTokenAndDecodesBody = do Effect {
+restFetchUsesBearerTokenAndDecodesBody = {
   handler = request => pure (
     if isEchoPost request
       then jsonReply 200 request.body
@@ -98,7 +98,7 @@ restFetchUsesBearerTokenAndDecodesBody = do Effect {
 }
 
 @test "rest fetch strict status returns io error"
-restFetchStrictStatusReturnsIoError = do Effect {
+restFetchStrictStatusReturnsIoError = {
   handler = _ => pure (jsonReply 404 missingJson)
 
   server <- startServer "127.0.0.1:39103" handler
@@ -116,15 +116,15 @@ restFetchStrictStatusReturnsIoError = do Effect {
   )
   _ <- stopServer server
   result match
-    | Err err => do Effect {
-        _ <- assert_eq (constructorName err) "IOError"
+    | Err err => {
+        assert_eq (constructorName err) "IOError"
         assert_eq (List.length (source.decodeErrors err)) 0
       }
     | Ok _ => fail "expected strict status failure"
 }
 
 @test "rest fetch decodes non 2xx body when strict status is disabled"
-restFetchDecodesNon2xxBodyWhenStrictStatusIsDisabled = do Effect {
+restFetchDecodesNon2xxBodyWhenStrictStatusIsDisabled = {
   handler = _ => pure (jsonReply 404 missingJson)
 
   server  <- startServer "127.0.0.1:39104" handler
@@ -143,9 +143,9 @@ restFetchDecodesNon2xxBodyWhenStrictStatusIsDisabled = do Effect {
 }
 
 @test "rest fetch timeout returns io error"
-restFetchTimeoutReturnsIoError = do Effect {
-  handler = request => do Effect {
-    _ <- attempt (sleep 80)
+restFetchTimeoutReturnsIoError = {
+  handler = request => {
+    attempt (sleep 80)
     pure (jsonReply 200 request.body)
   }
 
@@ -164,22 +164,22 @@ restFetchTimeoutReturnsIoError = do Effect {
   )
   _ <- stopServer server
   result match
-    | Err err => do Effect {
-        _ <- assert_eq (constructorName err) "IOError"
+    | Err err => {
+        assert_eq (constructorName err) "IOError"
         assert_eq (List.length (source.decodeErrors err)) 0
       }
     | Ok _ => fail "expected timeout failure"
 }
 
 @test "rest fetch retries after timeout"
-restFetchRetriesAfterTimeout = do Effect {
+restFetchRetriesAfterTimeout = {
   attempts = reactive.signal 0
-  handler  = request => do Effect {
+  handler  = request => {
     _       = reactive.update attempts (_ + 1)
     current = reactive.get attempts
     current match
-      | 1 => do Effect {
-          _ <- attempt (sleep 80)
+      | 1 => {
+          attempt (sleep 80)
           pure (jsonReply 200 attemptOneJson)
         }
       | _ => pure (jsonReply 200 request.body)

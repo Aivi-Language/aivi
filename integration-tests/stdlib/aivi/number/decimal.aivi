@@ -7,7 +7,7 @@ use aivi.math (abs)
 use aivi.number.decimal
 
 @test "decimal helpers and domain arithmetic"
-decimal_helpers_and_domain_arithmetic = do Effect {
+decimal_helpers_and_domain_arithmetic = {
   value    = fromFloat 3.14159
   rounded  = round value 2
   total    = fromFloat 1.25 + fromFloat 2.75

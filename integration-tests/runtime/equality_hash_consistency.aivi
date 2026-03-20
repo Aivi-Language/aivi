@@ -13,37 +13,37 @@ use aivi.testing
 // ---- Reflexivity ----
 
 @test "integer reflexivity"
-intRefl = do Effect {
+intRefl = {
   x = 42
   assert (x == x)
 }
 
 @test "float reflexivity for finite values"
-floatRefl = do Effect {
+floatRefl = {
   x = 3.14
   assert (x == x)
 }
 
 @test "text reflexivity"
-textRefl = do Effect {
+textRefl = {
   s = "hello"
   assert (s == s)
 }
 
 @test "list reflexivity"
-listRefl = do Effect {
+listRefl = {
   xs = [1, 2, 3]
   assert (xs == xs)
 }
 
 @test "record reflexivity"
-recordRefl = do Effect {
+recordRefl = {
   r = { name: "alice", age: 30 }
   assert (r == r)
 }
 
 @test "ADT reflexivity"
-adtRefl = do Effect {
+adtRefl = {
   v = Some 99
   assert (v == v)
 }
@@ -51,31 +51,31 @@ adtRefl = do Effect {
 // ---- Structural equality (same value, different binding) ----
 
 @test "equal integers are equal"
-intEq = do Effect {
+intEq = {
   assert (7 == 7)
   assert (0 == 0)
   assert ((-1) == (-1))
 }
 
 @test "equal texts are equal"
-textEq = do Effect {
+textEq = {
   assert ("world" == "world")
   assert ("" == "")
 }
 
 @test "equal lists are equal"
-listEq = do Effect {
+listEq = {
   assert ([10, 20, 30] == [10, 20, 30])
   assert ([] == [])
 }
 
 @test "equal records are equal"
-recordEq = do Effect {
+recordEq = {
   assert ({ x: 1, y: 2 } == { x: 1, y: 2 })
 }
 
 @test "equal ADT values are equal"
-adtEq = do Effect {
+adtEq = {
   assert (Some "test" == Some "test")
   assert (None == None)
 }
@@ -83,7 +83,7 @@ adtEq = do Effect {
 // ---- Symmetry ----
 
 @test "equality is symmetric for integers"
-intSymmetry = do Effect {
+intSymmetry = {
   // if a == b then b == a
   a    = 42
   b    = 42
@@ -94,7 +94,7 @@ intSymmetry = do Effect {
 }
 
 @test "inequality is symmetric for integers"
-intIneqSymmetry = do Effect {
+intIneqSymmetry = {
   assert (1 != 2)
   assert (2 != 1)
 }
@@ -102,25 +102,25 @@ intIneqSymmetry = do Effect {
 // ---- Inequality ----
 
 @test "different integers are not equal"
-intNeq = do Effect {
+intNeq = {
   assert (1 != 2)
   assert ((-1) != 1)
 }
 
 @test "different texts are not equal"
-textNeq = do Effect {
+textNeq = {
   assert ("abc" != "def")
   assert ("abc" != "ABC")
 }
 
 @test "different lists are not equal"
-listNeq = do Effect {
+listNeq = {
   assert ([1, 2] != [1, 2, 3])
   assert ([1, 2, 3] != [1, 2, 4])
 }
 
 @test "Some and None are not equal"
-someNoneNeq = do Effect {
+someNoneNeq = {
   assert (Some 1 != None)
   assert (None != Some 1)
 }
@@ -128,17 +128,17 @@ someNoneNeq = do Effect {
 // ---- Empty containers ----
 
 @test "empty lists are equal"
-emptyListEq = do Effect {
+emptyListEq = {
   assert ([] == [])
 }
 
 @test "nested list equality"
-nestedListEq = do Effect {
+nestedListEq = {
   assert ([[1, 2], [3, 4]] == [[1, 2], [3, 4]])
 }
 
 @test "tuple equality"
-tupleEq = do Effect {
+tupleEq = {
   assert ((1, "hello") == (1, "hello"))
   assert ((1, "hello") != (1, "world"))
 }

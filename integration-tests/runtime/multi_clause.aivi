@@ -19,13 +19,13 @@ toInt =
   | False2 => 0
 
 @test "multi-clause not"
-multiClauseNot = do Effect {
+multiClauseNot = {
   assertEq (not2 True2) False2
   assertEq (not2 False2) True2
 }
 
 @test "multi-clause toInt"
-multiClauseToInt = do Effect {
+multiClauseToInt = {
   assertEq (toInt True2) 1
   assertEq (toInt False2) 0
 }

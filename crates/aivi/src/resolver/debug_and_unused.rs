@@ -705,11 +705,11 @@ users = db.relation "users" [
   { name: "name", type: db.Varchar 120, constraints: [db.NotNull], default: None }
 ] []
 
-main = do Effect {
-  _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
-  _ <- db.runMigrations [users]
-  _ <- db.insert users { id: 1, name: "Alice" }
-  _ <- db.rows users[name == "Alice"]
+main = {
+  _configured = db.configure { driver: db.Sqlite, url: ":memory:" }
+  _migrated = db.runMigrations [users]
+  _inserted = db.insert users { id: 1, name: "Alice" }
+  _rows = db.rows users[name == "Alice"]
   db.first users
 }
 "#;
@@ -973,10 +973,10 @@ use aivi.reactive
 
 next = { count: 1 } |> count + 1
 
-derived = do Effect {
+derived = {
   state = signal { count: 1 }
   nextSignal = state ->> count + 1
-  pure nextSignal
+  nextSignal
 }
 "#;
 
@@ -1067,10 +1067,10 @@ f = opt =>
         let source = r#"
 module test.block_scope
 
-f = do Effect {
-  x <- pure 1
+f = {
+  x = 1
   y = 2
-  pure (x + y)
+  x + y
 }
 "#;
         let (mut modules, diags) =

@@ -1,6 +1,5 @@
 loadPort : Text -> Result ConfigError Port
-loadPort = rawPort => do Result {
-  parsedNumber <- parsePortNumber rawPort
-  validPort    <- validatePort parsedNumber
-  Ok validPort
-}
+loadPort = rawPort =>
+  parsePortNumber rawPort match
+    | Ok parsedNumber => validatePort parsedNumber
+    | Err err         => Err err

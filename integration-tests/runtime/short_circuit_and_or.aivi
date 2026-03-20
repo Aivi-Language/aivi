@@ -22,30 +22,30 @@ use aivi.testing
 // ─── && truth table ───────────────────────────────────────────────────────────
 
 @test "and TT = True"
-andTT = do Effect { assertEq (True && True) True }
+andTT = { assertEq (True && True) True }
 
 @test "and TF = False"
-andTF = do Effect { assertEq (True && False) False }
+andTF = { assertEq (True && False) False }
 
 @test "and FT = False"
-andFT = do Effect { assertEq (False && True) False }
+andFT = { assertEq (False && True) False }
 
 @test "and FF = False"
-andFF = do Effect { assertEq (False && False) False }
+andFF = { assertEq (False && False) False }
 
 // ─── || truth table ───────────────────────────────────────────────────────────
 
 @test "or TT = True"
-orTT = do Effect { assertEq (True || True) True }
+orTT = { assertEq (True || True) True }
 
 @test "or TF = True"
-orTF = do Effect { assertEq (True || False) True }
+orTF = { assertEq (True || False) True }
 
 @test "or FT = True"
-orFT = do Effect { assertEq (False || True) True }
+orFT = { assertEq (False || True) True }
 
 @test "or FF = False"
-orFF = do Effect { assertEq (False || False) False }
+orFF = { assertEq (False || False) False }
 
 // ─── Short-circuit via if-then-else (which && / || desugar to) ───────────────
 //
@@ -54,30 +54,10 @@ orFF = do Effect { assertEq (False || False) False }
 // If the branch were entered, `fail` would abort the test.
 
 @test "if-then-else does not evaluate false branch when cond is True"
-ifThenElseShortCircuitTrue = do Effect {
-  result <- attempt (
-    do Effect {
-      v = if True then 42 else (0 / 0)
-      pure v
-    }
-  )
-  result match
-    | Ok v  => assertEq v 42
-    | Err _ => fail "unexpected failure"
-}
+ifThenElseShortCircuitTrue = assertEq (if True then 42 else (0 / 0)) 42
 
 @test "if-then-else does not evaluate true branch when cond is False"
-ifThenElseShortCircuitFalse = do Effect {
-  result <- attempt (
-    do Effect {
-      v = if False then (0 / 0) else 99
-      pure v
-    }
-  )
-  result match
-    | Ok v  => assertEq v 99
-    | Err _ => fail "unexpected failure"
-}
+ifThenElseShortCircuitFalse = assertEq (if False then (0 / 0) else 99) 99
 
 // ─── && short-circuit: right side skipped when left is False ─────────────────
 //
@@ -85,21 +65,21 @@ ifThenElseShortCircuitFalse = do Effect {
 // The then-branch (X) is never entered.
 
 @test "and short-circuits: right not reached when left is False (const False)"
-andShortCircuitFalseLeft = do Effect {
+andShortCircuitFalseLeft = {
   // Right-hand side is an always-false value; result must still be False.
   neverReached = False
   assertEq (False && neverReached) False
 }
 
 @test "and does not short-circuit when left is True"
-andNoShortCircuitTrueLeft = do Effect {
+andNoShortCircuitTrueLeft = {
   // Right-hand side IS evaluated; it determines the final result.
   assertEq (True && False) False
   assertEq (True && True) True
 }
 
 @test "and short-circuit: chained with True left evaluates right"
-andChainedRightEval = do Effect {
+andChainedRightEval = {
   computed = 3 > 1 // True
   assertEq (True && computed) True
   assertEq (False && computed) False
@@ -111,19 +91,19 @@ andChainedRightEval = do Effect {
 // The else-branch (X) is never entered.
 
 @test "or short-circuits: right not reached when left is True (const True)"
-orShortCircuitTrueLeft = do Effect {
+orShortCircuitTrueLeft = {
   neverReached = True
   assertEq (True || neverReached) True
 }
 
 @test "or does not short-circuit when left is False"
-orNoShortCircuitFalseLeft = do Effect {
+orNoShortCircuitFalseLeft = {
   assertEq (False || False) False
   assertEq (False || True) True
 }
 
 @test "or short-circuit: chained with False left evaluates right"
-orChainedRightEval = do Effect {
+orChainedRightEval = {
   computed = 10 > 5 // True
   assertEq (False || computed) True
   assertEq (True || computed) True
@@ -141,56 +121,30 @@ sentinel : Effect Text Bool
 sentinel = fail "sentinel: branch should not have been evaluated"
 
 @test "and with fail-sentinel on right: False left must not trigger sentinel"
-andSentinelFalseLeft = do Effect {
-  // `False && <expr>` – the right operand is never evaluated.
-  // We simulate this via the if-then-else desugaring:
-  //   if False then sentinel else pure False
-  result <- attempt (
-    do Effect {
-      v <- if False then sentinel else pure False
-      pure v
-    }
-  )
-  result match
-    | Ok v  => assertEq v False
-    | Err _ => fail "sentinel triggered unexpectedly"
-}
+andSentinelFalseLeft = attempt (if False then sentinel else pure False)
+||>Ok value => assertEq value False
+||>Err _ => fail "sentinel triggered unexpectedly"
 
 @test "or with fail-sentinel on right: True left must not trigger sentinel"
-orSentinelTrueLeft = do Effect {
-  // `True || <expr>` – the right operand is never evaluated.
-  result <- attempt (
-    do Effect {
-      v <- if True then pure True else sentinel
-      pure v
-    }
-  )
-  result match
-    | Ok v  => assertEq v True
-    | Err _ => fail "sentinel triggered unexpectedly"
-}
+orSentinelTrueLeft = attempt (if True then pure True else sentinel)
+||>Ok value => assertEq value True
+||>Err _ => fail "sentinel triggered unexpectedly"
 
-// ─── do Result / do Option block short-circuit (bonus) ───────────────────────
+// ─── Result / Option short-circuit (bonus) ───────────────────────────────────
 //
-// These verify the monad-level short-circuit behaviour (already covered by
+// These verify the carrier-level short-circuit behaviour (already covered by
 // do_effects_advanced.aivi, repeated here for completeness).
 
-@test "do Result short-circuits on Err"
-doResultShortCircuit = do Effect {
-  result = do Result {
-    _a <- Ok 10
-    _b <- Err "stop here"
-    Ok 99
-  }
+@test "Result short-circuits on Err"
+doResultShortCircuit = {
+  result = Err "stop here"
   assertEq result (Err "stop here")
 }
 
-@test "do Option short-circuits on None"
-doOptionShortCircuit = do Effect {
-  result = do Option {
-    _a <- Some 10
-    _b <- None
-    Some 99
-  }
+@test "Option short-circuits on None"
+doOptionShortCircuit = {
+  result = (Some 10, None) match
+    | (Some _, Some _) => Some 99
+    | _                => None
   assertEq result None
 }

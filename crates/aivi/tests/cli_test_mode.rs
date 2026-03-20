@@ -49,9 +49,7 @@ use aivi.testing
 use demo.helper (value)
 
 @test "imports decorated helper"
-importsDecoratedHelper = do Effect {
-  assertEq value 1
-}
+importsDecoratedHelper = assertEq value 1
 "#,
     )
     .expect("write main");
@@ -91,10 +89,7 @@ use aivi
 use aivi.testing
 
 @test "snapshot project mode"
-snapshotProjectMode = do Effect {
-  data = { name: "Ada", age: 42 }
-  assertSnapshot "record_test" data
-}
+snapshotProjectMode = assertSnapshot "record_test" { name: "Ada", age: 42 }
 "#,
     )
     .expect("write main.aivi");

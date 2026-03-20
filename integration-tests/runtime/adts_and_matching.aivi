@@ -17,12 +17,12 @@ unwrapOr = d opt => opt match
   | Some x => x
 
 @test "option unwrapOr some"
-optionUnwrapSome = do Effect {
+optionUnwrapSome = {
   assertEq (unwrapOr 0 (Some 5)) 5
 }
 
 @test "option unwrapOr none"
-optionUnwrapNone = do Effect {
+optionUnwrapNone = {
   assertEq (unwrapOr 7 None) 7
 }
 
@@ -35,7 +35,7 @@ area = s => s match
   | Point    => 0
 
 @test "multi-constructor shape area"
-shapeArea = do Effect {
+shapeArea = {
   assertEq (area (Circle 5)) 25
   assertEq (area (Rect 3 4)) 12
   assertEq (area Point) 0
@@ -49,7 +49,7 @@ isSome = o => o match
   | None   => False
 
 @test "nested option matching"
-nestedOptionMatching = do Effect {
+nestedOptionMatching = {
   assertEq (isSome (Some 1)) True
   assertEq (isSome None) False
 }
@@ -62,7 +62,7 @@ describe = s => s match
   | _        => "other"
 
 @test "wildcard in match"
-wildcardMatch = do Effect {
+wildcardMatch = {
   assertEq (describe (Circle 1)) "circle"
   assertEq (describe (Rect 1 1)) "other"
   assertEq (describe Point) "other"

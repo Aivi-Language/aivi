@@ -13,11 +13,11 @@ options  = [None, Some 1, None, Some 2]
 someOnly = options |> filter (Some _)
 
 @test "pattern predicate with guard"
-patternPredicateWithGuard = do Effect {
+patternPredicateWithGuard = {
   assertEq passing [Ok 15, Ok 20]
 }
 
 @test "constructor predicate without guard"
-constructorPredicate = do Effect {
+constructorPredicate = {
   assertEq someOnly [Some 1, Some 2]
 }

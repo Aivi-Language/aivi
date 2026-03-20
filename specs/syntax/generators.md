@@ -2,7 +2,7 @@
 
 AIVI v0.2 uses flat flow syntax for zero-many workflows. The main tool is `*|>`, which fans out over an iterable, runs a per-item fan-out body, and rejoins with an ordinary list result at `*-|`.
 
-There is no separate `generate { ... }` surface in the current language.
+There is no separate legacy generator-block surface in the current language.
 
 ## The basic shape
 

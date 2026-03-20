@@ -14,7 +14,7 @@ subject = "Re: {maybeEmail ?? " "}"
 withBrace = "prefix {if True then "a}b" else "c"} suffix"
 
 @test "nested string literal in interpolation"
-testNestedString = do Effect {
+testNestedString = {
   assertEq subject "Re: hello@example.com"
   assertEq withBrace "prefix a}b suffix"
 }

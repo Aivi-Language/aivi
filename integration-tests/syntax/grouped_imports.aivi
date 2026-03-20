@@ -10,6 +10,6 @@ use aivi (
 )
 
 @test "grouped imports resolve correctly"
-groupedImportsWork = do Effect {
+groupedImportsWork = {
   assertEq (toUpper "hello") "HELLO"
 }

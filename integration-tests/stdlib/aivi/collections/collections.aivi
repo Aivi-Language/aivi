@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.collections
 
 @test "deque"
-deque_functional = do Effect {
+deque_functional = {
   d0 = Deque.empty
   d1 = Deque.pushBack 1 d0
   d2 = Deque.pushFront 0 d1
@@ -16,7 +16,7 @@ deque_functional = do Effect {
 
   res = Deque.popFront d2
   res match
-    | Some (val, d3) => do Effect {
+    | Some (val, d3) => {
         assert (val == 0)
         assert (Deque.peekFront d3 == Some 1)
       }
@@ -24,7 +24,7 @@ deque_functional = do Effect {
 }
 
 @test "heap"
-heap_functional = do Effect {
+heap_functional = {
   h0 = Heap.empty
   h1 = Heap.push 3 h0
   h2 = Heap.push 1 h1
@@ -34,7 +34,7 @@ heap_functional = do Effect {
 
   res = Heap.popMin h3
   res match
-    | Some (val, h4) => do Effect {
+    | Some (val, h4) => {
         assert (val == 1)
         assert (Heap.peekMin h4 == Some 2)
       }
@@ -42,7 +42,7 @@ heap_functional = do Effect {
 }
 
 @test "heap size"
-heapSize = do Effect {
+heapSize = {
   h0 = Heap.empty
   h1 = Heap.push 3 h0
   h2 = Heap.push 1 h1
@@ -52,21 +52,21 @@ heapSize = do Effect {
 }
 
 @test "heap from list"
-heapFromList = do Effect {
+heapFromList = {
   h = Heap.fromList [5, 1, 3, 2, 4]
   assert (Heap.size h == 5)
   assert (Heap.peekMin h == Some 1)
 }
 
 @test "heap tuple priority"
-heapTuplePriority = do Effect {
+heapTuplePriority = {
   h0  = Heap.empty
   h1  = Heap.push (3, "c") h0
   h2  = Heap.push (1, "a") h1
   h3  = Heap.push (2, "b") h2
   res = Heap.popMin h3
   res match
-    | Some ((w, n), _rest) => do Effect {
+    | Some ((w, n), _rest) => {
         assert (w == 1)
         assert (n == "a")
       }
@@ -74,7 +74,7 @@ heapTuplePriority = do Effect {
 }
 
 @test "map"
-map_functional = do Effect {
+map_functional = {
   m0 = Map.empty
   m1 = Map.insert 1 "one" m0
 
@@ -89,7 +89,7 @@ map_functional = do Effect {
 }
 
 @test "queue"
-queue_functional = do Effect {
+queue_functional = {
   q0 = Queue.empty
   q1 = Queue.enqueue 1 q0
   q2 = Queue.enqueue 2 q1
@@ -98,7 +98,7 @@ queue_functional = do Effect {
 
   res = Queue.dequeue q2
   res match
-    | Some (val, q3) => do Effect {
+    | Some (val, q3) => {
         assert (val == 1)
         assert (Queue.peek q3 == Some 2)
       }
@@ -106,7 +106,7 @@ queue_functional = do Effect {
 }
 
 @test "set"
-set_functional = do Effect {
+set_functional = {
   s0 = Set.empty
   s1 = Set.insert 1 s0
   assert (Set.size s0 == 0)

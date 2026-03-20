@@ -5,11 +5,10 @@ use aivi::{format_text_with_options, BraceStyle, FormatOptions};
 fn test_fmt_basic_indentation() {
     let input = r#"
 module Test
-main = do Effect {
-  x = 1
-  _ <- print x
-}"#;
-    let expected = "module Test\nmain = do Effect {\n  x = 1\n  _ <- print x\n}\n";
+main =
+|> pure 1#x
+|> print x"#;
+    let expected = "module Test\nmain = |> pure 1#x\n  |> print x\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -114,15 +113,13 @@ fn test_fmt_signal_matcher_pipe_blocks_indent_after_signal_derive() {
 #[test]
 fn test_fmt_signal_matcher_pipe_block_preserves_block_rhs_indentation_style() {
     let input = r#"
-main = do Effect {
-  aiSettingsOpen = shellState ->>
-    | Some AiSettingsSection => True
-    | _                      => False
+aiSettingsOpen = shellState ->>
+| Some AiSettingsSection => True
+| _                      => False
 
-  assertEq aiSettingsOpen False
-}
+main = assertEq aiSettingsOpen False
 "#;
-    let expected = "main = do Effect {\n  aiSettingsOpen = shellState ->>\n    | Some AiSettingsSection => True\n    | _                      => False\n\n  assertEq aiSettingsOpen False\n}\n";
+    let expected = "aiSettingsOpen = shellState ->>\n  | Some AiSettingsSection => True\n  | _                      => False\n\nmain = assertEq aiSettingsOpen False\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -290,33 +287,29 @@ sum = xs => xs match
   | [x, ...rest] => x + sum rest
 
 @test "recursion works"
-recursionWorks = do Effect {
-  _ <- assertEq (sum[1, 2, 3]) 6
-}
+recursionWorks = assertEq (sum[1, 2, 3]) 6
 "#;
-    let expected = "module demo\n\nsum = xs => xs match\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test \"recursion works\"\nrecursionWorks = do Effect {\n  _ <- assertEq (sum[1, 2, 3]) 6\n}\n";
+    let expected = "module demo\n\nsum = xs => xs match\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test \"recursion works\"\nrecursionWorks = assertEq (sum[1, 2, 3]) 6\n";
     assert_eq!(format_text(input), expected);
 }
 
 #[test]
-fn test_fmt_aligns_adjacent_do_binds_and_restarts_after_non_bind_lines() {
+fn test_fmt_aligns_adjacent_flow_lines_across_definitions() {
     let input = r#"
 module demo
 
-main = do Effect {
-  short <- a
-  muchLongerName <- bb
-  pure 1
-  x <- c
-  yy <- dd
-}
+main =
+|> a#short
+|> bb#muchLongerName
+|> pure 1
+|> c#x
+|> dd#yy
 
-other = do Maybe {
-  a <- one
-  bbbbb <- two
-}
+other =
+|> one
+|> longerName
 "#;
-    let expected = "module demo\n\nmain = do Effect {\n  short          <- a\n  muchLongerName <- bb\n  pure 1\n  x  <- c\n  yy <- dd\n}\n\nother = do Maybe {\n  a     <- one\n  bbbbb <- two\n}\n";
+    let expected = "module demo\n\nmain = |> a#short\n  |> bb#muchLongerName\n  |> pure 1\n  |> c#x\n  |> dd#yy\n\nother = |> one\n  |> longerName\n";
     assert_eq!(format_text(input), expected);
 }
 

@@ -1,4 +1,1 @@
-do Effect {
-  f
-  g
-}
+bind f (afterF => g)

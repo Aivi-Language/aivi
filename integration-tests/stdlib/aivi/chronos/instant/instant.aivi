@@ -7,7 +7,7 @@ use aivi.chronos.instant
 use aivi.chronos.instant (domain Instant)
 
 @test "compare and diff"
-compare_and_diff = do Effect {
+compare_and_diff = {
   start = 2024-01-01T00:00:00Z
   end   = 2024-01-01T00:00:10Z
 
@@ -21,7 +21,7 @@ compare_and_diff = do Effect {
 }
 
 @test "add sub roundtrip"
-add_sub_roundtrip = do Effect {
+add_sub_roundtrip = {
   base = 2024-01-01T00:00:00Z
 
   step = { millis: 1500 }

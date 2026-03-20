@@ -57,8 +57,8 @@ suite('LSP: document formatting', () => {
 
     const formattedText = editor.document.getText();
     assert.ok(
-      formattedText.includes('main = do Effect { _ <- print "hi" }'),
-      `Expected formatter output to normalize spacing inside the effect block, got: ${JSON.stringify(formattedText)}`
+      formattedText.includes('main = print "hi"'),
+      `Expected formatter output to normalize spacing around the assignment, got: ${JSON.stringify(formattedText)}`
     );
 
     await vscode.commands.executeCommand('workbench.action.files.revert');

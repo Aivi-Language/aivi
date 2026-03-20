@@ -8,14 +8,14 @@ use aivi.text
 // --- Length and isEmpty ---
 
 @test "length of text"
-lengthTest = do Effect {
+lengthTest = {
   assertEq (length "hello") 5
   assertEq (length "") 0
   assertEq (length "a") 1
 }
 
 @test "isEmpty"
-isEmptyTest = do Effect {
+isEmptyTest = {
   assertEq (isEmpty "") True
   assertEq (isEmpty "a") False
 }
@@ -23,21 +23,21 @@ isEmptyTest = do Effect {
 // --- Contains, startsWith, endsWith ---
 
 @test "contains"
-containsTest = do Effect {
+containsTest = {
   assertEq (contains "ell" "hello") True
   assertEq (contains "xyz" "hello") False
   assertEq (contains "" "hello") True
 }
 
 @test "startsWith"
-startsWithTest = do Effect {
+startsWithTest = {
   assertEq (startsWith "hel" "hello") True
   assertEq (startsWith "xyz" "hello") False
   assertEq (startsWith "" "hello") True
 }
 
 @test "endsWith"
-endsWithTest = do Effect {
+endsWithTest = {
   assertEq (endsWith "llo" "hello") True
   assertEq (endsWith "xyz" "hello") False
   assertEq (endsWith "" "hello") True
@@ -46,28 +46,28 @@ endsWithTest = do Effect {
 // --- indexOf, lastIndexOf, count ---
 
 @test "indexOf found"
-indexOfFound = do Effect {
+indexOfFound = {
   assertEq (indexOf "ll" "hello") (Some 2)
 }
 
 @test "indexOf not found"
-indexOfNotFound = do Effect {
+indexOfNotFound = {
   assertEq (indexOf "xyz" "hello") None
 }
 
 @test "lastIndexOf"
-lastIndexOfTest = do Effect {
+lastIndexOfTest = {
   assertEq (lastIndexOf "l" "hello world") (Some 9)
 }
 
 @test "count occurrences"
-countTest = do Effect {
+countTest = {
   assertEq (count "l" "hello world") 3
   assertEq (count "z" "hello") 0
 }
 
 @test "compare"
-compareTest = do Effect {
+compareTest = {
   assertEq (compare "a" "b") (-1)
   assertEq (compare "b" "a") 1
   assertEq (compare "a" "a") 0
@@ -76,85 +76,85 @@ compareTest = do Effect {
 // --- Trim ---
 
 @test "trim"
-trimTest = do Effect {
+trimTest = {
   assertEq (trim "  hello  ") "hello"
   assertEq (trim "hello") "hello"
   assertEq (trim "  ") ""
 }
 
 @test "trimStart"
-trimStartTest = do Effect {
+trimStartTest = {
   assertEq (trimStart "  hello  ") "hello  "
 }
 
 @test "trimEnd"
-trimEndTest = do Effect {
+trimEndTest = {
   assertEq (trimEnd "  hello  ") "  hello"
 }
 
 // --- Case conversion ---
 
 @test "toLower"
-toLowerTest = do Effect {
+toLowerTest = {
   assertEq (toLower "HELLO") "hello"
   assertEq (toLower "Hello World") "hello world"
   assertEq (toLower "") ""
 }
 
 @test "toUpper"
-toUpperTest = do Effect {
+toUpperTest = {
   assertEq (toUpper "hello") "HELLO"
   assertEq (toUpper "") ""
 }
 
 @test "capitalize"
-capitalizeTest = do Effect {
+capitalizeTest = {
   assertEq (capitalize "hello") "Hello"
   assertEq (capitalize "") ""
 }
 
 @test "titleCase"
-titleCaseTest = do Effect {
+titleCaseTest = {
   assertEq (titleCase "hello world") "Hello World"
 }
 
 @test "caseFold"
-caseFoldTest = do Effect {
+caseFoldTest = {
   assertEq (caseFold "HELLO") "hello"
 }
 
 // --- Replace ---
 
 @test "replace first occurrence"
-replaceTest = do Effect {
+replaceTest = {
   assertEq (replace "l" "r" "hello") "herlo"
 }
 
 @test "replaceAll"
-replaceAllTest = do Effect {
+replaceAllTest = {
   assertEq (replaceAll "l" "r" "hello") "herro"
 }
 
 @test "remove"
-removeTest = do Effect {
+removeTest = {
   assertEq (remove "l" "hello") "heo"
 }
 
 // --- Split and join ---
 
 @test "split"
-splitTest = do Effect {
+splitTest = {
   assertEq (split "," "a,b,c") ["a", "b", "c"]
   assertEq (split "," "hello") ["hello"]
 }
 
 @test "splitLines"
-splitLinesTest = do Effect {
+splitLinesTest = {
   assertEq (splitLines "a\nb\nc") ["a", "b", "c"]
 }
 
 @test "concat"
-concatTest = do Effect {
+concatTest = {
   assertEq (concat ["a", "b", "c"]) "abc"
   assertEq (concat []) ""
 }
@@ -162,49 +162,49 @@ concatTest = do Effect {
 // --- Slice ---
 
 @test "slice basic"
-sliceBasic = do Effect {
+sliceBasic = {
   assertEq (slice 1 3 "hello") "el"
   assertEq (slice 0 5 "hello") "hello"
 }
 
 @test "slice empty result"
-sliceEmpty = do Effect {
+sliceEmpty = {
   assertEq (slice 3 3 "hello") ""
   assertEq (slice 5 3 "hello") ""
 }
 
 @test "slice negative index"
-sliceNeg = do Effect {
+sliceNeg = {
   assertEq (slice (-2) 5 "hello") "lo"
 }
 
 // --- Pad ---
 
 @test "padStart"
-padStartTest = do Effect {
+padStartTest = {
   assertEq (padStart 8 "0" "hello") "000hello"
 }
 
 @test "padEnd"
-padEndTest = do Effect {
+padEndTest = {
   assertEq (padEnd 8 "." "hello") "hello..."
 }
 
 @test "padStart no padding needed"
-padStartNoPad = do Effect {
+padStartNoPad = {
   assertEq (padStart 3 "0" "hello") "hello"
 }
 
 // --- Repeat and reverse ---
 
 @test "repeat"
-repeatTest = do Effect {
+repeatTest = {
   assertEq (repeat 3 "ab") "ababab"
   assertEq (repeat 0 "ab") ""
 }
 
 @test "reverse"
-reverseTest = do Effect {
+reverseTest = {
   assertEq (reverse "hello") "olleh"
   assertEq (reverse "") ""
   assertEq (reverse "a") "a"
@@ -213,7 +213,7 @@ reverseTest = do Effect {
 // --- Chunk ---
 
 @test "chunk"
-chunkTest = do Effect {
+chunkTest = {
   assertEq (chunk 2 "abcde") ["ab", "cd", "e"]
   assertEq (chunk 3 "abcdef") ["abc", "def"]
 }
@@ -221,31 +221,31 @@ chunkTest = do Effect {
 // --- parseInt and parseFloat ---
 
 @test "parseInt valid"
-parseIntValid = do Effect {
+parseIntValid = {
   assertEq (parseInt "42") (Some 42)
   assertEq (parseInt "-7") (Some (-7))
 }
 
 @test "parseInt invalid"
-parseIntInvalid = do Effect {
+parseIntInvalid = {
   assertEq (parseInt "abc") None
   assertEq (parseInt "") None
 }
 
 @test "parseFloat valid"
-parseFloatValid = do Effect {
+parseFloatValid = {
   assertEq (parseFloat "3.14") (Some 3.14)
 }
 
 @test "parseFloat invalid"
-parseFloatInvalid = do Effect {
+parseFloatInvalid = {
   assertEq (parseFloat "abc") None
 }
 
 // --- debugText ---
 
 @test "debugText on int"
-debugTextInt = do Effect {
+debugTextInt = {
   result = debugText 42
   assertEq result "42"
 }

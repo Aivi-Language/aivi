@@ -7,7 +7,7 @@ use aivi.text (length, toUpper)
 use aivi.testing
 
 @test "@no_prelude with explicit imports works correctly"
-preludeDisabledWorks = do Effect {
+preludeDisabledWorks = {
   assertEq (length "hello") 5
   assertEq (toUpper "world") "WORLD"
 }

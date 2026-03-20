@@ -16,13 +16,13 @@ addParam : Int -> Int
 addParam = x => x + 10
 
 @test "function param x shadows module-level x"
-paramShadow = do Effect {
+paramShadow = {
   assertEq (addParam 5) 15
   assertEq x 0
 }
 
-@test "pattern binding x shadows outer x in do Effect"
-patternShadow = do Effect {
+@test "pattern binding x shadows outer x"
+patternShadow = {
   x      = 99
   (x, y) = (7, 8)
   assertEq x 7
@@ -30,14 +30,14 @@ patternShadow = do Effect {
 }
 
 @test "do-block bind x shadows outer x"
-doBlockBindShadow = do Effect {
+doBlockBindShadow = {
   x = 100
-  x <- pure 42
+  x = 42
   assertEq x 42
 }
 
 @test "match arm binding x shadows outer x, outer unchanged after"
-matchArmShadow = do Effect {
+matchArmShadow = {
   x      = 999
   result = (Some 77) match
     | Some x => x
@@ -47,7 +47,7 @@ matchArmShadow = do Effect {
 }
 
 @test "generator bind x shadows outer x, outer unchanged after"
-generatorBindShadow = do Effect {
+generatorBindShadow = {
   x = 5
   g = generate {
     x <- [1, 2, 3]
@@ -58,20 +58,21 @@ generatorBindShadow = do Effect {
 }
 
 @test "loop state variable x shadows outer x, outer unchanged after"
-loopBindShadow = do Effect {
-  x = 0
-  result <- do Effect {
+loopBindShadow = {
+  x      = 0
+  values = generate {
     loop x = 1 => {
-      if x >= 4 then pure x
+      yield x
+      if x >= 4 then {}
       else recurse (x + 1)
     }
   }
-  assertEq result 4
+  assertEq (toList values) [1, 2, 3, 4]
   assertEq x 0
 }
 
 @test "sequential shadowing: each new x binding hides previous"
-sequentialShadowing = do Effect {
+sequentialShadowing = {
   x = 1
   x = x + 10
   x = x * 2

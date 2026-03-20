@@ -136,10 +136,9 @@ Useful rules:
 
 ```aivi
 saveDraft =
-  event.from (_ =>
+  event.from (
     get draft
       |> persistDraft
-      |> _ => "Saved"
   )
 
 saveMessage = derive saveDraft.result (maybeResult =>

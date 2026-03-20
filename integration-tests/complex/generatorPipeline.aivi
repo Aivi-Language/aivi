@@ -33,13 +33,13 @@ scanFolder = s x => { sum: s.sum + x, acc: [s.sum + x, ...s.acc] }
 scanTotals = xs => reverseList (List.foldl scanFolder { sum: 0, acc: [] } xs).acc
 
 @test "bounded fibonacci via generator"
-generatorFibs = do Effect {
+generatorFibs = {
   fibs = toList (fibsUpTo 20)
   assertEq fibs [0, 1, 1, 2, 3, 5, 8, 13]
 }
 
 @test "prime sieve via range + guard filter"
-generatorPrimes = do Effect {
+generatorPrimes = {
   primes = generate {
     n <- range 2 20
     n -> isPrime n
@@ -49,7 +49,7 @@ generatorPrimes = do Effect {
 }
 
 @test "map and filter pipeline on generator"
-generatorMapFilter = do Effect {
+generatorMapFilter = {
   // Even squares from 1..10
   result = generate {
     n <- range 1 11
@@ -60,7 +60,7 @@ generatorMapFilter = do Effect {
 }
 
 @test "cartesian product via generator bind"
-generatorCartesian = do Effect {
+generatorCartesian = {
   pairs = generate {
     x <- fromList [1, 2, 3]
     y <- fromList [10, 20]
@@ -70,7 +70,7 @@ generatorCartesian = do Effect {
 }
 
 @test "generator reduce for running totals"
-generatorScan = do Effect {
+generatorScan = {
   // Sum of 1..5 = 15; verify via reduce
   total = reduce (acc x => acc + x) 0 (range 1 6)
   assertEq total 15
@@ -81,7 +81,7 @@ generatorScan = do Effect {
 }
 
 @test "generator pipeline: fibs filtered to primes"
-generatorFibPrimes = do Effect {
+generatorFibPrimes = {
   // Fibonacci numbers up to 100 that are also prime
   fibPrimes = generate {
     n <- fibsUpTo 100
@@ -93,7 +93,7 @@ generatorFibPrimes = do Effect {
 }
 
 @test "loop recurse inside generate"
-generatorLoopRecurse = do Effect {
+generatorLoopRecurse = {
   // Collatz sequence from 6 until reaching 1
   collatz = generate {
     loop n = 6 => {

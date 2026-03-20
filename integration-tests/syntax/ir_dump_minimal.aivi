@@ -23,7 +23,7 @@ result = mapList maybeInc [Some 1, None, Some 41]
 expected = [2, 0, 42]
 
 @test "basic IR pipeline end-to-end"
-irDumpMinimalRuns = do Effect {
+irDumpMinimalRuns = {
   assertEq value 3
   assertEq pair (3, "ok")
   assertEq (maybeInc (Some 1)) 2

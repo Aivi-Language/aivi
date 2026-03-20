@@ -5,79 +5,74 @@ use aivi
 use aivi.testing
 
 @test "assert"
-assert_functional = do Effect {
+assert_functional = {
   assert (1 + 1 == 2)
 }
 
 @test "assert false fails"
-assert_false_fails = do Effect {
-  result <- attempt (assert False)
-  result match
-    | Ok _  => assert False
-    | Err e => assertEq e "assertion failed"
+assert_false_fails = {
+  attempt (assert False)
+   |> assertErr
+   |> assertEq "assertion failed"
 }
 
 @test "assert eq"
-assertEq_functional = do Effect {
+assertEq_functional = {
   assertEq (1 + 1) 2
 }
 
 @test "assert eq"
-assert_eq_functional = do Effect {
+assert_eq_functional = {
   assert_eq (1 + 1) 2
 }
 
 @test "assert ok"
-assertOk_functional = do Effect {
-  value <- assertOk (if True then Ok 2 else Err "boom")
-  assertEq value 2
+assertOk_functional = {
+  assertOk (if True then Ok 2 else Err "boom")
+   |> assertEq 2
 }
 
 @test "assert ok fails"
-assertOk_fails = do Effect {
-  result <- attempt (assertOk (if False then Ok 2 else Err "boom"))
-  result match
-    | Ok _  => assert False
-    | Err e => assertEq e "assertOk failed: expected Ok"
+assertOk_fails = {
+  attempt (assertOk (if False then Ok 2 else Err "boom"))
+   |> assertErr
+   |> assertEq "assertOk failed: expected Ok"
 }
 
 @test "assert err"
-assertErr_functional = do Effect {
-  err <- assertErr (if True then Err "boom" else Ok 2)
-  assertEq err "boom"
+assertErr_functional = {
+  assertErr (if True then Err "boom" else Ok 2)
+   |> assertEq "boom"
 }
 
 @test "assert err fails"
-assertErr_fails = do Effect {
-  result <- attempt (assertErr (if False then Err "boom" else Ok 2))
-  result match
-    | Ok _  => assert False
-    | Err e => assertEq e "assertErr failed: expected Err"
+assertErr_fails = {
+  attempt (assertErr (if False then Err "boom" else Ok 2))
+   |> assertErr
+   |> assertEq "assertErr failed: expected Err"
 }
 
 @test "assert some"
-assertSome_functional = do Effect {
-  value <- assertSome (if True then Some 42 else None)
-  assertEq value 42
+assertSome_functional = {
+  assertSome (if True then Some 42 else None)
+   |> assertEq 42
 }
 
 @test "assert some fails"
-assertSome_fails = do Effect {
-  result <- attempt (assertSome (if False then Some 42 else None))
-  result match
-    | Ok _  => assert False
-    | Err e => assertEq e "assertSome failed: expected Some"
+assertSome_fails = {
+  attempt (assertSome (if False then Some 42 else None))
+   |> assertErr
+   |> assertEq "assertSome failed: expected Some"
 }
 
 @test "assert none"
-assertNone_functional = do Effect {
+assertNone_functional = {
   assertNone (if True then None else Some 42)
 }
 
 @test "assert none fails"
-assertNone_fails = do Effect {
-  result <- attempt (assertNone (if False then None else Some 42))
-  result match
-    | Ok _  => assert False
-    | Err e => assertEq e "assertNone failed: expected None"
+assertNone_fails = {
+  attempt (assertNone (if False then None else Some 42))
+   |> assertErr
+   |> assertEq "assertNone failed: expected None"
 }

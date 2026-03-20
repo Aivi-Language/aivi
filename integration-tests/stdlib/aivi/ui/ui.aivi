@@ -7,7 +7,7 @@ use aivi.ui
 use aivi.ui.layout (Px)
 
 @test "html sigil render lowers attributes and handlers"
-html_sigil_render_functional = do Effect {
+html_sigil_render_functional = {
   label = "Run"
   node  = ~<html>
       <button
@@ -34,7 +34,7 @@ html_sigil_render_functional = do Effect {
 }
 
 @test "diff from html sigil produces exact patch ops"
-diff_functional = do Effect {
+diff_functional = {
   old = ~<html><div class="card" data-x="1">Hello</div></html>
   neu = ~<html><div data-x="2">World</div></html>
   ops = diff old neu
@@ -46,7 +46,7 @@ diff_functional = do Effect {
 }
 
 @test "patchToJson encodes all patch variants"
-patchToJson_functional = do Effect {
+patchToJson_functional = {
   ops = [
     SetAttr "root" "data-x" "2"
     RemoveAttr "root" "class"

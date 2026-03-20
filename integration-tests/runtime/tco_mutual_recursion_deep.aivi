@@ -18,7 +18,7 @@ odd  = n => if n == 0 then False else even (n - 1)
 // ─── Small-value correctness ──────────────────────────────────────────────────
 
 @test "even/odd correct for small values"
-evenOddSmall = do Effect {
+evenOddSmall = {
   assertEq (even 0) True
   assertEq (even 2) True
   assertEq (even 4) True
@@ -32,21 +32,21 @@ evenOddSmall = do Effect {
 // ─── Deep mutual recursion – many alternating calls ─────────────────────────
 
 @test "even 5000 terminates and returns True"
-tcoEven5k = do Effect {
+tcoEven5k = {
   assertEq (even 5000) True
 }
 
 @test "odd 5001 terminates and returns True"
-tcoOdd5k = do Effect {
+tcoOdd5k = {
   assertEq (odd 5001) True
 }
 
 @test "even 4999 terminates and returns False"
-tcoEven4999 = do Effect {
+tcoEven4999 = {
   assertEq (even 4999) False
 }
 
 @test "odd 5000 terminates and returns False"
-tcoOdd5kFalse = do Effect {
+tcoOdd5kFalse = {
   assertEq (odd 5000) False
 }

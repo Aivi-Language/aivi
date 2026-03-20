@@ -1,10 +1,8 @@
 // Minimal: only emits fn.enter / fn.exit with timing
 @debug
-processOrder = order => do Effect {
-  validated <- validate order
-  receipt   <- charge validated
-  pure receipt
-}
+processOrder = order =>
+  validate order
+|> charge
 
 // Verbose: traces every pipe step, arguments, and return value
 @debug(pipes, args, return, time)

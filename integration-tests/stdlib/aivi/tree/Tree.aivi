@@ -10,7 +10,7 @@ len = xs => xs match
   | [_, ...rest] => 1 + len rest
 
 @test "traversals"
-traversals = do Effect {
+traversals = {
   t = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
   assertEq (len (dfsPreorder t)) 6
   assertEq (len (dfsPostorder t)) 6
@@ -18,7 +18,7 @@ traversals = do Effect {
 }
 
 @test "from list by builds expected shape"
-fromListByBuildsExpectedShape = do Effect {
+fromListByBuildsExpectedShape = {
   idFn       = x => x
   parentIdFn = x =>
     if x == 1 then None
@@ -39,7 +39,7 @@ fromListByBuildsExpectedShape = do Effect {
 }
 
 @test "from list by rejects multiple roots"
-fromListByRejectsMultipleRoots = do Effect {
+fromListByRejectsMultipleRoots = {
   idFn       = x => x
   parentIdFn = _ => None
   assertEq (fromListBy idFn parentIdFn [1, 2]) None

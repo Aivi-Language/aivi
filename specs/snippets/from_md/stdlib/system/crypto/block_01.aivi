@@ -3,10 +3,8 @@ use aivi.crypto
 fingerprint = sha256 "hello world"
 
 makeSessionToken : Effect Text Text
-makeSessionToken = do Effect {
-  bytes <- randomBytes 32
-  pure (toBase64Url bytes)
-}
+makeSessionToken = randomBytes 32
+  |> toBase64Url
 
 checkPassword : Text -> Text -> Effect Text Bool
 checkPassword = password storedHash => verifyPassword password storedHash

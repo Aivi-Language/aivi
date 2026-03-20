@@ -19,7 +19,7 @@ ExtractionResult = {
 extractionSchema = type.jsonSchema ExtractionResult
 
 @test "type.jsonSchema produces record with json_schema wrapper"
-jsonSchemaHasWrapper = do Effect {
+jsonSchemaHasWrapper = {
   schemaText = toText extractionSchema
   assert (contains "json_schema" schemaText)
   assert (contains "ExtractionResult" schemaText)
@@ -27,7 +27,7 @@ jsonSchemaHasWrapper = do Effect {
 }
 
 @test "type.jsonSchema maps record fields"
-jsonSchemaHasFields = do Effect {
+jsonSchemaHasFields = {
   schemaText = toText extractionSchema
   assert (contains "title" schemaText)
   assert (contains "summary" schemaText)
@@ -36,7 +36,7 @@ jsonSchemaHasFields = do Effect {
 }
 
 @test "type.jsonSchema maps primitive types"
-jsonSchemaMapsPrimitives = do Effect {
+jsonSchemaMapsPrimitives = {
   schemaText = toText extractionSchema
   assert (contains "string" schemaText)
   assert (contains "number" schemaText)

@@ -9,19 +9,19 @@ use aivi.result
 // --- fromInt / toInt ---
 
 @test "fromInt and toInt roundtrip"
-fromToInt = do Effect {
+fromToInt = {
   b = fromInt 255
   assertEq (toInt b) 255
 }
 
 @test "fromInt zero"
-fromIntZero = do Effect {
+fromIntZero = {
   b = fromInt 0
   assertEq (toInt b) 0
 }
 
 @test "fromInt large"
-fromIntLarge = do Effect {
+fromIntLarge = {
   b = fromInt 65535
   assertEq (toInt b) 65535
 }
@@ -29,7 +29,7 @@ fromIntLarge = do Effect {
 // --- fromBytes / toBytes ---
 
 @test "fromBytes and toBytes roundtrip"
-fromToBytes = do Effect {
+fromToBytes = {
   b     = fromInt 42
   bytes = toBytes b
   b2    = fromBytes bytes
@@ -39,14 +39,14 @@ fromToBytes = do Effect {
 // --- zero / ones ---
 
 @test "zero creates all-zero bits"
-zeroTest = do Effect {
+zeroTest = {
   b = zero 2
   assertEq (length b) 16
   assertEq (toInt b) 0
 }
 
 @test "ones creates all-one bits"
-onesTest = do Effect {
+onesTest = {
   b = ones 1
   assertEq (toInt b) 255
 }
@@ -54,7 +54,7 @@ onesTest = do Effect {
 // --- and ---
 
 @test "and operation"
-andTest = do Effect {
+andTest = {
   a      = fromInt 240
   b      = fromInt 170
   result = and a b
@@ -64,7 +64,7 @@ andTest = do Effect {
 // --- or ---
 
 @test "or operation"
-orTest = do Effect {
+orTest = {
   a      = fromInt 240
   b      = fromInt 15
   result = or a b
@@ -74,7 +74,7 @@ orTest = do Effect {
 // --- xor ---
 
 @test "xor operation"
-xorTest = do Effect {
+xorTest = {
   a      = fromInt 240
   b      = fromInt 170
   result = xor a b
@@ -84,7 +84,7 @@ xorTest = do Effect {
 // --- complement ---
 
 @test "complement flips all bits"
-complementTest = do Effect {
+complementTest = {
   b = fromInt 0
   c = complement b
   assertEq (toInt c) -1
@@ -93,14 +93,14 @@ complementTest = do Effect {
 // --- shiftLeft / shiftRight ---
 
 @test "shiftLeft"
-shiftLeftTest = do Effect {
+shiftLeftTest = {
   b      = fromInt 1
   result = shiftLeft 3 b
   assertEq (toInt result) 8
 }
 
 @test "shiftRight"
-shiftRightTest = do Effect {
+shiftRightTest = {
   b      = fromInt 8
   result = shiftRight 3 b
   assertEq (toInt result) 1
@@ -109,21 +109,21 @@ shiftRightTest = do Effect {
 // --- get / set / clear / toggle ---
 
 @test "get bit"
-getBitTest = do Effect {
+getBitTest = {
   b = fromInt 4
   assertEq (get 61 b) True
   assertEq (get 0 b) False
 }
 
 @test "set bit"
-setBitTest = do Effect {
+setBitTest = {
   b  = fromInt 0
   b2 = set 3 b
   assertEq (get 3 b2) True
 }
 
 @test "clear bit"
-clearBitTest = do Effect {
+clearBitTest = {
   b  = fromInt 255
   b2 = clear 56 b
   assertEq (get 56 b2) False
@@ -131,7 +131,7 @@ clearBitTest = do Effect {
 }
 
 @test "toggle bit"
-toggleBitTest = do Effect {
+toggleBitTest = {
   b  = fromInt 0
   b2 = toggle 5 b
   assertEq (get 5 b2) True
@@ -142,7 +142,7 @@ toggleBitTest = do Effect {
 // --- length ---
 
 @test "length of bits"
-lengthTest = do Effect {
+lengthTest = {
   b = fromInt 255
   assertEq (length b) 64
 }
@@ -150,7 +150,7 @@ lengthTest = do Effect {
 // --- slice ---
 
 @test "slice bits"
-sliceTest = do Effect {
+sliceTest = {
   b = fromInt 65535
   s = slice 6 7 b
   assertEq (toInt s) 255
@@ -159,19 +159,19 @@ sliceTest = do Effect {
 // --- popCount ---
 
 @test "popCount"
-popCountTest = do Effect {
+popCountTest = {
   b = fromInt 170
   assertEq (popCount b) 4
 }
 
 @test "popCount all zeros"
-popCountZero = do Effect {
+popCountZero = {
   b = fromInt 0
   assertEq (popCount b) 0
 }
 
 @test "popCount all ones"
-popCountOnes = do Effect {
+popCountOnes = {
   b = ones 1
   assertEq (popCount b) 8
 }
@@ -179,14 +179,14 @@ popCountOnes = do Effect {
 // --- BitStream ---
 
 @test "streamFromBits and streamRemaining"
-streamBasic = do Effect {
+streamBasic = {
   b = fromInt 65535
   s = streamFromBits b
   assertEq (streamRemaining s) 8
 }
 
 @test "streamRead success"
-streamReadOk = do Effect {
+streamReadOk = {
   b      = fromInt 65535
   s      = streamFromBits b
   result = streamRead 1 s
@@ -194,7 +194,7 @@ streamReadOk = do Effect {
 }
 
 @test "streamRead past end"
-streamReadPastEnd = do Effect {
+streamReadPastEnd = {
   b      = fromInt 255
   s      = streamFromBits b
   result = streamRead 10 s
@@ -202,7 +202,7 @@ streamReadPastEnd = do Effect {
 }
 
 @test "streamPeek does not advance"
-streamPeekNoAdvance = do Effect {
+streamPeekNoAdvance = {
   b = fromInt 65535
   s = streamFromBits b
   _ = streamPeek 1 s
@@ -210,7 +210,7 @@ streamPeekNoAdvance = do Effect {
 }
 
 @test "streamPeek past end"
-streamPeekPastEnd = do Effect {
+streamPeekPastEnd = {
   b      = fromInt 255
   s      = streamFromBits b
   result = streamPeek 10 s
@@ -218,7 +218,7 @@ streamPeekPastEnd = do Effect {
 }
 
 @test "streamSkip advances offset"
-streamSkipOk = do Effect {
+streamSkipOk = {
   b      = fromInt 65535
   s      = streamFromBits b
   result = streamSkip 1 s
@@ -228,7 +228,7 @@ streamSkipOk = do Effect {
 }
 
 @test "streamSkip past end"
-streamSkipPastEnd = do Effect {
+streamSkipPastEnd = {
   b      = fromInt 255
   s      = streamFromBits b
   result = streamSkip 10 s

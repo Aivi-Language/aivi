@@ -10,7 +10,7 @@ pattern  = ~r/\w+@\w+\.\w+/
 endpoint = ~u(https://api.example.com)
 
 @test "sigils work"
-sigilsWork = do Effect {
+sigilsWork = {
   assert (regex.test pattern "a@b.com")
   assertEq (protocol endpoint) "https"
 }

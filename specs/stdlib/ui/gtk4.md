@@ -28,7 +28,7 @@ The everyday surface is:
 - state: `signal`, `get`, `peek`, `->>`, `<<-`, `combineAll`
 - view: `~<gtk>...</gtk>`, shorthand widget tags, helper tags, `<show>`, `<each>`
 - input: `onClick`, `onInput`, `onToggle`, `onSelect`, `onKeyPress`, and raw `<signal ... />`
-- effectful actions: `event.from (...)` and other flow-shaped event helpers
+- effectful actions: `event.from (...)` for shared effect handles
 - app startup: `runGtkApp`
 - lower-level escape hatches: `mountAppWindow`, `buildFromNode`, `buildWithIds`, `reconcileNode`, `signalStream`, `signalPoll`, `signalEmit`, `menuModelNew`, `menuModelAppendItem`, `menuButtonSetMenuModel`, `osOpenUri`, `gtkSetInterval`
 

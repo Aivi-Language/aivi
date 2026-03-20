@@ -4,7 +4,6 @@ use aivi.concurrency as concurrent
 use aivi.prelude
 use aivi.reactive
 use aivi.list (dropLast, length)
-use aivi.system as system
 use aivi.text (join)
 use aivi.ui.gtk4
 
@@ -179,63 +178,52 @@ tickGame = _ => {
 
 view : GtkNode
 view = ~<gtk>
-  <GtkBox
-    orientation="vertical"
-    spacing="10"
-    marginTop="12"
-    marginStart="12"
-    marginEnd="12"
-    marginBottom="12">
-    <GtkLabel
-      label={scoreLabel}
-      cssClass="snake-title" />
-    <GtkLabel
-      label={statusLabel}
-      cssClass="snake-status" />
-    <GtkBox orientation="vertical" spacing="0" cssClass="snake-board">
-      <each items={board} as={row} key={row => row.id}>
-        <GtkLabel label={row.text} cssClass="snake-row" />
-      </each>
+  <GtkApplicationWindow title="Snake" defaultWidth={360} defaultHeight={440} onKeyPress={handleKey}>
+    <GtkBox
+      orientation="vertical"
+      spacing="10"
+      marginTop="12"
+      marginStart="12"
+      marginEnd="12"
+      marginBottom="12">
+      <GtkLabel
+        label={scoreLabel}
+        cssClass="snake-title" />
+      <GtkLabel
+        label={statusLabel}
+        cssClass="snake-status" />
+      <GtkBox orientation="vertical" spacing="0" cssClass="snake-board">
+        <each items={board} as={row} key={row => row.id}>
+          <GtkLabel label={row.text} cssClass="snake-row" />
+        </each>
+      </GtkBox>
     </GtkBox>
-  </GtkBox>
+  </GtkApplicationWindow>
 </gtk>
 
-css : Text
-css = ~`
-.snake-title  { font-family: monospace; font-size: 14px; }
-.snake-status { font-family: monospace; font-size: 12px; }
-.snake-board  { margin-top: 6px; }
-.snake-row    { font-family: monospace; font-size: 14px; letter-spacing: 2px; }`
+startGameLoop : Effect GtkError Unit
+startTickFeed : Unit -> Effect GtkError Unit
+startTickFeed = _ => gtkSetInterval tickMs
 
-initWindow : GtkNode -> Effect GtkError AppId
-initWindow = node => do Effect {
-  init Unit
-  appId <- appNew "demos.snake"
-  win   <- windowNew appId "Snake" 360 440
-  root  <- buildFromNode node
-  appSetCss appId css
-  windowSetChild win root
-  windowOnClose win "close"
-  windowPresent win
-  pure appId
-}
+openSignalStream : Unit -> Effect GtkError (Recv GtkSignalEvent)
+openSignalStream = _ => signalStream Unit
 
-ticker = do Effect {
-  loop n = 0 => {
-    concurrent.sleep tickMs
-    pure (tickGame Unit)
-    recurse (n + 1)
-  }
-}
+runTickLoop : Recv GtkSignalEvent -> Unit -> Effect GtkError Unit
+runTickLoop = rx => _ =>
+  concurrent.forEach rx (event => event match
+    | GtkTick => pure (tickGame Unit)
+    | _       => pure Unit
+  )
+
+startGameLoop =
+  Unit
+    ~|> startTickFeed
+    &|> openSignalStream #rx
+    ~|> runTickLoop rx
 
 main : Effect GtkError Unit
-main = do Effect {
-  appId <- initWindow view
-  rx    <- signalStream Unit
-  concurrent.spawn ticker
-  concurrent.forEach rx (event => event match
-    | GtkWindowClosed _ _   => system.exit 0
-    | GtkKeyPressed _ _ _ _ => pure (handleKey event)
-    | _                     => pure Unit
-  )
+main = runGtkApp {
+  appId: "demos.snake"
+  root: view
+  onStart: startGameLoop
 }

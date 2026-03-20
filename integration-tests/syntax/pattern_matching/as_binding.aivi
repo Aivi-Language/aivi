@@ -11,7 +11,7 @@ nestedAs = r => r match
   | _                    => "unknown"
 
 @test "as binding"
-asBindingWorks = do Effect {
+asBindingWorks = {
   assertEq (getNameAndAge { name: "A", age: 30 }) ("A", 30)
   assertEq (nestedAs { user: { name: "B" } }) "B"
 }

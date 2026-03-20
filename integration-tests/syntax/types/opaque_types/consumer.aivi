@@ -7,7 +7,7 @@ use aivi.testing
 use integrationTests.syntax.types.opaqueTypes.definer (Wrapper, make, value)
 
 @test "opaque types: construct via exported function"
-opaqueConstruct = do Effect {
+opaqueConstruct = {
   w = make 42
   assertEq (value w) 42
 }

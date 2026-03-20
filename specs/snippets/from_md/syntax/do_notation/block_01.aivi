@@ -1,6 +1,6 @@
 lookupDisplayName : UserId -> Option Text
-lookupDisplayName = userId => do Option {
-  user    <- findUser userId
-  profile <- findProfile user.profileId
-  Some profile.displayName
-}
+lookupDisplayName = userId =>
+  userId
+|> findUser#user
+|> findProfile user.profileId#profile
+|> profile.displayName

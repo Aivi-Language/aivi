@@ -23,7 +23,7 @@ sumTwo = pair => pair match
   | (None, None)     => 0
 
 @test "pattern arm binding isolation"
-patternArmBindingIsolation = do Effect {
+patternArmBindingIsolation = {
   assertEq (describeFirst (Some 42)) "42"
   assertEq (describeFirst None) "none"
   assertEq (sumTwo (Some 3, Some 4)) 7

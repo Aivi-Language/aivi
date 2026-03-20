@@ -8,7 +8,7 @@ use aivi.generator
 // --- Basic yield order ---
 
 @test "generator yields in order"
-generatorOrder = do Effect {
+generatorOrder = {
   g = generate {
     yield 1
     yield 2
@@ -20,7 +20,7 @@ generatorOrder = do Effect {
 // --- Generator fold ---
 
 @test "generator fold sums"
-generatorFoldSum = do Effect {
+generatorFoldSum = {
   g = generate {
     yield 10
     yield 20
@@ -33,7 +33,7 @@ generatorFoldSum = do Effect {
 // --- Generator with bind (flatmap) ---
 
 @test "generator with bind"
-generatorBind = do Effect {
+generatorBind = {
   numbers = generate {
     yield 1
     yield 2
@@ -50,7 +50,7 @@ generatorBind = do Effect {
 // --- Single yield ---
 
 @test "generator single yield"
-generatorSingle = do Effect {
+generatorSingle = {
   g = generate {
     yield 42
   }

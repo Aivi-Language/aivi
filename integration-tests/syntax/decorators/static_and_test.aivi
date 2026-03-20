@@ -8,6 +8,6 @@ use aivi.testing
 embedded = "ok"
 
 @test "static decorator access"
-staticIsAvailable = do Effect {
+staticIsAvailable = {
   assertEq embedded "ok"
 }

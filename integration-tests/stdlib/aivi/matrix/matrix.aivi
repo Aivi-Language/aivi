@@ -7,64 +7,64 @@ use aivi.matrix
 use aivi.vector (vec2, vec3, vec4, transform2, transform3, transform4)
 
 @test "mat2"
-mat2_functional = do Effect {
+mat2_functional = {
   m = identity2
   assert (m.m00 == 1.0)
 }
 
 @test "mat3"
-mat3_functional = do Effect {
+mat3_functional = {
   m = identity3
   assert (m.m00 == 1.0)
 }
 
 @test "mat4"
-mat4_functional = do Effect {
+mat4_functional = {
   m = identity4
   assert (m.m00 == 1.0)
 }
 
 @test "scalar"
-scalar_functional = do Effect {
+scalar_functional = {
   s = 1.0
   assert (s == 1.0)
 }
 
 @test "identity2"
-identity2_functional = do Effect {
+identity2_functional = {
   assert (identity2.m00 == 1.0)
   assert (identity2.m01 == 0.0)
 }
 
 @test "identity3"
-identity3_functional = do Effect {
+identity3_functional = {
   assert (identity3.m00 == 1.0)
   assert (identity3.m22 == 1.0)
 }
 
 @test "identity4"
-identity4_functional = do Effect {
+identity4_functional = {
   assert (identity4.m00 == 1.0)
   assert (identity4.m33 == 1.0)
 }
 
 @test "multiply2"
-multiply2_functional = do Effect {
+multiply2_functional = {
   assert (multiply2 identity2 identity2 == identity2)
 }
 
 @test "multiply3"
-multiply3_functional = do Effect {
+multiply3_functional = {
   assert (multiply3 identity3 identity3 == identity3)
 }
 
 @test "multiply4"
-multiply4_functional = do Effect {
+multiply4_functional = {
   assert (multiply4 identity4 identity4 == identity4)
 }
 
 @test "mat2 domain operators"
-mat2_domain_operators = do Effect {
+mat2_domain_operators = {
   a = ~mat[1.0 2.0
     3.0 4.0
   ]
@@ -95,7 +95,7 @@ mat2_domain_operators = do Effect {
 }
 
 @test "mat3 domain operators"
-mat3_domain_operators = do Effect {
+mat3_domain_operators = {
   a = ~mat[1.0 0.0 2.0
     0.0 1.0 3.0
     0.0 0.0 1.0
@@ -131,7 +131,7 @@ mat3_domain_operators = do Effect {
 }
 
 @test "mat4 domain operators"
-mat4_domain_operators = do Effect {
+mat4_domain_operators = {
   a = ~mat[1.0 0.0 0.0 2.0
     0.0 2.0 0.0 3.0
     0.0 0.0 3.0 4.0
@@ -174,7 +174,7 @@ mat4_domain_operators = do Effect {
 }
 
 @test "transpose2"
-transpose2_functional = do Effect {
+transpose2_functional = {
   m = ~mat[1.0 2.0
     3.0 4.0
   ]
@@ -185,11 +185,11 @@ transpose2_functional = do Effect {
 }
 
 @test "transpose3"
-transpose3_functional = do Effect {
+transpose3_functional = {
   assert (transpose3 identity3 == identity3)
 }
 
 @test "transpose4"
-transpose4_functional = do Effect {
+transpose4_functional = {
   assert (transpose4 identity4 == identity4)
 }

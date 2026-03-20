@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.number.bigint
 
 @test "bigint arithmetic and overflow"
-bigint_arithmetic_and_overflow = do Effect {
+bigint_arithmetic_and_overflow = {
   seven  = fromInt 7
   eight  = fromInt 8
   offset = fromInt 14

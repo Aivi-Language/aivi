@@ -125,6 +125,29 @@ main =
 }
 
 #[test]
+fn operator_first_flow_uses_implicit_unit_root() {
+    let expr = parse_main_expr(
+        r#"module app.main
+export main
+
+main = &|> assertEq 1 1
+       &|> assertEq 2 2
+"#,
+    );
+
+    let Expr::Flow { root, lines, .. } = expr else {
+        panic!("expected flow rhs");
+    };
+    let Expr::Ident(root_name) = root.as_ref() else {
+        panic!("expected implicit Unit root");
+    };
+    assert_eq!(root_name.name, "Unit");
+    assert_eq!(lines.len(), 2);
+    assert!(matches!(lines[0], FlowLine::Step(ref step) if step.kind == FlowStepKind::Applicative));
+    assert!(matches!(lines[1], FlowLine::Step(ref step) if step.kind == FlowStepKind::Applicative));
+}
+
+#[test]
 fn fanout_uses_explicit_end_marker() {
     let expr = parse_main_expr(
         r#"module app.main

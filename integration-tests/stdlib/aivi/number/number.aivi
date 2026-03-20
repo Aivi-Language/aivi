@@ -9,7 +9,7 @@ use aivi (
 use aivi.number as num
 
 @test "number facade decimal helpers"
-number_facade_decimal_helpers = do Effect {
+number_facade_decimal_helpers = {
   value   = num.fromFloat 3.14159
   rounded = num.round value 2
   output  = num.toFloat rounded
@@ -18,12 +18,12 @@ number_facade_decimal_helpers = do Effect {
 }
 
 @test "number facade bigint roundtrip"
-number_facade_bigint_roundtrip = do Effect {
+number_facade_bigint_roundtrip = {
   assertEq (num.toInt (num.fromInt 42)) (Some 42)
 }
 
 @test "number facade rational helpers"
-number_facade_rational_helpers = do Effect {
+number_facade_rational_helpers = {
   value = num.normalize (num.fromBigInts (num.fromInt 6) (num.fromInt 8))
 
   assertEq (num.toInt (num.numerator value)) (Some 3)
@@ -31,6 +31,6 @@ number_facade_rational_helpers = do Effect {
 }
 
 @test "number facade complex constant"
-number_facade_complex_constant = do Effect {
+number_facade_complex_constant = {
   assertEq num.i { re: 0.0, im: 1.0 }
 }

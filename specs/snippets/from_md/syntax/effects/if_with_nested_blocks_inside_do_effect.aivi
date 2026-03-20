@@ -1,9 +1,4 @@
-main = do Effect {
-  u     <- loadUser
-  token <- if u.isAdmin then do Effect {
-    log "admin login"
-    token <- mintToken u
-    pure token
-  } else pure "guest"
-  pure token
-}
+mintAdminToken = u => bind (log "admin login") (logged => mintToken u)
+
+main = loadUser
+  |> u => if u.isAdmin then mintAdminToken u else pure "guest"

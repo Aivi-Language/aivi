@@ -8,13 +8,13 @@ use aivi.testing
 // -- Setoid (equality) --
 
 @test "setoid int"
-setoid_int = do Effect {
+setoid_int = {
   assert (1 == 1)
   assert (1 != 2)
 }
 
 @test "setoid text"
-setoid_text = do Effect {
+setoid_text = {
   assert ("hello" == "hello")
   assert ("hello" != "world")
 }
@@ -22,7 +22,7 @@ setoid_text = do Effect {
 // -- Ord (ordering) --
 
 @test "ord int"
-ord_int = do Effect {
+ord_int = {
   assert (1 < 2)
   assert (2 > 1)
   assert (1 <= 1)
@@ -32,7 +32,7 @@ ord_int = do Effect {
 // -- Functor --
 
 @test "functor option"
-functor_option = do Effect {
+functor_option = {
   result = map (x => x + 1) (Some 5)
   assertEq result (Some 6)
 
@@ -41,7 +41,7 @@ functor_option = do Effect {
 }
 
 @test "functor list"
-functor_list = do Effect {
+functor_list = {
   xs = [1, 2, 3]
   ys = map (x => x * 2) xs
   assertEq ys [2, 4, 6]

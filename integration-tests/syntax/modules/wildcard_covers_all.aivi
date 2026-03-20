@@ -5,7 +5,7 @@ use aivi.list
 use aivi.testing
 
 @test "wildcard import makes all exports available"
-wildcardCoversAll = do Effect {
+wildcardCoversAll = {
   xs = [1, 2, 3, 4, 5]
   assertEq (filter (x => x > 3) xs) [4, 5]
   assertEq (xs |> map (x => x * 2)) [2, 4, 6, 8, 10]

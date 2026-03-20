@@ -9,6 +9,6 @@ sum = xs => xs match
   | [x, ...rest] => x + sum rest
 
 @test "recursive list sum"
-recursionWorks = do Effect {
+recursionWorks = {
   assertEq (sum [1, 2, 3]) 6
 }

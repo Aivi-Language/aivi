@@ -7,7 +7,7 @@ use aivi.ui.layout
 use aivi.ui.layout (domain Layout)
 
 @test "literals"
-literals_functional = do Effect {
+literals_functional = {
   x = 1px
   y = 1em
   z = 1rem

@@ -449,7 +449,7 @@ impl Parser {
             let effect_span = self.previous_span();
             self.emit_diag(
                 "W1600",
-                "`effect { }` is deprecated; use `do Effect { }` instead",
+                "`effect { }` is deprecated; use flow syntax instead",
                 effect_span.clone(),
             );
             let monad = SpannedName {

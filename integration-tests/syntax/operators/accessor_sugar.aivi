@@ -10,7 +10,7 @@ getName : { name: Text, age: Int } -> Text
 getName = .name
 
 @test ".field as standalone accessor function"
-dotFieldAccessor = do Effect {
+dotFieldAccessor = {
   person = { name: "Alice", age: 30 }
   assertEq (getName person) "Alice"
 }
@@ -27,7 +27,7 @@ names1 = map.name people
 names2 = map (x => x.name) people
 
 @test "map .name equals map (x => x.name)"
-mapDotName = do Effect {
+mapDotName = {
   assertEq names1 ["Alice", "Bob", "Carol"]
   assertEq names1 names2
 }
@@ -37,7 +37,7 @@ ages1 = map.age people
 ages2 = map (x => x.age) people
 
 @test "map .age equals map (x => x.age)"
-mapDotAge = do Effect {
+mapDotAge = {
   assertEq ages1 [30, 25, 40]
   assertEq ages1 ages2
 }
@@ -55,7 +55,7 @@ activeItems     = filter active items
 activeItemsExpl = filter (x => x.active) items
 
 @test "predicate lifting: bare bool field used as filter predicate"
-predicateLiftingBoolField = do Effect {
+predicateLiftingBoolField = {
   assertEq (length activeItems) 2
   assertEq activeItems activeItemsExpl
 }
@@ -64,7 +64,7 @@ predicateLiftingBoolField = do Effect {
 labels = items |> filter active |> map.label
 
 @test "pipeline with filter+predicate and .field accessor"
-pipelineAccessor = do Effect {
+pipelineAccessor = {
   assertEq labels ["A", "C"]
 }
 
@@ -77,14 +77,14 @@ records = [
 ]
 
 @test "by id: find by same-name equality"
-byIdSugar = do Effect {
+byIdSugar = {
   id     = 2
   result = find (by id) records
   assertEq result (Some { id: 2, name: "Bob" })
 }
 
 @test "by (f1, f2): multi-field same-name equality"
-byMultiField = do Effect {
+byMultiField = {
   id     = 3
   name   = "Carol"
   result = find (by (id, name)) records
@@ -99,7 +99,7 @@ sortedValues     = sortBy value nums |> map.value
 explSortedValues = sortBy (x => x.value) nums |> map (x => x.value)
 
 @test "generalised lifting: bare name in sortBy (non-Bool fn position)"
-generalisedLifting = do Effect {
+generalisedLifting = {
   assertEq sortedValues [1, 1, 3, 4, 5]
   assertEq sortedValues explSortedValues
 }

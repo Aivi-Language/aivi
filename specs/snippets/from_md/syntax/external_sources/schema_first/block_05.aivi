@@ -4,7 +4,4 @@ usersSource = file.json {
   schema: source.schema.derive
 }
 
-do Effect {
-  users <- load usersSource
-  pure users
-}
+load usersSource

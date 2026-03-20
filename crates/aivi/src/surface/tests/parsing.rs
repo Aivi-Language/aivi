@@ -840,7 +840,7 @@ fn rejects_test_without_argument() {
 module Example
 
 @test
-x = do Effect { _ <- assert True }
+x = assert True
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
@@ -856,7 +856,7 @@ fn accepts_test_with_string_argument() {
 module Example
 
 @test "adds two numbers"
-x = do Effect { _ <- assertEq (1 + 1) 2 }
+x = assertEq (1 + 1) 2
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
@@ -892,7 +892,7 @@ fn rejects_test_with_non_string_argument() {
 module Example
 
 @test 42
-x = do Effect { _ <- assert True }
+x = assert True
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(

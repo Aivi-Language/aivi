@@ -1,8 +1,6 @@
 // Runnable test definition
 @test "addition is commutative"
-addCommutative = do Effect {
-  assertEq (add 2 3) (add 3 2)
-}
+addCommutative = assertEq (add 2 3) (add 3 2)
 
 // Test-oriented module marker
 @test

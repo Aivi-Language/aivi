@@ -1,11 +1,9 @@
 nextEventSummary : Effect GtkError (Option Text)
-nextEventSummary = do Effect {
-  nextEvent <- signalPoll {}
-  nextEvent match
-    | None                                => pure None
-    | Some (GtkClicked _ _)               => pure (Some "button clicked")
-    | Some (GtkInputChanged _ _ txt)      => pure (Some txt)
-    | Some (GtkFocusOut _ _)              => pure (Some "focus lost")
-    | Some (GtkUnknownSignal _ _ sig _ _) => pure (Some sig)
-    | Some _                              => pure (Some "other event")
-}
+nextEventSummary = signalPoll {}
+  |> nextEvent => nextEvent match
+    | None                                => None
+    | Some (GtkClicked _ _)               => Some "button clicked"
+    | Some (GtkInputChanged _ _ txt)      => Some txt
+    | Some (GtkFocusOut _ _)              => Some "focus lost"
+    | Some (GtkUnknownSignal _ _ sig _ _) => Some sig
+    | Some _                              => Some "other event"

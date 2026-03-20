@@ -56,7 +56,7 @@ topologicalSort = graph => {
 }
 
 @test "Kahn topological sort"
-topoSmoke = do Effect {
+topoSmoke = {
   adj = ~map{
     0 => [1, 2]
     1 => [3]
@@ -65,12 +65,12 @@ topoSmoke = do Effect {
   }
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
-  result <- pure (topologicalSort graph)
+  result = (topologicalSort graph)
   assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
 
   // Test cyclic graph detection
   cyclicAdj   = ~map{ 0 => [1], 1 => [0] }
   cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
-  cycle <- pure (topologicalSort cyclicGraph)
+  cycle = (topologicalSort cyclicGraph)
   assert (cycle == Err [0, 1] || cycle == Err [1, 0])
 }

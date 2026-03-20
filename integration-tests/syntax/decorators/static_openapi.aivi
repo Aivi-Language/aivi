@@ -8,28 +8,28 @@ use aivi.testing
 petStoreApi = openapi.fromFile "./petstore.json"
 
 @test "openapi static produces a callable factory"
-factoryCallable = do Effect {
-  client = petStoreApi {}
+factoryCallable = {
+  client = petStoreApi { bearerToken: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None, baseUrl: None }
   assert True
 }
 
 @test "openapi static client has endpoint functions"
-clientEndpoints = do Effect {
-  client = petStoreApi {}
-  src <- client.listPets { limit: Some 10 }
+clientEndpoints = {
+  client = petStoreApi { bearerToken: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None, baseUrl: None }
+  _ = client.listPets { limit: Some 10 }
   assert True
 }
 
 @test "openapi static endpoints can be destructured"
-destructureEndpoints = do Effect {
-  client                              = petStoreApi {}
+destructureEndpoints = {
+  client                              = petStoreApi { bearerToken: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None, baseUrl: None }
   { listPets, createPet, getPetById } = client
   assert True
 }
 
 @test "openapi static config with bearer token"
-configBearerToken = do Effect {
+configBearerToken = {
   client = petStoreApi { bearerToken: Some "test-token", headers: None, timeoutMs: None, retryCount: None, strictStatus: None, baseUrl: None }
-  src <- client.listPets {}
+  _ = client.listPets { limit: None }
   assert True
 }

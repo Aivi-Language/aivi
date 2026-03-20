@@ -25,7 +25,7 @@ impl Parser {
                 if !matches!(kind, BlockKind::Generate | BlockKind::Do { .. }) {
                     self.emit_diag(
                         "E1533",
-                        "`loop` is only allowed inside `generate { ... }` or `do Effect { ... }` blocks",
+                        "`loop` is only allowed inside `generate { ... }` or effect-style blocks",
                         loop_start.clone(),
                     );
                 }
@@ -117,7 +117,7 @@ impl Parser {
                 if !matches!(kind, BlockKind::Generate | BlockKind::Do { .. }) {
                     self.emit_diag(
                         "E1535",
-                        "`recurse` is only allowed inside `generate { ... }` or `do Effect { ... }` blocks (within a `loop`)",
+                        "`recurse` is only allowed inside `generate { ... }` or effect-style blocks (within a `loop`)",
                         recurse_kw.clone(),
                     );
                 }
@@ -139,7 +139,7 @@ impl Parser {
                 if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1540",
-                        "`when` is only allowed inside `do Effect { ... }` blocks",
+                        "`when` is only allowed inside effect-style blocks",
                         when_kw.clone(),
                     );
                 }
@@ -162,7 +162,7 @@ impl Parser {
                 if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1543",
-                        "`unless` is only valid inside a `do Effect { … }` block",
+                        "`unless` is only valid inside an effect-style block",
                         unless_kw.clone(),
                     );
                 }
@@ -185,7 +185,7 @@ impl Parser {
                 if !matches!(kind, BlockKind::Do { ref monad } if monad.name == "Effect") {
                     self.emit_diag(
                         "E1541",
-                        "`given` is only allowed inside `do Effect { ... }` blocks",
+                        "`given` is only allowed inside effect-style blocks",
                         given_kw.clone(),
                     );
                 }
@@ -545,7 +545,7 @@ impl Parser {
 
 /// Walk an expression tree and replace every `BlockItem::Recurse { expr, span }`
 /// with `BlockItem::Expr { expr: Call(fn_name, expr), span }`.
-/// This is used to desugar `loop`/`recurse` inside `do Effect { ... }` blocks
+/// This is used to desugar `loop`/`recurse` inside effect-style blocks
 /// at parse time, avoiding new AST variants.
 fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
     match expr {

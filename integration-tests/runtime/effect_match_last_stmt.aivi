@@ -8,7 +8,7 @@ use aivi.testing
 // where arms return Effects should work correctly.
 
 @test "match returning Effect as last do-block statement"
-test_match_last_effect = do Effect {
+test_match_last_effect = {
   x = Ok 42
   x match
     | Ok v  => assertEq v 42
@@ -16,8 +16,8 @@ test_match_last_effect = do Effect {
 }
 
 @test "match returning Effect as last with prior bind"
-test_match_last_with_bind = do Effect {
-  _ <- pure Unit
+test_match_last_with_bind = {
+  _ = Unit
   x = Ok 99
   x match
     | Ok v  => assertEq v 99
@@ -25,9 +25,9 @@ test_match_last_with_bind = do Effect {
 }
 
 @test "match returning Effect as last after multiple binds"
-test_match_last_multi_bind = do Effect {
-  a <- pure 10
-  b <- pure 20
+test_match_last_multi_bind = {
+  a = 10
+  b = 20
   result = Ok (a + b)
   result match
     | Ok v  => assertEq v 30

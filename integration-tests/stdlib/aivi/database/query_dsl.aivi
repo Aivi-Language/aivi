@@ -82,66 +82,28 @@ withSeededConn = run =>
    |> _ => run conn
 
 seed : DbConnection -> Effect DbError Unit
-seed = conn =>
+seed = conn => {
+  user1  = { id: 1, email: "ada@example.com", active: True, age: 31, createdAt: 100 }
+  user2  = { id: 2, email: "linus@example.com", active: False, age: 19, createdAt: 200 }
+  user3  = { id: 3, email: "grace@example.com", active: True, age: 24, createdAt: 300 }
+  order1 = { id: 1, userId: 1, status: "paid", total: 40, createdAt: 10 }
+  order2 = { id: 2, userId: 1, status: "paid", total: 70, createdAt: 30 }
+  order3 = { id: 3, userId: 1, status: "draft", total: 5, createdAt: 40 }
+  order4 = { id: 4, userId: 2, status: "paid", total: 90, createdAt: 20 }
+  order5 = { id: 5, userId: 3, status: "refunded", total: 15, createdAt: 50 }
+
   Unit
   ~|>_ => runMigrationsOn conn [users, orders]
-   |> _ => insertOn conn users {
-    id: 1
-    email: "ada@example.com"
-    active: True
-    age: 31
-    createdAt: 100
-}#users1
-|> _ => insertOn conn users1 {
-    id: 2
-    email: "linus@example.com"
-    active: False
-    age: 19
-    createdAt: 200
-}#users2
-  ~|>_ => insertOn conn users2 {
-    id: 3
-    email: "grace@example.com"
-    active: True
-    age: 24
-    createdAt: 300
-  }
-|> _ => insertOn conn orders {
-    id: 1
-    userId: 1
-    status: "paid"
-    total: 40
-    createdAt: 10
-}#orders1
-|> _ => insertOn conn orders1 {
-    id: 2
-    userId: 1
-    status: "paid"
-    total: 70
-    createdAt: 30
-}#orders2
-|> _ => insertOn conn orders2 {
-    id: 3
-    userId: 1
-    status: "draft"
-    total: 5
-    createdAt: 40
-}#orders3
-|> _ => insertOn conn orders3 {
-    id: 4
-    userId: 2
-    status: "paid"
-    total: 90
-    createdAt: 20
-}#orders4
-  ~|>_ => insertOn conn orders4 {
-    id: 5
-    userId: 3
-    status: "refunded"
-    total: 15
-    createdAt: 50
-  }
-|> _ => pure Unit
+   |> _ => insertOn conn users user1#users1
+   |> _ => insertOn conn users1 user2#users2
+  ~|>_ => insertOn conn users2 user3
+   |> _ => insertOn conn orders order1#orders1
+   |> _ => insertOn conn orders1 order2#orders2
+   |> _ => insertOn conn orders2 order3#orders3
+   |> _ => insertOn conn orders3 order4#orders4
+  ~|>_ => insertOn conn orders4 order5
+   |> _ => pure Unit
+}
 
 userIds = rows => List.map (u => u.id) rows
 

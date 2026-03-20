@@ -15,7 +15,7 @@ add = a b => a + b
 pipe1 = 5 |> add 3
 
 @test "pipe passes value as last arg to partial application"
-pipeLastArg = do Effect {
+pipeLastArg = {
   assertEq pipe1 8
 }
 
@@ -28,7 +28,7 @@ pipeLastArg = do Effect {
 pipe2 = 5 |> add 3 |> add 2
 
 @test "chained pipes are left-associative"
-pipeChained = do Effect {
+pipeChained = {
   assertEq pipe2 10
 }
 
@@ -37,7 +37,7 @@ pipeChained = do Effect {
 pipe3 = 1 |> add 1 |> add 1 |> add 1
 
 @test "three-level pipe chain"
-pipeThreeLevel = do Effect {
+pipeThreeLevel = {
   assertEq pipe3 4
 }
 
@@ -49,7 +49,7 @@ multiply = a b => a * b
 pipe4 = 3 |> multiply 4
 
 @test "pipe with multiply"
-pipeMultiply = do Effect {
+pipeMultiply = {
   assertEq pipe4 12
 }
 
@@ -58,6 +58,6 @@ pipeMultiply = do Effect {
 pipe5 = 2 |> add 3 |> multiply 5
 
 @test "pipe add then multiply"
-pipeAddThenMultiply = do Effect {
+pipeAddThenMultiply = {
   assertEq pipe5 25
 }

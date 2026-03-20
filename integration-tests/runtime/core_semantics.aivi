@@ -7,14 +7,14 @@ use aivi.testing
 // --- Pipes and application ---
 
 @test "pipe is function application"
-pipeIsApp = do Effect {
+pipeIsApp = {
   inc    = x => x + 1
   result = 41 |> inc
   assertEq result 42
 }
 
 @test "chained pipes"
-chainedPipes = do Effect {
+chainedPipes = {
   double = x => x * 2
   inc    = x => x + 1
   result = 5 |> double |> inc
@@ -24,14 +24,14 @@ chainedPipes = do Effect {
 // --- Currying and partial application ---
 
 @test "currying works"
-curryingWorks = do Effect {
+curryingWorks = {
   add  = a b => a + b
   add2 = add 2
   assertEq (add2 40) 42
 }
 
 @test "multi-stage currying"
-multiStageCurry = do Effect {
+multiStageCurry = {
   add3 = a b c => a + b + c
   f    = add3 10
   g    = f 20
@@ -41,7 +41,7 @@ multiStageCurry = do Effect {
 // --- Application associativity ---
 
 @test "application is left-associative"
-appLeftAssoc = do Effect {
+appLeftAssoc = {
   apply = f x => f x
   inc   = x => x + 1
   assertEq (apply inc 5) 6
@@ -50,7 +50,7 @@ appLeftAssoc = do Effect {
 // --- Immutable bindings ---
 
 @test "bindings are immutable values"
-immutableBindings = do Effect {
+immutableBindings = {
   x = 42
   y = x
   assertEq x y

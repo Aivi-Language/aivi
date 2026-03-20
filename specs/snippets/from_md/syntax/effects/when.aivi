@@ -1,3 +1,1 @@
-do Effect {
-  when isVerbose <- print "debug info"
-}
+if isVerbose then print "debug info" else pure Unit

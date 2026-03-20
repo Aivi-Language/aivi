@@ -16,7 +16,7 @@ treeSum = t => t match
   | Branch l r => (treeSum l) + (treeSum r)
 
 @test "nested tree pattern matching"
-nestedTreeMatch = do Effect {
+nestedTreeMatch = {
   tree = Branch (Branch (Leaf 1) (Leaf 2)) (Leaf 3)
   assertEq (treeSum tree) 6
 }
@@ -30,7 +30,7 @@ treeDepth = t => t match
   | Branch l r => 1 + (maxInt (treeDepth l) (treeDepth r))
 
 @test "tree depth"
-treeDepthTest = do Effect {
+treeDepthTest = {
   tree = Branch (Branch (Leaf 1) (Leaf 2)) (Leaf 3)
   assertEq (treeDepth tree) 3
 }
@@ -38,7 +38,7 @@ treeDepthTest = do Effect {
 // --- Complex currying and closures ---
 
 @test "triple nested closure"
-tripleNested = do Effect {
+tripleNested = {
   make = a => b => c => d => a + b + c + d
   f    = make 1
   g    = f 2
@@ -47,14 +47,14 @@ tripleNested = do Effect {
 }
 
 @test "closure captures computed value"
-closureCapturesComputed = do Effect {
+closureCapturesComputed = {
   x = 10 * 5
   f = n => n + x
   assertEq (f 8) 58
 }
 
 @test "closure in list operations"
-closureInList = do Effect {
+closureInList = {
   multiplier = 3
   result     = map (x => x * multiplier) [1, 2, 3, 4]
   assertEq result [3, 6, 9, 12]
@@ -63,32 +63,27 @@ closureInList = do Effect {
 // --- Higher-order function chains ---
 
 @test "chained map and filter"
-chainedMapFilter = do Effect {
-  result = [1, 2, 3, 4, 5, 6]
-    |> filter (x => x > 2)
-    |> map (x => x * 10)
+chainedMapFilter = {
+  result = List.map (x => x * 10) (List.filter (x => x > 2) [1, 2, 3, 4, 5, 6])
     assertEq result [30, 40, 50, 60]
 }
 
 @test "reduce with pipe"
-foldlPipe = do Effect {
-  result = [1, 2, 3, 4, 5]
-    |> reduce (acc => x => acc + x) 0
+foldlPipe = {
+  result = List.foldl (acc x => acc + x) 0 [1, 2, 3, 4, 5]
     assertEq result 15
 }
 
 @test "map then reduce"
-mapThenFold = do Effect {
-  result = [1, 2, 3]
-    |> map (x => x * x)
-    |> reduce (acc => x => acc + x) 0
+mapThenFold = {
+  result = List.foldl (acc x => acc + x) 0 (List.map (x => x * x) [1, 2, 3])
     assertEq result 14
 }
 
 // --- Record construction and field access ---
 
 @test "complex record with nested fields"
-complexRecord = do Effect {
+complexRecord = {
   user = {
     name: "Alice"
     age: 30
@@ -103,7 +98,7 @@ complexRecord = do Effect {
 }
 
 @test "record patch with nested update"
-recordPatchNested = do Effect {
+recordPatchNested = {
   config  = { debug: False, maxRetries: 3, label: "prod" }
   updated = config <| { debug: True, label: "dev" }
   assertEq updated.debug True
@@ -112,53 +107,54 @@ recordPatchNested = do Effect {
 }
 
 @test "record as function return"
-recordAsReturn = do Effect {
+recordAsReturn = {
   mkPair = a b => { first: a, second: b }
   pair   = mkPair 1 "hello"
   assertEq pair.first 1
   assertEq pair.second "hello"
 }
 
-// --- Nested do blocks with effects ---
+// --- Nested Result and Option logic ---
 
-@test "nested do option in do effect"
-nestedDoOptionInEffect = do Effect {
-  result = do Option {
-    a <- Some 10
-    b <- Some 20
-    Some (a + b)
-  }
+andThenText : Result Text A -> (A -> Result Text B) -> Result Text B
+andThenText = result next => result match
+  | Ok value => next value
+  | Err err  => Err err
+
+@test "nested Option logic in plain block"
+nestedOptionInPlainBlock = {
+  result = (Some 10, Some 20) match
+    | (Some a, Some b) => Some (a + b)
+    | _                => None
   assertEq result (Some 30)
 }
 
-@test "nested do result in do effect"
-nestedDoResultInEffect = do Effect {
-  result = do Result {
-    x <- Ok 5
-    y <- Ok 10
-    Ok (x * y)
-  }
+@test "nested Result logic in plain block"
+nestedResultInPlainBlock = {
+  result = andThenText (Ok 5) (x =>
+    andThenText (Ok 10) (y =>
+      Ok (x * y)
+    )
+  )
   assertEq result (Ok 50)
 }
 
-@test "nested do result short-circuit"
-nestedDoResultShort = do Effect {
-  result = do Result {
-    x <- Ok 5
-    y <- Err "bad"
-    Ok (x + y)
-  }
+@test "nested Result logic short-circuits"
+nestedResultShort = {
+  result = andThenText (Ok 5) (x =>
+    andThenText (Err "bad") (y =>
+      Ok (x + y)
+    )
+  )
   assertEq result (Err "bad")
 }
 
 @test "attempt and recover"
-attemptRecover = do Effect {
-  result <- attempt (fail "boom")
-  val = result match
+attemptRecover = attempt (fail "boom")
+  |> result => assertEq (result match
     | Ok v  => v
     | Err _ => 42
-  assertEq val 42
-}
+  ) 42
 
 // --- Multi-clause function definitions ---
 
@@ -171,7 +167,7 @@ describeShape =
   | Point         => "point"
 
 @test "multi-clause shape"
-multiClauseShape = do Effect {
+multiClauseShape = {
   assertEq (describeShape (Circle 5.0)) "circle"
   assertEq (describeShape (Rectangle 3.0 4.0)) "rectangle"
   assertEq (describeShape Point) "point"
@@ -186,36 +182,32 @@ eval = e => e match
   | Mul l r => (eval l) * (eval r)
 
 @test "recursive ADT evaluation"
-recursiveAdtEval = do Effect {
+recursiveAdtEval = {
   expr = Add (Mul (Num 3) (Num 4)) (Num 5)
   assertEq (eval expr) 17
 }
 
-// --- Complex list comprehension patterns ---
+// --- Complex list expansion patterns ---
 
-@test "do list comprehension"
-doListComprehension = do Effect {
-  result = do List {
-    x <- [1, 2, 3]
-    y <- [10, 20]
-    [x * y]
-  }
+@test "nested list expansion"
+listExpansion = {
+  result = List.flatMap (x => List.map (y => x * y) [10, 20]) [1, 2, 3]
   assertEq result [10, 20, 20, 40, 30, 60]
 }
 
 // --- String interpolation with expressions ---
 
 @test "string concatenation"
-stringConcat = do Effect {
+stringConcat = {
   name     = "world"
-  greeting = "hello " ++ name
+  greeting = "hello {name}"
   assertEq greeting "hello world"
 }
 
 // --- Tuple patterns ---
 
 @test "tuple destructuring"
-tupleDestructure = do Effect {
+tupleDestructure = {
   pair   = (1, "hello")
   (a, b) = pair
   assertEq a 1
@@ -223,7 +215,7 @@ tupleDestructure = do Effect {
 }
 
 @test "triple tuple"
-tripleTuple = do Effect {
+tripleTuple = {
   t         = (1, 2, 3)
   (a, b, c) = t
   assertEq (a + b + c) 6
@@ -232,7 +224,7 @@ tripleTuple = do Effect {
 // --- Boolean operations ---
 
 @test "boolean and or"
-boolOps = do Effect {
+boolOps = {
   assertEq (True && True) True
   assertEq (True && False) False
   assertEq (False || True) True
@@ -244,7 +236,7 @@ boolOps = do Effect {
 Color = Red | Green | Blue
 
 @test "adt equality"
-adtEquality = do Effect {
+adtEquality = {
   assertEq Red Red
   assertEq (Red == Green) False
   assertEq (Some 42) (Some 42)
@@ -259,7 +251,7 @@ myLength = xs => xs match
   | [_, ...rest] => 1 + (myLength rest)
 
 @test "recursive list length"
-recursiveListLength = do Effect {
+recursiveListLength = {
   assertEq (myLength [1, 2, 3]) 3
   assertEq (myLength []) 0
 }

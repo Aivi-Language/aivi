@@ -13,7 +13,7 @@ emptyListViaMonoid : List Int
 emptyListViaMonoid = empty
 
 @test "empty resolved for List via type annotation and Monoid"
-emptyAnnotated = do Effect {
+emptyAnnotated = {
   assertEq emptyListViaMonoid []
 }
 
@@ -21,7 +21,7 @@ emptyMapViaMonoid : Map Text Int
 emptyMapViaMonoid = empty
 
 @test "empty resolved for Map via type annotation and Monoid"
-emptyMapAnnotated = do Effect {
+emptyMapAnnotated = {
   assertEq (Map.size emptyMapViaMonoid) 0
 }
 
@@ -30,6 +30,6 @@ concatWithEmpty : List Int -> List Int
 concatWithEmpty = xs => concat xs List.empty
 
 @test "qualified empty works as fallback"
-emptyArgPos = do Effect {
+emptyArgPos = {
   assertEq (concatWithEmpty [1, 2, 3]) [1, 2, 3]
 }

@@ -98,7 +98,7 @@ strongComponents = graph => {
 }
 
 @test "Tarjan SCC detection"
-sccSmoke = do Effect {
+sccSmoke = {
   adj = ~map{
     0 => [1]
     1 => [2]
@@ -107,7 +107,7 @@ sccSmoke = do Effect {
   }
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
-  comps <- pure (strongComponents graph)
+  comps = (strongComponents graph)
   assert (List.length comps == 2)
   assert (List.find (cmp => List.find (x => x == 0) cmp != None) comps != None)
 }

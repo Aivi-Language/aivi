@@ -2,16 +2,17 @@ use aivi.testing
 use aivi.rest
 
 @test "multiple mocked endpoints"
-multiMock     =
-  mock rest.get = url => url match
-    | ~u(https://api.example.com/users) => pure [{ id: 1, name: "Ada" }]
-    | ~u(https://api.example.com/posts) => pure [{ id: 10, title: "Hello" }]
-    | other                             => fail "unexpected GET: { Url.toText other }"
-mock rest.post = _ _ => pure { success: True }
-in do Effect {
-  users  <- fetchUsers
-  posts  <- fetchPosts
-  result <- submitForm {}
-  _      <- assertEq (length users) 1
-  assertEq result.success True
-}
+multiMock = mock rest.get = url => url match
+  | ~u(https://api.example.com/users) => pure [{ id: 1, name: "Ada" }]
+  | ~u(https://api.example.com/posts) => pure [{ id: 10, title: "Hello" }]
+  | other                             => fail "unexpected GET: { Url.toText other }"
+mock rest.post = endpoint payload => pure { success: True }
+in bind (fetchUsers) (users =>
+  bind (fetchPosts) (posts =>
+    if length users == 1 && length posts == 1 then
+      submitForm {}
+      |> result => assertEq result.success True
+    else
+      fail "expected mocked users and posts"
+      )
+      )

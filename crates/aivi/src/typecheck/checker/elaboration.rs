@@ -554,7 +554,7 @@ impl TypeChecker {
                 self.elab_expr(desugared, expected, env)
             }
             Expr::Block { kind, items, span } => {
-                // For generic do-monad blocks (do Result, do Option, etc.), skip
+                // For generic monadic blocks (Result, Option, etc.), skip
                 // item-by-item elaboration and defer to infer_generic_do_block
                 // via check_or_coerce. The elaboration's bind processing uses
                 // shared substitution state that conflicts with the inference pass.

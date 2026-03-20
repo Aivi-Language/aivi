@@ -603,12 +603,12 @@ describe = x =>
     }
 
     #[test]
-    fn let_binding_in_do_block_lowers_without_error() {
+    fn let_binding_in_block_lowers_without_error() {
         let result = parse_lower_to_rust_ir(r#"
 module Test
-f = do Effect {
+f = {
   x = 42
-  pure x
+  x
 }
 "#);
         assert!(result.is_ok(), "expected Ok, got: {result:?}");

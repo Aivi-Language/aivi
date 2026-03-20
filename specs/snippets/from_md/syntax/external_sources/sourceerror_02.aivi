@@ -1,4 +1,5 @@
-do Effect {
-  txt <- load (file.read "./README.md") or "(missing)"
-  pure txt
-}
+load (file.read "./README.md")
+|> attempt
+|> result => result match
+  | Ok txt => txt
+  | Err _  => "(missing)"

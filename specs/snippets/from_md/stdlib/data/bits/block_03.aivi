@@ -3,9 +3,12 @@ use aivi.bits
 parseHeader : Bits -> Result Text { version: Int, flags: Bits, payload: Bits }
 parseHeader = raw =>
   s0          = streamFromBits raw
-do Result {
-  (vb, s1)     <- streamRead 1 s0
-  (flags, s2)  <- streamRead 2 s1
-  (payload, _) <- streamRead 4 s2
-  pure { version: toInt vb, flags: flags, payload: payload }
-}
+  streamRead 1 s0 match
+    | Ok (vb, s1) =>
+        streamRead 2 s1 match
+          | Ok (flags, s2) =>
+              streamRead 4 s2 match
+                | Ok (payload, _) => Ok { version: toInt vb, flags: flags, payload: payload }
+                | Err err         => Err err
+          | Err err => Err err
+    | Err err => Err err

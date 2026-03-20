@@ -54,9 +54,7 @@ userSource = id =>
   }
 
 fetchUser : Int -> Effect ApiError User
-fetchUser = id => do Effect {
-  load (userSource id)
-}
+fetchUser = id => load (userSource id)
 
 // Pattern matching is exhaustive — the compiler rejects non-exhaustive cases
 describe : ApiError -> Text
@@ -85,26 +83,24 @@ state = signal { count: 0 }
 countLabel = derive state (s => "Count: {s.count}")
 increment = _ => update state (patch { count: _ + 1 })
 
-view = ~<gtk>
-  <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
-    <GtkLabel label={countLabel} />
-    <GtkButton label="Increment" onClick={increment} />
-  </GtkBox>
+root = ~<gtk>
+  <GtkApplicationWindow title="Counter" defaultWidth={480} defaultHeight={240}>
+    <GtkBox orientation="vertical" spacing="12" marginTop="16" marginStart="16">
+      <GtkLabel label={countLabel} />
+      <GtkButton label="Increment" onClick={increment} />
+    </GtkBox>
+  </GtkApplicationWindow>
 </gtk>
 
 main : Effect GtkError Unit
-main = do Effect {
-  _ <- init Unit
-  appId <- appNew "com.example.counter"
-  win <- windowNew appId "Counter" 480 240
-  root <- buildFromNode view
-  _ <- windowSetChild win root
-  _ <- windowPresent win
-  appRun appId
+main = runGtkApp {
+  appId: "com.example.counter"
+  root: root
+  onStart: pure Unit
 }
 ```
 
-Lower-level `signalStream`, `signalPoll`, `gtkSetInterval`, `buildWithIds`, and `reconcileNode` remain available for custom hosting and integrations, but the normal app shape is: mount once with `buildFromNode`, then let signals keep the widgets live.
+Lower-level `signalStream`, `signalPoll`, `gtkSetInterval`, `buildWithIds`, and `reconcileNode` remain available for custom hosting and integrations, but the normal app shape is: describe the window once with `runGtkApp`, then let signals keep the widgets live.
 
 ### Dynamic lists with `<each>`
 
@@ -214,10 +210,10 @@ usersSource =
     |> source.validate nonEmpty
 
 usersCount : Effect (SourceError File) Int
-usersCount = do Effect {
-  users <- load usersSource
-  pure (List.length users)
-}
+usersCount =
+  usersSource
+     |> load
+     |> List.length
 ```
 
 The record forms of `file.json`, `env.decode`, and `rest.get` are now the preferred public surface. They line up with source hovers/diagnostics in the LSP and with the wider Phase 3 source-pipeline story in `specs/syntax/external_sources/`.
@@ -244,24 +240,23 @@ users = db.relation "users" [
 ] []
 
 // Relation roots become typed queries — shape them with ordinary pipes
-getActiveUsers : Effect DbError (List User)
-getActiveUsers = do Effect {
-  _ <- db.configure { driver: Sqlite, url: "./local.db" }
-  _ <- db.runMigrations [users]
-  db.rows (
-    users[active]
-      |> db.orderBy (db.desc .createdAt, db.asc .id)
-      |> db.limit 20
-  )
-}
+activeUsersQuery =
+  users[active]
+    |> db.orderBy (db.desc .createdAt, db.asc .id)
+    |> db.limit 20
 
-// Precondition guards read like prose
+getActiveUsers : Effect DbError (List User)
+getActiveUsers = db.rows activeUsersQuery
+
+// Precondition checks stay explicit
 withdraw : Float -> Account -> Effect BankError Account
-withdraw = amount => account => do Effect {
-  given amount > 0                or fail (InvalidAmount amount)
-  given account.balance >= amount or fail InsufficientFunds
-  pure (account <| { balance: account.balance - amount })
-}
+withdraw = amount => account =>
+  if amount <= 0 then
+    fail (InvalidAmount amount)
+  else if account.balance < amount then
+    fail InsufficientFunds
+  else
+    pure (account <| { balance: account.balance - amount })
 ```
 
 ### Typed API clients from OpenAPI specs — at compile time
@@ -273,14 +268,10 @@ Point AIVI at any OpenAPI spec and it generates a fully typed client, checked at
 @static
 api = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
 
-main = do Effect {
-  // Return type is inferred from the spec — no json.decode needed
-  pets <- api.listPets { limit: Some 10 }
-  print "Found { pets |> length } pets: { pets |> map name }"
+// Return types are inferred from the spec — no json.decode needed
+pets = api.listPets { limit: Some 10 }
 
-  newPet <- api.createPet { name: "Fido", tag: Some "dog" }
-  print "Created: { newPet.name } (id: { newPet.id })"
-}
+newPet = api.createPet { name: "Fido", tag: Some "dog" }
 ```
 
 ## Incremental workspace tooling

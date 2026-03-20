@@ -17,7 +17,7 @@ use aivi.testing
 // the slow-path eval to panic on overflow in debug builds.
 
 @test "max + 1 wraps to min (two's-complement)"
-overflowAdd = do Effect {
+overflowAdd = {
   // Both are local Int literals: JIT uses iadd which wraps.
   maxVal  = 9223372036854775807
   wrapped = maxVal + 1
@@ -27,7 +27,7 @@ overflowAdd = do Effect {
 }
 
 @test "min - 1 wraps to max (two's-complement)"
-overflowSub = do Effect {
+overflowSub = {
   minVal  = 0-9223372036854775807-1
   wrapped = minVal - 1
   maxVal  = 9223372036854775807
@@ -35,7 +35,7 @@ overflowSub = do Effect {
 }
 
 @test "multiply overflow wraps"
-mulOverflow = do Effect {
+mulOverflow = {
   // 2 * i64::MAX = 2 * 9223372036854775807 mod 2^64 = -2
   maxVal = 9223372036854775807
   result = 2 * maxVal
@@ -43,7 +43,7 @@ mulOverflow = do Effect {
 }
 
 @test "max - min via subtraction of local values overflows to -1"
-maxMinusMin = do Effect {
+maxMinusMin = {
   // i64::MAX - i64::MIN = 9223372036854775807 - (-9223372036854775808) = -1 (wraps)
   maxVal = 9223372036854775807
   minVal = 0-9223372036854775807-1
@@ -52,7 +52,7 @@ maxMinusMin = do Effect {
 }
 
 @test "small arithmetic stays correct"
-smallArith = do Effect {
+smallArith = {
   assertEq (100 + 200) 300
   assertEq (1000-1) 999
   assertEq (7 * 6) 42
@@ -61,28 +61,28 @@ smallArith = do Effect {
 }
 
 @test "zero arithmetic identity with large values"
-zeroArithLarge = do Effect {
+zeroArithLarge = {
   maxVal = 9223372036854775807
   assertEq (maxVal + 0) maxVal
   assertEq (0 * maxVal) 0
 }
 
 @test "negative integer arithmetic"
-negArith = do Effect {
+negArith = {
   assertEq ((-5) + (-3)) (-8)
   assertEq ((-10) - (-4)) (-6)
   assertEq ((-3) * 4) (-12)
 }
 
 @test "integer division truncates toward zero"
-intDivTrunc = do Effect {
+intDivTrunc = {
   assertEq (7 / 2) 3
   assertEq ((-7) / 2) (-3)
   assertEq (7 / (-2)) (-3)
 }
 
 @test "integer remainder sign follows dividend"
-intRemSign = do Effect {
+intRemSign = {
   assertEq (7 % 3) 1
   assertEq ((-7) % 3) (-1)
   assertEq (7 % (-3)) 1

@@ -46,68 +46,71 @@ typedUsersCsvSource = path =>
   }
 
 @test "schema-first file source supports transform pipeline"
-schema_first_file_source_supports_transform_pipeline = do Effect {
+schema_first_file_source_supports_transform_pipeline = {
   path = "/tmp/aivi_source_pipeline_users.json"
-  _     <- file.write_text path ~`[{"id":1,"name":"Ada"},{"id":2,"name":"Lin"}]`
-  count <- load (usersCountSource path)
-  assertEq count 2
+  file.write_text path ~`[{"id":1,"name":"Ada"},{"id":2,"name":"Lin"}]`
+  load (usersCountSource path)
+   |> assertEq 2
 }
 
 @test "source validate returns structured decode errors"
-source_validate_returns_structured_decode_errors = do Effect {
+source_validate_returns_structured_decode_errors = {
   path = "/tmp/aivi_source_pipeline_empty.json"
-  _      <- file.write_text path "[]"
-  result <- attempt (load (validatedUsersSource path))
-  result match
-    | Err err => do Effect {
+  file.write_text path "[]"
+  attempt (load (validatedUsersSource path))
+   |> assertErr
+   |> err => {
         errs = fileDecodeErrors err
-        _ <- assertEq (constructorName err) "DecodeError"
-        _ <- assertEq (List.length errs) 1
+        assertEq (constructorName err) "DecodeError"
+        assertEq (List.length errs) 1
         errs match
-          | [onlyErr] => do Effect {
-              _ <- assertEq onlyErr.path []
+          | [onlyErr] => {
+              assertEq onlyErr.path []
               assertEq onlyErr.message "expected at least one user"
             }
           | _ => fail "expected one decode error"
       }
-  | Ok _ => fail "expected decode error"
 }
 
 @test "schema-first file csv source supports record form"
-schema_first_file_csv_source_supports_record_form = do Effect {
+schema_first_file_csv_source_supports_record_form = {
   path = "/tmp/aivi_source_pipeline_users.csv"
-  _    <- file.write_text path "id,name,active\n1,Ada,true\n2,Lin,false\n"
-  rows <- load (typedUsersCsvSource path)
-  _    <- assertEq (List.length rows) 2
-  rows match
-    | [first, second] => do Effect {
-        _ <- assertEq first.id 1
-        _ <- assertEq first.name "Ada"
-        _ <- assertEq first.active True
-        _ <- assertEq second.id 2
-        _ <- assertEq second.name "Lin"
-        assertEq second.active False
+  file.write_text path "id,name,active\n1,Ada,true\n2,Lin,false\n"
+  load (typedUsersCsvSource path)
+   |> rows => {
+        assertEq (List.length rows) 2
+        rows match
+          | [first, second] => {
+              assertEq first.id 1
+              assertEq first.name "Ada"
+              assertEq first.active True
+              assertEq second.id 2
+              assertEq second.name "Lin"
+              assertEq second.active False
+            }
+          | _ => fail "expected two csv rows"
       }
-    | _ => fail "expected two csv rows"
 }
 
 @test "schema-first env decode supports config records"
-schema_first_env_decode_supports_config_records = do Effect {
-  _   <- env.set "AIVI_PHASE3_PORT" "8080"
-  _   <- env.set "AIVI_PHASE3_DEBUG" "true"
-  cfg <- load (
+schema_first_env_decode_supports_config_records = {
+  env.set "AIVI_PHASE3_PORT" "8080"
+  env.set "AIVI_PHASE3_DEBUG" "true"
+  load (
     env.decode {
       prefix: "AIVI_PHASE3"
       schema: source.schema.derive
     }
   )
-  _ <- assertEq cfg.port 8080
-  assertEq cfg.debug True
+   |> cfg => {
+        assertEq cfg.port 8080
+        assertEq cfg.debug True
+      }
 }
 
 @test "env decode missing prefix returns structured decode error"
-env_decode_missing_prefix_returns_structured_decode_error = do Effect {
-  result <- attempt (
+env_decode_missing_prefix_returns_structured_decode_error = {
+  attempt (
     load (
       env.decode {
         prefix: "AIVI_PHASE3_MISSING"
@@ -115,10 +118,9 @@ env_decode_missing_prefix_returns_structured_decode_error = do Effect {
       }
     )
   )
-  result match
-    | Err err => do Effect {
-        _ <- assertEq (constructorName err) "DecodeError"
+   |> assertErr
+   |> err => {
+        assertEq (constructorName err) "DecodeError"
         assertEq (List.length (envDecodeErrors err)) 1
       }
-    | Ok _ => fail "expected decode error"
 }

@@ -4,7 +4,4 @@ appConfig = env.decode {
   schema: source.schema.derive
 }
 
-do Effect {
-  cfg <- load appConfig
-  pure cfg
-}
+load appConfig

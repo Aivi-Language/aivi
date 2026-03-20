@@ -17,7 +17,7 @@ emptyMap : Map Text Int
 emptyMap = ~map{}
 
 @test "map ++ merges entries, right side wins on collision"
-mapConcatWorks = do Effect {
+mapConcatWorks = {
   assertEq (map.size merged) 3
   assertEq (map.get "a" merged) (Some 1)
   assertEq (map.get "b" merged) (Some 99)
@@ -25,11 +25,11 @@ mapConcatWorks = do Effect {
 }
 
 @test "map ++ with empty right is identity"
-mapConcatEmptyRight = do Effect {
+mapConcatEmptyRight = {
   assertEq (m1 ++ emptyMap) m1
 }
 
 @test "map ++ with empty left is identity"
-mapConcatEmptyLeft = do Effect {
+mapConcatEmptyLeft = {
   assertEq (emptyMap ++ m1) m1
 }

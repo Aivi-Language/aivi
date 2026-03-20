@@ -17,7 +17,7 @@ identity = x => x
 explicitParens = (1 |> identity) == 1
 
 @test "pipe result equality requires explicit parentheses"
-pipeResultEquality = do Effect {
+pipeResultEquality = {
   assertEq explicitParens True
 }
 
@@ -32,6 +32,6 @@ double = x => x * 2
 chained1 = (10 |> double) == 20
 
 @test "pipe-then-compare with explicit parens"
-pipeThenCompare = do Effect {
+pipeThenCompare = {
   assertEq chained1 True
 }

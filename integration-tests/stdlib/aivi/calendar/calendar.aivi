@@ -6,23 +6,23 @@ use aivi.testing
 use aivi.calendar
 
 @test "date"
-date_functional = do Effect {
+date_functional = {
   d = { year: 2024, month: 2, day: 29 }
   assert (d.year == 2024)
 }
 
 @test "date time"
-dateTime_functional = do Effect {
+dateTime_functional = {
   assertEq (1 + 1) 2
 }
 
 @test "end of month"
-endOfMonth_functional = do Effect {
+endOfMonth_functional = {
   assertEq (1 + 1) 2
 }
 
 @test "add days"
-addDays_functional = do Effect {
+addDays_functional = {
   d = addDays { year: 2024, month: 2, day: 28 } 1
   assert (d.day == 29)
   assert (d.month == 2)
@@ -33,39 +33,39 @@ addDays_functional = do Effect {
 }
 
 @test "add months"
-addMonths_functional = do Effect {
+addMonths_functional = {
   d = addMonths { year: 2024, month: 1, day: 31 } 1
   assert (d.month == 2)
   assert (d.day == 29) // 2024 is leap year, 29th is max
 }
 
 @test "add years"
-addYears_functional = do Effect {
+addYears_functional = {
   d = addYears { year: 2024, month: 2, day: 29 } 1
   assert (d.year == 2025)
   assert (d.day == 28) // 2025 is not leap, clamps to 28
 }
 
 @test "days in month"
-daysInMonth_functional = do Effect {
+daysInMonth_functional = {
   assert (daysInMonth { year: 2024, month: 2, day: 1 } == 29)
   assert (daysInMonth { year: 2023, month: 2, day: 1 } == 28)
 }
 
 @test "end of month 2"
-endOfMonth_functional_2 = do Effect {
+endOfMonth_functional_2 = {
   d = endOfMonth { year: 2024, month: 2, day: 1 }
   assert (d.day == 29)
 }
 
 @test "is leap year"
-isLeapYear_functional = do Effect {
+isLeapYear_functional = {
   assert (isLeapYear { year: 2024, month: 1, day: 1 } == True)
   assert (isLeapYear { year: 2023, month: 1, day: 1 } == False)
 }
 
 @test "negate delta"
-negateDelta_functional = do Effect {
+negateDelta_functional = {
   useDate = { year: 2024, month: 2, day: 10 }
   d1      = 1d
   m1      = 1m
@@ -79,7 +79,5 @@ negateDelta_functional = do Effect {
 }
 
 @test "now"
-now_functional = do Effect {
-  _ <- now
-  assertEq (1 + 1) 2
-}
+now_functional = now
+  |> _ => assertEq (1 + 1) 2

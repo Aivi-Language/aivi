@@ -17,7 +17,7 @@ addOne : Int -> Int
 addOne = n => n + 1
 
 bad : Effect Text Unit
-bad = do Effect {
+bad = {
   res <- attempt (pure "hello")
   res match
     | Ok v  => pure (addOne v)

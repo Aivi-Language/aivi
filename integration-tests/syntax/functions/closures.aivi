@@ -3,38 +3,27 @@ module integrationTests.syntax.functions.closures
 
 use aivi
 use aivi.testing
-use aivi.generator
-use aivi.list
 
-// Closure over `factor` used inside a generator
-scaledRange : Int -> Generator Int
-scaledRange = factor => generate {
-  n <- [1, 2, 3]
-  yield n * factor
-}
+// Closure over `factor` used inside a list transform
+scaledRange : Int -> List Int
+scaledRange = factor => List.map (n => n * factor) [1, 2, 3]
 
-// Closure over two parameters used inside a generator
-filteredScaled : Int -> Int -> Generator Int
-filteredScaled = offset factor => generate {
-  n <- [1, 2, 3]
-  yield n * factor + offset
-}
+// Closure over two parameters used inside a list transform
+filteredScaled : Int -> Int -> List Int
+filteredScaled = offset factor => List.map (n => n * factor + offset) [1, 2, 3]
 
-// Resource that captures `offset` and yields a closure
-withAdder : Int -> Resource Text (Int -> Int)
-withAdder = offset => resource {
-  adder = n => n + offset
-  yield adder
-}
+// Helper that captures `offset` and returns a closure
+withAdder : Int -> (Int -> Int)
+withAdder = offset => n => n + offset
 
-@test "closure captures variable in generator"
-closureInGenerator = do Effect {
-  result = toList (scaledRange 3)
+@test "closure captures variable in list transform"
+closureInGenerator = {
+  result = scaledRange 3
   assertEq result [3, 6, 9]
 }
 
-@test "inner closure defined and composed in do Effect"
-innerClosureInDoEffect = do Effect {
+@test "inner closure defined and composed in plain block"
+innerClosureInPlainBlock = {
   base       = 100
   clampedAdd = limit n => if n + base > limit then limit else n + base
   assertEq (clampedAdd 120 10) 110
@@ -42,44 +31,39 @@ innerClosureInDoEffect = do Effect {
 }
 
 @test "closure passed to higher-order map"
-closureInHigherOrder = do Effect {
+closureInHigherOrder = {
   multiplier = 4
-  assertEq ([3, 4, 5] |> map (_ * multiplier)) [12, 16, 20]
+  assertEq (List.map (x => x * multiplier) [3, 4, 5]) [12, 16, 20]
 }
 
-@test "closure used inside do Option"
-closureInDoOption = do Effect {
+@test "closure used inside Option logic"
+closureInOptionLogic = {
   offset    = 5
   addOffset = x => Some (x + offset)
-  result    = do Option {
-    a <- Some 10
-    b <- addOffset a
-    Some b
-  }
+  result = Some 10 match
+    | Some a => addOffset a
+    | None   => None
   assertEq result (Some 15)
 }
 
-@test "closure used inside do Result"
-closureInDoResult = do Effect {
-  validate = max n => do Result {
-    ok <- if n <= max then Ok n else Err "out of range"
-    Ok (ok * 2)
-  }
+@test "closure used inside Result logic"
+closureInResultLogic = {
+  validate = max n => if n <= max then Ok (n * 2) else Err "out of range"
   result1 = validate 100 42
   result2 = validate 10 42
   assertEq result1 (Ok 84)
   assertEq result2 (Err "out of range")
 }
 
-@test "resource acquires and yields a closure"
-resourceYieldsClosure = do Effect {
-  adder <- withAdder 7
+@test "helper returns a closure"
+closureHelperReturnsClosure = {
+  adder = withAdder 7
   assertEq (adder 3) 10
   assertEq (adder 10) 17
 }
 
-@test "generator with closure over two captured parameters"
-generatorWithClosureFilterTransform = do Effect {
-  result = toList (filteredScaled 1 10)
+@test "list transform with closure over two captured parameters"
+generatorWithClosureFilterTransform = {
+  result = filteredScaled 1 10
   assertEq result [11, 21, 31]
 }

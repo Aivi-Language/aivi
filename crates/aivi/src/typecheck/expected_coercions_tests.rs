@@ -407,7 +407,7 @@ module test.signal_block
 use aivi
 use aivi.reactive
 
-main = do Effect {
+main = {
   count = signal 1
   doubled = count ->> (_ * 2)
   _ = count <<- 5
@@ -556,14 +556,13 @@ module test.signal_local_replacements
 use aivi
 use aivi.reactive
 
-main = do Effect {
+main = {
   snakeState = signal [1]
   nextSnake = [1, 2]
   dirState = signal "right"
   nextDir = "left"
   count = signal 0
   bump = _ + 1
-
   _ = snakeState <| nextSnake
   _ = dirState <| nextDir
   _ = dirState <| "up"

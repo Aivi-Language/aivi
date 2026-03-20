@@ -10,18 +10,18 @@ use aivi.option
 // -- Functor --
 
 @test "map works on List via Functor"
-functor_list = do Effect {
+functor_list = {
   assertEq (map (x => x * 2) [1, 2, 3]) [2, 4, 6]
 }
 
 @test "map works on Option via Functor"
-functor_option = do Effect {
+functor_option = {
   assertEq (map (x => x + 1) (Some 5)) (Some 6)
   assertEq (map (x => x + 1) None) None
 }
 
 @test "map works on Result via Functor"
-functor_result = do Effect {
+functor_result = {
   assertEq (map (x => x * 2) (Ok 5)) (Ok 10)
   assertEq (map (x => x * 2) (Err "e")) (Err "e")
 }
@@ -29,12 +29,12 @@ functor_result = do Effect {
 // -- Filterable --
 
 @test "filter works on List via Filterable"
-filterable_list = do Effect {
+filterable_list = {
   assertEq (filter (x => x > 2) [1, 2, 3, 4]) [3, 4]
 }
 
 @test "filter works on Option via Filterable"
-filterable_option = do Effect {
+filterable_option = {
   assertEq (filter (x => x > 3) (Some 5)) (Some 5)
   assertEq (filter (x => x > 3) (Some 1)) None
   assertEq (filter (x => x > 3) None) None
@@ -43,12 +43,12 @@ filterable_option = do Effect {
 // -- Foldable --
 
 @test "reduce works on List via Foldable"
-foldable_list = do Effect {
+foldable_list = {
   assertEq (reduce (acc x => acc + x) 0 [1, 2, 3]) 6
 }
 
 @test "reduce works on Option via Foldable"
-foldable_option = do Effect {
+foldable_option = {
   assertEq (reduce (acc x => acc + x) 0 (Some 5)) 5
   assertEq (reduce (acc x => acc + x) 0 None) 0
 }
@@ -56,25 +56,25 @@ foldable_option = do Effect {
 // -- Semigroup / Monoid --
 
 @test "concat works on List via Semigroup"
-semigroup_list = do Effect {
+semigroup_list = {
   assertEq (concat [1, 2] [3, 4]) [1, 2, 3, 4]
 }
 
 @test "empty works on List via Monoid"
-monoid_list = do Effect {
+monoid_list = {
   assertEq (concat [] [1, 2, 3]) [1, 2, 3]
 }
 
 // -- Alternative --
 
 @test "alt works on Option via Alternative"
-alternative_option = do Effect {
+alternative_option = {
   assertEq (alt (Some 2) (Some 1)) (Some 1)
   assertEq (alt (Some 2) None) (Some 2)
 }
 
 @test "alt works on List via Alternative"
-alternative_list = do Effect {
+alternative_list = {
   assertEq (alt [4, 5] [1, 2, 3]) [1, 2, 3]
   assertEq (alt [4, 5] []) [4, 5]
 }
@@ -82,7 +82,7 @@ alternative_list = do Effect {
 // -- Polymorphic --
 
 @test "map is polymorphic across containers"
-polymorphic_map = do Effect {
+polymorphic_map = {
   double = x => x * 2
   assertEq (map double [1, 2, 3]) [2, 4, 6]
   assertEq (map double (Some 5)) (Some 10)
@@ -92,7 +92,7 @@ polymorphic_map = do Effect {
 // -- Pipe syntax --
 
 @test "class methods work with pipes"
-pipe_class_methods = do Effect {
+pipe_class_methods = {
   xs       = [1, 2, 3, 4, 5]
   filtered = xs |> filter (x => x > 2)
   mapped   = filtered |> map (x => x * 10)

@@ -44,14 +44,10 @@ MkContact = name email => {
 }
 
 contactValidation : State -> Validation (List Text) Contact
-contactValidation = s => do Applicative {
-  name  <- validate nameRule s.name
-  email <- validate emailRule s.email
-  MkContact name email
-}
+contactValidation = s => ap (ap (Valid MkContact) (validate nameRule s.name)) (validate emailRule s.email)
 
 @test "fields start pristine and hide errors"
-fields_start_pristine = do Effect {
+fields_start_pristine = {
   assertEq initialState.name (field "")
   assertEq initialState.email (field "")
   assertEq (nameErrors initialState) []
@@ -59,7 +55,7 @@ fields_start_pristine = do Effect {
 }
 
 @test "input change marks field dirty but not touched"
-input_change_marks_dirty = do Effect {
+input_change_marks_dirty = {
   s = initialState <| { name: setValue "A" initialState.name }
   assertEq s.name.value "A"
   assertEq s.name.dirty True
@@ -68,7 +64,7 @@ input_change_marks_dirty = do Effect {
 }
 
 @test "blur reveals field validation"
-blur_reveals_validation = do Effect {
+blur_reveals_validation = {
   changed = initialState <| { name: setValue "A" initialState.name }
   blurred = changed <| { name: touch changed.name }
   assertEq blurred.name.touched True
@@ -76,7 +72,7 @@ blur_reveals_validation = do Effect {
 }
 
 @test "submit reveals untouched field errors"
-submit_reveals_errors = do Effect {
+submit_reveals_errors = {
   submitted = initialState <| { submitted: True }
   assertEq submitted.submitted True
   assertEq (nameErrors submitted) ["This field is required"]
@@ -84,21 +80,21 @@ submit_reveals_errors = do Effect {
 }
 
 @test "valid form produces typed payload"
-valid_form_payload = do Effect {
+valid_form_payload = {
   s      = initialState <| { name: setValue "Alice" initialState.name } <| { email: setValue "alice@example.com" initialState.email }
   result = contactValidation s
   assertEq result (Valid { name: "Alice", email: "alice@example.com" })
 }
 
 @test "form validation accumulates field errors"
-form_validation_accumulates_errors = do Effect {
+form_validation_accumulates_errors = {
   s      = initialState <| { name: setValue "A" initialState.name } <| { email: setValue "not-an-email" initialState.email }
   result = contactValidation s
   assertEq result (Invalid ["Must be at least 2 characters", "Enter a valid email address"])
 }
 
 @test "gtk signal callbacks invoke field updates directly"
-gtk_signal_callbacks_update_fields = do Effect {
+gtk_signal_callbacks_update_fields = {
   onNameChange  = txt => st => st <| { name: setValue txt st.name }
   onEmailChange = txt => st => st <| { email: setValue txt st.email }
   onNameBlur    = st => st <| { name: touch st.name }

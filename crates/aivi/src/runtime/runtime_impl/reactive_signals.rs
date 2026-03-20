@@ -251,13 +251,13 @@ impl Runtime {
         let running_signal = self.reactive_create_signal(Value::Bool(false))?;
 
         let result_id =
-            self.reactive_signal_id_from_value(result_signal.clone(), "reactive.event result")?;
+            self.reactive_signal_id_from_value(result_signal.clone(), "reactive.eventFrom result")?;
         let error_id =
-            self.reactive_signal_id_from_value(error_signal.clone(), "reactive.event error")?;
+            self.reactive_signal_id_from_value(error_signal.clone(), "reactive.eventFrom error")?;
         let done_id =
-            self.reactive_signal_id_from_value(done_signal.clone(), "reactive.event done")?;
+            self.reactive_signal_id_from_value(done_signal.clone(), "reactive.eventFrom done")?;
         let running_id =
-            self.reactive_signal_id_from_value(running_signal.clone(), "reactive.event running")?;
+            self.reactive_signal_id_from_value(running_signal.clone(), "reactive.eventFrom running")?;
 
         let run_effect = Value::Effect(Arc::new(EffectValue::Thunk {
             func: Arc::new(move |runtime| {

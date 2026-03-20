@@ -2,18 +2,18 @@
 
 > **Proposal status:** this page is a forward-looking design proposal. It does **not** replace the current v0.1 language reference yet.
 > 
-> Today, workflow sequencing is still defined by [Effects](../syntax/effects.md), [do Notation](../syntax/do_notation.md), [Resources](../syntax/resources.md), and [Generators](../syntax/generators.md). If this proposal lands, those pages become migration references during the refactor and are then removed or rewritten at cutover.
+> Today, workflow sequencing is still described across [Effects](../syntax/effects.md), [Cleanup & Lifetimes](../syntax/resources.md), and [Fan-out & Collection Shaping](../syntax/generators.md). If this proposal lands, those pages become migration references during the refactor and are then removed or rewritten at cutover.
 
 ## Why this proposal exists
 
 AIVI currently splits workflow-shaped code across several surfaces:
 
 - plain `|>` pipelines for ordinary transforms,
-- `do Effect { ... }` for effects and resource acquisition,
+- dedicated effect blocks for effects and resource acquisition,
 - `do M { ... }` for generic chaining,
-- `do Applicative { ... }` for independent validation,
-- `generate { ... }` for zero-many workflows,
-- `resource { ... }` for explicit acquisition and cleanup.
+- dedicated applicative blocks for independent validation,
+- legacy fan-out blocks for zero-many workflows,
+- legacy cleanup blocks for explicit acquisition and release.
 
 Each of those forms is coherent on its own, but together they force programmers, formatters, and tooling to switch between several syntactic models for what is often the same left-to-right idea: take a current value, run the next step, and decide what to do with success, absence, multiplicity, failure, cleanup, and control flow.
 
@@ -24,7 +24,7 @@ The intended end state is deliberate: **one workflow style, not several equivale
 ## Design goals
 
 1. **One workflow surface.** Effects, `Option`, `Result`, applicatives, generators, and resources should look like variations of one core idea rather than separate notations.
-2. **Left-to-right reading.** The common case should read as a single pipeline without nested `do Effect { ... }` blocks.
+2. **Left-to-right reading.** The common case should read as a single pipeline without nested dedicated effect blocks.
 3. **Explicit control.** Failure handling, retries, timeouts, cleanup, concurrency, and branching should remain visible in the syntax.
 4. **Formatter-friendly structure.** Indentation and subflow boundaries should come from the parsed tree, not from heuristics.
 5. **Mechanical migration.** The compiler should be able to lower the new syntax to the same internal workflow machinery during the refactor.
@@ -160,7 +160,7 @@ request
 
 ## Resources and cleanup
 
-This proposal removes the dedicated `resource { ... }` workflow surface. Resource lifetime becomes a pipeline concern through explicit cleanup registration.
+This proposal removes the dedicated cleanup-block workflow surface. Resource lifetime becomes a pipeline concern through explicit cleanup registration.
 
 | Clause          | Meaning                                                                                            |
 | --------------- | -------------------------------------------------------------------------------------------------- |
@@ -180,7 +180,7 @@ The concrete runtime may still lower resource-aware stages through the existing 
 
 ## Applicatives and validation
 
-Applicative composition becomes an explicitly grouped pipeline shape rather than a separate `do Applicative { ... }` block. Consecutive &|> collect all errors
+Applicative composition becomes an explicitly grouped pipeline shape rather than a separate applicative block. Consecutive &|> collect all errors
 
 Example:
 
@@ -199,7 +199,7 @@ Inside an `all` group:
 
 ## Generators, zero-many workflows, and concurrency
 
-`*|>` replaces the separate `generate { ... }` surface. A `*|>` stage expands zero-many outputs and flattens them into the surrounding workflow.
+`*|>` replaces the separate legacy fan-out block surface. A `*|>` stage expands zero-many outputs and flattens them into the surrounding workflow.
 
 suggestion: +|> should fan out with applicative mode
 
@@ -325,16 +325,12 @@ If the `|` column always lines up, long workflow pipelines stay visually scannab
 
 Q: how do we replace
 @test "demo test"
-myTest = do Effect {
+myTest =
   assertEq 1 1
-  assertEq 2 1
-}
-Q: can we just start with no subject? that way we could also directly use *|> and +|>
-myTest = !|> {
-  
-}
+     ~|> assertEq 2 1
+
+Q: can we just start from the first effect expression? That would also let `*|>` and `+|>` keep a consistent root-expression story.
  
 ## Migration and refactor plan
 
 Adopting this proposal would require a deliberate end-to-end refactor.
-

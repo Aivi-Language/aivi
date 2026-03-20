@@ -14,6 +14,6 @@ gt2      = values |> filter (_ > 2)
 expected = [3, 4, 5]
 
 @test "predicate filtering"
-predicatesWork = do Effect {
+predicatesWork = {
   assertEq gt2 expected
 }

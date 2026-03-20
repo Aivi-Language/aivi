@@ -1198,6 +1198,9 @@ impl TypeChecker {
         env: &TypeEnv,
     ) -> Result<Expr, TypeError> {
         let inner = self.desugar_nested_flow_expr(step_expr.clone(), env)?;
+        if Expr::is_implicit_unit_placeholder(&current_expr) {
+            return Ok(inner);
+        }
         Ok(Expr::Binary {
             op: "|>".to_string(),
             left: Box::new(current_expr),
@@ -1213,6 +1216,9 @@ impl TypeChecker {
         env: &TypeEnv,
     ) -> Result<Expr, TypeError> {
         let predicate = self.desugar_nested_flow_expr(predicate.clone(), env)?;
+        if Expr::is_implicit_unit_placeholder(&current_expr) {
+            return Ok(predicate);
+        }
         Ok(Expr::Binary {
             op: "|>".to_string(),
             left: Box::new(current_expr),
@@ -2926,5 +2932,13 @@ impl Expr {
             name: "Unit".to_string(),
             span,
         })
+    }
+
+    fn is_implicit_unit_placeholder(expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Ident(SpannedName { name, span })
+                if name == "Unit" && span.start == span.end
+        )
     }
 }

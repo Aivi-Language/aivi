@@ -7,7 +7,7 @@ use aivi.testing
 use aivi.chronos.calendar
 
 @test "date to text and format"
-date_toText_and_format = do Effect {
+date_toText_and_format = {
   d = { year: 2024, month: 5, day: 21 }
 
   assertEq (toText d) "2024-05-21"

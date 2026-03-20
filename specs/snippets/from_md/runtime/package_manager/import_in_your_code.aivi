@@ -2,7 +2,4 @@ module my.app
 
 use my.aivi.lib (greet)
 
-main = do Effect {
-  msg = greet "world"
-  print msg
-}
+main = print (greet "world")

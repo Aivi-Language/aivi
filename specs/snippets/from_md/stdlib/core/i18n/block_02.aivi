@@ -1,9 +1,6 @@
 loadTranslator : Locale -> Text -> Effect Text (Key -> {} -> Text)
-loadTranslator = locale path => do Effect {
-  bundleResult <- bundleFromPropertiesFile locale path
-  bundle = bundleResult match
-    | Ok b  => b
-    | Err e => fail e
-
-  pure (t bundle)
-}
+loadTranslator = locale path =>
+  bundleFromPropertiesFile locale path
+|> bundleResult => bundleResult match
+  | Ok bundle => pure (t bundle)
+  | Err e     => fail e

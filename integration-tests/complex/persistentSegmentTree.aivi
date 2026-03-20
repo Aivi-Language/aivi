@@ -110,17 +110,17 @@ updatePoint = tree idx value => tree match
     }
 
 @test "Persistent segment tree queries"
-persistency = do Effect {
+persistency = {
   arr = [1, 2, 3, 4]
-  tree <- pure (fromList arr)
+  tree = (fromList arr)
 
-  queryAll <- pure (queryRange tree 0 3)
+  queryAll = (queryRange tree 0 3)
   assert (queryAll == Some { sum: 10, min: 1, max: 4 })
 
-  querySlice <- pure (queryRange tree 1 2)
+  querySlice = (queryRange tree 1 2)
   assert (querySlice == Some { sum: 5, min: 2, max: 3 })
 
-  updated <- pure (updatePoint tree 2 7)
+  updated = (updatePoint tree 2 7)
   assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
 
   // Original tree stays intact (persistence)

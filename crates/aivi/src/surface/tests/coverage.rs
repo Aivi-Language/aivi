@@ -7,9 +7,10 @@
 use std::path::Path;
 
 use crate::surface::{
-    lower_modules_to_arena, parse_modules, ArenaBlockItem, ArenaBlockKind, ArenaExpr, ArenaLiteral,
-    ArenaModuleItem, ArenaPattern, ArenaRecordTypeField, ArenaTypeExpr, BlockItem, BlockKind, Expr,
-    Literal, ModuleItem, PathSegment,
+    lower_modules_to_arena, parse_modules, ArenaBlockItem, ArenaBlockKind, ArenaExpr,
+    ArenaFlowLine, ArenaFlowStepKind, ArenaLiteral, ArenaModuleItem, ArenaPattern,
+    ArenaRecordTypeField, ArenaTypeExpr, BlockItem, BlockKind, Expr, FlowLine, Literal, ModuleItem,
+    PathSegment,
 };
 
 use super::diag_codes;
@@ -548,14 +549,13 @@ x = f 1 2
 }
 
 #[test]
-fn lower_do_block_to_arena() {
+fn lower_flow_expr_to_arena() {
     let src = r#"
 module Example
 
-x = do Effect {
-  y <- someEffect
-  pure y
-}
+x =
+   |> someEffect#y
+   |> pure y
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
@@ -569,15 +569,16 @@ x = do Effect {
         })
         .expect("x");
     match arena.expr(def.expr) {
-        ArenaExpr::Block {
-            kind: ArenaBlockKind::Do { monad },
-            items,
-            ..
-        } => {
-            assert_eq!(monad.symbol.as_str(), "Effect");
-            assert_eq!(items.len(), 2);
+        ArenaExpr::Flow { lines, .. } => {
+            assert_eq!(lines.len(), 2);
+            assert!(matches!(
+                lines.first(),
+                Some(ArenaFlowLine::Step(step))
+                    if step.kind == ArenaFlowStepKind::Flow
+                        && step.binding.as_ref().is_some_and(|binding| binding.name.symbol.as_str() == "y")
+            ));
         }
-        other => panic!("expected Do Block, got {other:?}"),
+        other => panic!("expected Flow, got {other:?}"),
     }
 }
 
@@ -1071,14 +1072,13 @@ f = (1, "a")
 // ─────────────────────────────────────────────────────────
 
 #[test]
-fn lower_block_let_item_to_arena() {
+fn lower_flow_binding_to_arena() {
     let src = r#"
 module Example
 
-x = do Effect {
-  y = 1
-  pure y
-}
+x =
+   |> pure 1#y
+   |> pure y
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
@@ -1092,24 +1092,25 @@ x = do Effect {
         })
         .expect("x");
     match arena.expr(def.expr) {
-        ArenaExpr::Block { items, .. } => {
-            assert!(items
-                .iter()
-                .any(|i| matches!(i, ArenaBlockItem::Let { .. })));
+        ArenaExpr::Flow { lines, .. } => {
+            assert!(matches!(
+                lines.first(),
+                Some(ArenaFlowLine::Step(step))
+                    if step.binding.as_ref().is_some_and(|binding| binding.name.symbol.as_str() == "y")
+            ));
         }
-        other => panic!("expected Block, got {other:?}"),
+        other => panic!("expected Flow, got {other:?}"),
     }
 }
 
 #[test]
-fn lower_block_when_item_to_arena() {
+fn lower_tap_step_to_arena() {
     let src = r#"
 module Example
 
-x = do Effect {
-  when True <- someEffect
-  pure 1
-}
+x =
+   |> pure 1
+  ~|> if True then someEffect else pure Unit
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
@@ -1123,24 +1124,24 @@ x = do Effect {
         })
         .expect("x");
     match arena.expr(def.expr) {
-        ArenaExpr::Block { items, .. } => {
-            assert!(items
-                .iter()
-                .any(|i| matches!(i, ArenaBlockItem::When { .. })));
+        ArenaExpr::Flow { lines, .. } => {
+            assert!(lines.iter().any(|line| matches!(
+                line,
+                ArenaFlowLine::Step(step) if step.kind == ArenaFlowStepKind::Tap
+            )));
         }
-        other => panic!("expected Block, got {other:?}"),
+        other => panic!("expected Flow, got {other:?}"),
     }
 }
 
 #[test]
-fn lower_block_unless_item_to_arena() {
+fn lower_inverse_tap_step_to_arena() {
     let src = r#"
 module Example
 
-x = do Effect {
-  unless False <- someEffect
-  pure 1
-}
+x =
+   |> pure 1
+  ~|> if False then pure Unit else someEffect
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
@@ -1154,33 +1155,41 @@ x = do Effect {
         })
         .expect("x");
     match arena.expr(def.expr) {
-        ArenaExpr::Block { items, .. } => {
-            assert!(items
-                .iter()
-                .any(|i| matches!(i, ArenaBlockItem::Unless { .. })));
+        ArenaExpr::Flow { lines, .. } => {
+            assert!(lines.iter().any(|line| matches!(
+                line,
+                ArenaFlowLine::Step(step) if step.kind == ArenaFlowStepKind::Tap
+            )));
         }
-        other => panic!("expected Block, got {other:?}"),
+        other => panic!("expected Flow, got {other:?}"),
     }
 }
 
 #[test]
-fn lower_block_given_item_to_arena() {
+fn lower_guard_line_to_arena() {
     let src = r#"
 module Example
 
-x = do Effect {
-  given ok <- someCheck else fail "nope"
-  pure 1
-}
+x = ok
+  >|> _ or fail "nope"
+   |> pure 1
 "#;
     let (modules, _diags) = parse_modules(Path::new("test.aivi"), src);
-    // given may parse with diags; just ensure arena lowering doesn't panic
     let (arena, lowered) = lower_modules_to_arena(&modules);
     let _def = lowered[0].items.iter().find_map(|item| match item {
         ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
         _ => None,
     });
-    assert!(!arena.exprs.is_empty());
+    let def = _def.expect("x");
+    match arena.expr(def.expr) {
+        ArenaExpr::Flow { lines, .. } => {
+            assert!(lines.iter().any(|line| matches!(
+                line,
+                ArenaFlowLine::Guard(guard) if guard.fail_expr.is_some()
+            )));
+        }
+        other => panic!("expected Flow, got {other:?}"),
+    }
 }
 
 #[test]
@@ -3194,8 +3203,8 @@ fn lower_block_recurse_item_to_arena() {
 // ─────────────────────────────────────────────────────────
 
 #[test]
-fn parses_loop_in_do_block() {
-    let src = "module Example\n\nx = do Effect {\n  loop n = 0 => {\n    pure n\n  }\n}\n";
+fn parses_anchor_in_flow() {
+    let src = "module Example\n\nx = 0\n  @|> restart\n   |> recurse restart\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
     let def = modules[0]
@@ -3207,7 +3216,7 @@ fn parses_loop_in_do_block() {
         })
         .expect("x");
     assert!(
-        matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::Let { .. })))
+        matches!(&def.expr, Expr::Flow { lines, .. } if lines.iter().any(|line| matches!(line, FlowLine::Anchor(_))))
     );
 }
 
@@ -3247,8 +3256,8 @@ fn rejects_bind_outside_do_or_generate() {
 }
 
 #[test]
-fn parses_given_with_match_form() {
-    let src = "module Example\n\nx = do Effect {\n  given (status > 0) or\n    | NotFound => pure \"not found\"\n    | Timeout => pure \"timeout\"\n  pure \"ok\"\n}\n";
+fn parses_guard_with_match_fail_expr() {
+    let src = "module Example\n\nx = status\n  >|> _ > 0 or fail (status match\n    | NotFound => pure \"not found\"\n    | Timeout  => pure \"timeout\"\n  )\n   |> pure \"ok\"\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
     let def = modules[0]
@@ -3260,20 +3269,18 @@ fn parses_given_with_match_form() {
         })
         .expect("x");
     match &def.expr {
-        Expr::Block { items, .. } => assert!(items.iter().any(|i| matches!(
-            i,
-            BlockItem::Given {
-                fail_expr: Expr::Match { .. },
-                ..
-            }
+        Expr::Flow { lines, .. } => assert!(lines.iter().any(|line| matches!(
+            line,
+            FlowLine::Guard(guard)
+                if matches!(guard.fail_expr.as_ref(), Some(Expr::Match { .. }))
         ))),
-        other => panic!("expected Block, got {other:?}"),
+        other => panic!("expected Flow, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_given_with_simple_fail() {
-    let src = "module Example\n\nx = do Effect {\n  given (status > 0) or fail \"bad\"\n  pure \"ok\"\n}\n";
+fn parses_guard_with_simple_fail() {
+    let src = "module Example\n\nx = status\n  >|> _ > 0 or fail \"bad\"\n   |> pure \"ok\"\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
     let def = modules[0]
@@ -3285,7 +3292,7 @@ fn parses_given_with_simple_fail() {
         })
         .expect("x");
     assert!(
-        matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::Given { .. })))
+        matches!(&def.expr, Expr::Flow { lines, .. } if lines.iter().any(|line| matches!(line, FlowLine::Guard(_))))
     );
 }
 

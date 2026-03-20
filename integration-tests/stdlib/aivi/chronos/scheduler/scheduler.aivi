@@ -7,7 +7,7 @@ use aivi.chronos.scheduler
 use aivi.chronos.scheduler (domain Scheduler)
 
 @test "trigger constructors"
-trigger_constructors = do Effect {
+trigger_constructors = {
   tz = ~tz(UTC)
 
   c = cron "0 */5 * * *" tz
@@ -28,7 +28,7 @@ trigger_constructors = do Effect {
 }
 
 @test "idempotent planning index"
-idempotent_planning_index = do Effect {
+idempotent_planning_index = {
   k = planKey "nightly-report" 2026-01-01T00:00:00Z
 
   run = {
@@ -50,7 +50,7 @@ idempotent_planning_index = do Effect {
 }
 
 @test "retry delay with exponential backoff"
-retry_delay_with_exponential_backoff = do Effect {
+retry_delay_with_exponential_backoff = {
   policy = Exponential {
     base: { millis: 1000 }
     cap: { millis: 10000 }
@@ -67,7 +67,7 @@ retry_delay_with_exponential_backoff = do Effect {
 }
 
 @test "tenant concurrency limit"
-tenant_concurrency_limit = do Effect {
+tenant_concurrency_limit = {
   limit = { tenantId: "tenant-1", maxConcurrent: 2 }
 
   k1 = planKey "job-a" 2026-01-01T00:00:00Z
@@ -108,7 +108,7 @@ tenant_concurrency_limit = do Effect {
 }
 
 @test "worker action helpers"
-worker_action_helpers = do Effect {
+worker_action_helpers = {
   k   = planKey "job-a" 2026-01-01T00:00:00Z
   run = {
     key: k

@@ -1,10 +1,8 @@
-do Effect {
-  _ <- db.runMigrations [users, orders]
-  _ <- db.runMigrationSql [
-    {
-      id: "idx-orders-status"
-      sql: "CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);"
-    }
-  ]
-  pure Unit
-}
+applySchema = db.runMigrations [users, orders]
+
+addOrderStatusIndex = db.runMigrationSql [
+  {
+    id: "idx-orders-status"
+    sql: "CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);"
+  }
+]

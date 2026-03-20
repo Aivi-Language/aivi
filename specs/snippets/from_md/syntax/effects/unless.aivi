@@ -1,3 +1,2 @@
-do Effect {
-  unless isValid <- fail (ValidationError "invalid input")
-}
+isValid
+>|>_ or fail (ValidationError "invalid input")

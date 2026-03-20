@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.syntax.effects.implicitUnitRoot
+
+use aivi
+use aivi.testing
+
+@test "operator-first applicative flow uses implicit Unit root"
+operatorFirstApplicativeFlowUsesImplicitUnitRoot =
+  &|> assertEq 1 1
+  &|> assertEq 2 2
+
+@test "operator-first sequential flow can bind and continue"
+operatorFirstSequentialFlowCanBindAndContinue =
+   |> pure 10#value
+  ~|>value => assertEq value 10

@@ -4,6 +4,4 @@ use aivi.testing
 add = left right => left + right
 
 @test "addition works"
-additionWorks = do Effect {
-  assertEq (add 1 1) 2
-}
+additionWorks = assertEq (add 1 1) 2

@@ -120,30 +120,27 @@ use aivi.testing
 ShellState = AiSettingsSection | SearchSection
 
 @test "signal patch operator updates scalar signals"
-signal_patch_operator_updates_scalar = do Effect {
+signal_patch_operator_updates_scalar = {
   count = signal 1
-
   assertEq (count <<- (_ + 3)) Unit
   assertEq (get count) 4
 }
 
 @test "signal pipe derives a new signal from the current value"
-signal_pipe_derives_from_source = do Effect {
-  count   = signal 2
+signal_pipe_derives_from_source = {
+  count = signal 2
   doubled = count ->> (_ * 2)
-
   assertEq (get doubled) 4
   assertEq (set count 5) Unit
   assertEq (get doubled) 10
 }
 
 @test "signal pipe accepts bare matcher blocks"
-signal_pipe_accepts_bare_matcher_blocks = do Effect {
-  shellState     = signal (Some SearchSection)
+signal_pipe_accepts_bare_matcher_blocks = {
+  shellState = signal (Some SearchSection)
   aiSettingsOpen = shellState ->>
     | Some AiSettingsSection => True
     | _                      => False
-
   assertEq (get aiSettingsOpen) False
   assertEq (set shellState (Some AiSettingsSection)) Unit
   assertEq (get aiSettingsOpen) True

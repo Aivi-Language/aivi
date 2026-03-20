@@ -241,7 +241,7 @@ pub extern "C" fn rt_bind_effect(
 // ---------------------------------------------------------------------------
 
 /// Wrap a value in an `Effect` thunk so that `rt_run_effect` can consume it.
-/// Used at the end of JIT-compiled `do Effect` blocks to ensure the return
+/// Used at the end of JIT-compiled effect-style blocks to ensure the return
 /// type is always `Value::Effect`, matching what the caller expects.
 ///
 /// # Safety

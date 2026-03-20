@@ -9,13 +9,13 @@ use aivi.result
 // --- Compile ---
 
 @test "regex compile valid"
-compileValid = do Effect {
+compileValid = {
   result = compile "\\d+"
   assertEq (isOk result) True
 }
 
 @test "regex compile invalid"
-compileInvalid = do Effect {
+compileInvalid = {
   result = compile "[invalid"
   assertEq (isErr result) True
 }
@@ -23,13 +23,10 @@ compileInvalid = do Effect {
 // --- Test ---
 
 @test "regex test matches"
-testMatches = do Effect {
-  r = do Result {
-    rx <- compile "\\d+"
-    Ok rx
-  }
+testMatches = {
+  r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         assertEq (test rx "hello 42 world") True
         assertEq (test rx "no numbers here") False
       }
@@ -37,13 +34,10 @@ testMatches = do Effect {
 }
 
 @test "regex test full text"
-testFullText = do Effect {
-  r = do Result {
-    rx <- compile "^hello$"
-    Ok rx
-  }
+testFullText = {
+  r = compile "^hello$"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         assertEq (test rx "hello") True
         assertEq (test rx "hello world") False
       }
@@ -53,10 +47,10 @@ testFullText = do Effect {
 // --- Find ---
 
 @test "regex find"
-findTest = do Effect {
+findTest = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = find rx "abc 123 def"
         assertEq result (Some (4, 7))
       }
@@ -64,10 +58,10 @@ findTest = do Effect {
 }
 
 @test "regex find no match"
-findNoMatch = do Effect {
+findNoMatch = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = find rx "no digits"
         assertEq result None
       }
@@ -77,10 +71,10 @@ findNoMatch = do Effect {
 // --- FindAll ---
 
 @test "regex findAll"
-findAllTest = do Effect {
+findAllTest = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = findAll rx "12 and 34"
         assertEq result [(0, 2), (7, 9)]
       }
@@ -90,10 +84,10 @@ findAllTest = do Effect {
 // --- Split ---
 
 @test "regex split"
-splitTest = do Effect {
+splitTest = {
   r = compile "\\s+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = split rx "a b  c"
         assertEq result ["a", "b", "c"]
       }
@@ -101,10 +95,10 @@ splitTest = do Effect {
 }
 
 @test "regex split no match"
-splitNoMatch = do Effect {
+splitNoMatch = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = split rx "abc"
         assertEq result ["abc"]
       }
@@ -114,10 +108,10 @@ splitNoMatch = do Effect {
 // --- Replace ---
 
 @test "regex replace first"
-replaceFirst = do Effect {
+replaceFirst = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = replace rx "12 and 34" "XX"
         assertEq result "XX and 34"
       }
@@ -125,10 +119,10 @@ replaceFirst = do Effect {
 }
 
 @test "regex replaceAll"
-replaceAllTest = do Effect {
+replaceAllTest = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = replaceAll rx "12 and 34" "XX"
         assertEq result "XX and XX"
       }
@@ -138,13 +132,13 @@ replaceAllTest = do Effect {
 // --- Match ---
 
 @test "regex match with groups"
-matchGroups = do Effect {
+matchGroups = {
   r = compile "(\\w+)@(\\w+)"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = match rx "user@host"
         result match
-          | Some m => do Effect {
+          | Some m => {
               assertEq m.full "user@host"
               assertEq m.start 0
               assertEq m.end 9
@@ -155,10 +149,10 @@ matchGroups = do Effect {
 }
 
 @test "regex match no match"
-matchNone = do Effect {
+matchNone = {
   r = compile "\\d+"
   r match
-    | Ok rx => do Effect {
+    | Ok rx => {
         result = match rx "no digits"
         assertEq result None
       }

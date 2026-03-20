@@ -1,30 +1,24 @@
 @static
 petStoreApi = openapi.fromFile "./petstore.json"
 
-listSomePets = do Effect {
-  client = petStoreApi {
-    bearerToken: Some "sk-..."
-    baseUrl: None
-    headers: None
-    timeoutMs: None
-    retryCount: None
-    strictStatus: None
-  }
-
-  pets <- client.listPets { limit: Some 10 }
-  pure pets
+petStoreClient = petStoreApi {
+  bearerToken: Some "sk-..."
+  baseUrl: None
+  headers: None
+  timeoutMs: None
+  retryCount: None
+  strictStatus: None
 }
 
-listPetsWithDestructuring = do Effect {
-  { listPets } = petStoreApi {
-    bearerToken: None
-    baseUrl: None
-    headers: None
-    timeoutMs: None
-    retryCount: None
-    strictStatus: None
-  }
+listSomePets = petStoreClient.listPets { limit: Some 10 }
 
-  result <- listPets {}
-  pure result
+{ listPets } = petStoreApi {
+  bearerToken: None
+  baseUrl: None
+  headers: None
+  timeoutMs: None
+  retryCount: None
+  strictStatus: None
 }
+
+listPetsWithDestructuring = listPets {}

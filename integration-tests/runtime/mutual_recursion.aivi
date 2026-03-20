@@ -13,28 +13,28 @@ even = n => if n == 0 then True else odd (n - 1)
 odd  = n => if n == 0 then False else even (n - 1)
 
 @test "even recognizes even numbers"
-evenWorks = do Effect {
+evenWorks = {
   assertEq (even 0) True
   assertEq (even 4) True
   assertEq (even 10) True
 }
 
 @test "odd recognizes odd numbers"
-oddWorks = do Effect {
+oddWorks = {
   assertEq (odd 1) True
   assertEq (odd 3) True
   assertEq (odd 11) True
 }
 
 @test "even rejects odd numbers"
-evenRejectsOdd = do Effect {
+evenRejectsOdd = {
   assertEq (even 1) False
   assertEq (even 3) False
   assertEq (even 7) False
 }
 
 @test "odd rejects even numbers"
-oddRejectsEven = do Effect {
+oddRejectsEven = {
   assertEq (odd 0) False
   assertEq (odd 2) False
   assertEq (odd 10) False

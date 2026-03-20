@@ -7,14 +7,14 @@ use aivi.math
 use aivi.geometry
 
 @test "point2 constructor"
-point2_constructor = do Effect {
+point2_constructor = {
   p = point2 3.0 4.0
   assertEq p.x 3.0
   assertEq p.y 4.0
 }
 
 @test "point3 constructor"
-point3_constructor = do Effect {
+point3_constructor = {
   p = point3 1.0 2.0 3.0
   assertEq p.x 1.0
   assertEq p.y 2.0
@@ -22,35 +22,35 @@ point3_constructor = do Effect {
 }
 
 @test "line2 constructor"
-line2_constructor = do Effect {
+line2_constructor = {
   l = line2 0.0 0.0 1.0 0.0
   assertEq l.origin.x 0.0
   assertEq l.direction.x 1.0
 }
 
 @test "segment2 constructor"
-segment2_constructor = do Effect {
+segment2_constructor = {
   s = segment2 0.0 0.0 3.0 4.0
   assertEq s.start.x 0.0
   assertEq s.end.x 3.0
 }
 
 @test "ray3 constructor"
-ray3_constructor = do Effect {
+ray3_constructor = {
   r = ray3 0.0 0.0 0.0 0.0 0.0 1.0
   assertEq r.origin.x 0.0
   assertEq r.dir.z 1.0
 }
 
 @test "distance 2d"
-distance_2d = do Effect {
+distance_2d = {
   p1 = point2 0.0 0.0
   p2 = point2 3.0 4.0
   assert (abs (distance p1 p2 - 5.0) < 0.0001)
 }
 
 @test "midpoint"
-midpoint_functional = do Effect {
+midpoint_functional = {
   seg = segment2 0.0 0.0 4.0 6.0
   mid = midpoint seg
   assert (abs (mid.x - 2.0) < 0.0001)
@@ -58,7 +58,7 @@ midpoint_functional = do Effect {
 }
 
 @test "polygon area is non-negative"
-polygon_area = do Effect {
+polygon_area = {
   ccw = {
     vertices: [point2 0.0 0.0, point2 4.0 0.0, point2 4.0 3.0, point2 0.0 3.0]
   }
@@ -73,7 +73,7 @@ polygon_area = do Effect {
 }
 
 @test "point2 arithmetic"
-point2_arithmetic = do Effect {
+point2_arithmetic = {
   a = point2 1.0 2.0
   b = point2 3.0 4.0
   s = a + b
@@ -82,7 +82,7 @@ point2_arithmetic = do Effect {
 }
 
 @test "point3 arithmetic"
-point3_arithmetic = do Effect {
+point3_arithmetic = {
   a = point3 1.0 2.0 3.0
   b = point3 4.0 5.0 6.0
   s = a + b

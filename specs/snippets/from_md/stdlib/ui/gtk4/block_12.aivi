@@ -3,12 +3,10 @@ use aivi.ui.gtk4
 state = signal { projectName: "", volume: 0.0, saved: False }
 
 runLoop : Effect GtkError Unit
-runLoop = do Effect {
-  events <- signalStream {}
-  channel.forEach events (event => event match
+runLoop = signalStream {}
+  |> events => channel.forEach events (event => event match
     | GtkClicked _ _          => update state (patch { saved: True })
     | GtkInputChanged _ _ txt => update state (patch { projectName: txt })
     | GtkValueChanged _ _ val => update state (patch { volume: val })
     | _                       => pure Unit
   )
-}

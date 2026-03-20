@@ -1,10 +1,10 @@
-do Effect {
-  _ <- db.insert users { id: 1, email: "ada@example.com", active: True }
-  _ <- db.update users[id == 1] { active: False }
-  _ <- db.delete users[!active]
-  _ <- db.upsert users[id == 2] { id: 2, email: "grace@example.com", active: True } {
-    email: "grace@example.com"
-    active: True
-  }
-  pure Unit
+seedAda = db.insert users { id: 1, email: "ada@example.com", active: True }
+
+deactivateAda = db.update users[id == 1] { active: False }
+
+removeInactive = db.delete users[!active]
+
+createOrUpdateGrace = db.upsert users[id == 2] { id: 2, email: "grace@example.com", active: True } {
+  email: "grace@example.com"
+  active: True
 }

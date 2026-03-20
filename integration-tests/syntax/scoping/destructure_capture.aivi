@@ -6,10 +6,10 @@ use aivi.testing
 
 Person = { name: Text, age: Int }
 
-// Closures capturing destructured bindings, tested inside do Effect blocks.
+// Closures capturing destructured bindings.
 
 @test "closure captures destructured name binding and returns it"
-doEffectDestructureName = do Effect {
+destructureNameCapture = {
   user          = { name: "Alice", age: 30 }
   { name, age } = user
   getName       = _ => name
@@ -19,7 +19,7 @@ doEffectDestructureName = do Effect {
 }
 
 @test "closure captures destructured age binding"
-doEffectDestructureAge = do Effect {
+doEffectDestructureAge = {
   user          = { name: "Bob", age: 17 }
   { name, age } = user
   isAdult       = _ => age >= 18
@@ -31,7 +31,7 @@ doEffectDestructureAge = do Effect {
 }
 
 @test "closure captures destructured integer binding"
-doEffectDestructureMixed = do Effect {
+doEffectDestructureMixed = {
   info            = { name: "Dave", score: 42 }
   { name, score } = info
   addScore        = x => score + x
@@ -40,14 +40,14 @@ doEffectDestructureMixed = do Effect {
 }
 
 @test "closure from function capturing field via record access"
-closureFromFunctionFieldAccess = do Effect {
+closureFromFunctionFieldAccess = {
   getAge   = user => _ => user.age
   getAgeFn = getAge { name: "Eve", age: 28 }
   assertEq (getAgeFn Unit) 28
 }
 
 @test "tuple destructure binding captured in closure"
-tupleDestructureCapture = do Effect {
+tupleDestructureCapture = {
   pair   = (10, 20)
   (a, b) = pair
   sumFn  = offset => a + b + offset
@@ -56,7 +56,7 @@ tupleDestructureCapture = do Effect {
 }
 
 @test "nested record field access captured in closure"
-nestedFieldCapture = do Effect {
+nestedFieldCapture = {
   wrapper   = { inner: { value: 7 } }
   inner     = wrapper.inner
   { value } = inner

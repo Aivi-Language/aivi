@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.ui.layout
 
 @test "length types"
-length_types = do Effect {
+length_types = {
   px  = Px 100
   em  = Em 2
   rem = Rem 1
@@ -20,13 +20,13 @@ length_types = do Effect {
 }
 
 @test "percentage type"
-percentage_type = do Effect {
+percentage_type = {
   p = Pct 50
   assertEq p (Pct 50)
 }
 
 @test "unit val construct"
-unitVal_construct = do Effect {
+unitVal_construct = {
   u = { val: 42 }
   assertEq u.val 42
 }

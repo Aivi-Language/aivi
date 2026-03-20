@@ -9,7 +9,7 @@ use aivi.testing
 makeAdder = n => x => n + x
 
 @test "closure captures outer binding"
-closureCapture = do Effect {
+closureCapture = {
   addFive = makeAdder 5
   assertEq (addFive 3) 8
   assertEq (addFive 10) 15
@@ -22,7 +22,7 @@ map = f xs => xs match
   | [x, ...rest] => [f x, ...(map f rest)]
 
 @test "map with lambda"
-mapLambda = do Effect {
+mapLambda = {
   result = map (x => x * 2)[1, 2, 3]
   assertEq result [2, 4, 6]
 }
@@ -32,7 +32,7 @@ mapLambda = do Effect {
 compose = f g x => f (g x)
 
 @test "function composition"
-functionComposition = do Effect {
+functionComposition = {
   double    = x => x * 2
   inc       = x => x + 1
   doubleInc = compose double inc
@@ -42,7 +42,7 @@ functionComposition = do Effect {
 // --- Nested closures ---
 
 @test "nested closures"
-nestedClosures = do Effect {
+nestedClosures = {
   outer = a => b => c => a + b + c
   f     = outer 10
   g     = f 20
@@ -54,7 +54,7 @@ nestedClosures = do Effect {
 applyTwice = f x => f (f x)
 
 @test "apply twice"
-applyTwiceTest = do Effect {
+applyTwiceTest = {
   inc = x => x + 1
   assertEq (applyTwice inc 0) 2
   assertEq (applyTwice (x => x * 2) 3) 12

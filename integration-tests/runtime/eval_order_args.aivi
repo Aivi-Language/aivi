@@ -27,19 +27,19 @@ triple = a b c => (a, b, c)
 // --- Basic positional correctness ---
 
 @test "args arrive at correct positions – Int"
-argPositionInt = do Effect {
+argPositionInt = {
   result = toList3 10 20 30
   assertEq result [10, 20, 30]
 }
 
 @test "args arrive at correct positions – Text"
-argPositionText = do Effect {
+argPositionText = {
   result = toList3 "first" "second" "third"
   assertEq result ["first", "second", "third"]
 }
 
 @test "four args arrive in declaration order"
-argPositionFour = do Effect {
+argPositionFour = {
   result = toList4 1 2 3 4
   assertEq result [1, 2, 3, 4]
 }
@@ -47,7 +47,7 @@ argPositionFour = do Effect {
 // --- Computed arguments preserve position ---
 
 @test "computed args at correct positions"
-computedArgPositions = do Effect {
+computedArgPositions = {
   base   = 10
   result = toList3 (base + 1) (base * 2) (base * 3)
   assertEq result [11, 20, 30]
@@ -56,40 +56,40 @@ computedArgPositions = do Effect {
 // --- Non-commutative: argument order changes the result ---
 
 @test "sub(10,3) = 7, not sub(3,10)"
-subArgOrder = do Effect {
+subArgOrder = {
   assertEq (sub 10 3) 7
   assertEq (sub 3 10) (-7)
 }
 
 @test "nested computed args respect position"
-nestedComputedArgs = do Effect {
+nestedComputedArgs = {
   f      = x => x * 2
   g      = x => x + 100
   result = toList3 (f 1) (g 2) (f (g 3))
   assertEq result [2, 102, 206]
 }
 
-// --- do Effect sequencing reflects L-to-R evaluation order ---
+// --- multi-step sequencing reflects L-to-R evaluation order ---
 //
-// In a do Effect block, each bind is sequenced: step1 runs before step2, etc.
+// In a multi-step computation, each step keeps its source order.
 // Collecting the results in order verifies that evaluation proceeds
-// left-to-right through the block.
+// left-to-right through the surrounding expression.
 
-@test "do Effect sequencing is left-to-right"
-doEffectSeqOrder = do Effect {
-  a <- pure 100
-  b <- pure 200
-  c <- pure 300
+@test "multi-step sequencing is left-to-right"
+effectSeqOrder = {
+  a = 100
+  b = 200
+  c = 300
   log = [a, b, c]
   assertEq log [100, 200, 300]
 }
 
 @test "multi-step accumulation preserves order"
-multiStepAccumulation = do Effect {
-  v1 <- pure (1 * 10)
-  v2 <- pure (2 * 10)
-  v3 <- pure (3 * 10)
-  v4 <- pure (4 * 10)
+multiStepAccumulation = {
+  v1 = (1 * 10)
+  v2 = (2 * 10)
+  v3 = (3 * 10)
+  v4 = (4 * 10)
   log = [v1, v2, v3, v4]
   assertEq log [10, 20, 30, 40]
 }
@@ -97,7 +97,7 @@ multiStepAccumulation = do Effect {
 // --- Triple destructure: all three positions must be distinct ---
 
 @test "triple destructure preserves arg order"
-tripleDestructure = do Effect {
+tripleDestructure = {
   (a, b, c) = triple 7 8 9
   assertEq a 7
   assertEq b 8
@@ -107,14 +107,14 @@ tripleDestructure = do Effect {
 // --- Curried application: partial application preserves arg position ---
 
 @test "partial application fixes first arg position"
-partialAppFixesFirst = do Effect {
+partialAppFixesFirst = {
   sub5 = sub 5 // sub5 x = 5 - x
   assertEq (sub5 3) 2
   assertEq (sub5 5) 0
 }
 
 @test "chained partial application preserves order"
-chainedPartial = do Effect {
+chainedPartial = {
   mkList = a b c => [a, b, c]
   f      = mkList 1
   g      = f 2

@@ -2,16 +2,9 @@ use aivi.testing
 use aivi.rest
 
 @test "fetch users from real API (snapshot)"
-fetchUsersSnapshot =
-  mock snapshot rest.get
-  in do Effect {
-    users <- fetchUsers
-    assertEq (length users) 3
-  }
+fetchUsersSnapshot = mock snapshot rest.get
+in fetchUsers
+|> users => assertEq (length users) 3
 
 @test "user table formatting"
-userTableSnapshot = do Effect {
-  users     = [{ id: 1, name: "Ada" }, { id: 2, name: "Grace" }]
-  formatted = formatUserTable users
-  assertSnapshot "user_table" formatted
-}
+userTableSnapshot = assertSnapshot "user_table" (formatUserTable [{ id: 1, name: "Ada" }, { id: 2, name: "Grace" }])

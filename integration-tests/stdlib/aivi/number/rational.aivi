@@ -7,7 +7,7 @@ use aivi.number.bigint (fromInt, toInt)
 use aivi.number.rational
 
 @test "rational normalize and accessors"
-rational_normalize_and_accessors = do Effect {
+rational_normalize_and_accessors = {
   value = normalize (fromBigInts (fromInt 6) (fromInt 8))
 
   assertEq (toInt (numerator value)) (Some 3)
@@ -15,7 +15,7 @@ rational_normalize_and_accessors = do Effect {
 }
 
 @test "rational domain arithmetic"
-rational_domain_arithmetic = do Effect {
+rational_domain_arithmetic = {
   half     = fromBigInts (fromInt 1) (fromInt 2)
   third    = fromBigInts (fromInt 1) (fromInt 3)
   sum      = normalize (half + third)

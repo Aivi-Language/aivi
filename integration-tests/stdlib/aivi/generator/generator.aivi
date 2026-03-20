@@ -10,14 +10,14 @@ len = xs => xs match
   | [_, ...rest] => 1 + len rest
 
 @test "range"
-range_functional = do Effect {
+range_functional = {
   xs = toList (range 0 5)
   assertEq (len xs) 5
   assertEq xs [0, 1, 2, 3, 4]
 }
 
 @test "range empty"
-range_empty = do Effect {
+range_empty = {
   xs = toList (range 5 5)
   assertEq xs []
 
@@ -26,14 +26,14 @@ range_empty = do Effect {
 }
 
 @test "from list to list"
-fromList_toList = do Effect {
+fromList_toList = {
   g  = fromList [10, 20, 30]
   xs = toList g
   assertEq xs [10, 20, 30]
 }
 
 @test "map"
-map_functional = do Effect {
+map_functional = {
   g       = range 1 4
   doubled = g |> map (x => x * 2)
   xs      = toList doubled
@@ -41,7 +41,7 @@ map_functional = do Effect {
 }
 
 @test "filter"
-filter_functional = do Effect {
+filter_functional = {
   g     = range 1 6
   evens = filter (x => x % 2 == 0) g
   xs    = toList evens
@@ -49,14 +49,14 @@ filter_functional = do Effect {
 }
 
 @test "reduce sum"
-foldl_sum = do Effect {
+foldl_sum = {
   g     = range 1 4
   total = reduce (acc x => acc + x) 0 g
   assertEq total 6
 }
 
 @test "reduce empty"
-foldl_empty = do Effect {
+foldl_empty = {
   g     = range 0 0
   total = reduce (acc x => acc + x) 42 g
   assertEq total 42

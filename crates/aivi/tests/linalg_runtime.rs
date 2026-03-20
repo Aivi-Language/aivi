@@ -20,14 +20,12 @@ module app.main
 
 use aivi
 use aivi.linear_algebra
+use aivi.testing
 
 main : Effect Text Unit
-main = do Effect {
-  a = { size: 2, data: [1.0, 2.0] }
-  b = { size: 3, data: [3.0, 4.0, 5.0] }
-  _ = a + b
-  pure Unit
-}
+main =
+   |> pure ({ size: 2, data: [1.0, 2.0] } + { size: 3, data: [3.0, 4.0, 5.0] })#bad
+   |> bad => assertEq bad.size bad.size
 "#,
         "linalg.addVec expects vectors of equal size",
     );
@@ -39,14 +37,12 @@ module app.main
 
 use aivi
 use aivi.linear_algebra
+use aivi.testing
 
 main : Effect Text Unit
-main = do Effect {
-  a = { size: 2, data: [1.0, 2.0] }
-  b = { size: 3, data: [3.0, 4.0, 5.0] }
-  _ = a - b
-  pure Unit
-}
+main =
+   |> pure ({ size: 2, data: [1.0, 2.0] } - { size: 3, data: [3.0, 4.0, 5.0] })#bad
+   |> bad => assertEq bad.size bad.size
 "#,
         "linalg.subVec expects vectors of equal size",
     );
@@ -58,13 +54,12 @@ module app.main
 
 use aivi
 use aivi.linear_algebra
+use aivi.testing
 
 main : Effect Text Unit
-main = do Effect {
-  invalid = { size: 3, data: [1.0, 2.0] }
-  _ = invalid * 2.0
-  pure Unit
-}
+main =
+   |> pure ({ size: 3, data: [1.0, 2.0] } * 2.0)#bad
+   |> bad => assertEq bad.size bad.size
 "#,
         "linalg.scaleVec Vec.size does not match data length",
     );
@@ -79,14 +74,12 @@ module app.main
 
 use aivi
 use aivi.linalg
+use aivi.testing
 
 main : Effect Text Unit
-main = do Effect {
-  a = { size: 2, data: [1.0, 2.0] }
-  b = { size: 3, data: [3.0, 4.0, 5.0] }
-  _ = a + b
-  pure Unit
-}
+main =
+   |> pure ({ size: 2, data: [1.0, 2.0] } + { size: 3, data: [3.0, 4.0, 5.0] })#bad
+   |> bad => assertEq bad.size bad.size
 "#,
         "linalg.addVec expects vectors of equal size",
     );

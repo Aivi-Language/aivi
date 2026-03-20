@@ -10,7 +10,7 @@ use aivi (
 
 // Test 1: Vec4 domain scalar scaling with *
 @test "vec4 scalar mul"
-vec4_scalar_mul = do Effect {
+vec4_scalar_mul = {
   v = vec4 1.0 2.0 3.0 1.0
   assertEq (v.x * 2.0) 2.0
   assertEq (v.y * 2.0) 4.0
@@ -20,7 +20,7 @@ vec4_scalar_mul = do Effect {
 
 // Test 2: Mat4 × Vec4 transform
 @test "mat4 vec4 transform"
-mat4_vec4_transform = do Effect {
+mat4_vec4_transform = {
   v      = vec4 1.0 2.0 3.0 1.0
   result = transform4 identity4 v
   assertEq result.x 1.0
@@ -31,7 +31,7 @@ mat4_vec4_transform = do Effect {
 
 // Test 3: Mat4 × Mat4 product
 @test "mat4 mat4 product"
-mat4_mat4_product = do Effect {
+mat4_mat4_product = {
   m = multiply4 identity4 identity4
   assertEq m.m00 1.0
   assertEq m.m11 1.0
@@ -41,7 +41,7 @@ mat4_mat4_product = do Effect {
 
 // Test 4: Vec4 arithmetic ops
 @test "vec4 add"
-vec4_add = do Effect {
+vec4_add = {
   a = vec4 1.0 2.0 3.0 0.0
   b = vec4 4.0 5.0 6.0 1.0
   assertEq (a.x + b.x) 5.0
@@ -52,7 +52,7 @@ vec4_add = do Effect {
 
 // Test 5: Verify independent arithmetic semantics
 @test "star vs cross are distinct"
-star_vs_cross_are_distinct = do Effect {
+star_vs_cross_are_distinct = {
   v           = vec4 1.0 1.0 1.0 1.0
   scaled      = 3.0 * 3.0
   transformed = transform4 identity4 v
