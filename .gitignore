@@ -11,3 +11,4 @@ target
 aivi-vscode-*
 /*.aivi
 assets/gir/
+vscode/.vscode-test/
