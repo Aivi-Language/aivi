@@ -84,6 +84,7 @@ adtRecordPayloads = do Effect {
   assertEq results [95, 50]
 }
 
+mapList : (A -> B) -> List A -> List B
 mapList = f xs => xs match
   | []           => []
   | [x, ...rest] => [f x, ...(mapList f rest)]

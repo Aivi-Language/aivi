@@ -1,535 +1,163 @@
 # Database Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.database"} -->
-The `Database` domain gives you a typed way to describe tables, move data in and out of relational databases, and build queries without dropping straight to raw SQL.
-
-It combines familiar database ideas—tables, rows, filters, joins, migrations, and transactions—with AIVI's typed records, effects, and resource management.
-
+`aivi.database` describes relational schemas as typed values, builds first-class `Query` / `GroupedQuery` ASTs from relation roots, and executes record-shaped writes against explicit or ambient connections.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.database<span class="domain-badge">domain</span></div>
 
 ## Start here
 
-This page is intentionally broad. If you are new to `aivi.database`, do not read it as one long reference manual. Start with the beginner path, copy the first useful workflow, then come back for the advanced sections and API tables when you need them.
+If you are new to `aivi.database`, the shortest useful path is:
 
-### Beginner path
-
-For a first database-backed feature, this is the shortest useful route:
-
-1. define one typed `Table A` (see [Overview](#overview))
-2. open or configure a connection
-3. run migrations (see [Migrations](#migrations))
-4. load rows or run one simple query (see [Querying](#querying))
-5. apply inserts, updates, or deletes
-
-You can safely ignore pooling, multi-table joins, savepoints, and typed mutation helpers until that flow feels familiar.
-
-### Terms you'll see later
-
-If this is your first pass, skim these and keep moving. The query and migration examples below will make them concrete.
-
-| Term | Plain meaning |
-| --- | --- |
-| **explicit connection** | you open a `DbConnection` value yourself and pass it to the helpers that need it |
-| **default / ambient connection helper** | a helper such as `db.load` that uses the process-wide connection previously configured with `db.configure` |
-| **delta** | a value that describes a write such as “insert this row” or “update rows matching this predicate” |
-| **savepoint** | a named rollback marker inside a larger transaction |
-| **portable subset** | query shapes that translate cleanly to SQL without backend-specific extensions, instead of falling back to older in-memory behavior |
-
-### First successful workflow
-
-If you want one concrete pattern to copy, start with an explicit connection and a single query:
+1. declare one `Relation A`
+2. run migrations for that relation
+3. execute a query with `rows`, `first`, `count`, or `exists`
+4. mutate rows with `insert`, `delete`, `update`, or `upsert`
 
 <<< ../../snippets/from_md/stdlib/system/database/block_01.aivi{aivi}
 
+## Core model
 
-That gives you a complete first loop: connect, migrate, query, clean up.
-
-### Quick choice: `db.load` vs `db.runQuery`
-
-- use `db.load` when you want every row from one table with no extra filtering,
-- use `db.runQuery` when you want filtering, sorting, projections, joins, or aggregates.
-
-### Advanced path
-
-Come back to the later sections when you need:
-
-- explicit connection ownership for larger programs
-- portable query lowering and multi-table joins
-- transactions and savepoints
-- connection pooling
-- typed mutation helpers and reusable deltas
-
-## Overview
-
-<<< ../../snippets/from_md/stdlib/system/database/overview.aivi{aivi}
-
-A table schema is described with ordinary values. `db.table` takes a table name and a list of `Column` values, while the row shape comes from the binding's type annotation.
-
-`aivi.database` supports two connection styles:
-
-- **explicit connections** such as `db.connect`, `db.loadOn`, and `db.beginTxOn`,
-- **default connection helpers** such as `db.configure`, `db.load`, and `db.beginTx`.
-
-Explicit `DbConnection` handles are usually the better fit for larger programs because ownership stays local and works cleanly with pooling and transactions.
-
-### Choosing a connection style
-
-| Style | Best for | Trade-off | Typical first example |
-| --- | --- | --- | --- |
-| default connection helpers (`db.configure`, `db.load`, `db.beginTx`) | tutorials, small tools, one-database apps | convenient, but the active connection is ambient | “configure once, then `db.load userTable`” |
-| explicit connections (`db.connect`, `db.loadOn`, `db.beginTxOn`) | services, pooled code, transaction-heavy workflows | a little more wiring, but ownership stays obvious | “open `dbConn`, pass it to `db.runQueryOn`, then close it” |
-
-### Ambient and explicit execution at a glance
-
-The ambient/explicit split applies to reads, writes, and transaction control, not just connection acquisition.
-
-| Concern | Ambient helper | Explicit helper |
-| --- | --- | --- |
-| load one table | `db.load userTable` | `db.loadOn conn userTable` |
-| run a query | `db.runQuery q` | `db.runQueryOn conn q` |
-| apply one delta | `db.applyDelta userTable delta` | `db.applyDeltaOn conn userTable delta` |
-| apply several deltas | `db.applyDeltas userTable deltas` | `db.applyDeltasOn conn userTable deltas` |
-| wrap work in a transaction | `db.inTransaction action` | `db.inTransactionOn conn action` |
-| manage a savepoint | `db.savepoint "afterUsers"` | `db.savepointOn conn "afterUsers"` |
-
-Ambient helpers always target the current default connection configured with `db.configure`.
-Explicit helpers always target the `DbConnection` value passed in by the caller.
-The selector-based CRUD surface follows the same split instead of embedding connection ownership into the selector itself.
-
-## Types
-
-If you are still on the beginner path, you can skim this section once and return later. The first overview, migration, query, and API-table examples are the faster route to a working mental model.
+| Type | Meaning |
+| --- | --- |
+| `Relation A` | relation root / schema declaration for rows shaped like `A` |
+| `Query A` | row query that eventually returns `A`-shaped rows |
+| `GroupedQuery K A` | grouped rows of `A` keyed by `K` |
+| `OrderTerm A` | one sort key for rows of `A` |
+| `Order A` | alias for the ordering shape accepted by `orderBy` |
+| `Agg A B` | alias for grouped aggregate results |
 
 <<< ../../snippets/from_md/stdlib/system/database/types.aivi{aivi}
 
-## Domain Definition
+Relations are schema roots. Queries are shaped from those roots. Grouped queries change scope: row expressions such as `.email` become grouped expressions such as `key`, `count`, `sum .total`, and `max .createdAt`.
+
+## Relation definitions
+
+Declare relations with `relation`, column metadata, and optional links:
 
 <<< ../../snippets/from_md/stdlib/system/database/domain_definition.aivi{aivi}
 
-### Applying deltas
+Links are used in two different positions:
 
-Deltas describe inserts, updates, deletes, and upserts as data.
-That makes it possible to build mutations explicitly, combine them, and apply them through one API.
+- inside `[]`, a relation-valued link means existential filtering (`EXISTS`-style semantics)
+- inside `selectMap`, a relation-valued link stays nested instead of flattening the parent row
 
-<<< ../../snippets/from_md/stdlib/system/database/applying_deltas.aivi{aivi}
+## Query surface
 
-## A practical mental model
+<!-- quick-info: {"kind":"feature","name":"Relation queries"} -->
+Every database read starts from a `Relation A` root.
 
-If you are approaching this domain from a traditional application background, a good workflow is:
+- `relation[predicate]` filters rows
+- `|> orderBy ...`, `|> limit ...`, `|> offset ...`, and `|> distinct` shape the result set
+- `|> selectMap { ... }` projects a new row shape
+- `|> groupBy ...` switches to grouped scope
+- `|> having ...` filters grouped rows
+- execution stays separate: `rows`, `first`, `count`, and `exists`
+<!-- /quick-info -->
 
-1. define a typed `Table A`,
-2. open or configure a connection,
-3. run migrations,
-4. load rows or run a `Query`,
-5. make changes with deltas or typed mutation helpers,
-6. wrap related writes in a transaction when they must succeed or fail together.
+### Compact grammar
 
-## Querying
+```text
+query ::= relation
+        | query "[" predicate "]"
+        | query "|>" orderBy order
+        | query "|>" limit int
+        | query "|>" offset int
+        | query "|>" distinct
+        | query "|>" selectMap recordShape
+        | query "|>" groupBy keyShape
+        | groupedQuery "|>" having groupPredicate
+        | groupedQuery "|>" selectMap groupRecordShape
+```
 
-<!-- quick-info: {"kind":"feature","name":"Query DSL"} -->
-`Query A` is a typed description of a database read that eventually produces values of type `A`.
-The `do Query { ... }` notation lets you write those reads in a step-by-step style that feels close to a SQL `SELECT` while staying inside ordinary AIVI code.
+`orderBy` accepts either one `asc` / `desc` term or a tuple of order terms such as `(desc .createdAt, asc .id)`.
 
-Queries are translated to a structured SQL-backed form when every participating table has an explicit column list and the query stays within the portable subset. Here, **portable subset** means “query shapes that cleanly translate to SQL instead of relying on the older in-memory runtime.” That subset includes `db.from`, `db.where`, `db.guard`, `db.select`, `db.orderBy`, `db.limit`, `db.offset`, `db.count`, `db.exists`, and `do Query` blocks built from those forms.
-
-Helper-built queries that fall outside that subset still run through the older in-memory query runtime. Unsupported `do Query` shapes fail with a query error when executed instead of silently changing behavior.
-
-If you are learning the query DSL, read the examples in this order:
-
-1. one-table query,
-2. ambient-vs-explicit execution,
-3. pipeline helpers,
-4. joins,
-5. aggregates.
-
-Start here with the one-table example. The later examples reuse the same ideas and add one new concept at a time.
+### Core stages
 
 <<< ../../snippets/from_md/stdlib/system/database/block_02.aivi{aivi}
 
-
-If you have already configured a default connection, you can use the ambient helpers instead:
-
-<<< ../../snippets/from_md/stdlib/system/database/block_03.aivi{aivi}
-
-
-You can also build the same query with pipeline helpers:
-
 <<< ../../snippets/from_md/stdlib/system/database/block_04.aivi{aivi}
-
-
-Sorting and paging work well in the pipeline style because they read from top to bottom:
 
 <<< ../../snippets/from_md/stdlib/system/database/block_05.aivi{aivi}
 
+### Execution helpers and connection styles
 
-When a lowered query omits `db.orderBy`, rows keep the source row order so `db.limit` and `db.offset` stay deterministic.
+The same query values run against either the ambient default connection or an explicit `DbConnection` passed by the caller.
 
-Captured `Option` values also participate in lowered SQL predicates. Comparisons such as `row.deletedAt == None` lower to `IS NULL`, `row.deletedAt != None` lowers to `IS NOT NULL`, and captured `Some value` unwraps to the contained SQL scalar before rendering.
+| Concern | Ambient helper | Explicit helper |
+| --- | --- | --- |
+| all rows / filtered rows | `rows query` | `rowsOn conn query` |
+| first row | `first query` | `firstOn conn query` |
+| row count | `count query` | `countOn conn query` |
+| row existence | `exists query` | `existsOn conn query` |
+| migrations | `runMigrations relations` | `runMigrationsOn conn relations` |
+| sqlite tuning | `configureSqlite tuning` | `configureSqliteOn conn tuning` |
 
+<<< ../../snippets/from_md/stdlib/system/database/block_03.aivi{aivi}
 
-Inside a `do Query` block, apply those helpers to the source query on the right-hand side of `<-`.
-<!-- /quick-info -->
+## Nested relation semantics
 
-### Multi-table joins
-
-<!-- quick-info: {"kind":"feature","name":"Multi-table join"} -->
-Multi-table reads are written as repeated `db.from` binds plus `db.guard` conditions that relate the rows.
-In the portable subset, that pattern lowers to a SQL cross join with pushed-down `WHERE` predicates. In practice, when the guard compares keys from the participating rows, that behaves like the inner joins most SQL users expect.
+Predicate links are existential: a nested relation inside `[]` qualifies the parent row without multiplying it.
 
 <<< ../../snippets/from_md/stdlib/system/database/block_06.aivi{aivi}
 
-
-This style currently covers inner-join-like workflows built from table sources and guard conditions.
-<!-- /quick-info -->
-
-### Aggregate helpers
-
-<!-- quick-info: {"kind":"feature","name":"db.count / db.exists"} -->
-`db.count` and `db.exists` are the simplest way to ask summary questions about a query.
-When their input query stays inside the lowered subset, they compile to SQL aggregate or existence checks. Otherwise, they use the older in-memory behavior.
-
-<<< ../../snippets/from_md/stdlib/system/database/block_07.aivi{aivi}
-
-
-These helpers do not make an otherwise unsupported query lowerable; they only follow the behavior of the query they wrap.
-<!-- /quick-info -->
+Projection links stay nested. A child relation projected inside `selectMap` yields nested child rows instead of a flattened join result.
 
 <<< ../../snippets/from_md/stdlib/system/database/querying.aivi{aivi}
 
-## Shaping multi-table results
+## Grouped queries and aggregates
 
-Use repeated `db.from` binds plus `db.guard` when you want one flattened row per match; the [Multi-table joins](#multi-table-joins) example above is the canonical portable form.
+Grouping is the stage that changes scope. After `groupBy`, grouped projections may use:
 
-When you need a nested parent/child result such as `{ user, posts }`, keep the database read typed and do the final shaping in ordinary AIVI code after one or more explicit `db.runQueryOn` or `db.loadOn` calls. That keeps this page aligned with the currently documented `Query` and table-loading helpers without implying extra preload-specific APIs.
+- `key`
+- `count`
+- `sum .field`
+- `avg .field`
+- `min .field`
+- `max .field`
 
-## Migrations
+<<< ../../snippets/from_md/stdlib/system/database/block_07.aivi{aivi}
 
-Schema definitions are typed values, so the same information can drive both runtime behavior and migration generation.
-Marking them `@static` allows compile-time validation and migration analysis when the inputs are known ahead of time.
+`having` is evaluated in grouped scope, and grouped `selectMap` produces an ordinary `Query` again, so you can continue with stages such as `orderBy`, `limit`, `offset`, or `distinct`.
 
-<<< ../../snippets/from_md/stdlib/system/database/migrations.aivi{aivi}
+## Writes
 
-## Pooling
+Database writes stay explicit and record-shaped.
 
-Connection pooling lives in `aivi.database.pool`.
-The pool is configured explicitly.
-Prefer `Pool.withConn` for routine short-lived work because it guarantees a checked-out connection is returned even if the work fails or is cancelled.
-Reach for `Pool.acquire` / `Pool.release` only when one workflow truly needs to hold the same connection across several steps.
+- `insert` / `insertOn` insert one full row
+- `delete` / `deleteOn` remove rows selected by a root relation query
+- `update` / `updateOn` apply a record patch to every matched row
+- `upsert` / `upsertOn` patch matching rows or insert the seed row when none match
 
-On success, `Pool.create` has already eagerly seeded `minIdle` idle connections.
-After creation, `idleTimeout` and `healthCheckInterval` are enforced lazily when later borrows inspect idle connections; there is no background reaper that keeps `minIdle` topped up or prunes stale connections proactively.
-`Pool.drain` waits for borrowed connections to come back, releases the idle set, and leaves the pool open for future borrows.
-`Pool.close` performs the same idle cleanup, marks the pool closed, and causes future borrows to return `Pool.Closed`.
-The underlying pool API is generic; the signatures below show the usual database instantiation with `DbConnection` and `DbError`.
-
-If you are still on the beginner path, skip pooling until one process needs many short-lived database operations.
-
-<<< ../../snippets/from_md/stdlib/system/database/pooling.aivi{aivi}
-
-### Pool configuration at a glance
-
-Only the fields listed here are valid. `Pool.create` rejects unexpected config fields so stale or misspelled settings fail fast.
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `maxSize` | `Int` | Hard upper bound on total idle + checked-out + in-flight connection creations. Must be `> 0`. |
-| `minIdle` | `Int` | Number of idle connections eagerly created during `Pool.create`. Must be `>= 0` and `<= maxSize`. This is a startup warm count, not a background-maintained floor. |
-| `acquireTimeout` | `Span` | Maximum time `Pool.acquire` / `Pool.withConn` wait when the pool is exhausted or repeatedly retires unhealthy connections. Must be non-negative. |
-| `idleTimeout` | `Option Span` | When present, idle connections older than this are retired lazily on a later borrow. Must be non-negative when present. |
-| `healthCheckInterval` | `Option Span` | When present, an idle connection is re-checked before reuse once it has been idle at least this long. Must be non-negative when present. `Some { millis: 0 }` checks every reuse. |
-| `backoffPolicy` | `BackoffPolicy` | Retry delay while waiting for capacity or retrying after health-check failures. `Fixed span` uses one delay every time. `Exponential { base, max }` doubles from `base` up to `max`. All spans must be non-negative, and exponential `max` must be `>= base`. |
-| `queuePolicy` | `QueuePolicy` | `Fifo` reuses the oldest idle connection first. `Lifo` reuses the most recently returned idle connection first. |
-| `acquire` | `Unit -> Effect DbError Conn` | Opens one new connection when the pool needs capacity. |
-| `release` | `Conn -> Effect DbError Unit` | Permanently closes one connection that the pool is discarding. |
-| `healthCheck` | `Conn -> Effect DbError Bool` | Returns `True` to keep a connection in circulation, or `False` to retire it and retry. |
-
-### Pool errors and monitoring
-
-- `Pool.Timeout` — no healthy connection became available before `acquireTimeout` elapsed.
-- `Pool.Closed` — the pool has been closed and will not hand out new connections.
-- `Pool.HealthFailed` — every attempted connection failed `healthCheck` before the acquire timeout elapsed.
-- `Pool.InvalidConfig reason` — configuration validation failed before the pool was created.
-
-`Pool.stats` returns `PoolStats = { size, idle, inUse, waiters, closed }`, where `size` counts idle, checked-out, and in-flight connection creations.
-
-## Runtime effects
-
-- `db.configure`, `db.configureSqlite`, pool creation, and connection acquisition open or configure database connections.
-- `db.load`, selector helpers, and `db.runQuery` / `db.runQueryOn` execute database reads.
-- `db.applyDelta`, typed mutation helpers, transactions, and savepoints execute database writes.
-- `db.runMigrations` and `db.runMigrationSql` apply schema changes.
-
-## Core API
-
-This section is the reference shelf. Skim it once, then come back when you need the exact helper name or type.
-
-### Table and connection management
-
-| Function | What it does |
-| --- | --- |
-| **db.table** name columns<br><code>Text -> List Column -> Table A</code> | Creates a table definition. The row type `A` comes from the binding's type annotation. |
-| **db.configure** config<br><code>DbConfig -> Effect DbError Unit</code> | Configures the default database connection used by ambient helpers. |
-| **db.connect** config<br><code>DbConfig -> Effect DbError DbConnection</code> | Opens an explicit connection handle. This is the preferred entry point for pooled or transaction-heavy code. |
-| **db.open** config<br><code>DbConfig -> Resource DbError DbConnection</code> | Resource wrapper around `db.connect` and `db.close` for deterministic cleanup. |
-| **db.close** conn<br><code>DbConnection -> Effect DbError Unit</code> | Closes an explicit connection handle. |
-| **db.runMigrations** tables<br><code>List (Table A) -> Effect DbError Unit</code> | Applies schema changes for the configured default connection. |
-| **db.runMigrationsOn** conn tables<br><code>DbConnection -> List (Table A) -> Effect DbError Unit</code> | Applies schema changes through an explicit connection. |
-| **db.runMigrationSql** steps<br><code>List MigrationStep -> Effect DbError Unit</code> | Runs ordered SQL migration steps against the configured backend. |
-| **db.runMigrationSqlOn** conn steps<br><code>DbConnection -> List MigrationStep -> Effect DbError Unit</code> | Runs ordered SQL migration steps through an explicit connection. |
-| **db.configureSqlite** tuning<br><code>SqliteTuning -> Effect DbError Unit</code> | Sets SQLite-specific tuning such as journal mode and busy timeout on the default connection. |
-| **db.configureSqliteOn** conn tuning<br><code>DbConnection -> SqliteTuning -> Effect DbError Unit</code> | Applies SQLite-specific tuning to one explicit connection. |
-
-### Loading data and applying deltas
-
-| Function | What it does |
-| --- | --- |
-| **db.load** table<br><code>Table A -> Effect DbError (List A)</code> | Loads all rows from `table` using the default configured connection. |
-| **db.loadOn** conn table<br><code>DbConnection -> Table A -> Effect DbError (List A)</code> | Loads all rows from `table` through an explicit connection. |
-| **db.applyDelta** table delta<br><code>Table A -> Delta A -> Effect DbError (Table A)</code> | Applies one delta against `table` using the default connection. Also available through the domain `+` operator. |
-| **db.applyDeltaOn** conn table delta<br><code>DbConnection -> Table A -> Delta A -> Effect DbError (Table A)</code> | Applies one delta through an explicit connection. |
-| **db.applyDeltas** table deltas<br><code>Table A -> List (Delta A) -> Effect DbError (Table A)</code> | Applies several deltas in one call using the default connection. |
-| **db.applyDeltasOn** conn table deltas<br><code>DbConnection -> Table A -> List (Delta A) -> Effect DbError (Table A)</code> | Applies several deltas through an explicit connection. |
-
-### Transactions and savepoints
-
-| Function | What it does |
-| --- | --- |
-| **db.beginTxOn** conn<br><code>DbConnection -> Effect DbError Unit</code> | Starts a transaction on `conn`. |
-| **db.commitTxOn** conn<br><code>DbConnection -> Effect DbError Unit</code> | Commits the active transaction on `conn`. |
-| **db.rollbackTxOn** conn<br><code>DbConnection -> Effect DbError Unit</code> | Rolls back the active transaction on `conn`. |
-| **db.inTransactionOn** conn action<br><code>DbConnection -> Effect DbError A -> Effect DbError A</code> | Runs `action` in a transaction, committing on success and rolling back on failure. |
-| **db.savepointOn** conn name<br><code>DbConnection -> Text -> Effect DbError Unit</code> | Creates a named savepoint after validating the identifier. |
-| **db.releaseSavepointOn** conn name<br><code>DbConnection -> Text -> Effect DbError Unit</code> | Releases a savepoint on `conn`. |
-| **db.rollbackToSavepointOn** conn name<br><code>DbConnection -> Text -> Effect DbError Unit</code> | Rolls back to a savepoint while keeping the outer transaction active. |
-
-The ambient forms (`db.beginTx`, `db.commitTx`, `db.rollbackTx`, `db.inTransaction`, `db.savepoint`, and related helpers) operate on the current default connection configured with `db.configure`.
-
-### Delta constructors
-
-| Constructor | What it represents |
-| --- | --- |
-| **Insert** row<br><code>A -> Delta A</code> | Insert one new row. |
-| **Update** pred patch<br><code>Pred A -> Patch A -> Delta A</code> | Update rows that match `pred` with `patch`. |
-| **Delete** pred<br><code>Pred A -> Delta A</code> | Delete rows that match `pred`. |
-| **Upsert** pred value patch<br><code>Pred A -> A -> Patch A -> Delta A</code> | Update matching rows, or insert `value` if no row matches. |
-
-These constructors are the canonical low-level way to build reusable delta values programmatically.
-
-### Selector CRUD helpers
-
-<!-- quick-info: {"kind":"feature","name":"Selector CRUD helpers"} -->
-The high-level CRUD helpers keep inserts explicit and route reads, updates, deletes, and upserts through a shared `table[predicate]` selector surface.
-Selectors are pure descriptions of “which rows in which table”; they do not open connections, start transactions, or perform I/O by themselves.
-
-On configured database connections, selector helpers run against the database-backed table storage directly instead of loading whole tables into memory first.
-Selector reads lower their predicates into the same portable SQL scalar subset used by lowered queries, and selector writes target only the matching persisted rows.
-Selector `update` and `upsert` require lowered patch blocks on that DB-backed path; unsupported patch functions fail explicitly at runtime instead of silently falling back to full-table in-memory mutation.
-<!-- /quick-info -->
+<<< ../../snippets/from_md/stdlib/system/database/applying_deltas.aivi{aivi}
 
 <<< ../../snippets/from_md/stdlib/system/database/typed_mutations.aivi{aivi}
 
-#### Selector values
+## Migrations
 
-`aivi.database` exposes a structural selector carrier:
+Schema declarations are ordinary values, so the same relation metadata drives migrations, query lowering, and runtime row decoding.
 
-```aivi
-DbSelection A = { table: Table A, pred: Pred A }
-```
+<<< ../../snippets/from_md/stdlib/system/database/migrations.aivi{aivi}
 
-`table[predicate]` is the constructor surface for this type.
-When the left-hand side elaborates to `Table A`, the bracket body is interpreted as a row predicate of type `A -> Bool` using the same predicate-lifting rules already used by `db.where` and collection selectors.
+## Transactions and savepoints
 
-That means all of these are valid selector forms:
+Connection ownership is separate from query construction.
 
-- `userTable[id == userId]`
-- `userTable[active]`
-- `postTable[createdAt < cutoff]`
+- `beginTx` / `beginTxOn`, `commitTx` / `commitTxOn`, and `rollbackTx` / `rollbackTxOn` control transactions
+- `inTransaction` / `inTransactionOn` wrap one effectful workflow in commit-or-rollback behavior
+- `savepoint`, `releaseSavepoint`, and `rollbackToSavepoint` expose nested rollback markers
 
-#### Explicit (`…On`) forms
+These helpers work with the same `Relation` / `Query` / write helpers described above; there is no separate transaction-specific query language.
 
-| Function | Canonical meaning |
-| --- | --- |
-| **db.insertOn** conn table row<br><code>DbConnection -> Table A -> A -> Effect DbError (Table A)</code> | `db.applyDeltaOn conn table (Insert row)` |
-| **db.rowsOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (List A)</code> | Executes `selection` against the persisted table on `conn` and returns the matching rows in source order. |
-| **db.firstOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Option A)</code> | Executes `selection` against the persisted table on `conn` and returns the first matching row, if any. |
-| **db.deleteOn** conn selection<br><code>DbConnection -> DbSelection A -> Effect DbError (Table A)</code> | Deletes rows matched by `selection` on `conn`, then returns the updated table snapshot. |
-| **db.updateOn** conn selection patch<br><code>DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on `conn`. On the DB-backed path the patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
-| **db.upsertOn** conn selection row patch<br><code>DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on `conn`, or inserts `row` if no row matches. On the DB-backed path the update patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
+## Pooling
 
-#### Ambient forms
+`aivi.database.pool` manages reusable `DbConnection` values. The usual entry point is `Pool.withConn`, which borrows a connection, runs one effectful action, and returns the connection to the pool even when the action fails.
 
-| Function | Canonical meaning |
-| --- | --- |
-| **db.insert** table row<br><code>Table A -> A -> Effect DbError (Table A)</code> | `db.applyDelta table (Insert row)` |
-| **db.rows** selection<br><code>DbSelection A -> Effect DbError (List A)</code> | Executes `selection` against the persisted table on the default configured connection and returns the matching rows in source order. |
-| **db.first** selection<br><code>DbSelection A -> Effect DbError (Option A)</code> | Executes `selection` against the persisted table on the default configured connection and returns the first matching row, if any. |
-| **db.delete** selection<br><code>DbSelection A -> Effect DbError (Table A)</code> | Deletes rows matched by `selection` on the default configured connection, then returns the updated table snapshot. |
-| **db.update** selection patch<br><code>DbSelection A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on the default configured connection. On the DB-backed path the patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
-| **db.upsert** selection row patch<br><code>DbSelection A -> A -> Patch A -> Effect DbError (Table A)</code> | Updates rows matched by `selection` on the default configured connection, or inserts `row` if no row matches. On the DB-backed path the update patch must be a lowered patch block (`{ ... }` or a reusable `patch { ... }` value). |
+<<< ../../snippets/from_md/stdlib/system/database/pooling.aivi{aivi}
 
-Use the selector helpers for one-off CRUD operations.
-Use `db.applyDeltas` or `db.applyDeltasOn` when you want to batch several deltas together explicitly.
+## Runtime effects
 
-#### Ambient vs explicit execution
-
-Ambient selector operations run on the default connection configured with `db.configure`.
-For example, `db.inTransaction (...)` can contain both `db.delete userTable[id == userId]` and `userTable[id == userId] <| { active: False }`, and both operations stay on that ambient connection for the whole transaction.
-
-Explicit selector operations run on the `DbConnection` value passed to the helper.
-For example, `db.inTransactionOn conn (...)` can contain both `db.deleteOn conn userTable[id == userId]` and `db.updateOn conn userTable[id == userId] { active: False }`, and both operations stay on that specific connection for the whole transaction.
-
-The selector itself never captures a connection and never changes transaction boundaries.
-
-#### Selector-specific `<|` sugar
-
-`<|` keeps its ordinary record-patching meaning on ordinary data, and gains one database-specific case when the left-hand side is a `DbSelection A`:
-
-- `selection <| { ... }` is shorthand for `db.update selection { ... }`
-
-So these forms are equivalent:
-
-```aivi
-db.update userTable[id == userId] { role: "admin" }
-userTable[id == userId] <| { role: "admin" }
-```
-
-Row deletion always stays explicit:
-
-```aivi
-db.delete userTable[id == userId]
-db.deleteOn conn userTable[id == userId]
-```
-
-Standalone `-` keeps its ordinary patch meaning only inside patch blocks.
-It does not gain any selector-specific delete meaning.
-
-#### Typing and desugaring
-
-The selector CRUD surface type-checks with these rules:
-
-- if `table : Table A` and `pred` checks as `A -> Bool` under predicate lifting, then `table[pred] : DbSelection A`
-- `db.rows : DbSelection A -> Effect DbError (List A)`
-- `db.rowsOn : DbConnection -> DbSelection A -> Effect DbError (List A)`
-- `db.first : DbSelection A -> Effect DbError (Option A)`
-- `db.firstOn : DbConnection -> DbSelection A -> Effect DbError (Option A)`
-- `db.update : DbSelection A -> Patch A -> Effect DbError (Table A)`
-- `db.updateOn : DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)`
-- `db.delete : DbSelection A -> Effect DbError (Table A)`
-- `db.deleteOn : DbConnection -> DbSelection A -> Effect DbError (Table A)`
-- `db.upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)`
-- `db.upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)`
-
-Plain record literals `{ ... }` are accepted directly anywhere these helpers expect a `Patch A`.
-That means `db.update table[pred] { ... }`, `db.updateOn conn table[pred] { ... }`, `db.upsert table[pred] row { ... }`, and `db.upsertOn conn table[pred] row { ... }` all type-check by coercing the inline record block to the corresponding `Patch A`.
-
-On the DB-backed selector path, only lowered patch blocks are accepted for the update branch.
-That means plain `{ ... }` blocks and reusable `patch { ... }` values work, while arbitrary patch lambdas fail explicitly at runtime instead of silently forcing a full-table in-memory mutation.
-
-`selection <| { ... }` type-checks as `Effect DbError (Table A)` when `selection : DbSelection A` and the patch block checks as a valid `Patch A`.
-
-The selector surface behaves as follows:
-
-| Surface form | Operational meaning |
-| --- | --- |
-| `db.rows table[pred]` | Executes the lowered selector predicate against the default connection and returns only the matching rows. |
-| `db.rowsOn conn table[pred]` | Executes the lowered selector predicate against `conn` and returns only the matching rows. |
-| `db.first table[pred]` | Executes the lowered selector predicate against the default connection and returns the first matching row as `Option`. |
-| `db.firstOn conn table[pred]` | Executes the lowered selector predicate against `conn` and returns the first matching row as `Option`. |
-| `db.update table[pred] { ... }` | Locates matching persisted rows on the default connection, applies the lowered patch block to each matched row, and persists the updated rows. |
-| `db.update table[pred] patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
-| `db.updateOn conn table[pred] { ... }` | Locates matching persisted rows on `conn`, applies the lowered patch block to each matched row, and persists the updated rows. |
-| `db.updateOn conn table[pred] patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
-| `db.delete table[pred]` | Deletes rows matched by the lowered selector predicate on the default connection. |
-| `db.deleteOn conn table[pred]` | Deletes rows matched by the lowered selector predicate on `conn`. |
-| `db.upsert table[pred] seed { ... }` | Updates rows matched by the lowered selector predicate on the default connection, or inserts `seed` if no row matches. |
-| `db.upsert table[pred] seed patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
-| `db.upsertOn conn table[pred] seed { ... }` | Updates rows matched by the lowered selector predicate on `conn`, or inserts `seed` if no row matches. |
-| `db.upsertOn conn table[pred] seed patchFn` | Fails at runtime on the DB-backed selector path unless `patchFn` is a lowered patch block. |
-| `table[pred] <| { ... }` | `db.update table[pred] { ... }` |
-
-This keeps the selector layer shallow on purpose.
-It is syntax and API sugar over the existing single-table query and delta model, not a new transaction or connection mechanism.
-
-#### Compile-fail cases and diagnostics
-
-The compiler should reject at least these cases with targeted diagnostics:
-
-| Example | Why it is rejected | Suggested help |
-| --- | --- | --- |
-| `db.delete userTable` | `db.delete` expects a `DbSelection A`, not a whole `Table A` | suggest `db.delete userTable[pred]` |
-| `db.rows userTable[id]` | `id` lifts to `User -> Int`, but a selector predicate must resolve to `Bool` | suggest `userTable[id == someId]` or another boolean predicate |
-| `db.update userTable[id == userId] 1` | `db.update` expects a patch value in its final argument position | suggest `db.update userTable[id == userId] { role: "admin" }` or pass a reusable `patch { ... }` value |
-| `userTable[id == userId] <| 1` | selector patch shorthand accepts only a patch block | suggest `userTable[id == userId] <| { ... }` |
-| `userTable[id == userId] <| { nope: True }` | the patch mentions a field that is not present on the selected row type | report the unknown field just as ordinary patching already does |
-
-These are specification-level diagnostics, not exact error strings.
-The important part is that the compiler explains whether the failure came from selector formation, patch typing, or misuse of selector shorthand.
-
-### FTS helpers
-
-`aivi.database` also includes typed helpers for full-text-search payloads and queries:
-
-- `ftsDoc : Text -> List Text -> FtsDoc`
-- `ftsMatchAny : List Text -> FtsQuery`
-- `ftsMatchAll : List Text -> FtsQuery`
-
-### Query DSL reference
-
-| Function | What it does |
-| --- | --- |
-| **db.from** tbl<br><code>Table A -> Query A</code> | Lifts a table into a query source. |
-| **db.where** pred q<br><code>(A -> Bool) -> Query A -> Query A</code> | Filters rows by a predicate. In lowered queries the filter is pushed into SQL. |
-| **db.guard** cond<br><code>Bool -> Query Unit</code> | Inside `do Query`, continues when `cond` is `True` and produces no rows when it is `False`. |
-| **db.select** f q<br><code>(A -> B) -> Query A -> Query B</code> | Projects each row into a new shape. |
-| **db.queryOf** value<br><code>A -> Query A</code> | Wraps one value as a singleton query result. |
-| **db.emptyQuery**<br><code>Query A</code> | A query that always returns an empty list. |
-| **db.queryChain** f q<br><code>(A -> Query B) -> Query A -> Query B</code> | Query bind; this is what `do Query` desugars to. |
-| **db.runQueryOn** conn q<br><code>DbConnection -> Query A -> Effect DbError (List A)</code> | Executes a query through an explicit connection. |
-| **db.runQuery** q<br><code>Query A -> Effect DbError (List A)</code> | Executes a query through the default configured connection. |
-| **db.orderBy** key q<br><code>(A -> B) -> Query A -> Query A</code> | Sorts rows by a projected key. |
-| **db.limit** n q<br><code>Int -> Query A -> Query A</code> | Keeps at most `n` rows. |
-| **db.offset** n q<br><code>Int -> Query A -> Query A</code> | Skips the first `n` rows. |
-| **db.count** q<br><code>Query A -> Query Int</code> | Returns a singleton query containing the row count. |
-| **db.exists** q<br><code>Query A -> Query Bool</code> | Returns a singleton query telling you whether any rows match. |
-
-### Pooling (`aivi.database.pool`)
-
-#### Types and constructors
-
-| Name | Type / shape | What it means |
-| --- | --- | --- |
-| **Pool.PoolError** | `Timeout | Closed | HealthFailed | InvalidConfig Text` | Pool-level failures returned from `Pool.create`, `Pool.acquire`, and `Pool.withConn`. |
-| **Pool.QueuePolicy** | `Fifo | Lifo` | Chooses which idle connection is reused first. |
-| **Pool.BackoffPolicy** | `Fixed Span | Exponential { base: Span, max: Span }` | Chooses retry delay while waiting for capacity or retrying after health-check failures. |
-| **Pool.PoolStats** | `{ size: Int, idle: Int, inUse: Int, waiters: Int, closed: Bool }` | Snapshot returned by `Pool.stats`. |
-
-#### Operations
-
-| Function | What it does |
-| --- | --- |
-| **Pool.create** config<br><code>Pool.Config Conn -> Effect DbError (Result Pool.PoolError (Pool Conn))</code> | Validates the configuration, eagerly seeds `minIdle` idle connections, and returns a pool. |
-| **Pool.acquire** pool<br><code>Pool Conn -> Effect DbError (Result Pool.PoolError Conn)</code> | Borrows one connection. Returns `Err Timeout`, `Err Closed`, or `Err HealthFailed` for pool-level failures. |
-| **Pool.release** pool conn<br><code>Pool Conn -> Conn -> Effect DbError Unit</code> | Returns a previously borrowed connection to the pool. If the pool is already closed, the connection is destroyed instead of becoming idle again. |
-| **Pool.withConn** pool f<br><code>Pool Conn -> (Conn -> Effect DbError A) -> Effect DbError (Result Pool.PoolError A)</code> | Borrows a connection, runs `f`, and always releases the connection afterward. Prefer this helper for routine work. |
-| **Pool.stats** pool<br><code>Pool Conn -> Effect DbError Pool.PoolStats</code> | Returns `{ size, idle, inUse, waiters, closed }` for the current pool state. |
-| **Pool.drain** pool<br><code>Pool Conn -> Effect DbError Unit</code> | Waits for all borrowed connections to be returned, releases the idle set, and leaves the pool open. |
-| **Pool.close** pool<br><code>Pool Conn -> Effect DbError Unit</code> | Releases the idle set, marks the pool closed, and causes future `Pool.acquire` / `Pool.withConn` calls to return `Err Pool.Closed`. |
-
-## Practical guidance
-
-- Prefer ambient connections when a function opens, shares, or nests database work.
-- Use ambient helpers when you truly want one process-wide default connection.
-- Prefer `Pool.withConn` over manual `Pool.acquire` / `Pool.release` unless one workflow genuinely needs to hold the same connection across multiple steps.
-- Call `Pool.close` during shutdown, or `Pool.drain` followed by `Pool.close` when you want borrowed work to finish first.
-- Keep table definitions complete with explicit column lists if you want the query DSL to lower cleanly into SQL.
-- Use savepoints for inner rollback boundaries instead of trying to nest transactions on the same connection.
-- Reach for raw deltas when you want to construct mutations programmatically; reach for typed helpers when you want the shortest clear code.
-
-## Notes
-
-- In v0.1, database reads stay on `db.load`, selector helpers, or `db.runQuery*`.
-- `db.runMigrationSql` and `db.runMigrationSqlOn` are the stable raw SQL entry points in v0.1; regular row reads stay on `db.load`, selector helpers, or `db.runQuery*`.
-- `db.applyDelta` and `db.applyDeltas` remain the generic mutation path for programmatically constructed deltas.
-- Selector CRUD helpers (`db.rows*`, `db.first*`, `db.delete*`, `db.update*`, `db.upsert*`, and `selection <| { ... }`) no longer materialize whole tables just to filter them on configured database connections.
-- Transactions are scoped to a single `DbConnection`.
+- `configure`, `connect`, `close`, and pooling helpers manage connections
+- `runMigrations`, `runMigrationSql`, `rows`, `first`, `count`, and `exists` talk to the database
+- `insert`, `delete`, `update`, and `upsert` mutate persisted rows
+- transactions and savepoints add the usual commit / rollback control around those same helpers

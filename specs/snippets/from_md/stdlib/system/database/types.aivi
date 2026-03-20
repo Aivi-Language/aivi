@@ -1,61 +1,11 @@
-// Tables carry schema metadata and hold rows
-Table A = {
-  name: Text
-  columns: List Column
-  rows: List A
-}
+use aivi.database as db
 
-// Schema definitions are regular AIVI values.
-// The row type is inferred from the table binding (e.g. Table User).
-ColumnType =
-  | IntType
-  | BoolType
-  | TimestampType
-  | Varchar Int
+users : db.Relation User
+activeUsers : db.Query User
+salesByUser : db.Query { userId: Int, totalSpent: Int }
+newestFirst : db.Order User
+revenue : db.Agg Sale Int
 
-ColumnConstraint =
-  | AutoIncrement
-  | NotNull
-
-ColumnDefault =
-  | DefaultBool Bool
-  | DefaultInt Int
-  | DefaultText Text
-  | DefaultNow
-
-Column = {
-  name: Text
-  type: ColumnType
-  constraints: List ColumnConstraint
-  default: Option ColumnDefault
-}
-
-// Predicate alias
-Pred A = A => Bool
-
-// Select the runtime backend.
-Driver =
-  | Sqlite
-  | Postgresql
-  | Mysql
-
-// Configure the default database backend used by db.load / db.applyDelta / db.runMigrations.
-// - Sqlite: url is a filesystem path or ":memory:".
-// - Postgresql/Mysql: url is a connection string.
-DbConfig = { driver: Driver, url: Text }
-
-// Explicit connections are opaque runtime handles.
-DbConnection
-
-// Deltas express insert/update/delete/upsert
-Delta A =
-  | Insert A
-  | Update (Pred A) (Patch A)
-  | Delete (Pred A)
-  | Upsert (Pred A) A (Patch A)
-
-// Selector values carry one table plus the row predicate applied to it.
-DbSelection A = { table: Table A, pred: Pred A }
-
-// Patch functions apply record updates
-Patch A = A -> A
+activeUsers = users[active]
+newestFirst = db.desc .createdAt
+revenue = db.sum .total

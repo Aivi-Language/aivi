@@ -43,7 +43,7 @@ impl TypeChecker {
             .extract_table_row_fields(resolved_ty)
             .or_else(|| env.get(&def.name.name).and_then(|scheme| self.extract_table_row_fields(&scheme.ty)));
         if let (Some(row_fields), Some((table_name, columns_expr))) =
-            (table_ty, Self::extract_table_call(expr))
+            (table_ty, Self::extract_relation_call(expr))
         {
             if let Some(columns) = self.extract_static_table_columns(columns_expr) {
                 let snapshot = TableSchemaSnapshot {
@@ -115,7 +115,9 @@ impl TypeChecker {
             expr.clone()
         } else if expr_contains_placeholder(expr) {
             self.rewrite_placeholder_lambda(expr, "__query")
-        } else if let Some(lifted) = lift_predicate_expr(expr, env, &self.method_to_classes, "__query") {
+        } else if let Some(lifted) =
+            lift_implicit_field_expr(expr, env, &self.method_to_classes, "__query")
+        {
             lifted
         } else {
             expr.clone()
@@ -160,7 +162,11 @@ impl TypeChecker {
         match expr {
             Expr::Lambda { .. } | Expr::FieldSection { .. } => expr.clone(),
             Expr::Call { func, args, span } => Expr::Call {
-                func: Box::new(self.normalize_pipe_transformer(func, env)),
+                // Only normalize the arguments. Rewriting the callee itself turns
+                // class methods like `map` in `xs |> map f` into field-accessor
+                // lambdas before pipe method dispatch gets a chance to resolve
+                // them, which breaks ordinary typeclass-style pipelines.
+                func: func.clone(),
                 args: args
                     .iter()
                     .map(|arg| self.normalize_pipe_transformer(arg, env))
@@ -318,40 +324,39 @@ impl TypeChecker {
                 matches!(
                     Self::callee_leaf_name(func),
                     Some(
-                        "from"
-                            | "where"
-                            | "select"
+                        "relation"
                             | "orderBy"
-                            | "guard"
-                            | "queryOf"
+                            | "selectMap"
+                            | "groupBy"
+                            | "having"
                             | "count"
                             | "exists"
+                            | "distinct"
                             | "limit"
                             | "offset"
+                            | "asc"
+                            | "desc"
                     )
                 ) || args.iter().any(Self::expr_mentions_query_surface)
                     || Self::expr_mentions_query_surface(func)
             }
-            Expr::Block { kind, items, .. } => {
-                matches!(kind, BlockKind::Do { monad } if monad.name == "Query")
-                    || items.iter().any(|item| match item {
-                        BlockItem::Bind { expr, .. }
-                        | BlockItem::Let { expr, .. }
-                        | BlockItem::Filter { expr, .. }
-                        | BlockItem::Yield { expr, .. }
-                        | BlockItem::Recurse { expr, .. }
-                        | BlockItem::Expr { expr, .. } => Self::expr_mentions_query_surface(expr),
-                        BlockItem::When { cond, effect, .. }
-                        | BlockItem::Unless { cond, effect, .. } => {
-                            Self::expr_mentions_query_surface(cond)
-                                || Self::expr_mentions_query_surface(effect)
-                        }
-                        BlockItem::Given { cond, fail_expr, .. } => {
-                            Self::expr_mentions_query_surface(cond)
-                                || Self::expr_mentions_query_surface(fail_expr)
-                        }
-                    })
-            }
+            Expr::Block { items, .. } => items.iter().any(|item| match item {
+                BlockItem::Bind { expr, .. }
+                | BlockItem::Let { expr, .. }
+                | BlockItem::Filter { expr, .. }
+                | BlockItem::Yield { expr, .. }
+                | BlockItem::Recurse { expr, .. }
+                | BlockItem::Expr { expr, .. } => Self::expr_mentions_query_surface(expr),
+                BlockItem::When { cond, effect, .. }
+                | BlockItem::Unless { cond, effect, .. } => {
+                    Self::expr_mentions_query_surface(cond)
+                        || Self::expr_mentions_query_surface(effect)
+                }
+                BlockItem::Given { cond, fail_expr, .. } => {
+                    Self::expr_mentions_query_surface(cond)
+                        || Self::expr_mentions_query_surface(fail_expr)
+                }
+            }),
             Expr::Binary { left, right, .. } => {
                 Self::expr_mentions_query_surface(left) || Self::expr_mentions_query_surface(right)
             }
@@ -419,30 +424,25 @@ impl TypeChecker {
             Expr::Call { func, args, .. } => {
                 let callee = Self::callee_leaf_name(func);
                 match (callee, args.as_slice()) {
-                    (Some("from"), [table]) => self.table_row_fields_from_expr(table, env),
-                    (Some("where"), [pred, query]) | (Some("orderBy"), [pred, query]) => {
+                    (Some("orderBy"), [pred, query])
+                    | (Some("selectMap"), [pred, query])
+                    | (Some("groupBy"), [pred, query])
+                    | (Some("having"), [pred, query]) => {
                         let row = self.validate_query_schema_expr(query, env, bindings);
                         if let Some(fields) = row.as_ref() {
                             self.validate_query_row_expr(pred, Some(fields), bindings);
                         }
-                        row
-                    }
-                    (Some("select"), [projection, query]) => {
-                        let row = self.validate_query_schema_expr(query, env, bindings);
-                        if let Some(fields) = row.as_ref() {
-                            self.validate_query_row_expr(projection, Some(fields), bindings);
+                        match callee {
+                            Some("orderBy") | Some("having") => row,
+                            _ => None,
                         }
-                        None
                     }
                     (Some("limit"), [_, query]) | (Some("offset"), [_, query]) => {
                         self.validate_query_schema_expr(query, env, bindings)
                     }
+                    (Some("distinct"), [query]) => self.validate_query_schema_expr(query, env, bindings),
                     (Some("count"), [query]) | (Some("exists"), [query]) => {
                         self.validate_query_schema_expr(query, env, bindings);
-                        None
-                    }
-                    (Some("guard"), [guard]) | (Some("queryOf"), [guard]) => {
-                        self.validate_query_row_expr(guard, None, bindings);
                         None
                     }
                     _ => {
@@ -459,64 +459,35 @@ impl TypeChecker {
                 if let Some(fields) = left_row.as_ref() {
                     match &**right {
                         Expr::Call { func, args, .. } => match (Self::callee_leaf_name(func), args.as_slice()) {
-                            (Some("where"), [pred]) | (Some("orderBy"), [pred]) => {
+                            (Some("orderBy"), [pred])
+                            | (Some("selectMap"), [pred])
+                            | (Some("groupBy"), [pred])
+                            | (Some("having"), [pred]) => {
                                 self.validate_query_row_expr(pred, Some(fields), bindings);
-                                left_row
-                            }
-                            (Some("select"), [projection]) => {
-                                self.validate_query_row_expr(projection, Some(fields), bindings);
-                                None
+                                match Self::callee_leaf_name(func) {
+                                    Some("orderBy") | Some("having") => left_row,
+                                    _ => None,
+                                }
                             }
                             (Some("limit"), [_]) | (Some("offset"), [_]) => left_row,
-                            (Some("count"), []) | (Some("exists"), []) => None,
+                            (Some("distinct"), []) => left_row,
                             _ => None,
                         },
+                        Expr::Ident(name) if name.name == "distinct" => left_row,
                         _ => None,
                     }
                 } else {
                     None
                 }
             }
-            Expr::Block {
-                kind: BlockKind::Do { monad },
-                items,
-                ..
-            } if monad.name == "Query" => {
-                let mut local_bindings = bindings.clone();
-                for item in items {
-                    match item {
-                        BlockItem::Bind { pattern, expr, .. } => {
-                            let row = self.validate_query_schema_expr(expr, env, &local_bindings);
-                            if let Some(fields) = row {
-                                match pattern {
-                                    Pattern::Ident(name) | Pattern::SubjectIdent(name) => {
-                                        local_bindings.insert(name.name.clone(), fields);
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        BlockItem::Let { expr, .. } | BlockItem::Expr { expr, .. } => {
-                            self.validate_query_schema_expr(expr, env, &local_bindings);
-                            self.validate_query_row_expr(expr, None, &local_bindings);
-                        }
-                        BlockItem::Filter { expr, .. }
-                        | BlockItem::Yield { expr, .. }
-                        | BlockItem::Recurse { expr, .. } => {
-                            self.validate_query_row_expr(expr, None, &local_bindings);
-                        }
-                        BlockItem::When { cond, effect, .. }
-                        | BlockItem::Unless { cond, effect, .. } => {
-                            self.validate_query_row_expr(cond, None, &local_bindings);
-                            self.validate_query_row_expr(effect, None, &local_bindings);
-                        }
-                        BlockItem::Given { cond, fail_expr, .. } => {
-                            self.validate_query_row_expr(cond, None, &local_bindings);
-                            self.validate_query_row_expr(fail_expr, None, &local_bindings);
-                        }
-                    }
+            Expr::Index { base, index, .. } => {
+                let row = self
+                    .validate_query_schema_expr(base, env, bindings)
+                    .or_else(|| self.table_row_fields_from_expr(base, env));
+                if let Some(fields) = row.as_ref() {
+                    self.validate_query_row_expr(index, Some(fields), bindings);
                 }
-                None
+                row
             }
             _ => None,
         }
@@ -588,6 +559,9 @@ impl TypeChecker {
             }
             Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
                 for field in fields {
+                    if Self::expr_mentions_query_surface(&field.value) {
+                        continue;
+                    }
                     self.validate_query_row_expr(&field.value, placeholder, bindings);
                 }
             }
@@ -723,8 +697,7 @@ impl TypeChecker {
 
     fn query_projection_expected_type(&mut self, callee: &str, row_ty: Type) -> Option<Type> {
         match callee {
-            "where" => Some(Type::Func(Box::new(row_ty), Box::new(Type::con("Bool")))),
-            "select" | "orderBy" => Some(Type::Func(
+            "selectMap" | "groupBy" | "having" => Some(Type::Func(
                 Box::new(row_ty),
                 Box::new(self.fresh_var()),
             )),
@@ -733,8 +706,12 @@ impl TypeChecker {
     }
 
     fn extract_query_row_type(&mut self, ty: Type) -> Option<Type> {
-        let applied = self.apply(ty);
+        let applied = self.apply(ty.clone());
         if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Query") {
+            let applied_row = self.apply(row_ty);
+            return Some(self.expand_alias(applied_row));
+        }
+        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Relation") {
             let applied_row = self.apply(row_ty);
             return Some(self.expand_alias(applied_row));
         }
@@ -757,7 +734,7 @@ impl TypeChecker {
 
     fn extract_table_row_fields(&mut self, ty: &Type) -> Option<BTreeMap<String, Type>> {
         let applied = self.apply(ty.clone());
-        let row_ty = if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Table") {
+        let row_ty = if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Relation") {
             row_ty
         } else {
             let expanded = self.expand_alias(applied);
@@ -954,11 +931,11 @@ impl TypeChecker {
         )
     }
 
-    fn extract_table_call(expr: &Expr) -> Option<(String, &Expr)> {
+    fn extract_relation_call(expr: &Expr) -> Option<(String, &Expr)> {
         let Expr::Call { func, args, .. } = expr else {
             return None;
         };
-        if args.len() != 2 || Self::callee_leaf_name(func)? != "table" {
+        if args.len() != 3 || Self::callee_leaf_name(func)? != "relation" {
             return None;
         }
         let table_name = match &args[0] {

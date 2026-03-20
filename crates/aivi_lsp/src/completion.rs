@@ -75,11 +75,6 @@ impl Backend {
             return Self::gtk_completions(&gtk_ctx, gtk_index);
         }
 
-        // Query DSL completions: detect cursor inside `do Query { ... }`
-        if Self::inside_do_query_block(text, position) {
-            return Self::query_block_completions();
-        }
-
         if let Some(prefix) = Self::use_module_prefix(&line_prefix) {
             for name in module_map.keys() {
                 if name.starts_with(prefix) {
@@ -515,11 +510,6 @@ impl Backend {
             "do Effect block",
         ),
         (
-            "do Query",
-            "do Query {\n  ${1:row} <- from ${2:table}\n  guard ${3:condition}\n  queryOf ${0:row}\n}",
-            "do Query DSL block",
-        ),
-        (
             "match",
             "${1:expr} match\n  | ${2:pattern} => ${3:body}\n  | ${0:_ => _}",
             "match expression",
@@ -589,15 +579,6 @@ impl Backend {
 
     fn snippet_documentation(label: &str) -> Option<Documentation> {
         let value = match label {
-            "do Query" => Some(
-                "Compose a database query using the monadic `do Query` DSL.\n\n\
-                 - `from table` — bind all rows from a `Table A` as a `Query A`\n\
-                 - `guard condition` — filter rows by a boolean predicate\n\
-                 - `queryOf value` — lift a value into the result set (terminal step)\n\
-                 - `select f query` — project each row through `f`\n\
-                 - `where pred query` — functional filter (alternative to `guard`)\n\n\
-                 Pass the resulting `Query A` to `runQueryOn conn query` to execute it.",
-            ),
             "gtk signal-first app" => Some(
                 "Scaffold a signal-first GTK app.\n\nCreate source signals, derive more signals with `map`, declare a root application window with `~<gtk>`, and run it with `runGtkApp`.",
             ),
@@ -1053,93 +1034,6 @@ impl Backend {
         let rest = &attrs[value_start..];
         let end = rest.find('"')?;
         Some(&rest[..end])
-    }
-
-    /// Returns `true` when the cursor sits inside a `do Query { ... }` block.
-    ///
-    /// Strategy: scan backwards from the cursor collecting unmatched braces.
-    /// The first unmatched `{` that is immediately preceded (ignoring whitespace)
-    /// by `do Query` means we are in such a block.
-    fn inside_do_query_block(text: &str, position: Position) -> bool {
-        let offset = Self::offset_at(text, position).min(text.len());
-        let before = &text[..offset];
-        let bytes = before.as_bytes();
-
-        let mut depth: i32 = 0;
-        let mut i = bytes.len();
-        while i > 0 {
-            i -= 1;
-            match bytes[i] {
-                b'}' => depth += 1,
-                b'{' => {
-                    if depth == 0 {
-                        // Found an unmatched `{` — check what precedes it.
-                        let prefix = before[..i].trim_end();
-                        if prefix.ends_with("do Query") {
-                            return true;
-                        }
-                        // Not a Query block — keep scanning outer blocks.
-                        depth -= 1; // will become -1, keep searching
-                    } else {
-                        depth -= 1;
-                    }
-                }
-                _ => {}
-            }
-        }
-        false
-    }
-
-    /// Completion items offered when the cursor is inside a `do Query { ... }` block.
-    fn query_block_completions() -> Vec<CompletionItem> {
-        /// (label, detail, documentation)
-        const QUERY_DSL: &[(&str, &str, &str)] = &[
-            (
-                "from",
-                "Table A -> Query A",
-                "Bind all rows of a table into the query. Usually the first step: `row <- from myTable`.",
-            ),
-            (
-                "guard",
-                "Bool -> Query Unit",
-                "Filter the current row set by a boolean predicate. Rows for which the predicate is `False` are dropped.",
-            ),
-            (
-                "queryOf",
-                "A -> Query A",
-                "Lift a value into the query result. Use as the terminal step to specify what each result row looks like.",
-            ),
-            (
-                "select",
-                "(A -> B) -> Query A -> Query B",
-                "Project each row through a function, producing a new `Query B`.",
-            ),
-            (
-                "where",
-                "(A -> Bool) -> Query A -> Query A",
-                "Functional filter: keep only rows satisfying the predicate. Equivalent to `guard` in bind style.",
-            ),
-            (
-                "runQueryOn",
-                "DbConnection -> Query A -> Effect DbError (List A)",
-                "Execute a `Query A` against a live database connection and return the matching rows.",
-            ),
-        ];
-
-        QUERY_DSL
-            .iter()
-            .map(|(label, detail, doc)| CompletionItem {
-                label: label.to_string(),
-                kind: Some(CompletionItemKind::FUNCTION),
-                detail: Some(detail.to_string()),
-                documentation: Some(Documentation::MarkupContent(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: doc.to_string(),
-                })),
-                sort_text: Some("0".to_string()),
-                ..CompletionItem::default()
-            })
-            .collect()
     }
 
     fn gtk_completions(ctx: &GtkCompletionContext, gtk_index: &GtkIndex) -> Vec<CompletionItem> {

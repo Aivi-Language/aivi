@@ -378,7 +378,6 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                         Ok(result)
                     }
                 }),
-                db_patch_meta: None,
             }),
             args: Vec::new(),
             tagged_args: None,
@@ -473,7 +472,6 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
 
                 Ok(result)
             }),
-            db_patch_meta: None,
         }),
         args: Vec::new(),
         tagged_args: None,

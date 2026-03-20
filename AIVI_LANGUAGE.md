@@ -225,11 +225,17 @@ user3 = user <| { profile.avatar: "new.png" }
 record <| { items[*].price: _ * 1.1 }
 record <| { items[price > 80].tag: "hot" }
 record <| { lookup["key"]: newVal }
-db.rows userTable[active]
-db.first userTable[id == userId]
-db.update userTable[id == userId] { role: "admin" }
-userTable[id == userId] <| { role: "admin" }
-db.delete userTable[id == userId]
+db.rows users[active]
+db.first users[id == userId]
+db.rows (
+  users[active]
+    |> orderBy (desc .createdAt, asc .id)
+    |> limit 10
+    |> selectMap { id: .id, email: .email }
+)
+db.update users[id == userId] { role: "admin" }
+users[id == userId] <| { role: "admin" }
+db.delete users[id == userId]
 ```
 
 Patch instructions:

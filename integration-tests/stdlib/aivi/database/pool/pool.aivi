@@ -373,11 +373,11 @@ drain_releases_idle_connections_and_keeps_pool_open = do Effect {
 
 poolPath = "/tmp/aivi-db-pool-transaction.sqlite"
 
-users : Table { id: Int, name: Text }
-users = Db.table "pool_users" [
+users : Db.Relation { id: Int, name: Text }
+users = Db.relation "pool_users" [
   { name: "id",   type: Db.IntType,     constraints: [Db.NotNull], default: None }
   { name: "name", type: Db.Varchar 255, constraints: [Db.NotNull], default: None }
-]
+] []
 
 poolCfg : Pool.Config DbConnection
 poolCfg = {
@@ -405,15 +405,15 @@ pooled_connections_isolate_uncommitted_writes = do Effect {
 
   outerResult <- Pool.withConn pool (conn1 => do Effect {
       _           <- Db.beginTxOn conn1
-      _           <- Db.applyDeltaOn conn1 users (Db.Insert { id: 1, name: "Outer" })
+      _           <- Db.insertOn conn1 users { id: 1, name: "Outer" }
 
-      beforeResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
+      beforeResult <- Pool.withConn pool (conn2 => Db.rowsOn conn2 users)
       rowsBefore   <- assertOk beforeResult
       assertEq (List.length rowsBefore) 0
 
       _ <- Db.commitTxOn conn1
 
-      afterResult <- Pool.withConn pool (conn2 => Db.loadOn conn2 users)
+      afterResult <- Pool.withConn pool (conn2 => Db.rowsOn conn2 users)
       rowsAfter   <- assertOk afterResult
       pure rowsAfter
   })

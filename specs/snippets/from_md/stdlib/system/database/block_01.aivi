@@ -1,14 +1,6 @@
-activeUsers : Query User
-activeUsers = do Query {
-  user <- db.from userTable
-  db.guard user.active
-  db.queryOf user
-}
-
-main = do Effect {
-  dbConn <- db.connect { driver: Sqlite, url: "app.db" }
-  _      <- db.runMigrationsOn dbConn [userTable]
-  users  <- db.runQueryOn dbConn activeUsers
-  _      <- db.close dbConn
-  pure users
-}
+conn <- db.connect { driver: Sqlite, url: ":memory:" }
+_ <- db.runMigrationsOn conn [users]
+_ <- db.insertOn conn users { id: 1, email: "ada@example.com", active: True }
+activeUsers <- db.rowsOn conn users[active]
+_ <- db.close conn
+pure activeUsers

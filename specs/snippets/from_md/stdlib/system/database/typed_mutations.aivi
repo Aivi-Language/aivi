@@ -1,52 +1,29 @@
-// Selector CRUD helpers keep inserts explicit and make reads/writes
-// flow through a shared `table[predicate]` selector surface.
+use aivi.database as db
 
-// db.insertOn inserts a single row through an explicit connection.
-createUser : DbConnection -> User -> Effect DbError (Table User)
-createUser = conn => newUser =>
-  db.insertOn conn userTable newUser
+// db.insertOn inserts one full row.
+createUser : DbConnection -> User -> Effect DbError (Relation User)
+createUser = conn => user =>
+  db.insertOn conn users user
 
-// db.deleteOn deletes all rows selected by the table predicate.
-removeInactiveUsers : DbConnection -> Effect DbError (Table User)
+// db.deleteOn removes every row selected by the root relation query.
+removeInactiveUsers : DbConnection -> Effect DbError (Relation User)
 removeInactiveUsers = conn =>
-  db.deleteOn conn userTable[!active]
+  db.deleteOn conn users[!active]
 
-// db.updateOn patches all rows selected by the table predicate.
-promoteAdmin : DbConnection -> Int -> Effect DbError (Table User)
+// db.updateOn applies one record patch to every matched row.
+promoteAdmin : DbConnection -> Int -> Effect DbError (Relation User)
 promoteAdmin = conn => userId =>
-  db.updateOn conn userTable[id == userId] { role: "admin" }
+  db.updateOn conn users[id == userId] { role: "admin" }
 
-// db.firstOn keeps the selector syntax for reads as well.
+// db.firstOn keeps the same query surface for reads.
 lookupUser : DbConnection -> Int -> Effect DbError (Option User)
 lookupUser = conn => userId =>
-  db.firstOn conn userTable[id == userId]
+  db.firstOn conn users[id == userId]
 
-// db.upsertOn patches matching rows and inserts the seed row when none match.
-syncUser : DbConnection -> User -> Effect DbError (Table User)
+// db.upsertOn patches matching rows or inserts the seed row.
+syncUser : DbConnection -> User -> Effect DbError (Relation User)
 syncUser = conn => user =>
-  db.upsertOn conn userTable[id == user.id] user {
+  db.upsertOn conn users[id == user.id] user {
     name: user.name
     active: user.active
   }
-
-// Ambient variants use the default connection from db.configure
-// and mirror the explicit forms exactly:
-//
-//   db.insert        table row
-//   db.rows          table[pred]
-//   db.first         table[pred]
-//   db.delete        table[pred]
-//   db.update        table[pred] { ... }
-//   db.upsert        table[pred] value { ... }
-
-addUserAmbient : User -> Effect DbError (Table User)
-addUserAmbient = newUser =>
-  db.insert userTable newUser
-
-activeUsersAmbient : Effect DbError (List User)
-activeUsersAmbient =
-  db.rows userTable[active]
-
-deleteStaleAmbient : Instant -> Effect DbError (Table User)
-deleteStaleAmbient = cutoff =>
-  db.delete userTable[createdAt < cutoff]

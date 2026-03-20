@@ -30,7 +30,8 @@ This table mixes true kernel primitives with a few compile-time rewrites and bac
 | Predicates | λ + case |
 | Generators | fold (Church-encoded) |
 | Effects (`do Effect {}`) | `bind` + `pure` |
-| Generic do-monads | `chain` + `of` (`do Query` uses `queryChain` + `queryOf`) |
+| Generic do-monads | `chain` + `of` |
+| Relation queries | compiled query plans + runtime SQL execution |
 | Resources | `__makeResource` |
 | Plain blocks | immediately-applied λ |
 | Domains | static rewrite to ordinary calls or templates |
@@ -57,7 +58,7 @@ The combined result is block-free HIR composed of nested lambdas and ordinary fu
 |:---------- |:----- |:-------------- |
 | `do Option { x <- e1; e2 }` | Surface → HIR | `chain (λx → e2) e1` |
 | `do Result { x <- e1; e2 }` | Surface → HIR | `chain (λx → e2) e1` |
-| `do Query { x <- e1; e2 }` | Surface → HIR | `queryChain (λx → e2) e1` |
+| `users[active] |> orderBy (desc .createdAt)` | Surface → HIR | `__db_query_compiled <static-plan> <sources> <captures>` |
 | `do Effect { x <- e1; e2 }` | HIR → block-free HIR | `__withResourceScope (bind e1 (λx → e2))` |
 | `do Effect { x = e; rest }` | HIR → block-free HIR | `__withResourceScope (bind (pure e) (λx → rest))` |
 | `resource { acq; yield v; cleanup }` | HIR → block-free HIR | `__makeResource (λ_ → acquire_chain)`, where `acquire_chain` is lowered with the `do Effect` rules and yields `(v, λ_ → cleanup_chain)` so cleanup closes over acquisition bindings |

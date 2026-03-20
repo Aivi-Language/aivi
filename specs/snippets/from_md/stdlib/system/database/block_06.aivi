@@ -1,17 +1,2 @@
-Order = { id: Int, userId: Int, total: Int }
-
-orderTable : Table Order
-orderTable = db.table "orders" [
-  { name: "id",     type: IntType, constraints: [AutoIncrement, NotNull], default: None }
-  { name: "userId", type: IntType, constraints: [NotNull],                default: None }
-  { name: "total",  type: IntType, constraints: [NotNull],                default: None }
-]
-
-activeUserOrders : Query { user: User, order: Order }
-activeUserOrders = do Query {
-  user <- db.from userTable
-  db.guard user.active
-  order <- db.from orderTable
-  db.guard (order.userId == user.id) // join condition
-  db.queryOf { user: user, order: order }
-}
+usersWithPaidOrders =
+  users[orders[status == "paid"]]

@@ -461,20 +461,16 @@ use aivi.database
 
 Product = { id: Int, price: Int, active: Bool }
 
-productTable : Table Product
-productTable = table "products" [
+productTable : Relation Product
+productTable = relation "products" [
   { name: "id", type: IntType, constraints: [NotNull], default: None }
   { name: "price", type: IntType, constraints: [NotNull], default: None }
   { name: "active", type: BoolType, constraints: [NotNull], default: None }
-]
+] []
 
-filtered = where active (from productTable)
-sorted = orderBy.price (from productTable)
-queryBlock = do Query {
-  p <- from productTable
-  guard p.active
-  orderBy.price (queryOf p)
-}
+filtered = productTable[active]
+filteredById = productTable[id == 1]
+sorted = productTable |> orderBy (asc .price)
 "#;
 
     let (mut modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
@@ -498,7 +494,7 @@ queryBlock = do Query {
         .find(|m| m.name == "test.query_lifting")
         .expect("expected test.query_lifting module");
 
-    for def_name in ["filtered", "sorted", "queryBlock"] {
+    for def_name in ["filtered", "filteredById", "sorted"] {
         let def = module
             .defs
             .iter()
@@ -511,6 +507,10 @@ queryBlock = do Query {
         assert!(
             !hir_contains_var(&def.expr, "price"),
             "expected {def_name} to rewrite bare `price` lifting"
+        );
+        assert!(
+            !hir_contains_var(&def.expr, "id"),
+            "expected {def_name} to rewrite bare `id` lifting"
         );
     }
 }

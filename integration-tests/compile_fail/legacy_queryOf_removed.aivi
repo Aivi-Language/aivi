@@ -1,0 +1,18 @@
+// EXPECT-ERROR: unknown name 'queryOf'
+@no_prelude
+module integrationTests.compileFail.legacyQueryOfRemoved
+
+use aivi
+use aivi.database
+
+User = { id: Int }
+
+users : Relation User
+users = relation "users" [
+  { name: "id", type: IntType, constraints: [NotNull], default: None }
+] []
+
+bad = do Query {
+  user <- users
+  queryOf user
+}

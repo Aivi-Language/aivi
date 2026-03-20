@@ -1,0 +1,15 @@
+// EXPECT-ERROR: unknown name 'from'
+@no_prelude
+module integrationTests.compileFail.legacyFromRemoved
+
+use aivi
+use aivi.database
+
+User = { id: Int }
+
+users : Relation User
+users = relation "users" [
+  { name: "id", type: IntType, constraints: [NotNull], default: None }
+] []
+
+bad = from users

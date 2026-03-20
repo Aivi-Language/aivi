@@ -4,533 +4,236 @@ module integrationTests.stdlib.aivi.database.queryDsl
 use aivi
 use aivi.testing
 use aivi.database (
-  Table, IntType, BoolType, Varchar,
-  AutoIncrement, NotNull,
-  DefaultBool,
+  Relation, Query, DbConnection, DbError,
+  IntType, BoolType, Varchar,
+  NotNull,
   Sqlite,
-  DbConnection, DbError,
-  Query,
-  Insert,
-  emptyQuery,
-  table, connect, close,
-  runMigrationsOn, applyDeltaOn, runQueryOn,
-  from, where, select, queryOf, guard, orderBy, limit, offset, count, exists,
-  configure, runMigrations, applyDelta, runQuery
+  relation, hasMany, belongsTo,
+  connect, close, runMigrationsOn, insertOn,
+  rowsOn, firstOn, countOn, existsOn,
+  orderBy, limit, offset, distinct, selectMap, groupBy, having,
+  asc, desc, key, count, sum, max
 )
 
-// ── shared schema ──────────────────────────────────────────────────────────
+User         = { id: Int, email: Text, active: Bool, age: Int, createdAt: Int }
+Order        = { id: Int, userId: Int, status: Text, total: Int, createdAt: Int }
+UserSummary  = { id: Int, email: Text }
+UserIdOnly   = { userId: Int }
+OrderSummary = { id: Int, total: Int }
+UserOrders   = { id: Int, orders: List OrderSummary }
+SalesSummary = { userId: Int, orderCount: Int, totalSpent: Int, maxOrder: Int }
 
-Product = { id: Int, name: Text, price: Int, active: Bool }
-
-productTable : Table Product
-productTable = table "products" [
-  { name: "id",     type: IntType,    constraints: [AutoIncrement, NotNull], default: None }
-  { name: "name",   type: Varchar 80, constraints: [NotNull],                default: None }
-  { name: "price",  type: IntType,    constraints: [NotNull],                default: None }
-  { name: "active", type: BoolType,   constraints: [NotNull],                default: Some (DefaultBool True) }
+users : Relation User
+users = relation "users" [
+  { name: "id",        type: IntType,     constraints: [NotNull], default: None }
+  { name: "email",     type: Varchar 120, constraints: [NotNull], default: None }
+  { name: "active",    type: BoolType,    constraints: [NotNull], default: None }
+  { name: "age",       type: IntType,     constraints: [NotNull], default: None }
+  { name: "createdAt", type: IntType,     constraints: [NotNull], default: None }
+] [
+  hasMany "orders" "orders" .id .userId
 ]
 
-seedProducts : DbConnection -> Effect DbError Unit
-seedProducts = conn => do Effect {
-  _ <- applyDeltaOn conn productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
-  _ <- applyDeltaOn conn productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
-  _ <- applyDeltaOn conn productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
+orders : Relation Order
+orders = relation "orders" [
+  { name: "id",        type: IntType,    constraints: [NotNull], default: None }
+  { name: "userId",    type: IntType,    constraints: [NotNull], default: None }
+  { name: "status",    type: Varchar 40, constraints: [NotNull], default: None }
+  { name: "total",     type: IntType,    constraints: [NotNull], default: None }
+  { name: "createdAt", type: IntType,    constraints: [NotNull], default: None }
+] [
+  belongsTo "user" "users" .userId .id
+]
+
+allUsersById : Query User
+allUsersById = users |> orderBy (asc .id)
+
+activeAdultUsers : Query User
+activeAdultUsers = users[active && age > 18] |> orderBy (asc .id)
+
+pagedActiveUsers : Query UserSummary
+pagedActiveUsers = users[active] |> orderBy (desc .createdAt, asc .id) |> limit 2 |> offset 1 |> selectMap { id: .id, email: .email }
+
+paidUserIds : Query UserIdOnly
+paidUserIds = orders[status == "paid"] |> orderBy (asc .userId, asc .id) |> selectMap { userId: .userId } |> distinct
+
+usersWithLargePaidOrders : Query User
+usersWithLargePaidOrders = users[orders[status == "paid" && total > 60]] |> orderBy (asc .id)
+
+activeUsersWithPaidOrders : Query UserOrders
+activeUsersWithPaidOrders = users[active] |> orderBy (asc .id) |> selectMap {
+  id: .id
+  orders: (.orders[status == "paid"] |> orderBy (desc .createdAt) |> limit 2 |> selectMap { id: .id, total: .total })
+}
+
+salesByUser : Query SalesSummary
+salesByUser = orders[status == "paid"] |> groupBy .userId |> having (sum .total > 50) |> selectMap { userId: key, orderCount: count, totalSpent: sum .total, maxOrder: max .total } |> orderBy (desc .totalSpent)
+
+highValuePaidUsers : Query User
+highValuePaidUsers = users[id == 2]
+
+usersByCreatedAt : Query User
+usersByCreatedAt = users |> orderBy (asc .createdAt)
+
+seed : DbConnection -> Effect DbError Unit
+seed = conn => do Effect {
+  _ <- runMigrationsOn conn [users, orders]
+
+  users1 <- insertOn conn users {
+    id: 1
+    email: "ada@example.com"
+    active: True
+    age: 31
+    createdAt: 100
+  }
+  users2 <- insertOn conn users1 {
+    id: 2
+    email: "linus@example.com"
+    active: False
+    age: 19
+    createdAt: 200
+  }
+  _ <- insertOn conn users2 {
+    id: 3
+    email: "grace@example.com"
+    active: True
+    age: 24
+    createdAt: 300
+  }
+
+  orders1 <- insertOn conn orders {
+    id: 1
+    userId: 1
+    status: "paid"
+    total: 40
+    createdAt: 10
+  }
+  orders2 <- insertOn conn orders1 {
+    id: 2
+    userId: 1
+    status: "paid"
+    total: 70
+    createdAt: 30
+  }
+  orders3 <- insertOn conn orders2 {
+    id: 3
+    userId: 1
+    status: "draft"
+    total: 5
+    createdAt: 40
+  }
+  orders4 <- insertOn conn orders3 {
+    id: 4
+    userId: 2
+    status: "paid"
+    total: 90
+    createdAt: 20
+  }
+  _ <- insertOn conn orders4 {
+    id: 5
+    userId: 3
+    status: "refunded"
+    total: 15
+    createdAt: 50
+  }
+
   pure Unit
 }
 
-expectedProducts : List Product
-expectedProducts = [
-  { id: 1, name: "Widget",  price: 10, active: True }
-  { id: 2, name: "Gadget",  price: 20, active: False }
-  { id: 3, name: "Doohick", price: 15, active: True }
-]
+userIds = rows => List.map (u => u.id) rows
 
-// ── tests ──────────────────────────────────────────────────────────────────
-
-@test "from loads all rows"
-from_loads_all_rows = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (from productTable)
-  _       <- close conn
-  assertEq results expectedProducts
-}
-
-@test "where filters rows"
-where_filters_rows = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (where active (from productTable))
-  _       <- close conn
-  assertEq (List.length results) 2
-}
-
-@test "select projects rows"
-select_projects_rows = do Effect {
+@test "relation roots execute as queries"
+relation_roots_execute_as_queries = do Effect {
   conn  <- connect { driver: Sqlite, url: ":memory:" }
-  _     <- runMigrationsOn conn [productTable]
-  _     <- seedProducts conn
-  names <- runQueryOn conn (select.name (from productTable))
+  _     <- seed conn
+  found <- rowsOn conn allUsersById
   _     <- close conn
-  assertEq (List.length names) 3
+  assertEq (userIds found) [1, 2, 3]
 }
 
-@test "do Query from single bind"
-do_query_from_single_bind = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (do Query {
-      p       <- from productTable
-      queryOf p
-  })
-  _ <- close conn
-  assertEq results expectedProducts
-}
-
-@test "do Query with guard filters"
-do_query_guard_filters = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (do Query {
-      p       <- from productTable
-      guard p.active
-      queryOf p
-  })
-  _ <- close conn
-  assertEq (List.length results) 2
-}
-
-@test "do Query projects field"
-do_query_projects_field = do Effect {
+@test "bracket filters use predicate lifting"
+bracket_filters_use_predicate_lifting = do Effect {
   conn  <- connect { driver: Sqlite, url: ":memory:" }
-  _     <- runMigrationsOn conn [productTable]
-  _     <- seedProducts conn
-  names <- runQueryOn conn (do Query {
-      p     <- from productTable
-      queryOf p.name
-  })
-  _ <- close conn
-  assertEq (List.length names) 3
+  _     <- seed conn
+  found <- rowsOn conn activeAdultUsers
+  _     <- close conn
+  assertEq (userIds found) [1, 3]
 }
 
-@test "do Query guard and project"
-do_query_guard_and_project = do Effect {
+@test "orderBy limit offset and selectMap compose"
+orderBy_limit_offset_and_selectMap_compose = do Effect {
   conn  <- connect { driver: Sqlite, url: ":memory:" }
-  _     <- runMigrationsOn conn [productTable]
-  _     <- seedProducts conn
-  names <- runQueryOn conn (do Query {
-      p     <- from productTable
-      guard p.active
-      queryOf p.name
-  })
-  _ <- close conn
-  assertEq (List.length names) 2
+  _     <- seed conn
+  found <- rowsOn conn pagedActiveUsers
+  _     <- close conn
+  assertEq found [{ id: 1, email: "ada@example.com" }]
 }
 
-@test "emptyQuery returns empty list"
-empty_query_returns_empty = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  results <- runQueryOn conn emptyQuery
-  _       <- close conn
-  assertEq (List.length results) 0
+@test "distinct removes duplicate projected rows"
+distinct_removes_duplicate_projected_rows = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- seed conn
+  found <- rowsOn conn paidUserIds
+  _     <- close conn
+  assertEq (List.length found) 2
+  found match
+    | [a, b] => assert ((a.userId == 1 && b.userId == 2) || (a.userId == 2 && b.userId == 1))
+    | _      => assert False
 }
 
-@test "queryOf wraps single value"
-query_of_wraps_single_value = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  results <- runQueryOn conn (queryOf 42)
-  _       <- close conn
-  assertEq results [42]
+@test "nested relation filters use exists semantics"
+nested_relation_filters_use_exists_semantics = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- seed conn
+  found <- rowsOn conn usersWithLargePaidOrders
+  _     <- close conn
+  assertEq (userIds found) [1, 2]
 }
 
-@test "do Query let binding"
-do_query_let_binding = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (do Query {
-      p       <- from productTable
-      doubled = p.price * 2
-      queryOf doubled
-  })
-  _ <- close conn
-  assertEq results [20, 40, 30]
-}
-
-@test "orderBy sorts rows ascending by key"
-order_by_sorts_ascending = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  _    <- runMigrationsOn conn [productTable]
-  _    <- seedProducts conn
-  rows <- runQueryOn conn (orderBy.price (from productTable))
-  _    <- close conn
-  prices = List.map.price rows
-  assertEq prices [10, 15, 20]
-}
-
-@test "orderBy sorts text field ascending"
-order_by_sorts_text = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  _    <- runMigrationsOn conn [productTable]
-  _    <- seedProducts conn
-  rows <- runQueryOn conn (orderBy.name (from productTable))
-  _    <- close conn
-  names = List.map.name rows
-  assertEq names ["Doohick", "Gadget", "Widget"]
-}
-
-@test "limit returns first n rows"
-limit_returns_first_n = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (limit 2 (from productTable))
-  _       <- close conn
-  assertEq results [
-    { id: 1, name: "Widget", price: 10, active: True }
-    { id: 2, name: "Gadget", price: 20, active: False }
+@test "nested relation projections stay nested"
+nested_relation_projections_stay_nested = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- seed conn
+  found <- rowsOn conn activeUsersWithPaidOrders
+  _     <- close conn
+  assertEq found [
+    {
+      id: 1
+      orders: [
+        { id: 2, total: 70 }
+        { id: 1, total: 40 }
+      ]
+    }
+    {
+      id: 3
+      orders: []
+    }
   ]
 }
 
-@test "limit 0 returns empty list"
-limit_zero_returns_empty = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (limit 0 (from productTable))
-  _       <- close conn
-  assertEq (List.length results) 0
-}
-
-@test "offset skips first n rows"
-offset_skips_first_n = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (offset 1 (from productTable))
-  _       <- close conn
-  assertEq results [
-    { id: 2, name: "Gadget",  price: 20, active: False }
-    { id: 3, name: "Doohick", price: 15, active: True }
+@test "grouped queries support having aggregates and ordering"
+grouped_queries_support_having_aggregates_and_ordering = do Effect {
+  conn  <- connect { driver: Sqlite, url: ":memory:" }
+  _     <- seed conn
+  found <- rowsOn conn salesByUser
+  _     <- close conn
+  assertEq found [
+    { userId: 1, orderCount: 2, totalSpent: 110, maxOrder: 70 }
+    { userId: 2, orderCount: 1, totalSpent: 90,  maxOrder: 90 }
   ]
 }
 
-@test "offset beyond length returns empty"
-offset_beyond_length = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (offset 10 (from productTable))
-  _       <- close conn
-  assertEq (List.length results) 0
-}
-
-@test "orderBy then limit selects top n"
-order_by_then_limit = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  _    <- runMigrationsOn conn [productTable]
-  _    <- seedProducts conn
-  rows <- runQueryOn conn (limit 2 (orderBy.price (from productTable)))
-  _    <- close conn
-  prices = List.map.price rows
-  assertEq prices [10, 15]
-}
-
-@test "limit and offset for pagination"
-limit_and_offset_pagination = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable]
-  _       <- seedProducts conn
-  results <- runQueryOn conn (limit 1 (offset 1 (orderBy.price (from productTable))))
-  _       <- close conn
-  prices = List.map.price results
-  assertEq prices [15]
-}
-
-@test "do Query with orderBy"
-do_query_with_order_by = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  _    <- runMigrationsOn conn [productTable]
-  _    <- seedProducts conn
-  rows <- runQueryOn conn (do Query {
-      p    <- from productTable
-      guard p.active
-      orderBy.price (queryOf p)
-  })
-  _ <- close conn
-  assertEq (List.map.price rows) [10, 15]
-}
-
-// ── count ──────────────────────────────────────────────────────────────────
-
-@test "count returns total number of rows"
-count_returns_row_count = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  result <- runQueryOn conn (count (from productTable))
-  _      <- close conn
-  assertEq result [3]
-}
-
-@test "count on filtered query returns filtered count"
-count_filtered = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  result <- runQueryOn conn (count (where active (from productTable)))
-  _      <- close conn
-  assertEq result [2]
-}
-
-@test "count on empty query returns zero"
-count_empty = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  result <- runQueryOn conn (count emptyQuery)
-  _      <- close conn
-  assertEq result [0]
-}
-
-activeProductsQ : Query Product
-activeProductsQ = do Query {
-  p <- from productTable
-  guard p.active
-  queryOf p
-}
-
-@test "count composes with do Query"
-count_do_query = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  result <- runQueryOn conn (count activeProductsQ)
-  _      <- close conn
-  assertEq result [2]
-}
-
-// ── exists ─────────────────────────────────────────────────────────────────
-
-@test "exists returns True when rows are present"
-exists_true_when_rows_present = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  result <- runQueryOn conn (exists (from productTable))
-  _      <- close conn
-  assertEq result [True]
-}
-
-@test "exists returns False on empty query"
-exists_false_when_empty = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  result <- runQueryOn conn (exists emptyQuery)
-  _      <- close conn
-  assertEq result [False]
-}
-
-expensiveProductsQ : Query Product
-expensiveProductsQ = where (p => p.price > 100) (from productTable)
-
-@test "exists returns False when filter matches nothing"
-exists_false_when_no_match = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  result <- runQueryOn conn (exists expensiveProductsQ)
-  _      <- close conn
-  assertEq result [False]
-}
-
-affordableProductsQ : Query Product
-affordableProductsQ = where (p => p.price > 10) (from productTable)
-
-@test "exists returns True when at least one row matches"
-exists_true_when_some_match = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable]
-  _      <- seedProducts conn
-  result <- runQueryOn conn (exists affordableProductsQ)
-  _      <- close conn
-  assertEq result [True]
-}
-
-// ── multi-table composition ────────────────────────────────────────────────
-
-Order = { id: Int, productId: Int, qty: Int }
-
-orderTable : Table Order
-orderTable = table "orders" [
-  { name: "id",        type: IntType, constraints: [AutoIncrement, NotNull], default: None }
-  { name: "productId", type: IntType, constraints: [NotNull],                default: None }
-  { name: "qty",       type: IntType, constraints: [NotNull],                default: None }
-]
-
-seedOrders : DbConnection -> Effect DbError Unit
-seedOrders = conn => do Effect {
-  _ <- applyDeltaOn conn orderTable (Insert { id: 1, productId: 1, qty: 5 })
-  _ <- applyDeltaOn conn orderTable (Insert { id: 2, productId: 3, qty: 2 })
-  pure Unit
-}
-
-activeOrdersQ : Query Order
-activeOrdersQ = do Query {
-  order   <- from orderTable
-  product <- from productTable
-  guard (order.productId == product.id)
-  guard product.active
-  queryOf order
-}
-
-expectedActiveOrders : List Order
-expectedActiveOrders = [
-  { id: 1, productId: 1, qty: 5 }
-  { id: 2, productId: 3, qty: 2 }
-]
-
-inactiveOrdersQ : Query Order
-inactiveOrdersQ = do Query {
-  order   <- from orderTable
-  product <- from productTable
-  guard (order.productId == product.id)
-  guard (product.active == False)
-  queryOf order
-}
-
-activeOrderSummariesQ : Query { orderId: Int, productName: Text }
-activeOrderSummariesQ = do Query {
-  order   <- from orderTable
-  product <- from productTable
-  guard (order.productId == product.id)
-  guard product.active
-  queryOf { orderId: order.id, productName: product.name }
-}
-
-@test "count orders for active products via cross-join"
-count_orders_for_active_products = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable, orderTable]
-  _      <- seedProducts conn
-  _      <- seedOrders conn
-  result <- runQueryOn conn (count activeOrdersQ)
-  _      <- close conn
-  assertEq result [2]
-}
-
-@test "joined query returns whole order rows"
-joined_query_returns_whole_order_rows = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable, orderTable]
-  _      <- seedProducts conn
-  _      <- seedOrders conn
-  result <- runQueryOn conn activeOrdersQ
-  _      <- close conn
-  assertEq result expectedActiveOrders
-}
-
-@test "exists for orders of inactive products is False"
-exists_orders_for_inactive_products = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [productTable, orderTable]
-  _      <- seedProducts conn
-  _      <- seedOrders conn
-  result <- runQueryOn conn (exists inactiveOrdersQ)
-  _      <- close conn
-  assertEq result [False]
-}
-
-@test "do Query join projects record summary"
-do_query_join_projects_record = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [productTable, orderTable]
-  _       <- seedProducts conn
-  _       <- seedOrders conn
-  results <- runQueryOn conn activeOrderSummariesQ
-  _       <- close conn
-  assertEq results [
-    { orderId: 1, productName: "Widget" }
-    { orderId: 2, productName: "Doohick" }
-  ]
-}
-
-// ── runQuery (ambient connection) ──────────────────────────────────────────
-
-@test "runQuery uses ambient connection to load all rows"
-run_query_ambient_all_rows = do Effect {
-  _       <- configure { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrations [productTable]
-  _       <- applyDelta productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
-  _       <- applyDelta productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
-  _       <- applyDelta productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
-  results <- runQuery (from productTable)
-  assertEq (List.length results) 3
-}
-
-@test "runQuery with where filter uses ambient connection"
-run_query_ambient_with_filter = do Effect {
-  _       <- configure { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrations [productTable]
-  _       <- applyDelta productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
-  _       <- applyDelta productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
-  _       <- applyDelta productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
-  results <- runQuery (where active (from productTable))
-  assertEq (List.length results) 2
-}
-
-@test "runQuery with do Query block uses ambient connection"
-run_query_ambient_do_query = do Effect {
-  _     <- configure { driver: Sqlite, url: ":memory:" }
-  _     <- runMigrations [productTable]
-  _     <- applyDelta productTable (Insert { id: 1, name: "Widget", price: 10, active: True })
-  _     <- applyDelta productTable (Insert { id: 2, name: "Gadget", price: 20, active: False })
-  _     <- applyDelta productTable (Insert { id: 3, name: "Doohick", price: 15, active: True })
-  names <- runQuery (do Query {
-      p     <- from productTable
-      guard p.active
-      queryOf p.name
-  })
-  assertEq (List.length names) 2
-}
-
-// ── nullable columns ─────────────────────────────────────────────────────────
-
-Customer = { id: Int, email: Option Text }
-
-customerTable : Table Customer
-customerTable = table "customers" [
-  { name: "id",    type: IntType,     constraints: [NotNull], default: None }
-  { name: "email", type: Varchar 120, constraints: [],        default: None }
-]
-
-seedCustomers : DbConnection -> Effect DbError Unit
-seedCustomers = conn => do Effect {
-  _ <- applyDeltaOn conn customerTable (Insert { id: 1, email: Some "a@example.com" })
-  _ <- applyDeltaOn conn customerTable (Insert { id: 2, email: None })
-  pure Unit
-}
-
-@test "nullable row projection round-trips Option fields"
-nullable_row_projection_round_trips_option_fields = do Effect {
-  conn    <- connect { driver: Sqlite, url: ":memory:" }
-  _       <- runMigrationsOn conn [customerTable]
-  _       <- seedCustomers conn
-  results <- runQueryOn conn (from customerTable)
-  _       <- close conn
-  assertEq results [
-    { id: 1, email: Some "a@example.com" }
-    { id: 2, email: None }
-  ]
-}
-
-@test "nullable scalar projection round-trips Option fields"
-nullable_scalar_projection_round_trips_option_fields = do Effect {
-  conn   <- connect { driver: Sqlite, url: ":memory:" }
-  _      <- runMigrationsOn conn [customerTable]
-  _      <- seedCustomers conn
-  emails <- runQueryOn conn (select.email (from customerTable))
-  _      <- close conn
-  assertEq emails [Some "a@example.com", None]
+@test "rows first count and exists execute compiled queries"
+rows_first_count_and_exists_execute_compiled_queries = do Effect {
+  conn                  <- connect { driver: Sqlite, url: ":memory:" }
+  _                     <- seed conn
+  activeAdultCount      <- countOn conn activeAdultUsers
+  hasHighValuePaidOrder <- existsOn conn highValuePaidUsers
+  firstUser             <- firstOn conn usersByCreatedAt
+  _                     <- close conn
+  assertEq activeAdultCount 2
+  assertEq hasHighValuePaidOrder True
+  firstUser match
+    | Some user => assertEq user.id 1
+    | None      => assert False
 }

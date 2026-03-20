@@ -186,14 +186,6 @@ pub(crate) struct BuiltinImpl {
     pub(crate) name: String,
     pub(crate) arity: usize,
     pub(crate) func: Arc<BuiltinFunc>,
-    pub(crate) db_patch_meta: Option<Arc<DbPatchRuntimeMeta>>,
-}
-
-#[derive(Clone)]
-pub(crate) struct DbPatchRuntimeMeta {
-    pub(crate) plan_json: Option<String>,
-    pub(crate) captures: Vec<Value>,
-    pub(crate) error: Option<String>,
 }
 
 pub(crate) enum EffectValue {

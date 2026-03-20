@@ -49,7 +49,7 @@ If you have seen the word **monadic** before, this generic chaining pattern is w
 
 ## Overview
 
-Generic `do M { ... }` reuses the same readable block layout as `do Effect { ... }`. For most constructors the meaning comes from `Chain` / `Applicative` support instead of being hard-coded for effects; `do Query { ... }` is the main built-in special case.
+Generic `do M { ... }` reuses the same readable block layout as `do Effect { ... }`. For non-effect constructors the meaning comes from `Chain` / `Applicative` support instead of being hard-coded per constructor.
 
 ### Design principles
 
@@ -57,7 +57,7 @@ Generic `do M { ... }` reuses the same readable block layout as `do Effect { ...
 2. **`generate { ... }` stays separate.** Generators describe pure sequences with `yield`, so they use their own rules.
 3. **Generic `do M { ... }` uses the common subset.** It supports `<-` for bind, `=` for pure local names, expression sequencing, and a final expression.
 4. **`do Applicative { ... }` is the independent variant.** It combines inputs side by side through `map` / `ap` instead of sequencing through `chain`.
-5. **Constructor support provides the behavior.** Ordinary `do M` blocks lower through `chain` and `of`, so they rely on the constructor's `Chain` and `Applicative` support. `do Applicative { ... }` lowers through `map` / `ap` / `of`. `do Query { ... }` is the notable built-in exception: it lowers through query helpers described in [Database](../stdlib/system/database.md).
+5. **Constructor support provides the behavior.** Ordinary `do M` blocks lower through `chain` and `of`, so they rely on the constructor's `Chain` and `Applicative` support. `do Applicative { ... }` lowers through `map` / `ap` / `of`.
 
 ## Syntax
 
@@ -73,7 +73,7 @@ The parser accepts any `UpperIdent` after `do`. The difference is semantic:
 
 - `do Effect { ... }` gets the effect-specific rules
 - `do Applicative { ... }` uses the applicative rules for independent `<-` bindings
-- every other `do M { ... }` uses the generic block rules; most lower through `chain` / `of`, while `do Query { ... }` uses query-specific helpers
+- every other `do M { ... }` uses the generic block rules and lowers through `chain` / `of`
 
 ### Statement subset by block kind
 
@@ -158,8 +158,6 @@ desugars to `⟦expr⟧`. The final expression must already have type `M A`.
 
 desugars to `of Unit`, using `of : A -> M A` from `Applicative M`.
 
-Special case: `do Query { ... }` uses `queryChain` and `queryOf` instead. See [Database](../stdlib/system/database.md).
-
 ### `do Applicative { ... }`
 
 `do Applicative { ... }` is for independent inputs that should be combined side by side instead of fed into one another.
@@ -203,7 +201,6 @@ Most generic `do M` blocks rely on the target constructor's sequencing operation
 - `Chain M` provides `chain` for `<-` binds and expression sequencing
 - `Applicative M` provides `of` for empty blocks and value injection
 - `do Applicative` relies on `Functor` / `Apply` / `Applicative` support for the target constructor
-- `do Query` uses `queryChain` and `queryOf`; see [Database](../stdlib/system/database.md)
 - for `M ≠ Effect`, effect-only statements such as `or`, `when`, `unless`, `given`, `on`, resource binds, and `loop` / `recurse` are rejected
 
 For `do Applicative`, the compiler also rejects any `<-` whose right-hand side refers to an earlier applicative-bound name, because that would require monadic sequencing rather than applicative combination.
@@ -212,7 +209,7 @@ If the required sequencing operations are unavailable, compilation fails during 
 
 ## Runtime behavior
 
-Most `do M { ... }` blocks lower to nested `chain` calls plus lambdas, with `of Unit` for the empty-block case. `do Query { ... }` uses the query-specific `queryChain` / `queryOf` pair instead.
+Most `do M { ... }` blocks lower to nested `chain` calls plus lambdas, with `of Unit` for the empty-block case.
 
 `do Applicative { ... }` lowers to `map` / `ap` calls plus lambdas, with `of Unit` for the empty-block case.
 
@@ -226,12 +223,10 @@ Most `do M { ... }` blocks lower to nested `chain` calls plus lambdas, with `of 
 | `Result E A` | Chain computations that may fail, without using `Effect`. |
 | `List A`     | Describe non-deterministic combinations such as cartesian products. |
 | `Validation (List E) A` | Accumulate independent validation errors while building one typed value. |
-| `Query A`    | Build typed database reads in a step-by-step style; see [Database](../stdlib/system/database.md). |
-
 ## When to use which block form
 
 - Use `do Effect { ... }` for I/O, resource management, cancellation-aware work, and the effect-only statements from [Effects](effects.md).
-- Use `do M { ... }` when you want the same readable sequencing for `Option`, `Result`, `List`, `Query`, or another type constructor with the required sequencing support.
+- Use `do M { ... }` when you want the same readable sequencing for `Option`, `Result`, `List`, `Validation`, or another type constructor with the required sequencing support.
 - Use `do Applicative { ... }` when each input is independent and you want to combine them without introducing sequencing.
 - Use `generate { ... }` when you are building a pure sequence of yielded values.
 

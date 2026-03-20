@@ -960,7 +960,7 @@ impl TypeChecker {
                     current_ty = value_ty;
                 }
                 PathSegment::Index(expr, seg_span) => {
-                    let unbound = collect_unbound_names(expr, env);
+                    let unbound = collect_implicit_field_names(expr, env);
                     if unbound.is_empty() {
                         let idx_ty = self.infer_expr(expr, env)?;
                         let checkpoint = self.subst.clone();

@@ -204,14 +204,15 @@ impl Parser {
                     span: suffix_token.span,
                 };
                 let span = merge_span(open_span, suffix.span.clone());
-                return Some(Expr::Suffixed {
+                let expr = Expr::Suffixed {
                     base: Box::new(expr),
                     suffix,
                     span,
-                });
+                };
+                return Some(self.parse_postfix_with_anchor(expr.clone(), expr_span(&expr)));
             }
 
-            return Some(expr);
+            return Some(self.parse_postfix_with_anchor(expr, close_span));
         }
 
         if self.consume_symbol("[") {

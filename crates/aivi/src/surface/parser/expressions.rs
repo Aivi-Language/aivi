@@ -645,11 +645,16 @@ impl Parser {
         Some(expr)
     }
     fn parse_postfix(&mut self) -> Option<Expr> {
-        let mut expr = self.parse_primary()?;
+        let expr = self.parse_primary()?;
+        let anchor = expr_span(&expr);
+        Some(self.parse_postfix_with_anchor(expr, anchor))
+    }
+
+    fn parse_postfix_with_anchor(&mut self, mut expr: Expr, mut anchor: Span) -> Expr {
         loop {
             if self.peek_symbol("(") {
                 if let Some(span) = self.peek_span() {
-                    if is_adjacent(&expr_span(&expr), &span) {
+                    if is_adjacent(&anchor, &span) {
                         self.consume_symbol("(");
                         let mut args = Vec::new();
                         while !self.check_symbol(")") && self.pos < self.tokens.len() {
@@ -661,19 +666,20 @@ impl Parser {
                             }
                         }
                         let end = self.expect_symbol(")", "expected ')' to close call");
-                        let span = merge_span(expr_span(&expr), end.unwrap_or(expr_span(&expr)));
+                        let span = merge_span(anchor.clone(), end.unwrap_or_else(|| anchor.clone()));
                         expr = Expr::Call {
                             func: Box::new(expr),
                             args,
-                            span,
+                            span: span.clone(),
                         };
+                        anchor = span;
                         continue;
                     }
                 }
             }
             if self.peek_symbol("[") {
                 if let Some(span) = self.peek_span() {
-                    if is_adjacent(&expr_span(&expr), &span) {
+                    if is_adjacent(&anchor, &span) {
                         // `_` is the placeholder used heavily in patching; `_["x"]` is almost
                         // always meant as `_ ["x"]` (a list literal argument) rather than an
                         // index expression. Let the application parser treat `["x"]` as a
@@ -697,28 +703,29 @@ impl Parser {
                         self.consume_newlines();
                         let spread = self.consume_symbol("...");
                         let base_allows_single_bracket_call =
-                            matches!(expr, Expr::FieldAccess { .. });
+                            matches!(expr, Expr::FieldAccess { .. } | Expr::Lambda { .. });
 
                         // Empty bracket-list call: `f[]` => `f []`
                         if self.check_symbol("]") && base_allows_single_bracket_call {
                             let end = self
                                 .expect_symbol("]", "expected ']' to close bracket list")
-                                .unwrap_or_else(|| expr_span(&expr));
+                                .unwrap_or_else(|| anchor.clone());
                             let list = Expr::List {
                                 items: Vec::new(),
                                 span: end.clone(),
                             };
-                            let span = merge_span(expr_span(&expr), end);
+                            let span = merge_span(anchor.clone(), end);
                             expr = Expr::Call {
                                 func: Box::new(expr),
                                 args: vec![list],
-                                span,
+                                span: span.clone(),
                             };
+                            anchor = span;
                             continue;
                         }
 
                         let first = self.parse_expr().unwrap_or_else(|| {
-                            let span = self.peek_span().unwrap_or_else(|| expr_span(&expr));
+                            let span = self.peek_span().unwrap_or_else(|| anchor.clone());
                             self.emit_diag(
                                 "E1529",
                                 "expected expression inside brackets",
@@ -765,12 +772,13 @@ impl Parser {
                                 items,
                                 span: list_span.clone(),
                             };
-                            let span = merge_span(expr_span(&expr), list_span);
+                            let span = merge_span(anchor.clone(), list_span);
                             expr = Expr::Call {
                                 func: Box::new(expr),
                                 args: vec![list],
-                                span,
+                                span: span.clone(),
                             };
+                            anchor = span;
                         } else if base_allows_single_bracket_call {
                             // Single-element bracket-list call: `f[x]` => `f [x]`
                             let end = self.expect_symbol("]", "expected ']' to close bracket list");
@@ -786,49 +794,56 @@ impl Parser {
                                 }],
                                 span: list_span.clone(),
                             };
-                            let span = merge_span(expr_span(&expr), list_span);
+                            let span = merge_span(anchor.clone(), list_span);
                             expr = Expr::Call {
                                 func: Box::new(expr),
                                 args: vec![list],
-                                span,
+                                span: span.clone(),
                             };
+                            anchor = span;
                         } else {
                             let end = self.expect_symbol("]", "expected ']' after index");
-                            let span =
-                                merge_span(expr_span(&expr), end.unwrap_or(expr_span(&expr)));
+                            let span = merge_span(anchor.clone(), end.unwrap_or_else(|| anchor.clone()));
                             expr = Expr::Index {
                                 base: Box::new(expr),
                                 index: Box::new(first),
-                                span,
+                                span: span.clone(),
                             };
+                            anchor = span;
                         }
                         continue;
                     }
                 }
             }
-            if self.consume_symbol(".") {
-                if let Some(field) = self.consume_ident() {
-                    if matches!(&expr, Expr::Ident(name) if name.name == "_") {
-                        self.emit_diag(
-                            "E1620",
-                            &format!(
-                                "`_.{}` is not valid — use `.{}` for an accessor function or `{}` as a bare field name",
-                                field.name, field.name, field.name
-                            ),
-                            field.span.clone(),
-                        );
+            if self.peek_symbol(".") {
+                if let Some(span) = self.peek_span() {
+                    if is_adjacent(&anchor, &span) {
+                        self.consume_symbol(".");
+                        if let Some(field) = self.consume_ident() {
+                            if matches!(&expr, Expr::Ident(name) if name.name == "_") {
+                                self.emit_diag(
+                                    "E1620",
+                                    &format!(
+                                        "`_.{}` is not valid — use `.{}` for an accessor function or `{}` as a bare field name",
+                                        field.name, field.name, field.name
+                                    ),
+                                    field.span.clone(),
+                                );
+                            }
+                            let span = merge_span(anchor.clone(), field.span.clone());
+                            expr = Expr::FieldAccess {
+                                base: Box::new(expr),
+                                field,
+                                span: span.clone(),
+                            };
+                            anchor = span;
+                            continue;
+                        }
                     }
-                    let span = merge_span(expr_span(&expr), field.span.clone());
-                    expr = Expr::FieldAccess {
-                        base: Box::new(expr),
-                        field,
-                        span,
-                    };
-                    continue;
                 }
             }
             break;
         }
-        Some(expr)
+        expr
     }
 }

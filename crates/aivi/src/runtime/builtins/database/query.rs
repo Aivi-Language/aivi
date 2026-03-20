@@ -1,8 +1,10 @@
 use aivi_database::{QueryCell, QueryColumn, QueryColumnType, QueryRow, QueryTable};
 
+use aivi_core::CompiledAggregateFn;
+
 use crate::hir::{
-    CompiledAggregate, CompiledOrderBy, CompiledProjection, CompiledQueryPlan,
-    CompiledQuerySource, CompiledScalarExpr,
+    CompiledAggregate, CompiledOrderBy, CompiledProjection, CompiledProjectionField,
+    CompiledQueryPlan, CompiledQuerySource, CompiledScalarExpr,
 };
 
 const QUERY_META_FIELD: &str = "__aiviQueryPlan";
@@ -27,6 +29,14 @@ struct RuntimeTableSchema {
     name: String,
     storage_name: String,
     columns: Vec<RuntimeColumn>,
+}
+
+struct DecodeProjectionCtx<'a> {
+    connection: &'a aivi_database::DbConnection,
+    schemas: &'a HashMap<String, RuntimeTableSchema>,
+    sources: &'a [Value],
+    captures: &'a [Value],
+    hidden_rows: &'a HashMap<String, Value>,
 }
 
 pub(super) fn build_query_compiled_builtin() -> Value {
@@ -220,9 +230,9 @@ fn execute_compiled_query(
     let plan: CompiledQueryPlan = serde_json::from_str(plan_json)
         .map_err(|err| RuntimeError::Message(format!("database query plan decode error: {err}")))?;
     let schemas = build_runtime_schemas(&plan.sources, sources)?;
-    let sql = build_query_sql(&plan, &schemas, captures)?;
+    let sql = build_query_sql(&plan, &schemas, sources, captures)?;
     let rows = connection.query_sql(sql).map_err(RuntimeError::Message)?;
-    decode_query_rows(&plan, &schemas, captures, rows)
+    decode_query_rows(connection, &plan, &schemas, sources, captures, rows)
 }
 
 fn build_runtime_schemas(
@@ -237,7 +247,7 @@ fn build_runtime_schemas(
                 source.source_index
             ))
         })?;
-        let (name, columns, _rows) = table_parts(table.clone(), "database.query schema")?;
+        let (name, columns, _rows) = relation_parts(table.clone(), "database.query schema")?;
         validate_identifier(&name, "database.query table name")?;
         let columns = parse_runtime_columns(columns)?;
         let storage_name = aivi_database::query_storage_name(&name);
@@ -384,9 +394,21 @@ fn validate_identifier(name: &str, ctx: &str) -> Result<(), RuntimeError> {
 fn build_query_sql(
     plan: &CompiledQueryPlan,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
     captures: &[Value],
 ) -> Result<String, RuntimeError> {
-    let sql_aliases = build_sql_aliases(plan);
+    build_query_sql_with_outer(plan, schemas, sources, captures, &HashMap::new())
+}
+
+fn build_query_sql_aliases_and_tail(
+    plan: &CompiledQueryPlan,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
+    captures: &[Value],
+    outer_aliases: &HashMap<String, String>,
+) -> Result<(HashMap<String, String>, String), RuntimeError> {
+    let mut sql_aliases = outer_aliases.clone();
+    sql_aliases.extend(build_sql_aliases(plan, outer_aliases.len()));
     let mut from_parts = Vec::new();
     for (index, source) in plan.sources.iter().enumerate() {
         let schema = schemas.get(&source.alias).ok_or_else(|| {
@@ -410,7 +432,33 @@ fn build_query_sql(
             " WHERE {}",
             plan.filters
                 .iter()
-                .map(|expr| render_scalar_expr(expr, schemas, &sql_aliases, captures))
+                .map(|expr| render_scalar_expr(expr, schemas, sources, &sql_aliases, captures))
+                .collect::<Result<Vec<_>, _>>()?
+                .join(" AND ")
+        )
+    };
+
+    let group_by_sql = if plan.group_by.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " GROUP BY {}",
+            plan.group_by
+                .iter()
+                .map(|expr| render_scalar_expr(expr, schemas, sources, &sql_aliases, captures))
+                .collect::<Result<Vec<_>, _>>()?
+                .join(", ")
+        )
+    };
+
+    let having_sql = if plan.having.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " HAVING {}",
+            plan.having
+                .iter()
+                .map(|expr| render_scalar_expr(expr, schemas, sources, &sql_aliases, captures))
                 .collect::<Result<Vec<_>, _>>()?
                 .join(" AND ")
         )
@@ -419,9 +467,9 @@ fn build_query_sql(
     let mut order_exprs = plan
         .order_by
         .iter()
-        .map(|order| render_order_by(order, schemas, &sql_aliases, captures))
+        .map(|order| render_order_by(order, schemas, sources, &sql_aliases, captures))
         .collect::<Result<Vec<_>, _>>()?;
-    if matches!(plan.aggregate, CompiledAggregate::None) {
+    if matches!(plan.aggregate, CompiledAggregate::None) && plan.group_by.is_empty() {
         if order_exprs.is_empty() {
             for source in &plan.sources {
                 order_exprs.push(format!(
@@ -461,24 +509,57 @@ fn build_query_sql(
         (None, None) => String::new(),
     };
 
-    let from_where_order_limit = format!(
-        "{}{}{}{}",
-        from_parts.join(" "),
-        where_sql,
-        order_sql,
-        limit_sql,
-    );
+    Ok((
+        sql_aliases,
+        format!(
+            "{}{}{}{}{}{}",
+            from_parts.join(" "),
+            where_sql,
+            group_by_sql,
+            having_sql,
+            order_sql,
+            limit_sql,
+        ),
+    ))
+}
+
+fn build_query_sql_with_outer(
+    plan: &CompiledQueryPlan,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
+    captures: &[Value],
+    outer_aliases: &HashMap<String, String>,
+) -> Result<String, RuntimeError> {
+    let (sql_aliases, from_where_order_limit) =
+        build_query_sql_aliases_and_tail(plan, schemas, sources, captures, outer_aliases)?;
 
     match plan.aggregate {
         CompiledAggregate::None => {
-            let select_sql =
-                render_select_projection(&plan.projection, schemas, &sql_aliases, captures)?;
-            Ok(format!("SELECT {} {}", select_sql.join(", "), from_where_order_limit))
+            let mut select_sql =
+                render_select_projection(&plan.projection, schemas, sources, &sql_aliases, captures)?;
+            if projection_contains_nested_queries(&plan.projection) {
+                for source in &plan.sources {
+                    select_sql.extend(render_row_projection(&source.alias, schemas, &sql_aliases)?);
+                }
+            }
+            let select_head = if plan.distinct {
+                "SELECT DISTINCT"
+            } else {
+                "SELECT"
+            };
+            Ok(format!(
+                "{select_head} {} {}",
+                select_sql.join(", "),
+                from_where_order_limit
+            ))
         }
-        CompiledAggregate::Count => Ok(format!(
-            "SELECT COUNT(*) FROM (SELECT 1 {}) __aivi_count_src",
-            from_where_order_limit
-        )),
+        CompiledAggregate::Count => {
+            let mut inner_plan = plan.clone();
+            inner_plan.aggregate = CompiledAggregate::None;
+            let inner_sql =
+                build_query_sql_with_outer(&inner_plan, schemas, sources, captures, outer_aliases)?;
+            Ok(format!("SELECT COUNT(*) FROM ({inner_sql}) __aivi_count_src"))
+        }
         CompiledAggregate::Exists => {
             let exists_tail = if plan.limit.is_some() || plan.offset.is_some() {
                 from_where_order_limit
@@ -490,23 +571,24 @@ fn build_query_sql(
     }
 }
 
-fn build_sql_aliases(plan: &CompiledQueryPlan) -> HashMap<String, String> {
+fn build_sql_aliases(plan: &CompiledQueryPlan, offset: usize) -> HashMap<String, String> {
     plan.sources
         .iter()
         .enumerate()
-        .map(|(index, source)| (source.alias.clone(), format!("t{index}")))
+        .map(|(index, source)| (source.alias.clone(), format!("t{}", index + offset)))
         .collect()
 }
 
 fn render_order_by(
     order: &CompiledOrderBy,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
     sql_aliases: &HashMap<String, String>,
     captures: &[Value],
 ) -> Result<String, RuntimeError> {
     Ok(format!(
         "{} {}",
-        render_scalar_expr(&order.expr, schemas, sql_aliases, captures)?,
+        render_scalar_expr(&order.expr, schemas, sources, sql_aliases, captures)?,
         if order.descending { "DESC" } else { "ASC" }
     ))
 }
@@ -514,13 +596,14 @@ fn render_order_by(
 fn render_select_projection(
     projection: &CompiledProjection,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
     sql_aliases: &HashMap<String, String>,
     captures: &[Value],
 ) -> Result<Vec<String>, RuntimeError> {
     match projection {
-        CompiledProjection::Row { alias } => render_row_projection(alias, schemas, sql_aliases),
+        CompiledProjection::Row { alias, .. } => render_row_projection(alias, schemas, sql_aliases),
         CompiledProjection::Scalar { expr } => Ok(vec![render_scalar_expr(
-            expr, schemas, sql_aliases, captures,
+            expr, schemas, sources, sql_aliases, captures,
         )?]),
         CompiledProjection::Record { fields } => {
             let mut out = Vec::new();
@@ -528,12 +611,14 @@ fn render_select_projection(
                 out.extend(render_select_projection(
                     &field.value,
                     schemas,
+                    sources,
                     sql_aliases,
                     captures,
                 )?);
             }
             Ok(out)
         }
+        CompiledProjection::NestedQuery { .. } => Ok(Vec::new()),
     }
 }
 
@@ -556,6 +641,7 @@ fn render_row_projection(
 fn render_scalar_expr(
     expr: &CompiledScalarExpr,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
     sql_aliases: &HashMap<String, String>,
     captures: &[Value],
 ) -> Result<String, RuntimeError> {
@@ -581,6 +667,16 @@ fn render_scalar_expr(
                 field
             ))
         }
+        CompiledScalarExpr::OuterColumn { alias, field } => Ok(format!(
+            "{}.{}",
+            sql_aliases
+                .get(alias)
+                .ok_or_else(|| RuntimeError::Message(format!(
+                    "missing SQL alias for outer '{}'",
+                    alias
+                )))?,
+            field
+        )),
         CompiledScalarExpr::Captured { capture_index } => {
             let value = query_capture_value(*capture_index, captures)?;
             render_required_runtime_scalar_literal(value)
@@ -600,11 +696,11 @@ fn render_scalar_expr(
         }
         CompiledScalarExpr::UnaryNeg { expr } => Ok(format!(
             "(-{})",
-            render_scalar_expr(expr, schemas, sql_aliases, captures)?
+            render_scalar_expr(expr, schemas, sources, sql_aliases, captures)?
         )),
         CompiledScalarExpr::Binary { op, left, right } => {
             if let Some(sql) =
-                render_null_sensitive_binary(op, left, right, schemas, sql_aliases, captures)?
+                render_null_sensitive_binary(op, left, right, schemas, sources, sql_aliases, captures)?
             {
                 return Ok(sql);
             }
@@ -617,10 +713,59 @@ fn render_scalar_expr(
             };
             Ok(format!(
                 "({} {} {})",
-                render_scalar_expr(left, schemas, sql_aliases, captures)?,
+                render_scalar_expr(left, schemas, sources, sql_aliases, captures)?,
                 sql_op,
-                render_scalar_expr(right, schemas, sql_aliases, captures)?
+                render_scalar_expr(right, schemas, sources, sql_aliases, captures)?
             ))
+        }
+        CompiledScalarExpr::Aggregate { aggregate, expr } => match aggregate {
+            CompiledAggregateFn::Count => Ok("COUNT(*)".to_string()),
+            CompiledAggregateFn::Sum => Ok(format!(
+                "SUM({})",
+                render_scalar_expr(
+                    expr.as_ref().expect("SUM aggregate expression"),
+                    schemas,
+                    sources,
+                    sql_aliases,
+                    captures
+                )?
+            )),
+            CompiledAggregateFn::Avg => Ok(format!(
+                "AVG({})",
+                render_scalar_expr(
+                    expr.as_ref().expect("AVG aggregate expression"),
+                    schemas,
+                    sources,
+                    sql_aliases,
+                    captures
+                )?
+            )),
+            CompiledAggregateFn::Min => Ok(format!(
+                "MIN({})",
+                render_scalar_expr(
+                    expr.as_ref().expect("MIN aggregate expression"),
+                    schemas,
+                    sources,
+                    sql_aliases,
+                    captures
+                )?
+            )),
+            CompiledAggregateFn::Max => Ok(format!(
+                "MAX({})",
+                render_scalar_expr(
+                    expr.as_ref().expect("MAX aggregate expression"),
+                    schemas,
+                    sources,
+                    sql_aliases,
+                    captures
+                )?
+            )),
+        },
+        CompiledScalarExpr::Exists { query } => {
+            let nested_schemas = build_runtime_schemas(&query.sources, sources)?;
+            let child_sql =
+                build_query_sql_with_outer(query, &nested_schemas, sources, captures, sql_aliases)?;
+            Ok(format!("EXISTS ({child_sql})"))
         }
     }
 }
@@ -638,6 +783,7 @@ fn render_null_sensitive_binary(
     left: &CompiledScalarExpr,
     right: &CompiledScalarExpr,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
     sql_aliases: &HashMap<String, String>,
     captures: &[Value],
 ) -> Result<Option<String>, RuntimeError> {
@@ -667,7 +813,7 @@ fn render_null_sensitive_binary(
     }
 
     let non_null = if left_is_null { right } else { left };
-    let rendered = render_scalar_expr(non_null, schemas, sql_aliases, captures)?;
+    let rendered = render_scalar_expr(non_null, schemas, sources, sql_aliases, captures)?;
     Ok(Some(if op == "==" {
         format!("({rendered} IS NULL)")
     } else {
@@ -737,8 +883,10 @@ fn render_runtime_scalar_literal(value: &Value) -> Result<Option<String>, Runtim
 }
 
 fn decode_query_rows(
+    connection: &aivi_database::DbConnection,
     plan: &CompiledQueryPlan,
     schemas: &HashMap<String, RuntimeTableSchema>,
+    sources: &[Value],
     captures: &[Value],
     rows: Vec<Vec<QueryCell>>,
 ) -> Result<Value, RuntimeError> {
@@ -760,10 +908,33 @@ fn decode_query_rows(
         CompiledAggregate::Exists => Ok(list_value(vec![Value::Bool(!rows.is_empty())])),
         CompiledAggregate::None => {
             let mut out = Vec::with_capacity(rows.len());
+            let visible_columns = projection_column_count(&plan.projection, schemas)?;
+            let needs_hidden_rows = projection_contains_nested_queries(&plan.projection);
             for row in rows {
-                let (value, consumed) =
-                    decode_projection(&plan.projection, schemas, captures, &row, 0)?;
-                if consumed != row.len() {
+                if row.len() < visible_columns {
+                    return Err(RuntimeError::Message(
+                        "database.query returned fewer columns than expected".to_string(),
+                    ));
+                }
+                let hidden_rows = if needs_hidden_rows {
+                    decode_hidden_rows(&plan.sources, schemas, &row[visible_columns..])?
+                } else {
+                    HashMap::new()
+                };
+                let decode_ctx = DecodeProjectionCtx {
+                    connection,
+                    schemas,
+                    sources,
+                    captures,
+                    hidden_rows: &hidden_rows,
+                };
+                let (value, consumed) = decode_projection(
+                    &decode_ctx,
+                    &plan.projection,
+                    &row[..visible_columns],
+                    0,
+                )?;
+                if consumed != visible_columns {
                     return Err(RuntimeError::Message(
                         "database.query returned more columns than expected".to_string(),
                     ));
@@ -776,30 +947,45 @@ fn decode_query_rows(
 }
 
 fn decode_projection(
+    ctx: &DecodeProjectionCtx<'_>,
     projection: &CompiledProjection,
-    schemas: &HashMap<String, RuntimeTableSchema>,
-    captures: &[Value],
     row: &[QueryCell],
     start: usize,
 ) -> Result<(Value, usize), RuntimeError> {
     match projection {
-        CompiledProjection::Row { alias } => decode_row_projection(alias, schemas, row, start),
+        CompiledProjection::Row { alias, .. } => decode_row_projection(alias, ctx.schemas, row, start),
         CompiledProjection::Scalar { expr } => {
             let cell = row.get(start).ok_or_else(|| {
                 RuntimeError::Message("database.query scalar column is missing".to_string())
             })?;
-            Ok((decode_scalar_cell(expr, schemas, captures, cell)?, start + 1))
+            Ok((decode_scalar_cell(expr, ctx.schemas, ctx.captures, cell)?, start + 1))
         }
         CompiledProjection::Record { fields } => {
             let mut out = HashMap::new();
             let mut cursor = start;
             for field in fields {
-                let (value, next) =
-                    decode_projection(&field.value, schemas, captures, row, cursor)?;
+                let (value, next) = decode_projection(ctx, &field.value, row, cursor)?;
                 out.insert(field.name.clone(), value);
                 cursor = next;
             }
             Ok((Value::Record(Arc::new(out)), cursor))
+        }
+        CompiledProjection::NestedQuery { query } => {
+            let (bound_query, bound_captures) =
+                bind_outer_columns(query, ctx.captures, ctx.hidden_rows)?;
+            let nested_schemas = build_runtime_schemas(&bound_query.sources, ctx.sources)?;
+            let sql = build_query_sql(&bound_query, &nested_schemas, ctx.sources, &bound_captures)?;
+            let rows = ctx.connection.query_sql(sql).map_err(RuntimeError::Message)?;
+            let value = decode_query_rows(
+                ctx.connection,
+                &bound_query,
+                &nested_schemas,
+                ctx.sources,
+                &bound_captures,
+                rows,
+            )?;
+            let values = expect_list(value, "database.query nested relation")?;
+            Ok((list_value(values.iter().cloned().collect()), start))
         }
     }
 }
@@ -941,6 +1127,9 @@ fn infer_scalar_kind(
                 QueryColumnType::Text | QueryColumnType::Timestamp => ScalarKind::Text,
             })
         }
+        CompiledScalarExpr::OuterColumn { .. } => Err(RuntimeError::Message(
+            "database.query outer columns are only valid inside correlated subqueries".to_string(),
+        )),
         CompiledScalarExpr::Captured { capture_index } => {
             let value = query_capture_value(*capture_index, captures)?;
             match normalize_runtime_scalar(value)? {
@@ -974,6 +1163,227 @@ fn infer_scalar_kind(
                 }
             }
         },
+        CompiledScalarExpr::Aggregate { aggregate, .. } => Ok(match aggregate {
+            CompiledAggregateFn::Count => ScalarKind::Int,
+            CompiledAggregateFn::Avg => ScalarKind::Float,
+            CompiledAggregateFn::Sum | CompiledAggregateFn::Min | CompiledAggregateFn::Max => {
+                ScalarKind::Int
+            }
+        }),
+        CompiledScalarExpr::Exists { .. } => Ok(ScalarKind::Bool),
+    }
+}
+
+fn projection_contains_nested_queries(projection: &CompiledProjection) -> bool {
+    match projection {
+        CompiledProjection::NestedQuery { .. } => true,
+        CompiledProjection::Record { fields } => fields
+            .iter()
+            .any(|field| projection_contains_nested_queries(&field.value)),
+        _ => false,
+    }
+}
+
+fn projection_column_count(
+    projection: &CompiledProjection,
+    schemas: &HashMap<String, RuntimeTableSchema>,
+) -> Result<usize, RuntimeError> {
+    match projection {
+        CompiledProjection::Row { alias, .. } => Ok(schema_for_alias(schemas, alias)?.columns.len()),
+        CompiledProjection::Scalar { .. } => Ok(1),
+        CompiledProjection::Record { fields } => fields.iter().try_fold(0usize, |acc, field| {
+            Ok(acc + projection_column_count(&field.value, schemas)?)
+        }),
+        CompiledProjection::NestedQuery { .. } => Ok(0),
+    }
+}
+
+fn decode_hidden_rows(
+    sources: &[CompiledQuerySource],
+    schemas: &HashMap<String, RuntimeTableSchema>,
+    cells: &[QueryCell],
+) -> Result<HashMap<String, Value>, RuntimeError> {
+    let mut out = HashMap::new();
+    let mut cursor = 0usize;
+    for source in sources {
+        let (row, next) = decode_row_projection(&source.alias, schemas, cells, cursor)?;
+        out.insert(source.alias.clone(), row);
+        cursor = next;
+    }
+    if cursor != cells.len() {
+        return Err(RuntimeError::Message(
+            "database.query hidden projection columns did not line up with source rows".to_string(),
+        ));
+    }
+    Ok(out)
+}
+
+fn bind_outer_columns(
+    plan: &CompiledQueryPlan,
+    captures: &[Value],
+    hidden_rows: &HashMap<String, Value>,
+) -> Result<(CompiledQueryPlan, Vec<Value>), RuntimeError> {
+    let mut extra = Vec::new();
+    let next = bind_outer_columns_in_plan(plan, captures.len(), &mut extra, hidden_rows)?;
+    let mut combined = captures.to_vec();
+    combined.extend(extra);
+    Ok((next, combined))
+}
+
+fn bind_outer_columns_in_plan(
+    plan: &CompiledQueryPlan,
+    base_capture_index: usize,
+    extra: &mut Vec<Value>,
+    hidden_rows: &HashMap<String, Value>,
+) -> Result<CompiledQueryPlan, RuntimeError> {
+    let mut next = plan.clone();
+    next.filters = next
+        .filters
+        .iter()
+        .map(|expr| bind_outer_columns_in_scalar(expr, base_capture_index, extra, hidden_rows))
+        .collect::<Result<Vec<_>, _>>()?;
+    next.order_by = next
+        .order_by
+        .iter()
+        .map(|order| {
+            Ok(CompiledOrderBy {
+                expr: bind_outer_columns_in_scalar(&order.expr, base_capture_index, extra, hidden_rows)?,
+                descending: order.descending,
+            })
+        })
+        .collect::<Result<Vec<_>, RuntimeError>>()?;
+    next.group_by = next
+        .group_by
+        .iter()
+        .map(|expr| bind_outer_columns_in_scalar(expr, base_capture_index, extra, hidden_rows))
+        .collect::<Result<Vec<_>, _>>()?;
+    next.having = next
+        .having
+        .iter()
+        .map(|expr| bind_outer_columns_in_scalar(expr, base_capture_index, extra, hidden_rows))
+        .collect::<Result<Vec<_>, _>>()?;
+    next.projection = bind_outer_columns_in_projection(
+        &next.projection,
+        base_capture_index,
+        extra,
+        hidden_rows,
+    )?;
+    Ok(next)
+}
+
+fn bind_outer_columns_in_projection(
+    projection: &CompiledProjection,
+    base_capture_index: usize,
+    extra: &mut Vec<Value>,
+    hidden_rows: &HashMap<String, Value>,
+) -> Result<CompiledProjection, RuntimeError> {
+    match projection {
+        CompiledProjection::Row {
+            alias,
+            relation_name,
+            links,
+        } => Ok(CompiledProjection::Row {
+            alias: alias.clone(),
+            relation_name: relation_name.clone(),
+            links: links.clone(),
+        }),
+        CompiledProjection::Scalar { expr } => Ok(CompiledProjection::Scalar {
+            expr: bind_outer_columns_in_scalar(expr, base_capture_index, extra, hidden_rows)?,
+        }),
+        CompiledProjection::Record { fields } => Ok(CompiledProjection::Record {
+            fields: fields
+                .iter()
+                .map(|field| {
+                    Ok(CompiledProjectionField {
+                        name: field.name.clone(),
+                        value: bind_outer_columns_in_projection(
+                            &field.value,
+                            base_capture_index,
+                            extra,
+                            hidden_rows,
+                        )?,
+                    })
+                })
+                .collect::<Result<Vec<_>, RuntimeError>>()?,
+        }),
+        CompiledProjection::NestedQuery { query } => Ok(CompiledProjection::NestedQuery {
+            query: Box::new(bind_outer_columns_in_plan(
+                query,
+                base_capture_index,
+                extra,
+                hidden_rows,
+            )?),
+        }),
+    }
+}
+
+fn bind_outer_columns_in_scalar(
+    expr: &CompiledScalarExpr,
+    base_capture_index: usize,
+    extra: &mut Vec<Value>,
+    hidden_rows: &HashMap<String, Value>,
+) -> Result<CompiledScalarExpr, RuntimeError> {
+    match expr {
+        CompiledScalarExpr::OuterColumn { alias, field } => {
+            let row = hidden_rows.get(alias).ok_or_else(|| {
+                RuntimeError::Message(format!(
+                    "database.query missing hidden row for outer alias '{}'",
+                    alias
+                ))
+            })?;
+            let fields = expect_record(row.clone(), "database.query hidden outer row")?;
+            let value = fields.get(field).cloned().ok_or_else(|| {
+                RuntimeError::Message(format!(
+                    "database.query hidden outer row '{}' has no field '{}'",
+                    alias, field
+                ))
+            })?;
+            let index = base_capture_index + extra.len();
+            extra.push(value);
+            Ok(CompiledScalarExpr::Captured { capture_index: index })
+        }
+        CompiledScalarExpr::UnaryNeg { expr } => Ok(CompiledScalarExpr::UnaryNeg {
+            expr: Box::new(bind_outer_columns_in_scalar(
+                expr,
+                base_capture_index,
+                extra,
+                hidden_rows,
+            )?),
+        }),
+        CompiledScalarExpr::Binary { op, left, right } => Ok(CompiledScalarExpr::Binary {
+            op: op.clone(),
+            left: Box::new(bind_outer_columns_in_scalar(
+                left,
+                base_capture_index,
+                extra,
+                hidden_rows,
+            )?),
+            right: Box::new(bind_outer_columns_in_scalar(
+                right,
+                base_capture_index,
+                extra,
+                hidden_rows,
+            )?),
+        }),
+        CompiledScalarExpr::Aggregate { aggregate, expr } => Ok(CompiledScalarExpr::Aggregate {
+            aggregate: aggregate.clone(),
+            expr: expr
+                .as_ref()
+                .map(|expr| {
+                    bind_outer_columns_in_scalar(expr, base_capture_index, extra, hidden_rows)
+                        .map(Box::new)
+                })
+                .transpose()?,
+        }),
+        CompiledScalarExpr::Exists { query } => Ok(CompiledScalarExpr::Exists {
+            query: Box::new(bind_outer_columns_in_plan(
+                query,
+                base_capture_index,
+                extra,
+                hidden_rows,
+            )?),
+        }),
+        other => Ok(other.clone()),
     }
 }
 
@@ -1133,6 +1543,15 @@ fn load_rows_from_storage(
 mod query_tests {
     use super::*;
 
+    fn test_connection() -> aivi_database::DbConnection {
+        let state = aivi_database::DatabaseState::new();
+        let connection = state
+            .connect(aivi_database::Driver::Sqlite, ":memory:".to_string())
+            .expect("sqlite connection");
+        connection.ensure_schema().expect("ensure schema");
+        connection
+    }
+
     fn single_text_schema(not_null: bool) -> HashMap<String, RuntimeTableSchema> {
         HashMap::from([(
             "p".to_string(),
@@ -1185,6 +1604,7 @@ mod query_tests {
         let sql = render_scalar_expr(
             &CompiledScalarExpr::Captured { capture_index: 0 },
             &single_text_schema(false),
+            &[],
             &HashMap::new(),
             &[Value::Constructor {
                 name: "Some".to_string(),
@@ -1208,6 +1628,7 @@ mod query_tests {
                 right: Box::new(CompiledScalarExpr::Captured { capture_index: 0 }),
             },
             &single_text_schema(false),
+            &[],
             &HashMap::from([("p".to_string(), "t0".to_string())]),
             &[Value::Constructor {
                 name: "None".to_string(),
@@ -1231,6 +1652,7 @@ mod query_tests {
                 right: Box::new(CompiledScalarExpr::Captured { capture_index: 0 }),
             },
             &single_text_schema(false),
+            &[],
             &HashMap::from([("p".to_string(), "t0".to_string())]),
             &[Value::Constructor {
                 name: "None".to_string(),
@@ -1316,8 +1738,11 @@ mod query_tests {
         let sql = render_select_projection(
             &CompiledProjection::Row {
                 alias: "p".to_string(),
+                relation_name: "products".to_string(),
+                links: Vec::new(),
             },
             &schemas,
+            &[],
             &sql_aliases,
             &[],
         )
@@ -1328,6 +1753,7 @@ mod query_tests {
 
     #[test]
     fn decode_row_projection_reconstructs_option_and_timestamp_fields() {
+        let connection = test_connection();
         let mut schemas = HashMap::new();
         schemas.insert(
             "p".to_string(),
@@ -1359,12 +1785,21 @@ mod query_tests {
             QueryCell::Text("a@example.com".to_string()),
             QueryCell::Text("2024-01-02 03:04:05.000000".to_string()),
         ];
+        let hidden_rows = HashMap::new();
+        let decode_ctx = DecodeProjectionCtx {
+            connection: &connection,
+            schemas: &schemas,
+            sources: &[],
+            captures: &[],
+            hidden_rows: &hidden_rows,
+        };
         let (value, consumed) = decode_projection(
+            &decode_ctx,
             &CompiledProjection::Row {
                 alias: "p".to_string(),
+                relation_name: "products".to_string(),
+                links: Vec::new(),
             },
-            &schemas,
-            &[],
             &row,
             0,
         )
@@ -1387,6 +1822,7 @@ mod query_tests {
 
     #[test]
     fn decode_scalar_projection_of_nullable_column_returns_none() {
+        let connection = test_connection();
         let mut schemas = HashMap::new();
         schemas.insert(
             "p".to_string(),
@@ -1401,15 +1837,22 @@ mod query_tests {
             },
         );
 
+        let hidden_rows = HashMap::new();
+        let decode_ctx = DecodeProjectionCtx {
+            connection: &connection,
+            schemas: &schemas,
+            sources: &[],
+            captures: &[],
+            hidden_rows: &hidden_rows,
+        };
         let (value, consumed) = decode_projection(
+            &decode_ctx,
             &CompiledProjection::Scalar {
                 expr: CompiledScalarExpr::Column {
                     alias: "p".to_string(),
                     field: "email".to_string(),
                 },
             },
-            &schemas,
-            &[],
             &[QueryCell::Null],
             0,
         )

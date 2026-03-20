@@ -1,0 +1,11 @@
+// EXPECT-ERROR: unknown name 'table'
+@no_prelude
+module integrationTests.compileFail.legacyTableRemoved
+
+use aivi
+use aivi.database
+
+User = { id: Int }
+
+users : Relation User
+users = table "users" []

@@ -9,28 +9,20 @@ use super::util::{
 };
 use crate::runtime::{EffectValue, Runtime, RuntimeError, Value};
 
-fn table_parts(value: Value, ctx: &str) -> Result<(String, Value, Arc<Vec<Value>>), RuntimeError> {
+fn relation_parts(value: Value, ctx: &str) -> Result<(String, Value, Arc<Vec<Value>>), RuntimeError> {
     let fields = expect_record(value, ctx)?;
     let name = fields
         .get("name")
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Table.name")))?;
+        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Relation.name")))?;
     let name = expect_text(name.clone(), ctx)?;
     let columns = fields
         .get("columns")
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Table.columns")))?;
+        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Relation.columns")))?;
     let rows = fields
         .get("rows")
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Table.rows")))?;
+        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Relation.rows")))?;
     let rows = expect_list(rows.clone(), ctx)?;
     Ok((name, columns.clone(), rows))
-}
-
-fn make_table(name: String, columns: Value, rows: Vec<Value>) -> Value {
-    let mut fields = HashMap::new();
-    fields.insert("name".to_string(), Value::Text(name));
-    fields.insert("columns".to_string(), columns);
-    fields.insert("rows".to_string(), list_value(rows));
-    Value::Record(Arc::new(fields))
 }
 
 fn encode_value(value: &Value) -> Result<JsonValue, RuntimeError> {

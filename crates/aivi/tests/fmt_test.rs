@@ -54,9 +54,9 @@ buildGraph =
     fromWeightedEdges weighted
   }
 "#;
-    // Records and lists whose RHS is a `{` or `[` after a plain `=` are now formatted in
-    // Allman style (opener on its own indented line) instead of being merged back to K&R.
-    let expected = "buildGraph =\n  {\n    weighted =\n    [\n      (0, 1, 1.0)\n      (0, 2, 4.0)\n    ]\n    fromWeightedEdges weighted\n  }\n";
+    // Compact RHS blocks/lists stay attached to `=` when the formatter can keep the block body
+    // readable without forcing an Allman-style opener.
+    let expected = "buildGraph = {\n  weighted = [\n    (0, 1, 1.0)\n    (0, 2, 4.0)\n  ]\n  fromWeightedEdges weighted\n}\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -175,12 +175,12 @@ fn test_fmt_breaks_mixed_arg_patch_lambda_head_when_only_first_arg_is_patched() 
 #[test]
 fn test_fmt_no_space_before_index_bracket() {
     // Adjacent `)[` (no space in source) → index access: space stays stripped.
-    let input = "userTable = (database.table \"users\")[a]";
-    let expected = "userTable = (database.table \"users\")[a]\n";
+    let input = "users = (database.relation \"users\" [] [])[a]";
+    let expected = "users = (database.relation \"users\" [] [])[a]\n";
     assert_eq!(format_text(input), expected);
     // Non-adjacent `) [` (space in source) → function application: space preserved.
-    let input2 = "userTable = (database.table \"users\") [a]";
-    let expected2 = "userTable = (database.table \"users\") [a]\n";
+    let input2 = "users = (database.relation \"users\" [] []) [a]";
+    let expected2 = "users = (database.relation \"users\" [] []) [a]\n";
     assert_eq!(format_text(input2), expected2);
 }
 
@@ -238,7 +238,7 @@ n =
   else
     3
 "#;
-    let expected = "module demo\n\nn =\n  if x then\n    if y then\n      1\n    else\n      2\n  else\n    3\n";
+    let expected = "module demo\n\nn = if x then\n  if y then\n    1\n  else\n    2\nelse\n  3\n";
     assert_eq!(format_text(input), expected);
 
     let input = r#"
@@ -252,8 +252,7 @@ n =
   else
     3
 "#;
-    let expected =
-        "module demo\n\nn =\n  if x then\n    1\n  else if y then\n    2\n  else\n    3\n";
+    let expected = "module demo\n\nn = if x then\n  1\nelse if y then\n  2\nelse\n  3\n";
     assert_eq!(format_text(input), expected);
 }
 

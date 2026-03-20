@@ -1379,23 +1379,19 @@ use aivi.database
 
 Product = { id: Int, price: Int, active: Bool }
 
-productTable : Table Product
-productTable = table "products" [
+productTable : Relation Product
+productTable = relation "products" [
   { name: "id", type: IntType, constraints: [NotNull], default: None }
   { name: "price", type: IntType, constraints: [NotNull], default: None }
   { name: "active", type: BoolType, constraints: [NotNull], default: None }
-]
+] []
 
-filtered = where active (from productTable)
-sorted = orderBy.price (from productTable)
-queryBlock = do Query {
-  p <- from productTable
-  guard p.active
-  orderBy.price (queryOf p)
-}
+filtered = productTable[active]
+filteredById = productTable[id == 1]
+sorted = productTable |> orderBy (asc .price)
 "#,
         );
-        for def_name in ["filtered", "sorted", "queryBlock"] {
+        for def_name in ["filtered", "filteredById", "sorted"] {
             let expr = find_def_expr(&program, def_name);
             assert!(
                 !expr_contains_var(expr, "active"),
@@ -1404,6 +1400,10 @@ queryBlock = do Query {
             assert!(
                 !expr_contains_var(expr, "price"),
                 "expected {def_name} to rewrite bare `price` lifting"
+            );
+            assert!(
+                !expr_contains_var(expr, "id"),
+                "expected {def_name} to rewrite bare `id` lifting"
             );
         }
     }
@@ -1421,15 +1421,15 @@ use aivi.database
 
 Product = { id: Int, price: Int, active: Bool }
 
-productTable : Table Product
-productTable = table "products" [
+productTable : Relation Product
+productTable = relation "products" [
   { name: "id", type: IntType, constraints: [NotNull], default: None }
   { name: "price", type: IntType, constraints: [NotNull], default: None }
   { name: "active", type: BoolType, constraints: [NotNull], default: None }
-]
+] []
 
-filtered = where active (from productTable)
-sorted = orderBy.price (from productTable)
+filtered = productTable[active]
+sorted = productTable |> orderBy (asc .price)
 "#,
         );
         for def_name in ["filtered", "sorted"] {

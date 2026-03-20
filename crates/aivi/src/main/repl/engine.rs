@@ -971,9 +971,19 @@ Command Reference
 
     fn synthesize_module(&self, input: &str, kind: InputKind) -> String {
         let mut lines = vec!["module repl_session".to_owned(), String::new()];
-        lines.push("use aivi.prelude".to_owned());
+        let mut visible_imports = vec!["aivi.prelude".to_owned()];
+        for module in &self.default_visible_modules {
+            if !visible_imports.contains(module) {
+                visible_imports.push(module.clone());
+            }
+        }
         for imp in &self.imports {
-            lines.push(format!("use {imp}"));
+            if !visible_imports.contains(imp) {
+                visible_imports.push(imp.clone());
+            }
+        }
+        for module in visible_imports {
+            lines.push(format!("use {module}"));
         }
         let existing_sig_names: HashSet<String> = self
             .definitions
@@ -2819,10 +2829,17 @@ mod tests {
         let mut engine = make_engine();
         engine.submit("/use aivi.logic").unwrap();
         let snap = engine.submit("Some 5 |> map (_ + 1)").unwrap();
-        assert!(snap.transcript.iter().any(|entry| {
-            matches!(entry.kind, TranscriptKind::ValueResult)
-                && entry.text == "Some 6 :: Option Int"
-        }));
+        assert!(
+            snap.transcript.iter().any(|entry| {
+                matches!(entry.kind, TranscriptKind::ValueResult)
+                    && entry.text == "Some 6 :: Option Int"
+            }),
+            "transcript: {:?}",
+            snap.transcript
+                .iter()
+                .map(|entry| (&entry.kind, entry.text.as_str()))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2952,9 +2969,16 @@ mod tests {
     fn expression_submit_shows_runtime_value_and_type() {
         let mut engine = make_engine();
         let snap = engine.submit("(Some 2 |> map (_ + 2)) ?? 0").unwrap();
-        assert!(snap.transcript.iter().any(|entry| {
-            matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "4 :: Int"
-        }));
+        assert!(
+            snap.transcript.iter().any(|entry| {
+                matches!(entry.kind, TranscriptKind::ValueResult) && entry.text == "4 :: Int"
+            }),
+            "transcript: {:?}",
+            snap.transcript
+                .iter()
+                .map(|entry| (&entry.kind, entry.text.as_str()))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

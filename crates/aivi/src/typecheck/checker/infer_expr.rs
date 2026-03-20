@@ -211,28 +211,10 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         let base_ty = self.infer_expr(base, env)?;
         if let Some(row_ty) = self.extract_table_row_type(base_ty.clone()) {
-            let pred_ty = self.infer_arg_with_predicate_fallback(index, env)?;
             let pred_expected =
                 Type::Func(Box::new(row_ty.clone()), Box::new(self.named_type("Bool")));
-            let checkpoint = self.subst.clone();
-            if let Err(_err) =
-                self.unify_with_span(pred_ty.clone(), pred_expected, expr_span(index))
-            {
-                self.subst = checkpoint;
-                let found_ty = self.apply(pred_ty);
-                let found_ty = self.expand_alias(found_ty);
-                let found = self.type_to_string(&found_ty);
-                return Err(TypeError {
-                    span: expr_span(index),
-                    message: format!(
-                        "database selector predicates must have type {} -> Bool (found {found})",
-                        self.type_to_string(&row_ty)
-                    ),
-                    expected: None,
-                    found: None,
-                });
-            }
-            return Ok(self.named_type("DbSelection").app(vec![row_ty]));
+            self.validate_expr_against_expected(index, pred_expected, env)?;
+            return Ok(self.named_type("Query").app(vec![row_ty]));
         }
         let index_ty = self.infer_expr(index, env)?;
 

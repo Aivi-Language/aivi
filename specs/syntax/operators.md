@@ -61,9 +61,9 @@ On ordinary data, `<|` applies a patch literal to the value on its left and retu
 
 When the left-hand side is a database row selector from [`aivi.database`](../stdlib/system/database.md), `<|` switches to selector CRUD update semantics:
 
-- `userTable[id == userId] <| { role: "admin" }` updates the selected rows
+- `users[id == userId] <| { role: "admin" }` updates the selected rows
 
-Row deletion stays explicit as `db.delete userTable[id == userId]`.
+Row deletion stays explicit as `db.delete users[id == userId]`.
 See [Patching Records](patching.md) for reusable `patch { ... }` values, deep selectors, and collection-aware updates.
 
 Inside a lambda head, `<|` has one extra surface-sugar role:

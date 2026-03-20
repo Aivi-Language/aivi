@@ -1,13 +1,10 @@
-activeUserCountQuery : Query Int
-activeUserCountQuery = db.count (db.from userTable |> db.where active)
-
-hasActiveUsers : Query Bool
-hasActiveUsers = db.exists (db.from userTable |> db.where active)
-
-main = do Effect {
-  dbConn       <- db.connect { driver: Sqlite, url: "app.db" }
-  [userCount]  <- db.runQueryOn dbConn activeUserCountQuery
-  [foundUsers] <- db.runQueryOn dbConn hasActiveUsers
-  _            <- db.close dbConn
-  pure (userCount, foundUsers)
-}
+salesByUser =
+  orders[status == "paid"]
+    |> groupBy .userId
+    |> having (sum .total > 100)
+    |> selectMap {
+         userId: key
+         orderCount: count
+         totalSpent: sum .total
+       }
+    |> orderBy (desc .totalSpent)

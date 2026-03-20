@@ -160,12 +160,7 @@ fn lower_expr_inner_ctx(
                 .collect(),
         },
         Expr::Record { fields, .. } => {
-            let selection_meta = if looks_like_db_selection_record(&fields) {
-                Some(compile_static_db_selection(&fields))
-            } else {
-                None
-            };
-            let mut lowered_fields: Vec<HirRecordField> = fields
+            let lowered_fields: Vec<HirRecordField> = fields
                 .into_iter()
                 .map(|field| HirRecordField {
                     spread: field.spread,
@@ -185,13 +180,6 @@ fn lower_expr_inner_ctx(
                     value: lower_expr_ctx(field.value, id_gen, ctx, false),
                 })
                 .collect();
-            if let Some(meta) = selection_meta {
-                lowered_fields.push(HirRecordField {
-                    spread: false,
-                    path: vec![HirPathSegment::Field(DB_SELECTION_META_FIELD.to_string())],
-                    value: build_db_selection_meta_hir(meta, id_gen, ctx),
-                });
-            }
             HirExpr::Record {
                 id: id_gen.next(),
                 fields: lowered_fields,
@@ -243,17 +231,23 @@ fn lower_expr_inner_ctx(
                 .source_path
                 .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span.clone())),
         },
-        Expr::Call { func, args, span } => HirExpr::Call {
-            id: id_gen.next(),
-            func: Box::new(lower_expr_ctx(*func, id_gen, ctx, false)),
-            args: args
-                .into_iter()
-                .map(|arg| lower_expr_ctx(arg, id_gen, ctx, false))
-                .collect(),
-            location: ctx
-                .source_path
-                .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
-        },
+        Expr::Call { func, args, span } => {
+            if let Some(lowered) = maybe_lower_db_patch_call(&func, &args, span.clone(), id_gen, ctx) {
+                lowered
+            } else {
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(lower_expr_ctx(*func, id_gen, ctx, false)),
+                    args: args
+                        .into_iter()
+                        .map(|arg| lower_expr_ctx(arg, id_gen, ctx, false))
+                        .collect(),
+                    location: ctx
+                        .source_path
+                        .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
+                }
+            }
+        }
         Expr::Lambda { params, body, span } => {
             let body = lower_expr_ctx(*body, id_gen, ctx, false);
             let location = ctx
@@ -919,9 +913,6 @@ fn desugar_applicative_do_block(
 /// - `e`  (final)     →  `e`
 /// - `{}`  (empty)    →  `of Unit`
 ///
-/// For `do Query { ... }`, `chain`→`queryChain` and `of`→`queryOf` so that the
-/// desugared calls resolve through the `aivi.database` Query helpers rather than
-/// the generic monad typeclass dispatch.
 fn desugar_generic_do_block(
     items: Vec<BlockItem>,
     surface_kind: &BlockKind,
@@ -932,7 +923,7 @@ fn desugar_generic_do_block(
     let ops = do_block_ops(surface_kind);
 
     if items.is_empty() {
-        // `do M {}` → `of Unit`  (or `queryOf Unit` for do Query)
+        // `do M {}` → `of Unit`
         return HirExpr::Call {
             id: id_gen.next(),
             func: Box::new(HirExpr::Var {
@@ -955,18 +946,8 @@ fn desugar_generic_do_block(
 }
 
 /// Returns the `chain`/`of` function names for a generic do-block.
-///
-/// `do Query { ... }` uses `queryChain`/`queryOf`; all other monads use
-/// the standard typeclass-dispatched `chain`/`of`.
 fn do_block_ops(surface_kind: &BlockKind) -> DoOps {
-    if let BlockKind::Do { ref monad } = surface_kind {
-        if monad.name == "Query" {
-            return DoOps {
-                chain: "queryChain",
-                of: "queryOf",
-            };
-        }
-    }
+    let _ = surface_kind;
     DoOps {
         chain: "chain",
         of: "of",
@@ -1262,88 +1243,69 @@ fn lower_named_call_hir(
     }
 }
 
-fn looks_like_db_selection_record(fields: &[crate::surface::RecordField]) -> bool {
-    let mut has_table = false;
-    let mut has_pred = false;
-    for field in fields {
-        if field.spread {
-            return false;
-        }
-        match field.path.as_slice() {
-            [crate::surface::PathSegment::Field(name)] if name.name == "table" => has_table = true,
-            [crate::surface::PathSegment::Field(name)] if name.name == "pred" => has_pred = true,
-            _ => {}
-        }
-    }
-    has_table && has_pred
-}
-
-fn build_db_selection_meta_hir(
-    meta: Result<StaticCompiledDbSelection, String>,
+fn maybe_lower_db_patch_call(
+    func: &Expr,
+    args: &[Expr],
+    span: crate::diagnostics::Span,
     id_gen: &mut IdGen,
     ctx: &mut LowerCtx<'_>,
-) -> HirExpr {
-    match meta {
-        Ok(compiled) => {
-            let plan_json = match serde_json::to_string(&compiled.plan) {
-                Ok(json) => json,
-                Err(err) => {
-                    return HirExpr::Record {
-                        id: id_gen.next(),
-                        fields: vec![HirRecordField {
-                            spread: false,
-                            path: vec![HirPathSegment::Field("error".to_string())],
-                            value: HirExpr::LitString {
-                                id: id_gen.next(),
-                                text: format!(
-                                    "failed to serialize lowered selector plan: {err}"
-                                ),
-                            },
-                        }],
-                    };
-                }
-            };
-            let captures = HirExpr::List {
-                id: id_gen.next(),
-                items: compiled
-                    .capture_exprs
-                    .into_iter()
-                    .map(|expr| HirListItem {
-                        expr: lower_expr_ctx(expr, id_gen, ctx, false),
-                        spread: false,
-                    })
-                    .collect(),
-            };
-            HirExpr::Record {
-                id: id_gen.next(),
-                fields: vec![
-                    HirRecordField {
-                        spread: false,
-                        path: vec![HirPathSegment::Field("planJson".to_string())],
-                        value: HirExpr::LitString {
-                            id: id_gen.next(),
-                            text: plan_json,
-                        },
-                    },
-                    HirRecordField {
-                        spread: false,
-                        path: vec![HirPathSegment::Field("captures".to_string())],
-                        value: captures,
-                    },
-                ],
-            }
+) -> Option<HirExpr> {
+    let helper = call_leaf_name(func)?;
+    let patch_arg_index = match (helper, args.len()) {
+        ("update", 2) => Some(1),
+        ("updateOn", 3) => Some(2),
+        ("upsert", 3) => Some(2),
+        ("upsertOn", 4) => Some(3),
+        _ => None,
+    }?;
+
+    let mut args = args.to_vec();
+    let patch_arg = args.remove(patch_arg_index);
+    let lowered_patch = lower_db_patch_arg(patch_arg, id_gen, ctx)?;
+    let mut lowered_args = Vec::with_capacity(args.len() + 1);
+    for (index, arg) in args.into_iter().enumerate() {
+        if index == patch_arg_index {
+            lowered_args.push(lowered_patch.clone());
         }
-        Err(message) => HirExpr::Record {
-            id: id_gen.next(),
-            fields: vec![HirRecordField {
-                spread: false,
-                path: vec![HirPathSegment::Field("error".to_string())],
-                value: HirExpr::LitString {
-                    id: id_gen.next(),
-                    text: message,
-                },
-            }],
-        },
+        lowered_args.push(lower_expr_ctx(arg, id_gen, ctx, false));
+    }
+    if patch_arg_index == lowered_args.len() {
+        lowered_args.push(lowered_patch);
+    }
+
+    Some(HirExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(lower_expr_ctx(func.clone(), id_gen, ctx, false)),
+        args: lowered_args,
+        location: ctx
+            .source_path
+            .map(|path| crate::diagnostics::SourceOrigin::new(path.to_string(), span)),
+    })
+}
+
+fn lower_db_patch_arg(
+    expr: Expr,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> Option<HirExpr> {
+    match expr {
+        Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
+            let compiled_patch = compile_static_db_patch(&fields);
+            let fallback_patch = build_patch_lambda_hir(fields, id_gen, ctx);
+            Some(build_db_patch_hir(compiled_patch, fallback_patch, id_gen, ctx))
+        }
+        _ => None,
+    }
+}
+
+fn call_leaf_name(expr: &Expr) -> Option<&str> {
+    match expr {
+        Expr::Ident(name) => Some(name.name.rsplit('.').next().unwrap_or(&name.name)),
+        Expr::FieldAccess { base, field, .. } => {
+            call_leaf_name(base)?;
+            Some(field.name.as_str())
+        }
+        _ => None,
     }
 }
 
@@ -1472,46 +1434,14 @@ fn maybe_lower_query_expr(
     id_gen: &mut IdGen,
     ctx: &mut LowerCtx<'_>,
 ) -> Option<HirExpr> {
-    if is_query_do_block(expr) {
-        return Some(match compile_static_query(expr) {
-            Ok(compiled) => build_static_query_hir(compiled, id_gen, ctx),
-            Err(message) => build_query_error_hir(message, id_gen),
-        });
+    if !expr_requires_relation_query_lowering(expr) {
+        return None;
     }
 
-    if let Ok(compiled) = compile_static_query(expr) {
-        return Some(build_static_query_hir(compiled, id_gen, ctx));
-    }
-
-    match expr {
-        Expr::Call { func, args, .. } if is_database_helper(func, "count") && args.len() == 1 => {
-            Some(HirExpr::Call {
-                id: id_gen.next(),
-                func: Box::new(HirExpr::Var {
-                    id: id_gen.next(),
-                    name: DB_QUERY_COUNT_BUILTIN.to_string(),
-                
-                    location: None,
-                }),
-                args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
-                location: None,
-            })
-        }
-        Expr::Call { func, args, .. } if is_database_helper(func, "exists") && args.len() == 1 => {
-            Some(HirExpr::Call {
-                id: id_gen.next(),
-                func: Box::new(HirExpr::Var {
-                    id: id_gen.next(),
-                    name: DB_QUERY_EXISTS_BUILTIN.to_string(),
-                
-                    location: None,
-                }),
-                args: vec![lower_expr_ctx(args[0].clone(), id_gen, ctx, false)],
-                location: None,
-            })
-        }
-        _ => None,
-    }
+    Some(match compile_static_query(expr, ctx.surface_db_index, ctx.current_module) {
+        Ok(compiled) => build_static_query_hir(compiled, id_gen, ctx),
+        Err(message) => build_query_error_hir(message, id_gen),
+    })
 }
 
 fn build_static_query_hir(

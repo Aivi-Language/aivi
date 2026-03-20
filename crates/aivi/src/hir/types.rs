@@ -374,6 +374,7 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
     let debug_trace = debug_trace_enabled();
     let mut id_gen = IdGen::default();
     let mut hir_modules = Vec::new();
+    let surface_db_index = crate::hir::build_surface_db_index(modules);
     for (module_index, module) in modules.iter().enumerate() {
         if trace {
             eprintln!(
@@ -411,6 +412,7 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
                         def,
                         debug_params,
                         module_source.as_deref(),
+                        &surface_db_index,
                         &mut id_gen,
                     ),
                 }
@@ -493,6 +495,8 @@ fn parse_debug_params(decorators: &[Decorator]) -> Option<DebugParams> {
 struct LowerCtx<'a> {
     debug: Option<LowerDebug<'a>>,
     source_path: Option<&'a str>,
+    current_module: &'a str,
+    surface_db_index: &'a crate::hir::SurfaceDbIndex,
 }
 
 struct LowerDebug<'a> {
@@ -529,6 +533,7 @@ fn lower_def_expr(
     def: Def,
     debug_params: Option<DebugParams>,
     module_source: Option<&str>,
+    surface_db_index: &crate::hir::SurfaceDbIndex,
     id_gen: &mut IdGen,
 ) -> HirExpr {
     let Def {
@@ -562,6 +567,8 @@ fn lower_def_expr(
             next_pipe_id: 1,
         }),
         source_path: Some(&module.path),
+        current_module: &module.name.name,
+        surface_db_index,
     };
 
     let body_hir = lower_expr_ctx(effective_expr, id_gen, &mut ctx, false);

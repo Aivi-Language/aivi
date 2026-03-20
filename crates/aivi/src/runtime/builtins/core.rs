@@ -829,7 +829,6 @@ pub(crate) fn register_builtins(env: &Env) {
                         let inner = cell_clone.lock().unwrap().clone().unwrap_or(Value::Unit);
                         runtime.apply(inner, arg)
                     }),
-                    db_patch_meta: None,
                 }),
                 args: Vec::new(),
                 tagged_args: Some(Vec::new()),

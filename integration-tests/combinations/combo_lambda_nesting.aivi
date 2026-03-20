@@ -95,10 +95,13 @@ tripleNesting = do Effect {
 
 // --- List of closures each capturing creation-time value ---
 
+makeAdderN : Int -> Int -> Int
 makeAdderN = n => x => x + n
 
+buildAdders : Int -> List (Int -> Int)
 buildAdders = n => if n <= 0 then [] else [makeAdderN n, ...(buildAdders (n - 1))]
 
+applyAll : List (Int -> Int) -> Int -> List Int
 applyAll = fns arg => fns match
   | []           => []
   | [f, ...rest] => [f arg, ...(applyAll rest arg)]

@@ -235,21 +235,24 @@ use aivi.database as db
 User = { id: Int, name: Text, active: Bool, createdAt: Instant }
 
 @static
-userTable : Table User
-userTable = db.table "users" [
+users : db.Relation User
+users = db.relation "users" [
   { name: "id",        type: IntType,       constraints: [AutoIncrement, NotNull] }
   { name: "name",      type: Varchar 100,   constraints: [NotNull] }
   { name: "active",    type: BoolType,      constraints: [NotNull] }
   { name: "createdAt", type: TimestampType, constraints: [NotNull], default: Some DefaultNow }
-]
+] []
 
-// Query returns typed rows — pipe directly into list operations
+// Relation roots become typed queries — shape them with ordinary pipes
 getActiveUsers : Effect DbError (List User)
 getActiveUsers = do Effect {
   _ <- db.configure { driver: Sqlite, url: "./local.db" }
-  _ <- db.runMigrations [userTable]
-  users <- db.load userTable
-  pure (users |> filter active |> sortBy.createdAt)
+  _ <- db.runMigrations [users]
+  db.rows (
+    users[active]
+      |> db.orderBy (db.desc .createdAt, db.asc .id)
+      |> db.limit 20
+  )
 }
 
 // Precondition guards read like prose

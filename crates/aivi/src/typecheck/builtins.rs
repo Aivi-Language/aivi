@@ -118,13 +118,15 @@ impl TypeChecker {
         self.builtin_types
             .insert("VNode".to_string(), arrow(star.clone(), star.clone()));
         self.builtin_types
-            .insert("Table".to_string(), arrow(star.clone(), star.clone()));
-        self.builtin_types
-            .insert("Pred".to_string(), arrow(star.clone(), star.clone()));
-        self.builtin_types
-            .insert("Delta".to_string(), arrow(star.clone(), star.clone()));
-        self.builtin_types
             .insert("Query".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("Relation".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types.insert(
+            "GroupedQuery".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
+        self.builtin_types
+            .insert("OrderTerm".to_string(), arrow(star.clone(), star.clone()));
         // `Resource E A` mirrors `Effect E A`: acquisition may fail with `E`.
         self.builtin_types.insert(
             "Resource".to_string(),

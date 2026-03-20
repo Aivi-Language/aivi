@@ -1,24 +1,17 @@
 use aivi.database as db
 
-User = { id: Int, name: Text, email: Option Text, active: Bool, loginCount: Int, createdAt: Instant }
+User = { id: Int, email: Text, active: Bool, createdAt: Int }
 
-dbDefault = { driver: Sqlite, url: ":memory:" }
+users : db.Relation User
+users = db.relation "users" [
+  { name: "id", type: IntType, constraints: [NotNull], default: None }
+  { name: "email", type: Varchar 120, constraints: [NotNull], default: None }
+  { name: "active", type: BoolType, constraints: [NotNull], default: Some (DefaultBool True) }
+  { name: "createdAt", type: IntType, constraints: [NotNull], default: None }
+] []
 
-@static
-userTable : Table User
-userTable = db.table "users"[
-  { name: "id",         type: IntType,       constraints: [AutoIncrement, NotNull], default: None }
-  { name: "name",       type: Varchar 100,   constraints: [NotNull],                default: None }
-  { name: "email",      type: Varchar 255,   constraints: [],                       default: None }
-  { name: "active",     type: BoolType,      constraints: [NotNull],                default: Some (DefaultBool True) }
-  { name: "loginCount", type: IntType,       constraints: [NotNull],                default: Some (DefaultInt 0) }
-  { name: "createdAt",  type: TimestampType, constraints: [NotNull],                default: Some DefaultNow }
-]
-
-getActiveUsers : Effect DbError (List User)
-getActiveUsers = do Effect {
-  conn  <- db.open dbDefault
-  _     <- db.runMigrationsOn conn [userTable]
-  users <- db.loadOn conn userTable
-  pure (users |> filter active |> sortBy.createdAt)
-}
+recentEmails =
+  users[active]
+    |> db.orderBy (db.desc .createdAt, db.asc .id)
+    |> db.limit 10
+    |> db.selectMap { email: .email }

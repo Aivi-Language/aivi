@@ -375,7 +375,7 @@ Literal        := "True"
 - `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals, and HTML/GTK angle sigils are documented in [Operators and Context](operators.md#118-sigils)
 - `RecordSpread` (`...expr`) merges fields left to right, with later fields overriding earlier ones
 - `name.path: value` inside a record literal builds nested record-shaped data from scratch. If you meant “update an existing nested value”, use `<|` / `patch`.
-- Postfix brackets reuse one syntax family for list indexing, map indexing, and database row selectors such as `userTable[id == userId]`. Which meaning applies is decided during elaboration from the left-hand side type.
+- Postfix brackets reuse one syntax family for list indexing, map indexing, and database row selectors such as `users[id == userId]`. Which meaning applies is decided during elaboration from the left-hand side type.
 
 ## 0.4 Patching
 

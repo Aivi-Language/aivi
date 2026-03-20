@@ -718,14 +718,17 @@ impl TypeChecker {
             Expr::Index { base, index, span } => {
                 let base_ty = self.infer_expr(&base, env)?;
                 if let Some(row_ty) = self.extract_table_row_type(base_ty) {
-                    let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
+                    let query_ty = self.named_type("Query").app(vec![row_ty.clone()]);
                     let pred_expected =
-                        Type::Func(Box::new(row_ty), Box::new(self.named_type("Bool")));
+                        Type::Func(Box::new(row_ty.clone()), Box::new(self.named_type("Bool")));
+                    self.validate_expr_against_expected(&index, pred_expected, env)?;
                     let (base, _base_ty) = self.elab_expr(*base, None, env)?;
-                    let (index, _index_ty) =
-                        self.elab_call_arg_with_predicate_fallback(*index, pred_expected, env)?;
-                    let out = self.db_selection_record_expr(base, index, &span);
-                    self.check_or_coerce(out, expected.or(Some(selection_ty)), env)
+                    let out = Expr::Index {
+                        base: Box::new(base),
+                        index,
+                        span,
+                    };
+                    self.check_or_coerce(out, expected.or(Some(query_ty)), env)
                 } else {
                     let (base, _base_ty) = self.elab_expr(*base, None, env)?;
                     let (index, _index_ty) = self.elab_expr(*index, None, env)?;
@@ -750,6 +753,7 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
+        let preserved_pipe_right = right.clone();
         let right = if matches!(op.as_str(), "|>" | "->>") {
             self.normalize_pipe_transformer(&right, env)
         } else {
@@ -759,6 +763,23 @@ impl TypeChecker {
             return self.elab_db_selector_write(left, right, span, expected, env);
         }
         if op == "|>" {
+            let left_ty = self.infer_expr(&left, env)?;
+            let preserves_relation_query_syntax = self.extract_query_row_type(left_ty.clone()).is_some()
+                || (self.looks_like_relation_query_expr(&left)
+                    && self.looks_like_relation_query_stage(&preserved_pipe_right));
+            if preserves_relation_query_syntax {
+                if self.extract_query_row_type(left_ty.clone()).is_some() {
+                    self.validate_query_pipe_transformer(&right, &left_ty, env)?;
+                }
+                let (left, _left_ty) = self.elab_expr(left, None, env)?;
+                let out = Expr::Binary {
+                    op,
+                    left: Box::new(left),
+                    right: Box::new(preserved_pipe_right),
+                    span,
+                };
+                return self.check_or_coerce(out, expected, env);
+            }
             let (left, _left_ty) = self.elab_expr(left, None, env)?;
             let (right, _right_ty) = self.elab_expr(right, None, env)?;
             let out = Expr::Binary {
@@ -901,32 +922,6 @@ impl TypeChecker {
         }
     }
 
-    fn db_selection_record_expr(&self, table: Expr, pred: Expr, span: &Span) -> Expr {
-        Expr::Record {
-            fields: vec![
-                RecordField {
-                    path: vec![PathSegment::Field(SpannedName {
-                        name: "table".to_string(),
-                        span: span.clone(),
-                    })],
-                    value: table,
-                    spread: false,
-                    span: span.clone(),
-                },
-                RecordField {
-                    path: vec![PathSegment::Field(SpannedName {
-                        name: "pred".to_string(),
-                        span: span.clone(),
-                    })],
-                    value: pred,
-                    spread: false,
-                    span: span.clone(),
-                },
-            ],
-            span: span.clone(),
-        }
-    }
-
     fn db_helper_call_expr(&self, helper: &str, args: Vec<Expr>, span: &Span) -> Expr {
         Expr::Call {
             func: Box::new(Expr::Ident(SpannedName {
@@ -946,47 +941,19 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
-        let (selection, row_ty) = match left {
-            Expr::Index {
-                base,
-                index,
-                span: index_span,
-            } => {
-                let base_ty = self.infer_expr(&base, env)?;
-                let Some(row_ty) = self.extract_table_row_type(base_ty) else {
-                    return Err(TypeError {
-                        span: expr_span(&base),
-                        message: "database selector writes require a table selection like `userTable[id == userId]`".to_string(),
-                        expected: None,
-                        found: None,
-                    });
-                };
-                let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
-                let pred_expected =
-                    Type::Func(Box::new(row_ty.clone()), Box::new(self.named_type("Bool")));
-                let (base, _base_ty) = self.elab_expr(*base, None, env)?;
-                let (index, _index_ty) =
-                    self.elab_call_arg_with_predicate_fallback(*index, pred_expected, env)?;
-                let selection = self.db_selection_record_expr(base, index, &index_span);
-                let (selection, _selection_ty) =
-                    self.check_or_coerce(selection, Some(selection_ty), env)?;
-                (selection, row_ty)
-            }
-            other => {
-                let left_ty = self.infer_expr(&other, env)?;
-                let Some(row_ty) = self.extract_db_selection_row_type(left_ty) else {
-                    return Err(TypeError {
-                        span: expr_span(&other),
-                        message: "database selector writes require a table selection like `userTable[id == userId]`".to_string(),
-                        expected: None,
-                        found: None,
-                    });
-                };
-                let selection_ty = self.named_type("DbSelection").app(vec![row_ty.clone()]);
-                let (selection, _selection_ty) = self.elab_expr(other, Some(selection_ty), env)?;
-                (selection, row_ty)
-            }
+        let left_ty = self.infer_expr(&left, env)?;
+        let Some(row_ty) = self.extract_db_selection_row_type(left_ty) else {
+            return Err(TypeError {
+                span: expr_span(&left),
+                message:
+                    "database updates require a relation query like `users[id == userId]`"
+                        .to_string(),
+                expected: None,
+                found: None,
+            });
         };
+        let query_ty = self.named_type("Query").app(vec![row_ty.clone()]);
+        let (selection, _selection_ty) = self.elab_expr(left, Some(query_ty), env)?;
 
         let call = match right {
             Expr::Record {
@@ -1008,7 +975,8 @@ impl TypeChecker {
             other => {
                 return Err(TypeError {
                     span: expr_span(&other),
-                    message: "database selector updates accept only a patch block like `{ ... }`".to_string(),
+                    message: "database query updates accept only a patch block like `{ ... }`"
+                        .to_string(),
                     expected: None,
                     found: None,
                 });
@@ -1021,21 +989,6 @@ impl TypeChecker {
     fn looks_like_db_selector_target(&self, expr: &Expr) -> bool {
         match expr {
             Expr::Index { index, .. } => self.looks_like_db_selector_predicate(index),
-            Expr::Record { fields, .. } => {
-                let mut has_table = false;
-                let mut has_pred = false;
-                for field in fields {
-                    if field.spread {
-                        return false;
-                    }
-                    match field.path.as_slice() {
-                        [PathSegment::Field(name)] if name.name == "table" => has_table = true,
-                        [PathSegment::Field(name)] if name.name == "pred" => has_pred = true,
-                        _ => {}
-                    }
-                }
-                has_table && has_pred
-            }
             _ => false,
         }
     }
@@ -1066,6 +1019,39 @@ impl TypeChecker {
             | Expr::Suffixed { .. }
             | Expr::Block { .. }
             | Expr::Mock { .. } => false,
+        }
+    }
+
+    fn looks_like_relation_query_stage(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call { func, .. } => self.looks_like_relation_query_stage(func),
+            Expr::FieldAccess { base, .. } => self.looks_like_relation_query_stage(base),
+            Expr::Ident(_) => matches!(
+                Self::callee_leaf_name(expr),
+                Some("orderBy" | "limit" | "offset" | "distinct" | "selectMap" | "groupBy" | "having")
+            ),
+            _ => false,
+        }
+    }
+
+    fn looks_like_relation_query_expr(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Ident(_) | Expr::FieldAccess { .. } => true,
+            Expr::Index { base, .. } => {
+                self.looks_like_relation_query_expr(base)
+                    || matches!(base.as_ref(), Expr::Ident(_) | Expr::FieldAccess { .. })
+            }
+            Expr::Binary {
+                op, left, right, ..
+            } if op == "|>" => {
+                let left_is_query_root = matches!(
+                    left.as_ref(),
+                    Expr::Ident(_) | Expr::FieldAccess { .. } | Expr::Index { .. }
+                );
+                self.looks_like_relation_query_expr(left)
+                    || (left_is_query_root && self.looks_like_relation_query_stage(right))
+            }
+            _ => false,
         }
     }
 

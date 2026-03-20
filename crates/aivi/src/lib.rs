@@ -42,12 +42,11 @@ pub mod surface {
 
 pub mod hir {
     pub use aivi_core::{
-        CompiledAggregate, CompiledDbPatchField, CompiledDbPatchPlan, CompiledDbSelectionPlan,
-        CompiledOrderBy, CompiledProjection, CompiledProjectionField, CompiledQueryPlan,
-        CompiledQuerySource, CompiledScalarExpr, HirBlockItem, HirBlockKind, HirDef, HirExpr,
-        HirListItem, HirLiteral, HirMatchArm, HirMockSubstitution, HirModule, HirPathSegment,
-        HirPattern, HirProgram, HirRecordField, HirRecordPatternField, HirTextPart,
-        DB_SELECTION_META_FIELD,
+        CompiledAggregate, CompiledDbPatchField, CompiledDbPatchPlan, CompiledOrderBy,
+        CompiledProjection, CompiledProjectionField, CompiledQueryPlan, CompiledQuerySource,
+        CompiledScalarExpr, HirBlockItem, HirBlockKind, HirDef, HirExpr, HirListItem, HirLiteral,
+        HirMatchArm, HirMockSubstitution, HirModule, HirPathSegment, HirPattern, HirProgram,
+        HirRecordField, HirRecordPatternField, HirTextPart,
     };
 
     pub fn desugar_modules(modules: &[crate::surface::Module]) -> crate::hir::HirProgram {

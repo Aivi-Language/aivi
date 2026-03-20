@@ -1,6 +1,8 @@
-main = do Effect {
-  _     <- db.configure { driver: Sqlite, url: "app.db" }
-  _     <- db.runMigrations [userTable]
-  names <- db.runQuery activeUserNamesQuery
-  pure names
+do Effect {
+  _ <- db.configure { driver: Sqlite, url: ":memory:" }
+  _ <- db.runMigrations [users]
+  _ <- db.insert users { id: 1, email: "ada@example.com", active: True }
+  activeUsers <- db.rows users[active]
+  firstUser <- db.first users[id == 1]
+  pure { activeUsers, firstUser }
 }

@@ -30,9 +30,11 @@ fn run_test_suite_with_timeout(
     modules: &[aivi::surface::Module],
     display_name: &str,
     timeout_secs: u64,
+    project_root: Option<PathBuf>,
 ) -> Option<Result<aivi::TestReport, aivi::AiviError>> {
     let test_entries = test_entries.to_vec();
     let modules = modules.to_vec();
+    let project_root = project_root.clone();
     let done = Arc::new(AtomicBool::new(false));
     let done2 = done.clone();
 
@@ -41,7 +43,13 @@ fn run_test_suite_with_timeout(
         .stack_size(256 * 1024 * 1024)
         .spawn(move || {
             let result = catch_unwind(AssertUnwindSafe(|| {
-                run_test_suite(program, &test_entries, &modules, false, None)
+                run_test_suite(
+                    program,
+                    &test_entries,
+                    &modules,
+                    false,
+                    project_root.clone(),
+                )
             }));
             done2.store(true, Ordering::Release);
             result
@@ -104,8 +112,18 @@ fn process_test_file(
 
     let program = desugar_modules(&modules);
     let display = path.display().to_string();
-    let result =
-        run_test_suite_with_timeout(program, &tests, &modules, &display, FILE_TIMEOUT_SECS);
+    let project_root = path
+        .ancestors()
+        .find(|ancestor| ancestor.join("Cargo.toml").exists())
+        .map(Path::to_path_buf);
+    let result = run_test_suite_with_timeout(
+        program,
+        &tests,
+        &modules,
+        &display,
+        FILE_TIMEOUT_SECS,
+        project_root,
+    );
     let Some(Ok(report)) = result else {
         return FileResult::Skipped;
     };

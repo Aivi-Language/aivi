@@ -22,12 +22,6 @@ loopCapturesOuter = do Effect {
   assertEq result 45
 }
 
-// --- Loop with match per iteration ---
-
-foldList = f acc xs => xs match
-  | []           => acc
-  | [x, ...rest] => foldList f (f acc x) rest
-
 @test "loop with match dispatching per iteration"
 loopWithMatch = do Effect {
   items = [Some 1, None, Some 3, None, Some 5]

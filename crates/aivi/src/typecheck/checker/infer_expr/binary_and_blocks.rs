@@ -27,7 +27,7 @@ impl TypeChecker {
 
     fn extract_table_row_type(&mut self, ty: Type) -> Option<Type> {
         let applied = self.apply(ty);
-        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Table") {
+        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Relation") {
             let applied_row = self.apply(row_ty);
             return Some(self.expand_alias(applied_row));
         }
@@ -45,7 +45,7 @@ impl TypeChecker {
 
     fn extract_db_selection_row_type(&mut self, ty: Type) -> Option<Type> {
         let applied = self.apply(ty);
-        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "DbSelection") {
+        if let Some(row_ty) = Self::extract_named_type_arg(&applied, "Query") {
             let applied_row = self.apply(row_ty);
             return Some(self.expand_alias(applied_row));
         }
@@ -54,9 +54,14 @@ impl TypeChecker {
         let Type::Record { fields } = resolved else {
             return None;
         };
-        let table_ty = fields.get("table")?.clone();
-        let _pred_ty = fields.get("pred")?.clone();
-        let row_ty = self.extract_table_row_type(table_ty)?;
+        let run_ty = fields.get("run")?.clone();
+        let applied_run = self.apply(run_ty);
+        let expanded_run = self.expand_alias(applied_run);
+        let Type::Func(_, result_ty) = expanded_run else {
+            return None;
+        };
+        let effect_result = Self::extract_effect_result_type(&result_ty)?;
+        let row_ty = Self::extract_named_type_arg(&effect_result, "List")?;
         let applied_row = self.apply(row_ty);
         Some(self.expand_alias(applied_row))
     }
@@ -64,7 +69,7 @@ impl TypeChecker {
     fn db_effect_table_type(&self, row_ty: Type) -> Type {
         self.named_type("Effect").app(vec![
             self.named_type("DbError"),
-            self.named_type("Table").app(vec![row_ty]),
+            self.named_type("Relation").app(vec![row_ty]),
         ])
     }
 
@@ -89,6 +94,50 @@ impl TypeChecker {
         body_env.insert(param.name.clone(), Scheme::mono(signal_item_ty));
         let result_ty = self.infer_expr(&piped_body, &mut body_env)?;
         Ok(self.named_type("Signal").app(vec![result_ty]))
+    }
+
+    fn infer_pipe_partial_call(
+        &mut self,
+        left: &Expr,
+        right: &Expr,
+        env: &mut TypeEnv,
+        debug_pipe: bool,
+    ) -> Option<Result<Type, TypeError>> {
+        let Expr::Call {
+            func,
+            args: partial_args,
+            ..
+        } = right
+        else {
+            return None;
+        };
+        let Expr::Ident(name) = func.as_ref() else {
+            return None;
+        };
+
+        if debug_pipe {
+            eprintln!(
+                "[PIPE_DEBUG] |> right=Call({}) in_env={} overloads={} in_methods={}",
+                name.name,
+                env.get(&name.name).is_some(),
+                env.get_all(&name.name).map(|items| items.len()).unwrap_or(0),
+                self.method_to_classes.contains_key(&name.name)
+            );
+        }
+
+        if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name) {
+            let mut all_args: Vec<Expr> = partial_args.clone();
+            all_args.push(left.clone());
+            return Some(self.infer_method_call(name, &all_args, None, env));
+        }
+
+        if env.get_all(&name.name).is_some_and(|items| items.len() > 1) {
+            let mut all_args: Vec<Expr> = partial_args.clone();
+            all_args.push(left.clone());
+            return Some(self.infer_call(func, &all_args, env));
+        }
+
+        None
     }
 
     fn infer_signal_write_kind(
@@ -147,40 +196,43 @@ impl TypeChecker {
             eprintln!("[PIPE_DEBUG] infer_binary op={}", op);
         }
         if op == "|>" {
-            let arg_ty = self.infer_expr(left, env)?;
             let right = self.normalize_pipe_transformer(right, env);
+            let needs_syntactic_query_fallback = !matches!(left, Expr::Ident(_))
+                && self.looks_like_relation_query_expr(left)
+                && self.looks_like_relation_query_stage(&right);
+            if needs_syntactic_query_fallback {
+                let checkpoint = self.subst.clone();
+                if let Ok(arg_ty) = self.infer_expr(left, env) {
+                    if self.extract_query_row_type(arg_ty.clone()).is_some() {
+                        self.validate_query_pipe_transformer(&right, &arg_ty, env)?;
+                        if let Some(result) =
+                            self.infer_pipe_partial_call(left, &right, env, debug_pipe)
+                        {
+                            return result;
+                        }
+                        let func_ty = self.infer_expr(&right, env)?;
+                        let result_ty = self.fresh_var();
+                        self.unify_with_span(
+                            func_ty,
+                            Type::Func(Box::new(arg_ty), Box::new(result_ty.clone())),
+                            expr_span(&right),
+                        )?;
+                        return Ok(result_ty);
+                    }
+                }
+                self.subst = checkpoint;
+                return Ok(self.fresh_var());
+            }
+            let arg_ty = self.infer_expr(left, env)?;
             if std::env::var("AIVI_DEBUG_SIG").is_ok_and(|v| v == "1") {
                 eprintln!(
                     "[PIPE_INNER] |> right after normalize: disc={:?}",
                     std::mem::discriminant(&right)
                 );
             }
-            // Special case: if the RHS is a partially-applied class method call, collect all
-            // arguments including the piped LHS value so instance dispatch sees the full picture.
-            // This resolves ambiguity like `Some 5 |> map f` where `map f` alone is ambiguous.
-            if let Expr::Call {
-                func,
-                args: partial_args,
-                ..
-            } = &right
-            {
-                if let Expr::Ident(name) = func.as_ref() {
-                    if debug_pipe {
-                        eprintln!(
-                            "[PIPE_DEBUG] |> right=Call({}) in_env={} in_methods={}",
-                            name.name,
-                            env.get(&name.name).is_some(),
-                            self.method_to_classes.contains_key(&name.name)
-                        );
-                    }
-                    if env.get(&name.name).is_none()
-                        && self.method_to_classes.contains_key(&name.name)
-                    {
-                        let mut all_args: Vec<Expr> = partial_args.clone();
-                        all_args.push(left.clone());
-                        return self.infer_method_call(name, &all_args, None, env);
-                    }
-                }
+            if let Some(result) = self.infer_pipe_partial_call(left, &right, env, debug_pipe) {
+                self.validate_query_pipe_transformer(&right, &arg_ty, env)?;
+                return result;
             }
             let func_ty = self.infer_expr(&right, env)?;
             self.validate_query_pipe_transformer(&right, &arg_ty, env)?;
@@ -225,7 +277,8 @@ impl TypeChecker {
                     }
                     _ => Err(TypeError {
                         span: expr_span(right),
-                        message: "database selector updates accept only a patch block like `{ ... }`".to_string(),
+                        message: "database query updates accept only a patch block like `{ ... }`"
+                            .to_string(),
                         expected: None,
                         found: None,
                     }),

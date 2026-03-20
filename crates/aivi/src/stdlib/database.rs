@@ -3,39 +3,66 @@ pub const MODULE_NAME: &str = "aivi.database";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.database
-export Table, ColumnType, ColumnConstraint, ColumnDefault, Column
+export RelationLink, Relation, ColumnType, ColumnConstraint, ColumnDefault, Column
 export IntType, FloatType, BoolType, TimestampType, Varchar
 export AutoIncrement, NotNull
 export DefaultBool, DefaultInt, DefaultText, DefaultNow
-export Pred, Patch, Delta, DbSelection, DbError
-export Insert, Update, Delete, Upsert
+export DbError
 export Driver, DbConfig, DbConnection, configure, connect, open, close
 export Sqlite, Postgresql, Mysql
 export SqliteTuning, MigrationStep, SavepointName, TxAction
 export FtsDoc, FtsQuery
-export table, load, applyDelta, applyDeltas, runMigrations, runMigrationSql
-export loadOn, applyDeltaOn, applyDeltasOn, runMigrationsOn, runMigrationSqlOn
+export relation, hasMany, belongsTo, runMigrations, runMigrationSql
+export runMigrationsOn, runMigrationSqlOn
 export configureSqlite, configureSqliteOn
 export beginTx, commitTx, rollbackTx, inTransaction
 export beginTxOn, commitTxOn, rollbackTxOn, inTransactionOn
 export savepoint, releaseSavepoint, rollbackToSavepoint
 export savepointOn, releaseSavepointOn, rollbackToSavepointOn
-export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export insert, insertOn
-export rows, rowsOn, first, firstOn
+export rows, rowsOn, first, firstOn, count, countOn, exists, existsOn
 export delete, deleteOn
 export update, updateOn
 export upsert, upsertOn
-export domain Database
-export Query, queryOf, queryChain, emptyQuery, from, where, guard, select, runQueryOn, runQuery
-export orderBy, limit, offset, count, exists
+export Query, GroupedQuery, Order, OrderTerm, Agg
+export orderBy, limit, offset, distinct, selectMap, groupBy, having
+export asc, desc, key, sum, avg, min, max
+export ftsDoc, ftsMatchAny, ftsMatchAll
 
 use aivi
-use aivi.list (length, reverse)
-
+use aivi.prelude (panic)
 DbError = Text
 
-Table A = { name: Text, columns: List Column, rows: List A }
+Patch A = A -> A
+
+RelationLink = {
+  name: Text
+  target: Text
+  many: Bool
+}
+
+Relation A = {
+  name: Text
+  columns: List Column
+  links: List RelationLink
+  rows: List A
+  run: DbConnection -> Effect DbError (List A)
+}
+
+Query A = {
+  run: DbConnection -> Effect DbError (List A)
+}
+
+GroupedQuery K A = {
+  runGroups: DbConnection -> Effect DbError (List Unit)
+}
+
+OrderTerm A = {
+  descending: Bool
+}
+
+Order A = OrderTerm A
+Agg A B = B
 
 ColumnType = IntType | FloatType | BoolType | TimestampType | Varchar Int
 ColumnConstraint = AutoIncrement | NotNull
@@ -46,11 +73,6 @@ Column = {
   constraints: List ColumnConstraint
   default: Option ColumnDefault
 }
-
-Pred A = A -> Bool
-Patch A = A -> A
-Delta A = Insert A | Update (Pred A) (Patch A) | Delete (Pred A) | Upsert (Pred A) A (Patch A)
-DbSelection A = { table: Table A, pred: Pred A }
 
 Driver = Sqlite | Postgresql | Mysql
 DbConfig = { driver: Driver, url: Text }
@@ -81,115 +103,133 @@ FtsQuery = {
   matchMode: Text
 }
 
-// ---------------------------------------------------------------------------
-// Query DSL — portable subset
-//
-// `Query A` still has an ordinary runtime representation, but the compiler now
-// recognizes the portable subset (`from`/`where`/`guard`/`select`/`orderBy`/
-// `limit`/`offset`, plus `count`/`exists`) and attaches a structured SQL-backed
-// plan when every participating table has an explicit column list.
-//
-// Helper-built queries that do not lower still execute with the legacy
-// in-memory runtime. Unsupported `do Query` shapes do not silently fall back;
-// they become query errors when run. Use `runQueryOn conn q` or `runQuery q`
-// to execute. The `do Query` block still desugars using `queryChain`/`queryOf`
-// (rather than the generic monad `chain`/`of`) so the types resolve through
-// the helpers below.
-//
-// Example:
-//
-//   activeNames : Query Text
-//   activeNames = do Query {
-//     user <- from userTable
-//     guard user.active
-//     queryOf user.name
-//   }
-//
-//   main = do Effect {
-//     conn    <- connect { driver: Sqlite, url: ":memory:" }
-//     names   <- runQueryOn conn activeNames
-//     ...
-//   }
-// ---------------------------------------------------------------------------
+withRelationRuntime : { name: Text, columns: List Column, links: List RelationLink, rows: List A } -> Relation A
+withRelationRuntime = rel => {
+  name: rel.name
+  columns: rel.columns
+  links: rel.links
+  rows: rel.rows
+  run: conn => database.loadRelationOn conn rel
+}
 
-Query A = { run: DbConnection -> Effect DbError (List A) }
+loweringRequiredQuery : Text -> Query A
+loweringRequiredQuery = message => {
+  run: _conn => fail message
+}
 
-emptyQuery : Query A
-emptyQuery = { run: _conn => pure [] }
+loweringRequiredGrouped : Text -> GroupedQuery K A
+loweringRequiredGrouped = message => {
+  runGroups: _conn => fail message
+}
 
-queryOf : A -> Query A
-queryOf = value => { run: _conn => pure [value] }
+loweringRequiredPure : Text -> A
+loweringRequiredPure = message => panic message
 
-queryBindAll : DbConnection -> List A -> (A -> Query B) -> Effect DbError (List B)
-queryBindAll = conn xs f => xs match
-  | []           => pure []
-  | [x, ...rest] => do Effect {
-      ys <- (f x).run conn
-      zs <- queryBindAll conn rest f
-      pure [...ys, ...zs]
-    }
+relation : Text -> List Column -> List RelationLink -> Relation A
+relation = name columns links =>
+  withRelationRuntime { name, columns, links, rows: [] }
 
-queryChain : (A -> Query B) -> Query A -> Query B
-queryChain = f q => { run: conn => do Effect {
-  xs <- q.run conn
-  queryBindAll conn xs f
-}}
+hasMany : Text -> Text -> (A -> K) -> (B -> K) -> RelationLink
+hasMany = name target _sourceKey _targetKey => { name, target, many: True }
 
-from : Table A -> Query A
-from = tbl => { run: conn => loadOn conn tbl }
+belongsTo : Text -> Text -> (A -> K) -> (B -> K) -> RelationLink
+belongsTo = name target _sourceKey _targetKey => { name, target, many: False }
 
-where : (A -> Bool) -> Query A -> Query A
-where = pred q => { run: conn => do Effect {
-  xs <- q.run conn
-  pure (List.filter pred xs)
-}}
+asc : (A -> B) -> OrderTerm A
+asc = _key => { descending: False }
 
-guard : Bool -> Query Unit
-guard = cond => if cond then queryOf Unit else emptyQuery
+desc : (A -> B) -> OrderTerm A
+desc = _key => { descending: True }
 
-select : (A -> B) -> Query A -> Query B
-select = f q => { run: conn => do Effect {
-  xs <- q.run conn
-  pure (List.map f xs)
-}}
-
-runQueryOn : DbConnection -> Query A -> Effect DbError (List A)
-runQueryOn = conn q => q.run conn
-
-runQuery : Query A -> Effect DbError (List A)
-runQuery = q => database.runQuery q
-
-orderBy : (A -> B) -> Query A -> Query A
-orderBy = key q => { run: conn => do Effect {
-  xs <- q.run conn
-  pure (List.sortBy key xs)
-}}
+orderBy : O -> Query A -> Query A
+orderBy = _order _query =>
+  loweringRequiredQuery "database.orderBy requires SQL-backed lowering"
 
 limit : Int -> Query A -> Query A
-limit = n q => { run: conn => do Effect {
-  xs <- q.run conn
-  pure (List.take n xs)
-}}
+limit = n q => {
+  run: conn => do Effect {
+    xs <- q.run conn
+    pure (List.take n xs)
+  }
+}
 
 offset : Int -> Query A -> Query A
-offset = n q => { run: conn => do Effect {
-  xs <- q.run conn
-  pure (List.drop n xs)
-}}
+offset = n q => {
+  run: conn => do Effect {
+    xs <- q.run conn
+    pure (List.drop n xs)
+  }
+}
 
-count : Query A -> Query Int
-count = q => { run: conn => do Effect {
-  xs <- q.run conn
-  pure [List.length xs]
-}}
+distinct : Query A -> Query A
+distinct = q => {
+  run: conn => do Effect {
+    xs <- q.run conn
+    pure (List.dedup xs)
+  }
+}
 
-exists : Query A -> Query Bool
-exists = q => { run: conn => do Effect {
-  xs <- q.run conn
-  xs match
-    | [] => pure [False]
-    | _  => pure [True]
-}}
+selectMap : M -> Query A -> Query B
+selectMap = _mapper _source =>
+  loweringRequiredQuery "database.selectMap requires SQL-backed lowering"
+
+selectMap : M -> GroupedQuery K A -> Query B
+selectMap = _mapper _source =>
+  loweringRequiredQuery "database.grouped selectMap requires SQL-backed lowering"
+
+groupBy : K -> Query A -> GroupedQuery K A
+groupBy = _key _query =>
+  loweringRequiredGrouped "database.groupBy requires SQL-backed lowering"
+
+having : H -> GroupedQuery K A -> GroupedQuery K A
+having = _pred _query =>
+  loweringRequiredGrouped "database.having requires SQL-backed lowering"
+
+key : K
+key = loweringRequiredPure "database.key requires grouped SQL-backed lowering"
+
+count : Int
+count = loweringRequiredPure "database.count aggregate requires grouped SQL-backed lowering"
+
+sum : (A -> N) -> N
+sum = _selector =>
+  loweringRequiredPure "database.sum requires grouped SQL-backed lowering"
+
+avg : (A -> N) -> Float
+avg = _selector =>
+  loweringRequiredPure "database.avg requires grouped SQL-backed lowering"
+
+min : (A -> B) -> B
+min = _selector =>
+  loweringRequiredPure "database.min requires grouped SQL-backed lowering"
+
+max : (A -> B) -> B
+max = _selector =>
+  loweringRequiredPure "database.max requires grouped SQL-backed lowering"
+
+rows : Query A -> Effect DbError (List A)
+rows = q => database.rows q
+
+rowsOn : DbConnection -> Query A -> Effect DbError (List A)
+rowsOn = conn q => database.rowsOn conn q
+
+first : Query A -> Effect DbError (Option A)
+first = q => database.first q
+
+firstOn : DbConnection -> Query A -> Effect DbError (Option A)
+firstOn = conn q => database.firstOn conn q
+
+count : Query A -> Effect DbError Int
+count = q => database.count q
+
+countOn : DbConnection -> Query A -> Effect DbError Int
+countOn = conn q => database.countOn conn q
+
+exists : Query A -> Effect DbError Bool
+exists = q => database.exists q
+
+existsOn : DbConnection -> Query A -> Effect DbError Bool
+existsOn = conn q => database.existsOn conn q
 
 configure : DbConfig -> Effect DbError Unit
 configure = config => database.configure config
@@ -213,42 +253,13 @@ configureSqlite = tuning => database.configureSqlite tuning
 configureSqliteOn : DbConnection -> SqliteTuning -> Effect DbError Unit
 configureSqliteOn = conn tuning => database.configureSqliteOn conn tuning
 
-table : Text -> List Column -> Table A
-table = name columns => database.table name columns
+runMigrations : List (Relation A) -> Effect DbError Unit
+runMigrations = relations =>
+  database.runMigrations relations
 
-load : Table A -> Effect DbError (List A)
-load = value => database.load value
-
-loadOn : DbConnection -> Table A -> Effect DbError (List A)
-loadOn = conn value => database.loadOn conn value
-
-applyDelta : Table A -> Delta A -> Effect DbError (Table A)
-applyDelta = table delta => database.applyDelta table delta
-
-applyDeltaOn : DbConnection -> Table A -> Delta A -> Effect DbError (Table A)
-applyDeltaOn = conn table delta => database.applyDeltaOn conn table delta
-
-applyDeltas : Table A -> List (Delta A) -> Effect DbError (Table A)
-applyDeltas = table deltas => deltas match
-  | [] => pure table
-  | [d, ...rest] => do Effect {
-      next <- applyDelta table d
-      applyDeltas next rest
-    }
-
-applyDeltasOn : DbConnection -> Table A -> List (Delta A) -> Effect DbError (Table A)
-applyDeltasOn = conn table deltas => deltas match
-  | [] => pure table
-  | [d, ...rest] => do Effect {
-      next <- applyDeltaOn conn table d
-      applyDeltasOn conn next rest
-    }
-
-runMigrations : List (Table A) -> Effect DbError Unit
-runMigrations = tables => database.runMigrations tables
-
-runMigrationsOn : DbConnection -> List (Table A) -> Effect DbError Unit
-runMigrationsOn = conn tables => database.runMigrationsOn conn tables
+runMigrationsOn : DbConnection -> List (Relation A) -> Effect DbError Unit
+runMigrationsOn = conn relations =>
+  database.runMigrationsOn conn relations
 
 collectSql : List MigrationStep -> List Text
 collectSql = steps => steps match
@@ -329,22 +340,29 @@ rollbackToSavepoint = name => database.rollbackToSavepoint name
 rollbackToSavepointOn : DbConnection -> SavepointName -> Effect DbError Unit
 rollbackToSavepointOn = conn name => database.rollbackToSavepointOn conn name
 
-chunkDeltas : Int -> List (Delta A) -> List (List (Delta A))
-chunkDeltas = size deltas =>
-  if size <= 0 then [deltas] else chunkDeltasGo size deltas [] []
+insert : Relation A -> A -> Effect DbError (Relation A)
+insert = rel value => database.insert rel value
 
-chunkFinalize : List (Delta A) -> List (List (Delta A)) -> List (List (Delta A))
-chunkFinalize = current acc => current match
-  | [] => reverse acc
-  | _  => reverse [reverse current, ...acc]
+insertOn : DbConnection -> Relation A -> A -> Effect DbError (Relation A)
+insertOn = conn rel value => database.insertOn conn rel value
 
-chunkDeltasGo : Int -> List (Delta A) -> List (Delta A) -> List (List (Delta A)) -> List (List (Delta A))
-chunkDeltasGo = size remaining current acc => remaining match
-  | [] => chunkFinalize current acc
-  | [d, ...rest] =>
-      if length current >= size
-      then chunkDeltasGo size remaining [] [reverse current, ...acc]
-      else chunkDeltasGo size rest [d, ...current] acc
+delete : Query A -> Effect DbError (Relation A)
+delete = query => database.delete query
+
+deleteOn : DbConnection -> Query A -> Effect DbError (Relation A)
+deleteOn = conn query => database.deleteOn conn query
+
+update : Query A -> Patch A -> Effect DbError (Relation A)
+update = query patchFn => database.update query patchFn
+
+updateOn : DbConnection -> Query A -> Patch A -> Effect DbError (Relation A)
+updateOn = conn query patchFn => database.updateOn conn query patchFn
+
+upsert : Query A -> A -> Patch A -> Effect DbError (Relation A)
+upsert = query value patchFn => database.upsert query value patchFn
+
+upsertOn : DbConnection -> Query A -> A -> Patch A -> Effect DbError (Relation A)
+upsertOn = conn query value patchFn => database.upsertOn conn query value patchFn
 
 ftsDoc : Text -> List Text -> FtsDoc
 ftsDoc = docId terms => { docId, terms }
@@ -366,45 +384,4 @@ ftsMatchAny = terms => { expression: joinTermsWithOr terms, matchMode: "any" }
 
 ftsMatchAll : List Text -> FtsQuery
 ftsMatchAll = terms => { expression: joinTerms terms, matchMode: "all" }
-
-insert : Table A -> A -> Effect DbError (Table A)
-insert = table value => applyDelta table (Insert value)
-
-insertOn : DbConnection -> Table A -> A -> Effect DbError (Table A)
-insertOn = conn table value => applyDeltaOn conn table (Insert value)
-
-rows : DbSelection A -> Effect DbError (List A)
-rows = selection => database.rows selection
-
-rowsOn : DbConnection -> DbSelection A -> Effect DbError (List A)
-rowsOn = conn selection => database.rowsOn conn selection
-
-first : DbSelection A -> Effect DbError (Option A)
-first = selection => database.first selection
-
-firstOn : DbConnection -> DbSelection A -> Effect DbError (Option A)
-firstOn = conn selection => database.firstOn conn selection
-
-delete : DbSelection A -> Effect DbError (Table A)
-delete = selection => database.delete selection
-
-deleteOn : DbConnection -> DbSelection A -> Effect DbError (Table A)
-deleteOn = conn selection => database.deleteOn conn selection
-
-update : DbSelection A -> Patch A -> Effect DbError (Table A)
-update = selection patchFn => database.update selection patchFn
-
-updateOn : DbConnection -> DbSelection A -> Patch A -> Effect DbError (Table A)
-updateOn = conn selection patchFn => database.updateOn conn selection patchFn
-
-upsert : DbSelection A -> A -> Patch A -> Effect DbError (Table A)
-upsert = selection value patchFn => database.upsert selection value patchFn
-
-upsertOn : DbConnection -> DbSelection A -> A -> Patch A -> Effect DbError (Table A)
-upsertOn = conn selection value patchFn => database.upsertOn conn selection value patchFn
-
-domain Database over Table A = {
-  (+) : Table A -> Delta A -> Effect DbError (Table A)
-  (+) = table delta => applyDelta table delta
-}
 "#;

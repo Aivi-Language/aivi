@@ -1,6 +1,6 @@
 // Sugar
 val = do Effect {
-  x <- fetch
+  x <- fetch |> decode
   y <- decode x
   pure y
 }

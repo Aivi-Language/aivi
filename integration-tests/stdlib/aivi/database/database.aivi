@@ -4,117 +4,65 @@ module integrationTests.stdlib.aivi.database.tests
 use aivi
 use aivi.testing
 use aivi.database (
+  Relation,
   IntType, BoolType, TimestampType, Varchar,
   AutoIncrement, NotNull,
   DefaultBool, DefaultInt, DefaultText, DefaultNow,
   Sqlite, Postgresql, Mysql,
   configure, configureSqlite, connect, close,
-  table, load as dbLoad, loadOn, runMigrationsOn, runMigrationSql,
+  relation, runMigrations, runMigrationsOn, runMigrationSql,
   beginTx, beginTxOn, commitTx, commitTxOn, rollbackTxOn,
   savepoint, savepointOn, releaseSavepoint, rollbackToSavepointOn,
   inTransactionOn,
-  applyDelta, applyDeltaOn, chunkDeltas,
   ftsDoc, ftsMatchAny, ftsMatchAll,
-  Insert, Delete, Upsert,
-  insert, insertOn, rows, first, firstOn, delete, deleteOn, update, updateOn, upsert, upsertOn
+  insert, insertOn, rows, rowsOn, first, delete, deleteOn, updateOn, upsert, upsertOn
 )
 
-// Test that types are well-formed
+User = { id: Int, name: Text, active: Bool }
 
-@test "column type construct"
-columnType_construct = do Effect {
-  ct1 = IntType
-  ct2 = BoolType
-  ct3 = TimestampType
-  ct4 = Varchar 255
-  assertEq ct1 IntType
-  assertEq ct2 BoolType
-  assertEq ct3 TimestampType
-  ct4 match
-    | Varchar n => assertEq n 255
-    | _         => assert False
+users : Relation User
+users = relation "users" [
+  { name: "id",     type: IntType,     constraints: [AutoIncrement, NotNull], default: None }
+  { name: "name",   type: Varchar 120, constraints: [NotNull],                default: None }
+  { name: "active", type: BoolType,    constraints: [NotNull],                default: Some (DefaultBool True) }
+] []
+
+seedUsersOn = conn => do Effect {
+  users1 <- insertOn conn users { id: 1, name: "Alice", active: True }
+  users2 <- insertOn conn users1 { id: 2, name: "Bob", active: False }
+  pure users2
 }
 
-@test "column constraint construct"
-columnConstraint_construct = do Effect {
-  c1 = AutoIncrement
-  c2 = NotNull
-  assertEq c1 AutoIncrement
-  assertEq c2 NotNull
+@test "column types constraints defaults and drivers construct"
+column_types_constraints_defaults_and_drivers_construct = do Effect {
+  assertEq IntType IntType
+  assertEq BoolType BoolType
+  assertEq TimestampType TimestampType
+  assertEq (Varchar 255) (Varchar 255)
+  assertEq AutoIncrement AutoIncrement
+  assertEq NotNull NotNull
+  assertEq (DefaultBool True) (DefaultBool True)
+  assertEq (DefaultInt 0) (DefaultInt 0)
+  assertEq (DefaultText "hello") (DefaultText "hello")
+  assertEq DefaultNow DefaultNow
+  assertEq Sqlite Sqlite
+  assertEq Postgresql Postgresql
+  assertEq Mysql Mysql
 }
 
-@test "column default construct"
-columnDefault_construct = do Effect {
-  d1 = DefaultBool True
-  d2 = DefaultInt 0
-  d3 = DefaultText "hello"
-  d4 = DefaultNow
-  d1 match
-    | DefaultBool value => assertEq value True
-    | _                 => assert False
-  d2 match
-    | DefaultInt value => assertEq value 0
-    | _                => assert False
-  d3 match
-    | DefaultText value => assertEq value "hello"
-    | _                 => assert False
-  assertEq d4 DefaultNow
+@test "relation values keep schema metadata"
+relation_values_keep_schema_metadata = do Effect {
+  assertEq users.name "users"
+  assertEq (List.length users.columns) 3
 }
 
-@test "driver construct"
-driver_construct = do Effect {
-  d1 = Sqlite
-  d2 = Postgresql
-  d3 = Mysql
-  assertEq d1 Sqlite
-  assertEq d2 Postgresql
-  assertEq d3 Mysql
-}
-
-@test "db config construct"
-dbConfig_construct = do Effect {
-  cfg = { driver: Sqlite, url: ":memory:" }
-  assertEq cfg.driver Sqlite
-  assertEq cfg.url ":memory:"
-}
-
-@test "column construct"
-column_construct = do Effect {
-  col = {
-    name: "id"
-    type: IntType
-    constraints: [AutoIncrement, NotNull]
-    default: None
-  }
-  assertEq col.name "id"
-}
-
-@test "delta construct"
-delta_construct = do Effect {
-  user        = { id: 1, name: "Alice" }
-  insertDelta = Insert user
-  deleteDelta = Delete (u => u.id == 1)
-  upsertDelta = Upsert (u => u.id == 1) user (u => u <| { name: "Bob" })
-  users0      = table "users"[]
-  users1 <- applyDelta users0 insertDelta
-  users2 <- applyDelta users1 deleteDelta
-  users3 <- applyDelta users2 upsertDelta
-  rows   <- dbLoad users3
-  rows match
-    | [row] => do Effect {
-        assertEq row.id 1
-        assertEq row.name "Alice"
-      }
-    | _ => assert False
-}
-
-@test "sqlite tuning and transaction primitives"
-sqlite_tuning_and_tx = do Effect {
+@test "sqlite tuning and ambient transaction primitives"
+sqlite_tuning_and_ambient_transaction_primitives = do Effect {
   configure { driver: Sqlite, url: ":memory:" }
   configureSqlite { wal: True, busyTimeoutMs: 100 }
   beginTx
-  savepoint "s1"
-  releaseSavepoint "s1"
+  savepoint "before_seed"
+  releaseSavepoint "before_seed"
   commitTx
   assert True
 }
@@ -123,7 +71,10 @@ sqlite_tuning_and_tx = do Effect {
 migration_sql_helper = do Effect {
   configure { driver: Sqlite, url: ":memory:" }
   runMigrationSql [
-    { id: "001-create", sql: "CREATE TABLE IF NOT EXISTS people (id INTEGER PRIMARY KEY, name TEXT NOT NULL);" }
+    {
+      id: "001-create"
+      sql: "CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL);"
+    }
   ]
   assert True
 }
@@ -131,247 +82,136 @@ migration_sql_helper = do Effect {
 @test "explicit connection commit and rollback"
 explicit_connection_commit_and_rollback = do Effect {
   conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "users"[]
-  _      <- runMigrationsOn conn [users0]
-  _      <- beginTxOn conn
-  users1 <- applyDeltaOn conn users0 (Insert { id: 1, name: "Alice" })
-  _      <- commitTxOn conn
-  rows1  <- loadOn conn users1
-  assertEq (List.length rows1) 1
+  _    <- runMigrationsOn conn [users]
 
-  _     <- beginTxOn conn
-  _     <- applyDeltaOn conn users1 (Insert { id: 2, name: "Bob" })
-  _     <- rollbackTxOn conn
-  rows2 <- loadOn conn users0
-  _     <- close conn
-  assertEq (List.length rows2) 1
+  _           <- beginTxOn conn
+  users1      <- insertOn conn users { id: 1, name: "Alice", active: True }
+  _           <- commitTxOn conn
+  afterCommit <- rowsOn conn users1
+  assertEq (List.length afterCommit) 1
+
+  _             <- beginTxOn conn
+  _             <- insertOn conn users1 { id: 2, name: "Bob", active: False }
+  _             <- rollbackTxOn conn
+  afterRollback <- rowsOn conn users1
+  _             <- close conn
+  assertEq (List.length afterRollback) 1
 }
 
 @test "savepoint rollback on explicit connection"
 savepoint_rollback_on_explicit_connection = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "savepoint_users"[]
-  _      <- runMigrationsOn conn [users0]
-  _      <- beginTxOn conn
-  users1 <- applyDeltaOn conn users0 (Insert { id: 1, name: "Alpha" })
-  _      <- savepointOn conn "after_first"
-  _      <- applyDeltaOn conn users1 (Insert { id: 2, name: "Beta" })
-  _      <- rollbackToSavepointOn conn "after_first"
-  _      <- commitTxOn conn
-  rows   <- loadOn conn users0
-  _      <- close conn
-  assertEq (List.length rows) 1
+  conn      <- connect { driver: Sqlite, url: ":memory:" }
+  _         <- runMigrationsOn conn [users]
+  _         <- beginTxOn conn
+  users1    <- insertOn conn users { id: 1, name: "Alpha", active: True }
+  _         <- savepointOn conn "after_first"
+  _         <- insertOn conn users1 { id: 2, name: "Beta", active: False }
+  _         <- rollbackToSavepointOn conn "after_first"
+  _         <- commitTxOn conn
+  persisted <- rowsOn conn users1
+  _         <- close conn
+  assertEq (List.length persisted) 1
 }
 
 @test "inTransactionOn rolls back on failure"
 inTransactionOn_rolls_back_on_failure = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "tx_users"[]
-  _      <- runMigrationsOn conn [users0]
+  conn   <- connect { driver: Sqlite, url: ":memory:" }
+  _      <- runMigrationsOn conn [users]
   result <- attempt (inTransactionOn conn (do Effect {
-        _      <- applyDeltaOn conn users0 (Insert { id: 1, name: "Tx" })
+        _      <- insertOn conn users { id: 1, name: "Tx", active: True }
         fail "boom"
   }))
-  rows <- loadOn conn users0
-  _    <- close conn
-  assertEq (List.length rows) 0
+  persisted <- rowsOn conn users
+  _         <- close conn
+  assertEq (List.length persisted) 0
   result match
     | Err err => assertEq err "boom"
     | Ok _    => assert False
 }
 
-@test "delta chunk helper"
-delta_chunk_helper = do Effect {
-  deltas = [
-    Insert { id: 1, name: "A" }
-    Insert { id: 2, name: "B" }
-    Delete (u => u.id == 1)
-  ]
-  chunks = chunkDeltas 2 deltas
-  assertEq (List.length chunks) 2
+@test "ambient rows and first helpers"
+ambient_rows_and_first_helpers = do Effect {
+  configure { driver: Sqlite, url: ":memory:" }
+  _           <- runMigrations [users]
+  users1      <- insert users { id: 1, name: "Alice", active: True }
+  _           <- insert users1 { id: 2, name: "Bob", active: False }
+  activeUsers <- rows users[active]
+  firstBob    <- first users[name == "Bob"]
+  assertEq (List.length activeUsers) 1
+  firstBob match
+    | Some user => assertEq user.id 2
+    | None      => assert False
 }
 
-@test "fts helpers"
-fts_helpers = do Effect {
+@test "delete and deleteOn helpers remove matched rows"
+delete_and_deleteOn_helpers_remove_matched_rows = do Effect {
+  configure { driver: Sqlite, url: ":memory:" }
+  _                <- runMigrations [users]
+  users1           <- insert users { id: 1, name: "Alice", active: True }
+  _                <- insert users1 { id: 2, name: "Bob", active: False }
+  _                <- delete users[id == 1]
+  remainingAmbient <- rows users
+  assertEq (List.length remainingAmbient) 1
+
+  conn              <- connect { driver: Sqlite, url: ":memory:" }
+  _                 <- runMigrationsOn conn [users]
+  _                 <- seedUsersOn conn
+  _                 <- deleteOn conn users[id == 2]
+  remainingExplicit <- rowsOn conn users
+  _                 <- close conn
+  assertEq (List.length remainingExplicit) 1
+}
+
+@test "patch shorthand update and updateOn apply record patches"
+patch_shorthand_update_and_updateOn_apply_record_patches = do Effect {
+  configure { driver: Sqlite, url: ":memory:" }
+  _           <- runMigrations [users]
+  _           <- insert users { id: 1, name: "Alice", active: True }
+  _           <- users[id == 1] <| { name: "Alicia" }
+  ambientRows <- rows users
+  ambientRows match
+    | [user] => assertEq user.name "Alicia"
+    | _      => assert False
+
+  conn         <- connect { driver: Sqlite, url: ":memory:" }
+  _            <- runMigrationsOn conn [users]
+  _            <- insertOn conn users { id: 1, name: "Alice", active: True }
+  _            <- updateOn conn users[id == 1] { name: "Alicia" }
+  explicitRows <- rowsOn conn users
+  _            <- close conn
+  explicitRows match
+    | [user] => assertEq user.name "Alicia"
+    | _      => assert False
+}
+
+@test "upsert and upsertOn insert then update"
+upsert_and_upsertOn_insert_then_update = do Effect {
+  configure { driver: Sqlite, url: ":memory:" }
+  _           <- runMigrations [users]
+  _           <- upsert users[id == 99] { id: 99, name: "New", active: True } { name: "Updated" }
+  _           <- upsert users[id == 99] { id: 99, name: "Unused", active: False } { name: "Updated" }
+  ambientRows <- rows users
+  ambientRows match
+    | [user] => assertEq user.name "Updated"
+    | _      => assert False
+
+  conn         <- connect { driver: Sqlite, url: ":memory:" }
+  _            <- runMigrationsOn conn [users]
+  _            <- upsertOn conn users[id == 1] { id: 1, name: "Alice", active: True } { name: "Alicia" }
+  _            <- upsertOn conn users[id == 1] { id: 1, name: "Unused", active: False } { name: "Alicia" }
+  explicitRows <- rowsOn conn users
+  _            <- close conn
+  explicitRows match
+    | [user] => assertEq user.name "Alicia"
+    | _      => assert False
+}
+
+@test "fts helpers build portable query values"
+fts_helpers_build_portable_query_values = do Effect {
   doc      = ftsDoc "doc-1" ["hello", "world"]
   anyQuery = ftsMatchAny ["hello", "world"]
   allQuery = ftsMatchAll ["hello", "world"]
   assertEq doc.docId "doc-1"
   assertEq anyQuery.matchMode "any"
   assertEq allQuery.matchMode "all"
-}
-
-@test "insert convenience"
-insert_convenience = do Effect {
-  users0 = table "insert_users"[]
-  users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- insert users1 { id: 2, name: "Bob" }
-  rows   <- dbLoad users2
-  assertEq (List.length rows) 2
-}
-
-@test "insertOn convenience"
-insertOn_convenience = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "insertOn_users"[]
-  _      <- runMigrationsOn conn [users0]
-  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
-  rows   <- loadOn conn users1
-  _      <- close conn
-  assertEq (List.length rows) 1
-}
-
-@test "rows selector convenience"
-rows_selector_convenience = do Effect {
-  users0 = table "rows_users"[]
-  users1  <- insert users0 { id: 1, name: "Alice" }
-  users2  <- insert users1 { id: 2, name: "Bob" }
-  matched <- rows users2[id == 1]
-  assertEq (List.length matched) 1
-  matched match
-    | [row] => assertEq row.name "Alice"
-    | _     => assert False
-}
-
-@test "selector predicate lifting supports bare bool fields"
-selector_predicate_lifting_bool_field = do Effect {
-  users0 = table "selector_bool_users"[]
-  users1  <- insert users0 { id: 1, name: "Alice", active: True }
-  users2  <- insert users1 { id: 2, name: "Bob", active: False }
-  matched <- rows users2[active]
-  assertEq (List.length matched) 1
-  matched match
-    | [row] => do Effect {
-        assertEq row.name "Alice"
-        assertEq row.active True
-      }
-    | _ => assert False
-}
-
-@test "selector predicate lifting supports comparison predicates"
-selector_predicate_lifting_comparison = do Effect {
-  users0 = table "selector_name_users"[]
-  users1 <- insert users0 { id: 1, name: "Alice", active: True }
-  users2 <- insert users1 { id: 2, name: "Bob", active: False }
-  found  <- first users2[name == "Alice"]
-  found match
-    | Some row => do Effect {
-        assertEq row.id 1
-        assertEq row.active True
-      }
-    | None => assert False
-}
-
-@test "firstOn selector convenience"
-firstOn_selector_convenience = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "firstOn_users"[]
-  _      <- runMigrationsOn conn [users0]
-  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
-  users2 <- insertOn conn users1 { id: 2, name: "Bob" }
-  found  <- firstOn conn users2[id == 2]
-  _      <- close conn
-  found match
-    | Some row => assertEq row.name "Bob"
-    | None     => assert False
-}
-
-@test "delete selector convenience"
-delete_selector_convenience = do Effect {
-  users0 = table "delete_selector_users"[]
-  users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- insert users1 { id: 2, name: "Bob" }
-  users3 <- delete users2[id == 1]
-  rows   <- dbLoad users3
-  assertEq (List.length rows) 1
-  rows match
-    | [row] => assertEq row.name "Bob"
-    | _     => assert False
-}
-
-@test "deleteOn selector convenience"
-deleteOn_selector_convenience = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "deleteOn_users"[]
-  _      <- runMigrationsOn conn [users0]
-  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
-  users2 <- insertOn conn users1 { id: 2, name: "Bob" }
-  users3 <- deleteOn conn users2[id == 1]
-  rows   <- loadOn conn users3
-  _      <- close conn
-  assertEq (List.length rows) 1
-}
-
-@test "update selector shorthand"
-update_selector_shorthand = do Effect {
-  users0 = table "update_selector_users"[]
-  users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- users1[id == 1] <| { name: "Alicia" }
-  rows   <- dbLoad users2
-  rows match
-    | [row] => assertEq row.name "Alicia"
-    | _     => assert False
-}
-
-@test "update selector convenience"
-update_selector_convenience = do Effect {
-  users0 = table "update_users"[]
-  users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- update users1[id == 1] { name: "Alicia" }
-  rows   <- dbLoad users2
-  rows match
-    | [row] => assertEq row.name "Alicia"
-    | _     => assert False
-}
-
-@test "updateOn selector convenience"
-updateOn_selector_convenience = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "updateOn_users"[]
-  _      <- runMigrationsOn conn [users0]
-  users1 <- insertOn conn users0 { id: 1, name: "Alice" }
-  users2 <- updateOn conn users1[id == 1] { name: "Alicia" }
-  rows   <- loadOn conn users2
-  _      <- close conn
-  rows match
-    | [row] => assertEq row.name "Alicia"
-    | _     => assert False
-}
-
-@test "upsert convenience inserts when missing"
-upsert_convenience_inserts = do Effect {
-  users0 = table "upsert_ins_users"[]
-  users1 <- upsert users0[id == 99] { id: 99, name: "New" } { id: 99, name: "New" }
-  rows   <- dbLoad users1
-  assertEq (List.length rows) 1
-  rows match
-    | [row] => assertEq row.name "New"
-    | _     => assert False
-}
-
-@test "upsert convenience updates when present"
-upsert_convenience_updates = do Effect {
-  users0 = table "upsert_upd_users"[]
-  users1 <- insert users0 { id: 1, name: "Alice" }
-  users2 <- upsert users1[id == 1] { id: 1, name: "Alice" } { name: "Updated" }
-  rows   <- dbLoad users2
-  assertEq (List.length rows) 1
-  rows match
-    | [row] => assertEq row.name "Updated"
-    | _     => assert False
-}
-
-@test "upsertOn convenience"
-upsertOn_convenience = do Effect {
-  conn <- connect { driver: Sqlite, url: ":memory:" }
-  users0 = table "upsertOn_users"[]
-  _      <- runMigrationsOn conn [users0]
-  users1 <- upsertOn conn users0[id == 1] { id: 1, name: "Alice" } { name: "Updated" }
-  users2 <- upsertOn conn users1[id == 1] { id: 1, name: "Alice" } { name: "Updated" }
-  rows   <- loadOn conn users2
-  _      <- close conn
-  assertEq (List.length rows) 1
-  rows match
-    | [row] => assertEq row.name "Updated"
-    | _     => assert False
 }

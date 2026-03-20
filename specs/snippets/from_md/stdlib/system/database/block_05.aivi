@@ -1,7 +1,5 @@
-recentTopNames : Query Text
-recentTopNames = db.from userTable
-  |> db.where active
-  |> db.orderBy.createdAt // sort before slicing
-  |> db.offset 10 // skip the first page
-  |> db.limit 5 // then keep the next five rows
-  |> db.select.name
+page2 =
+  users
+    |> orderBy (desc .createdAt, asc .id)
+    |> limit 10
+    |> offset 10

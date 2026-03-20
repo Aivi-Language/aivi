@@ -1453,14 +1453,15 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let db_error_ty = Type::con("DbError");
     let db_config_ty = Type::con("DbConfig");
     let db_connection_ty = Type::con("DbConnection");
-    let table_ty = Type::con("Table").app(vec![Type::Var(db_row)]);
-    let delta_ty = Type::con("Delta").app(vec![Type::Var(db_row)]);
-    let list_table_ty = Type::con("List").app(vec![table_ty.clone()]);
+    let relation_ty = Type::con("Relation").app(vec![Type::Var(db_row)]);
+    let list_relation_ty = Type::con("List").app(vec![relation_ty.clone()]);
     let list_row_ty = Type::con("List").app(vec![Type::Var(db_row)]);
-    let list_column_ty = Type::con("List").app(vec![Type::con("Column")]);
     let list_text_ty = Type::con("List").app(vec![text_ty.clone()]);
-    let db_effect_table_ty = Type::con("Effect").app(vec![db_error_ty.clone(), table_ty.clone()]);
+    let db_effect_relation_ty =
+        Type::con("Effect").app(vec![db_error_ty.clone(), relation_ty.clone()]);
     let db_effect_rows_ty = Type::con("Effect").app(vec![db_error_ty.clone(), list_row_ty.clone()]);
+    let db_effect_int_ty = Type::con("Effect").app(vec![db_error_ty.clone(), Type::con("Int")]);
+    let db_effect_bool_ty = Type::con("Effect").app(vec![db_error_ty.clone(), Type::con("Bool")]);
     let db_effect_unit_ty = Type::con("Effect").app(vec![db_error_ty.clone(), Type::con("Unit")]);
     let sqlite_tuning_ty = Type::Record {
         fields: vec![
@@ -1472,16 +1473,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     let database_record = Type::Record {
         fields: vec![
-            (
-                "table".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(Type::Func(
-                        Box::new(list_column_ty),
-                        Box::new(table_ty.clone()),
-                    )),
-                ),
-            ),
             (
                 "configure".to_string(),
                 Type::Func(Box::new(db_config_ty), Box::new(db_effect_unit_ty.clone())),
@@ -1504,62 +1495,92 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
-                "load".to_string(),
+                "loadRelation".to_string(),
                 Type::Func(
-                    Box::new(table_ty.clone()),
+                    Box::new(relation_ty.clone()),
                     Box::new(db_effect_rows_ty.clone()),
                 ),
             ),
             (
-                "loadOn".to_string(),
+                "loadRelationOn".to_string(),
                 Type::Func(
                     Box::new(db_connection_ty.clone()),
                     Box::new(Type::Func(
-                        Box::new(table_ty.clone()),
+                        Box::new(relation_ty.clone()),
                         Box::new(db_effect_rows_ty.clone()),
                     )),
                 ),
             ),
             (
-                "runQuery".to_string(),
+                "insert".to_string(),
                 Type::Func(
-                    Box::new(Type::con("Query").app(vec![Type::Var(db_row)])),
-                    Box::new(db_effect_rows_ty.clone()),
-                ),
-            ),
-            (
-                "applyDelta".to_string(),
-                Type::Func(
-                    Box::new(table_ty.clone()),
+                    Box::new(relation_ty.clone()),
                     Box::new(Type::Func(
-                        Box::new(delta_ty.clone()),
-                        Box::new(db_effect_table_ty.clone()),
+                        Box::new(Type::Var(db_row)),
+                        Box::new(db_effect_relation_ty.clone()),
                     )),
                 ),
             ),
             (
-                "applyDeltaOn".to_string(),
+                "insertOn".to_string(),
                 Type::Func(
                     Box::new(db_connection_ty.clone()),
                     Box::new(Type::Func(
-                        Box::new(table_ty.clone()),
+                        Box::new(relation_ty.clone()),
                         Box::new(Type::Func(
-                            Box::new(delta_ty.clone()),
-                            Box::new(db_effect_table_ty.clone()),
+                            Box::new(Type::Var(db_row)),
+                            Box::new(db_effect_relation_ty.clone()),
                         )),
                     )),
                 ),
             ),
             (
+                "count".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Query").app(vec![Type::Var(db_row)])),
+                    Box::new(db_effect_int_ty.clone()),
+                ),
+            ),
+            (
+                "countOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Query").app(vec![Type::Var(db_row)])),
+                        Box::new(db_effect_int_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "exists".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Query").app(vec![Type::Var(db_row)])),
+                    Box::new(db_effect_bool_ty.clone()),
+                ),
+            ),
+            (
+                "existsOn".to_string(),
+                Type::Func(
+                    Box::new(db_connection_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Query").app(vec![Type::Var(db_row)])),
+                        Box::new(db_effect_bool_ty.clone()),
+                    )),
+                ),
+            ),
+            (
                 "runMigrations".to_string(),
-                Type::Func(Box::new(list_table_ty), Box::new(db_effect_unit_ty.clone())),
+                Type::Func(
+                    Box::new(list_relation_ty),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
             ),
             (
                 "runMigrationsOn".to_string(),
                 Type::Func(
                     Box::new(db_connection_ty.clone()),
                     Box::new(Type::Func(
-                        Box::new(Type::con("List").app(vec![table_ty.clone()])),
+                        Box::new(Type::con("List").app(vec![relation_ty.clone()])),
                         Box::new(db_effect_unit_ty.clone()),
                     )),
                 ),

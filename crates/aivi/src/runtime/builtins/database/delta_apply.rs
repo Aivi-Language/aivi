@@ -1,208 +1,33 @@
-use super::util::{builtin_with_db_patch_meta, make_none, make_some};
-use crate::runtime::values::DbPatchRuntimeMeta;
+use super::util::{make_none, make_some};
 
 pub(super) fn build_patch_compiled_builtin() -> Value {
     builtin("__db_patch_compiled", 3, |mut args, _| {
         let fallback = args.pop().unwrap();
-        let captures_value = args.pop().unwrap();
-        let plan_json_value = args.pop().unwrap();
-        let plan_json = expect_text(plan_json_value, "__db_patch_compiled")?;
-        let captures = expect_list(captures_value, "__db_patch_compiled")?;
-        Ok(builtin_with_db_patch_meta(
-            "__db_patch_compiled.value",
-            1,
-            Some(std::sync::Arc::new(DbPatchRuntimeMeta {
-                plan_json: Some(plan_json),
-                captures: captures.iter().cloned().collect(),
-                error: None,
-            })),
-            move |mut apply_args, runtime| {
-                let arg = apply_args.pop().unwrap();
-                runtime.apply(fallback.clone(), arg)
-            },
-        ))
+        let _captures_value = args.pop().unwrap();
+        let _plan_json_value = args.pop().unwrap();
+        Ok(builtin("__db_patch_compiled.value", 1, move |mut apply_args, runtime| {
+            let arg = apply_args.pop().unwrap();
+            runtime.apply(fallback.clone(), arg)
+        }))
     })
-}
-
-fn expect_runtime_bool(value: Value, ctx: &str) -> Result<bool, RuntimeError> {
-    match value {
-        Value::Bool(value) => Ok(value),
-        other => Err(RuntimeError::Message(format!(
-            "{ctx} expects Bool, got {}",
-            crate::runtime::format_value(&other)
-        ))),
-    }
 }
 
 pub(super) fn build_patch_error_builtin() -> Value {
     builtin("__db_patch_error", 2, |mut args, _| {
         let fallback = args.pop().unwrap();
-        let message_value = args.pop().unwrap();
-        let message = expect_text(message_value, "__db_patch_error")?;
-        Ok(builtin_with_db_patch_meta(
-            "__db_patch_error.value",
-            1,
-            Some(std::sync::Arc::new(DbPatchRuntimeMeta {
-                plan_json: None,
-                captures: Vec::new(),
-                error: Some(message),
-            })),
-            move |mut apply_args, runtime| {
-                let arg = apply_args.pop().unwrap();
-                runtime.apply(fallback.clone(), arg)
-            },
-        ))
+        let _message_value = args.pop().unwrap();
+        Ok(builtin("__db_patch_error.value", 1, move |mut apply_args, runtime| {
+            let arg = apply_args.pop().unwrap();
+            runtime.apply(fallback.clone(), arg)
+        }))
     })
 }
 
-fn require_compiled_patch(
-    patch: &Value,
-    ctx: &str,
-) -> Result<(crate::hir::CompiledDbPatchPlan, Vec<Value>), RuntimeError> {
-    let Value::Builtin(builtin) = patch else {
-        return Err(RuntimeError::Message(format!(
-            "{ctx} requires a patch block in the lowered SQL-backed subset"
-        )));
-    };
-    let Some(meta) = builtin.imp.db_patch_meta.as_ref() else {
-        return Err(RuntimeError::Message(format!(
-            "{ctx} requires a patch block in the lowered SQL-backed subset"
-        )));
-    };
-    if let Some(error) = &meta.error {
-        return Err(RuntimeError::Message(format!("{ctx}: {error}")));
-    }
-    let plan_json = meta.plan_json.as_ref().ok_or_else(|| {
-        RuntimeError::Message(format!("{ctx} is missing compiled selector patch metadata"))
-    })?;
-    let plan: crate::hir::CompiledDbPatchPlan = serde_json::from_str(plan_json).map_err(|err| {
-        RuntimeError::Message(format!(
-            "{ctx} could not decode compiled selector patch plan: {err}"
-        ))
-    })?;
-    Ok((plan, meta.captures.clone()))
-}
-
-fn apply_delta_rows(
-    rows: &[Value],
-    delta: Value,
-    runtime: &mut Runtime,
-) -> Result<Vec<Value>, RuntimeError> {
-    let mut out = Vec::with_capacity(rows.len());
-    match delta {
-        Value::Constructor { name: tag, args } => match tag.as_str() {
-            "Insert" => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::Message(
-                        "database.applyDelta expects Insert value".to_string(),
-                    ));
-                }
-                out.extend(rows.iter().cloned());
-                out.push(args[0].clone());
-            }
-            "Update" => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::Message(
-                        "database.applyDelta expects Update predicate and patch".to_string(),
-                    ));
-                }
-                let pred = args[0].clone();
-                let patch = args[1].clone();
-                for row in rows.iter() {
-                    let keep = runtime.apply(pred.clone(), row.clone())?;
-                    let keep = match keep {
-                        Value::Bool(value) => value,
-                        other => {
-                            return Err(RuntimeError::Message(format!(
-                                "database.applyDelta Update predicate expects Bool, got {}",
-                                crate::runtime::format_value(&other)
-                            )))
-                        }
-                    };
-                    if keep {
-                        let updated = runtime.apply(patch.clone(), row.clone())?;
-                        out.push(updated);
-                    } else {
-                        out.push(row.clone());
-                    }
-                }
-            }
-            "Delete" => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::Message(
-                        "database.applyDelta expects Delete predicate".to_string(),
-                    ));
-                }
-                let pred = args[0].clone();
-                for row in rows.iter() {
-                    let matches = runtime.apply(pred.clone(), row.clone())?;
-                    let matches = match matches {
-                        Value::Bool(value) => value,
-                        other => {
-                            return Err(RuntimeError::Message(format!(
-                                "database.applyDelta Delete predicate expects Bool, got {}",
-                                crate::runtime::format_value(&other)
-                            )))
-                        }
-                    };
-                    if !matches {
-                        out.push(row.clone());
-                    }
-                }
-            }
-            "Upsert" => {
-                if args.len() != 3 {
-                    return Err(RuntimeError::Message(
-                        "database.applyDelta expects Upsert predicate, value, and patch"
-                            .to_string(),
-                    ));
-                }
-                let pred = args[0].clone();
-                let value = args[1].clone();
-                let patch = args[2].clone();
-                let mut matched = false;
-                for row in rows.iter() {
-                    let keep = runtime.apply(pred.clone(), row.clone())?;
-                    let keep = match keep {
-                        Value::Bool(value) => value,
-                        other => {
-                            return Err(RuntimeError::Message(format!(
-                                "database.applyDelta Upsert predicate expects Bool, got {}",
-                                crate::runtime::format_value(&other)
-                            )))
-                        }
-                    };
-                    if keep {
-                        matched = true;
-                        let updated = runtime.apply(patch.clone(), row.clone())?;
-                        out.push(updated);
-                    } else {
-                        out.push(row.clone());
-                    }
-                }
-                if !matched {
-                    out.push(value);
-                }
-            }
-            _ => {
-                return Err(RuntimeError::Message(
-                    "database.applyDelta expects Delta".to_string(),
-                ))
-            }
-        },
-        _ => {
-            return Err(RuntimeError::Message(
-                "database.applyDelta expects Delta".to_string(),
-            ))
-        }
-    }
-    Ok(out)
-}
-
-fn apply_delta(table: Value, delta: Value, runtime: &mut Runtime) -> Result<Value, RuntimeError> {
-    let (name, columns, rows) = table_parts(table, "database.applyDelta")?;
-    let out = apply_delta_rows(rows.as_ref(), delta, runtime)?;
-    Ok(make_table(name, columns, out))
+fn insert_relation(source_relation: Value, value: Value) -> Result<Value, RuntimeError> {
+    let (_name, _columns, rows) = relation_parts(source_relation.clone(), "database.insert")?;
+    let mut new_rows = rows.iter().cloned().collect::<Vec<_>>();
+    new_rows.push(value);
+    relation_snapshot_with_rows(&source_relation, new_rows, "database.insert")
 }
 
 fn parse_driver(value: Value) -> Result<Driver, RuntimeError> {
@@ -261,27 +86,26 @@ fn require_default_db_connection(
 }
 
 fn load_rows_from_connection(
-    table: Value,
+    relation: Value,
     connection: &aivi_database::DbConnection,
 ) -> Result<Value, RuntimeError> {
-    let (name, _columns, _rows) = table_parts(table, "database.load")?;
+    let (name, _columns, _rows) = relation_parts(relation, "database.loadRelation")?;
     Ok(list_value(load_rows_from_storage(connection, &name)?))
 }
 
-fn apply_delta_on_connection(
-    table: Value,
-    delta: Value,
+fn insert_relation_on_connection(
+    source_relation: Value,
+    value: Value,
     connection: &aivi_database::DbConnection,
-    runtime: &mut Runtime,
 ) -> Result<Value, RuntimeError> {
-    let (name, columns, _rows) = table_parts(table, "database.applyDelta")?;
+    let (name, columns, _rows) = relation_parts(source_relation.clone(), "database.insertOn")?;
     let columns_json = encode_json(&columns)?;
     let initial_storage_columns_json = serde_json::to_string(
         &build_query_storage_table(name.clone(), columns.clone(), &[])?.columns,
     )
     .map_err(|err| {
         RuntimeError::Message(format!(
-            "database.applyDelta could not encode storage columns for '{name}': {err}"
+            "database.insertOn could not encode storage columns for '{name}': {err}"
         ))
     })?;
 
@@ -303,11 +127,12 @@ fn apply_delta_on_connection(
 
         let (rev, _stored_cols, _stored_storage_cols) = entry.unwrap();
         let current_rows = load_rows_from_storage(connection, &name)?;
-        let new_rows = apply_delta_rows(&current_rows, delta.clone(), runtime)?;
+        let mut new_rows = current_rows;
+        new_rows.push(value.clone());
         let storage_table = build_query_storage_table(name.clone(), columns.clone(), &new_rows)?;
         let storage_columns_json = serde_json::to_string(&storage_table.columns).map_err(|err| {
             RuntimeError::Message(format!(
-                "database.applyDelta could not encode storage columns for '{name}': {err}"
+                "database.insertOn could not encode storage columns for '{name}': {err}"
             ))
         })?;
         let saved = connection.replace_table_storage(
@@ -319,7 +144,7 @@ fn apply_delta_on_connection(
         );
         match saved {
             Ok(_new_rev) => {
-                return Ok(make_table(name.clone(), columns.clone(), new_rows));
+                return relation_snapshot_with_rows(&source_relation, new_rows, "database.insertOn");
             }
             Err(err) => {
                 if err.contains("retry") {
@@ -331,7 +156,7 @@ fn apply_delta_on_connection(
     }
 
     Err(RuntimeError::Message(
-        "database.applyDelta failed due to concurrent writes; retry".to_string(),
+        "database.insertOn failed due to concurrent writes; retry".to_string(),
     ))
 }
 
@@ -342,8 +167,8 @@ fn run_migrations_on_connection(
     let tables = expect_list(tables, "database.runMigrations")?;
     connection.ensure_schema().map_err(RuntimeError::Message)?;
 
-    for table in tables.iter() {
-        let (name, columns, _rows) = table_parts(table.clone(), "database.runMigrations")?;
+    for relation in tables.iter() {
+        let (name, columns, _rows) = relation_parts(relation.clone(), "database.runMigrations")?;
         let columns_json = encode_json(&columns)?;
         let storage_columns_json = serde_json::to_string(
             &build_query_storage_table(name.clone(), columns.clone(), &[])?.columns,
@@ -360,81 +185,106 @@ fn run_migrations_on_connection(
     Ok(Value::Unit)
 }
 
-enum SelectorMetaState {
-    Missing,
-    Error(String),
-    Compiled {
-        plan: crate::hir::CompiledDbSelectionPlan,
-        captures: Vec<Value>,
-    },
+struct QueryMutationContext {
+    source_relation: Value,
+    name: String,
+    columns: Value,
+    rev: i64,
+    columns_json: String,
+    schema: RuntimeTableSchema,
+    plan: CompiledQueryPlan,
+    sources: Vec<Value>,
+    captures: Vec<Value>,
+    target_alias: String,
 }
 
-fn selection_parts_with_meta(
-    selection: Value,
+struct DecodedCompiledQueryMeta {
+    plan: CompiledQueryPlan,
+    sources: Vec<Value>,
+    captures: Vec<Value>,
+}
+
+struct RootRelationQueryMeta {
+    source_relation: Value,
+    plan: CompiledQueryPlan,
+    sources: Vec<Value>,
+    captures: Vec<Value>,
+    target_alias: String,
+}
+
+fn decode_compiled_query_meta(
+    query: &Value,
     ctx: &str,
-) -> Result<(Value, Value, SelectorMetaState), RuntimeError> {
-    let fields = expect_record(selection, ctx)?;
-    let table = fields
-        .get("table")
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects DbSelection.table")))?
-        .clone();
-    let pred = fields
-        .get("pred")
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects DbSelection.pred")))?
-        .clone();
-    let meta = match fields.get(crate::hir::DB_SELECTION_META_FIELD) {
-        None => SelectorMetaState::Missing,
-        Some(meta_value) => {
-            let meta_fields = expect_record(meta_value.clone(), ctx)?;
-            if let Some(error) = meta_fields.get("error") {
-                SelectorMetaState::Error(expect_text(error.clone(), ctx)?)
-            } else {
-                let plan_json = expect_text(
-                    meta_fields
-                        .get("planJson")
-                        .ok_or_else(|| {
-                            RuntimeError::Message(format!("{ctx} selection metadata missing planJson"))
-                        })?
-                        .clone(),
-                    ctx,
-                )?;
-                let captures = expect_list(
-                    meta_fields
-                        .get("captures")
-                        .ok_or_else(|| {
-                            RuntimeError::Message(format!("{ctx} selection metadata missing captures"))
-                        })?
-                        .clone(),
-                    ctx,
-                )?;
-                let plan: crate::hir::CompiledDbSelectionPlan = serde_json::from_str(&plan_json)
-                    .map_err(|err| {
-                        RuntimeError::Message(format!(
-                            "{ctx} could not decode compiled selector plan: {err}"
-                        ))
-                    })?;
-                SelectorMetaState::Compiled {
-                    plan,
-                    captures: captures.iter().cloned().collect(),
-                }
-            }
-        }
+) -> Result<Option<DecodedCompiledQueryMeta>, RuntimeError> {
+    let Some((plan_json, sources, captures)) = extract_query_meta(query)? else {
+        return Ok(None);
     };
-    Ok((table, pred, meta))
+    let plan: CompiledQueryPlan = serde_json::from_str(&plan_json).map_err(|err| {
+        RuntimeError::Message(format!(
+            "{ctx} could not decode compiled query plan: {err}"
+        ))
+    })?;
+    Ok(Some(DecodedCompiledQueryMeta {
+        plan,
+        sources,
+        captures,
+    }))
 }
 
-fn require_selector_meta(
-    selection: Value,
+fn require_root_relation_query_meta(
+    query: Value,
     ctx: &str,
-) -> Result<(Value, crate::hir::CompiledDbSelectionPlan, Vec<Value>), RuntimeError> {
-    let (table, _pred, meta) = selection_parts_with_meta(selection, ctx)?;
-    match meta {
-        SelectorMetaState::Compiled { plan, captures } => Ok((table, plan, captures)),
-        SelectorMetaState::Error(message) => Err(RuntimeError::Message(format!("{ctx}: {message}"))),
-        SelectorMetaState::Missing => Err(RuntimeError::Message(format!(
-            "{ctx} requires a selector predicate in the lowered SQL-backed subset"
-        ))),
+) -> Result<RootRelationQueryMeta, RuntimeError> {
+    let Some(DecodedCompiledQueryMeta {
+        plan,
+        sources,
+        captures,
+    }) = decode_compiled_query_meta(&query, ctx)?
+    else {
+        return Err(RuntimeError::Message(format!(
+            "{ctx} requires a lowered SQL-backed root relation query"
+        )));
+    };
+    let source = plan.sources.first().ok_or_else(|| {
+        RuntimeError::Message(format!("{ctx} query is missing a root relation source"))
+    })?;
+    let source_alias = source.alias.clone();
+    let source_relation_name = source.relation_name.clone();
+    let source_index = source.source_index;
+    if !matches!(plan.aggregate, CompiledAggregate::None)
+        || !plan.group_by.is_empty()
+        || !plan.having.is_empty()
+        || plan.grouped_projection
+    {
+        return Err(RuntimeError::Message(format!(
+            "{ctx} requires a non-grouped root relation query"
+        )));
     }
+    match &plan.projection {
+        CompiledProjection::Row {
+            alias,
+            relation_name,
+            ..
+        } if alias == &source_alias && relation_name == &source_relation_name => {}
+        _ => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} requires a root relation query without selectMap or grouping"
+            )))
+        }
+    }
+    let source_relation = sources.get(source_index).cloned().ok_or_else(|| {
+        RuntimeError::Message(format!(
+            "{ctx} query source index {} is out of bounds",
+            source_index
+        ))
+    })?;
+    Ok(RootRelationQueryMeta {
+        source_relation,
+        plan,
+        sources,
+        captures,
+        target_alias: source_alias,
+    })
 }
 
 fn ensure_persisted_table_entry(
@@ -442,7 +292,7 @@ fn ensure_persisted_table_entry(
     connection: &aivi_database::DbConnection,
     ctx: &str,
 ) -> Result<(String, Value, i64, String, String), RuntimeError> {
-    let (name, columns, _rows) = table_parts(table.clone(), ctx)?;
+    let (name, columns, _rows) = relation_parts(table.clone(), ctx)?;
     connection.ensure_schema().map_err(RuntimeError::Message)?;
     let columns_json = encode_json(&columns)?;
     let storage_columns_json = serde_json::to_string(
@@ -499,65 +349,54 @@ fn load_runtime_schema_from_storage(
     })
 }
 
-fn selector_sql_context(
-    schema: &RuntimeTableSchema,
-) -> (
-    std::collections::HashMap<String, RuntimeTableSchema>,
-    std::collections::HashMap<String, String>,
-) {
-    (
-        std::collections::HashMap::from([("q0".to_string(), schema.clone())]),
-        std::collections::HashMap::from([("q0".to_string(), "t0".to_string())]),
-    )
-}
-
-fn render_selector_where_sql(
-    schema: &RuntimeTableSchema,
-    plan: &crate::hir::CompiledDbSelectionPlan,
-    captures: &[Value],
+fn relation_snapshot_with_rows(
+    source_relation: &Value,
+    rows: Vec<Value>,
     ctx: &str,
-) -> Result<String, RuntimeError> {
-    let (schemas, aliases) = selector_sql_context(schema);
-    render_scalar_expr(&plan.predicate, &schemas, &aliases, captures).map_err(|err| {
-        RuntimeError::Message(format!(
-            "{ctx} could not render selector predicate for '{}': {err}",
-            schema.name
-        ))
-    })
-}
-
-fn query_storage_row_json(
-    connection: &aivi_database::DbConnection,
-    sql: String,
-    ctx: &str,
-) -> Result<Vec<Value>, RuntimeError> {
-    let rows = connection.query_sql(sql).map_err(RuntimeError::Message)?;
-    let mut out = Vec::with_capacity(rows.len());
-    for row in rows {
-        let json = match row.as_slice() {
-            [QueryCell::Text(json)] => json.as_str(),
-            other => {
-                return Err(RuntimeError::Message(format!(
-                    "{ctx} returned unexpected storage row shape: {other:?}"
-                )))
-            }
-        };
-        out.push(decode_json(json)?);
-    }
-    Ok(out)
-}
-
-fn load_table_snapshot(
-    name: String,
-    columns: Value,
-    connection: &aivi_database::DbConnection,
 ) -> Result<Value, RuntimeError> {
+    let _ = relation_parts(source_relation.clone(), ctx)?;
+    let mut fields = (*expect_record(source_relation.clone(), ctx)?).clone();
+    fields.insert("rows".to_string(), list_value(rows));
+    Ok(Value::Record(Arc::new(fields)))
+}
+
+fn load_relation_snapshot(
+    source_relation: &Value,
+    connection: &aivi_database::DbConnection,
+    ctx: &str,
+) -> Result<Value, RuntimeError> {
+    let (name, _columns, _rows) = relation_parts(source_relation.clone(), ctx)?;
     let rows = load_rows_from_storage(connection, &name)?;
-    Ok(make_table(
+    relation_snapshot_with_rows(source_relation, rows, ctx)
+}
+
+fn prepare_query_mutation_context(
+    query: Value,
+    connection: &aivi_database::DbConnection,
+    ctx: &str,
+) -> Result<QueryMutationContext, RuntimeError> {
+    let RootRelationQueryMeta {
+        source_relation,
+        plan,
+        sources,
+        captures,
+        target_alias,
+    } = require_root_relation_query_meta(query, ctx)?;
+    let (name, columns, rev, columns_json, storage_columns_json) =
+        ensure_persisted_table_entry(&source_relation, connection, ctx)?;
+    let schema = load_runtime_schema_from_storage(&name, &storage_columns_json, ctx)?;
+    Ok(QueryMutationContext {
+        source_relation,
         name,
         columns,
-        rows,
-    ))
+        rev,
+        columns_json,
+        schema,
+        plan,
+        sources,
+        captures,
+        target_alias,
+    })
 }
 
 fn storage_has_rows(
@@ -689,52 +528,49 @@ fn projectable_schema_for_row(
     })
 }
 
-fn selector_rows_in_memory(
-    selection: Value,
+fn query_target_alias_and_tail(
+    context: &QueryMutationContext,
     ctx: &str,
+) -> Result<(String, String), RuntimeError> {
+    let schemas = build_runtime_schemas(&context.plan.sources, &context.sources)?;
+    let (sql_aliases, tail) = build_query_sql_aliases_and_tail(
+        &context.plan,
+        &schemas,
+        &context.sources,
+        &context.captures,
+        &HashMap::new(),
+    )?;
+    let sql_alias = sql_aliases
+        .get(&context.target_alias)
+        .cloned()
+        .ok_or_else(|| {
+            RuntimeError::Message(format!(
+                "{ctx} missing target query alias '{}'",
+                context.target_alias
+            ))
+        })?;
+    Ok((sql_alias, tail))
+}
+
+fn query_rows_on_connection(
+    query: Value,
+    connection: &aivi_database::DbConnection,
     runtime: &mut Runtime,
-) -> Result<Vec<Value>, RuntimeError> {
-    let (table, pred, _meta) = selection_parts_with_meta(selection, ctx)?;
-    let (_name, _columns, rows) = table_parts(table, ctx)?;
-    let mut matched = Vec::new();
-    for row in rows.iter() {
-        let keep = runtime.apply(pred.clone(), row.clone())?;
-        if expect_runtime_bool(keep, ctx)? {
-            matched.push(row.clone());
-        }
-    }
-    Ok(matched)
-}
-
-fn selector_rows_on_connection(
-    selection: Value,
-    connection: &aivi_database::DbConnection,
     ctx: &str,
 ) -> Result<Vec<Value>, RuntimeError> {
-    let (table, plan, captures) = require_selector_meta(selection, ctx)?;
-    let (name, _columns, _rev, _columns_json, storage_columns_json) =
-        ensure_persisted_table_entry(&table, connection, ctx)?;
-    let schema = load_runtime_schema_from_storage(&name, &storage_columns_json, ctx)?;
-    if schema.columns.is_empty() && !storage_has_rows(connection, &schema.storage_name)? {
-        return Ok(Vec::new());
-    }
-    let where_sql = render_selector_where_sql(&schema, &plan, &captures, ctx)?;
-    query_storage_row_json(
-        connection,
-        format!(
-            "SELECT t0.__aivi_row_json FROM {} AS t0 WHERE {} ORDER BY t0.__aivi_ord ASC",
-            schema.storage_name, where_sql
-        ),
-        ctx,
-    )
+    let inner_effect = query_run_field(query, Value::DbConnection(connection.clone()), runtime)?;
+    let result = runtime.run_effect_value(inner_effect)?;
+    let rows = expect_list(result, ctx)?;
+    Ok(rows.iter().cloned().collect())
 }
 
-fn selector_first_on_connection(
-    selection: Value,
+fn query_first_on_connection(
+    query: Value,
     connection: &aivi_database::DbConnection,
+    runtime: &mut Runtime,
     ctx: &str,
 ) -> Result<Value, RuntimeError> {
-    let rows = selector_rows_on_connection(selection, connection, ctx)?;
+    let rows = query_rows_on_connection(query, connection, runtime, ctx)?;
     Ok(rows
         .into_iter()
         .next()
@@ -742,52 +578,21 @@ fn selector_first_on_connection(
         .unwrap_or_else(make_none))
 }
 
-fn selector_delete_on_connection(
-    selection: Value,
+fn query_matching_rows_on_connection(
+    context: &QueryMutationContext,
     connection: &aivi_database::DbConnection,
     ctx: &str,
-) -> Result<Value, RuntimeError> {
-    let (table, plan, captures) = require_selector_meta(selection, ctx)?;
-    let (name, columns, _rev, _columns_json, storage_columns_json) =
-        ensure_persisted_table_entry(&table, connection, ctx)?;
-    let schema = load_runtime_schema_from_storage(&name, &storage_columns_json, ctx)?;
-    if schema.columns.is_empty() && !storage_has_rows(connection, &schema.storage_name)? {
-        return load_table_snapshot(name, columns, connection);
+) -> Result<Vec<(i64, Value)>, RuntimeError> {
+    if context.schema.columns.is_empty() && !storage_has_rows(connection, &context.schema.storage_name)? {
+        return Ok(Vec::new());
     }
-    let where_sql = render_selector_where_sql(&schema, &plan, &captures, ctx)?;
-    connection
-        .execute_sql(format!(
-            "DELETE FROM {} WHERE __aivi_ord IN (SELECT t0.__aivi_ord FROM {} AS t0 WHERE {})",
-            schema.storage_name,
-            schema.storage_name,
-            where_sql
-        ))
-        .map_err(RuntimeError::Message)?;
-    load_table_snapshot(name, columns, connection)
-}
-
-fn selector_update_on_connection(
-    selection: Value,
-    patch: Value,
-    connection: &aivi_database::DbConnection,
-    runtime: &mut Runtime,
-    ctx: &str,
-) -> Result<Value, RuntimeError> {
-    let (table, plan, captures) = require_selector_meta(selection, ctx)?;
-    let _compiled_patch = require_compiled_patch(&patch, ctx)?;
-    let (name, columns, _rev, _columns_json, storage_columns_json) =
-        ensure_persisted_table_entry(&table, connection, ctx)?;
-    let schema = load_runtime_schema_from_storage(&name, &storage_columns_json, ctx)?;
-    if schema.columns.is_empty() && !storage_has_rows(connection, &schema.storage_name)? {
-        return load_table_snapshot(name, columns, connection);
-    }
-    let where_sql = render_selector_where_sql(&schema, &plan, &captures, ctx)?;
+    let (sql_alias, query_tail) = query_target_alias_and_tail(context, ctx)?;
     let matched_rows = connection
         .query_sql(format!(
-            "SELECT t0.__aivi_ord, t0.__aivi_row_json FROM {} AS t0 WHERE {} ORDER BY t0.__aivi_ord ASC",
-            schema.storage_name, where_sql
+            "SELECT {sql_alias}.__aivi_ord, {sql_alias}.__aivi_row_json {query_tail}"
         ))
         .map_err(RuntimeError::Message)?;
+    let mut out = Vec::with_capacity(matched_rows.len());
     for matched in matched_rows {
         let (ordinal, row_json) = match matched.as_slice() {
             [QueryCell::Int(ordinal), QueryCell::Text(row_json)] => (*ordinal, row_json.as_str()),
@@ -797,106 +602,121 @@ fn selector_update_on_connection(
                 )))
             }
         };
-        let updated = runtime.apply(patch.clone(), decode_json(row_json)?)?;
-        connection
-            .execute_sql(build_update_sql_for_schema(&schema, &updated, ordinal, ctx)?)
-            .map_err(RuntimeError::Message)?;
+        out.push((ordinal, decode_json(row_json)?));
     }
-    load_table_snapshot(name, columns, connection)
+    Ok(out)
 }
 
-fn selector_upsert_on_connection(
-    selection: Value,
+fn apply_query_patch_rows(
+    context: &QueryMutationContext,
+    matched_rows: Vec<(i64, Value)>,
+    patch: Value,
+    connection: &aivi_database::DbConnection,
+    runtime: &mut Runtime,
+    ctx: &str,
+) -> Result<(), RuntimeError> {
+    for (ordinal, row) in matched_rows {
+        let updated = runtime.apply(patch.clone(), row)?;
+        connection
+            .execute_sql(build_update_sql_for_schema(&context.schema, &updated, ordinal, ctx)?)
+            .map_err(RuntimeError::Message)?;
+    }
+    Ok(())
+}
+
+fn query_delete_on_connection(
+    query: Value,
+    connection: &aivi_database::DbConnection,
+    ctx: &str,
+) -> Result<Value, RuntimeError> {
+    let context = prepare_query_mutation_context(query, connection, ctx)?;
+    if context.schema.columns.is_empty() && !storage_has_rows(connection, &context.schema.storage_name)? {
+        return load_relation_snapshot(&context.source_relation, connection, ctx);
+    }
+    let (sql_alias, query_tail) = query_target_alias_and_tail(&context, ctx)?;
+    connection
+        .execute_sql(format!(
+            "DELETE FROM {} WHERE __aivi_ord IN (SELECT {sql_alias}.__aivi_ord {query_tail})",
+            context.schema.storage_name,
+        ))
+        .map_err(RuntimeError::Message)?;
+    load_relation_snapshot(&context.source_relation, connection, ctx)
+}
+
+fn query_update_on_connection(
+    query: Value,
+    patch: Value,
+    connection: &aivi_database::DbConnection,
+    runtime: &mut Runtime,
+    ctx: &str,
+) -> Result<Value, RuntimeError> {
+    let context = prepare_query_mutation_context(query, connection, ctx)?;
+    let matched_rows = query_matching_rows_on_connection(&context, connection, ctx)?;
+    apply_query_patch_rows(&context, matched_rows, patch, connection, runtime, ctx)?;
+    load_relation_snapshot(&context.source_relation, connection, ctx)
+}
+
+fn query_upsert_on_connection(
+    query: Value,
     value: Value,
     patch: Value,
     connection: &aivi_database::DbConnection,
     runtime: &mut Runtime,
     ctx: &str,
 ) -> Result<Value, RuntimeError> {
-    let (table, plan, captures) = require_selector_meta(selection, ctx)?;
-    let _compiled_patch = require_compiled_patch(&patch, ctx)?;
-    let (name, columns, rev, columns_json, storage_columns_json) =
-        ensure_persisted_table_entry(&table, connection, ctx)?;
-    let schema = load_runtime_schema_from_storage(&name, &storage_columns_json, ctx)?;
-    let storage_has_rows = storage_has_rows(connection, &schema.storage_name)?;
-    if !storage_has_rows && schema.columns.is_empty() {
-        let single_row_table = projectable_schema_for_row(name.clone(), columns.clone(), &value, ctx)?;
+    let context = prepare_query_mutation_context(query, connection, ctx)?;
+    let has_rows = storage_has_rows(connection, &context.schema.storage_name)?;
+    if !has_rows && context.schema.columns.is_empty() {
+        let single_row_table =
+            projectable_schema_for_row(context.name.clone(), context.columns.clone(), &value, ctx)?;
         let next_storage_columns_json =
             serde_json::to_string(&single_row_table.columns).map_err(|err| {
                 RuntimeError::Message(format!(
-                    "{ctx} could not encode inferred storage columns for '{name}': {err}"
+                    "{ctx} could not encode inferred storage columns for '{}': {err}",
+                    context.name
                 ))
             })?;
         connection
             .replace_table_storage(
-                rev,
-                name.clone(),
-                columns_json,
+                context.rev,
+                context.name.clone(),
+                context.columns_json.clone(),
                 next_storage_columns_json,
                 single_row_table,
             )
             .map_err(RuntimeError::Message)?;
-        return load_table_snapshot(name, columns, connection);
+        return load_relation_snapshot(&context.source_relation, connection, ctx);
     }
 
-    if schema.columns.is_empty() {
+    if context.schema.columns.is_empty() {
         return Err(RuntimeError::Message(format!(
-            "{ctx} cannot upsert into a selector-backed table without projected columns"
+            "{ctx} cannot upsert into a root relation query without declared columns"
         )));
     }
 
-    let where_sql = render_selector_where_sql(&schema, &plan, &captures, ctx)?;
-    let matches = connection
-        .query_sql(format!(
-            "SELECT 1 FROM {} AS t0 WHERE {} LIMIT 1",
-            schema.storage_name, where_sql
-        ))
-        .map_err(RuntimeError::Message)?;
-    if !matches.is_empty() {
-        return selector_update_on_connection(
-            Value::Record(std::sync::Arc::new(std::collections::HashMap::from([
-                ("table".to_string(), table.clone()),
-                (
-                    crate::hir::DB_SELECTION_META_FIELD.to_string(),
-                    Value::Record(std::sync::Arc::new(std::collections::HashMap::from([
-                        (
-                            "planJson".to_string(),
-                            Value::Text(
-                                serde_json::to_string(&plan).map_err(|err| {
-                                    RuntimeError::Message(format!(
-                                        "{ctx} could not re-encode selector plan: {err}"
-                                    ))
-                                })?,
-                            ),
-                        ),
-                        ("captures".to_string(), list_value(captures.to_vec())),
-                    ]))),
-                ),
-                ("pred".to_string(), Value::Unit),
-            ]))),
-            patch,
-            connection,
-            runtime,
-            ctx,
-        );
+    let matched_rows = query_matching_rows_on_connection(&context, connection, ctx)?;
+    if !matched_rows.is_empty() {
+        apply_query_patch_rows(&context, matched_rows, patch, connection, runtime, ctx)?;
+        return load_relation_snapshot(&context.source_relation, connection, ctx);
     }
 
-    let desired_schema = projectable_schema_for_row(name.clone(), columns.clone(), &value, ctx)?;
+    let desired_schema =
+        projectable_schema_for_row(context.name.clone(), context.columns.clone(), &value, ctx)?;
     let current_columns: std::collections::HashSet<_> =
-        schema.columns.iter().map(|column| column.name.clone()).collect();
+        context.schema.columns.iter().map(|column| column.name.clone()).collect();
     let desired_columns: std::collections::HashSet<_> =
         desired_schema.columns.iter().map(|column| column.name.clone()).collect();
     if !desired_columns.is_subset(&current_columns) {
         return Err(RuntimeError::Message(format!(
-            "{ctx} cannot insert selector upsert row because it introduces new projected columns"
+            "{ctx} cannot insert relation upsert row because it introduces new projected columns"
         )));
     }
-    let ordinal = next_storage_ordinal(connection, &schema.storage_name)?;
-    let insert_sql = build_insert_sql_for_schema(&schema, &value, ordinal, ctx)?;
+    let ordinal = next_storage_ordinal(connection, &context.schema.storage_name)?;
+    let insert_sql = build_insert_sql_for_schema(&context.schema, &value, ordinal, ctx)?;
     connection
         .execute_sql(insert_sql)
         .map_err(RuntimeError::Message)?;
-    load_table_snapshot(name, columns, connection)
+    load_relation_snapshot(&context.source_relation, connection, ctx)
 }
 
 fn configure_sqlite_on_connection(
@@ -963,15 +783,6 @@ pub(super) fn build_database_record() -> Value {
 
     let mut fields = HashMap::new();
 
-    fields.insert(
-        "table".to_string(),
-        builtin("database.table", 2, |mut args, _| {
-            let columns = args.pop().unwrap();
-            let name = expect_text(args.pop().unwrap(), "database.table")?;
-            Ok(make_table(name, columns, Vec::new()))
-        }),
-    );
-
     {
         let state = state.clone();
         fields.insert(
@@ -1034,16 +845,17 @@ pub(super) fn build_database_record() -> Value {
     {
         let state = state.clone();
         fields.insert(
-            "load".to_string(),
-            builtin("database.load", 1, move |mut args, _| {
-                let table = args.pop().unwrap();
+            "loadRelation".to_string(),
+            builtin("database.loadRelation", 1, move |mut args, _| {
+                let relation = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| match default_db_connection(&state)? {
-                            Some(connection) => load_rows_from_connection(table.clone(), &connection),
+                            Some(connection) => load_rows_from_connection(relation.clone(), &connection),
                             None => {
-                                let (_, _, rows) = table_parts(table.clone(), "database.load")?;
+                                let (_, _, rows) =
+                                    relation_parts(relation.clone(), "database.loadRelation")?;
                                 Ok(list_value(rows.iter().cloned().collect()))
                             }
                         }
@@ -1055,14 +867,54 @@ pub(super) fn build_database_record() -> Value {
     }
 
     fields.insert(
-        "loadOn".to_string(),
-        builtin("database.loadOn", 2, move |mut args, _| {
-            let table = args.pop().unwrap();
+        "loadRelationOn".to_string(),
+        builtin("database.loadRelationOn", 2, move |mut args, _| {
+            let relation = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
-                    let connection = expect_db_connection(connection.clone(), "database.loadOn")?;
-                    load_rows_from_connection(table.clone(), &connection)
+                    let connection =
+                        expect_db_connection(connection.clone(), "database.loadRelationOn")?;
+                    load_rows_from_connection(relation.clone(), &connection)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "insert".to_string(),
+            builtin("database.insert", 2, move |mut args, _| {
+                let value = args.pop().unwrap();
+                let relation = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| match default_db_connection(&state)? {
+                            Some(connection) => {
+                                insert_relation_on_connection(relation.clone(), value.clone(), &connection)
+                            }
+                            None => insert_relation(relation.clone(), value.clone()),
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    fields.insert(
+        "insertOn".to_string(),
+        builtin("database.insertOn", 3, move |mut args, _| {
+            let value = args.pop().unwrap();
+            let relation = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let connection = expect_db_connection(connection.clone(), "database.insertOn")?;
+                    insert_relation_on_connection(relation.clone(), value.clone(), &connection)
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -1074,21 +926,20 @@ pub(super) fn build_database_record() -> Value {
         fields.insert(
             "rows".to_string(),
             builtin("database.rows", 1, move |mut args, _| {
-                let selection = args.pop().unwrap();
+                let query = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |runtime| match default_db_connection(&state)? {
-                            Some(connection) => Ok(list_value(selector_rows_on_connection(
-                                selection.clone(),
+                            Some(connection) => Ok(list_value(query_rows_on_connection(
+                                query.clone(),
                                 &connection,
-                                "database.rows",
-                            )?)),
-                            None => Ok(list_value(selector_rows_in_memory(
-                                selection.clone(),
-                                "database.rows",
                                 runtime,
+                                "database.rows",
                             )?)),
+                            None => Err(RuntimeError::Message(
+                                "database backend is not configured".to_string(),
+                            )),
                         }
                     }),
                 };
@@ -1100,14 +951,15 @@ pub(super) fn build_database_record() -> Value {
     fields.insert(
         "rowsOn".to_string(),
         builtin("database.rowsOn", 2, move |mut args, _| {
-            let selection = args.pop().unwrap();
+            let query = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
+                func: Arc::new(move |runtime| {
                     let connection = expect_db_connection(connection.clone(), "database.rowsOn")?;
-                    Ok(list_value(selector_rows_on_connection(
-                        selection.clone(),
+                    Ok(list_value(query_rows_on_connection(
+                        query.clone(),
                         &connection,
+                        runtime,
                         "database.rowsOn",
                     )?))
                 }),
@@ -1121,25 +973,20 @@ pub(super) fn build_database_record() -> Value {
         fields.insert(
             "first".to_string(),
             builtin("database.first", 1, move |mut args, _| {
-                let selection = args.pop().unwrap();
+                let query = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |runtime| match default_db_connection(&state)? {
-                            Some(connection) => selector_first_on_connection(
-                                selection.clone(),
+                            Some(connection) => query_first_on_connection(
+                                query.clone(),
                                 &connection,
+                                runtime,
                                 "database.first",
                             ),
-                            None => Ok(selector_rows_in_memory(
-                                selection.clone(),
-                                "database.first",
-                                runtime,
-                            )?
-                            .into_iter()
-                            .next()
-                            .map(make_some)
-                            .unwrap_or_else(make_none)),
+                            None => Err(RuntimeError::Message(
+                                "database backend is not configured".to_string(),
+                            )),
                         }
                     }),
                 };
@@ -1151,12 +998,12 @@ pub(super) fn build_database_record() -> Value {
     fields.insert(
         "firstOn".to_string(),
         builtin("database.firstOn", 2, move |mut args, _| {
-            let selection = args.pop().unwrap();
+            let query = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
+                func: Arc::new(move |runtime| {
                     let connection = expect_db_connection(connection.clone(), "database.firstOn")?;
-                    selector_first_on_connection(selection.clone(), &connection, "database.firstOn")
+                    query_first_on_connection(query.clone(), &connection, runtime, "database.firstOn")
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -1168,28 +1015,19 @@ pub(super) fn build_database_record() -> Value {
         fields.insert(
             "delete".to_string(),
             builtin("database.delete", 1, move |mut args, _| {
-                let selection = args.pop().unwrap();
+                let query = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
-                        move |runtime| match default_db_connection(&state)? {
-                            Some(connection) => selector_delete_on_connection(
-                                selection.clone(),
+                        move |_runtime| match default_db_connection(&state)? {
+                            Some(connection) => query_delete_on_connection(
+                                query.clone(),
                                 &connection,
                                 "database.delete",
                             ),
-                            None => {
-                                let (table, pred, _meta) =
-                                    selection_parts_with_meta(selection.clone(), "database.delete")?;
-                                apply_delta(
-                                    table,
-                                    Value::Constructor {
-                                        name: "Delete".to_string(),
-                                        args: vec![pred],
-                                    },
-                                    runtime,
-                                )
-                            }
+                            None => Err(RuntimeError::Message(
+                                "database backend is not configured".to_string(),
+                            )),
                         }
                     }),
                 };
@@ -1201,12 +1039,12 @@ pub(super) fn build_database_record() -> Value {
     fields.insert(
         "deleteOn".to_string(),
         builtin("database.deleteOn", 2, move |mut args, _| {
-            let selection = args.pop().unwrap();
+            let query = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let connection = expect_db_connection(connection.clone(), "database.deleteOn")?;
-                    selector_delete_on_connection(selection.clone(), &connection, "database.deleteOn")
+                    query_delete_on_connection(query.clone(), &connection, "database.deleteOn")
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -1219,30 +1057,21 @@ pub(super) fn build_database_record() -> Value {
             "update".to_string(),
             builtin("database.update", 2, move |mut args, _| {
                 let patch = args.pop().unwrap();
-                let selection = args.pop().unwrap();
+                let query = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |runtime| match default_db_connection(&state)? {
-                            Some(connection) => selector_update_on_connection(
-                                selection.clone(),
+                            Some(connection) => query_update_on_connection(
+                                query.clone(),
                                 patch.clone(),
                                 &connection,
                                 runtime,
                                 "database.update",
                             ),
-                            None => {
-                                let (table, pred, _meta) =
-                                    selection_parts_with_meta(selection.clone(), "database.update")?;
-                                apply_delta(
-                                    table,
-                                    Value::Constructor {
-                                        name: "Update".to_string(),
-                                        args: vec![pred, patch.clone()],
-                                    },
-                                    runtime,
-                                )
-                            }
+                            None => Err(RuntimeError::Message(
+                                "database backend is not configured".to_string(),
+                            )),
                         }
                     }),
                 };
@@ -1255,13 +1084,13 @@ pub(super) fn build_database_record() -> Value {
         "updateOn".to_string(),
         builtin("database.updateOn", 3, move |mut args, _| {
             let patch = args.pop().unwrap();
-            let selection = args.pop().unwrap();
+            let query = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
                     let connection = expect_db_connection(connection.clone(), "database.updateOn")?;
-                    selector_update_on_connection(
-                        selection.clone(),
+                    query_update_on_connection(
+                        query.clone(),
                         patch.clone(),
                         &connection,
                         runtime,
@@ -1280,31 +1109,22 @@ pub(super) fn build_database_record() -> Value {
             builtin("database.upsert", 3, move |mut args, _| {
                 let patch = args.pop().unwrap();
                 let value = args.pop().unwrap();
-                let selection = args.pop().unwrap();
+                let query = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |runtime| match default_db_connection(&state)? {
-                            Some(connection) => selector_upsert_on_connection(
-                                selection.clone(),
+                            Some(connection) => query_upsert_on_connection(
+                                query.clone(),
                                 value.clone(),
                                 patch.clone(),
                                 &connection,
                                 runtime,
                                 "database.upsert",
                             ),
-                            None => {
-                                let (table, pred, _meta) =
-                                    selection_parts_with_meta(selection.clone(), "database.upsert")?;
-                                apply_delta(
-                                    table,
-                                    Value::Constructor {
-                                        name: "Upsert".to_string(),
-                                        args: vec![pred, value.clone(), patch.clone()],
-                                    },
-                                    runtime,
-                                )
-                            }
+                            None => Err(RuntimeError::Message(
+                                "database backend is not configured".to_string(),
+                            )),
                         }
                     }),
                 };
@@ -1318,13 +1138,13 @@ pub(super) fn build_database_record() -> Value {
         builtin("database.upsertOn", 4, move |mut args, _| {
             let patch = args.pop().unwrap();
             let value = args.pop().unwrap();
-            let selection = args.pop().unwrap();
+            let query = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
                     let connection = expect_db_connection(connection.clone(), "database.upsertOn")?;
-                    selector_upsert_on_connection(
-                        selection.clone(),
+                    query_upsert_on_connection(
+                        query.clone(),
                         value.clone(),
                         patch.clone(),
                         &connection,
@@ -1340,53 +1160,34 @@ pub(super) fn build_database_record() -> Value {
     {
         let state = state.clone();
         fields.insert(
-            "runQuery".to_string(),
-            builtin("database.runQuery", 1, move |mut args, _| {
+            "count".to_string(),
+            builtin("database.count", 1, move |mut args, _| {
                 let query = args.pop().unwrap();
                 let effect = EffectValue::Thunk {
                     func: Arc::new({
                         let state = state.clone();
                         move |runtime| {
                             let connection = require_default_db_connection(&state)?;
-                            let fields = expect_record(query.clone(), "database.runQuery")?;
+                            let counted = build_count_query(query.clone())?;
+                            let fields = expect_record(counted, "database.count")?;
                             let run_fn = fields
                                 .get("run")
                                 .ok_or_else(|| {
                                     RuntimeError::Message(
-                                        "database.runQuery expects Query with 'run' field"
-                                            .to_string(),
+                                        "database.count expects Query with 'run' field".to_string(),
                                     )
                                 })?
                                 .clone();
-                            let inner_effect =
-                                runtime.apply(run_fn, Value::DbConnection(connection))?;
-                            runtime.run_effect_value(inner_effect)
-                        }
-                    }),
-                };
-                Ok(Value::Effect(Arc::new(effect)))
-            }),
-        );
-    }
-
-    {
-        let state = state.clone();
-        fields.insert(
-            "applyDelta".to_string(),
-            builtin("database.applyDelta", 2, move |mut args, _| {
-                let delta = args.pop().unwrap();
-                let table = args.pop().unwrap();
-                let effect = EffectValue::Thunk {
-                    func: Arc::new({
-                        let state = state.clone();
-                        move |runtime| match default_db_connection(&state)? {
-                            Some(connection) => apply_delta_on_connection(
-                                table.clone(),
-                                delta.clone(),
-                                &connection,
-                                runtime,
-                            ),
-                            None => apply_delta(table.clone(), delta.clone(), runtime),
+                            let inner_effect = runtime.apply(run_fn, Value::DbConnection(connection))?;
+                            let result = runtime.run_effect_value(inner_effect)?;
+                            let values = expect_list(result, "database.count")?;
+                            match values.iter().next().cloned() {
+                                Some(Value::Int(value)) => Ok(Value::Int(value)),
+                                Some(other) => Err(RuntimeError::Message(format!(
+                                    "database.count expected Int result, found {other:?}"
+                                ))),
+                                None => Ok(Value::Int(0)),
+                            }
                         }
                     }),
                 };
@@ -1396,16 +1197,107 @@ pub(super) fn build_database_record() -> Value {
     }
 
     fields.insert(
-        "applyDeltaOn".to_string(),
-        builtin("database.applyDeltaOn", 3, move |mut args, _| {
-            let delta = args.pop().unwrap();
-            let table = args.pop().unwrap();
+        "countOn".to_string(),
+        builtin("database.countOn", 2, move |mut args, _| {
+            let query = args.pop().unwrap();
             let connection = args.pop().unwrap();
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
-                    let connection =
-                        expect_db_connection(connection.clone(), "database.applyDeltaOn")?;
-                    apply_delta_on_connection(table.clone(), delta.clone(), &connection, runtime)
+                    let connection = expect_db_connection(connection.clone(), "database.countOn")?;
+                    let counted = build_count_query(query.clone())?;
+                    let fields = expect_record(counted, "database.countOn")?;
+                    let run_fn = fields
+                        .get("run")
+                        .ok_or_else(|| {
+                            RuntimeError::Message(
+                                "database.countOn expects Query with 'run' field".to_string(),
+                            )
+                        })?
+                        .clone();
+                    let inner_effect = runtime.apply(run_fn, Value::DbConnection(connection))?;
+                    let result = runtime.run_effect_value(inner_effect)?;
+                    let values = expect_list(result, "database.countOn")?;
+                    match values.iter().next().cloned() {
+                        Some(Value::Int(value)) => Ok(Value::Int(value)),
+                        Some(other) => Err(RuntimeError::Message(format!(
+                            "database.countOn expected Int result, found {other:?}"
+                        ))),
+                        None => Ok(Value::Int(0)),
+                    }
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "exists".to_string(),
+            builtin("database.exists", 1, move |mut args, _| {
+                let query = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |runtime| {
+                            let connection = require_default_db_connection(&state)?;
+                            let exists_query = build_exists_query(query.clone())?;
+                            let fields = expect_record(exists_query, "database.exists")?;
+                            let run_fn = fields
+                                .get("run")
+                                .ok_or_else(|| {
+                                    RuntimeError::Message(
+                                        "database.exists expects Query with 'run' field".to_string(),
+                                    )
+                                })?
+                                .clone();
+                            let inner_effect =
+                                runtime.apply(run_fn, Value::DbConnection(connection))?;
+                            let result = runtime.run_effect_value(inner_effect)?;
+                            let values = expect_list(result, "database.exists")?;
+                            match values.iter().next().cloned() {
+                                Some(Value::Bool(value)) => Ok(Value::Bool(value)),
+                                Some(other) => Err(RuntimeError::Message(format!(
+                                    "database.exists expected Bool result, found {other:?}"
+                                ))),
+                                None => Ok(Value::Bool(false)),
+                            }
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    fields.insert(
+        "existsOn".to_string(),
+        builtin("database.existsOn", 2, move |mut args, _| {
+            let query = args.pop().unwrap();
+            let connection = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    let connection = expect_db_connection(connection.clone(), "database.existsOn")?;
+                    let exists_query = build_exists_query(query.clone())?;
+                    let fields = expect_record(exists_query, "database.existsOn")?;
+                    let run_fn = fields
+                        .get("run")
+                        .ok_or_else(|| {
+                            RuntimeError::Message(
+                                "database.existsOn expects Query with 'run' field".to_string(),
+                            )
+                        })?
+                        .clone();
+                    let inner_effect = runtime.apply(run_fn, Value::DbConnection(connection))?;
+                    let result = runtime.run_effect_value(inner_effect)?;
+                    let values = expect_list(result, "database.existsOn")?;
+                    match values.iter().next().cloned() {
+                        Some(Value::Bool(value)) => Ok(Value::Bool(value)),
+                        Some(other) => Err(RuntimeError::Message(format!(
+                            "database.existsOn expected Bool result, found {other:?}"
+                        ))),
+                        None => Ok(Value::Bool(false)),
+                    }
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))

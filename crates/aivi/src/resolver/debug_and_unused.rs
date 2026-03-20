@@ -541,8 +541,8 @@ module test.db_alias
 use aivi.database as db
 
 // `db.*` gets rewritten to `aivi.database.*` during parsing; resolver must treat these as in-scope.
-x = db.table
-y = db.applyDelta
+x = db.relation
+y = db.insert
 z = db.configure
 "#;
 
@@ -584,14 +584,17 @@ module test.db_alias_syntax
 use aivi.database as db
 
 User = { id: Int, name: Text }
-userTable = db.table "users"[]
+users = db.relation "users" [
+  { name: "id", type: db.IntType, constraints: [db.NotNull], default: None }
+  { name: "name", type: db.Varchar 120, constraints: [db.NotNull], default: None }
+] []
 
 main = do Effect {
   _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
-  _ <- db.runMigrations[userTable]
-  _ <- db.insert userTable { id: 1, name: "Alice" }
-  _ <- db.rows userTable[name == "Alice"]
-  db.load userTable
+  _ <- db.runMigrations [users]
+  _ <- db.insert users { id: 1, name: "Alice" }
+  _ <- db.rows users[name == "Alice"]
+  db.first users
 }
 "#;
 
@@ -783,12 +786,12 @@ rows = [{ id: 1 }, { id: 2 }]
 out = filter (id == 1) rows
 
 Product = { id: Int, active: Bool }
-productTable : Table Product
-productTable = table "products" [
+productTable : Relation Product
+productTable = relation "products" [
   { name: "id", type: IntType, constraints: [], default: None }
   { name: "active", type: BoolType, constraints: [], default: None }
-]
-query = where active (from productTable)
+] []
+query = productTable[active]
 "#;
 
         let path = std::path::Path::new("test.aivi");
@@ -816,12 +819,12 @@ module test.selector_predicates
 use aivi.database
 
 Product = { id: Int, name: Text, active: Bool }
-productTable : Table Product
-productTable = table "products" [
+productTable : Relation Product
+productTable = relation "products" [
   { name: "id", type: IntType, constraints: [], default: None }
   { name: "name", type: Varchar 120, constraints: [], default: None }
   { name: "active", type: BoolType, constraints: [], default: None }
-]
+] []
 
 activeSelection = productTable[active]
 namedSelection = productTable[name == "Alice"]

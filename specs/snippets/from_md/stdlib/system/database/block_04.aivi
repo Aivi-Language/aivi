@@ -1,4 +1,5 @@
-activeUserNamesQuery : Query Text
-activeUserNamesQuery = db.from userTable
-  |> db.where active
-  |> db.select.name
+recentEmails =
+  users[active]
+    |> orderBy (desc .createdAt, asc .id)
+    |> selectMap { email: .email }
+    |> distinct
