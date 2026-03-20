@@ -9,9 +9,9 @@ use aivi.testing
 @test "tuple destructure with <- bind"
 test_bind = pure (1, 2)
   |> (a, b) => {
-       assertEq a 1
-       assertEq b 2
-     }
+    assertEq a 1
+    assertEq b 2
+  }
 
 @test "triple destructure with <- bind"
 test_triple = pure (10, 20, 30)
@@ -20,10 +20,10 @@ test_triple = pure (10, 20, 30)
 @test "nested tuple destructure with <- bind"
 test_nested = pure (1, (2, 3))
   |> (a, (b, c)) => {
-       assertEq a 1
-       assertEq b 2
-       assertEq c 3
-     }
+    assertEq a 1
+    assertEq b 2
+    assertEq c 3
+  }
 
 @test "tuple destructure with pure let in do-block"
 test_let = {
@@ -36,8 +36,8 @@ test_let = {
 test_mixed = {
   (x, y) = (5, 10)
   pure (x + 1, y + 1)
-   |> (a, b) => {
-        assertEq a 6
-        assertEq b 11
-      }
+  |> (a, b) => {
+    assertEq a 6
+    assertEq b 11
+  }
 }

@@ -7,13 +7,11 @@ use aivi.logic
 use aivi.list
 
 @test "list wrappers"
-list_wrappers =
-  ~|> assertEq (filter (x => x % 2 == 0) [1, 2, 3, 4, 5]) [2, 4]
-  ~|> assertEq (take 2 [1, 2, 3, 4, 5]) [1, 2]
-  ~|> assertEq (drop 3 [1, 2, 3, 4, 5]) [4, 5]
-  ~|> assertEq (find (x => x == 4) [1, 2, 3, 4, 5]) (Some 4)
+list_wrappers = ~|>assertEq (filter (x => x % 2 == 0) [1, 2, 3, 4, 5]) [2, 4]
+~|>assertEq (take 2 [1, 2, 3, 4, 5]) [1, 2]
+~|>assertEq (drop 3 [1, 2, 3, 4, 5]) [4, 5]
+~|>assertEq (find (x => x == 4) [1, 2, 3, 4, 5]) (Some 4)
 
 @test "effect traversal helpers"
-effect_traversal_helpers =
-  traverseEffects (_ => pure Unit) [1, 2, 3]
-    |> traversed => sequenceEffects [pure 1, pure 2, pure 3]
+effect_traversal_helpers = traverseEffects (_ => pure Unit) [1, 2, 3]
+  |> traversed => sequenceEffects [pure 1, pure 2, pure 3]

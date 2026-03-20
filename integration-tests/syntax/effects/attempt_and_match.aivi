@@ -5,8 +5,7 @@ use aivi
 use aivi.testing
 
 @test "attempt exposes failure to branch matching"
-attemptExposesFailureToBranchMatching =
-  attempt (fail "nope")
-    |> attemptResult =>
-         assertErr attemptResult
-           |> err => assertEq err "nope"
+attemptExposesFailureToBranchMatching = attempt (fail "nope")
+  |> attemptResult =>
+    assertErr attemptResult
+  |> err => assertEq err "nope"

@@ -29,15 +29,15 @@ loadErrorPayload = request => fetch request
 
 startServer = address => handler =>
   attempt (httpServer.listen { address: address } handler)
-   |> assertOk
-   |> server => {
-        sleep 25
-        pure server
-      }
+|> assertOk
+|> server => {
+    sleep 25
+    pure server
+}
 
 stopServer = server =>
   attempt (httpServer.stop server)
-   |> assertOk
+|> assertOk
 
 headerValue = name => headers => headers match
   | []                => None
@@ -67,12 +67,12 @@ restGetDecodesJsonResponse = {
   handler = _ => pure (jsonReply 200 userJson)
 
   startServer "127.0.0.1:39101" handler
-   |> server => loadUser ~u(http://127.0.0.1:39101/user)
-    |> user => {
-         stopServer server
-         assert_eq user.id 42
-         assert_eq user.name "Ada"
-       }
+  |> server => loadUser ~u(http://127.0.0.1:39101/user)
+  |> user => {
+    stopServer server
+    assert_eq user.id 42
+    assert_eq user.name "Ada"
+  }
 }
 
 @test "rest fetch uses bearer token and decodes body"
@@ -84,20 +84,20 @@ restFetchUsesBearerTokenAndDecodesBody = {
   )
 
   startServer "127.0.0.1:39102" handler
-   |> server => loadPing {
-      method: "POST"
-      url: ~u(http://127.0.0.1:39102/echo)
-      headers: [{ name: "Content-Type", value: "application/json" }]
-      body: Some (Plain "\{\"ping\":true}")
-      timeoutMs: None
-      retryCount: None
-      bearerToken: Some "secret"
-      strictStatus: None
-    }
-    |> ping => {
-         stopServer server
-         assert_eq ping.ping True
-       }
+  |> server => loadPing {
+    method: "POST"
+    url: ~u(http://127.0.0.1:39102/echo)
+    headers: [{ name: "Content-Type", value: "application/json" }]
+    body: Some (Plain "\{\"ping\":true}")
+    timeoutMs: None
+    retryCount: None
+    bearerToken: Some "secret"
+    strictStatus: None
+  }
+  |> ping => {
+    stopServer server
+    assert_eq ping.ping True
+  }
 }
 
 @test "rest fetch strict status returns io error"
@@ -105,24 +105,24 @@ restFetchStrictStatusReturnsIoError = {
   handler = _ => pure (jsonReply 404 missingJson)
 
   startServer "127.0.0.1:39103" handler
-   |> server => attempt (
-      loadPing {
-        method: "GET"
-        url: ~u(http://127.0.0.1:39103/missing)
-        headers: []
-        body: None
-        timeoutMs: None
-        retryCount: None
-        bearerToken: None
-        strictStatus: Some True
-      }
-    )
-    |> assertErr
-    |> err => {
-         stopServer server
-         assert_eq (constructorName err) "IOError"
-         assert_eq (List.length (source.decodeErrors err)) 0
-       }
+  |> server => attempt (
+    loadPing {
+      method: "GET"
+      url: ~u(http://127.0.0.1:39103/missing)
+      headers: []
+      body: None
+      timeoutMs: None
+      retryCount: None
+      bearerToken: None
+      strictStatus: Some True
+    }
+  )
+  |> assertErr
+  |> err => {
+    stopServer server
+    assert_eq (constructorName err) "IOError"
+    assert_eq (List.length (source.decodeErrors err)) 0
+  }
 }
 
 @test "rest fetch decodes non 2xx body when strict status is disabled"
@@ -130,20 +130,20 @@ restFetchDecodesNon2xxBodyWhenStrictStatusIsDisabled = {
   handler = _ => pure (jsonReply 404 missingJson)
 
   startServer "127.0.0.1:39104" handler
-   |> server => loadErrorPayload {
-      method: "GET"
-      url: ~u(http://127.0.0.1:39104/missing)
-      headers: []
-      body: None
-      timeoutMs: None
-      retryCount: None
-      bearerToken: None
-      strictStatus: None
-    }
-    |> payload => {
-         stopServer server
-         assert_eq payload.error "missing"
-       }
+  |> server => loadErrorPayload {
+    method: "GET"
+    url: ~u(http://127.0.0.1:39104/missing)
+    headers: []
+    body: None
+    timeoutMs: None
+    retryCount: None
+    bearerToken: None
+    strictStatus: None
+  }
+  |> payload => {
+    stopServer server
+    assert_eq payload.error "missing"
+  }
 }
 
 @test "rest fetch timeout returns io error"
@@ -154,24 +154,24 @@ restFetchTimeoutReturnsIoError = {
   }
 
   startServer "127.0.0.1:39105" handler
-   |> server => attempt (
-      loadPing {
-        method: "POST"
-        url: ~u(http://127.0.0.1:39105/timeout)
-        headers: [{ name: "Content-Type", value: "application/json" }]
-        body: Some (Plain "\{\"ping\":true}")
-        timeoutMs: Some 20
-        retryCount: None
-        bearerToken: None
-        strictStatus: None
-      }
-    )
-    |> assertErr
-    |> err => {
-         stopServer server
-         assert_eq (constructorName err) "IOError"
-         assert_eq (List.length (source.decodeErrors err)) 0
-       }
+  |> server => attempt (
+    loadPing {
+      method: "POST"
+      url: ~u(http://127.0.0.1:39105/timeout)
+      headers: [{ name: "Content-Type", value: "application/json" }]
+      body: Some (Plain "\{\"ping\":true}")
+      timeoutMs: Some 20
+      retryCount: None
+      bearerToken: None
+      strictStatus: None
+    }
+  )
+  |> assertErr
+  |> err => {
+    stopServer server
+    assert_eq (constructorName err) "IOError"
+    assert_eq (List.length (source.decodeErrors err)) 0
+  }
 }
 
 @test "rest fetch retries after timeout"
@@ -189,19 +189,19 @@ restFetchRetriesAfterTimeout = {
   }
 
   startServer "127.0.0.1:39106" handler
-   |> server => loadAttemptStatus {
-      method: "POST"
-      url: ~u(http://127.0.0.1:39106/retry)
-      headers: [{ name: "Content-Type", value: "application/json" }]
-      body: Some (Plain "\{\"attempt\":2}")
-      timeoutMs: Some 20
-      retryCount: Some 1
-      bearerToken: None
-      strictStatus: None
-    }
-    |> value => {
-         stopServer server
-         assert_eq value.attempt 2
-         assert_eq (reactive.get attempts) 2
-       }
+  |> server => loadAttemptStatus {
+    method: "POST"
+    url: ~u(http://127.0.0.1:39106/retry)
+    headers: [{ name: "Content-Type", value: "application/json" }]
+    body: Some (Plain "\{\"attempt\":2}")
+    timeoutMs: Some 20
+    retryCount: Some 1
+    bearerToken: None
+    strictStatus: None
+  }
+  |> value => {
+    stopServer server
+    assert_eq value.attempt 2
+    assert_eq (reactive.get attempts) 2
+  }
 }

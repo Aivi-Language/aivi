@@ -11,27 +11,23 @@ recoverWithZero = result => result match
 nestedFailure = fail "inner error"
 
 @test "attempt wraps success in Ok"
-attemptWrapsSuccessInOk =
-  attempt (pure 42)
-    |> attemptResult =>
-         assertOk attemptResult
-           |> value => assertEq value 42
+attemptWrapsSuccessInOk = attempt (pure 42)
+  |> attemptResult =>
+    assertOk attemptResult
+  |> value => assertEq value 42
 
 @test "attempt wraps failure in Err"
-attemptWrapsFailureInErr =
-  attempt (fail "something went wrong")
-    |> attemptResult =>
-         assertErr attemptResult
-           |> err => assertEq err "something went wrong"
+attemptWrapsFailureInErr = attempt (fail "something went wrong")
+  |> attemptResult =>
+    assertErr attemptResult
+  |> err => assertEq err "something went wrong"
 
 @test "attempt allows recovery after failure"
-attemptAllowsRecovery =
-  attempt (fail "recoverable")
-    |> attemptResult => assertEq (recoverWithZero attemptResult) 0
+attemptAllowsRecovery = attempt (fail "recoverable")
+  |> attemptResult => assertEq (recoverWithZero attemptResult) 0
 
 @test "attempt on nested failure keeps the first error"
-attemptNestedShortCircuit =
-  attempt nestedFailure
-    |> attemptResult =>
-         assertErr attemptResult
-           |> err => assertEq err "inner error"
+attemptNestedShortCircuit = attempt nestedFailure
+  |> attemptResult =>
+    assertErr attemptResult
+  |> err => assertEq err "inner error"
