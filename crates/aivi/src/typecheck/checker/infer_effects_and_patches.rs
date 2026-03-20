@@ -282,7 +282,7 @@ impl TypeChecker {
                 BlockItem::Recurse { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`recurse` is only available in effect-style blocks or `generate { ... }`, not applicative blocks".to_string(),
+                        message: "`recurse` is only available in effect-style blocks, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -393,7 +393,7 @@ impl TypeChecker {
                 BlockItem::Recurse { span, .. } => {
                     return Err(TypeError {
                         span: span.clone(),
-                        message: "`recurse` is only available in effect-style blocks or `generate { ... }`, not applicative blocks".to_string(),
+                        message: "`recurse` is only available in effect-style blocks, not applicative blocks".to_string(),
                         expected: None,
                         found: None,
                     });
@@ -426,6 +426,22 @@ impl TypeChecker {
         let effect_ty = Type::con("Effect").app(vec![err_ty, value_ty.clone()]);
         self.unify_with_span(expr_ty, effect_ty, span)?;
         Ok(value_ty)
+    }
+
+    fn infer_recurse_payload_or_expr(
+        &mut self,
+        expr: &Expr,
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        match expr {
+            Expr::Call { func, args, .. }
+                if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+            {
+                self.infer_expr(&args[0], env)
+            }
+            Expr::Ident(_) => Ok(self.fresh_var()),
+            _ => self.infer_expr(expr, env),
+        }
     }
 
     fn effect_type_args(&mut self, ty: &Type) -> Option<Vec<Type>> {
@@ -537,8 +553,11 @@ impl TypeChecker {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     self.unify_with_span(expr_ty, Type::con("Bool"), expr_span(expr))?;
                 }
-                BlockItem::Yield { expr, .. } | BlockItem::Recurse { expr, .. } => {
+                BlockItem::Yield { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
+                }
+                BlockItem::Recurse { expr, .. } => {
+                    let _ = self.infer_recurse_payload_or_expr(expr, &mut local_env)?;
                 }
                 BlockItem::When { cond, effect, .. }
                 | BlockItem::Unless { cond, effect, .. } => {
@@ -702,7 +721,7 @@ impl TypeChecker {
                     return Err(TypeError {
                         span: span.clone(),
                         message: format!(
-                            "`recurse` is only available in effect-style blocks or `generate {{ ... }}`, not `{monad_name}` monadic blocks"
+                            "`recurse` is only available in effect-style blocks, not `{monad_name}` monadic blocks"
                         ),
                         expected: None,
                         found: None,
@@ -712,7 +731,7 @@ impl TypeChecker {
                     return Err(TypeError {
                         span: span.clone(),
                         message: format!(
-                            "guards are only available in `generate {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                            "block guard statements have been removed from AIVI v0.2; use flow guards or collection filters instead of `do {monad_name} {{ ... }}`"
                         ),
                         expected: None,
                         found: None,
@@ -722,7 +741,7 @@ impl TypeChecker {
                     return Err(TypeError {
                         span: span.clone(),
                         message: format!(
-                            "`yield` is only available in `generate {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                            "`yield` has been removed from user-written blocks in AIVI v0.2"
                         ),
                         expected: None,
                         found: None,
@@ -740,73 +759,6 @@ impl TypeChecker {
             Type::con(&monad_con).app(vec![result_ty])
         };
         Ok(block_ty)
-    }
-
-    fn infer_generate_block(
-        &mut self,
-        items: &[BlockItem],
-        env: &mut TypeEnv,
-    ) -> Result<Type, TypeError> {
-        let mut local_env = env.clone();
-        let yield_ty = self.fresh_var();
-        let mut current_elem: Option<Type> = None;
-        for item in items {
-            match item {
-                BlockItem::Bind { pattern, expr, .. } => {
-                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    let bind_elem = self.generate_source_elem(expr_ty, expr_span(expr))?;
-                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
-                    let pat_ty_for_span = pat_ty.clone();
-                    self.unify_with_span(pat_ty, bind_elem.clone(), pattern_span(pattern))?;
-                    let resolved = self.apply(pat_ty_for_span);
-                    self.span_types.push((pattern_span(pattern), resolved));
-                    current_elem = Some(bind_elem);
-                }
-                BlockItem::Let { pattern, expr, .. } => {
-                    if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
-                        self.infer_pattern(pattern, &mut local_env)?;
-                    }
-                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
-                    let pat_ty_for_span = pat_ty.clone();
-                    self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
-                    let resolved = self.apply(pat_ty_for_span);
-                    self.span_types.push((pattern_span(pattern), resolved));
-                }
-                BlockItem::Filter { expr, .. } => {
-                    let mut guard_env = local_env.clone();
-                    if let Some(elem) = current_elem.clone() {
-                        guard_env.insert("_".to_string(), Scheme::mono(elem));
-                    }
-                    let expr_ty = self.infer_expr(expr, &mut guard_env)?;
-                    if self
-                        .unify_with_span(expr_ty.clone(), Type::con("Bool"), expr_span(expr))
-                        .is_err()
-                    {
-                        let arg_ty = current_elem.clone().unwrap_or_else(|| self.fresh_var());
-                        let func_ty = Type::Func(Box::new(arg_ty), Box::new(Type::con("Bool")));
-                        self.unify_with_span(expr_ty, func_ty, expr_span(expr))?;
-                    }
-                }
-                BlockItem::Yield { expr, .. } => {
-                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    self.unify_with_span(expr_ty, yield_ty.clone(), expr_span(expr))?;
-                }
-                BlockItem::Recurse { expr, .. } | BlockItem::Expr { expr, .. } => {
-                    let _ = self.infer_expr(expr, &mut local_env)?;
-                }
-                BlockItem::When { cond, effect, .. }
-                | BlockItem::Unless { cond, effect, .. } => {
-                    self.infer_expr(cond, &mut local_env)?;
-                    self.infer_expr(effect, &mut local_env)?;
-                }
-                BlockItem::Given { cond, fail_expr, .. } => {
-                    self.infer_expr(cond, &mut local_env)?;
-                    self.infer_expr(fail_expr, &mut local_env)?;
-                }
-            }
-        }
-        Ok(Type::con("aivi.generator.Generator").app(vec![yield_ty]))
     }
 
     fn infer_managed_block(
@@ -848,7 +800,10 @@ impl TypeChecker {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     self.unify_with_span(expr_ty, yield_ty.clone(), expr_span(expr))?;
                 }
-                BlockItem::Recurse { expr, .. } | BlockItem::Expr { expr, .. } => {
+                BlockItem::Recurse { expr, .. } => {
+                    let _ = self.infer_recurse_payload_or_expr(expr, &mut local_env)?;
+                }
+                BlockItem::Expr { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
                 }
                 BlockItem::When { cond, effect, .. }
@@ -1206,17 +1161,10 @@ impl TypeChecker {
         Ok(value_ty)
     }
 
-    fn generate_source_elem(&mut self, expr_ty: Type, span: Span) -> Result<Type, TypeError> {
+    fn list_source_elem(&mut self, expr_ty: Type, span: Span) -> Result<Type, TypeError> {
         let elem_ty = self.fresh_var();
         let list_ty = Type::con("List").app(vec![elem_ty.clone()]);
-        let gen_ty = Type::con("aivi.generator.Generator").app(vec![elem_ty.clone()]);
-        if self
-            .unify_with_span(expr_ty.clone(), list_ty, span.clone())
-            .is_ok()
-        {
-            return Ok(elem_ty);
-        }
-        self.unify_with_span(expr_ty, gen_ty, span)?;
+        self.unify_with_span(expr_ty, list_ty, span)?;
         Ok(elem_ty)
     }
 

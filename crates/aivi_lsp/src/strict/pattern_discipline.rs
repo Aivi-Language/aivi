@@ -462,7 +462,6 @@ pub(super) fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnost
                 };
                 let cat = match kind {
                     BlockKind::Do { .. } => StrictCategory::Effect,
-                    BlockKind::Generate => StrictCategory::Generator,
                     _ => StrictCategory::Style,
                 };
                 push_simple(

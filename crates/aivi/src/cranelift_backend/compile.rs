@@ -169,8 +169,8 @@ fn jit_compile_into_runtime(
     for ir_module in &rust_program.modules {
         let module_dot = format!("{}.", ir_module.name);
         for def in &ir_module.defs {
-            // Skip qualified aliases emitted by the Kernel (e.g. name="aivi.generator.fromList"
-            // in module "aivi.generator"). The bare def + Pass B alias is sufficient.
+            // Skip qualified aliases emitted by the Kernel (e.g. name="aivi.logic.map"
+            // in module "aivi.logic"). The bare def + Pass B alias is sufficient.
             if def.name.starts_with(&module_dot) {
                 continue;
             }

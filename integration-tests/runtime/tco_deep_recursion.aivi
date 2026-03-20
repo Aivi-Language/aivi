@@ -12,14 +12,14 @@ use aivi.testing
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-@test "loop/recurse countdown 10000 terminates and returns correct count"
+@test "countdown 10000 terminates and returns correct count"
 tcoCountdown = {
   steps  = [1..10000]
   result = List.length steps
   assertEq result 10000
 }
 
-@test "loop/recurse sum to 10000 equals arithmetic formula"
+@test "sum to 10000 equals arithmetic formula"
 tcoSumTo = {
   n        = 10000
   values   = [1.. n]
@@ -28,7 +28,7 @@ tcoSumTo = {
   assertEq result expected
 }
 
-@test "loop/recurse finds maximum in 1000-element range"
+@test "finds maximum in 1000-element range"
 tcoMaxFold = {
   values = [1..1000]
   result = List.foldl (current n => if n > current then n else current) 0 values

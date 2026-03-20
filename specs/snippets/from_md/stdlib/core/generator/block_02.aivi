@@ -1,2 +1,0 @@
-numbers = range 1 5
-sum     = reduce (total => n => total + n) 0 numbers

@@ -3,7 +3,6 @@ module integrationTests.runtime.craneliftCoverage
 
 use aivi
 use aivi.testing
-use aivi.generator
 
 // --- Float arithmetic (triggers lower_lit_number float path, rt_box_float, rt_unbox_float) ---
 
@@ -352,26 +351,17 @@ boolLiteralPattern = {
   assertEq (describe False) "no"
 }
 
-// --- Generator operations (triggers rt_gen_vec_*, rt_generator_to_list) ---
+// --- List operations (triggers list lowering and folds) ---
 
-@test "generator to list conversion"
-generatorToListConversion = {
-  g = generate {
-    yield 10
-    yield 20
-    yield 30
-  }
-  assertEq (toList g) [10, 20, 30]
+@test "list pass-through conversion"
+listPassThrough = {
+  values = [10, 20, 30]
+  assertEq values [10, 20, 30]
 }
 
-@test "generator fold with multiply"
-generatorFoldMultiply = {
-  g = generate {
-    yield 2
-    yield 3
-    yield 4
-  }
-  result = g (acc x => acc * x) 1
+@test "list fold with multiply"
+listFoldMultiply = {
+  result = foldl (acc x => acc * x) 1 [2, 3, 4]
   assertEq result 24
 }
 

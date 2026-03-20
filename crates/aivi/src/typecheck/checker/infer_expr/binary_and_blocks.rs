@@ -840,7 +840,6 @@ impl TypeChecker {
             BlockKind::Do { monad } => {
                 self.infer_generic_do_block(&monad.name, &monad.span, items, env)
             }
-            BlockKind::Generate => self.infer_generate_block(items, env),
             BlockKind::Managed => self.infer_managed_block(items, env),
         }
     }
@@ -879,9 +878,11 @@ impl TypeChecker {
                 }
                 BlockItem::Filter { expr, .. }
                 | BlockItem::Yield { expr, .. }
-                | BlockItem::Recurse { expr, .. }
                 | BlockItem::Expr { expr, .. } => {
                     last_ty = self.infer_expr(expr, &mut local_env)?;
+                }
+                BlockItem::Recurse { expr, .. } => {
+                    last_ty = self.infer_recurse_payload_or_expr(expr, &mut local_env)?;
                 }
                 BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
                     self.infer_expr(cond, &mut local_env)?;

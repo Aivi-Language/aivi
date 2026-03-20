@@ -78,7 +78,6 @@ impl TypeChecker {
             "Mat",
             "Graph",
             "Edge",
-            "Generator",
             "Html",
             "DateTime",
             "Span",

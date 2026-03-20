@@ -69,18 +69,6 @@ pub(crate) fn register_builtins(env: &Env) {
     );
 
     env.set(
-        "foldGen".to_string(),
-        builtin("foldGen", 3, |mut args, runtime| {
-            let init = args.pop().unwrap();
-            let step = args.pop().unwrap();
-            let gen = args.pop().unwrap();
-            let with_step = runtime.apply(gen, step)?;
-            let result = runtime.apply(with_step, init)?;
-            Ok(result)
-        }),
-    );
-
-    env.set(
         "constructorName".to_string(),
         builtin("constructorName", 1, |mut args, _| {
             let value = args.pop().unwrap();
@@ -756,48 +744,6 @@ pub(crate) fn register_builtins(env: &Env) {
                 }),
             };
             Ok(Value::Effect(std::sync::Arc::new(effect)))
-        }),
-    );
-
-    // __asGenerator : a -> Generator a
-    // If the value is a List, converts it to a generator (fold function).
-    // Otherwise, assumes it's already a generator and passes it through.
-    env.set(
-        "__asGenerator".to_string(),
-        builtin("__asGenerator", 1, |mut args, _runtime| {
-            let val = args.pop().unwrap();
-            match val {
-                Value::Unit => {
-                    // Unit → empty generator: \k -> \z -> z
-                    Ok(builtin("__asGenerator.empty", 2, |mut args, _rt| {
-                        let z = args.pop().unwrap();
-                        let _k = args.pop().unwrap();
-                        Ok(z)
-                    }))
-                }
-                Value::List(items) => {
-                    // Return a generator: \k -> \z -> foldl k z items
-                    let items = Arc::clone(&items);
-                    Ok(builtin("__asGenerator.gen", 2, move |mut args, _rt| {
-                        let z = args.pop().unwrap();
-                        let k = args.pop().unwrap();
-                        let mut acc = z;
-                        for item in items.iter() {
-                            let k_applied = match &k {
-                                Value::Builtin(b) => b.apply(acc.clone(), _rt)?,
-                                _ => _rt.apply(k.clone(), acc.clone())?,
-                            };
-                            acc = match &k_applied {
-                                Value::Builtin(b) => b.apply(item.clone(), _rt)?,
-                                _ => _rt.apply(k_applied, item.clone())?,
-                            };
-                        }
-                        Ok(acc)
-                    }))
-                }
-                // Already a generator (function) — pass through
-                other => Ok(other),
-            }
         }),
     );
 

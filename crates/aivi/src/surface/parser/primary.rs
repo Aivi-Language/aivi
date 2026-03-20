@@ -459,7 +459,13 @@ impl Parser {
             return Some(self.parse_block(BlockKind::Do { monad }));
         }
         if self.match_keyword("generate") {
-            return Some(self.parse_block(BlockKind::Generate));
+            let generate_span = self.previous_span();
+            self.emit_diag(
+                "E1623",
+                "`generate { ... }` was removed in AIVI v0.2; use list/range transforms or `*|>` fan-out",
+                generate_span,
+            );
+            return Some(self.parse_block(BlockKind::Plain));
         }
         if self.match_keyword("patch") {
             let start = self.previous_span();
@@ -546,8 +552,8 @@ impl Parser {
         }
 
         // `recurse expr` can appear as a match arm body (expression position) rather than only
-        // as a block statement.  Wrap it in a plain block with a Recurse item so that
-        // replace_recurse_in_expr can replace it with the enclosing loop's recursive call.
+        // as a block statement. Wrap it in a plain block with a Recurse item so flow desugaring
+        // can interpret anchored restarts without needing a separate AST node.
         if self.match_keyword("recurse") {
             let recurse_kw = self.previous_span();
             let expr = self.parse_expr().unwrap_or(Expr::Raw {

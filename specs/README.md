@@ -48,7 +48,7 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Flow Syntax](syntax/flows.md)
 - [Effects](syntax/effects.md)
 - [Cleanup & Lifetimes](syntax/resources.md)
-- [Fan-out & Collection Shaping](syntax/generators.md)
+- [Fan-out & Collection Shaping](syntax/fan_out.md)
 #### Modules & External Data
 - [Modules](syntax/modules.md)
 ##### External Sources
@@ -100,7 +100,6 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Result](stdlib/core/result.md)
 - [Logic](stdlib/core/logic.md)
 - [Collections](stdlib/core/collections.md)
-- [Generator](stdlib/core/generator.md)
 - [Validation](stdlib/core/validation.md)
 #### Text & Data
 - [Text](stdlib/core/text.md)

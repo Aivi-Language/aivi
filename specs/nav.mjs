@@ -43,7 +43,7 @@ export const sidebar = [
           { text: 'Flow Syntax', link: '/syntax/flows' },
           { text: 'Effects', link: '/syntax/effects' },
           { text: 'Cleanup & Lifetimes', link: '/syntax/resources' },
-          { text: 'Fan-out & Collection Shaping', link: '/syntax/generators' }
+          { text: 'Fan-out & Collection Shaping', link: '/syntax/fan_out' }
         ]
       },
       {
@@ -133,7 +133,6 @@ export const sidebar = [
           { text: 'Result', link: '/stdlib/core/result' },
           { text: 'Logic', link: '/stdlib/core/logic' },
           { text: 'Collections', link: '/stdlib/core/collections' },
-          { text: 'Generator', link: '/stdlib/core/generator' },
           { text: 'Validation', link: '/stdlib/core/validation' }
         ]
       },

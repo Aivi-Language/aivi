@@ -49,7 +49,7 @@ Inside a module body, top-level value bindings are recursive. A top-level defini
 
 That lets you write ordinary recursive helpers without rearranging a file to satisfy declaration order.
 
-Local bindings are different: a binding inside a function, block, or `match` arm does **not** become recursive just because it uses `=`. For local recursion, use a module-level helper or the dedicated `loop` / `recurse` forms (`loop` starts a recursive computation and `recurse` jumps back to it), described in [Generators](generators.md) and [Effects](effects.md).
+Local bindings are different: a binding inside a function, block, or `match` arm does **not** become recursive just because it uses `=`. For local restart-style recursion inside workflows, use `recurse` as described in [Flow Syntax](flows.md) and [Effects](effects.md), or move the recursion into a module-level helper.
 
 <<< ../snippets/from_md/syntax/bindings/recursion_module_level.aivi{aivi}
 

@@ -1,6 +1,6 @@
 # Predicates (Unified Model)
 
-A predicate is a `Bool`-valued test that reads naturally against a “current value”. AIVI uses the same mental model in helpers such as `filter`, in generator guards, and in patch predicates, so the rules on this page carry over directly to [Generators](generators.md) and [Patching Records](patching.md).
+A predicate is a `Bool`-valued test that reads naturally against a “current value”. AIVI uses the same mental model in helpers such as `filter`, in fan-out guards, and in patch predicates, so the rules on this page carry over directly to [Fan-out & Collection Shaping](fan_out.md) and [Patching Records](patching.md).
 
 ## 4.1 Predicate expressions
 
@@ -23,7 +23,7 @@ items |> filter (.price > 70)
 ```
 :::
 
-Pattern predicates such as `Some _`, `Ok { value } when value > 10`, or `Ok { value } unless value <= 10` are match tests: they succeed if the current value matches the pattern, and the optional `when` / `unless` guard can refer to names bound by that pattern. In expression positions they are usually parenthesized; generator guards accept the same idea directly. See [Pattern Matching](pattern_matching.md) for the pattern syntax itself.
+Pattern predicates such as `Some _`, `Ok { value } when value > 10`, or `Ok { value } unless value <= 10` are match tests: they succeed if the current value matches the pattern, and the optional `when` / `unless` guard can refer to names bound by that pattern. In expression positions they are usually parenthesized; fan-out guards accept the same idea directly. See [Pattern Matching](pattern_matching.md) for the pattern syntax itself.
 
 ## 4.1.1 Predicate combinators
 
@@ -33,7 +33,7 @@ Predicate expressions support the usual boolean operators:
 - `p && q` (and, short-circuit)
 - `p || q` (or, short-circuit)
 
-These operators may appear inside any predicate position, including generator guards and patch predicates.
+These operators may appear inside any predicate position, including fan-out guards and patch predicates.
 
 If you want to name predicate functions explicitly, define ordinary functions of type `A -> Bool` and compose them like any other helpers:
 
@@ -77,7 +77,7 @@ If you already write `_` explicitly, as in `takeWhile (_ < 10)`, you are using t
 This applies to:
 
 - stdlib helpers such as `filter`, `find`, `map`, `takeWhile`, `dropWhile`, `sortBy`
-- generator guards (`item -> pred`) described in [Generators](generators.md)
+- fan-out guards described in [Fan-out & Collection Shaping](fan_out.md)
 - patch predicates such as `items[price > 80]` from [Patching Records](patching.md)
 - your own helpers that expect a single-argument function
 

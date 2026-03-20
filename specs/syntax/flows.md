@@ -5,7 +5,7 @@ AIVI v0.2 flow syntax is the flat, spine-aligned workflow surface for sequential
 <!-- /quick-info -->
 ## 1. Status and intent
 
-This document defines AIVI v2 Flow Syntax as a flat, spine-aligned surface syntax for left-to-right flows across sequential, applicative, generator-shaped, resource-scoped, and event-shaped code.
+This document defines AIVI v2 Flow Syntax as a flat, spine-aligned surface syntax for left-to-right flows across sequential, applicative, zero-many fan-out, resource-scoped, and event-shaped code.
 
 It is intended to subsume the common user-authored shapes currently expressed with dedicated effect blocks, generic chaining blocks, applicative sibling blocks, legacy fan-out blocks, cleanup blocks, and most handler bodies currently written as dedicated event workflows.
 
@@ -19,7 +19,7 @@ AIVI v2 Flow Syntax has six goals:
 2. Keep ordinary sequential flow flat.
 3. Support common branching, recovery, fan-out, concurrency, retry, cleanup, and validation without nested callback structure.
 4. Keep data shaping in ordinary functions and pipes rather than embedding a second collection DSL.
-5. Remain compatible in spirit with existing AIVI pipe, effect, guard, attempt, duration, resource, generator, test, mock, and event semantics.
+5. Remain compatible in spirit with existing AIVI pipe, effect, guard, attempt, duration, resource, fan-out, test, mock, and event semantics.
 6. Eliminate user-authored `do` blocks from the common language surface.
 
 ## 3. Non-goals
@@ -186,11 +186,11 @@ Semantics:
 - if false and `or fail err` is present, the flow fails with `err`
 - if false and no failure branch is present, the line is only valid where dropping is already well-defined by the enclosing carrier
 
-Generator rule:
+Item-skip rule:
 
 - inside `*|>`, `>|>` without `or fail ...` means “skip this item if false”
 
-In ordinary effect flow, the intended model matches current `given cond or failExpr`, so silent guards should not be the default outside generator-style fan-out.
+In ordinary effect flow, the intended model matches current `given cond or failExpr`, so silent guards should not be the default outside fan-out bodies.
 
 ### 7.4 `?|>` — Attempt
 
@@ -281,7 +281,7 @@ Scheduling rule:
 
 - `@concurrent n` on the first line of the block limits runtime parallelism for that block
 
-### 7.8 `*|>` — Fan-out / generator
+### 7.8 `*|>` — Fan-out
 
 Per-item spine block over an iterable, producing a normal list result.
 
@@ -303,10 +303,10 @@ Semantics:
 - the block yields a normal list of per-item outputs
 - any later shaping such as `map`, `filter`, `partition`, `groupBy`, `toSet`, or `fold` is done with ordinary pipes and functions after `*-|` rejoins the outer spine
 
-Generator rule:
+Item-skip rule:
 
 - inside a `*|>` fan-out body, a `>|>` line without `or fail ...` means “skip this item if false”
-- this is the direct flat-flow replacement for generator guards such as `x -> pred`
+- this keeps per-item filtering local to the fan-out body
 
 Concurrency rule:
 
@@ -616,7 +616,7 @@ Meaning:
 - without an explicit value, restart from the anchor with the current spine subject
 - with an explicit value, restart with the supplied subject
 
-This is the flat-flow equivalent of current local recursion support in effect and generator blocks.
+This is the flat-flow equivalent of current local recursion support in effect and fan-out bodies.
 
 ---
 
@@ -660,11 +660,11 @@ The block remains applicative even when the runtime can evaluate lines concurren
 
 ---
 
-## 13. Replacing generators and resources
+## 13. Fan-out and resources
 
-### 13.1 Generator replacement
+### 13.1 Fan-out
 
-`*|>` plus ordinary pipes replaces legacy generator blocks that used one line to bind items, another to guard them, and a final line to emit the transformed value.
+`*|>` plus ordinary pipes expresses per-item list workflows when you want guards, bindings, or nested zero-many expansion in flow form.
 
 Flat replacement:
 
@@ -926,7 +926,7 @@ readConfig = path =>
      |> decodeConfig
 ```
 
-### 19.7 Generator replacement
+### 19.7 Fan-out
 
 ```aivi
 evenSquares = max =>

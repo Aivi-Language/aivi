@@ -1,0 +1,30 @@
+@no_prelude
+module integrationTests.syntax.effects.anchorRestart
+
+use aivi
+use aivi.testing
+
+Step = Continue Int | Done Int
+
+nextStep = n =>
+  if n == 0 then Done 0 else Continue (n - 1)
+
+countdownExplicit = start =>
+  start
+  @|>restart
+   |> nextStep
+  ||>Done result => result
+  ||>Continue state => recurse restart state
+
+countdownImplicit = start =>
+  start
+  @|>restart
+   |> _ - 1
+  ||>0 => 0
+  ||>_ => recurse restart
+
+@test "anchor restart with explicit replacement subject"
+anchorRestartExplicit = assertEq (countdownExplicit 5) 0
+
+@test "anchor restart without replacement subject uses current spine"
+anchorRestartImplicit = assertEq (countdownImplicit 5) 0

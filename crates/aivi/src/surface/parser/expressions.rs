@@ -280,7 +280,6 @@ impl Parser {
             diagnostics: Vec::new(),
             path: self.path.clone(),
             gensym: self.gensym,
-            loop_block_kind: self.loop_block_kind.clone(),
             min_flow_alignment: self.min_flow_alignment,
         }
     }

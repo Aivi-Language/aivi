@@ -610,7 +610,6 @@ impl TypeChecker {
             "BigInt",
             "TimeZone",
             "ZonedDateTime",
-            "Generator", // Generator might be higher kinded? treating as Star for now or check spec.
         ] {
             self.builtin_types.insert(name.to_string(), star.clone());
         }

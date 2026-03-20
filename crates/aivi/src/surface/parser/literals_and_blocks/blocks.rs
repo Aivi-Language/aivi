@@ -1,17 +1,5 @@
 impl Parser {
     fn parse_block(&mut self, kind: BlockKind) -> Expr {
-        // Inside a `loop` body, promote plain `{ ... }` blocks to the parent
-        // block kind (e.g. `Do { monad }`) so that keywords like `recurse`,
-        // `when`, `unless`, and bind (`<-`) work correctly.
-        let kind = if matches!(kind, BlockKind::Plain) {
-            if let Some(promoted) = self.loop_block_kind.take() {
-                promoted
-            } else {
-                kind
-            }
-        } else {
-            kind
-        };
         let start = self.previous_span();
         self.expect_symbol("{", "expected '{' to start block");
         let mut items = Vec::new();
@@ -22,14 +10,12 @@ impl Parser {
             }
             if self.match_keyword("loop") {
                 let loop_start = self.previous_span();
-                if !matches!(kind, BlockKind::Generate | BlockKind::Do { .. }) {
-                    self.emit_diag(
-                        "E1533",
-                        "`loop` is only allowed inside `generate { ... }` or effect-style blocks",
-                        loop_start.clone(),
-                    );
-                }
-                let pattern = self.parse_pattern().unwrap_or(Pattern::Wildcard(loop_start.clone()));
+                self.emit_diag(
+                    "E1624",
+                    "`loop` was removed in AIVI v0.2; use plain recursion or `@|>`/`recurse` flow anchors",
+                    loop_start.clone(),
+                );
+                let _pattern = self.parse_pattern().unwrap_or(Pattern::Wildcard(loop_start.clone()));
                 self.expect_symbol("=", "expected '=' in loop binding");
                 self.consume_newlines();
                 let init = self.parse_match_or_binary().unwrap_or(Expr::Raw {
@@ -37,87 +23,41 @@ impl Parser {
                     span: loop_start.clone(),
                 });
                 self.expect_symbol("=>", "expected '=>' in loop binding");
-
-                if matches!(kind, BlockKind::Do { .. } | BlockKind::Generate) {
-                    // --- Loop: desugar at parse time for Effect + Generate blocks ---
-                    // Generate a fresh internal name for the recursive function.
-                    let fn_name = self.fresh_internal_name("loop", loop_start.clone());
-
-                    // Set the promotion flag so the body's `{ ... }` block is
-                    // parsed as the same Do kind (enables `<-`, `recurse`, etc.).
-                    self.loop_block_kind = Some(kind.clone());
-
-                    let body = self.parse_expr().unwrap_or(Expr::Raw {
-                        text: String::new(),
-                        span: loop_start.clone(),
-                    });
-
-                    // Walk the body and replace every `BlockItem::Recurse { expr }`
-                    // with `BlockItem::Expr { Call(fn_name, expr) }`.
-                    let body = replace_recurse_in_expr(body, &fn_name);
-
-                    let body_span = expr_span(&body);
-                    let outer_span = merge_span(loop_start, body_span.clone());
-
-                    // Emit: __loop_N = pattern => body
-                    items.push(BlockItem::Let {
-                        pattern: Pattern::Ident(fn_name.clone()),
-                        expr: Expr::Lambda {
-                            params: vec![pattern],
-                            body: Box::new(body),
-                            span: outer_span.clone(),
-                        },
-                        span: outer_span.clone(),
-                    });
-
-                    // Emit: __loop_N init
-                    items.push(BlockItem::Expr {
-                        expr: Expr::Call {
-                            func: Box::new(Expr::Ident(fn_name)),
-                            args: vec![init],
-                            span: outer_span.clone(),
-                        },
-                        span: outer_span,
-                    });
-                } else {
-                    // Recovery path for unsupported loop contexts.
-                    let body = self.parse_expr().unwrap_or(Expr::Raw {
-                        text: String::new(),
-                        span: loop_start.clone(),
-                    });
-                    let span = merge_span(loop_start, expr_span(&body));
-                    items.push(BlockItem::Expr { expr: body, span });
-                }
+                let body = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: loop_start.clone(),
+                });
+                let span = merge_span(loop_start, expr_span(&body));
+                items.push(BlockItem::Expr {
+                    expr: Expr::Tuple {
+                        items: vec![init, body],
+                        span: span.clone(),
+                    },
+                    span,
+                });
                 continue;
             }
             if self.match_keyword("yield") {
                 let yield_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Generate) {
-                    self.emit_diag(
-                        "E1534",
-                        "`yield` is only allowed inside `generate { ... }` blocks",
-                        yield_kw.clone(),
-                    );
-                }
+                self.emit_diag(
+                    "E1625",
+                    "`yield` was removed in AIVI v0.2; use list literals, list transforms, or `*|>` fan-out",
+                    yield_kw.clone(),
+                );
                 let expr = self.parse_expr().unwrap_or(Expr::Raw {
                     text: String::new(),
                     span: yield_kw.clone(),
                 });
                 let span = merge_span(yield_kw, expr_span(&expr));
-                if matches!(kind, BlockKind::Generate) {
-                    items.push(BlockItem::Yield { expr, span });
-                } else {
-                    // Recovery: treat as a plain expression statement to keep parsing.
-                    items.push(BlockItem::Expr { expr, span });
-                }
+                items.push(BlockItem::Expr { expr, span });
                 continue;
             }
             if self.match_keyword("recurse") {
                 let recurse_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Generate | BlockKind::Do { .. }) {
+                if !matches!(kind, BlockKind::Do { .. }) {
                     self.emit_diag(
                         "E1535",
-                        "`recurse` is only allowed inside `generate { ... }` or effect-style blocks (within a `loop`)",
+                        "`recurse` is only allowed inside effect-style blocks (within legacy `do` loops) or flow bodies",
                         recurse_kw.clone(),
                     );
                 }
@@ -126,7 +66,7 @@ impl Parser {
                     span: recurse_kw.clone(),
                 });
                 let span = merge_span(recurse_kw, expr_span(&expr));
-                if matches!(kind, BlockKind::Generate | BlockKind::Do { .. }) {
+                if matches!(kind, BlockKind::Do { .. }) {
                     items.push(BlockItem::Recurse { expr, span });
                 } else {
                     items.push(BlockItem::Expr { expr, span });
@@ -249,11 +189,11 @@ impl Parser {
                     });
                     if !matches!(
                         kind,
-                        BlockKind::Do { .. } | BlockKind::Generate
+                        BlockKind::Do { .. }
                     ) {
                         self.emit_diag(
                             "E1536",
-                            "`<-` is only allowed inside `do Monad { ... }` or `generate { ... }` blocks",
+                            "`<-` is only allowed inside `do Monad { ... }` blocks",
                             merge_span(pattern_span(&pattern), expr_span(&expr)),
                         );
                         let span = merge_span(pattern_span(&pattern), expr_span(&expr));
@@ -303,44 +243,17 @@ impl Parser {
                     continue;
                 }
                 if self.consume_symbol("->") {
-                    let guard_start = self.pos;
-                    // Try pattern predicate: Pat ((when|unless) Guard)?
-                    let expr = if let Some(pat) = self.parse_pattern() {
-                        let guard_style = if self.match_keyword("when") {
-                            Some(false)
-                        } else if self.match_keyword("unless") {
-                            Some(true)
-                        } else {
-                            None
-                        };
-                        if let Some(guard_negated) = guard_style {
-                            let guard = self.parse_expr().unwrap_or(Expr::Raw {
-                                text: String::new(),
-                                span: pattern_span(&pat),
-                            });
-                            let span = merge_span(pattern_span(&pat), expr_span(&guard));
-                            build_pattern_predicate(pat, Some(guard), guard_negated, span)
-                        } else if matches!(pat, Pattern::Constructor { .. }) {
-                            // Bare constructor pattern predicate (e.g. `x -> Some _`)
-                            let span = pattern_span(&pat);
-                            build_pattern_predicate(pat, None, false, span)
-                        } else {
-                            // Not a pattern predicate — backtrack and parse as expr
-                            self.pos = guard_start;
-                            self.parse_expr().unwrap_or(Expr::Raw {
-                                text: String::new(),
-                                span: pattern_span(&pattern),
-                            })
-                        }
-                    } else {
-                        self.pos = guard_start;
-                        self.parse_expr().unwrap_or(Expr::Raw {
-                            text: String::new(),
-                            span: pattern_span(&pattern),
-                        })
-                    };
+                    self.emit_diag(
+                        "E1626",
+                        "block guard statements were removed in AIVI v0.2; use flow guards or collection filters instead",
+                        pattern_span(&pattern),
+                    );
+                    let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                        text: String::new(),
+                        span: pattern_span(&pattern),
+                    });
                     let span = merge_span(pattern_span(&pattern), expr_span(&expr));
-                    items.push(BlockItem::Filter { expr, span });
+                    items.push(BlockItem::Expr { expr, span });
                     continue;
                 }
                 if self.consume_symbol("=") {
@@ -543,314 +456,3 @@ impl Parser {
     }
 }
 
-/// Walk an expression tree and replace every `BlockItem::Recurse { expr, span }`
-/// with `BlockItem::Expr { expr: Call(fn_name, expr), span }`.
-/// This is used to desugar `loop`/`recurse` inside effect-style blocks
-/// at parse time, avoiding new AST variants.
-fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
-    match expr {
-        Expr::Block { kind, items, span } => {
-            let items = items
-                .into_iter()
-                .map(|item| replace_recurse_in_block_item(item, fn_name))
-                .collect();
-            Expr::Block { kind, items, span }
-        }
-        Expr::If {
-            cond,
-            then_branch,
-            else_branch,
-            span,
-        } => Expr::If {
-            cond: Box::new(replace_recurse_in_expr(*cond, fn_name)),
-            then_branch: Box::new(replace_recurse_in_expr(*then_branch, fn_name)),
-            else_branch: Box::new(replace_recurse_in_expr(*else_branch, fn_name)),
-            span,
-        },
-        Expr::Lambda { params, body, span } => Expr::Lambda {
-            params,
-            body: Box::new(replace_recurse_in_expr(*body, fn_name)),
-            span,
-        },
-        Expr::Match {
-            scrutinee,
-            arms,
-            span,
-        } => Expr::Match {
-            scrutinee: scrutinee.map(|e| Box::new(replace_recurse_in_expr(*e, fn_name))),
-            arms: arms
-                .into_iter()
-                .map(|arm| MatchArm {
-                    pattern: arm.pattern,
-                    guard: arm.guard.map(|g| replace_recurse_in_expr(g, fn_name)),
-                    guard_negated: arm.guard_negated,
-                    body: replace_recurse_in_expr(arm.body, fn_name),
-                    span: arm.span,
-                })
-                .collect(),
-            span,
-        },
-        Expr::Call { func, args, span } => Expr::Call {
-            func: Box::new(replace_recurse_in_expr(*func, fn_name)),
-            args: args
-                .into_iter()
-                .map(|a| replace_recurse_in_expr(a, fn_name))
-                .collect(),
-            span,
-        },
-        Expr::Binary {
-            op,
-            left,
-            right,
-            span,
-        } => Expr::Binary {
-            op,
-            left: Box::new(replace_recurse_in_expr(*left, fn_name)),
-            right: Box::new(replace_recurse_in_expr(*right, fn_name)),
-            span,
-        },
-        Expr::Flow { root, lines, span } => Expr::Flow {
-            root: Box::new(replace_recurse_in_expr(*root, fn_name)),
-            lines: lines
-                .into_iter()
-                .map(|line| replace_recurse_in_flow_line(line, fn_name))
-                .collect(),
-            span,
-        },
-        Expr::Tuple { items, span } => Expr::Tuple {
-            items: items
-                .into_iter()
-                .map(|e| replace_recurse_in_expr(e, fn_name))
-                .collect(),
-            span,
-        },
-        Expr::List { items, span } => Expr::List {
-            items: items
-                .into_iter()
-                .map(|li| ListItem {
-                    expr: replace_recurse_in_expr(li.expr, fn_name),
-                    spread: li.spread,
-                    span: li.span,
-                })
-                .collect(),
-            span,
-        },
-        Expr::Record { fields, span } => Expr::Record {
-            fields: fields
-                .into_iter()
-                .map(|f| RecordField {
-                    spread: f.spread,
-                    path: f.path,
-                    value: replace_recurse_in_expr(f.value, fn_name),
-                    span: f.span,
-                })
-                .collect(),
-            span,
-        },
-        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
-            base: Box::new(replace_recurse_in_expr(*base, fn_name)),
-            suffix,
-            span,
-        },
-        Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
-            base: Box::new(replace_recurse_in_expr(*base, fn_name)),
-            field,
-            span,
-        },
-        Expr::Index { base, index, span } => Expr::Index {
-            base: Box::new(replace_recurse_in_expr(*base, fn_name)),
-            index: Box::new(replace_recurse_in_expr(*index, fn_name)),
-            span,
-        },
-        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
-            expr: Box::new(replace_recurse_in_expr(*expr, fn_name)),
-            span,
-        },
-        Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
-            parts: parts
-                .into_iter()
-                .map(|p| match p {
-                    TextPart::Expr { expr, span } => TextPart::Expr {
-                        expr: Box::new(replace_recurse_in_expr(*expr, fn_name)),
-                        span,
-                    },
-                    other => other,
-                })
-                .collect(),
-            span,
-        },
-        Expr::PatchLit { fields, span } => Expr::PatchLit {
-            fields: fields
-                .into_iter()
-                .map(|f| RecordField {
-                    spread: f.spread,
-                    path: f.path,
-                    value: replace_recurse_in_expr(f.value, fn_name),
-                    span: f.span,
-                })
-                .collect(),
-            span,
-        },
-        // Leaf expressions: no sub-expressions to walk.
-        other @ (Expr::Ident(_)
-        | Expr::Literal(_)
-        | Expr::Raw { .. }
-        | Expr::FieldSection { .. }) => other,
-        Expr::Mock { substitutions, body, span } => {
-            let substitutions = substitutions
-                .into_iter()
-                .map(|mut sub| {
-                    sub.value = sub.value.map(|v| replace_recurse_in_expr(v, fn_name));
-                    sub
-                })
-                .collect();
-            Expr::Mock {
-                substitutions,
-                body: Box::new(replace_recurse_in_expr(*body, fn_name)),
-                span,
-            }
-        }
-    }
-}
-
-fn replace_recurse_in_flow_modifier(modifier: FlowModifier, fn_name: &SpannedName) -> FlowModifier {
-    match modifier {
-        FlowModifier::Timeout { duration, span } => FlowModifier::Timeout {
-            duration: replace_recurse_in_expr(duration, fn_name),
-            span,
-        },
-        FlowModifier::Delay { duration, span } => FlowModifier::Delay {
-            duration: replace_recurse_in_expr(duration, fn_name),
-            span,
-        },
-        FlowModifier::Concurrent { limit, span } => FlowModifier::Concurrent {
-            limit: replace_recurse_in_expr(limit, fn_name),
-            span,
-        },
-        FlowModifier::Retry {
-            attempts,
-            interval,
-            exponential,
-            span,
-        } => FlowModifier::Retry {
-            attempts,
-            interval: replace_recurse_in_expr(interval, fn_name),
-            exponential,
-            span,
-        },
-        FlowModifier::Cleanup { expr, span } => FlowModifier::Cleanup {
-            expr: replace_recurse_in_expr(expr, fn_name),
-            span,
-        },
-    }
-}
-
-fn replace_recurse_in_flow_arm(arm: FlowArm, fn_name: &SpannedName) -> FlowArm {
-    FlowArm {
-        pattern: arm.pattern,
-        guard: arm
-            .guard
-            .map(|guard| replace_recurse_in_expr(guard, fn_name)),
-        guard_negated: arm.guard_negated,
-        body: replace_recurse_in_expr(arm.body, fn_name),
-        span: arm.span,
-    }
-}
-
-fn replace_recurse_in_flow_line(line: FlowLine, fn_name: &SpannedName) -> FlowLine {
-    match line {
-        FlowLine::Step(step) => FlowLine::Step(FlowStep {
-            kind: step.kind,
-            expr: replace_recurse_in_expr(step.expr, fn_name),
-            modifiers: step
-                .modifiers
-                .into_iter()
-                .map(|modifier| replace_recurse_in_flow_modifier(modifier, fn_name))
-                .collect(),
-            binding: step.binding,
-            subflow: step
-                .subflow
-                .into_iter()
-                .map(|line| replace_recurse_in_flow_line(line, fn_name))
-                .collect(),
-            span: step.span,
-        }),
-        FlowLine::Guard(guard) => FlowLine::Guard(FlowGuard {
-            predicate: replace_recurse_in_expr(guard.predicate, fn_name),
-            fail_expr: guard
-                .fail_expr
-                .map(|expr| replace_recurse_in_expr(expr, fn_name)),
-            span: guard.span,
-        }),
-        FlowLine::Branch(arm) => FlowLine::Branch(replace_recurse_in_flow_arm(arm, fn_name)),
-        FlowLine::Recover(arm) => FlowLine::Recover(replace_recurse_in_flow_arm(arm, fn_name)),
-        FlowLine::Anchor(anchor) => FlowLine::Anchor(anchor),
-    }
-}
-
-/// Replace `Recurse` block items with function calls to `fn_name`.
-fn replace_recurse_in_block_item(item: BlockItem, fn_name: &SpannedName) -> BlockItem {
-    match item {
-        BlockItem::Recurse { expr, span } => BlockItem::Expr {
-            expr: Expr::Call {
-                func: Box::new(Expr::Ident(fn_name.clone())),
-                args: vec![replace_recurse_in_expr(expr, fn_name)],
-                span: span.clone(),
-            },
-            span,
-        },
-        BlockItem::Bind {
-            pattern,
-            expr,
-            span,
-        } => BlockItem::Bind {
-            pattern,
-            expr: replace_recurse_in_expr(expr, fn_name),
-            span,
-        },
-        BlockItem::Let {
-            pattern,
-            expr,
-            span,
-        } => BlockItem::Let {
-            pattern,
-            expr: replace_recurse_in_expr(expr, fn_name),
-            span,
-        },
-        BlockItem::Expr { expr, span } => BlockItem::Expr {
-            expr: replace_recurse_in_expr(expr, fn_name),
-            span,
-        },
-        BlockItem::Filter { expr, span } => BlockItem::Filter {
-            expr: replace_recurse_in_expr(expr, fn_name),
-            span,
-        },
-        BlockItem::Yield { expr, span } => BlockItem::Yield {
-            expr: replace_recurse_in_expr(expr, fn_name),
-            span,
-        },
-        BlockItem::When { cond, effect, span } => BlockItem::When {
-            cond: replace_recurse_in_expr(cond, fn_name),
-            effect: replace_recurse_in_expr(effect, fn_name),
-            span,
-        },
-        BlockItem::Unless {
-            cond,
-            effect,
-            span,
-        } => BlockItem::Unless {
-            cond: replace_recurse_in_expr(cond, fn_name),
-            effect: replace_recurse_in_expr(effect, fn_name),
-            span,
-        },
-        BlockItem::Given {
-            cond,
-            fail_expr,
-            span,
-        } => BlockItem::Given {
-            cond: replace_recurse_in_expr(cond, fn_name),
-            fail_expr: replace_recurse_in_expr(fail_expr, fn_name),
-            span,
-        },
-    }
-}

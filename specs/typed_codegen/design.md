@@ -179,7 +179,7 @@ Generated Cranelift code calls into the runtime through a large `extern "C"` hel
 | Access | `rt_record_field`, `rt_list_index`, `rt_tuple_item`, `rt_constructor_arg` |
 | Pattern matching | `rt_constructor_name_eq`, `rt_value_equals`, `rt_list_tail`, `rt_list_len` |
 | Control | `rt_apply`, `rt_force_thunk`, `rt_run_effect`, `rt_bind_effect`, `rt_wrap_effect`, `rt_check_call_depth` |
-| Generators | `rt_gen_vec_new`, `rt_gen_vec_push`, `rt_gen_vec_extend_generator`, `rt_gen_vec_into_generator` |
+| Fan-out / zero-many lowering | `rt_gen_vec_new`, `rt_gen_vec_push`, `rt_gen_vec_extend_generator`, `rt_gen_vec_into_generator` |
 | Sigils | `rt_eval_sigil` |
 | AOT registration | `rt_register_jit_fn` |
 

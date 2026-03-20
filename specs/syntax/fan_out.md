@@ -1,8 +1,8 @@
 # Fan-out and Collection Shaping
 
-AIVI v0.2 uses flat flow syntax for zero-many workflows. The main tool is `*|>`, which fans out over an iterable, runs a per-item fan-out body, and rejoins with an ordinary list result at `*-|`.
+AIVI uses flat flow syntax for zero-many workflows. `*|>` fans out over a list, range, or other iterable, runs a per-item body, and rejoins with a plain list result at `*-|`.
 
-There is no separate legacy generator-block surface in the current language.
+Use ordinary lists, ranges, and collection helpers for sequence values. Reach for `*|>` only when the sequence logic itself needs workflow structure such as guards, scoped bindings, nested expansion, or per-item effects.
 
 ## The basic shape
 
@@ -17,7 +17,7 @@ evens =
 
 Read that as:
 
-1. start from an iterable,
+1. start from a list or range,
 2. enter a per-item fan-out body with `*|>`,
 3. keep only items whose guard passes,
 4. emit the transformed value for each surviving item,
@@ -28,12 +28,12 @@ Read that as:
 Inside a fan-out block:
 
 - each item becomes the current spine subject,
-- ordinary `|>` lines transform that item,
+- ordinary `|>` lines transform or emit that item,
 - `>|>` without `or fail ...` means **skip this item**,
 - bindings created inside the fan-out body stay local to that item,
 - the whole block yields a plain list value once `*-|` closes it.
 
-That final point matters: after the block finishes, use ordinary collection helpers rather than a second special workflow syntax.
+That final point matters: after the block finishes, keep shaping the result with ordinary collection functions rather than a second special workflow syntax.
 
 ## Shape the result with ordinary functions
 
@@ -81,10 +81,6 @@ savedIds =
 ```
 
 `@concurrent` limits how many item fan-out bodies may run at once. It does not change the logical result shape.
-
-## Relationship to `aivi.generator`
-
-The [`aivi.generator`](../stdlib/core/generator.md) module still documents reusable lazy generator values as library data. The language-level workflow surface for zero-many processing, though, is `*|>` plus ordinary collection functions.
 
 ## When to use fan-out versus plain collection helpers
 

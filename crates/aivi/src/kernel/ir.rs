@@ -18,6 +18,37 @@ impl IdGen {
     }
 }
 
+fn is_recursive_generated_binding_name(name: &str) -> bool {
+    name.starts_with("__loop") || name.starts_with("__flow_restart_")
+}
+
+fn wrap_recursive_generated_binding(
+    pattern: &HirPattern,
+    raw_src: HirExpr,
+    id_gen: &mut IdGen,
+) -> HirExpr {
+    let binding_name = match pattern {
+        HirPattern::Var { name, .. } => name.clone(),
+        _ => unreachable!(),
+    };
+    let fix_body = HirExpr::Lambda {
+        id: id_gen.next(),
+        param: binding_name,
+        body: Box::new(raw_src),
+        location: None,
+    };
+    HirExpr::App {
+        id: id_gen.next(),
+        func: Box::new(HirExpr::Var {
+            id: id_gen.next(),
+            name: "__fix".to_string(),
+            location: None,
+        }),
+        arg: Box::new(fix_body),
+        location: None,
+    }
+}
+
 pub fn desugar_blocks(program: HirProgram) -> HirProgram {
     let mut id_gen = IdGen::new(find_max_id_program(&program) + 1);
     let modules = program
@@ -256,7 +287,6 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
             block_kind,
             items,
         } => match block_kind {
-            HirBlockKind::Generate => lower_generate_block(items, id_gen),
             HirBlockKind::Do { monad } if monad == "Effect" => {
                 lower_effect_block(items, id_gen)
             }
@@ -303,355 +333,6 @@ fn desugar_record_field(field: HirRecordField, id_gen: &mut IdGen) -> HirRecordF
             .collect(),
         value: desugar_expr(field.value, id_gen),
     }
-}
-
-// ── Generator Church-encoding ─────────────────────────────────────────────────
-
-fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
-    if items.is_empty() {
-        return gen_empty(id_gen);
-    }
-
-    let item = items[0].clone();
-    let rest = items[1..].to_vec();
-
-    match item {
-        HirBlockItem::Yield { expr } => {
-            let yield_expr = gen_yield(desugar_expr(expr, id_gen), id_gen);
-            if rest.is_empty() {
-                yield_expr
-            } else {
-                gen_append(yield_expr, lower_generate_block(rest, id_gen), id_gen)
-            }
-        }
-        HirBlockItem::Bind {
-            pattern,
-            expr,
-            is_monadic,
-        } => {
-            let raw_src = desugar_expr(expr, id_gen);
-            if is_monadic {
-                // `x <- expr` in a generate block: iterate over expr as a generator.
-                // Wrap with __asGenerator so bare lists are implicitly converted.
-                let src = HirExpr::App {
-                    id: id_gen.next(),
-                    func: Box::new(HirExpr::Var {
-                        id: id_gen.next(),
-                        name: "__asGenerator".to_string(),
-                    
-                        location: None,
-                    }),
-                    arg: Box::new(raw_src),
-                    location: None,
-                };
-                let next = lower_generate_block(rest, id_gen);
-                let param_name = format!("_gen_bind_{}", id_gen.next());
-                let param_var = HirExpr::Var {
-                    id: id_gen.next(),
-                    name: param_name.clone(),
-                
-                    location: None,
-                };
-                let body = HirExpr::Match {
-                    id: id_gen.next(),
-                    scrutinee: Box::new(param_var),
-                    arms: vec![HirMatchArm {
-                        pattern,
-                        guard: None,
-                        guard_negated: false,
-                        body: next,
-                    }],
-                    location: None,
-                };
-                let func = HirExpr::Lambda {
-                    id: id_gen.next(),
-                    param: param_name,
-                    body: Box::new(body),
-                                location: None,
-};
-                gen_bind(src, func, id_gen)
-            } else {
-                // `s = expr` in a generate block: plain let-binding.
-                // Check if this is a recursive __loop binding (from loop/recurse desugaring).
-                let is_recursive_loop = matches!(&pattern, HirPattern::Var { name, .. } if name.starts_with("__loop"));
-
-                let next = lower_generate_block(rest, id_gen);
-                let param_name = format!("_gen_let_{}", id_gen.next());
-                let param_var = HirExpr::Var {
-                    id: id_gen.next(),
-                    name: param_name.clone(),
-                
-                    location: None,
-                };
-                let body = HirExpr::Match {
-                    id: id_gen.next(),
-                    scrutinee: Box::new(param_var),
-                    arms: vec![HirMatchArm {
-                        pattern: pattern.clone(),
-                        guard: None,
-                        guard_negated: false,
-                        body: next,
-                    }],
-                    location: None,
-                };
-
-                let value = if is_recursive_loop {
-                    // Recursive binding: __loop0 = λn → body_using___loop0
-                    // Desugar to: __fix (λ__loop0 → raw_src)
-                    // so __loop0 is bound before raw_src references it.
-                    let loop_name = match &pattern {
-                        HirPattern::Var { name, .. } => name.clone(),
-                        _ => unreachable!(),
-                    };
-                    let fix_body = HirExpr::Lambda {
-                        id: id_gen.next(),
-                        param: loop_name,
-                        body: Box::new(raw_src),
-                                        location: None,
-};
-                    HirExpr::App {
-                        id: id_gen.next(),
-                        func: Box::new(HirExpr::Var {
-                            id: id_gen.next(),
-                            name: "__fix".to_string(),
-                        
-                            location: None,
-                        }),
-                        arg: Box::new(fix_body),
-                        location: None,
-                    }
-                } else {
-                    raw_src
-                };
-
-                // (\param -> body) value  — immediately-applied lambda = let binding
-                HirExpr::App {
-                    id: id_gen.next(),
-                    func: Box::new(HirExpr::Lambda {
-                        id: id_gen.next(),
-                        param: param_name,
-                        body: Box::new(body),
-                                        location: None,
-}),
-                    arg: Box::new(value),
-                    location: None,
-                }
-            }
-        }
-        HirBlockItem::Expr { expr } => {
-            // Treat as sub-generator to spread/append.
-            // Wrap with __asGenerator so Unit (e.g. from empty else branches
-            // in loop/recurse) becomes an empty generator.
-            let raw = desugar_expr(expr, id_gen);
-            let head = HirExpr::App {
-                id: id_gen.next(),
-                func: Box::new(HirExpr::Var {
-                    id: id_gen.next(),
-                    name: "__asGenerator".to_string(),
-                
-                    location: None,
-                }),
-                arg: Box::new(raw),
-                location: None,
-            };
-            if rest.is_empty() {
-                head
-            } else {
-                gen_append(head, lower_generate_block(rest, id_gen), id_gen)
-            }
-        }
-        HirBlockItem::Filter { expr } => {
-            let cond = desugar_expr(expr, id_gen);
-            let next = lower_generate_block(rest, id_gen);
-            gen_if(cond, next, id_gen)
-        }
-        HirBlockItem::Recurse { .. } => {
-            // Unsupported for now
-            gen_empty(id_gen)
-        }
-    }
-}
-
-// Generator A = (R -> A -> R) -> R -> R
-// \k -> \z -> z
-fn gen_empty(id_gen: &mut IdGen) -> HirExpr {
-    let k = format!("_k_{}", id_gen.next());
-    let z = format!("_z_{}", id_gen.next());
-    HirExpr::Lambda {
-        id: id_gen.next(),
-        param: k,
-        body: Box::new(HirExpr::Lambda {
-            id: id_gen.next(),
-            param: z.clone(),
-            body: Box::new(HirExpr::Var {
-                id: id_gen.next(),
-                name: z,
-            
-                location: None,
-            }),
-        
-            location: None,
-        }),
-    
-        location: None,
-    }
-}
-
-// \k -> \z -> k z x
-fn gen_yield(val: HirExpr, id_gen: &mut IdGen) -> HirExpr {
-    let k_name = format!("_k_{}", id_gen.next());
-    let z_name = format!("_z_{}", id_gen.next());
-    let k = HirExpr::Var {
-        id: id_gen.next(),
-        name: k_name.clone(),
-    
-        location: None,
-    };
-    let z = HirExpr::Var {
-        id: id_gen.next(),
-        name: z_name.clone(),
-    
-        location: None,
-    };
-
-    // k z val
-    let k_app_z = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(k),
-        arg: Box::new(z),
-        location: None,
-    };
-    let k_app_z_val = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(k_app_z),
-        arg: Box::new(val),
-        location: None,
-    };
-
-    HirExpr::Lambda {
-        id: id_gen.next(),
-        param: k_name,
-        body: Box::new(HirExpr::Lambda {
-            id: id_gen.next(),
-            param: z_name,
-            body: Box::new(k_app_z_val),
-        
-            location: None,
-        }),
-        location: None,
-}
-}
-
-// \k -> \z -> g2 k (g1 k z)
-fn gen_append(g1: HirExpr, g2: HirExpr, id_gen: &mut IdGen) -> HirExpr {
-    let k_name = format!("_k_{}", id_gen.next());
-    let z_name = format!("_z_{}", id_gen.next());
-    let k = HirExpr::Var {
-        id: id_gen.next(),
-        name: k_name.clone(),
-    
-        location: None,
-    };
-    let z = HirExpr::Var {
-        id: id_gen.next(),
-        name: z_name.clone(),
-    
-        location: None,
-    };
-
-    // g1 k z
-    let g1_k = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(g1),
-        arg: Box::new(k.clone()),
-        location: None,
-    };
-    let g1_k_z = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(g1_k),
-        arg: Box::new(z.clone()),
-        location: None,
-    };
-
-    // g2 k (g1 k z)
-    let g2_k = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(g2),
-        arg: Box::new(k),
-        location: None,
-    };
-    let g2_k_res = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(g2_k),
-        arg: Box::new(g1_k_z),
-        location: None,
-    };
-
-    HirExpr::Lambda {
-        id: id_gen.next(),
-        param: k_name,
-        body: Box::new(HirExpr::Lambda {
-            id: id_gen.next(),
-            param: z_name,
-            body: Box::new(g2_k_res),
-        
-            location: None,
-        }),
-        location: None,
-}
-}
-
-// \k -> \z -> if cond then next(k, z) else z
-fn gen_if(cond: HirExpr, next: HirExpr, id_gen: &mut IdGen) -> HirExpr {
-    let k_name = format!("_k_{}", id_gen.next());
-    let z_name = format!("_z_{}", id_gen.next());
-    let k = HirExpr::Var {
-        id: id_gen.next(),
-        name: k_name.clone(),
-    
-        location: None,
-    };
-    let z = HirExpr::Var {
-        id: id_gen.next(),
-        name: z_name.clone(),
-    
-        location: None,
-    };
-
-    // next k z
-    let next_k = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(next),
-        arg: Box::new(k.clone()),
-        location: None,
-    };
-    let next_k_z = HirExpr::App {
-        id: id_gen.next(),
-        func: Box::new(next_k),
-        arg: Box::new(z.clone()),
-        location: None,
-    };
-
-    let if_expr = HirExpr::If {
-        id: id_gen.next(),
-        cond: Box::new(cond),
-        then_branch: Box::new(next_k_z),
-        else_branch: Box::new(z),
-        location: None,
-    };
-
-    HirExpr::Lambda {
-        id: id_gen.next(),
-        param: k_name,
-        body: Box::new(HirExpr::Lambda {
-            id: id_gen.next(),
-            param: z_name,
-            body: Box::new(if_expr),
-        
-            location: None,
-        }),
-        location: None,
-}
 }
 
 // ── effect-style block desugaring ─────────────────────────────────────────────
@@ -1029,6 +710,14 @@ fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> 
             if is_last {
                 lowered_expr
             } else {
+                let lowered_expr = match pattern {
+                    HirPattern::Var { name, .. }
+                        if is_recursive_generated_binding_name(name) =>
+                    {
+                        wrap_recursive_generated_binding(pattern, lowered_expr, id_gen)
+                    }
+                    _ => lowered_expr,
+                };
                 let rest = lower_plain_items(items, idx + 1, id_gen);
                 let param = pattern_to_param(pattern, id_gen);
                 let body = wrap_pattern_match(param.clone(), pattern, rest, id_gen);

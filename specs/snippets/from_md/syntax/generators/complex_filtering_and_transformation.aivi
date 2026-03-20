@@ -1,6 +1,0 @@
-// Find active premium users with valid emails
-processed = generate {
-  u <- users
-  u -> active && tier == Premium && isValidEmail email
-  yield { name: u.name, email: toLower u.email }
-}

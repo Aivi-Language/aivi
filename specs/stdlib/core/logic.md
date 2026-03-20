@@ -185,7 +185,7 @@ A `Filterable` can remove values using a predicate. Requires `Functor`.
 The class snippet uses abbreviated HKT form, so `filter: (A -> Bool) -> F A` reads as `filter: (A -> Bool) -> F A -> F A`.
 <!-- /quick-info -->
 
-`Filterable` is the shared interface behind filtering values out of structures such as lists, maps, generators, and other containers that support removal.
+`Filterable` is the shared interface behind filtering values out of structures such as lists, maps, trees, streams, and other containers that support removal.
 
 <<< ../../snippets/from_md/stdlib/core/logic/filterable.aivi{aivi}
 
@@ -256,7 +256,6 @@ This table shows which standard types implement which classes. `use aivi.logic` 
 | **Option** | ✓ | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | **Result E** | ✓ | — | — | — | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — |
 | **Map K** | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
-| **Generator** | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
 | **Tree** | — | — | — | — | ✓ | ✓ | ✓ | — | — | — | — | — | — | — | — |
 | **Stream** | — | — | — | — | ✓ | ✓ | — | — | — | — | — | — | — | — | — |
 

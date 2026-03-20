@@ -136,7 +136,7 @@ Read that as:
 
 AIVI leans heavily on this pipeline style because it keeps transformations readable and avoids temporary mutable state.
 
-See [Predicates](syntax/predicates), [Collections](stdlib/core/collections), and [Generator](stdlib/core/generator).
+See [Predicates](syntax/predicates), [Fan-out & Collection Shaping](syntax/fan_out), and [Collections](stdlib/core/collections).
 
 ---
 
@@ -174,7 +174,7 @@ Read that as:
 
 `*|>` ... `*-|` is the flow-syntax way to express zero-many work. After the block, use ordinary collection helpers such as `map`, `filter`, `partition`, `groupBy`, `toSet`, or `fold`.
 
-See [Flow Syntax](syntax/flows), [Fan-out & Collection Shaping](syntax/generators), and [Collections](stdlib/core/collections).
+See [Flow Syntax](syntax/flows), [Fan-out & Collection Shaping](syntax/fan_out), and [Collections](stdlib/core/collections).
 
 ---
 

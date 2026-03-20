@@ -23,7 +23,6 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "Invalid",
     "Closed",
     // Core functions
-    "foldGen",
     "constructorName",
     "constructorOrdinal",
     "pure",
@@ -53,7 +52,6 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "promap",
     "assertEq",
     "__assertSnapshot",
-    "__asGenerator",
     "__makeResource",
     "__withResourceScope",
     "__fix",

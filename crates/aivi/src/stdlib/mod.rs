@@ -27,7 +27,6 @@ mod duration;
 mod email;
 mod file;
 mod forms;
-mod generator;
 mod geometry;
 mod gnome_online_accounts;
 mod graph;
@@ -94,10 +93,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: collections::MODULE_NAME,
         source: collections::SOURCE,
-    },
-    EmbeddedModule {
-        name: generator::MODULE_NAME,
-        source: generator::SOURCE,
     },
     EmbeddedModule {
         name: logic::MODULE_NAME,

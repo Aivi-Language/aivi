@@ -2,7 +2,7 @@
 
 > **Proposal status:** this page is a forward-looking design proposal. It does **not** replace the current v0.1 language reference yet.
 > 
-> Today, workflow sequencing is still described across [Effects](../syntax/effects.md), [Cleanup & Lifetimes](../syntax/resources.md), and [Fan-out & Collection Shaping](../syntax/generators.md). If this proposal lands, those pages become migration references during the refactor and are then removed or rewritten at cutover.
+> Today, workflow sequencing is still described across [Effects](../syntax/effects.md), [Cleanup & Lifetimes](../syntax/resources.md), and [Fan-out & Collection Shaping](../syntax/fan_out.md). If this proposal lands, those pages become migration references during the refactor and are then removed or rewritten at cutover.
 
 ## Why this proposal exists
 
@@ -17,13 +17,13 @@ AIVI currently splits workflow-shaped code across several surfaces:
 
 Each of those forms is coherent on its own, but together they force programmers, formatters, and tooling to switch between several syntactic models for what is often the same left-to-right idea: take a current value, run the next step, and decide what to do with success, absence, multiplicity, failure, cleanup, and control flow.
 
-This proposal replaces that split with one pipeline calculus so ordinary sequencing, optional binding, failure propagation, applicative fan-out, generator expansion, resource cleanup, retries, timeouts, concurrency, and looping all read in the same surface language.
+This proposal replaces that split with one pipeline calculus so ordinary sequencing, optional binding, failure propagation, applicative fan-out, fan-out expansion, resource cleanup, retries, timeouts, concurrency, and looping all read in the same surface language.
 
 The intended end state is deliberate: **one workflow style, not several equivalent ones**.
 
 ## Design goals
 
-1. **One workflow surface.** Effects, `Option`, `Result`, applicatives, generators, and resources should look like variations of one core idea rather than separate notations.
+1. **One workflow surface.** Effects, `Option`, `Result`, applicatives, zero-many fan-out, and resources should look like variations of one core idea rather than separate notations.
 2. **Left-to-right reading.** The common case should read as a single pipeline without nested dedicated effect blocks.
 3. **Explicit control.** Failure handling, retries, timeouts, cleanup, concurrency, and branching should remain visible in the syntax.
 4. **Formatter-friendly structure.** Indentation and subflow boundaries should come from the parsed tree, not from heuristics.
@@ -60,7 +60,7 @@ In other words:
 | `!\|>`       | fail-fast bind            |
 | `?\|>`       | optional bind             |
 | `&\|>`       | applicative branch        |
-| `*\|>`       | sequence / generator bind |
+| `*\|>`       | zero-many / fan-out bind |
 | `+\|>`       | as * but applicative      |
 | `:\|>`       | control / meta stage      |
 
@@ -197,7 +197,7 @@ Inside an `all` group:
 - each `&|>` branch receives the same pre-group subject,
 - remembered names from successful branches become available after the group,
 
-## Generators, zero-many workflows, and concurrency
+## Fan-out, zero-many workflows, and concurrency
 
 `*|>` replaces the separate legacy fan-out block surface. A `*|>` stage expands zero-many outputs and flattens them into the surrounding workflow.
 

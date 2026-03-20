@@ -78,7 +78,7 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Flow Syntax](syntax/flows)
 - [Effects](syntax/effects)
 - [Cleanup & Lifetimes](syntax/resources)
-- [Fan-out & Collection Shaping](syntax/generators)
+- [Fan-out & Collection Shaping](syntax/fan_out)
 #### Modules & External Data
 - [Modules](syntax/modules)
 ##### External Sources
@@ -130,7 +130,6 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Result](stdlib/core/result)
 - [Logic](stdlib/core/logic)
 - [Collections](stdlib/core/collections)
-- [Generator](stdlib/core/generator)
 - [Validation](stdlib/core/validation)
 #### Text & Data
 - [Text](stdlib/core/text)

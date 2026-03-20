@@ -1,0 +1,35 @@
+@no_prelude
+module integrationTests.syntax.scoping.closureListCapture
+
+use aivi
+use aivi.testing
+
+makeFns : List (Int -> Int)
+makeFns = List.map (x => n => n + x) [10, 20, 30]
+
+@test "list closures each capture their own iteration value"
+listClosureCapture = {
+  results = List.map (f => f 5) makeFns
+  assertEq results [15, 25, 35]
+}
+
+@test "list closures over nested values capture independently"
+listNestedCapture = {
+  fns = List.flatMap (base => List.map (mult => x => x * mult + base) [10, 100]) [1, 2]
+  results = List.map (f => f 3) fns
+  assertEq results [31, 301, 32, 302]
+}
+
+@test "list closure captures correct item with filtering"
+listClosureWithFilter = {
+  fns = [1, 2, 3, 4, 5] |> List.filter (x => x % 2 == 1) |> List.map (x => n => n + x)
+  results = List.map (f => f 0) fns
+  assertEq results [1, 3, 5]
+}
+
+@test "list-shaped closures capture per-item value"
+listLoopClosureCapture = {
+  fns = List.map (n => x => x * n) [1, 2, 3]
+  results = List.map (f => f 4) fns
+  assertEq results [4, 8, 12]
+}

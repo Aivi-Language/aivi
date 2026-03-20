@@ -260,7 +260,6 @@ pub enum ArenaFlowLine {
 pub enum ArenaBlockKind {
     Plain,
     Do { monad: SpannedSymbol },
-    Generate,
     Managed,
 }
 

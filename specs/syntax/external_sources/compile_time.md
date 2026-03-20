@@ -1,7 +1,7 @@
 # Compile-Time Sources (`@static`)
 
 <!-- quick-info: {"kind":"topic","name":"compile-time sources"} -->
-`@static` evaluates deterministic source reads and generators at compile time and embeds the value into the program.
+`@static` evaluates deterministic source reads and build-time generation steps at compile time and embeds the value into the program.
 <!-- /quick-info -->
 
 `@static` is for inputs that should be fixed when the program is built rather than read every time the program runs.

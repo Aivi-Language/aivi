@@ -85,8 +85,8 @@ resourceSequential = {
                                                    assertMissing path2
 }
 
-@test "resource loop: acquire use release per iteration"
-resourceLoop = {
+@test "resource iteration: acquire use release per item"
+resourceIteration = {
   paths = [
     "/tmp/aivi_complex_resource_4a.txt"
     "/tmp/aivi_complex_resource_4b.txt"

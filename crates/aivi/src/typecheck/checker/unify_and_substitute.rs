@@ -437,8 +437,8 @@ impl TypeChecker {
                     .map(|arg| self.expand_alias_with_visiting(arg, visiting))
                     .collect::<Vec<_>>();
 
-                // Resolve bare type names (e.g. "Key", "Generator") to their fully-qualified
-                // internal names (e.g. "aivi.i18n.Key", "aivi.generator.Generator") so that
+                // Resolve bare type names (e.g. "Key", "TimeZone") to their fully-qualified
+                // internal names (e.g. "aivi.i18n.Key", "aivi.calendar.TimeZone") so that
                 // alias expansion and opaque checks work correctly regardless of whether the
                 // type was constructed with a bare or qualified name.
                 let qualified = self.type_name_bindings.get(&name).cloned().unwrap_or_else(|| name.clone());
@@ -466,10 +466,10 @@ impl TypeChecker {
                     mapping.insert(*param, arg.clone());
                 }
                 // Freshen internal (non-param) vars in the alias body so each
-                // expansion is independent. Without this, a shared var like `R` in
-                // `Generator A = (R -> A -> R) -> R -> R` would be reused across
-                // multiple expansions, causing spurious occurs-check failures when
-                // the same `Generator` alias is expanded twice in a single unification.
+                // expansion is independent. Without this, shared internal vars in
+                // aliases would be reused across multiple expansions, causing
+                // spurious occurs-check failures when the same alias is expanded
+                // twice in a single unification.
                 let param_set: HashSet<TypeVarId> = alias.params.iter().cloned().collect();
                 let body_vars = Self::collect_vars(&alias.body);
                 for var in body_vars {

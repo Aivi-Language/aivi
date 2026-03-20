@@ -17,7 +17,7 @@ withAdder : Int -> (Int -> Int)
 withAdder = offset => n => n + offset
 
 @test "closure captures variable in list transform"
-closureInGenerator = {
+closureInListTransform = {
   result = scaledRange 3
   assertEq result [3, 6, 9]
 }
@@ -63,7 +63,7 @@ closureHelperReturnsClosure = {
 }
 
 @test "list transform with closure over two captured parameters"
-generatorWithClosureFilterTransform = {
+listWithClosureFilterTransform = {
   result = filteredScaled 1 10
   assertEq result [11, 21, 31]
 }

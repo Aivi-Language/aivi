@@ -345,7 +345,6 @@ fn strict_category_as_str_covers_all_variants() {
         (StrictCategory::Pipe, "Pipe"),
         (StrictCategory::Pattern, "Pattern"),
         (StrictCategory::Effect, "Effect"),
-        (StrictCategory::Generator, "Generator"),
         (StrictCategory::Style, "Style"),
         (StrictCategory::Kernel, "Kernel"),
         (StrictCategory::Domain, "Domain"),

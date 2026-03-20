@@ -545,7 +545,6 @@ impl ArenaBuilder {
             BlockKind::Do { monad } => ArenaBlockKind::Do {
                 monad: SpannedSymbol::from(monad),
             },
-            BlockKind::Generate => ArenaBlockKind::Generate,
             BlockKind::Managed => ArenaBlockKind::Managed,
         }
     }

@@ -508,7 +508,6 @@ pub enum FlowLine {
 pub enum BlockKind {
     Plain,
     Do { monad: SpannedName },
-    Generate,
     Managed,
 }
 

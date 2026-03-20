@@ -362,42 +362,29 @@ main = {
     );
 }
 
-// ─── Generators ───────────────────────────────────────────────────────────────
-// Covers: generator fold, to list, and bind (cartesian product).
+// ─── Lists ────────────────────────────────────────────────────────────────────
+// Covers: list folding, list equality, and cartesian shaping without lazy sequences.
 
 #[test]
-fn rt_generators() {
+fn rt_list_sequences() {
     run_jit(
         r#"@no_prelude
 module app.main
 
 use aivi
 use aivi.testing
-use aivi.generator
 
-gen = generate {
-  yield 1
-  yield 2
-  yield 3
-}
+values = [1, 2, 3]
 
-numbers = generate {
-  yield 1
-  yield 2
-}
-
-pairSums = generate {
-  x <- numbers
-  y <- numbers
-  yield (x + y)
-}
+pairSums = List.flatMap (x => List.map (y => x + y) [1, 2]) [1, 2]
 
 main = {
-  foldResult = gen (a => b => a + b) 0
+  foldResult = List.foldl (acc x => acc + x) 0 values
   assertEq foldResult 6
-  assert (toList gen == [1, 2, 3])
-  bindResult = pairSums (a => b => a + b) 0
+  assertEq values [1, 2, 3]
+  bindResult = List.foldl (acc x => acc + x) 0 pairSums
   assertEq bindResult 12
+  assertEq pairSums [2, 3, 3, 4]
 }
 "#,
     );

@@ -1,0 +1,60 @@
+@no_prelude
+module integrationTests.combinations.comboCollectionNesting
+
+use aivi
+use aivi.testing
+
+// Direct collection transforms replacing the older lazy-sequence examples.
+// Verifies captures and nesting still behave correctly in ordinary collection code.
+
+classify = n => if n % 2 == 0 then n * 10 else n
+scaleBy  = factor => n => n * factor
+
+@test "list mapping uses function with conditional logic"
+listWithMatch = assertEq (List.map classify [1, 2, 3, 4, 5]) [1, 20, 3, 40, 5]
+
+@test "list filtering captures outer scope"
+listFilterWithOuter =
+  assertEq (
+    [1, 2, 3, 4, 5]
+       |> List.filter (n => n > 3)
+       |> List.map (n => n * 2)
+  ) [8, 10]
+
+assertValuesWithBase = base => assertEq (List.map (n => n + base) [1, 2, 3]) [101, 102, 103]
+
+@test "named outer values can feed later list shaping"
+listWithNamedBase = assertValuesWithBase 100
+
+makeScaledValues = factor => List.map (scaleBy factor) [1, 2, 3, 4]
+
+@test "mapped list returned from function captures arg"
+listFromFunction = assertEq (makeScaledValues 5) [5, 10, 15, 20]
+
+pairWithOffsets = base => [base + 1, base + 2]
+
+nestedValues = List.flatMap pairWithOffsets [10, 20]
+
+@test "nested list expansion flattens per item"
+nestedCollections = assertEq nestedValues [11, 12, 21, 22]
+
+double = x => x * 2
+inc    = x => x + 1
+
+@test "list mapping can keep pipe chains in element logic"
+listPipeChain = assertEq (List.map (n => n |> double |> inc) [1, 2, 3]) [3, 5, 7]
+
+matchingPairsFor = target => x =>
+  [6, 7, 8, 9]
+     |> List.filter (y => x + y == target)
+     |> List.map (y => (x, y))
+
+cartesianPairs = List.flatMap (matchingPairsFor 10) [1, 2, 3, 4]
+
+@test "cartesian expansion can capture outer state"
+cartesianGuard = assertEq cartesianPairs [(1, 9), (2, 8), (3, 7), (4, 6)]
+
+scaledOuterValues = factor => List.map (scaleBy factor) [1, 2, 3, 4, 5]
+
+@test "list mapping captures outer scope"
+listCapturesOuter = assertEq (scaledOuterValues 2) [2, 4, 6, 8, 10]

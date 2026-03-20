@@ -14,8 +14,8 @@ advanceHandleMapState = state => state match
       if n >= 200 then n
       else advanceHandleMapState (n + 1, currentHandles)
 
-@test "tuple loop carries effectful record state"
-tupleLoopCarriesEffectfulRecordState = {
+@test "tuple recursion carries effectful record state"
+tupleRecursionCarriesEffectfulRecordState = {
   handle = {
     cancel: pure Unit
     reusable: True
@@ -25,8 +25,8 @@ tupleLoopCarriesEffectfulRecordState = {
   assertEq total 200
 }
 
-@test "tuple loop carries maps of effectful records"
-tupleLoopCarriesEffectfulHandleMaps = {
+@test "tuple recursion carries maps of effectful records"
+tupleRecursionCarriesEffectfulHandleMaps = {
   handle = {
     cancel: pure Unit
     reusable: True

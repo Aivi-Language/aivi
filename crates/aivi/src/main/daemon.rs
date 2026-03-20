@@ -904,7 +904,7 @@ mod tests {
                                         "op": "+",
                                         "left": { "kind": "LitNumber", "id": 2, "text": "1" },
                                         "right": { "kind": "LitNumber", "id": 3, "text": "2" },
-                                        "location": "<embedded:aivi.generator>:34:6"
+                                        "location": "<embedded:aivi.logic>:34:6"
                                     }
                                 }]
                             }]

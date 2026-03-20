@@ -607,9 +607,9 @@ impl TypeChecker {
                             let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
                             if matches!(kind, BlockKind::Plain) {
                                 self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
-                            } else if matches!(kind, BlockKind::Generate | BlockKind::Managed) {
-                                // For generate/managed blocks, try to extract the element type
-                                // from List or Generator. Plain unify on failure.
+                            } else if matches!(kind, BlockKind::Managed) {
+                                // Managed bindings consume effect-like resources whose yielded
+                                // values are carried in a list-shaped acquire payload.
                                 let backup = self.subst.clone();
                                 let elem_ty = self.fresh_var();
                                 let list_ty = Type::con("List").app(vec![elem_ty.clone()]);
@@ -623,21 +623,7 @@ impl TypeChecker {
                                         pattern_span(&pattern),
                                     );
                                 } else {
-                                    self.subst = backup.clone();
-                                    let gen_ty =
-                                        Type::con("Generator").app(vec![elem_ty.clone()]);
-                                    if self
-                                        .unify_with_span(expr_ty.clone(), gen_ty, span.clone())
-                                        .is_ok()
-                                    {
-                                        let _ = self.unify_with_span(
-                                            pat_ty,
-                                            elem_ty,
-                                            pattern_span(&pattern),
-                                        );
-                                    } else {
-                                        self.subst = backup;
-                                    }
+                                    self.subst = backup;
                                 }
                             } else {
                                 // For Effect do-blocks, try to extract the value type from the

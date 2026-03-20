@@ -977,59 +977,6 @@ f =
         assert!(matches!(expr, HirExpr::Block { .. }));
     }
 
-    // ---- lower_blocks_and_patterns.rs: Filter, Yield, Recurse ----
-
-    #[test]
-    fn generate_block_yield_lowered() {
-        let program = parse_and_lower(
-            r#"
-module Test
-
-nums = generate {
-  yield 1
-  yield 2
-  yield 3
-}
-"#,
-        );
-        let expr = find_def_expr(&program, "nums");
-        assert!(matches!(expr, HirExpr::Block { .. }));
-    }
-
-    #[test]
-    fn generate_block_filter_lowered() {
-        let program = parse_and_lower(
-            r#"
-module Test
-
-evens = generate {
-  x <- [1, 2, 3, 4]
-  filter (x == 2)
-  yield x
-}
-"#,
-        );
-        let expr = find_def_expr(&program, "evens");
-        assert!(matches!(expr, HirExpr::Block { .. }));
-    }
-
-    #[test]
-    fn generate_block_bind_lowered() {
-        let program = parse_and_lower(
-            r#"
-module Test
-
-cross = generate {
-  x <- [1, 2]
-  y <- [10, 20]
-  yield (x + y)
-}
-"#,
-        );
-        let expr = find_def_expr(&program, "cross");
-        assert!(matches!(expr, HirExpr::Block { .. }));
-    }
-
     // ---- lower_blocks_and_patterns.rs: nested effect values ----
 
     #[test]

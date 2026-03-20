@@ -154,8 +154,16 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                         }
                         BlockItem::Filter { expr, .. }
                         | BlockItem::Yield { expr, .. }
-                        | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => collect_expr(expr, env, bound, out),
+                        BlockItem::Recurse { expr, .. } => match expr {
+                            Expr::Ident(_) => {}
+                            Expr::Call { func, args, .. }
+                                if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+                            {
+                                collect_expr(&args[0], env, bound, out);
+                            }
+                            _ => collect_expr(expr, env, bound, out),
+                        },
                         BlockItem::When { cond, effect, .. }
                         | BlockItem::Unless { cond, effect, .. } => {
                             collect_expr(cond, env, bound, out);
@@ -345,9 +353,17 @@ fn collect_query_implicit_field_names(
                         }
                         BlockItem::Expr { expr, .. }
                         | BlockItem::Filter { expr, .. }
-                        | BlockItem::Yield { expr, .. }
-                        | BlockItem::Recurse { expr, .. } => {
+                        | BlockItem::Yield { expr, .. } => {
                             collect_expr(expr, env, method_names, bound, out);
+                        }
+                        BlockItem::Recurse { expr, .. } => match expr {
+                            Expr::Ident(_) => {}
+                            Expr::Call { func, args, .. }
+                                if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+                            {
+                                collect_expr(&args[0], env, method_names, bound, out);
+                            }
+                            _ => collect_expr(expr, env, method_names, bound, out),
                         }
                         BlockItem::When { cond, effect, .. }
                         | BlockItem::Unless { cond, effect, .. } => {
@@ -621,10 +637,30 @@ fn rewrite_implicit_field_vars(
                         | BlockItem::Let { expr, .. }
                         | BlockItem::Filter { expr, .. }
                         | BlockItem::Yield { expr, .. }
-                        | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => {
                             *expr =
                                 rewrite_implicit_field_vars(expr.clone(), implicit_param, unbound);
+                        }
+                        BlockItem::Recurse { expr, .. } => {
+                            *expr = match expr.clone() {
+                                Expr::Ident(_) => expr.clone(),
+                                Expr::Call { func, args, span }
+                                    if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+                                {
+                                    Expr::Call {
+                                        func,
+                                        args: vec![rewrite_implicit_field_vars(
+                                            args[0].clone(),
+                                            implicit_param,
+                                            unbound,
+                                        )],
+                                        span,
+                                    }
+                                }
+                                other => {
+                                    rewrite_implicit_field_vars(other, implicit_param, unbound)
+                                }
+                            };
                         }
                         BlockItem::When { cond, effect, .. }
                         | BlockItem::Unless { cond, effect, .. } => {
@@ -744,8 +780,16 @@ fn expr_contains_placeholder(expr: &Expr) -> bool {
             | BlockItem::Let { expr, .. }
             | BlockItem::Filter { expr, .. }
             | BlockItem::Yield { expr, .. }
-            | BlockItem::Recurse { expr, .. }
             | BlockItem::Expr { expr, .. } => expr_contains_placeholder(expr),
+            BlockItem::Recurse { expr, .. } => match expr {
+                Expr::Ident(_) => false,
+                Expr::Call { func, args, .. }
+                    if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+                {
+                    expr_contains_placeholder(&args[0])
+                }
+                _ => expr_contains_placeholder(expr),
+            },
             BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
                 expr_contains_placeholder(cond) || expr_contains_placeholder(effect)
             }
@@ -815,8 +859,16 @@ fn expr_contains_field_section(expr: &Expr) -> bool {
             | BlockItem::Let { expr, .. }
             | BlockItem::Filter { expr, .. }
             | BlockItem::Yield { expr, .. }
-            | BlockItem::Recurse { expr, .. }
             | BlockItem::Expr { expr, .. } => expr_contains_field_section(expr),
+            BlockItem::Recurse { expr, .. } => match expr {
+                Expr::Ident(_) => false,
+                Expr::Call { func, args, .. }
+                    if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+                {
+                    expr_contains_field_section(&args[0])
+                }
+                _ => expr_contains_field_section(expr),
+            },
             BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
                 expr_contains_field_section(cond) || expr_contains_field_section(effect)
             }

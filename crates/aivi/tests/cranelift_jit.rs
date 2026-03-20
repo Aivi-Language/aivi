@@ -404,51 +404,32 @@ main = {
     );
 }
 
-// ─── Generators ───────────────────────────────────────────────────────────────
-// Covers: generate block (Church fold), generate-bind, generator to list.
+// ─── Lists ────────────────────────────────────────────────────────────────────
+// Covers: list folding, list equality, and cartesian shaping in JIT mode.
 
 #[test]
-fn cranelift_jit_generators() {
+fn cranelift_jit_list_sequences() {
     run_jit(
         r#"@no_prelude
 module app.main
 
 use aivi
 use aivi.testing
-use aivi.generator
 
-gen = generate {
-  yield 10
-  yield 20
-  yield 30
-}
+values = [10, 20, 30]
 
-numbers = generate {
-  yield 1
-  yield 2
-}
+pairSums = List.flatMap (x => List.map (y => x + y) [1, 2]) [1, 2]
 
-pairSums = generate {
-  x <- numbers
-  y <- numbers
-  yield (x + y)
-}
-
-bigGen = generate {
-  yield 10
-  yield 20
-  yield 30
-  yield 40
-  yield 50
-}
+bigValues = [10, 20, 30, 40, 50]
 
 main : Effect Text Unit
 main = {
-  foldResult = gen (a => b => a + b) 0
+  foldResult = List.foldl (acc x => acc + x) 0 values
   assertEq foldResult 60
-  bindResult = pairSums (a => b => a + b) 0
+  bindResult = List.foldl (acc x => acc + x) 0 pairSums
   assertEq bindResult 12
-  assertEq (toList bigGen) [10, 20, 30, 40, 50]
+  assertEq pairSums [2, 3, 3, 4]
+  assertEq bigValues [10, 20, 30, 40, 50]
 }
 "#,
     );

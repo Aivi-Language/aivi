@@ -19,8 +19,8 @@ impl Runtime {
                     } else {
                         // First concrete (non-callable) result wins immediately.
                         // This ensures HKT dispatch is correct: e.g. `filter pred
-                        // list` returns the filtered list rather than a generator
-                        // closure produced by the Generator Filterable instance.
+                        // list` returns the filtered list rather than a partially
+                        // applied callable produced during method dispatch.
                         self.jit_suppress_warnings = saved_suppress;
                         return Ok(value);
                     }

@@ -337,7 +337,6 @@ pub enum HirBlockKind {
     /// `do M { ... }` — monadic block. `monad` is the type constructor name
     /// (e.g. `"Effect"`, `"Option"`, `"Result"`).
     Do { monad: String },
-    Generate,
     Managed,
 }
 

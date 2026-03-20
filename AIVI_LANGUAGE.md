@@ -562,6 +562,7 @@ src
 - No method-call style: use `map f xs` or `xs |> map f`.
 - No angle-bracket generics: `List Int`, not `List<Int>`.
 - No `flatMap`; use `chain`.
+- No `generate { ... }`, `Generator`, or `aivi.generator`; use lists, ranges, collection helpers, or `*|>` ... `*-|` fan-out.
 - No `case ... of`; use `match`.
 - No `String`; use `Text`.
 - Record fields use `:`, not `=`.

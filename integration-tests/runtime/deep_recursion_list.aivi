@@ -79,20 +79,20 @@ nestedFold = {
   assertEq total 66
 }
 
-// --- Loop/recurse within the safe depth limit (< 1000 frames) ---
+// --- Tail recursion within the safe depth limit (< 1000 frames) ---
 //
 // Tail-recursive helpers still go through the JIT call-depth guard. The tests
 // below use a depth of 500 — comfortably within that limit — to verify that
 // recursive accumulation itself works correctly.
 
-@test "loop recurse 500 iterations accumulates correctly"
-loopRecurse500 = {
+@test "tail recursion across 500 iterations accumulates correctly"
+tailRecursion500 = {
   total = sumRangeRecursively 0 0
   assertEq total 124750
 }
 
-@test "loop recurse builds list of 100 elements"
-loopRecurseList100 = {
+@test "tail recursion builds list of 100 elements"
+tailRecursionList100 = {
   xs    = buildRangeRecursively 0 []
   total = List.foldl (acc x => acc + x) 0 xs
   assertEq (List.length xs) 100

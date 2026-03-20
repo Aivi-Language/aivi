@@ -1687,7 +1687,6 @@ fn lower_block_kind(kind: &BlockKind) -> HirBlockKind {
         BlockKind::Do { monad } => HirBlockKind::Do {
             monad: monad.name.clone(),
         },
-        BlockKind::Generate => HirBlockKind::Generate,
         BlockKind::Managed => HirBlockKind::Managed,
     }
 }

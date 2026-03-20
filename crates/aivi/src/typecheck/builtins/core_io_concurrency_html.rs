@@ -99,25 +99,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
 
-    let a = checker.fresh_var_id();
-    let b = checker.fresh_var_id();
-    env.insert(
-        "foldGen".to_string(),
-        Scheme {
-            vars: vec![a, b],
-            ty: Type::Func(
-                Box::new(Type::con("Generator").app(vec![Type::Var(a)])),
-                Box::new(Type::Func(
-                    Box::new(Type::Func(
-                        Box::new(Type::Var(b)),
-                        Box::new(Type::Func(Box::new(Type::Var(a)), Box::new(Type::Var(b)))),
-                    )),
-                    Box::new(Type::Func(Box::new(Type::Var(b)), Box::new(Type::Var(b)))),
-                )),
-            ),
-            origin: None,
-        },
-    );
 
     let a = checker.fresh_var_id();
     let e = checker.fresh_var_id();

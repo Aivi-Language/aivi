@@ -583,37 +583,20 @@ x =
 }
 
 #[test]
-fn lower_generate_block_to_arena() {
+fn rejects_removed_generate_block_syntax() {
     let src = r#"
 module Example
 
 x = generate {
-  yield 1
-  yield 2
+  1
 }
 "#;
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let (arena, lowered) = lower_modules_to_arena(&modules);
-    let def = lowered[0]
-        .items
-        .iter()
-        .find_map(|item| match item {
-            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
-            _ => None,
-        })
-        .expect("x");
-    match arena.expr(def.expr) {
-        ArenaExpr::Block {
-            kind: ArenaBlockKind::Generate,
-            items,
-            ..
-        } => {
-            assert_eq!(items.len(), 2);
-            assert!(matches!(items[0], ArenaBlockItem::Yield { .. }));
-        }
-        other => panic!("expected Generate Block, got {other:?}"),
-    }
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.contains(&"E1623".to_string()),
+        "expected E1623, got {codes:?}"
+    );
 }
 
 #[test]
@@ -1163,16 +1146,6 @@ x = ok
     }
 }
 
-#[test]
-fn lower_filter_in_generate_block() {
-    let src = r#"
-module Example
-
-x = generate {
-  n <- [1, 2, 3]
-  n -> n > 0
-  yield n
-}
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
@@ -1810,41 +1783,7 @@ x = { a.b: 1 }
 }
 
 #[test]
-fn parses_block_with_filter_in_generate() {
-    let src = r#"
-module Example
-
-x = generate {
-  n <- [1, 2, 3]
-  n -> n > 0
-  yield n
-}
-"#;
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let module = modules.first().expect("module");
-    let def = module
-        .items
-        .iter()
-        .find_map(|item| match item {
-            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
-            _ => None,
-        })
-        .expect("x def");
-    match &def.expr {
-        Expr::Block {
-            items,
-            kind: BlockKind::Generate,
-            ..
-        } => {
-            assert!(items.iter().any(|i| matches!(i, BlockItem::Filter { .. })));
-        }
-        other => panic!("expected Generate block, got {other:?}"),
-    }
-}
-
-#[test]
-fn rejects_yield_outside_generate() {
+fn rejects_removed_yield_syntax() {
     let src = r#"
 module Example
 
@@ -1855,13 +1794,13 @@ x = {
     let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
     let codes = diag_codes(&diags);
     assert!(
-        codes.contains(&"E1534".to_string()),
-        "expected E1534, got {codes:?}"
+        codes.contains(&"E1625".to_string()),
+        "expected E1625, got {codes:?}"
     );
 }
 
 #[test]
-fn rejects_recurse_outside_generate() {
+fn rejects_recurse_outside_effect_block() {
     let src = r#"
 module Example
 
@@ -3149,7 +3088,7 @@ fn lower_match_with_unless_guard_to_arena() {
 
 #[test]
 fn lower_block_recurse_item_to_arena() {
-    let src = "module Example\n\nx = generate {\n  recurse 1\n}\n";
+    let src = "module Example\n\nx = recurse 1\n";
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
     let (arena, lowered) = lower_modules_to_arena(&modules);
@@ -3192,35 +3131,35 @@ fn parses_anchor_in_flow() {
 }
 
 #[test]
-fn rejects_loop_outside_do_or_generate() {
+fn rejects_removed_loop_syntax() {
     let src = "module Example\n\nx = {\n  loop n = 0 => pure n\n}\n";
     let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diag_codes(&diags).contains(&"E1533".to_string()));
+    assert!(diag_codes(&diags).contains(&"E1624".to_string()));
 }
 
 #[test]
 fn rejects_when_outside_do() {
-    let src = "module Example\n\nx = generate {\n  when True <- someEffect\n  yield 1\n}\n";
+    let src = "module Example\n\nx = {\n  when True <- someEffect\n  1\n}\n";
     let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1540".to_string()));
 }
 
 #[test]
 fn rejects_unless_outside_do() {
-    let src = "module Example\n\nx = generate {\n  unless False <- someEffect\n  yield 1\n}\n";
+    let src = "module Example\n\nx = {\n  unless False <- someEffect\n  1\n}\n";
     let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1543".to_string()));
 }
 
 #[test]
 fn rejects_given_outside_do() {
-    let src = "module Example\n\nx = generate {\n  given True or fail \"nope\"\n  yield 1\n}\n";
+    let src = "module Example\n\nx = {\n  given True or fail \"nope\"\n  1\n}\n";
     let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1541".to_string()));
 }
 
 #[test]
-fn rejects_bind_outside_do_or_generate() {
+fn rejects_bind_outside_do() {
     let src = "module Example\n\nx = {\n  y <- someEffect\n  y\n}\n";
     let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1536".to_string()));

@@ -3093,10 +3093,9 @@ mod tests {
     }
 
     #[test]
-    fn expression_submit_resolves_generator_pipeline_to_list() {
+    fn expression_submit_resolves_list_pipeline() {
         let mut engine = make_engine();
-        engine.submit("/use aivi.generator").unwrap();
-        let snap = engine.submit("range 1 5 |> map (_ * 2) |> toList").unwrap();
+        let snap = engine.submit("[1..5] |> map (_ * 2)").unwrap();
         assert!(snap.transcript.iter().any(|entry| {
             matches!(entry.kind, TranscriptKind::ValueResult)
                 && entry.text == "[2, 4, 6, 8] :: List Int"

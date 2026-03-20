@@ -1,12 +1,8 @@
 @no_prelude
-module integrationTests.combinations.comboClosureInGenerator
+module integrationTests.combinations.comboClosureInList
 
 use aivi
 use aivi.testing
-
-// Fan-out produces closures that capture the current item. The closures are
-// collected, then called after the fan-out completes. Each must carry its own
-// captured value, not a shared reference to the last iteration value.
 
 makeAdder       = n => x => x + n
 makeMultiplier  = n => x => x * n
@@ -23,26 +19,19 @@ subtractorClosures = List.map subtractFrom [10, 20, 30]
 @test "each mapped closure captures its own item"
 eachClosureCapturesOwnBinding = assertEq (List.map (f => f 0) adderClosures) [1, 2, 3]
 
-// --- Call closures with non-zero argument after mapping ---
-
 @test "closures called after mapping return correct values"
-closuresCalledAfterGeneration =
+closuresCalledAfterMapping =
   assertEq (List.map (f => f 2) multiplierClosures) [20, 40, 60]
-
-// --- Outer scope + item both captured ---
 
 @test "closure captures both outer scope and item"
 closureCapturesOuterAndIter =
   assertEq (List.map (f => f 0) (shiftedClosures 100)) [101, 102, 103]
 
-// --- Closures over paired values capture tuple fields ---
-
 @test "mapped closures capture tuple pattern binding"
-generatorAdtClosures = assertEq (List.map (f => f 0) pairClosures) [11, 22, 33]
-
-// --- Closures from mapping called out of order still correct ---
+adtClosures = assertEq (List.map (f => f 0) pairClosures) [11, 22, 33]
 
 @test "closures called out of order still hold their own captured value"
-closuresCalledOutOfOrder =
-  &|> assertEq (List.map (f => f 5) subtractorClosures) [5, 15, 25]
-  &|> assertEq (List.map (f => f 10) subtractorClosures) [0, 10, 20]
+closuresCalledOutOfOrder = {
+  assertEq (List.map (f => f 5) subtractorClosures) [5, 15, 25]
+  assertEq (List.map (f => f 10) subtractorClosures) [0, 10, 20]
+}

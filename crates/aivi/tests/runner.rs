@@ -267,8 +267,6 @@ fn run_aivi_sources_inner() {
         .filter(|p| {
             let path_str = p.to_string_lossy();
             let keep = path_str.contains("fromListDebug.aivi")
-                || path_str.contains("generators_advanced.aivi")
-                || path_str.contains("generatorPipeline.aivi")
                 || path_str.contains("closures_hof.aivi")
                 || path_str.contains("resourceLifecycle.aivi");
             keep && !path_str.starts_with("integration-tests/stdlib/")
@@ -374,7 +372,6 @@ fn syntax_remaining_batch_one_files_execute_without_failures() {
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/syntax/effects/when_conditional.aivi",
-        "integration-tests/syntax/generators/basic_yield.aivi",
         "integration-tests/syntax/operators/domain_operator_resolution.aivi",
         "integration-tests/syntax/patching/record_patch_basic.aivi",
         "integration-tests/syntax/pattern_matching/guards_when.aivi",
@@ -469,7 +466,7 @@ fn combinations_batch_one_execute_without_failures() {
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/combinations/combo_closures_across_scopes.aivi",
-        "integration-tests/combinations/combo_generator_nesting.aivi",
+        "integration-tests/combinations/combo_collection_nesting.aivi",
         "integration-tests/combinations/combo_resource_nesting.aivi",
         "integration-tests/combinations/combo_multi_clause_with_nesting.aivi",
     ]
@@ -576,7 +573,7 @@ fn scoping_tests_execute_without_failures() {
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/syntax/scoping/closure_loop_capture.aivi",
-        "integration-tests/syntax/scoping/closure_generator_capture.aivi",
+        "integration-tests/syntax/scoping/closure_list_capture.aivi",
         "integration-tests/syntax/scoping/shadowing_all_binders.aivi",
         "integration-tests/syntax/scoping/nested_lambda_capture.aivi",
         "integration-tests/syntax/scoping/destructure_capture.aivi",

@@ -1,5 +1,5 @@
-generate {
-  u <- users
-  u -> active && tier == Premium
-  yield u
-}
+users
+   *|> _
+   >|> active && tier == Premium
+    |> .email
+   *-|

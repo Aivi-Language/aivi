@@ -3,9 +3,10 @@ module integrationTests.syntax.scoping.closureLoopCapture
 
 use aivi
 use aivi.testing
+use aivi.logic
 
-// Closures created inside a loop/recurse, stored in a list, called after
-// the loop ends. Each closure must capture its own per-iteration value,
+// Closures created by recursive builders, stored in a list, called after
+// the recursion ends. Each closure must capture its own per-step value,
 // not the last value seen.
 
 buildMultiplierFns = i => fns =>
@@ -32,24 +33,24 @@ buildIncrementFns = i => fns =>
     buildIncrementFns (i + 1) [...fns, f]
   }
 
-@test "loop closures each capture their own iteration value"
-loopClosureCapture = {
+@test "recursive closures each capture their own step value"
+recursiveClosureCapture = {
   fns = buildMultiplierFns 1 []
   // fns = [f1, f2, f3, f4] where fi x = x * i
-  results = List.map (f => f 10) fns
+  results = map (f => f 10) fns
   assertEq results [10, 20, 30, 40]
 }
 
-@test "loop closures capture distinct additive offsets"
-loopClosureOffsets = {
+@test "recursive closures capture distinct additive offsets"
+recursiveClosureOffsets = {
   fns = buildOffsetFns 0 []
   // fns = [f0, f1, f2]: f0 adds 0, f1 adds 100, f2 adds 200
-  results = List.map (f => f 5) fns
+  results = map (f => f 5) fns
   assertEq results [5, 105, 205]
 }
 
-@test "loop closures called multiple times still return correct per-iteration value"
-loopClosureMultiCall = {
+@test "recursive closures called multiple times keep the right captured value"
+recursiveClosureMultiCall = {
   fns = buildIncrementFns 1 []
   fns match
     | [first, second, third] => {

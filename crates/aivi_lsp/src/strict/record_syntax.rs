@@ -13,8 +13,8 @@ pub(super) fn strict_record_syntax_cst(cst_tokens: &[aivi::CstToken], out: &mut 
     //     that are not valid record-field syntax (AIVI-S017)
     //
     // We keep this deliberately conservative: only flag things that are
-    // *unambiguously* wrong according to spec.  (`effect { }` / `generate { }`
-    // blocks are not records and are excluded.)
+    // *unambiguously* wrong according to spec. Effect-style blocks are not
+    // records and are excluded.
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum BraceKind {

@@ -1207,31 +1207,6 @@ bad = { x: "hello", y: 2 }
     );
 }
 
-// ---- infer_effects_and_patches.rs: generator type inference ----
-
-#[test]
-fn infer_generator_block() {
-    let result = parse_and_infer(
-        r#"
-module Test
-
-nums = generate {
-  yield 1
-  yield 2
-  yield 3
-}
-"#,
-    );
-    let non_embedded: Vec<_> = result
-        .diagnostics
-        .into_iter()
-        .filter(|d| !d.path.starts_with("<embedded:"))
-        .collect();
-    assert!(!has_errors(&non_embedded));
-    let types = result.type_strings.get("Test").expect("Test module");
-    assert!(types.contains_key("nums"));
-}
-
 // ---- class_env.rs: multi-param class ----
 
 #[test]

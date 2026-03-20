@@ -3,7 +3,7 @@ module integrationTests.combinations.comboLoopNesting
 
 use aivi
 use aivi.testing
-use aivi.generator
+use aivi.logic
 
 accumulateWithFactor = factor => i => acc =>
   if i > 5 then acc
@@ -30,44 +30,38 @@ sumScaledWithPure = base => i => acc =>
   if i > 3 then acc
   else sumScaledWithPure base (i + 1) (acc + i * base)
 
-@test "loop in effect captures outer bindings"
-loopCapturesOuter = {
+@test "recursive accumulation captures outer bindings"
+recursiveCapturesOuter = {
   factor = 3
   result = accumulateWithFactor factor 1 0
   assertEq result 45
 }
 
-@test "loop with match dispatching per iteration"
-loopWithMatch = {
+@test "recursive dispatch with match per step"
+recursiveWithMatch = {
   items  = [Some 1, None, Some 3, None, Some 5]
   result = sumOptionalItems items 0
   assertEq result 9
 }
 
-@test "loop creates closures capturing iteration state"
-loopCreatesClosures = {
+@test "recursive builder creates closures capturing step state"
+recursiveCreatesClosures = {
   fns = buildAdderFnsDescending 1 []
   fns match
     | [f3, f2, f1] => assertEq [f1 10, f2 10, f3 10] [11, 12, 13]
     | _            => fail "expected three closures"
 }
 
-@test "loop with nested effect preserves outer"
-loopNestedEffectPreservesOuter = {
+@test "recursive helper with nested effect preserves outer"
+recursiveNestedEffectPreservesOuter = {
   base   = 100
   result = sumScaledWithPure base 1 0
   assertEq result 600
 }
 
-@test "loop in generator captures outer scope"
-loopInGeneratorCapturesOuter = {
+@test "mapped list captures outer scope"
+mappedListCapturesOuter = {
   multiplier = 10
-  g          = generate {
-    loop n = 1 => {
-      yield (n * multiplier)
-      if n >= 4 then {}
-      else recurse (n + 1)
-    }
-  }
-  assertEq (toList g) [10, 20, 30, 40]
+  values     = map (n => n * multiplier) [1, 2, 3, 4]
+  assertEq values [10, 20, 30, 40]
 }

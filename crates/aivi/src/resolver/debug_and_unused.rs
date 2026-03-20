@@ -402,11 +402,26 @@ fn check_expr(
                     BlockItem::Filter { expr, .. } => {
                         check_expr(expr, &mut block_scope, diagnostics, module, true);
                     }
-                    BlockItem::Yield { expr, .. }
-                    | BlockItem::Recurse { expr, .. }
-                    | BlockItem::Expr { expr, .. } => {
+                    BlockItem::Yield { expr, .. } | BlockItem::Expr { expr, .. } => {
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                     }
+                    BlockItem::Recurse { expr, .. } => match expr {
+                        Expr::Ident(_) => {}
+                        Expr::Call { func, args, .. }
+                            if matches!(func.as_ref(), Expr::Ident(_)) && args.len() == 1 =>
+                        {
+                            check_expr(
+                                &args[0],
+                                &mut block_scope,
+                                diagnostics,
+                                module,
+                                allow_unknown,
+                            );
+                        }
+                        _ => {
+                            check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
+                        }
+                    },
                     BlockItem::When { cond, effect, .. }
                     | BlockItem::Unless { cond, effect, .. } => {
                         check_expr(cond, &mut block_scope, diagnostics, module, allow_unknown);

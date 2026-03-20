@@ -1,5 +1,0 @@
-generate {
-  value <- xs
-  value -> value > 0
-  yield value * 2
-}

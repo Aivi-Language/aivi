@@ -75,11 +75,15 @@ highValuePaidUsers = users[id == 2]
 usersByCreatedAt : Query User
 usersByCreatedAt = users |> orderBy (asc .createdAt)
 
+seedAndRun = run => conn => {
+  seed conn
+  run conn
+}
+
 withSeededConn = run =>
-  Unit
-   |> _ => connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
-  ~|>_ => seed conn
-   |> _ => run conn
+  ":memory:"
+   |> url => connect { driver: Sqlite, url: url }@cleanup close#conn
+   |> seedAndRun run
 
 seed : DbConnection -> Effect DbError Unit
 seed = conn => {
@@ -92,97 +96,104 @@ seed = conn => {
   order4 = { id: 4, userId: 2, status: "paid", total: 90, createdAt: 20 }
   order5 = { id: 5, userId: 3, status: "refunded", total: 15, createdAt: 50 }
 
-  Unit
-  ~|>_ => runMigrationsOn conn [users, orders]
-   |> _ => insertOn conn users user1#users1
-   |> _ => insertOn conn users1 user2#users2
-  ~|>_ => insertOn conn users2 user3
-   |> _ => insertOn conn orders order1#orders1
-   |> _ => insertOn conn orders1 order2#orders2
-   |> _ => insertOn conn orders2 order3#orders3
-   |> _ => insertOn conn orders3 order4#orders4
-  ~|>_ => insertOn conn orders4 order5
-   |> _ => pure Unit
+  runMigrationsOn conn [users, orders]
+  users
+   |> relation => insertOn conn relation user1#users1
+   |> users1 => insertOn conn users1 user2#users2
+   |> users2 => insertOn conn users2 user3
+  orders
+   |> relation => insertOn conn relation order1#orders1
+   |> orders1 => insertOn conn orders1 order2#orders2
+   |> orders2 => insertOn conn orders2 order3#orders3
+   |> orders3 => insertOn conn orders3 order4#orders4
+   |> orders4 => insertOn conn orders4 order5
+  pure Unit
 }
 
 userIds = rows => List.map (u => u.id) rows
 
 @test "relation roots execute as queries"
 relation_roots_execute_as_queries = withSeededConn (conn =>
-  Unit
-  |> _ => rowsOn conn allUsersById#found
-  |> _ => assertEq (userIds found) [1, 2, 3]
+  allUsersById
+   |> rowsOn conn#found
+   |> found => assertEq (userIds found) [1, 2, 3]
 )
 
 @test "bracket filters use predicate lifting"
 bracket_filters_use_predicate_lifting = withSeededConn (conn =>
-  Unit
-  |> _ => rowsOn conn activeAdultUsers#found
-  |> _ => assertEq (userIds found) [1, 3]
+  activeAdultUsers
+   |> rowsOn conn#found
+   |> found => assertEq (userIds found) [1, 3]
 )
 
 @test "orderBy limit offset and selectMap compose"
 orderBy_limit_offset_and_selectMap_compose = withSeededConn (conn =>
-  Unit
-  |> _ => rowsOn conn pagedActiveUsers#found
-  |> _ => assertEq found [{ id: 1, email: "ada@example.com" }]
+  pagedActiveUsers
+   |> rowsOn conn#found
+   |> found => assertEq found [{ id: 1, email: "ada@example.com" }]
 )
 
 @test "distinct removes duplicate projected rows"
 distinct_removes_duplicate_projected_rows = withSeededConn (conn =>
-  Unit
-   |> _ => rowsOn conn paidUserIds#found
-  ~|>_ => assertEq (List.length found) 2
-   |> _ => found match
-    | [a, b] => assert ((a.userId == 1 && b.userId == 2) || (a.userId == 2 && b.userId == 1))
-    | _      => assert False
+  paidUserIds
+   |> rowsOn conn#found
+   |> found => {
+        assertEq (List.length found) 2
+        found match
+          | [a, b] => assert ((a.userId == 1 && b.userId == 2) || (a.userId == 2 && b.userId == 1))
+          | _      => assert False
+      }
 )
 
 @test "nested relation filters use exists semantics"
 nested_relation_filters_use_exists_semantics = withSeededConn (conn =>
-  Unit
-  |> _ => rowsOn conn usersWithLargePaidOrders#found
-  |> _ => assertEq (userIds found) [1, 2]
+  usersWithLargePaidOrders
+   |> rowsOn conn#found
+   |> found => assertEq (userIds found) [1, 2]
 )
 
 @test "nested relation projections stay nested"
 nested_relation_projections_stay_nested = withSeededConn (conn =>
-  Unit
-  |> _ => rowsOn conn activeUsersWithPaidOrders#found
-  |> _ => assertEq found [
-    {
-      id: 1
-      orders: [
-        { id: 2, total: 70 }
-        { id: 1, total: 40 }
-      ]
-    }
-    {
-      id: 3
-      orders: []
-    }
-  ]
+  activeUsersWithPaidOrders
+   |> rowsOn conn#found
+   |> found => assertEq found [
+     {
+       id: 1
+       orders: [
+         { id: 2, total: 70 }
+         { id: 1, total: 40 }
+       ]
+     }
+     {
+       id: 3
+       orders: []
+     }
+   ]
 )
 
 @test "grouped queries support having aggregates and ordering"
 grouped_queries_support_having_aggregates_and_ordering = withSeededConn (conn =>
-  Unit
-  |> _ => rowsOn conn salesByUser#found
-  |> _ => assertEq found [
-    { userId: 1, orderCount: 2, totalSpent: 110, maxOrder: 70 }
-    { userId: 2, orderCount: 1, totalSpent: 90,  maxOrder: 90 }
-  ]
+  salesByUser
+   |> rowsOn conn#found
+   |> found => assertEq found [
+     { userId: 1, orderCount: 2, totalSpent: 110, maxOrder: 70 }
+     { userId: 2, orderCount: 1, totalSpent: 90,  maxOrder: 90 }
+   ]
 )
 
 @test "rows first count and exists execute compiled queries"
 rows_first_count_and_exists_execute_compiled_queries = withSeededConn (conn =>
-  Unit
-   |> _ => countOn conn activeAdultUsers#activeAdultCount
-   |> _ => existsOn conn highValuePaidUsers#hasHighValuePaidOrder
-   |> _ => firstOn conn usersByCreatedAt#firstUser
-  ~|>_ => assertEq activeAdultCount 2
-  ~|>_ => assertEq hasHighValuePaidOrder True
-   |> _ => firstUser match
-    | Some user => assertEq user.id 1
-    | None      => assert False
+  activeAdultUsers
+   |> countOn conn#activeAdultCount
+   |> activeAdultCount => highValuePaidUsers
+     |> existsOn conn#hasHighValuePaidOrder
+     |> hasHighValuePaidOrder => usersByCreatedAt
+       |> firstOn conn#firstUser
+       |> firstUser => {
+            assertEq activeAdultCount 2
+            assertEq hasHighValuePaidOrder True
+            firstUser match
+              | Some user => assertEq user.id 1
+              | None      => assert False
+          }
 )

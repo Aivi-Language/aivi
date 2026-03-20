@@ -18,9 +18,16 @@ struct FlowBuiltExpr {
     kind: FlowExprKind,
 }
 
+#[derive(Clone)]
+struct FlowRestartAnchor {
+    source_name: SpannedName,
+    fn_name: SpannedName,
+}
+
 #[derive(Default)]
 struct FlowDesugarCtx {
     next_temp: usize,
+    anchors: Vec<FlowRestartAnchor>,
 }
 
 impl FlowDesugarCtx {
@@ -35,6 +42,13 @@ impl FlowDesugarCtx {
             name: self.fresh_name(prefix),
             span: span.clone(),
         }
+    }
+
+    fn lookup_anchor(&self, name: &str) -> Option<&FlowRestartAnchor> {
+        self.anchors
+            .iter()
+            .rev()
+            .find(|anchor| anchor.source_name.name == name)
     }
 }
 
@@ -141,8 +155,26 @@ impl TypeChecker {
         }
 
         match &lines[0] {
-            FlowLine::Anchor(_) => {
-                self.build_pure_flow(current_expr, current_ty, env, &lines[1..], ctx)
+            FlowLine::Anchor(anchor) => {
+                let anchored = self.build_flow_anchor_expr(
+                    anchor,
+                    current_expr,
+                    current_ty,
+                    env,
+                    ctx,
+                    |checker, restart_subject, restart_ty, restart_env, restart_ctx| {
+                        checker
+                            .build_pure_flow(
+                                restart_subject,
+                                restart_ty,
+                                restart_env,
+                                &lines[1..],
+                                restart_ctx,
+                            )
+                            .map(|built| built.expr)
+                    },
+                )?;
+                self.classify_flow_expr(&anchored, env)
             }
             FlowLine::Recover(arm) => Err(TypeError {
                 span: arm.span.clone(),
@@ -190,12 +222,13 @@ impl TypeChecker {
             FlowLine::Step(step) => match step.kind {
                 FlowStepKind::Flow => {
                     let step_expr =
-                        self.build_step_value_expr(current_expr.clone(), &step.expr, env)?;
+                        self.build_step_value_expr(current_expr.clone(), &step.expr, env, ctx)?;
                     let step_expr = self.apply_line_modifiers(
                         step_expr,
                         &step.modifiers,
                         env,
                         step.span.clone(),
+                        ctx,
                     )?;
                     match self.classify_flow_expr(&step_expr, env)? {
                         FlowBuiltExpr {
@@ -251,12 +284,13 @@ impl TypeChecker {
                 }
                 FlowStepKind::Tap => {
                     let tap_expr =
-                        self.build_step_value_expr(current_expr.clone(), &step.expr, env)?;
+                        self.build_step_value_expr(current_expr.clone(), &step.expr, env, ctx)?;
                     let tap_expr = self.apply_line_modifiers(
                         tap_expr,
                         &step.modifiers,
                         env,
                         step.span.clone(),
+                        ctx,
                     )?;
                     match self.classify_flow_expr(&tap_expr, env)? {
                         FlowBuiltExpr {
@@ -552,8 +586,25 @@ impl TypeChecker {
         }
 
         match &lines[0] {
-            FlowLine::Anchor(_) => {
-                self.build_effect_tail(current_expr, current_ty, env, &lines[1..], ctx)
+            FlowLine::Anchor(anchor) => {
+                let anchored = self.build_flow_anchor_expr(
+                    anchor,
+                    current_expr,
+                    current_ty,
+                    env,
+                    ctx,
+                    |checker, restart_subject, restart_ty, restart_env, restart_ctx| {
+                        let items = checker.build_effect_tail(
+                            restart_subject,
+                            restart_ty,
+                            restart_env,
+                            &lines[1..],
+                            restart_ctx,
+                        )?;
+                        Ok(checker.effect_block(items, anchor.span.clone()))
+                    },
+                )?;
+                self.append_effect_step(anchored, env, &[], ctx)
             }
             FlowLine::Recover(arm) => Err(TypeError {
                 span: arm.span.clone(),
@@ -603,12 +654,13 @@ impl TypeChecker {
             FlowLine::Step(step) => match step.kind {
                 FlowStepKind::Flow => {
                     let step_expr =
-                        self.build_step_value_expr(current_expr.clone(), &step.expr, env)?;
+                        self.build_step_value_expr(current_expr.clone(), &step.expr, env, ctx)?;
                     let step_expr = self.apply_line_modifiers(
                         step_expr,
                         &step.modifiers,
                         env,
                         step.span.clone(),
+                        ctx,
                     )?;
                     self.append_effect_flow_step(
                         step_expr,
@@ -621,12 +673,13 @@ impl TypeChecker {
                 }
                 FlowStepKind::Tap => {
                     let tap_expr =
-                        self.build_step_value_expr(current_expr.clone(), &step.expr, env)?;
+                        self.build_step_value_expr(current_expr.clone(), &step.expr, env, ctx)?;
                     let tap_expr = self.apply_line_modifiers(
                         tap_expr,
                         &step.modifiers,
                         env,
                         step.span.clone(),
+                        ctx,
                     )?;
                     self.append_effect_tap_step(
                         tap_expr,
@@ -1196,7 +1249,11 @@ impl TypeChecker {
         current_expr: Expr,
         step_expr: &Expr,
         env: &TypeEnv,
+        ctx: &mut FlowDesugarCtx,
     ) -> Result<Expr, TypeError> {
+        if let Some(restart) = self.resolve_flow_recurse_expr(step_expr, &current_expr, env, ctx)? {
+            return Ok(restart);
+        }
         let inner = self.desugar_nested_flow_expr(step_expr.clone(), env)?;
         if Expr::is_implicit_unit_placeholder(&current_expr) {
             return Ok(inner);
@@ -1232,14 +1289,18 @@ impl TypeChecker {
         current_expr: Expr,
         env: &TypeEnv,
         lines: &[FlowLine],
-        _ctx: &mut FlowDesugarCtx,
+        ctx: &mut FlowDesugarCtx,
     ) -> Result<(Expr, usize), TypeError> {
         let mut arms = Vec::new();
         let mut consumed = 0;
         while let Some(FlowLine::Branch(arm)) = lines.get(consumed) {
             let arm_env = self.env_with_pattern_binders(env, &arm.pattern);
-            let body =
-                self.prepare_inline_arm_body(arm.body.clone(), &arm_env, current_expr.clone())?;
+            let body = self.prepare_inline_arm_body(
+                arm.body.clone(),
+                &arm_env,
+                current_expr.clone(),
+                ctx,
+            )?;
             let guard = match arm.guard.clone() {
                 Some(guard) => Some(self.desugar_nested_flow_expr(guard, &arm_env)?),
                 None => None,
@@ -1281,9 +1342,9 @@ impl TypeChecker {
         let FlowLine::Step(step) = &lines[0] else {
             unreachable!("attempt region must start with a step");
         };
-        let raw_expr = self.build_step_value_expr(current_expr, &step.expr, env)?;
+        let raw_expr = self.build_step_value_expr(current_expr, &step.expr, env, ctx)?;
         let raw_effect_expr =
-            self.apply_line_modifiers(raw_expr, &step.modifiers, env, step.span.clone())?;
+            self.apply_line_modifiers(raw_expr, &step.modifiers, env, step.span.clone(), ctx)?;
         let effect_expr = self.reify_effect_candidate_expr(raw_effect_expr, step.span.clone());
         let attempt_expr = self.named_call_expr("attempt", vec![effect_expr], step.span.clone());
         let result_name = ctx.fresh_ident("attempt", &step.span);
@@ -1297,6 +1358,7 @@ impl TypeChecker {
                 arm.body.clone(),
                 &arm_env,
                 Expr::Ident(err_name.clone()),
+                ctx,
             )?;
             let body = match self.classify_flow_expr(&body, &arm_env)? {
                 FlowBuiltExpr {
@@ -1408,9 +1470,15 @@ impl TypeChecker {
                     found: None,
                 });
             }
-            let step_expr = self.build_step_value_expr(current_expr.clone(), &step.expr, env)?;
             let step_expr =
-                self.apply_line_modifiers(step_expr, &step.modifiers, env, step.span.clone())?;
+                self.build_step_value_expr(current_expr.clone(), &step.expr, env, ctx)?;
+            let step_expr = self.apply_line_modifiers(
+                step_expr,
+                &step.modifiers,
+                env,
+                step.span.clone(),
+                ctx,
+            )?;
             let kind = self.classify_flow_expr(&step_expr, env)?.kind;
             if let FlowExprKind::Carrier(info) = &kind {
                 if info.effect_like {
@@ -1521,9 +1589,10 @@ impl TypeChecker {
             if consumed == 0 {
                 concurrency_limit = self.flow_concurrency_limit(&step.modifiers)?;
             }
-            let base = self.build_step_value_expr(current_expr.clone(), &step.expr, env)?;
+            let base =
+                self.build_step_value_expr(current_expr.clone(), &step.expr, env, ctx)?;
             let raw_effect_expr =
-                self.apply_line_modifiers(base, &step.modifiers, env, step.span.clone())?;
+                self.apply_line_modifiers(base, &step.modifiers, env, step.span.clone(), ctx)?;
             let effect_expr = self.reify_effect_candidate_expr(raw_effect_expr, step.span.clone());
             let effect_ty = self.infer_expr_ephemeral(&effect_expr, env)?;
             let FlowExprKind::Carrier(effect_info) = self.classify_flow_type(effect_ty) else {
@@ -1654,34 +1723,30 @@ impl TypeChecker {
                 found: None,
             });
         }
-        let source_expr = self.build_step_value_expr(current_expr, &step.expr, env)?;
+        let source_expr = self.build_step_value_expr(current_expr, &step.expr, env, ctx)?;
         let source_ty = self.infer_expr_ephemeral(&source_expr, env)?;
         let item_ty = self.with_ephemeral_state_rollback(|checker| {
-            checker.generate_source_elem(source_ty.clone(), step.span.clone())
+            checker.list_source_elem(source_ty.clone(), step.span.clone())
         })?;
         let item = ctx.fresh_ident("item", &step.span);
         let mut item_env = env.clone();
         item_env.insert(item.name.clone(), Scheme::mono(item_ty.clone()));
         let silent_guard = self.flow_subflow_has_silent_guard(&step.subflow);
         if silent_guard {
-            let mut items = vec![BlockItem::Bind {
-                pattern: Pattern::Ident(item.clone()),
-                expr: source_expr,
-                span: step.span.clone(),
-            }];
-            items.extend(self.build_fanout_generate_items(
-                Expr::Ident(item),
+            let body = self.build_pure_fanout_list_expr(
+                Expr::Ident(item.clone()),
                 &item_env,
                 &step.subflow,
                 ctx,
-            )?);
+            )?;
+            let lambda = Expr::Lambda {
+                params: vec![Pattern::Ident(item)],
+                body: Box::new(body),
+                span: step.span.clone(),
+            };
             return Ok(self.named_call_expr(
-                "aivi.generator.toList",
-                vec![Expr::Block {
-                    kind: BlockKind::Generate,
-                    items,
-                    span: step.span.clone(),
-                }],
+                "chain",
+                vec![lambda, source_expr],
                 step.span.clone(),
             ));
         }
@@ -1699,19 +1764,7 @@ impl TypeChecker {
                     body: Box::new(body.expr),
                     span: step.span.clone(),
                 };
-                if self.is_generator_type(&source_ty) {
-                    Ok(self.named_call_expr(
-                        "aivi.generator.toList",
-                        vec![self.named_call_expr(
-                            "aivi.generator.map",
-                            vec![lambda, source_expr],
-                            step.span.clone(),
-                        )],
-                        step.span.clone(),
-                    ))
-                } else {
-                    Ok(self.named_call_expr("map", vec![lambda, source_expr], step.span.clone()))
-                }
+                Ok(self.named_call_expr("map", vec![lambda, source_expr], step.span.clone()))
             }
             FlowExprKind::Carrier(carrier) if carrier.effect_like => {
                 if silent_guard {
@@ -1742,9 +1795,11 @@ impl TypeChecker {
                     )?),
                     span: step.span.clone(),
                 };
-                let list_source =
-                    self.ensure_list_source_expr(source_expr, &source_ty, step.span.clone())?;
-                Ok(self.named_call_expr("traverse", vec![lambda, list_source], step.span.clone()))
+                Ok(self.named_call_expr(
+                    "traverse",
+                    vec![lambda, source_expr],
+                    step.span.clone(),
+                ))
             }
             FlowExprKind::Carrier(_) => Err(TypeError {
                 span: step.span.clone(),
@@ -1757,51 +1812,53 @@ impl TypeChecker {
         }
     }
 
-    fn build_fanout_generate_items(
+    fn build_pure_fanout_list_expr(
         &mut self,
         current_expr: Expr,
         env: &TypeEnv,
         lines: &[FlowLine],
         ctx: &mut FlowDesugarCtx,
-    ) -> Result<Vec<BlockItem>, TypeError> {
+    ) -> Result<Expr, TypeError> {
         if lines.is_empty() {
-            let yield_span = expr_span(&current_expr);
-            return Ok(vec![BlockItem::Yield {
-                expr: current_expr,
-                span: yield_span,
-            }]);
+            let span = expr_span(&current_expr);
+            return Ok(Expr::List {
+                items: vec![ListItem {
+                    expr: current_expr,
+                    spread: false,
+                    span: span.clone(),
+                }],
+                span,
+            });
         }
         match &lines[0] {
-            FlowLine::Anchor(_) => {
-                self.build_fanout_generate_items(current_expr, env, &lines[1..], ctx)
-            }
+            FlowLine::Anchor(_) => self.build_pure_fanout_list_expr(current_expr, env, &lines[1..], ctx),
             FlowLine::Guard(guard) if guard.fail_expr.is_none() => {
-                let mut items = vec![BlockItem::Filter {
-                    expr: self.build_guard_predicate_expr(
-                        current_expr.clone(),
-                        &guard.predicate,
-                        env,
-                    )?,
+                let predicate =
+                    self.build_guard_predicate_expr(current_expr.clone(), &guard.predicate, env)?;
+                let then_branch =
+                    self.build_pure_fanout_list_expr(current_expr, env, &lines[1..], ctx)?;
+                Ok(Expr::If {
+                    cond: Box::new(predicate),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(Expr::List {
+                        items: Vec::new(),
+                        span: guard.span.clone(),
+                    }),
                     span: guard.span.clone(),
-                }];
-                items.extend(self.build_fanout_generate_items(
-                    current_expr,
-                    env,
-                    &lines[1..],
-                    ctx,
-                )?);
-                Ok(items)
+                })
             }
             FlowLine::Step(step) if step.kind == FlowStepKind::Flow => {
                 if !step.modifiers.is_empty() {
                     return Err(TypeError {
                         span: step.span.clone(),
-                        message: "line modifiers are not supported inside guarded pure `*|>` fan-out bodies".to_string(),
+                        message:
+                            "line modifiers are not supported inside guarded pure `*|>` fan-out bodies"
+                                .to_string(),
                         expected: None,
                         found: None,
                     });
                 }
-                let step_expr = self.build_step_value_expr(current_expr, &step.expr, env)?;
+                let step_expr = self.build_step_value_expr(current_expr, &step.expr, env, ctx)?;
                 let step_ty = self.infer_expr_ephemeral(&step_expr, env)?;
                 let FlowExprKind::Pure(step_ty) = self.classify_flow_type(step_ty.clone()) else {
                     return Err(TypeError {
@@ -1819,18 +1876,27 @@ impl TypeChecker {
                     .unwrap_or_else(|| ctx.fresh_ident("item", &step.span));
                 let mut next_env = env.clone();
                 next_env.insert(binder.name.clone(), Scheme::mono(step_ty.clone()));
-                let mut items = vec![BlockItem::Let {
-                    pattern: Pattern::Ident(binder.clone()),
-                    expr: step_expr,
-                    span: step.span.clone(),
-                }];
-                items.extend(self.build_fanout_generate_items(
-                    Expr::Ident(binder),
+                let rest = self.build_pure_fanout_list_expr(
+                    Expr::Ident(binder.clone()),
                     &next_env,
                     &lines[1..],
                     ctx,
-                )?);
-                Ok(items)
+                )?;
+                Ok(Expr::Block {
+                    kind: BlockKind::Plain,
+                    items: vec![
+                        BlockItem::Let {
+                            pattern: Pattern::Ident(binder),
+                            expr: step_expr,
+                            span: step.span.clone(),
+                        },
+                        BlockItem::Expr {
+                            expr: rest,
+                            span: step.span.clone(),
+                        },
+                    ],
+                    span: step.span.clone(),
+                })
             }
             other => Err(TypeError {
                 span: other.span_clone(),
@@ -1847,6 +1913,7 @@ impl TypeChecker {
         modifiers: &[FlowModifier],
         env: &TypeEnv,
         span: Span,
+        ctx: &mut FlowDesugarCtx,
     ) -> Result<Expr, TypeError> {
         let has_cleanup = modifiers
             .iter()
@@ -1966,8 +2033,12 @@ impl TypeChecker {
             });
             for modifier in modifiers {
                 if let FlowModifier::Cleanup { expr, .. } = modifier {
-                    let cleanup_expr =
-                        self.build_step_value_expr(Expr::Ident(resource_name.clone()), expr, env)?;
+                    let cleanup_expr = self.build_step_value_expr(
+                        Expr::Ident(resource_name.clone()),
+                        expr,
+                        env,
+                        ctx,
+                    )?;
                     cleanup_items.push(BlockItem::Expr {
                         expr: cleanup_expr,
                         span: span.clone(),
@@ -2234,7 +2305,11 @@ impl TypeChecker {
         body: Expr,
         env: &TypeEnv,
         subject_expr: Expr,
+        ctx: &mut FlowDesugarCtx,
     ) -> Result<Expr, TypeError> {
+        if let Some(restart) = self.resolve_flow_recurse_expr(&body, &subject_expr, env, ctx)? {
+            return Ok(restart);
+        }
         let body = self.desugar_nested_flow_expr(body, env)?;
         if matches!(body, Expr::FieldSection { .. }) || expr_contains_placeholder(&body) {
             return Ok(self.call_expr(
@@ -2621,6 +2696,12 @@ impl TypeChecker {
     fn generic_flow_info(&mut self, ty: Type) -> Option<FlowCarrierInfo> {
         let applied = self.apply(ty.clone());
         let expanded = self.expand_alias(applied.clone());
+        if self
+            .flatten_type_constructor(&expanded)
+            .is_some_and(|(name, args)| self.type_name_matches(&name, "List") && args.len() == 1)
+        {
+            return None;
+        }
         let value_ty = self.last_type_arg(&expanded)?;
         let instance_ty = self.rebuild_flat_type(&expanded);
         let supports_functor = self
@@ -2682,26 +2763,6 @@ impl TypeChecker {
             .is_some_and(|(name, args)| {
                 self.type_name_matches(&name, "Effect") && (args.len() == 1 || args.len() == 2)
             })
-    }
-
-    fn is_generator_type(&mut self, ty: &Type) -> bool {
-        let applied = self.apply(ty.clone());
-        let expanded = self.expand_alias(applied);
-        self.flatten_type_constructor(&expanded)
-            .is_some_and(|(name, args)| name == "aivi.generator.Generator" && args.len() == 1)
-    }
-
-    fn ensure_list_source_expr(
-        &mut self,
-        source_expr: Expr,
-        source_ty: &Type,
-        span: Span,
-    ) -> Result<Expr, TypeError> {
-        if self.is_generator_type(source_ty) {
-            Ok(self.named_call_expr("aivi.generator.toList", vec![source_expr], span))
-        } else {
-            Ok(source_expr)
-        }
     }
 
     fn flow_subflow_has_silent_guard(&self, lines: &[FlowLine]) -> bool {
@@ -2786,6 +2847,154 @@ impl TypeChecker {
             name: "__flow_resource".to_string(),
             span: span.clone(),
         }
+    }
+
+    fn build_flow_anchor_expr<F>(
+        &mut self,
+        anchor: &crate::FlowAnchor,
+        current_expr: Expr,
+        current_ty: Type,
+        env: &TypeEnv,
+        ctx: &mut FlowDesugarCtx,
+        build_body: F,
+    ) -> Result<Expr, TypeError>
+    where
+        F: FnOnce(
+            &mut Self,
+            Expr,
+            Type,
+            &TypeEnv,
+            &mut FlowDesugarCtx,
+        ) -> Result<Expr, TypeError>,
+    {
+        if ctx.lookup_anchor(&anchor.name.name).is_some() {
+            return Err(TypeError {
+                span: anchor.span.clone(),
+                message: format!(
+                    "duplicate `@|>` anchor `{}` in the same flow",
+                    anchor.name.name
+                ),
+                expected: None,
+                found: None,
+            });
+        }
+
+        let fn_name = ctx.fresh_ident(&format!("restart_{}", anchor.name.name), &anchor.span);
+        let param = ctx.fresh_ident("restart_subject", &anchor.span);
+        let result_ty = self.fresh_var();
+        let mut body_env = env.clone();
+        body_env.insert(param.name.clone(), Scheme::mono(current_ty.clone()));
+        body_env.insert(
+            fn_name.name.clone(),
+            Scheme::mono(Type::Func(
+                Box::new(current_ty.clone()),
+                Box::new(result_ty),
+            )),
+        );
+
+        ctx.anchors.push(FlowRestartAnchor {
+            source_name: anchor.name.clone(),
+            fn_name: fn_name.clone(),
+        });
+        let body = build_body(
+            self,
+            Expr::Ident(param.clone()),
+            current_ty,
+            &body_env,
+            ctx,
+        )?;
+        ctx.anchors.pop();
+
+        Ok(Expr::Block {
+            kind: BlockKind::Plain,
+            items: vec![
+                BlockItem::Let {
+                    pattern: Pattern::Ident(fn_name.clone()),
+                    expr: Expr::Lambda {
+                        params: vec![Pattern::Ident(param)],
+                        body: Box::new(body),
+                        span: anchor.span.clone(),
+                    },
+                    span: anchor.span.clone(),
+                },
+                BlockItem::Expr {
+                    expr: self.call_expr(
+                        Expr::Ident(fn_name),
+                        vec![current_expr],
+                        anchor.span.clone(),
+                    ),
+                    span: anchor.span.clone(),
+                },
+            ],
+            span: anchor.span.clone(),
+        })
+    }
+
+    fn resolve_flow_recurse_expr(
+        &mut self,
+        expr: &Expr,
+        current_subject: &Expr,
+        env: &TypeEnv,
+        ctx: &mut FlowDesugarCtx,
+    ) -> Result<Option<Expr>, TypeError> {
+        let Expr::Block {
+            kind: BlockKind::Plain,
+            items,
+            ..
+        } = expr
+        else {
+            return Ok(None);
+        };
+        let [BlockItem::Recurse { expr, span }] = items.as_slice() else {
+            return Ok(None);
+        };
+
+        let (anchor, explicit_value) = match expr {
+            Expr::Ident(anchor) => (anchor.clone(), None),
+            Expr::Call {
+                func,
+                args,
+                span: call_span,
+            } => {
+                let Expr::Ident(anchor) = func.as_ref() else {
+                    return Ok(None);
+                };
+                if args.len() != 1 {
+                    return Err(TypeError {
+                        span: call_span.clone(),
+                        message: "`recurse` expects an anchor name and at most one restart value"
+                            .to_string(),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                (anchor.clone(), Some(args[0].clone()))
+            }
+            _ => return Ok(None),
+        };
+
+        let Some(binding) = ctx.lookup_anchor(&anchor.name).cloned() else {
+            return Err(TypeError {
+                span: span.clone(),
+                message: format!(
+                    "`recurse {}` requires a preceding `@|> {}` anchor in the same flow",
+                    anchor.name, anchor.name
+                ),
+                expected: None,
+                found: None,
+            });
+        };
+
+        let restart_subject = match explicit_value {
+            Some(value) => self.desugar_nested_flow_expr(value, env)?,
+            None => current_subject.clone(),
+        };
+
+        Ok(Some(self.call_expr(
+            Expr::Ident(binding.fn_name),
+            vec![restart_subject],
+            span.clone(),
+        )))
     }
 
     fn effect_block(&self, items: Vec<BlockItem>, span: Span) -> Expr {

@@ -20,8 +20,8 @@ recvTotal = rx => limit => count => acc =>
   ||>Ok n => recvTotal rx limit (count + 1) (acc + n)
   ||>Err Closed => fail "channel closed before all values were received"
 
-@test "effect loop over channel recv stays stack safe"
-effectLoopOverChannelRecvStaysStackSafe = {
+@test "effect recursion over channel recv stays stack safe"
+effectRecursionOverChannelRecvStaysStackSafe = {
   |> make 0
   |> ((tx, rx) => {
         spawn (sendRange tx 5000 0)
