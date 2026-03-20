@@ -9,17 +9,17 @@ deleteIfExists = path =>
   path
    |> exists
   ||>True => delete path
-  ||>False => pure Unit
+  ||>False => pure (Ok Unit)
 
 lifoFlow = logPath =>
-  logPath
-|> pure@cleanup (_ => writeText logPath "A")
-|> _ => pure logPath@cleanup (_ => writeText logPath "B")
-|> _ => pure Unit
+  Unit
+    |> start => pure logPath@cleanup (managedPath => writeText managedPath "A")#firstPath
+    |> afterFirst => pure firstPath@cleanup (managedPath => writeText managedPath "B")#secondPath
+    |> afterSecond => pure secondPath
 
 @test "cleanup registrations unwind in reverse order"
 cleanupRegistrationsUnwindInReverseOrder = "/tmp/aivi_lifo2_log.txt"
   |> pure@cleanup deleteIfExists#logPath
-  |> _ => lifoFlow logPath
-  |> _ => readText logPath
+  |> currentPath => lifoFlow currentPath
+  |> readText
   |> assertEq (Ok "A")

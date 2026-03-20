@@ -11,14 +11,12 @@ mime_parsing_helpers = {
   parts    = mimeParts raw
   combined = flattenBodies parts
 
-  Unit
-  ~|>_ => assertEq (List.length parts >= 1) True
-  ~|>_ => assert (text.contains "hello" combined)
+  assertEq (List.length parts >= 1) True
+  assert (text.contains "hello" combined)
 }
 
 @test "smtp surface with multi-recipient"
-smtp_surface = Unit
-  |> _ => attempt (smtpSend {
+smtp_surface = attempt (smtpSend {
       host: "smtp.example.com"
       user: "u"
       auth: Password "p"
@@ -31,7 +29,7 @@ smtp_surface = Unit
       port: None
       starttls: None
   })
-  |> _ => assert True
+  |> attemptResult => assert True
 
 @test "email auth password constructor"
 email_auth_password = {
@@ -73,8 +71,7 @@ idle_result_mailbox_changed = {
 mailbox_info_shape = {
   info = { name: "INBOX", separator: Some "/", attributes: ["\\HasNoChildren"] }
 
-  Unit
-  ~|>_ => assertEq info.name "INBOX"
-  ~|>_ => assertEq info.separator (Some "/")
-  ~|>_ => assertEq (List.length info.attributes) 1
+  assertEq info.name "INBOX"
+  assertEq info.separator (Some "/")
+  assertEq (List.length info.attributes) 1
 }

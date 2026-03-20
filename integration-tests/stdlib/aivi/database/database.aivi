@@ -28,170 +28,204 @@ users = relation "users" [
 ] []
 
 withMemoryConn = run =>
-  Unit
-|> _ => connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
-|> _ => run conn
+  connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
+   |> run
 
 seedUsersOn = conn =>
-  Unit
-|> _ => insertOn conn users { id: 1, name: "Alice", active: True }#users1
-|> _ => insertOn conn users1 { id: 2, name: "Bob", active: False }
+  insertOn conn users { id: 1, name: "Alice", active: True }#users1
+   |> users1 => insertOn conn users1 { id: 2, name: "Bob", active: False }
 
 failingTransaction = conn =>
-  Unit
-  ~|>_ => insertOn conn users { id: 1, name: "Tx", active: True }
-   |> _ => fail "boom"
+  insertOn conn users { id: 1, name: "Tx", active: True }
+  ~|> fail "boom"
 
 @test "column types constraints defaults and drivers construct"
-column_types_constraints_defaults_and_drivers_construct = Unit
-~|>_ => assertEq IntType IntType
-~|>_ => assertEq BoolType BoolType
-~|>_ => assertEq TimestampType TimestampType
-~|>_ => assertEq (Varchar 255) (Varchar 255)
-~|>_ => assertEq AutoIncrement AutoIncrement
-~|>_ => assertEq NotNull NotNull
-~|>_ => assertEq (DefaultBool True) (DefaultBool True)
-~|>_ => assertEq (DefaultInt 0) (DefaultInt 0)
-~|>_ => assertEq (DefaultText "hello") (DefaultText "hello")
-~|>_ => assertEq DefaultNow DefaultNow
-~|>_ => assertEq Sqlite Sqlite
-~|>_ => assertEq Postgresql Postgresql
- |> _ => assertEq Mysql Mysql
+column_types_constraints_defaults_and_drivers_construct =
+  assertEq IntType IntType
+  ~|> assertEq BoolType BoolType
+  ~|> assertEq TimestampType TimestampType
+  ~|> assertEq (Varchar 255) (Varchar 255)
+  ~|> assertEq AutoIncrement AutoIncrement
+  ~|> assertEq NotNull NotNull
+  ~|> assertEq (DefaultBool True) (DefaultBool True)
+  ~|> assertEq (DefaultInt 0) (DefaultInt 0)
+  ~|> assertEq (DefaultText "hello") (DefaultText "hello")
+  ~|> assertEq DefaultNow DefaultNow
+  ~|> assertEq Sqlite Sqlite
+  ~|> assertEq Postgresql Postgresql
+  ~|> assertEq Mysql Mysql
 
 @test "relation values keep schema metadata"
-relation_values_keep_schema_metadata = Unit
-~|>_ => assertEq users.name "users"
- |> _ => assertEq (List.length users.columns) 3
+relation_values_keep_schema_metadata =
+  assertEq users.name "users"
+  ~|> assertEq (List.length users.columns) 3
 
 @test "sqlite tuning and ambient transaction primitives"
-sqlite_tuning_and_ambient_transaction_primitives = Unit
-~|>_ => configure { driver: Sqlite, url: ":memory:" }
-~|>_ => configureSqlite { wal: True, busyTimeoutMs: 100 }
-~|>_ => beginTx
-~|>_ => savepoint "before_seed"
-~|>_ => releaseSavepoint "before_seed"
-~|>_ => commitTx
- |> _ => assert True
+sqlite_tuning_and_ambient_transaction_primitives =
+  configure { driver: Sqlite, url: ":memory:" }
+  ~|> configureSqlite { wal: True, busyTimeoutMs: 100 }
+  ~|> beginTx
+  ~|> savepoint "before_seed"
+  ~|> releaseSavepoint "before_seed"
+  ~|> commitTx
+  ~|> assert True
 
 @test "migration sql helper"
-migration_sql_helper = Unit
-~|>_ => configure { driver: Sqlite, url: ":memory:" }
-~|>_ => runMigrationSql [
+migration_sql_helper =
+  configure { driver: Sqlite, url: ":memory:" }
+  ~|> runMigrationSql [
   {
     id: "001-create"
     sql: "CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL);"
   }
 ]
-|> _ => assert True
+  ~|> assert True
 
 @test "explicit connection commit and rollback"
-explicit_connection_commit_and_rollback = withMemoryConn (conn =>
-  Unit
-  ~|>_ => runMigrationsOn conn [users]
-  ~|>_ => beginTxOn conn
-   |> _ => insertOn conn users { id: 1, name: "Alice", active: True }#users1
-  ~|>_ => commitTxOn conn
-   |> _ => rowsOn conn users1#afterCommit
-  ~|>_ => assertEq (List.length afterCommit) 1
-  ~|>_ => beginTxOn conn
-  ~|>_ => insertOn conn users1 { id: 2, name: "Bob", active: False }
-  ~|>_ => rollbackTxOn conn
-   |> _ => rowsOn conn users1#afterRollback
-   |> _ => assertEq (List.length afterRollback) 1
-)
+explicit_connection_commit_and_rollback = withMemoryConn (conn => {
+  firstTransaction =
+    beginTxOn conn
+    ~|> insertOn conn users { id: 1, name: "Alice", active: True }
+    ~|> commitTxOn conn
+     |> rowsOn conn users#afterCommit
+     |> afterCommit => assertEq (List.length afterCommit) 1
+
+  secondTransaction =
+    beginTxOn conn
+    ~|> insertOn conn users { id: 2, name: "Bob", active: False }
+    ~|> rollbackTxOn conn
+     |> rowsOn conn users#afterRollback
+     |> afterRollback => assertEq (List.length afterRollback) 1
+
+  runMigrationsOn conn [users]
+  ~|> firstTransaction
+  ~|> secondTransaction
+})
 
 @test "savepoint rollback on explicit connection"
-savepoint_rollback_on_explicit_connection = withMemoryConn (conn =>
-  Unit
-  ~|>_ => runMigrationsOn conn [users]
-  ~|>_ => beginTxOn conn
-   |> _ => insertOn conn users { id: 1, name: "Alpha", active: True }#users1
-  ~|>_ => savepointOn conn "after_first"
-  ~|>_ => insertOn conn users1 { id: 2, name: "Beta", active: False }
-  ~|>_ => rollbackToSavepointOn conn "after_first"
-  ~|>_ => commitTxOn conn
-   |> _ => rowsOn conn users1#persisted
-   |> _ => assertEq (List.length persisted) 1
+savepoint_rollback_on_explicit_connection = withMemoryConn (conn => {
+  transaction =
+    beginTxOn conn
+    ~|> insertOn conn users { id: 1, name: "Alpha", active: True }
+    ~|> savepointOn conn "after_first"
+    ~|> insertOn conn users { id: 2, name: "Beta", active: False }
+    ~|> rollbackToSavepointOn conn "after_first"
+    ~|> commitTxOn conn
+     |> rowsOn conn users#persisted
+     |> persisted => assertEq (List.length persisted) 1
+
+  runMigrationsOn conn [users]
+  ~|> transaction
 )
 
 @test "inTransactionOn rolls back on failure"
-inTransactionOn_rolls_back_on_failure = withMemoryConn (conn =>
-  Unit
-  ~|>_ => runMigrationsOn conn [users]
-   |> _ => attempt (inTransactionOn conn (failingTransaction conn))#result
-   |> _ => rowsOn conn users#persisted
-  ~|>_ => assertEq (List.length persisted) 0
-   |> _ => result match
-    | Err err => assertEq err "boom"
-    | Ok _    => assert False
-)
+inTransactionOn_rolls_back_on_failure = withMemoryConn (conn => {
+  verifyRollback =
+    attempt (inTransactionOn conn (failingTransaction conn))#result
+     |> result => rowsOn conn users#persisted
+     ~|> assertEq (List.length persisted) 0
+      |> persisted => result match
+       | Err err => assertEq err "boom"
+       | Ok _    => assert False
+
+  runMigrationsOn conn [users]
+  ~|> verifyRollback
+})
 
 @test "ambient rows and first helpers"
-ambient_rows_and_first_helpers = Unit
-~|>_ => configure { driver: Sqlite, url: ":memory:" }
-~|>_ => runMigrations [users]
- |> _ => insert users { id: 1, name: "Alice", active: True }#users1
-~|>_ => insert users1 { id: 2, name: "Bob", active: False }
- |> _ => rows users[active]#activeUsers
- |> _ => first users[name == "Bob"]#firstBob
-~|>_ => assertEq (List.length activeUsers) 1
- |> _ => firstBob match
-  | Some user => assertEq user.id 2
-  | None      => assert False
+ambient_rows_and_first_helpers = {
+  checkActiveUsers =
+    rows users[active]#activeUsers
+     |> activeUsers => assertEq (List.length activeUsers) 1
+
+  checkFirstBob =
+    first users[name == "Bob"]#firstBob
+     |> firstBob => firstBob match
+      | Some user => assertEq user.id 2
+      | None      => assert False
+
+  configure { driver: Sqlite, url: ":memory:" }
+  ~|> runMigrations [users]
+  ~|> insert users { id: 1, name: "Alice", active: True }
+  ~|> insert users { id: 2, name: "Bob", active: False }
+  ~|> checkActiveUsers
+  ~|> checkFirstBob
+}
 
 @test "delete and deleteOn helpers remove matched rows"
-delete_and_deleteOn_helpers_remove_matched_rows = Unit
-~|>_ => configure { driver: Sqlite, url: ":memory:" }
-~|>_ => runMigrations [users]
- |> _ => insert users { id: 1, name: "Alice", active: True }#users1
-~|>_ => insert users1 { id: 2, name: "Bob", active: False }
-~|>_ => delete users[id == 1]
- |> _ => rows users#remainingAmbient
-~|>_ => assertEq (List.length remainingAmbient) 1
- |> _ => connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
-~|>_ => runMigrationsOn conn [users]
-~|>_ => seedUsersOn conn
-~|>_ => deleteOn conn users[id == 2]
- |> _ => rowsOn conn users#remainingExplicit
- |> _ => assertEq (List.length remainingExplicit) 1
+delete_and_deleteOn_helpers_remove_matched_rows = {
+  checkAmbientDelete =
+    rows users#remainingAmbient
+     |> remainingAmbient => assertEq (List.length remainingAmbient) 1
+
+  checkExplicitDelete =
+    connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
+    ~|> runMigrationsOn conn [users]
+    ~|> seedUsersOn conn
+    ~|> deleteOn conn users[id == 2]
+     |> rowsOn conn users#remainingExplicit
+     |> remainingExplicit => assertEq (List.length remainingExplicit) 1
+
+  configure { driver: Sqlite, url: ":memory:" }
+  ~|> runMigrations [users]
+  ~|> insert users { id: 1, name: "Alice", active: True }
+  ~|> insert users { id: 2, name: "Bob", active: False }
+  ~|> delete users[id == 1]
+  ~|> checkAmbientDelete
+  ~|> checkExplicitDelete
+}
 
 @test "patch shorthand update and updateOn apply record patches"
-patch_shorthand_update_and_updateOn_apply_record_patches = Unit
-~|>_ => configure { driver: Sqlite, url: ":memory:" }
-~|>_ => runMigrations [users]
-~|>_ => insert users { id: 1, name: "Alice", active: True }
-~|>_ => users[id == 1] <| { name: "Alicia" }
- |> _ => rows users#ambientRows
-~|>_ => ambientRows match
-  | [user] => assertEq user.name "Alicia"
-  | _      => assert False
-   |> _ => connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
-  ~|>_ => runMigrationsOn conn [users]
-  ~|>_ => insertOn conn users { id: 1, name: "Alice", active: True }
-  ~|>_ => updateOn conn users[id == 1] { name: "Alicia" }
-   |> _ => rowsOn conn users#explicitRows
-   |> _ => explicitRows match
-  | [user] => assertEq user.name "Alicia"
-  | _      => assert False
+patch_shorthand_update_and_updateOn_apply_record_patches = {
+  checkAmbientPatch =
+    rows users#ambientRows
+     |> ambientRows => ambientRows match
+      | [user] => assertEq user.name "Alicia"
+      | _      => assert False
+
+  checkExplicitPatch =
+    connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
+    ~|> runMigrationsOn conn [users]
+    ~|> insertOn conn users { id: 1, name: "Alice", active: True }
+    ~|> updateOn conn users[id == 1] { name: "Alicia" }
+     |> rowsOn conn users#explicitRows
+     |> explicitRows => explicitRows match
+      | [user] => assertEq user.name "Alicia"
+      | _      => assert False
+
+  configure { driver: Sqlite, url: ":memory:" }
+  ~|> runMigrations [users]
+  ~|> insert users { id: 1, name: "Alice", active: True }
+  ~|> users[id == 1] <| { name: "Alicia" }
+  ~|> checkAmbientPatch
+  ~|> checkExplicitPatch
+}
 
 @test "upsert and upsertOn insert then update"
-upsert_and_upsertOn_insert_then_update = Unit
-~|>_ => configure { driver: Sqlite, url: ":memory:" }
-~|>_ => runMigrations [users]
-~|>_ => upsert users[id == 99] { id: 99, name: "New", active: True } { name: "Updated" }
-~|>_ => upsert users[id == 99] { id: 99, name: "Unused", active: False } { name: "Updated" }
- |> _ => rows users#ambientRows
-~|>_ => ambientRows match
-  | [user] => assertEq user.name "Updated"
-  | _      => assert False
-   |> _ => connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
-  ~|>_ => runMigrationsOn conn [users]
-  ~|>_ => upsertOn conn users[id == 1] { id: 1, name: "Alice", active: True } { name: "Alicia" }
-  ~|>_ => upsertOn conn users[id == 1] { id: 1, name: "Unused", active: False } { name: "Alicia" }
-   |> _ => rowsOn conn users#explicitRows
-   |> _ => explicitRows match
-  | [user] => assertEq user.name "Alicia"
-  | _      => assert False
+upsert_and_upsertOn_insert_then_update = {
+  checkAmbientUpsert =
+    rows users#ambientRows
+     |> ambientRows => ambientRows match
+      | [user] => assertEq user.name "Updated"
+      | _      => assert False
+
+  checkExplicitUpsert =
+    connect { driver: Sqlite, url: ":memory:" }@cleanup close#conn
+    ~|> runMigrationsOn conn [users]
+    ~|> upsertOn conn users[id == 1] { id: 1, name: "Alice", active: True } { name: "Alicia" }
+    ~|> upsertOn conn users[id == 1] { id: 1, name: "Unused", active: False } { name: "Alicia" }
+     |> rowsOn conn users#explicitRows
+     |> explicitRows => explicitRows match
+      | [user] => assertEq user.name "Alicia"
+      | _      => assert False
+
+  configure { driver: Sqlite, url: ":memory:" }
+  ~|> runMigrations [users]
+  ~|> upsert users[id == 99] { id: 99, name: "New", active: True } { name: "Updated" }
+  ~|> upsert users[id == 99] { id: 99, name: "Unused", active: False } { name: "Updated" }
+  ~|> checkAmbientUpsert
+  ~|> checkExplicitUpsert
+}
 
 @test "fts helpers build portable query values"
 fts_helpers_build_portable_query_values = {
@@ -199,8 +233,7 @@ fts_helpers_build_portable_query_values = {
   anyQuery = ftsMatchAny ["hello", "world"]
   allQuery = ftsMatchAll ["hello", "world"]
 
-  Unit
-  ~|>_ => assertEq doc.docId "doc-1"
-  ~|>_ => assertEq anyQuery.matchMode "any"
-   |> _ => assertEq allQuery.matchMode "all"
+  assertEq doc.docId "doc-1"
+  ~|> assertEq anyQuery.matchMode "any"
+  ~|> assertEq allQuery.matchMode "all"
 }

@@ -607,8 +607,8 @@ impl TypeChecker {
                             let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
                             if matches!(kind, BlockKind::Plain) {
                                 self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
-                            } else if matches!(kind, BlockKind::Generate | BlockKind::Resource) {
-                                // For generate/resource blocks, try to extract the element type
+                            } else if matches!(kind, BlockKind::Generate | BlockKind::Managed) {
+                                // For generate/managed blocks, try to extract the element type
                                 // from List or Generator. Plain unify on failure.
                                 let backup = self.subst.clone();
                                 let elem_ty = self.fresh_var();

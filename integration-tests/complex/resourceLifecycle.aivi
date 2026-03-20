@@ -5,24 +5,21 @@ use aivi
 use aivi.testing
 use aivi.file
 
-managedTempFile = path => content => resource {
-  _ <- writeText path content
-  yield path
-  _ <- delete path
-  pure Unit
-}
+managedTempFile = path => content =>
+  Unit
+    |> start => writeText path content
+    |> afterWrite => pure path@cleanup delete#managedPath
+    |> afterAcquire => pure managedPath
 
 readWhileManaged : Text -> Text -> Effect Text (Result Text Text)
 readWhileManaged = path => content =>
-  Unit
-|> _ => managedTempFile path content#managedPath
-|> _ => readText managedPath#result
+  managedTempFile path content
+    |> readText
 
 failWhileManaged : Text -> Text -> Text -> Effect Text A
 failWhileManaged = path => content => message =>
-  Unit
-|> _ => managedTempFile path content
-|> _ => fail message
+  managedTempFile path content
+    |> managedPath => fail message
 
 assertMissing : Text -> Effect Text Unit
 assertMissing = path =>
@@ -34,31 +31,36 @@ readManagedPairs : List (Text, Text) -> List (Result Text Text) -> Effect Text (
 readManagedPairs = pairs => acc => pairs match
   | []                         => pure (reverseList acc)
   | [(path, content), ...rest] =>
-    Unit
-|> _ => readWhileManaged path content#readResult
-|> _ => assertMissing path
-|> _ => readManagedPairs rest [readResult, ...acc]
+      readWhileManaged path content
+        |> readResult =>
+             assertMissing path
+               |> checked =>
+                    readManagedPairs rest [readResult, ...acc]
 
 @test "resource acquire and release cleans up file"
 resourceAcquireRelease = {
   path = "/tmp/aivi_complex_resource_1.txt"
 
-  Unit
-   |> _ => readWhileManaged path "hello resource"#readResult
-   |> _ => assertOk readResult#txt
-  ~|>_ => assertEq txt "hello resource"
-   |> _ => assertMissing path
+  readWhileManaged path "hello resource"
+    |> readResult =>
+         assertOk readResult
+           |> txt =>
+                assertEq txt "hello resource"
+                  |> checked =>
+                       assertMissing path
 }
 
 @test "resource cleanup runs even on failure"
 resourceCleanupOnFailure = {
   path = "/tmp/aivi_complex_resource_2.txt"
 
-  Unit
-   |> _ => attempt (failWhileManaged path "ephemeral" "intentional error")#res
-   |> _ => assertErr res#err
-  ~|>_ => assertEq err "intentional error"
-   |> _ => assertMissing path
+  attempt (failWhileManaged path "ephemeral" "intentional error")
+    |> res =>
+         assertErr res
+           |> err =>
+                assertEq err "intentional error"
+                  |> checked =>
+                       assertMissing path
 }
 
 @test "sequential resource scopes are independent"
@@ -66,15 +68,21 @@ resourceSequential = {
   path1 = "/tmp/aivi_complex_resource_3a.txt"
   path2 = "/tmp/aivi_complex_resource_3b.txt"
 
-  Unit
-   |> _ => readWhileManaged path1 "first"#r1
-   |> _ => readWhileManaged path2 "second"#r2
-   |> _ => assertOk r1#txt1
-  ~|>_ => assertEq txt1 "first"
-   |> _ => assertOk r2#txt2
-  ~|>_ => assertEq txt2 "second"
-   |> _ => assertMissing path1
-   |> _ => assertMissing path2
+  readWhileManaged path1 "first"
+    |> r1 =>
+         readWhileManaged path2 "second"
+           |> r2 =>
+                assertOk r1
+                  |> txt1 =>
+                       assertEq txt1 "first"
+                         |> checked1 =>
+                              assertOk r2
+                                |> txt2 =>
+                                     assertEq txt2 "second"
+                                       |> checked2 =>
+                                            assertMissing path1
+                                              |> checked3 =>
+                                                   assertMissing path2
 }
 
 @test "resource loop: acquire use release per iteration"
@@ -87,12 +95,15 @@ resourceLoop = {
 
   values = ["alpha", "beta", "gamma"]
 
-  Unit
-   |> _ => readManagedPairs (List.zip paths values) []#results
-  ~|>_ => assertEq results [Ok "alpha", Ok "beta", Ok "gamma"]
-   |> _ => assertMissing "/tmp/aivi_complex_resource_4a.txt"
-   |> _ => assertMissing "/tmp/aivi_complex_resource_4b.txt"
-   |> _ => assertMissing "/tmp/aivi_complex_resource_4c.txt"
+  readManagedPairs (List.zip paths values) []
+    |> results =>
+         assertEq results [Ok "alpha", Ok "beta", Ok "gamma"]
+           |> checked1 =>
+                assertMissing "/tmp/aivi_complex_resource_4a.txt"
+                  |> checked2 =>
+                       assertMissing "/tmp/aivi_complex_resource_4b.txt"
+                         |> checked3 =>
+                              assertMissing "/tmp/aivi_complex_resource_4c.txt"
 }
 
 reverseList = xs => List.foldl (acc x => [x, ...acc]) [] xs

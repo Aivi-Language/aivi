@@ -92,10 +92,10 @@ impl Parser {
             }
             if self.match_keyword("yield") {
                 let yield_kw = self.previous_span();
-                if !matches!(kind, BlockKind::Generate | BlockKind::Resource) {
+                if !matches!(kind, BlockKind::Generate) {
                     self.emit_diag(
                         "E1534",
-                        "`yield` is only allowed inside `generate { ... }` or `resource { ... }` blocks",
+                        "`yield` is only allowed inside `generate { ... }` blocks",
                         yield_kw.clone(),
                     );
                 }
@@ -104,7 +104,7 @@ impl Parser {
                     span: yield_kw.clone(),
                 });
                 let span = merge_span(yield_kw, expr_span(&expr));
-                if matches!(kind, BlockKind::Generate | BlockKind::Resource) {
+                if matches!(kind, BlockKind::Generate) {
                     items.push(BlockItem::Yield { expr, span });
                 } else {
                     // Recovery: treat as a plain expression statement to keep parsing.
@@ -249,11 +249,11 @@ impl Parser {
                     });
                     if !matches!(
                         kind,
-                        BlockKind::Do { .. } | BlockKind::Generate | BlockKind::Resource
+                        BlockKind::Do { .. } | BlockKind::Generate
                     ) {
                         self.emit_diag(
                             "E1536",
-                            "`<-` is only allowed inside `do Monad { ... }`, `generate { ... }`, or `resource { ... }` blocks",
+                            "`<-` is only allowed inside `do Monad { ... }` or `generate { ... }` blocks",
                             merge_span(pattern_span(&pattern), expr_span(&expr)),
                         );
                         let span = merge_span(pattern_span(&pattern), expr_span(&expr));

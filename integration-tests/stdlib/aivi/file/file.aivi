@@ -35,146 +35,195 @@ readFixtureImage : Text -> Effect Text PixelImage
 readFixtureImage = path => image path
 
 cleanupPath = path =>
-  Unit
-|> _ => exists path#present
-|> _ => if present then deleteOk path else pure Unit
+  exists path
+  |> present =>
+       if present then deleteOk path else pure Unit
 
 writeTextOk = path => contents =>
-  Unit
-|> _ => writeText path contents#result
-|> _ => assertOk result
+  writeText path contents
+  |> assertOk
 
 deleteOk = path =>
-  path
-|> delete
-|> assertOk
+  delete path
+  |> assertOk
 
 assertNonEmptyErr = result =>
   result
-|> assertErr#err
-|> _ => assert (text.length err > 0)
+  |> assertErr
+  |> err => assert (text.length err > 0)
 
 escapeHandle = path =>
-  Unit
-|> _ => file.open path@cleanup file.close#handle
+  path
+  |> file.open @cleanup file.close #handle
 
 @test "exists missing"
-exists_missing = Unit
-~|>_ => cleanupPath missingPath
- |> _ => exists missingPath
- |> assertEq False
+exists_missing = {
+  cleanupPath missingPath
+  exists missingPath
+  |> assertEq False
+}
 
 @test "write text read text roundtrip"
-writeText_readText_roundtrip = Unit
-~|>_ => cleanupPath roundtripPath
-~|>_ => writeTextOk roundtripPath "hello aivi"
- |> _ => readText roundtripPath#contentResult
- |> _ => assertOk contentResult#content
-~|>_ => assertEq content "hello aivi"
-~|>_ => deleteOk roundtripPath
- |> _ => exists roundtripPath
- |> assertEq False
+writeText_readText_roundtrip = {
+  path = roundtripPath
+
+  cleanupPath path
+  writeTextOk path "hello aivi"
+  readText path
+  |> assertOk
+  |> content => {
+      assertEq content "hello aivi"
+      deleteOk path
+      exists path
+      |> assertEq False
+    }
+}
 
 @test "stat reports written file"
-stat_reports_written_file = Unit
-~|>_ => cleanupPath statPath
-~|>_ => writeTextOk statPath "hello"
- |> _ => stat statPath#statsResult
- |> _ => assertOk statsResult#stats
-~|>_ => assertEq stats.size 5
-~|>_ => assert stats.isFile
-~|>_ => assertEq stats.isDirectory False
-~|>_ => assert (stats.modified >= stats.created)
- |> _ => cleanupPath statPath
+stat_reports_written_file = {
+  path = statPath
+
+  cleanupPath path
+  writeTextOk path "hello"
+  stat path
+  |> assertOk
+  |> stats => {
+      assertEq stats.size 5
+      assert stats.isFile
+      assertEq stats.isDirectory False
+      assert (stats.modified >= stats.created)
+      cleanupPath path
+    }
+}
 
 @test "read text missing returns err"
-readText_missing_returns_err = Unit
-~|>_ => cleanupPath missingPath
- |> _ => readText missingPath#contentResult
- |> _ => assertNonEmptyErr contentResult
+readText_missing_returns_err = {
+  cleanupPath missingPath
+  readText missingPath
+  |> assertNonEmptyErr
+}
 
 @test "delete missing returns err"
-delete_missing_returns_err = Unit
-~|>_ => cleanupPath missingPath
- |> _ => delete missingPath#deleteResult
- |> _ => assertNonEmptyErr deleteResult
+delete_missing_returns_err = {
+  cleanupPath missingPath
+  delete missingPath
+  |> assertNonEmptyErr
+}
 
 @test "exists tracks lifecycle"
-exists_tracks_lifecycle = Unit
-~|>_ => cleanupPath lifecyclePath
- |> _ => exists lifecyclePath#before
-~|>_ => assertEq before False
-~|>_ => writeTextOk lifecyclePath "created"
- |> _ => exists lifecyclePath#during
-~|>_ => assertEq during True
-~|>_ => deleteOk lifecyclePath
- |> _ => exists lifecyclePath
- |> assertEq False
+exists_tracks_lifecycle = {
+  path = lifecyclePath
+
+  cleanupPath path
+  exists path
+  |> assertEq False
+  writeTextOk path "created"
+  exists path
+  |> assertEq True
+  deleteOk path
+  exists path
+  |> assertEq False
+}
 
 @test "open readAll close prevents further reads"
-open_readAll_close_prevents_further_reads = Unit
-~|>_ => cleanupPath resourcePath
-~|>_ => writeTextOk resourcePath "hello from handle"
- |> _ => open resourcePath#handle
- |> _ => readAll handle#contentResult
- |> _ => assertOk contentResult#content
-~|>_ => assertEq content "hello from handle"
-~|>_ => close handle
- |> _ => readAll handle#readAfterClose
-~|>_ => assertNonEmptyErr readAfterClose
- |> _ => cleanupPath resourcePath
+open_readAll_close_prevents_further_reads = {
+  path = resourcePath
+
+  cleanupPath path
+  writeTextOk path "hello from handle"
+  open path
+  |> handle => {
+      readAll handle
+      |> assertOk
+      |> content => assertEq content "hello from handle"
+      close handle
+      readAll handle
+      |> assertNonEmptyErr
+      cleanupPath path
+    }
+}
 
 @test "open auto-closes when scope exits"
-open_auto_closes_when_scope_exits = Unit
-~|>_ => cleanupPath resourcePath
-~|>_ => writeTextOk resourcePath "hello from scope"
- |> _ => escapeHandle resourcePath#escapedHandle
- |> _ => readAll escapedHandle#readAfterScope
-~|>_ => assertNonEmptyErr readAfterScope
- |> _ => cleanupPath resourcePath
+open_auto_closes_when_scope_exits = {
+  path = resourcePath
+
+  cleanupPath path
+  writeTextOk path "hello from scope"
+  escapeHandle path
+  |> escapedHandle => {
+      readAll escapedHandle
+      |> assertNonEmptyErr
+      cleanupPath path
+    }
+}
 
 @test "readJson decodes typed record"
-readJson_decodes_typed_record = Unit
-~|>_ => cleanupPath jsonPath
-~|>_ => writeTextOk jsonPath "\{\"host\":\"localhost\",\"port\":8080,\"enabled\":true}"
- |> _ => readConfig jsonPath#config
-~|>_ => assertEq config.host "localhost"
-~|>_ => assertEq config.port 8080
-~|>_ => assertEq config.enabled True
- |> _ => cleanupPath jsonPath
+readJson_decodes_typed_record = {
+  path = jsonPath
+
+  cleanupPath path
+  writeTextOk path "\{\"host\":\"localhost\",\"port\":8080,\"enabled\":true}"
+  readConfig path
+  |> config => {
+      assertEq config.host "localhost"
+      assertEq config.port 8080
+      assertEq config.enabled True
+      cleanupPath path
+    }
+}
 
 @test "readCsv decodes typed rows"
-readCsv_decodes_typed_rows = Unit
-~|>_ => cleanupPath csvPath
-~|>_ => writeTextOk csvPath "id,name,active\n1,Ada,true\n2,Lin,false\n"
- |> _ => readUsers csvPath#users
-~|>_ => assertEq (List.length users) 2
- |> _ => assertSome (List.at 0 users)#first
- |> _ => assertSome (List.at 1 users)#second
-~|>_ => assertEq first.id 1
-~|>_ => assertEq first.name "Ada"
-~|>_ => assertEq first.active True
-~|>_ => assertEq second.id 2
-~|>_ => assertEq second.name "Lin"
-~|>_ => assertEq second.active False
- |> _ => cleanupPath csvPath
+readCsv_decodes_typed_rows = {
+  path = csvPath
+
+  cleanupPath path
+  writeTextOk path "id,name,active\n1,Ada,true\n2,Lin,false\n"
+  readUsers path
+  |> users => {
+      assertEq (List.length users) 2
+      List.at 0 users
+      |> assertSome
+      |> first => {
+          assertEq first.id 1
+          assertEq first.name "Ada"
+          assertEq first.active True
+        }
+      List.at 1 users
+      |> assertSome
+      |> second => {
+          assertEq second.id 2
+          assertEq second.name "Lin"
+          assertEq second.active False
+          cleanupPath path
+        }
+    }
+}
 
 @test "imageMeta reads fixture metadata"
-imageMeta_reads_fixture_metadata = Unit
-   |> _ => readFixtureImageMeta imagePath#meta
-  ~|>_ => assertEq meta.width 64
-  ~|>_ => assertEq meta.height 64
-   |> _ => assertEq meta.format "Png"
+imageMeta_reads_fixture_metadata =
+  readFixtureImageMeta imagePath
+  |> meta => {
+      assertEq meta.width 64
+      assertEq meta.height 64
+      assertEq meta.format "Png"
+    }
 
 @test "image reads fixture pixels"
-image_reads_fixture_pixels = Unit
-   |> _ => readFixtureImage imagePath#img
-  ~|>_ => assertEq img.width 64
-  ~|>_ => assertEq img.height 64
-  ~|>_ => assertEq img.format "Rgb8"
-  ~|>_ => assertEq (List.length img.pixels) 64
-   |> _ => assertSome (List.at 0 img.pixels)#firstRow
-  ~|>_ => assertEq (List.length firstRow) 64
-   |> _ => assertSome (List.at 20 img.pixels)#sampleRow
-   |> _ => assertSome (List.at 20 sampleRow)#samplePixel
-   |> _ => assertEq samplePixel (7, 129, 247)
+image_reads_fixture_pixels =
+  readFixtureImage imagePath
+  |> img => {
+      assertEq img.width 64
+      assertEq img.height 64
+      assertEq img.format "Rgb8"
+      assertEq (List.length img.pixels) 64
+      List.at 0 img.pixels
+      |> assertSome
+      |> firstRow => assertEq (List.length firstRow) 64
+      List.at 20 img.pixels
+      |> assertSome
+      |> sampleRow => {
+          List.at 20 sampleRow
+          |> assertSome
+          |> samplePixel => assertEq samplePixel (7, 129, 247)
+        }
+    }

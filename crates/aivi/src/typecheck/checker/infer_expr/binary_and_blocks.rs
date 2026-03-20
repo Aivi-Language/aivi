@@ -841,7 +841,7 @@ impl TypeChecker {
                 self.infer_generic_do_block(&monad.name, &monad.span, items, env)
             }
             BlockKind::Generate => self.infer_generate_block(items, env),
-            BlockKind::Resource => self.infer_resource_block(items, env),
+            BlockKind::Managed => self.infer_managed_block(items, env),
         }
     }
 

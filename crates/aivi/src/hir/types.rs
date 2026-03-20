@@ -338,7 +338,7 @@ pub enum HirBlockKind {
     /// (e.g. `"Effect"`, `"Option"`, `"Result"`).
     Do { monad: String },
     Generate,
-    Resource,
+    Managed,
 }
 
 impl HirBlockKind {

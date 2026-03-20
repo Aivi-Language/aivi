@@ -3,7 +3,6 @@ const HOVER_FALLBACK_DOCS: Record<string, string> = {
   use: "Imports names or modules into scope.",
   export: "Exports names from the current module.",
   effect: "Starts an effect block where `<-` binds effectful values.",
-  resource: "Defines a scoped resource block with structured cleanup semantics.",
   domain: "Declares a domain for operator/literal rewrites.",
   class: "Declares a type class.",
   instance: "Declares a type class instance implementation.",

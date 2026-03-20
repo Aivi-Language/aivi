@@ -11,9 +11,11 @@ use aivi.text as text
 
 startServer = address => handler =>
   attempt (httpServer.listen { address: address } handler)
-   |> assertOk#server
-  ~|>_ => sleep 25
-   |> _ => pure server
+  |> assertOk
+  |> server => {
+      sleep 25
+      pure server
+    }
 
 stopServer = server =>
   attempt (httpServer.stop server)
@@ -55,14 +57,19 @@ getPerformsRequest = {
         body: "bad"
       }
   )
+  requestUrl = ~u(http://127.0.0.1:39081/echo?lang=aivi)
 
-  Unit
-   |> _ => startServer "127.0.0.1:39081" handler@cleanup stopServer#server
-   |> _ => get ~u(http://127.0.0.1:39081/echo?lang=aivi)#responseResult
-   |> _ => assertOk responseResult#response
-  ~|>response => assert_eq response.status 200
-  ~|>response => assert_eq response.body "ok"
-   |> response => assert_eq (headerValue "content-type" response.headers) (Some "text/plain")
+  handler
+  |> runningHandler => startServer "127.0.0.1:39081" runningHandler@cleanup stopServer#server
+  |> server => {
+      get requestUrl
+      |> assertOk
+      |> response => {
+          assert_eq response.status 200
+          assert_eq response.body "ok"
+          assert_eq (headerValue "content-type" response.headers) (Some "text/plain")
+        }
+    }
 }
 
 @test "server response record coerces to json and adds application json header"
@@ -80,14 +87,19 @@ serverResponseRecordCoercesToJson = {
         body: "bad"
       }
   )
+  requestUrl = ~u(http://127.0.0.1:39085/json-response)
 
-  Unit
-   |> _ => startServer "127.0.0.1:39085" handler@cleanup stopServer#server
-   |> _ => get ~u(http://127.0.0.1:39085/json-response)#responseResult
-   |> _ => assertOk responseResult#response
-  ~|>response => assert_eq response.status 200
-  ~|>response => assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
-   |> response => assert_eq (headerValue "content-type" response.headers) (Some "application/json")
+  handler
+  |> runningHandler => startServer "127.0.0.1:39085" runningHandler@cleanup stopServer#server
+  |> server => {
+      get requestUrl
+      |> assertOk
+      |> response => {
+          assert_eq response.status 200
+          assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
+          assert_eq (headerValue "content-type" response.headers) (Some "application/json")
+        }
+    }
 }
 
 @test "post sends plain text body"
@@ -97,13 +109,18 @@ postSendsPlainTextBody = {
       then bytesTextReply 200 request.body
       else bytesTextReply 405 [110, 111]
   )
+  requestUrl = ~u(http://127.0.0.1:39082/submit)
 
-  Unit
-   |> _ => startServer "127.0.0.1:39082" handler@cleanup stopServer#server
-   |> _ => post ~u(http://127.0.0.1:39082/submit) "hello world"#responseResult
-   |> _ => assertOk responseResult#response
-  ~|>response => assert_eq response.status 200
-   |> response => assert_eq response.body "hello world"
+  handler
+  |> runningHandler => startServer "127.0.0.1:39082" runningHandler@cleanup stopServer#server
+  |> server => {
+      post requestUrl "hello world"
+      |> assertOk
+      |> response => {
+          assert_eq response.status 200
+          assert_eq response.body "hello world"
+        }
+    }
 }
 
 @test "fetch json body adds application json header"
@@ -120,13 +137,16 @@ fetchJsonBodyAddsApplicationJsonHeader = {
     body: Some (Json (toJson { name: "Ada", age: 42 }))
   }
 
-  Unit
-   |> _ => startServer "127.0.0.1:39083" handler@cleanup stopServer#server
-   |> _ => fetch request#responseResult
-   |> _ => assertOk responseResult#response
-  ~|>response => assert_eq response.status 200
-  ~|>response => assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
-   |> _ => pure Unit
+  handler
+  |> runningHandler => startServer "127.0.0.1:39083" runningHandler@cleanup stopServer#server
+  |> server => {
+      fetch request
+      |> assertOk
+      |> response => {
+          assert_eq response.status 200
+          assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
+        }
+    }
 }
 
 @test "fetch form body percent encodes pairs"
@@ -148,11 +168,14 @@ fetchFormBodyPercentEncodesPairs = {
     )
   }
 
-  Unit
-   |> _ => startServer "127.0.0.1:39084" handler@cleanup stopServer#server
-   |> _ => fetch request#responseResult
-   |> _ => assertOk responseResult#response
-  ~|>response => assert_eq response.status 200
-  ~|>response => assert_eq response.body "name=Ada+Lovelace&city=Paris"
-   |> _ => pure Unit
+  handler
+  |> runningHandler => startServer "127.0.0.1:39084" runningHandler@cleanup stopServer#server
+  |> server => {
+      fetch request
+      |> assertOk
+      |> response => {
+          assert_eq response.status 200
+          assert_eq response.body "name=Ada+Lovelace&city=Paris"
+        }
+    }
 }

@@ -261,7 +261,7 @@ pub enum ArenaBlockKind {
     Plain,
     Do { monad: SpannedSymbol },
     Generate,
-    Resource,
+    Managed,
 }
 
 #[derive(Debug, Clone)]

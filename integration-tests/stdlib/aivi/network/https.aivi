@@ -13,9 +13,8 @@ buildSecureGetRequest = {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/get", query: [], hash: None }
   req    = { method: "GET", url: reqUrl, headers: [], body: None }
 
-  Unit
-  ~|>_ => assertEq req.method "GET"
-  ~|>_ => assertEq req.body None
+  assertEq req.method "GET"
+  assertEq req.body None
 }
 
 @test "build secure post request"
@@ -28,45 +27,39 @@ buildSecurePostRequest = {
     body: Some "data"
   }
 
-  Unit
-  ~|>_ => assertEq req.method "POST"
-  ~|>_ => assertEq (List.length req.headers) 1
+  assertEq req.method "POST"
+  assertEq (List.length req.headers) 1
 }
 
 @test "response fields"
 responseFields = {
   resp = { status: 200, headers: [], body: "ok" }
 
-  Unit
-  ~|>_ => assertEq resp.status 200
-  ~|>_ => assertEq resp.body "ok"
+  assertEq resp.status 200
+  assertEq resp.body "ok"
 }
 
 @test "error fields"
 errorFields = {
   err = { message: "tls handshake failed" }
 
-  Unit
-  ~|>_ => assertEq err.message "tls handshake failed"
+  assertEq err.message "tls handshake failed"
 }
 
 // -- HTTPS-specific runtime behavior --
 
 @test "secure get rejects non https urls"
-secureGetRejectsNonHttpsUrls = Unit
-   |> _ => attempt (get ~u(http://127.0.0.1:39081/plain))
+secureGetRejectsNonHttpsUrls = attempt (get ~u(http://127.0.0.1:39081/plain))
   ||>Err err => assert (text.contains "https URL" err)
   ||>Ok _ => fail "expected https url error"
 
 @test "secure post rejects non https urls"
-securePostRejectsNonHttpsUrls = Unit
-   |> _ => attempt (post ~u(http://127.0.0.1:39082/plain) "payload")
+securePostRejectsNonHttpsUrls = attempt (post ~u(http://127.0.0.1:39082/plain) "payload")
   ||>Err err => assert (text.contains "https URL" err)
   ||>Ok _ => fail "expected https url error"
 
 @test "secure fetch rejects non https urls"
-secureFetchRejectsNonHttpsUrls = Unit
-  |> _ => attempt (
+secureFetchRejectsNonHttpsUrls = attempt (
     fetch {
       method: "POST"
       url: ~u(http://127.0.0.1:39083/form)

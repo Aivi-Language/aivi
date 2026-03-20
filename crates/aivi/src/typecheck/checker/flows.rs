@@ -1975,7 +1975,7 @@ impl TypeChecker {
                 }
             }
             base = Expr::Block {
-                kind: BlockKind::Resource,
+                kind: BlockKind::Managed,
                 items: cleanup_items,
                 span: span.clone(),
             };

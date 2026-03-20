@@ -106,27 +106,30 @@ cellChar = x y snake food =>
 
 rowText : Int -> List Pixel -> Pixel -> Text
 rowText = y snake food =>
-  [0.. gridW - 1] |> map (x => cellChar x y snake food) |> join ""
+  [0 .. gridW - 1]
+    |> map (x => cellChar x y snake food)
+    |> join ""
 
-boardRows : List Pixel -> Pixel -> List { id: Text, text: Text }
-boardRows = snake food =>
+boardRows : (List Pixel, Pixel) -> List { id: Text, text: Text }
+boardRows = (snake, food) =>
   [0.. gridH - 1] |> map (y => { id: "row-{toText y}", text: rowText y snake food })
 
-renderScoreLabel : Int -> List Pixel -> Text
-renderScoreLabel = score snake =>
+renderScoreLabel : (Int, List Pixel) -> Text
+renderScoreLabel = (score, snake) =>
   "Snake · Score {toText score} · Length {toText (length snake)}"
 
 renderStatusLabel : Mode -> Text
-renderStatusLabel = mode => mode match
+renderStatusLabel =
   | GameOver => "Game over! Press R or Restart."
   | Paused   => "Paused. Press Space or move to resume."
   | Running  => "Arrow keys to steer. Space to pause."
 
 statusLabel = derive modeState renderStatusLabel
-board       = combineAll (snakeState, foodState) ((snake, food) => boardRows snake food)
-scoreLabel  = combineAll (scoreState, snakeState) ((score, snake) => renderScoreLabel score snake)
+board       = combineAll (snakeState, foodState) boardRows
+scoreLabel  = combineAll (scoreState, snakeState) renderScoreLabel
 
-togglePause = _ => modeState <<- (mode => mode match
+togglePause : A -> Unit
+togglePause = _ => modeState <<- (
   | Running  => Paused
   | Paused   => Running
   | GameOver => GameOver
@@ -144,12 +147,13 @@ steer = nextDir => {
   }
 }
 
-handleDirection = maybeDir => maybeDir match
+handleDirection : Option Direction -> Unit
+handleDirection =
   | Some nextDir => steer nextDir
   | _            => Unit
 
 handleKey : GtkSignalEvent -> Unit
-handleKey = event => event match
+handleKey =
   | GtkKeyPressed _ _ key _ =>
       if key == "space" || key == " " then togglePause Unit
       else if key == "r" || key == "R" then restartGame Unit
@@ -171,8 +175,9 @@ tickGame = _ => {
     (head, body) = snakeParts snake
     newHead      = move head dir
 
-    if outOfBounds newHead || containsPixel newHead body then modeState <<- GameOver
-    else advanceSnake snake food score seed newHead
+    if outOfBounds newHead || containsPixel newHead body
+      then modeState <<- GameOver
+      else advanceSnake snake food score seed newHead
   }
 }
 
@@ -210,7 +215,7 @@ openSignalStream = _ => signalStream Unit
 
 runTickLoop : Recv GtkSignalEvent -> Unit -> Effect GtkError Unit
 runTickLoop = rx => _ =>
-  concurrent.forEach rx (event => event match
+  concurrent.forEach rx (
     | GtkTick => pure (tickGame Unit)
     | _       => pure Unit
   )

@@ -1030,25 +1030,6 @@ cross = generate {
         assert!(matches!(expr, HirExpr::Block { .. }));
     }
 
-    // ---- lower_blocks_and_patterns.rs: resource blocks ----
-
-    #[test]
-    fn resource_block_lowered() {
-        let program = parse_and_lower(
-            r#"
-module Test
-
-myRes = resource {
-  handle <- openFile "test.txt"
-  yield handle
-  closeFile handle
-}
-"#,
-        );
-        let expr = find_def_expr(&program, "myRes");
-        assert!(matches!(expr, HirExpr::Block { .. }));
-    }
-
     // ---- lower_blocks_and_patterns.rs: nested effect values ----
 
     #[test]

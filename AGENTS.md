@@ -143,7 +143,7 @@ When writing `.aivi` code in `integration-tests/`, `specs/` snippets, or doc exa
 
 - No nulls — use `Option A` or `Result E A`.
 - Exhaustive pattern matches; use `_` only when every remaining case is truly identical.
-- Use `resource { ... }` blocks for handles (files, connections) to guarantee cleanup.
+- Use `@cleanup` on the acquisition flow line for handles (files, connections) to guarantee cleanup.
 
 ### 4.3 Concurrency
 

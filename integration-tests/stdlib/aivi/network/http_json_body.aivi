@@ -14,40 +14,39 @@ expectUrl = raw =>
 @test "Json body variant construction"
 jsonBodyVariant = "https://example.com/token"
   |> expectUrl#reqUrl
-  |> _ => pure {
-    method: "POST"
-    url: reqUrl
-    headers: []
-    body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
-  }#req
-  ~|>_ => assertEq req.method "POST"
-   |> _ => req.body
+  |> currentUrl => pure {
+      method: "POST"
+      url: reqUrl
+      headers: []
+      body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
+    }#req
+  |> currentReq => pure req.body
   ||>Some (Json _) => assert True
   ||>_ => assert False
 
 @test "record literal coerces to Body"
 recordCoercesToBody = "https://example.com/token"
   |> expectUrl#reqUrl
-  |> _ => pure {
-    method: "POST"
-    url: reqUrl
-    headers: []
-    body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
-  }#req
-   |> _ => req.body
+  |> currentUrl => pure {
+      method: "POST"
+      url: reqUrl
+      headers: []
+      body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
+    }#req
+  |> currentReq => pure req.body
   ||>Some (Json _) => assert True
   ||>_ => assert False
 
 @test "text coerces to Body via Plain"
 textCoercesToBody = "https://example.com/token"
   |> expectUrl#reqUrl
-  |> _ => pure {
-    method: "POST"
-    url: reqUrl
-    headers: []
-    body: Some (Plain "hello world")
-  }#req
-   |> _ => req.body
+  |> currentUrl => pure {
+      method: "POST"
+      url: reqUrl
+      headers: []
+      body: Some (Plain "hello world")
+    }#req
+  |> currentReq => pure req.body
   ||>Some (Plain t) => assertEq t "hello world"
   ||>_ => assert False
 

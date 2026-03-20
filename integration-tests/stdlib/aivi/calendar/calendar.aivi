@@ -3,7 +3,7 @@ module integrationTests.stdlib.aivi.calendar.tests
 
 use aivi
 use aivi.testing
-use aivi.calendar
+use aivi.calendar (addDays, addMonths, addYears, daysInMonth, endOfMonth, isLeapYear, negateDelta, eom, now, domain Calendar)
 
 @test "date"
 date_functional = {
@@ -80,4 +80,4 @@ negateDelta_functional = {
 
 @test "now"
 now_functional = now
-  |> _ => assertEq (1 + 1) 2
+ ~|> currentDate => assertEq (1 + 1) 2

@@ -509,7 +509,7 @@ pub enum BlockKind {
     Plain,
     Do { monad: SpannedName },
     Generate,
-    Resource,
+    Managed,
 }
 
 #[derive(Debug, Clone)]

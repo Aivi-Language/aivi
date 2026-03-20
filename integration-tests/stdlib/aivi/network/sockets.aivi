@@ -10,29 +10,26 @@ use aivi.text as text
 parseEnvPort : Text -> (Int -> Effect Text Unit) -> Effect Text Unit
 parseEnvPort = raw => run =>
   raw
-|> text.parseInt#parsed
-|> _ => parsed match
+|> text.parseInt
+|> parsed => parsed match
   | Some port => run port
   | None      => pure Unit
 
 withEnvPort : Text -> (Int -> Effect Text Unit) -> Effect Text Unit
 withEnvPort = key => run =>
-  Unit
-|> _ => attempt (env.get key)#envResult
-|> _ => envResult match
+  attempt (env.get key)
+|> envResult => envResult match
   | Err _  => pure Unit
   | Ok raw => parseEnvPort raw run
 
 closeConnection : Connection -> Effect Text Unit
 closeConnection = conn =>
-  Unit
-|> _ => attempt (close conn)
+  attempt (close conn)
 |> assertOk
 
 sendBytes : Connection -> List Int -> Effect Text Unit
 sendBytes = conn => bytes =>
-  Unit
-|> _ => attempt (send conn bytes)
+  attempt (send conn bytes)
 |> assertOk
 
 assertDebugEq : Text -> A -> A -> Effect Text Unit
@@ -42,107 +39,114 @@ assertDebugEq = label => expected => actual =>
 
 recvAtLeastFromChunk : Connection -> Int -> List Int -> Effect SocketError (List Int)
 recvAtLeastFromChunk = conn => needed => chunk =>
-  Unit
-|> _ => recvAtLeast conn (needed - List.length chunk)#rest
-|> _ => pure [...chunk, ...rest]
+  recvAtLeast conn (needed - List.length chunk)
+|> rest => pure [...chunk, ...rest]
 
 recvAtLeast : Connection -> Int -> Effect SocketError (List Int)
 recvAtLeast = conn => needed =>
   if needed <= 0 then pure []
   else
-  Unit
-|> _ => recv conn#chunk
-|> _ =>
+  recv conn
+|> chunk =>
   if List.length chunk == 0 then
     pure []
   else
     recvAtLeastFromChunk conn needed chunk
 
-    @test "connect send recv close exercises a real socket roundtrip"
+@test "connect send recv close exercises a real socket roundtrip"
 connect_send_recv_close_roundtrip = withEnvPort "AIVI_TEST_SOCKET_SERVER_PORT" (port =>
-  Unit
-   |> _ => attempt (connect { host: "127.0.0.1", port: port })#connResult
-   |> _ => assertOk connResult#conn
-  ~|>_ => sendBytes conn [112, 105, 110, 103]
-   |> _ => attempt (recvAtLeast conn 4)#responseResult
-   |> _ => assertOk responseResult#response
-   |> _ => attempt (recv conn)#eofResult
-   |> _ => assertOk eofResult#eof
-  ~|>_ => closeConnection conn
-  ~|>_ => assertDebugEq "client response" [112, 111, 110, 103] response
-   |> _ => assertDebugEq "client eof" [] eof
+  attempt (connect { host: "127.0.0.1", port: port })
+   |> assertOk
+   |> conn => {
+       sendBytes conn [112, 105, 110, 103]
+       attempt (recvAtLeast conn 4)
+       |> assertOk
+       |> response => {
+           attempt (recv conn)
+           |> assertOk
+           |> eof => {
+               closeConnection conn
+               assertDebugEq "client response" [112, 111, 110, 103] response
+               assertDebugEq "client eof" [] eof
+             }
+         }
+     }
 )
 
 @test "listen accept recv send close exercises a real socket roundtrip"
 listen_accept_recv_send_close_roundtrip = withEnvPort "AIVI_TEST_SOCKET_LISTEN_PORT" (port => {
-    address = { host: "127.0.0.1", port: port }
+  address = { host: "127.0.0.1", port: port }
 
-    Unit
-     |> _ => attempt (listen address)#listenerResult
-     |> _ => assertOk listenerResult#listener
-     |> _ => attempt (accept listener)#connResult
-     |> _ => assertOk connResult#conn
-     |> _ => attempt (recvAtLeast conn 5)#requestResult
-     |> _ => assertOk requestResult#request
-    ~|>_ => sendBytes conn [119, 111, 114, 108, 100]
-    ~|>_ => closeConnection conn
-     |> _ => assertDebugEq "server request" [104, 101, 108, 108, 111] request
+  attempt (listen address)
+  |> assertOk
+  |> listener => {
+      attempt (accept listener)
+      |> assertOk
+      |> conn => {
+          attempt (recvAtLeast conn 5)
+          |> assertOk
+          |> request => {
+              sendBytes conn [119, 111, 114, 108, 100]
+              closeConnection conn
+              assertDebugEq "server request" [104, 101, 108, 108, 111] request
+            }
+        }
+    }
 })
 
 @test "connect rejects an out of range port as SocketError"
-connect_rejects_out_of_range_port_as_socket_error = Unit
-  |> _ => attempt (connect { host: "127.0.0.1", port: 70000 })#result
-  |> _ => assertErr result#err
-  |> _ => assertEq err.message "Address.port must be in 0..65535"
+connect_rejects_out_of_range_port_as_socket_error =
+  attempt (connect { host: "127.0.0.1", port: 70000 })
+  |> assertErr
+  |> err => assertEq err.message "Address.port must be in 0..65535"
 
 @test "listen rejects an out of range port as SocketError"
-listen_rejects_out_of_range_port_as_socket_error = Unit
-  |> _ => attempt (listen { host: "127.0.0.1", port: 70000 })#result
-  |> _ => assertErr result#err
-  |> _ => assertEq err.message "Address.port must be in 0..65535"
+listen_rejects_out_of_range_port_as_socket_error =
+  attempt (listen { host: "127.0.0.1", port: 70000 })
+  |> assertErr
+  |> err => assertEq err.message "Address.port must be in 0..65535"
 
 @test "send rejects out of range bytes as SocketError"
 send_rejects_out_of_range_bytes_as_socket_error = withEnvPort "AIVI_TEST_SOCKET_INVALID_SEND_PORT" (port =>
-  Unit
-   |> _ => attempt (connect { host: "127.0.0.1", port: port })#connResult
-   |> _ => assertOk connResult#conn
-   |> _ => attempt (send conn [256])#result
-  ~|>_ => closeConnection conn
-   |> _ => assertErr result#err
-   |> _ => assertEq err.message "byte value must be in 0..255"
+  attempt (connect { host: "127.0.0.1", port: port })
+   |> assertOk
+   |> conn => {
+       attempt (send conn [256])
+       |> assertErr
+       |> err => {
+           closeConnection conn
+           assertEq err.message "byte value must be in 0..255"
+         }
+     }
 )
 
 @test "socket error fields"
 socket_error_fields = {
   err = { message: "connection refused" }
 
-  Unit
-  ~|>_ => assertEq err.message "connection refused"
+  assertEq err.message "connection refused"
 }
 
 @test "address fields"
 address_fields = {
   addr = { host: "127.0.0.1", port: 8080 }
 
-  Unit
-  ~|>_ => assertEq addr.host "127.0.0.1"
-  ~|>_ => assertEq addr.port 8080
+  assertEq addr.host "127.0.0.1"
+  assertEq addr.port 8080
 }
 
 @test "address zero port"
 address_zero_port = {
   addr = { host: "0.0.0.0", port: 0 }
 
-  Unit
-  ~|>_ => assertEq addr.port 0
-  ~|>_ => assertEq addr.host "0.0.0.0"
+  assertEq addr.port 0
+  assertEq addr.host "0.0.0.0"
 }
 
 @test "address ipv6"
 address_ipv6 = {
   addr = { host: "::1", port: 443 }
 
-  Unit
-  ~|>_ => assertEq addr.host "::1"
-  ~|>_ => assertEq addr.port 443
+  assertEq addr.host "::1"
+  assertEq addr.port 443
 }

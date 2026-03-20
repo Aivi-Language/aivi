@@ -461,9 +461,6 @@ impl Parser {
         if self.match_keyword("generate") {
             return Some(self.parse_block(BlockKind::Generate));
         }
-        if self.match_keyword("resource") {
-            return Some(self.parse_block(BlockKind::Resource));
-        }
         if self.match_keyword("patch") {
             let start = self.previous_span();
             return Some(self.parse_patch_literal(start));

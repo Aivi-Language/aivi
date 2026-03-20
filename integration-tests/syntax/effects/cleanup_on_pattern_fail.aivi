@@ -9,7 +9,7 @@ deleteIfExists = path =>
   path
    |> exists
   ||>True => delete path
-  ||>False => pure Unit
+  ||>False => pure (Ok Unit)
 
 assertMissingPath = path =>
   path
@@ -17,30 +17,35 @@ assertMissingPath = path =>
 |> assertEq False
 
 branchFailureFlow = path =>
-  "live"
-   |> writeText path
-   |> _ => pure path@cleanup delete
-   |> _ => 99
-  ||>1 => pure Unit
-  ||>_ => fail "pattern-branch-failure"
+  Unit
+    |> start => writeText path "live"
+    |> afterWrite => pure path@cleanup delete#managedPath
+    |> afterAcquire => pure 99
+   ||>1 => pure Unit
+   ||>_ => fail "pattern-branch-failure"
 
 guardFailureFlow = path =>
-  "alive"
-   |> writeText path
-   |> _ => pure path@cleanup delete
-  >|>_ == "" or fail "guard-fired"
-   |> _ => pure Unit
+  Unit
+    |> start => writeText path "alive"
+    |> afterWrite => pure path@cleanup delete#managedPath
+   >|>_ == "" or fail "guard-fired"
 
 @test "cleanup runs after a branch failure"
 cleanupRunsAfterABranchFailure = "/tmp/aivi_pattern_fail_cleanup.txt"
-   |> pure@cleanup deleteIfExists#path
-   |> _ => attempt (branchFailureFlow path)
-  ~|>_ => assertMissingPath path
-   |> assertEq (Err "pattern-branch-failure")
+  |> pure@cleanup deleteIfExists#path
+  |> currentPath =>
+       attempt (branchFailureFlow currentPath)
+         |> result =>
+              assertMissingPath path
+                |> checked =>
+                     assertEq result (Err "pattern-branch-failure")
 
 @test "cleanup runs after a guard failure"
 cleanupRunsAfterAGuardFailure = "/tmp/aivi_guard_fail_cleanup.txt"
-   |> pure@cleanup deleteIfExists#path
-   |> _ => attempt (guardFailureFlow path)
-  ~|>_ => assertMissingPath path
-   |> assertEq (Err "guard-fired")
+  |> pure@cleanup deleteIfExists#path
+  |> currentPath =>
+       attempt (guardFailureFlow currentPath)
+         |> result =>
+              assertMissingPath path
+                |> checked =>
+                     assertEq result (Err "guard-fired")

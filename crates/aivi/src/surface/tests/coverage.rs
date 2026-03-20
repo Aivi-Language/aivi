@@ -617,35 +617,6 @@ x = generate {
 }
 
 #[test]
-fn lower_resource_block_to_arena() {
-    let src = r#"
-module Example
-
-x = resource {
-  yield "something"
-}
-"#;
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let (arena, lowered) = lower_modules_to_arena(&modules);
-    let def = lowered[0]
-        .items
-        .iter()
-        .find_map(|item| match item {
-            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
-            _ => None,
-        })
-        .expect("x");
-    match arena.expr(def.expr) {
-        ArenaExpr::Block {
-            kind: ArenaBlockKind::Resource,
-            ..
-        } => {}
-        other => panic!("expected Resource Block, got {other:?}"),
-    }
-}
-
-#[test]
 fn lower_text_interpolate_to_arena() {
     let src = r#"
 module Example
@@ -3294,32 +3265,6 @@ fn parses_guard_with_simple_fail() {
     assert!(
         matches!(&def.expr, Expr::Flow { lines, .. } if lines.iter().any(|line| matches!(line, FlowLine::Guard(_))))
     );
-}
-
-#[test]
-fn parses_resource_block_with_yield_and_bind() {
-    let src = "module Example\n\nx = resource {\n  handle <- acquire\n  yield handle\n}\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
-    let def = modules[0]
-        .items
-        .iter()
-        .find_map(|i| match i {
-            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
-            _ => None,
-        })
-        .expect("x");
-    match &def.expr {
-        Expr::Block {
-            kind: BlockKind::Resource,
-            items,
-            ..
-        } => {
-            assert!(items.iter().any(|i| matches!(i, BlockItem::Yield { .. })));
-            assert!(items.iter().any(|i| matches!(i, BlockItem::Bind { .. })));
-        }
-        other => panic!("expected Resource, got {other:?}"),
-    }
 }
 
 // ─────────────────────────────────────────────────────────

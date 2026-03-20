@@ -9,27 +9,40 @@ deleteIfExists = path =>
   path
    |> exists
   ||>True => delete path
-  ||>False => pure Unit
+  ||>False => pure (Ok Unit)
 
 writeMarkerOnExit = markerPath =>
-  markerPath
-|> pure@cleanup (_ => writeText markerPath "cleanup-ran")
-|> _ => pure Unit
+  Unit
+    |> start => pure markerPath@cleanup (managedPath => writeText managedPath "cleanup-ran")#managedPath
+    |> afterRegister => pure managedPath
+
+manageSecondPath = path1 =>
+  Unit
+    |> start => pure "/tmp/aivi_idempotency_2.txt"@cleanup deleteIfExists#path2
+    |> afterAcquire => pure { path1: path1, path2: path2 }
+
+assertCleanupRan = path =>
+  readText path
+    |> assertEq (Ok "cleanup-ran")
+
+assertBothCleanupRan = paths =>
+  writeMarkerOnExit paths.path1
+    |> firstPath =>
+         writeMarkerOnExit paths.path2
+           |> secondPath =>
+                &|> assertCleanupRan paths.path1
+                &|> assertCleanupRan paths.path2
 
 @test "cleanup fires for one acquisition"
 cleanupFiresForOneAcquisition = "/tmp/aivi_idempotency_marker.txt"
   |> pure@cleanup deleteIfExists#markerPath
-  |> _ => writeMarkerOnExit markerPath
-  |> _ => readText markerPath
+  |> currentPath => writeMarkerOnExit currentPath
+  |> readText
   |> assertEq (Ok "cleanup-ran")
 
 @test "independent cleanup scopes stay separate"
 independentCleanupScopesStaySeparate = "/tmp/aivi_idempotency_1.txt"
-   |> pure@cleanup deleteIfExists#path1
-   |> _ => pure "/tmp/aivi_idempotency_2.txt"@cleanup deleteIfExists#path2
-   |> _ => writeMarkerOnExit path1
-   |> _ => writeMarkerOnExit path2
-   |> _ => readText path1
-  ~|>assertEq (Ok "cleanup-ran")
-   |> _ => readText path2
-   |> assertEq (Ok "cleanup-ran")
+  |> pure@cleanup deleteIfExists#path1
+  |> currentPath =>
+       manageSecondPath currentPath
+         |> assertBothCleanupRan

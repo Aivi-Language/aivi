@@ -809,7 +809,7 @@ impl TypeChecker {
         Ok(Type::con("aivi.generator.Generator").app(vec![yield_ty]))
     }
 
-    fn infer_resource_block(
+    fn infer_managed_block(
         &mut self,
         items: &[BlockItem],
         env: &mut TypeEnv,

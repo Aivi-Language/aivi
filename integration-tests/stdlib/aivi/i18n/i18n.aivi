@@ -10,10 +10,9 @@ parseLocale_functional = {
   locale = parseLocale "en-US"
   or { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
-  Unit
-  ~|>_ => assertEq locale.language "en"
-  ~|>_ => assertEq locale.region (Some "US")
-  ~|>_ => assertEq locale.tag "en-US"
+  assertEq locale.language "en"
+  assertEq locale.region (Some "US")
+  assertEq locale.tag "en-US"
 }
 
 @test "parse locale underscore"
@@ -21,9 +20,8 @@ parseLocale_underscore = {
   locale = parseLocale "pt_BR"
   or { language: "pt", region: Some "BR", variants: [], tag: "pt-BR" }
 
-  Unit
-  ~|>_ => assertEq locale.language "pt"
-  ~|>_ => assertEq locale.region (Some "BR")
+  assertEq locale.language "pt"
+  assertEq locale.region (Some "BR")
 }
 
 @test "key valid"
@@ -45,8 +43,7 @@ key_invalid_double_dot = key "app..welcome" match
 sigil_key = {
   k = ~k"user.settings.theme"
 
-  Unit
-  ~|>_ => assertEq k.body "user.settings.theme"
+  assertEq k.body "user.settings.theme"
 }
 
 @test "sigil message render"
@@ -64,8 +61,7 @@ fallbackTags_functional = {
   locale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
   tags   = fallbackTags locale
 
-  Unit
-  ~|>_ => assert (List.length tags >= 1)
+  assert (List.length tags >= 1)
 }
 
 @test "fallback tags no region"
@@ -73,6 +69,5 @@ fallbackTags_no_region = {
   locale = { language: "ja", region: None, variants: [], tag: "ja" }
   tags   = fallbackTags locale
 
-  Unit
-  ~|>_ => assertEq tags ["ja"]
+  assertEq tags ["ja"]
 }

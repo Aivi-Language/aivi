@@ -9,18 +9,18 @@ deleteIfExists = path =>
   path
    |> exists
   ||>True => delete path
-  ||>False => pure Unit
+  ||>False => pure (Ok Unit)
 
 threeStepLifoFlow = logPath =>
-  logPath
-|> pure@cleanup (_ => writeText logPath "A")
-|> _ => pure logPath@cleanup (_ => writeText logPath "B")
-|> _ => pure logPath@cleanup (_ => writeText logPath "C")
-|> _ => pure Unit
+  Unit
+    |> start => pure logPath@cleanup (managedPath => writeText managedPath "A")#firstPath
+    |> afterFirst => pure firstPath@cleanup (managedPath => writeText managedPath "B")#secondPath
+    |> afterSecond => pure secondPath@cleanup (managedPath => writeText managedPath "C")#thirdPath
+    |> afterThird => pure thirdPath
 
 @test "three cleanup registrations unwind in reverse order"
 threeCleanupRegistrationsUnwindInReverseOrder = "/tmp/aivi_three_lifo_log.txt"
   |> pure@cleanup deleteIfExists#logPath
-  |> _ => threeStepLifoFlow logPath
-  |> _ => readText logPath
+  |> currentPath => threeStepLifoFlow currentPath
+  |> readText
   |> assertEq (Ok "A")

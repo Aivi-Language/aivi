@@ -265,7 +265,7 @@ fn desugar_expr(expr: HirExpr, id_gen: &mut IdGen) -> HirExpr {
                 // If we still get one here, treat remaining items as a plain block.
                 lower_plain_block(items, id_gen)
             }
-            HirBlockKind::Resource => lower_resource_block(id, items, id_gen),
+            HirBlockKind::Managed => lower_managed_block(id, items, id_gen),
             HirBlockKind::Plain => lower_plain_block(items, id_gen),
         },
 
@@ -894,12 +894,12 @@ fn effect_pure_unit(id_gen: &mut IdGen) -> HirExpr {
     )
 }
 
-// ── resource { ... } desugaring ───────────────────────────────────────────────
+// ── managed cleanup block desugaring ──────────────────────────────────────────
 //
-// resource { acquire; yield x; cleanup }
+// managed { acquire; yield x; cleanup }
 //   → __makeResource (λ_ → <desugared acquire yielding (x, λ_ → <desugared cleanup>)>)
 
-fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
+fn lower_managed_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> HirExpr {
     let yield_pos = items
         .iter()
         .position(|item| matches!(item, HirBlockItem::Yield { .. }));

@@ -12,16 +12,14 @@ use aivi.net.streams
 streamErrorFields = {
   err = { message: "stream closed unexpectedly" }
 
-  Unit
-  ~|>_ => assertEq err.message "stream closed unexpectedly"
+  assertEq err.message "stream closed unexpectedly"
 }
 
 @test "stream error empty message"
 streamErrorEmpty = {
   err = { message: "" }
 
-  Unit
-  ~|>_ => assertEq err.message ""
+  assertEq err.message ""
 }
 
 // -- fromList / fold --
