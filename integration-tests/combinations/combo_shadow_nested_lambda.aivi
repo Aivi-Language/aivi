@@ -18,9 +18,7 @@ process = x => v => v match
   | None   => z => globalX + x + z
 
 @test "three-level shadowing: lambda uses closest x"
-threeLevelShadowing = Unit
-~|>_ => assertEq ((process 200 (Some 30)) 0) 1030
-~|>_ => assertEq ((process 200 None) 0) 1200
+threeLevelShadowing = assertEq [((process 200 (Some 30)) 0), ((process 200 None) 0)] [1030, 1200]
 
 armScopedAdder = x => (Some 7) match
   | None   => z => z + x
@@ -35,9 +33,7 @@ pickValue = x => opt => opt match
   | None   => x
 
 @test "pattern binding shadows outer param"
-patternShadowsOuterParam = Unit
-~|>_ => assertEq (pickValue 100 (Some 5)) 5
-~|>_ => assertEq (pickValue 100 None) 100
+patternShadowsOuterParam = assertEq [pickValue 100 (Some 5), pickValue 100 None] [5, 100]
 
 nestedMatchResult = x => (Some 3) match
   | Some x => x

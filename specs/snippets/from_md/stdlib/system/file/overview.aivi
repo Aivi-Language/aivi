@@ -1,10 +1,11 @@
 use aivi.file (readText, stat)
 
 main =
-  Unit
-     |> _ => readText "config.json" #contentRes
-     ~|> print (contentRes or "missing config")
-     |> _ => stat "large_video.mp4" #infoRes
-     |> _ => infoRes match
-          | Ok info => print "File size: {info.size} bytes"
-          | Err _   => print "File not found"
+  readText "config.json"
+    |> contentRes =>
+         print (contentRes or "missing config")
+           |> logDone =>
+                stat "large_video.mp4"
+                  |> infoRes => infoRes match
+                    | Ok info => print "File size: {info.size} bytes"
+                    | Err _   => print "File not found"

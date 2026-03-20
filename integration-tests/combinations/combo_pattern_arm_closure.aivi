@@ -21,9 +21,7 @@ pickFn = v => v match
   | High n => x => n - x
 
 @test "only the matching arm's binding is captured"
-onlyMatchingArmCaptured = Unit
-~|>_ => assertEq ((pickFn (Low 3)) 10) 13
-~|>_ => assertEq ((pickFn (High 7)) 10) (-3)
+onlyMatchingArmCaptured = assertEq [((pickFn (Low 3)) 10), ((pickFn (High 7)) 10)] [13, -3]
 
 armClosure = n => (Some 5) match
   | None   => x => x + n
@@ -33,6 +31,4 @@ armClosure = n => (Some 5) match
 armClosureUsesPatternN = assertEq ((armClosure 999) 10) 15
 
 @test "two closures from different calls each capture their own binding"
-twoClosuresDifferentBindings = Unit
-~|>_ => assertEq ((pickFn (Low 4)) 6) 10
-~|>_ => assertEq ((pickFn (Mid 3)) 6) 18
+twoClosuresDifferentBindings = assertEq [((pickFn (Low 4)) 6), ((pickFn (Mid 3)) 6)] [10, 18]

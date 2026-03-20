@@ -3,5 +3,5 @@ use aivi.net.httpServer
 echoSocket = socket =>
   socket
      |> wsRecv #message
-     |> _ => wsSend socket message
-     |> _ => wsClose socket
+    ~|> message => wsSend socket message
+     |> message => wsClose socket

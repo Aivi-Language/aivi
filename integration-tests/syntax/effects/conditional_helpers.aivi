@@ -8,29 +8,29 @@ runIf    = cond action => if cond then action else pure Unit
 runIfNot = cond action => if cond then pure Unit else action
 
 @test "conditional helper true branch produces failure"
-conditionalHelperTrueBranchProducesFailure = Unit
-   |> _ => attempt (runIf True (fail "triggered"))#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "triggered"
-   |> _ => pure Unit
+conditionalHelperTrueBranchProducesFailure =
+  attempt (runIf True (fail "triggered"))
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "triggered"
 
 @test "conditional helper false branch skips failure"
-conditionalHelperFalseBranchSkipsFailure = Unit
-   |> _ => attempt (runIf False (fail "triggered"))#attemptResult
-   |> _ => assertOk attemptResult#value
-  ~|>_ => assertEq value Unit
-   |> _ => pure Unit
+conditionalHelperFalseBranchSkipsFailure =
+  attempt (runIf False (fail "triggered"))
+    |> attemptResult =>
+         assertOk attemptResult
+           |> value => assertEq value Unit
 
 @test "inverse helper true branch skips failure"
-inverseHelperTrueBranchSkipsFailure = Unit
-   |> _ => attempt (runIfNot True (fail "triggered"))#attemptResult
-   |> _ => assertOk attemptResult#value
-  ~|>_ => assertEq value Unit
-   |> _ => pure Unit
+inverseHelperTrueBranchSkipsFailure =
+  attempt (runIfNot True (fail "triggered"))
+    |> attemptResult =>
+         assertOk attemptResult
+           |> value => assertEq value Unit
 
 @test "inverse helper false branch produces failure"
-inverseHelperFalseBranchProducesFailure = Unit
-   |> _ => attempt (runIfNot False (fail "triggered"))#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "triggered"
-   |> _ => pure Unit
+inverseHelperFalseBranchProducesFailure =
+  attempt (runIfNot False (fail "triggered"))
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "triggered"

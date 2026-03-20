@@ -12,15 +12,17 @@ keepPositive = value =>
 
 recoverPositive : Int -> Effect Text Int
 recoverPositive = value =>
-  pure value
-  ?|>current => if current > 0 then pure (current + 1) else fail "not-positive"
-  !|>_ => pure 0
+  attempt (keepPositive value)
+    |> result => result match
+      | Ok current => pure (current + 1)
+      | Err _      => pure 0
 
 @test "flow bindings stay visible across steps"
-flowBindingsStayVisibleAcrossSteps = pure Unit
-   |> _ => pure 1#x
-   |> _ => pure 2#y
-  ~|>_ => assertEq 3 (x + y)
+flowBindingsStayVisibleAcrossSteps =
+  pure 1
+    |> x =>
+         pure 2
+           |> y => assertEq 3 (x + y)
 
 @test "tap preserves the current subject"
 tapPreservesTheCurrentSubject = pure 7

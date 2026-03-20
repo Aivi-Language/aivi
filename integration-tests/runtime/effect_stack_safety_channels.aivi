@@ -9,31 +9,28 @@ sendRange : Send Int -> Int -> Int -> Effect Text Unit
 sendRange = tx => limit => n =>
   if n >= limit then close tx
   else
-  send tx n
-|> _ => sendRange tx limit (n + 1)
+  &|>send tx n
+  &|>sendRange tx limit (n + 1)
 
 recvTotal : Recv Int -> Int -> Int -> Int -> Effect Text Int
 recvTotal = rx => limit => count => acc =>
   if count >= limit then pure acc
   else
-  recv rx
-|> result => result match
-  | Ok n       => recvTotal rx limit (count + 1) (acc + n)
-  | Err Closed => fail "channel closed before all values were received"
+   |> recv rx
+  ||>Ok n => recvTotal rx limit (count + 1) (acc + n)
+  ||>Err Closed => fail "channel closed before all values were received"
 
 @test "effect loop over channel recv stays stack safe"
 effectLoopOverChannelRecvStaysStackSafe = {
-  iterations = 5000
-  expected   = (iterations * (iterations - 1)) / 2
-  make 0
+  |> make 0
   |> ((tx, rx) => {
-      spawn (sendRange tx iterations 0)
-      |> producer => {
-        recvTotal rx iterations 0 0
-        |> total => {
-          producer.join
-          assertEq total expected
-        }
+        spawn (sendRange tx 5000 0)
+    |> producer => {
+          recvTotal rx 5000 0 0
+      |> total => {
+            producer.join
+            assertEq total 12497500
       }
+    }
   })
 }

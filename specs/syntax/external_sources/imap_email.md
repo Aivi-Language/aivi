@@ -105,11 +105,14 @@ InboxMessage = {
 }
 
 loadUnread = accountId =>
+  toSource = goaCfg =>
+    email.imap (
+      Goa.toImapConfig goaCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
+    )
+
   accountId
-     |> Goa.imapConfig #goaCfg
-     |> _ => email.imap (
-          Goa.toImapConfig goaCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
-        )
+     |> Goa.imapConfig
+     |> toSource
      |> load
 ```
 

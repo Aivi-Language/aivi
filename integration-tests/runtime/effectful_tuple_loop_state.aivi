@@ -6,12 +6,12 @@ use aivi.testing
 
 advanceHandleState = state => state match
   | (n, currentHandle) =>
-      if n >= 200 then pure n
+      if n >= 200 then n
       else advanceHandleState (n + 1, currentHandle)
 
 advanceHandleMapState = state => state match
   | (n, currentHandles) =>
-      if n >= 200 then pure n
+      if n >= 200 then n
       else advanceHandleMapState (n + 1, currentHandles)
 
 @test "tuple loop carries effectful record state"
@@ -21,8 +21,8 @@ tupleLoopCarriesEffectfulRecordState = {
     reusable: True
     signature: "tick"
   }
-  advanceHandleState (0, handle)
-  |> total => assertEq total 200
+  total = advanceHandleState (0, handle)
+  assertEq total 200
 }
 
 @test "tuple loop carries maps of effectful records"
@@ -33,6 +33,6 @@ tupleLoopCarriesEffectfulHandleMaps = {
     signature: "tick"
   }
   handles = Map.insert "tick" handle Map.empty
-  advanceHandleMapState (0, handles)
-  |> total => assertEq total 200
+  total   = advanceHandleMapState (0, handles)
+  assertEq total 200
 }

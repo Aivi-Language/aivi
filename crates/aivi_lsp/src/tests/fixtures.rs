@@ -761,7 +761,7 @@ use aivi
 main =
   "com.example.counter"
      |> appNew #appId
-     |> _ => appRun appId
+     |> current => appRun appId
 "#;
     let uri = sample_uri();
     let doc_index = DocIndex::default();
@@ -791,7 +791,7 @@ use examples.gtk
 main =
   "com.example.counter"
      |> appNew #appId
-     |> _ => appId
+     |> current => appId
 "#;
     let lib_uri = Url::parse("file:///gtk.aivi").expect("valid uri");
     let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
@@ -811,7 +811,7 @@ main =
     }
 
     let doc_index = DocIndex::default();
-    let position = position_after(app_text, "|> _ => ");
+    let position = position_after(app_text, "|> current => ");
     let hover =
         Backend::build_hover_with_workspace(app_text, &app_uri, position, &workspace, &doc_index)
             .expect("hover found");

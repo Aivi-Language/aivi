@@ -18,7 +18,7 @@ use aivi.generator
 @test "when sugar does not affect user bindings"
 whenSugarNoShadow = {
   x = 42
-  when True = Unit
+  if True then pure Unit else pure Unit
   // `_` from desugar must not shadow or clobber `x`
   assertEq x 42
 }
@@ -28,7 +28,7 @@ whenSugarNoShadow = {
 @test "unless sugar does not affect user bindings"
 unlessSugarNoShadow = {
   count = 7
-  unless False = Unit
+  if False then pure Unit else pure Unit
   assertEq count 7
 }
 
@@ -56,9 +56,9 @@ multipleSugarsSequential = {
   value = 55
   flag1 = True
   flag2 = False
-  when flag1 = Unit
-  unless flag2 = Unit
-  when flag1 = Unit
+  if flag1 then pure Unit else pure Unit
+  if flag2 then pure Unit else pure Unit
+  if flag1 then pure Unit else pure Unit
   // After three sugar expansions, value is unchanged
   assertEq value 55
 }

@@ -76,7 +76,7 @@ export main
 
 main =
   Unit
-    |> _ => pure 5
+    |> current => pure 5
     |> _ + 1
     |> assertEq 6
 "#,

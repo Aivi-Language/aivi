@@ -38,9 +38,7 @@ transformShape = shape => shape match
   | _        => n => n
 
 @test "ADT payload captured in closure used after match"
-adtPayloadClosureCapture = Unit
-~|>_ => assertEq ((transformShape (Rect 3 7)) 0) 21
-~|>_ => assertEq ((transformShape (Rect 3 7)) 10) 31
+adtPayloadClosureCapture = assertEq [((transformShape (Rect 3 7)) 0), ((transformShape (Rect 3 7)) 10)] [21, 31]
 
 Person = Student { name: Text, score: Int } | Teacher { name: Text, rating: Int }
 

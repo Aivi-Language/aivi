@@ -20,11 +20,11 @@ use aivi.testing
 // always prefer the (..) range + fold combination used here.
 
 sumRangeRecursively = i => acc =>
-  if i >= 500 then pure acc
+  if i >= 500 then acc
   else sumRangeRecursively (i + 1) (acc + i)
 
 buildRangeRecursively = i => acc =>
-  if i >= 100 then pure acc
+  if i >= 100 then acc
   else buildRangeRecursively (i + 1) [...acc, i]
 
 @test "range of 50000 elements folds correctly"
@@ -86,13 +86,15 @@ nestedFold = {
 // recursive accumulation itself works correctly.
 
 @test "loop recurse 500 iterations accumulates correctly"
-loopRecurse500 = sumRangeRecursively 0 0
-  |> total => assertEq total 124750
+loopRecurse500 = {
+  total = sumRangeRecursively 0 0
+  assertEq total 124750
+}
 
 @test "loop recurse builds list of 100 elements"
-loopRecurseList100 = buildRangeRecursively 0 []
-  |> xs => {
-    assertEq (List.length xs) 100
-    total = List.foldl (acc x => acc + x) 0 xs
-    assertEq total 4950
-  }
+loopRecurseList100 = {
+  xs    = buildRangeRecursively 0 []
+  total = List.foldl (acc x => acc + x) 0 xs
+  assertEq (List.length xs) 100
+  assertEq total 4950
+}

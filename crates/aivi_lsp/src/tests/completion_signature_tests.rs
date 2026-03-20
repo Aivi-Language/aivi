@@ -277,7 +277,7 @@ fn completion_includes_lambda_params_in_scope() {
 
 #[test]
 fn completion_includes_flow_bind_vars() {
-    let text = "@no_prelude\nmodule examples.flow_complete\nuse aivi\nrun =\n  \"test\"\n     |> pure #myVar\n     |> _ => myVar\n";
+    let text = "@no_prelude\nmodule examples.flow_complete\nuse aivi\nrun =\n  \"test\"\n     |> pure #myVar\n     |> current => myVar\n";
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi"]);
     let position = position_after(text, "=> ");

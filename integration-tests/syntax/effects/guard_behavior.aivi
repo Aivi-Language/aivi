@@ -18,49 +18,49 @@ withinRange = n =>
   >|>_ < 100 or fail "must be less than 100"
    |> pure
 
-abortBeforeTail : Effect Text Unit
+abortBeforeTail : Effect Text Bool
 abortBeforeTail = pure False
 >|>_ or fail "early exit"
- |> _ => fail "should not reach here"
+~|> current => fail "should not reach here"
 
 @test "guard success keeps the current value"
-guardSuccessKeepsTheCurrentValue = Unit
-   |> _ => attempt (requireNonEmpty [1, 2, 3])#attemptResult
-   |> _ => assertOk attemptResult#value
-  ~|>_ => assertEq value [1, 2, 3]
-   |> _ => pure Unit
+guardSuccessKeepsTheCurrentValue =
+  attempt (requireNonEmpty [1, 2, 3])
+    |> attemptResult =>
+         assertOk attemptResult
+           |> value => assertEq value [1, 2, 3]
 
 @test "guard failure returns the fallback error"
-guardFailureReturnsTheFallbackError = Unit
-   |> _ => attempt (requireNonEmpty [])#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "list must not be empty"
-   |> _ => pure Unit
+guardFailureReturnsTheFallbackError =
+  attempt (requireNonEmpty [])
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "list must not be empty"
 
 @test "guard failure skips later steps"
-guardFailureSkipsLaterSteps = Unit
-   |> _ => attempt abortBeforeTail#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "early exit"
-   |> _ => pure Unit
+guardFailureSkipsLaterSteps =
+  attempt abortBeforeTail
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "early exit"
 
 @test "multiple guards can all pass"
-multipleGuardsCanAllPass = Unit
-   |> _ => attempt (withinRange 50)#attemptResult
-   |> _ => assertOk attemptResult#value
-  ~|>_ => assertEq value 50
-   |> _ => pure Unit
+multipleGuardsCanAllPass =
+  attempt (withinRange 50)
+    |> attemptResult =>
+         assertOk attemptResult
+           |> value => assertEq value 50
 
 @test "the first guard can fail early"
-firstGuardCanFailEarly = Unit
-   |> _ => attempt (withinRange (-1))#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "must be positive"
-   |> _ => pure Unit
+firstGuardCanFailEarly =
+  attempt (withinRange (-1))
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "must be positive"
 
 @test "the second guard can fail after the first passes"
-secondGuardCanFailAfterTheFirstPasses = Unit
-   |> _ => attempt (withinRange 200)#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "must be less than 100"
-   |> _ => pure Unit
+secondGuardCanFailAfterTheFirstPasses =
+  attempt (withinRange 200)
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "must be less than 100"

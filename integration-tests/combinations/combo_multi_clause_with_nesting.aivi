@@ -13,10 +13,7 @@ moveBy =
   | Stay => n => n
 
 @test "multi-clause function returns different closures"
-multiClauseReturnsClosure = Unit
-~|>_ => assertEq (moveBy Up 10) 11
-~|>_ => assertEq (moveBy Down 10) 9
-~|>_ => assertEq (moveBy Stay 10) 10
+multiClauseReturnsClosure = assertEq [moveBy Up 10, moveBy Down 10, moveBy Stay 10] [11, 9, 10]
 
 Priority = Low | Medium | High
 
@@ -27,10 +24,7 @@ priorityScore =
   | High   => 10
 
 @test "multi-clause scoring stays direct"
-multiClauseScoringStaysDirect = Unit
-~|>_ => assertEq (priorityScore Low) 1
-~|>_ => assertEq (priorityScore Medium) 5
-~|>_ => assertEq (priorityScore High) 10
+multiClauseScoringStaysDirect = assertEq [priorityScore Low, priorityScore Medium, priorityScore High] [1, 5, 10]
 
 Bracket = Small | Big
 
@@ -45,6 +39,4 @@ bracketMultiplier =
   | Big   => x => x * 10
 
 @test "multi-clause with guards feeding closures"
-multiClauseGuardsClosure = Unit
-~|>_ => assertEq (bracketMultiplier (classify 5) 3) 6
-~|>_ => assertEq (bracketMultiplier (classify 50) 3) 30
+multiClauseGuardsClosure = assertEq [bracketMultiplier (classify 5) 3, bracketMultiplier (classify 50) 3] [6, 30]

@@ -46,7 +46,7 @@ main : Effect Text Int
 main =
   pure 42
    ?|>current => risky current
-   !|>_ => pure 7
+   !|>err => pure 7
    ~|>recovered => assertEq recovered 7
 "#,
     );
@@ -82,24 +82,19 @@ wrapOk : Int -> Result Text Int
 wrapOk = value => Ok value
 
 step : Int -> Effect Text Int
-step = n =>
-  Unit
-    |> _ => pure (wrapOk n)#res
-    |> _ => res match
-      | Err _ =>
-          fail "closed"
-      | Ok value =>
-          if value < 2 then
-            Unit
-            ~|>_ => pure Unit
-             |> _ => fail "no"
-          else pure value
+step = n => {
+  res = wrapOk n
+  res match
+    | Err _ =>
+        fail "closed"
+    | Ok value =>
+        if value < 2 then fail "no" else pure value
+}
 
 main : Effect Text Unit
 main =
-  Unit
-    |> _ => attempt (step 2)#result
-    |> _ => result match
+  attempt (step 2)
+    |> result => result match
       | Ok value => assertEq value 2
       | Err _    => assert False
 "#,

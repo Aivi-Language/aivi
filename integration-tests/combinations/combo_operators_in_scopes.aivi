@@ -19,11 +19,7 @@ updateY : BaseRecord -> Int -> BaseRecord
 updateY = base => newY => base <| { y: newY }
 
 @test "patch operator in closure-style helper capturing record"
-patchInClosure = Unit
-~|>_ => assertEq (updateY baseRecord 10).y 10
-~|>_ => assertEq (updateY baseRecord 20).y 20
-~|>_ => assertEq (updateY baseRecord 10).x 1
-~|>_ => assertEq (updateY baseRecord 20).name "test"
+patchInClosure = assertEq [updateY baseRecord 10, updateY baseRecord 20] [{ x: 1, y: 10, name: "test" }, { x: 1, y: 20, name: "test" }]
 
 applyValues = state values => values match
   | []           => state
@@ -37,6 +33,4 @@ classify = n => n match
   | _                     => "small"
 
 @test "pipe into match expression"
-pipeIntoMatch = Unit
-~|>_ => assertEq (5 |> double |> classify) "small"
-~|>_ => assertEq (6 |> double |> classify) "big"
+pipeIntoMatch = assertEq [5 |> double |> classify, 6 |> double |> classify] ["small", "big"]

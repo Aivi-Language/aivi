@@ -19,9 +19,8 @@ matchEffectResult = value => value match
   | Some n => pure (n * 2)
 
 @test "match arms can return effects"
-matchArmsCanReturnEffects = Unit
-   |> _ => matchEffectResult (Some 5)#result
-  ~|>_ => assertEq result 10
+matchArmsCanReturnEffects = |> matchEffectResult (Some 5)#result
+~|>result => assertEq result 10
 
 Color = Red | Green | Blue
 
@@ -31,28 +30,22 @@ makeFn = color => color match
   | Blue  => x => x + 3
 
 @test "match returns different closures per arm"
-matchReturnsClosure = Unit
-~|>_ => assertEq (makeFn Red 10) 11
-~|>_ => assertEq (makeFn Green 10) 12
-~|>_ => assertEq (makeFn Blue 10) 13
+matchReturnsClosure = assertEq [makeFn Red 10, makeFn Green 10, makeFn Blue 10] [11, 12, 13]
 
 classifyWithLimit = limit => n => n match
   | value when value < limit => "small"
   | _                        => "big"
 
 @test "match guards with closures capturing outer"
-matchGuardsClosure = Unit
-~|>_ => assertEq ((classifyWithLimit 50) 10) "small"
-~|>_ => assertEq ((classifyWithLimit 50) 100) "big"
+matchGuardsClosure = assertEq [((classifyWithLimit 50) 10), ((classifyWithLimit 50) 100)] ["small", "big"]
 
 matchResultEffect = value => value match
   | Err e => pure 0
   | Ok n  => pure (n * 2)
 
 @test "match arms return effects using pattern vars"
-matchArmsReturnEffectsUsingPatternVars = Unit
-   |> _ => matchResultEffect (Ok 21)#result
-  ~|>_ => assertEq result 42
+matchArmsReturnEffectsUsingPatternVars = |> matchResultEffect (Ok 21)#result
+~|>result => assertEq result 42
 
 recordScore = data => data match
   | Some r => r.score

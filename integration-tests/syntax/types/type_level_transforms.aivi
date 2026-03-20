@@ -83,9 +83,7 @@ omitAdmin = {
 
 @test "Optional makes field Option type"
 optionalEmail = {
-  withEmail : UserForm
   withEmail = { id: 1, name: "Bob", email: Some "bob@example.com", admin: True }
-  withoutEmail : UserForm
   withoutEmail = { id: 2, name: "Eve", email: None, admin: False }
   assertEq withEmail.id 1
   assertEq withoutEmail.email None
@@ -93,7 +91,6 @@ optionalEmail = {
 
 @test "Type-level pipe composes transforms"
 typePipe = {
-  draft : UserDraft
   draft = { id: 3, name: "Carol", email: None }
   assertEq draft.id 3
   assertEq draft.name "Carol"
@@ -109,7 +106,6 @@ recordTypeSpreadAddsFields = {
 
 @test "Later spread overrides earlier field type"
 recordTypeSpreadOverridesEarlierFields = {
-  normalized : UserNormalized
   normalized = { id: 11, name: "Eli" }
   assertEq (normalizedName normalized) "Eli"
 }

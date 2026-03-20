@@ -3,7 +3,6 @@ use aivi.net.sockets
 pingServer =
   { host: "127.0.0.1", port: 9000 }
      |> connect #conn
-     |> _ => send conn [112, 105, 110, 103]
-     |> _ => recv conn #reply
-     |> _ => close conn
-     |> _ => reply
+    ~|> send conn [112, 105, 110, 103]
+     |> recv conn #reply
+    ~|> close conn

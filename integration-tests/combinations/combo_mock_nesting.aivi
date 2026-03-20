@@ -11,6 +11,4 @@ mockActiveWithoutDo = mock greeting = "Hi"
 in assertEq greeting "Hi"
 
 @test "mock scope does not leak into outer binding"
-mockScopeDoesNotLeakIntoOuterBinding = Unit
-~|>_ => assertEq (mock greeting = "Temp" in greeting) "Temp"
-~|>_ => assertEq greeting "Hello"
+mockScopeDoesNotLeakIntoOuterBinding = assertEq [mock greeting = "Temp" in greeting, greeting] ["Temp", "Hello"]

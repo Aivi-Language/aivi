@@ -7,25 +7,23 @@ use aivi.testing
 // Tuple destructure on left-hand side of <- arrow in do-blocks.
 
 @test "tuple destructure with <- bind"
-test_bind = {
-  (a, b) = (1, 2)
-  assertEq a 1
-  assertEq b 2
-}
+test_bind = pure (1, 2)
+  |> (a, b) => {
+       assertEq a 1
+       assertEq b 2
+     }
 
 @test "triple destructure with <- bind"
-test_triple = {
-  (x, y, z) = (10, 20, 30)
-  assertEq (x + y + z) 60
-}
+test_triple = pure (10, 20, 30)
+  |> (x, y, z) => assertEq (x + y + z) 60
 
 @test "nested tuple destructure with <- bind"
-test_nested = {
-  (a, (b, c)) = (1, (2, 3))
-  assertEq a 1
-  assertEq b 2
-  assertEq c 3
-}
+test_nested = pure (1, (2, 3))
+  |> (a, (b, c)) => {
+       assertEq a 1
+       assertEq b 2
+       assertEq c 3
+     }
 
 @test "tuple destructure with pure let in do-block"
 test_let = {
@@ -37,7 +35,9 @@ test_let = {
 @test "mixed tuple destructure let and bind"
 test_mixed = {
   (x, y) = (5, 10)
-  (a, b) = (x + 1, y + 1)
-  assertEq a 6
-  assertEq b 11
+  pure (x + 1, y + 1)
+   |> (a, b) => {
+        assertEq a 6
+        assertEq b 11
+      }
 }

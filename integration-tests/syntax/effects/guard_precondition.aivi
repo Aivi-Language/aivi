@@ -11,15 +11,15 @@ positiveOnly = n =>
    |> pure
 
 @test "guard success continues"
-guardSuccessContinues = Unit
-   |> _ => attempt (positiveOnly 5)#attemptResult
-   |> _ => assertOk attemptResult#value
-  ~|>_ => assertEq value 5
-   |> _ => pure Unit
+guardSuccessContinues =
+  attempt (positiveOnly 5)
+    |> attemptResult =>
+         assertOk attemptResult
+           |> value => assertEq value 5
 
 @test "guard failure returns the original error"
-guardFailureReturnsTheOriginalError = Unit
-   |> _ => attempt (positiveOnly (-1))#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "must be positive"
-   |> _ => pure Unit
+guardFailureReturnsTheOriginalError =
+  attempt (positiveOnly (-1))
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "must be positive"

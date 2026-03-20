@@ -66,9 +66,10 @@ saveEnabled = combineAll (dirty, saveEvent.running) ((dirty, running) => dirty &
 
 ```aivi
 batch (_ =>
-  Unit
-     |> _ => update state (patch { saving: True })
-     |> _ => set lastError None
+  {
+    update state (patch { saving: True })
+    set lastError None
+  }
 )
 ```
 

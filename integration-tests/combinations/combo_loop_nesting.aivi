@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.generator
 
 accumulateWithFactor = factor => i => acc =>
-  if i > 5 then pure acc
+  if i > 5 then acc
   else accumulateWithFactor factor (i + 1) (acc + i * factor)
 
 sumOptionalItems = remaining => acc => remaining match
@@ -27,13 +27,15 @@ buildAdderFnsDescending = i => fns =>
   }
 
 sumScaledWithPure = base => i => acc =>
-  if i > 3 then pure acc
+  if i > 3 then acc
   else sumScaledWithPure base (i + 1) (acc + i * base)
 
 @test "loop in effect captures outer bindings"
-loopCapturesOuter = pure 3
-   |> factor => accumulateWithFactor factor 1 0#result
-  ~|>_ => assertEq result 45
+loopCapturesOuter = {
+  factor = 3
+  result = accumulateWithFactor factor 1 0
+  assertEq result 45
+}
 
 @test "loop with match dispatching per iteration"
 loopWithMatch = {
@@ -51,9 +53,11 @@ loopCreatesClosures = {
 }
 
 @test "loop with nested effect preserves outer"
-loopNestedEffectPreservesOuter = pure 100
-   |> base => sumScaledWithPure base 1 0#result
-  ~|>_ => assertEq result 600
+loopNestedEffectPreservesOuter = {
+  base   = 100
+  result = sumScaledWithPure base 1 0
+  assertEq result 600
+}
 
 @test "loop in generator captures outer scope"
 loopInGeneratorCapturesOuter = {

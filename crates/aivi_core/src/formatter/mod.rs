@@ -477,20 +477,20 @@ module demo
 
 main = tx => rx =>
   Unit
-  ~|>_ => send tx True
-  |> _ => recv rx#res
-  ~|>_ => close tx
-  |> _ => assertRecvOk True res
+  ~|> send tx True
+   |> recv rx#res
+  ~|> close tx
+   |> assertRecvOk True res
 ";
         let expected = "\
 module demo
 
 main = tx => rx =>
   Unit
-  ~|>_ => send tx True
-   |> _ => recv rx#res
-  ~|>_ => close tx
-   |> _ => assertRecvOk True res
+  ~|>send tx True
+   |> recv rx#res
+  ~|>close tx
+   |> assertRecvOk True res
 ";
         let formatted = format_text(input);
         assert_eq!(formatted, expected);
@@ -510,8 +510,8 @@ reply = value =>
   value
   ||>Ok ok =>
     Unit
-    ~|>_ => log ok
-    |> _ => persist ok
+    ~|> log ok
+     |> persist ok
   ||>Err _ => assert False
 ";
         let expected = "\
@@ -521,8 +521,8 @@ reply = value =>
   value
   ||>Ok ok =>
   Unit
-  ~|>_ => log ok
-   |> _ => persist ok
+  ~|>log ok
+   |> persist ok
   ||>Err _ => assert False
 ";
         let formatted = format_text(input);

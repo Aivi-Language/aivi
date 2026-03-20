@@ -7,9 +7,7 @@ use aivi.testing
 transformBy = x => n => n + x
 
 @test "lambda capture stays stable without do"
-lambdaCaptureStaysStableWithoutDo = Unit
-~|>_ => assertEq ((transformBy 10) 5) 15
-~|>_ => assertEq ((transformBy 10) 32) 42
+lambdaCaptureStaysStableWithoutDo = assertEq [((transformBy 10) 5), ((transformBy 10) 32)] [15, 42]
 
 optionLambdaResult = factor => (Some 6) match
   | Some a => Some ((x => x * factor) a)
@@ -37,9 +35,7 @@ makeAdder = opt => opt match
   | None   => x => x
 
 @test "lambda returned from match arm captures pattern var"
-lambdaFromMatchArm = Unit
-~|>_ => assertEq ((makeAdder (Some 10)) 5) 15
-~|>_ => assertEq ((makeAdder None) 5) 5
+lambdaFromMatchArm = assertEq [((makeAdder (Some 10)) 5), ((makeAdder None) 5)] [15, 5]
 
 @test "triple nested lambdas keep captured values"
 tripleNesting = assertEq (((x => y => 10 + x + y) 20) 12) 42

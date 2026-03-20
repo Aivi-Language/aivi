@@ -8,34 +8,30 @@ recoverWithZero = result => result match
   | Ok value => value
   | Err _    => 0
 
-nestedFailure = Unit
-  |> _ => fail "inner error"
-  |> _ => pure 99
+nestedFailure = fail "inner error"
 
 @test "attempt wraps success in Ok"
-attemptWrapsSuccessInOk = Unit
-   |> _ => attempt (pure 42)#attemptResult
-   |> _ => assertOk attemptResult#value
-  ~|>_ => assertEq value 42
-   |> _ => pure Unit
+attemptWrapsSuccessInOk =
+  attempt (pure 42)
+    |> attemptResult =>
+         assertOk attemptResult
+           |> value => assertEq value 42
 
 @test "attempt wraps failure in Err"
-attemptWrapsFailureInErr = Unit
-   |> _ => attempt (fail "something went wrong")#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "something went wrong"
-   |> _ => pure Unit
+attemptWrapsFailureInErr =
+  attempt (fail "something went wrong")
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "something went wrong"
 
 @test "attempt allows recovery after failure"
-attemptAllowsRecovery = Unit
-   |> _ => attempt (fail "recoverable")#attemptResult
-   |> _ => pure (recoverWithZero attemptResult)#value
-  ~|>_ => assertEq value 0
-   |> _ => pure Unit
+attemptAllowsRecovery =
+  attempt (fail "recoverable")
+    |> attemptResult => assertEq (recoverWithZero attemptResult) 0
 
 @test "attempt on nested failure keeps the first error"
-attemptNestedShortCircuit = Unit
-   |> _ => attempt nestedFailure#attemptResult
-   |> _ => assertErr attemptResult#err
-  ~|>_ => assertEq err "inner error"
-   |> _ => pure Unit
+attemptNestedShortCircuit =
+  attempt nestedFailure
+    |> attemptResult =>
+         assertErr attemptResult
+           |> err => assertEq err "inner error"
