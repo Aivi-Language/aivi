@@ -1,73 +1,77 @@
-# Resource Management
+# Cleanup and Managed Lifetimes
 
-AIVI provides a dedicated `Resource` type for values that need reliable setup and teardown. Use it for things like files, sockets, database connections, or any other handle that must be released even when work fails or gets cancelled.
+<!-- quick-info: {"kind":"syntax","name":"@cleanup","signature":"A -> (A -> Effect E Unit) -> A"} -->
+AIVI v0.2 manages acquisition and release with the `@cleanup` flow modifier. Register cleanup on the line that acquires a handle, and the runtime guarantees that finalization runs when the enclosing flow scope exits.
+<!-- /quick-info -->
 
-## 15.1 The `Resource E A` Type
+This page covers **resource-style cleanup semantics**. The user-authored `resource { ... }` block is no longer part of the current surface syntax.
 
-`Resource E A` is a value that describes how to **acquire** a handle of type `A` and later **release** it around a caller-supplied use site.
+## Basic pattern
 
-```text
-Resource E A
+```aivi
+readAllText = path =>
+  path
+     |> file.open @cleanup file.close #handle
+     |> file.readAll handle
 ```
 
-- `E` is the error type for acquisition failures, such as `FileError` or `SocketError`
-- `A` is the type of the acquired handle, such as `Handle` or `Socket`
+The successful result of the annotated line keeps flowing as usual:
 
-A `Resource` is **not** a handle itself. It is an inert recipe for obtaining one. The actual use happens after acquisition with `<-`, and the handle exists only within that enclosing scope.
+- `file.open` produces the handle,
+- `#handle` binds it for later steps,
+- `@cleanup file.close` registers the finalizer,
+- later lines can keep using `handle` until the enclosing flow ends.
 
-## 15.2 Defining Resources
+## Lifecycle guarantees
 
-Define a resource with a `resource` block. The shape is simple: perform setup, `yield` the resource to the caller, then write cleanup after `yield`.
+Cleanup registration is structural rather than ad hoc.
 
-The code after `yield` is guaranteed to run when the resource goes out of scope.
+- Cleanup is registered **only if the line succeeds**.
+- Cleanup runs on **normal completion**, **typed failure**, and **cancellation**.
+- Multiple cleanups unwind in **LIFO** order.
+- The cleanup expression receives the successful line result as its final argument.
+- Registering cleanup does **not** change the current flow subject.
 
-<<< ../snippets/from_md/syntax/resources/defining_resources.aivi{aivi}
+## Multiple managed handles
 
-Think of `yield` as the handoff point between “make the handle available” and “clean it up later”.
+```aivi
+compareFiles = leftPath rightPath =>
+  leftPath
+     |> file.open @cleanup file.close #left
+     |> _ => rightPath
+     |> file.open @cleanup file.close #right
+     |> compareHandles left right
+```
 
-### Rules
+When that flow exits, `right` closes before `left`.
 
-- write acquisition before `yield` and cleanup after it; a well-formed resource uses `yield` as its single handoff point
-- if `yield` is never reached, such as when acquisition fails, no cleanup runs because there is nothing to release
-- the cleanup phase runs as a finalizer and **may perform effects**
-- cleanup effects use the same error type `E`; if cleanup itself fails, the error is logged but does not override the original error
+## Error semantics
 
-## 15.3 Using Resources
+Cleanup follows the same intent as earlier scoped finalizers, but it is now attached directly to flow lines.
 
-Inside a `do Effect { ... }` block, use `<-` to acquire a resource. This binds the handle for the rest of that enclosing scope.
+- If acquisition fails, there is nothing to clean up.
+- If later work fails after acquisition, registered cleanup still runs.
+- If cleanup itself fails, the cleanup failure is secondary to the original flow failure.
+- A cancellation signal still triggers registered cleanup before the scope is considered finished.
 
-<<< ../snippets/from_md/syntax/resources/using_resources.aivi{aivi}
+## Cancellation behavior
 
-When the enclosing scope exits—typically the surrounding `do Effect { ... }` block—whether by normal completion, an error in `E`, or cancellation, all acquired resources are released in reverse order.
+Cleanup runs in a cancellation-protected finalization context.
 
-### Multiple Resources
+That means:
 
-You can acquire multiple resources in sequence. They are released in reverse order of acquisition (LIFO).
+- cancellation observed before acquisition prevents the line from succeeding,
+- cancellation observed after acquisition still unwinds registered cleanup,
+- a second cancellation signal does not interrupt cleanup half-way through.
 
-<<< ../snippets/from_md/syntax/resources/multiple_resources.aivi{aivi}
+## When to use `@cleanup`
 
-## 15.4 Error Semantics
+Reach for `@cleanup` whenever a successful step returns a handle-like value that must be released explicitly, for example:
 
-- if **acquisition** fails, the resource is never yielded and no cleanup runs
-- if **use** fails after acquisition, cleanup still runs and the original error propagates afterward
-- if **cleanup** fails, the cleanup error is suppressed to diagnostics and the original error, if any, takes priority
+- file handles,
+- sockets and listeners,
+- temporary directories,
+- database sessions,
+- long-lived mailbox or UI resources.
 
-All of these guarantees hold for typed errors and for cancellation.
-
-## 15.5 Cancellation
-
-Resources interact with the cancellation system (see [Concurrency](../stdlib/system/concurrency.md)):
-
-- cancellation is checked at `<-` bind points; if a task is cancelled before acquisition, acquisition does not run
-- if cancellation arrives **during use** of an acquired resource, cleanup still runs
-- cleanup code itself runs in a **cancellation-protected** context and is not interrupted by a second cancellation signal
-- this masking is structural, so ordinary finalizer safety does not require explicit `cancellation.mask`
-
-## 15.6 Composability and Nesting
-
-Resources compose naturally:
-
-- a `resource` block can acquire other resources internally
-- inner resources are released before the outer resource's cleanup runs
-- resources can be returned from functions and passed as values; they stay inert until acquired with `<-`
-- higher-level resources can be built by combining lower-level acquisition and cleanup steps
+For the full syntax of modifiers such as `@cleanup`, `@retry`, and `@timeout`, see [Flow Syntax](flows.md).

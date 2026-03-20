@@ -39,6 +39,49 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
                 || args.iter().any(|arg| expr_contains_ident(arg, target))
         }
         Expr::Lambda { body, .. } => expr_contains_ident(body, target),
+        Expr::Flow { root, lines, .. } => {
+            expr_contains_ident(root, target)
+                || lines.iter().any(|line| match line {
+                    crate::surface::FlowLine::Step(step) => {
+                        expr_contains_ident(&step.expr, target)
+                            || step.subflow.iter().any(|inner| match inner {
+                                crate::surface::FlowLine::Step(step) => {
+                                    expr_contains_ident(&step.expr, target)
+                                }
+                                crate::surface::FlowLine::Guard(guard) => {
+                                    expr_contains_ident(&guard.predicate, target)
+                                        || guard
+                                            .fail_expr
+                                            .as_ref()
+                                            .is_some_and(|e| expr_contains_ident(e, target))
+                                }
+                                crate::surface::FlowLine::Branch(arm)
+                                | crate::surface::FlowLine::Recover(arm) => {
+                                    arm.guard
+                                        .as_ref()
+                                        .is_some_and(|e| expr_contains_ident(e, target))
+                                        || expr_contains_ident(&arm.body, target)
+                                }
+                                crate::surface::FlowLine::Anchor(_) => false,
+                            })
+                    }
+                    crate::surface::FlowLine::Guard(guard) => {
+                        expr_contains_ident(&guard.predicate, target)
+                            || guard
+                                .fail_expr
+                                .as_ref()
+                                .is_some_and(|e| expr_contains_ident(e, target))
+                    }
+                    crate::surface::FlowLine::Branch(arm)
+                    | crate::surface::FlowLine::Recover(arm) => {
+                        arm.guard
+                            .as_ref()
+                            .is_some_and(|e| expr_contains_ident(e, target))
+                            || expr_contains_ident(&arm.body, target)
+                    }
+                    crate::surface::FlowLine::Anchor(_) => false,
+                })
+        }
         Expr::Match {
             scrutinee, arms, ..
         } => {
@@ -114,6 +157,48 @@ fn expr_contains_record_field(expr: &Expr, field_name: &str) -> bool {
             .any(|item| expr_contains_record_field(&item.expr, field_name)),
         Expr::FieldAccess { base, .. } => expr_contains_record_field(base, field_name),
         Expr::Lambda { body, .. } => expr_contains_record_field(body, field_name),
+        Expr::Flow { root, lines, .. } => {
+            expr_contains_record_field(root, field_name)
+                || lines.iter().any(|line| match line {
+                    crate::surface::FlowLine::Step(step) => {
+                        expr_contains_record_field(&step.expr, field_name)
+                            || step.subflow.iter().any(|inner| match inner {
+                                crate::surface::FlowLine::Step(step) => {
+                                    expr_contains_record_field(&step.expr, field_name)
+                                }
+                                crate::surface::FlowLine::Guard(guard) => {
+                                    expr_contains_record_field(&guard.predicate, field_name)
+                                        || guard.fail_expr.as_ref().is_some_and(|e| {
+                                            expr_contains_record_field(e, field_name)
+                                        })
+                                }
+                                crate::surface::FlowLine::Branch(arm)
+                                | crate::surface::FlowLine::Recover(arm) => {
+                                    arm.guard
+                                        .as_ref()
+                                        .is_some_and(|e| expr_contains_record_field(e, field_name))
+                                        || expr_contains_record_field(&arm.body, field_name)
+                                }
+                                crate::surface::FlowLine::Anchor(_) => false,
+                            })
+                    }
+                    crate::surface::FlowLine::Guard(guard) => {
+                        expr_contains_record_field(&guard.predicate, field_name)
+                            || guard
+                                .fail_expr
+                                .as_ref()
+                                .is_some_and(|e| expr_contains_record_field(e, field_name))
+                    }
+                    crate::surface::FlowLine::Branch(arm)
+                    | crate::surface::FlowLine::Recover(arm) => {
+                        arm.guard
+                            .as_ref()
+                            .is_some_and(|e| expr_contains_record_field(e, field_name))
+                            || expr_contains_record_field(&arm.body, field_name)
+                    }
+                    crate::surface::FlowLine::Anchor(_) => false,
+                })
+        }
         _ => false,
     }
 }
@@ -145,6 +230,49 @@ fn expr_contains_string(expr: &Expr, target: &str) -> bool {
                 || args.iter().any(|arg| expr_contains_string(arg, target))
         }
         Expr::Lambda { body, .. } => expr_contains_string(body, target),
+        Expr::Flow { root, lines, .. } => {
+            expr_contains_string(root, target)
+                || lines.iter().any(|line| match line {
+                    crate::surface::FlowLine::Step(step) => {
+                        expr_contains_string(&step.expr, target)
+                            || step.subflow.iter().any(|inner| match inner {
+                                crate::surface::FlowLine::Step(step) => {
+                                    expr_contains_string(&step.expr, target)
+                                }
+                                crate::surface::FlowLine::Guard(guard) => {
+                                    expr_contains_string(&guard.predicate, target)
+                                        || guard
+                                            .fail_expr
+                                            .as_ref()
+                                            .is_some_and(|e| expr_contains_string(e, target))
+                                }
+                                crate::surface::FlowLine::Branch(arm)
+                                | crate::surface::FlowLine::Recover(arm) => {
+                                    arm.guard
+                                        .as_ref()
+                                        .is_some_and(|e| expr_contains_string(e, target))
+                                        || expr_contains_string(&arm.body, target)
+                                }
+                                crate::surface::FlowLine::Anchor(_) => false,
+                            })
+                    }
+                    crate::surface::FlowLine::Guard(guard) => {
+                        expr_contains_string(&guard.predicate, target)
+                            || guard
+                                .fail_expr
+                                .as_ref()
+                                .is_some_and(|e| expr_contains_string(e, target))
+                    }
+                    crate::surface::FlowLine::Branch(arm)
+                    | crate::surface::FlowLine::Recover(arm) => {
+                        arm.guard
+                            .as_ref()
+                            .is_some_and(|e| expr_contains_string(e, target))
+                            || expr_contains_string(&arm.body, target)
+                    }
+                    crate::surface::FlowLine::Anchor(_) => false,
+                })
+        }
         Expr::Match {
             scrutinee, arms, ..
         } => {

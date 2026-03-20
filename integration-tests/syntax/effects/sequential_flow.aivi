@@ -1,0 +1,40 @@
+@no_prelude
+module integrationTests.syntax.effects.sequentialFlow
+
+use aivi
+use aivi.testing
+
+keepPositive : Int -> Effect Text Int
+keepPositive = value =>
+  value
+  >|>_ > 0 or fail "not-positive"
+   |> pure
+
+recoverPositive : Int -> Effect Text Int
+recoverPositive = value =>
+  pure value
+  ?|>current => if current > 0 then pure (current + 1) else fail "not-positive"
+  !|>_ => pure 0
+
+@test "flow bindings stay visible across steps"
+flowBindingsStayVisibleAcrossSteps = pure Unit
+   |> _ => pure 1#x
+   |> _ => pure 2#y
+  ~|>_ => assertEq 3 (x + y)
+
+@test "tap preserves the current subject"
+tapPreservesTheCurrentSubject = pure 7
+~|>value => assertEq value 7
+~|>value => assertEq value 7
+
+@test "guard preserves the current subject on success"
+guardPreservesTheCurrentSubjectOnSuccess = keepPositive 5
+~|>value => assertEq value 5
+
+@test "recovery keeps the success path"
+recoveryKeepsTheSuccessPath = recoverPositive 5
+~|>value => assertEq value 6
+
+@test "recovery can replace a failure"
+recoveryCanReplaceAFailure = recoverPositive (-1)
+~|>value => assertEq value 0

@@ -487,6 +487,9 @@ impl Backend {
                 }
                 Self::collect_source_tooling_expr_diagnostics(body, out);
             }
+            Expr::Flow { root, .. } => {
+                Self::collect_source_tooling_expr_diagnostics(root, out);
+            }
         }
     }
 
@@ -586,6 +589,7 @@ impl Backend {
                         .is_some_and(|value| Self::expr_contains_ident_path(value, expected))
                 }) || Self::expr_contains_ident_path(body, expected)
             }
+            Expr::Flow { root, .. } => Self::expr_contains_ident_path(root, expected),
         }
     }
 

@@ -3,97 +3,46 @@ module integrationTests.combinations.comboLambdaNesting
 
 use aivi
 use aivi.testing
-use aivi.generator
 
-// Lambdas nested inside every other scope-creating construct.
-// Verifies closure capture correctness in each context.
+transformBy = x => n => n + x
 
-// --- Lambda in do Effect captures effect-bound variable ---
+@test "lambda capture stays stable without do"
+lambdaCaptureStaysStableWithoutDo = Unit
+~|>_ => assertEq ((transformBy 10) 5) 15
+~|>_ => assertEq ((transformBy 10) 32) 42
 
-@test "lambda in do Effect captures effect-bound variable"
-lambdaInDoEffect = do Effect {
-  x <- pure 10
-  transform = n => n + x
-  assertEq (transform 5) 15
-  assertEq (transform 32) 42
-}
+optionLambdaResult = factor => (Some 6) match
+  | Some a => Some ((x => x * factor) a)
+  | None   => None
 
-// --- Lambda in do Option captures outer ---
+@test "lambda in option-style helper captures outer"
+lambdaInOptionStyleHelperCapturesOuter = assertEq (optionLambdaResult 7) (Some 42)
 
-@test "lambda in do Option captures outer"
-lambdaInDoOption = do Effect {
-  factor = 7
-  result = do Option {
-    a <- Some 6
-    f = x => x * factor
-    Some (f a)
-  }
-  assertEq result (Some 42)
-}
+resultLambdaResult = offset => (Ok 10) match
+  | Ok a  => Ok ((x => x + offset) a)
+  | Err e => Err e
 
-// --- Lambda in do Result captures outer ---
+@test "lambda in result-style helper captures outer"
+lambdaInResultStyleHelperCapturesOuter = assertEq (resultLambdaResult 100) (Ok 110)
 
-@test "lambda in do Result captures outer"
-lambdaInDoResult = do Effect {
-  offset = 100
-  result = do Result {
-    a <- Ok 10
-    addOffset = x => x + offset
-    Ok (addOffset a)
-  }
-  assertEq result (Ok 110)
-}
+mapWithScale = scale xs => xs match
+  | []         => []
+  | [x, ...rs] => [(n => n * scale) x, ...mapWithScale scale rs]
 
-// --- Lambda in do List captures outer ---
+@test "lambda in list-style helper captures outer"
+lambdaInListStyleHelperCapturesOuter = assertEq (mapWithScale 10 [1, 2, 3]) [10, 20, 30]
 
-@test "lambda in do List captures outer"
-lambdaInDoList = do Effect {
-  scale  = 10
-  result = do List {
-    x <- [1, 2, 3]
-    multiply = n => n * scale
-    [multiply x]
-  }
-  assertEq result [10, 20, 30]
-}
-
-// --- Lambda in generator captures outer ---
-
-@test "lambda in generator captures outer"
-lambdaInGenerator = do Effect {
-  base = 100
-  g    = generate {
-    n <- [1, 2, 3]
-    addBase = x => x + base
-    yield (addBase n)
-  }
-  assertEq (toList g) [101, 102, 103]
-}
-
-// --- Lambda returned from match arm captures pattern variable ---
+makeAdder = opt => opt match
+  | Some n => x => x + n
+  | None   => x => x
 
 @test "lambda returned from match arm captures pattern var"
-lambdaFromMatchArm = do Effect {
-  makeAdder = opt => opt match
-    | Some n => x => x + n
-    | None   => x => x
-  adder    = makeAdder (Some 10)
-  identity = makeAdder None
-  assertEq (adder 5) 15
-  assertEq (identity 5) 5
-}
+lambdaFromMatchArm = Unit
+~|>_ => assertEq ((makeAdder (Some 10)) 5) 15
+~|>_ => assertEq ((makeAdder None) 5) 5
 
-// --- Triple nesting: lambda in lambda in do Effect ---
-
-@test "triple nesting: lambda in lambda in do Effect"
-tripleNesting = do Effect {
-  a <- pure 10
-  f = x => y => a + x + y
-  g = f 20
-  assertEq (g 12) 42
-}
-
-// --- List of closures each capturing creation-time value ---
+@test "triple nested lambdas keep captured values"
+tripleNesting = assertEq (((x => y => 10 + x + y) 20) 12) 42
 
 makeAdderN : Int -> Int -> Int
 makeAdderN = n => x => x + n
@@ -107,8 +56,4 @@ applyAll = fns arg => fns match
   | [f, ...rest] => [f arg, ...(applyAll rest arg)]
 
 @test "list of closures each captures creation-time value"
-closureListCapture = do Effect {
-  fns     = buildAdders 3
-  results = applyAll fns 10
-  assertEq results [13, 12, 11]
-}
+closureListCapture = assertEq (applyAll (buildAdders 3) 10) [13, 12, 11]

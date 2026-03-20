@@ -58,7 +58,8 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
     };
 
     // Post-pass: group consecutive `use` lines that share a common module prefix.
-    group_use_imports(&result, options.indent_size)
+    let grouped = group_use_imports(&result, options.indent_size);
+    align_flow_runs(&grouped)
 }
 
 /// Parsed representation of a single flat `use` line for grouping purposes.
@@ -208,6 +209,63 @@ fn group_use_imports(text: &str, indent_size: usize) -> String {
     }
 
     out.join("\n")
+}
+
+fn flow_operator_prefix(trimmed: &str) -> Option<&'static str> {
+    [
+        "@|>", ">|>", "!|>", "*|>", "*-|", "?|>", "||>", "~|>", "&|>", "|>",
+    ]
+    .into_iter()
+    .find(|op| trimmed.starts_with(op))
+}
+
+fn flow_alignment_value(leading_spaces: usize, op: &str) -> usize {
+    leading_spaces + op.chars().count().saturating_sub(1)
+}
+
+fn align_flow_runs(text: &str) -> String {
+    let mut lines: Vec<String> = text.split('\n').map(ToString::to_string).collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let trimmed = lines[i].trim_start();
+        let Some(first_op) = flow_operator_prefix(trimmed) else {
+            i += 1;
+            continue;
+        };
+
+        let mut j = i + 1;
+        while j < lines.len() {
+            let trimmed = lines[j].trim_start();
+            if lines[j].trim().is_empty() || flow_operator_prefix(trimmed).is_none() {
+                break;
+            }
+            j += 1;
+        }
+
+        let run = &lines[i..j];
+        let target_alignment = run
+            .iter()
+            .filter_map(|line| {
+                let trimmed = line.trim_start();
+                let op = flow_operator_prefix(trimmed)?;
+                (op != "|>").then_some(flow_alignment_value(line.len() - trimmed.len(), op))
+            })
+            .next()
+            .unwrap_or_else(|| flow_alignment_value(lines[i].len() - trimmed.len(), first_op));
+
+        for line in &mut lines[i..j] {
+            let trimmed = line.trim_start();
+            let op = flow_operator_prefix(trimmed).expect("run contains only flow lines");
+            let desired_spaces =
+                target_alignment.saturating_sub(op.chars().count().saturating_sub(1));
+            *line = format!("{}{}", " ".repeat(desired_spaces), trimmed);
+        }
+
+        i = j;
+    }
+
+    lines.join("\n")
 }
 
 /// Collapse multi-line `~mat[row1\n      row2]` back to `~mat[row1;row2]`.
@@ -410,6 +468,70 @@ mod tests {
         let input2 = "name = user.name\n";
         let formatted2 = format_text(input2);
         assert_eq!(formatted2, input2);
+    }
+
+    #[test]
+    fn format_aligns_mixed_flow_operator_runs() {
+        let input = "\
+module demo
+
+main = tx => rx =>
+  Unit
+  ~|>_ => send tx True
+  |> _ => recv rx#res
+  ~|>_ => close tx
+  |> _ => assertRecvOk True res
+";
+        let expected = "\
+module demo
+
+main = tx => rx =>
+  Unit
+  ~|>_ => send tx True
+   |> _ => recv rx#res
+  ~|>_ => close tx
+   |> _ => assertRecvOk True res
+";
+        let formatted = format_text(input);
+        assert_eq!(formatted, expected);
+        assert_eq!(
+            format_text(&formatted),
+            expected,
+            "formatting should be idempotent"
+        );
+    }
+
+    #[test]
+    fn format_aligns_nested_branch_flow_runs() {
+        let input = "\
+module demo
+
+reply = value =>
+  value
+  ||>Ok ok =>
+    Unit
+    ~|>_ => log ok
+    |> _ => persist ok
+  ||>Err _ => assert False
+";
+        let expected = "\
+module demo
+
+reply = value =>
+  value
+  ||>Ok ok =>
+  Unit
+  ~|>_ => log ok
+   |> _ => persist ok
+  ||>Err _ => assert False
+";
+        let formatted = format_text(input);
+        assert_eq!(formatted, expected);
+        assert_eq!(
+            format_text(&formatted),
+            expected,
+            "formatting should be idempotent"
+        );
     }
 
     #[test]

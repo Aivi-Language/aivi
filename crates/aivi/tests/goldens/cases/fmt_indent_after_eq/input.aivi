@@ -1,6 +1,8 @@
 module test.fmt_indent_after_eq
 export activeNames
 
+use aivi
+
 class Functor (F A) = given (A: Any) {
   map: (A -> B) -> F B
 }

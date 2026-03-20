@@ -170,6 +170,7 @@ pub(super) fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<D
                         .is_some_and(|v| expr_uses_name_free(v, name))
                 }) || expr_uses_name_free(body, name)
             }
+            aivi::Expr::Flow { root, .. } => expr_uses_name_free(root, name),
         }
     }
 
@@ -312,6 +313,7 @@ pub(super) fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<D
                 }
                 walk_expr(body, out);
             }
+            aivi::Expr::Flow { root, .. } => walk_expr(root, out),
             aivi::Expr::Match { .. } => unreachable!(),
         }
     }
@@ -441,6 +443,7 @@ pub(super) fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnost
                     .any(|sub| sub.value.as_ref().is_some_and(|v| expr_uses_name(v, name)))
                     || expr_uses_name(body, name)
             }
+            aivi::Expr::Flow { root, .. } => expr_uses_name(root, name),
         }
     }
 

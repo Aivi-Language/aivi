@@ -1,7 +1,7 @@
 # File Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.file"} -->
-The `aivi.file` module covers the current v0.1 filesystem surface: reading text and structured files, writing whole text files, deleting files, and inspecting basic metadata.
+The `aivi.file` module covers the current filesystem surface: reading text and structured files, writing whole text files, deleting files, and inspecting basic metadata.
 
 Use it for tasks such as loading configuration, reading JSON or CSV into typed values, saving generated output, checking whether a path exists, or inspecting file metadata. For safer path construction, pair it with [`aivi.path`](./path).
 
@@ -34,20 +34,20 @@ If you are choosing an API for a beginner-friendly workflow, a good rule of thum
 
 `FileHandle` is an opaque runtime handle. You obtain it from `open`, pass it to `readAll` or `close`, and treat it as a resource rather than a value you inspect directly.
 
-## Choosing between resource and path APIs
+## Choosing between managed-handle and path APIs
 
 - Use the **path-based helpers** such as `readText`, `readJson`, and `writeText` for one-shot operations.
-- Use the **resource API** when a workflow already lives inside a `resource` block or when you want to keep an open file handle around briefly for staged work.
-- In normal `do Effect` code, bind `handle <- open path` directly. If a handle escapes an inner scope, the resource cleanup for that inner scope has already run.
+- Use the **managed-handle API** when a flow wants to keep an open file handle around briefly for staged work and pair it with `@cleanup`.
+- In normal flow code, acquire `open path` on the line where you also register `@cleanup file.close`. If a handle escapes an inner scope, the cleanup for that inner scope has already run.
 - `open` currently opens files for reading; it is not a general read/write handle API.
 
-## Resource operations
+## Managed handle operations
 
 ### `open`
 
 | Function | What it does |
 | --- | --- |
-| **open** path<br><code>Text -> Resource Text FileHandle</code> | Opens a file for reading and returns a managed `FileHandle`. |
+| **open** path<br><code>Text -> Effect Text FileHandle</code> | Opens a file for reading and returns a `FileHandle` that you typically pair with `@cleanup file.close`. |
 
 ### `readAll`
 
@@ -59,7 +59,7 @@ If you are choosing an API for a beginner-friendly workflow, a good rule of thum
 
 | Function | What it does |
 | --- | --- |
-| **close** handle<br><code>FileHandle -> Effect Text Unit</code> | Closes a file handle manually. Inside the `resource` returned by `open`, cleanup is automatic. |
+| **close** handle<br><code>FileHandle -> Effect Text Unit</code> | Closes a file handle manually. Pair `open` with `@cleanup file.close` when you want structural cleanup. |
 
 ## Common path-based reads
 
@@ -96,4 +96,4 @@ Byte-oriented helpers, directory traversal helpers, and copy/move helpers are no
 - Relative paths are resolved against the program's current working directory.
 - `FileStats.created` and `FileStats.modified` are Unix timestamps in milliseconds. On filesystems without a native creation timestamp, `created` falls back to `modified`.
 - `readJson`, `readCsv`, `imageMeta`, and `image` are the right fit when you want typed data instead of raw text.
-- When you already need a resource scope for other reasons, `open` and `readAll` can make a short multi-step file workflow easier to structure.
+- When you already need a managed handle for a few steps, `open` and `readAll` pair naturally with `@cleanup` in one flat flow.

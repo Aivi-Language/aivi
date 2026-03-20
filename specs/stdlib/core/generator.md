@@ -33,7 +33,7 @@ Read that top to bottom as: “describe a sequence, narrow it, adjust it, then f
 
 `Generator A` is best understood as “a reusable plan for producing `A` values on demand,” not as “a list that already exists.”
 
-- **construct** a generator with helpers such as `range`, `fromList`, or a [`generate { ... }`](../../syntax/generators.md) block
+- **construct** a generator with helpers such as `range` and `fromList`, or build a zero-many workflow with [`*|>` ... `*-|` fan-out`](../../syntax/generators.md)
 - **transform** it with helpers such as `map` and `filter`
 - **consume** it with helpers such as `toList` and `reduce`
 
@@ -52,7 +52,7 @@ Use a generator when you want to describe a sequence of values without building 
 - stepping through numeric ranges,
 - streaming transformed data through a pipeline,
 - keeping sequence-building logic pure and reusable,
-- writing sequence logic with [`generate { ... }`](../../syntax/generators.md) when nested loops, guards, or `loop` / `recurse` make the intent clearer.
+- writing sequence logic with [`*|>` ... `*-|` fan-out`](../../syntax/generators.md) when guards, per-item effects, or nested zero-many steps make the intent clearer.
 
 A generator stays **lazy** until you consume it.
 
@@ -62,11 +62,11 @@ A generator stays **lazy** until you consume it.
 
 ## The `Generator A` type
 
-`Generator A` is the type behind `generate { ... }`. If you have used iterators or streams in other languages, the idea is similar: it is a reusable description of how to produce values one at a time.
+`Generator A` is the reusable lazy sequence type from the standard library. If you have used iterators or streams in other languages, the idea is similar: it is a reusable description of how to produce values one at a time.
 
 Because generators are pure values, you can pass them around, transform them, and combine them without hidden mutation.
 
-The `aivi.generator` module keeps the v0.1 surface intentionally small: construction, mapping / filtering, and consumption. For richer sequence-building syntax, see [Generator expressions](../../syntax/generators.md). When you need list-oriented helpers such as `take`, `zip`, `chunk`, or indexing, convert with `toList` and continue with the APIs documented in [Collections](collections.md).
+The `aivi.generator` module keeps the surface intentionally small: construction, mapping / filtering, and consumption. For flow-shaped zero-many logic, see [Fan-out & Collection Shaping](../../syntax/generators.md). When you need list-oriented helpers such as `take`, `zip`, `chunk`, or indexing, convert with `toList` and continue with the APIs documented in [Collections](collections.md).
 
 ## Core API (v0.1)
 
@@ -111,7 +111,7 @@ The final `sum` is `10`, because `range 1 5` produces `[1, 2, 3, 4]`.
 ## Practical guidance
 
 - Prefer generators when you want pipeline-friendly, single-pass processing.
-- Prefer [`generate { ... }`](../../syntax/generators.md) when nested loops, guards, or tail-recursive `loop` / `recurse` express the sequence more clearly than plain mapping and filtering.
+- Prefer [`*|>` ... `*-|` fan-out`](../../syntax/generators.md) when the sequence logic needs guards, per-item effects, or nested zero-many structure.
 - Prefer lists once you need helpers from [`aivi.list`](collections.md), such as `take`, `zip`, `chunk`, or `at`.
 - `toList` is the usual boundary between a lazy sequence description and a concrete collection.
 - For summary values, `reduce` is usually clearer than calling the Church-encoded generator directly.

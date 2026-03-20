@@ -1,0 +1,40 @@
+@no_prelude
+module integrationTests.syntax.effects.listFlow
+
+use aivi
+use aivi.testing
+
+addRight = x ys => ys match
+  | []         => []
+  | [y, ...rs] => [x + y, ...addRight x rs]
+
+pairSums = xs ys => xs match
+  | []         => []
+  | [x, ...rs] => [...addRight x ys, ...pairSums rs ys]
+
+doubleAll = xs => xs match
+  | []         => []
+  | [x, ...rs] => [x * 2, ...doubleAll rs]
+
+scaleAll = xs => xs match
+  | []         => []
+  | [x, ...rs] => [x * 10, ...scaleAll rs]
+
+keepAll = xs => xs match
+  | []         => []
+  | [x, ...rs] => [x, ...keepAll rs]
+
+@test "list chaining keeps cartesian order"
+listChainingKeepsCartesianOrder = assertEq (pairSums [1, 2] [10, 20]) [11, 21, 12, 22]
+
+@test "list chaining supports one source"
+listChainingSupportsOneSource = assertEq (doubleAll [1, 2, 3]) [2, 4, 6]
+
+@test "list chaining stops on an empty input"
+listChainingStopsOnEmptyInput = assertEq (pairSums [1, 2] []) []
+
+@test "list mapping can reshape each element"
+listMappingCanReshapeEachElement = assertEq (scaleAll [1, 2, 3]) [10, 20, 30]
+
+@test "list chaining can return one element"
+listChainingCanReturnOneElement = assertEq (keepAll [42]) [42]

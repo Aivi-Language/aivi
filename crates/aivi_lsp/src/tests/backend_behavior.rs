@@ -49,7 +49,7 @@ fn diagnostics_report_missing_list_comma() {
 
 #[test]
 fn formatting_edits_match_formatter_output() {
-    let text = "module demo\n\nmain = do Effect { _<-print \"hi\" }\n";
+    let text = "module demo\n\nmain = Unit |> (_=>print \"hi\")\n";
     let options = FormatOptions::default();
     let edits = Backend::build_formatting_edits(text, options);
     assert_eq!(edits.len(), 1);
@@ -71,7 +71,7 @@ fn formatting_edits_align_multiline_arg_patch_heads() {
 
 #[test]
 fn formatting_edits_respect_indent_size() {
-    let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
+    let text = "module demo\n\nmain = Unit\n   |> (_ => print \"hi\")\n";
     let options = FormatOptions {
         indent_size: 4,
         max_blank_lines: 1,
@@ -83,7 +83,7 @@ fn formatting_edits_respect_indent_size() {
     let inner_line = formatted
         .lines()
         .nth(3)
-        .expect("expected formatted inner effect line");
+        .expect("expected formatted inner flow line");
     assert!(inner_line.starts_with("    "));
 }
 
@@ -740,10 +740,7 @@ x = ~<gtk><NavRailNode model.appState.activeSection "sidebar" /></gtk>
 #[test]
 fn semantic_tokens_highlight_paths_and_calls() {
     let text = r#"use aivi.net.https (get)
-main = do Effect {
-  xs = [1, 2]
-  ys = xs |> map inc
-}
+main = [1, 2] |> map inc
 nested = { title: "Report", stats: { count: 3, avg: 1.5 }, tags: ["a"] }
 Queue.isEmpty
 "#;

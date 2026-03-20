@@ -1,0 +1,26 @@
+@no_prelude
+module integrationTests.syntax.effects.cleanupFailure
+
+use aivi
+use aivi.testing
+
+successFlowWithFailingCleanup = "acquired-value"
+  |> pure@cleanup (_ => fail "cleanup-error")
+
+failureFlowWithFailingCleanup = "acquired-value"
+  |> pure@cleanup (_ => fail "cleanup-error")
+  |> _ => fail "primary-error"
+
+@test "cleanup failure stays secondary on success"
+cleanupFailureStaysSecondaryOnSuccess = Unit
+   |> _ => attempt successFlowWithFailingCleanup#attemptResult
+   |> _ => assertOk attemptResult#value
+  ~|>_ => assertEq value "acquired-value"
+   |> _ => pure Unit
+
+@test "primary failure stays visible alongside cleanup failure"
+primaryFailureStaysVisibleAlongsideCleanupFailure = Unit
+   |> _ => attempt failureFlowWithFailingCleanup#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "primary-error"
+   |> _ => pure Unit

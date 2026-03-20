@@ -96,10 +96,11 @@ last = xs => List.last xs
 traverseEffects : (A -> Effect E B) -> List A -> Effect E Unit
 traverseEffects = f xs => xs match
   | []           => pure Unit
-  | [x, ...rest] => do Effect {
-    _ <- f x
-    traverseEffects f rest
-  }
+  | [x, ...rest] =>
+    Unit
+       |> _ => f x
+      ~|> _ => traverseEffects f rest
+       |> _ => pure Unit
 
 sequenceEffects : List (Effect E A) -> Effect E Unit
 sequenceEffects = xs => {

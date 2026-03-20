@@ -1,4 +1,3 @@
-do Effect {
-  template <- load (file.read "./email-template.txt")  // no decoding beyond Text
-  pure template
-}
+doTemplate =
+  file.read "./email-template.txt"
+     |> load

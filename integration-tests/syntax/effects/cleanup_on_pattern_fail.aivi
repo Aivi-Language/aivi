@@ -1,0 +1,46 @@
+@no_prelude
+module integrationTests.syntax.effects.cleanupOnPatternFail
+
+use aivi
+use aivi.testing
+use aivi.file
+
+deleteIfExists = path =>
+  path
+   |> exists
+  ||>True => delete path
+  ||>False => pure Unit
+
+assertMissingPath = path =>
+  path
+|> exists
+|> assertEq False
+
+branchFailureFlow = path =>
+  "live"
+   |> writeText path
+   |> _ => pure path@cleanup delete
+   |> _ => 99
+  ||>1 => pure Unit
+  ||>_ => fail "pattern-branch-failure"
+
+guardFailureFlow = path =>
+  "alive"
+   |> writeText path
+   |> _ => pure path@cleanup delete
+  >|>_ == "" or fail "guard-fired"
+   |> _ => pure Unit
+
+@test "cleanup runs after a branch failure"
+cleanupRunsAfterABranchFailure = "/tmp/aivi_pattern_fail_cleanup.txt"
+   |> pure@cleanup deleteIfExists#path
+   |> _ => attempt (branchFailureFlow path)
+  ~|>_ => assertMissingPath path
+   |> assertEq (Err "pattern-branch-failure")
+
+@test "cleanup runs after a guard failure"
+cleanupRunsAfterAGuardFailure = "/tmp/aivi_guard_fail_cleanup.txt"
+   |> pure@cleanup deleteIfExists#path
+   |> _ => attempt (guardFailureFlow path)
+  ~|>_ => assertMissingPath path
+   |> assertEq (Err "guard-fired")

@@ -3,7 +3,6 @@ User = { name: Text, age: Int, gender: Text }
 usersSource : Source RestApi (List User)
 usersSource = rest.get ~u(https://api.example.com/users)
 
-do Effect {
-  users <- load usersSource
-  pure users
-}
+loadUsers =
+  usersSource
+     |> load

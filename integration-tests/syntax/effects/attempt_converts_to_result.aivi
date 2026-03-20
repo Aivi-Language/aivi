@@ -4,41 +4,38 @@ module integrationTests.syntax.effects.attemptConvertsToResult
 use aivi
 use aivi.testing
 
-// `attempt expr` converts an effectful computation into a `Result`, making its
-// success or failure available as a pure value for pattern matching.
+recoverWithZero = result => result match
+  | Ok value => value
+  | Err _    => 0
+
+nestedFailure = Unit
+  |> _ => fail "inner error"
+  |> _ => pure 99
 
 @test "attempt wraps success in Ok"
-attemptWrapsSuccessInOk = do Effect {
-  res <- attempt (pure 42)
-  res match
-    | Ok v  => assertEq v 42
-    | Err _ => fail "expected Ok"
-}
+attemptWrapsSuccessInOk = Unit
+   |> _ => attempt (pure 42)#attemptResult
+   |> _ => assertOk attemptResult#value
+  ~|>_ => assertEq value 42
+   |> _ => pure Unit
 
 @test "attempt wraps failure in Err"
-attemptWrapsFailureInErr = do Effect {
-  res <- attempt (fail "something went wrong")
-  res match
-    | Err e => assertEq e "something went wrong"
-    | Ok _  => fail "expected Err"
-}
+attemptWrapsFailureInErr = Unit
+   |> _ => attempt (fail "something went wrong")#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "something went wrong"
+   |> _ => pure Unit
 
 @test "attempt allows recovery after failure"
-attemptAllowsRecovery = do Effect {
-  res <- attempt (fail "recoverable")
-  value = res match
-    | Ok v  => v
-    | Err _ => 0
-  assertEq value 0
-}
+attemptAllowsRecovery = Unit
+   |> _ => attempt (fail "recoverable")#attemptResult
+   |> _ => pure (recoverWithZero attemptResult)#value
+  ~|>_ => assertEq value 0
+   |> _ => pure Unit
 
-@test "attempt on nested failure short-circuits inner block"
-attemptNestedShortCircuit = do Effect {
-  res <- attempt (do Effect {
-      _   <- fail "inner error"
-      pure 99
-  })
-  res match
-    | Err e => assertEq e "inner error"
-    | Ok _  => fail "expected Err"
-}
+@test "attempt on nested failure keeps the first error"
+attemptNestedShortCircuit = Unit
+   |> _ => attempt nestedFailure#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "inner error"
+   |> _ => pure Unit

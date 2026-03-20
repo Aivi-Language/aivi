@@ -127,11 +127,11 @@ When `imap` or `imapFetch` decodes directly into a record, the built-in decoder 
 ### Session-based IMAP
 
 Use `imapOpen` when you need several mailbox actions in one connection.
-As a `Resource`, it automatically closes the session when the surrounding resource scope ends.
+Acquire it in a flow and register the matching cleanup on the same line when you want structural session shutdown.
 
 | Function | What it does |
 | --- | --- |
-| **imapOpen** config<br><code>ImapConfig -> Resource Text ImapSession</code> | Opens a persistent IMAP session. |
+| **imapOpen** config<br><code>ImapConfig -> Effect Text ImapSession</code> | Opens a persistent IMAP session. Register the matching cleanup on the acquisition line when the session should close automatically with the enclosing flow scope. |
 | **imapSelect** mailbox session<br><code>Text -> ImapSession -> Effect Text MailboxInfo</code> | Opens a mailbox in read-write mode. |
 | **imapExamine** mailbox session<br><code>Text -> ImapSession -> Effect Text MailboxInfo</code> | Opens a mailbox in read-only mode. |
 | **imapSearch** query session<br><code>Text -> ImapSession -> Effect Text (List Int)</code> | Searches the selected mailbox and returns matching UIDs. |
@@ -164,14 +164,13 @@ On GNOME, a common source for that token is [`aivi.gnome.onlineAccounts`](./gnom
 
 ### Session-based workflow
 
-<<< ../../snippets/from_md/stdlib/system/email/block_08.aivi{aivi}
+Open the session in a flat flow, bind it with `#session`, register the matching cleanup at the acquisition line, and then continue with `imapSelect`, `imapSearch`, `imapFetch`, and `imapAddFlags`.
 
-This keeps one IMAP connection open long enough to select a mailbox, search it, fetch matching messages, and then mark those messages as seen.
-Use this pattern when several mailbox operations belong in one resource scope.
+This is the right shape when several mailbox operations belong to one longer-lived session.
 
 ### Watching a mailbox with IMAP IDLE
 
-<<< ../../snippets/from_md/stdlib/system/email/block_09.aivi{aivi}
+For long-running mailbox watchers, keep the `imapOpen` acquisition in an outer flow scope and let the repeating `imapIdle` / fetch step live in a helper flow or anchored restart loop.
 
 This example assumes `processMsgs` is your own application function, for example `List InboxMessage -> Effect Text Unit`.
-Wrap `watchInbox` in a resource scope that acquires the session with `imapOpen`, then let the recursive loop continue until your application decides to stop.
+

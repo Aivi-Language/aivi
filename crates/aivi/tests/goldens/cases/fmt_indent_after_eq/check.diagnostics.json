@@ -1,1 +1,19 @@
-[]
+[
+  {
+    "code": "E2002",
+    "labels": [],
+    "message": "unknown module 'aivi'",
+    "path": "crates/aivi/tests/goldens/cases/fmt_indent_after_eq/input.aivi",
+    "severity": "error",
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 4
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  }
+]

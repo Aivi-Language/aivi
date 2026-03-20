@@ -1,6 +1,6 @@
 # Operators and Context
 
-Operators in AIVI are small pieces of syntax with fixed precedence and meaning at the parser level. For example, `subtotal + tax` is always parsed as `+`, but a domain can decide what `+` means for a type such as `Distance` or `Money`. This page shows what each token does in practice and where domains can supply type-directed behavior.
+Operators in AIVI are small pieces of syntax with fixed precedence and meaning at the parser level. For example, `subtotal + tax` is always parsed as `+`, but a domain can decide what `+` means for a type such as `Distance` or `Money`. This page shows both the ordinary expression operators and the flow-line operators used by v0.2 flow syntax.
 
 > AIVI fixes the operator tokens and their precedence. Domains can define what some operators mean for their own carrier types, but they do not change how an expression is parsed.
 
@@ -9,15 +9,13 @@ Operators in AIVI are small pieces of syntax with fixed precedence and meaning a
 | Token | Name | Where it appears | What it does |
 |---|---|---|---|
 | `=` | binding | top-level, blocks | Defines a value, function clause, or type-level item. |
-| `<-` | binder | `do Effect {}`, `generate {}`, `resource {}` | Runs and binds the next produced value from an effect, generator, or resource context. |
-| `->` | guard | `generate {}` | Filters the current generator element using predicate syntax. |
-| `\|>` | pipe | expressions | Feeds the left value into the expression on the right. |
+| `|>` | pipe | expressions | Feeds the left value into the expression on the right. |
 | `->>` | signal derive | expressions | Derives a new signal from a source signal by applying a transform to the current value. The left side must be a `Signal A`. |
-| `<\|` | patch | expressions | Applies a patch to a record value. |
+| `<|` | patch | expressions | Applies a patch to a record value. |
 | `<<-` | signal write | expressions | Writes a signal with a value, updater function, or record patch. The left side must be a `Signal A`. |
 | `match` | match | expressions | Starts refutable pattern matching on the expression to its left. |
-| `\|` | arm / union separator | `match` arms, sum-type definitions | Separates branches or constructors. |
-| `=>` | arrow | lambdas, match arms, `loop` | Separates inputs or patterns from the resulting expression. |
+| `|` | arm / union separator | `match` arms, sum-type definitions | Separates branches or constructors. |
+| `=>` | arrow | lambdas, match arms, flow helpers | Separates inputs or patterns from the resulting expression. |
 | `..` | range | list literals | Builds an inclusive `Int` range inside a list literal. |
 | `...` | spread / rest | list and record literals, list patterns | Spreads values into a collection or captures the remainder of a list pattern. |
 | `.` | access / accessor sugar | expressions | Accesses a field (`x.field`) or builds an accessor function (`.field`). |
@@ -26,9 +24,29 @@ Operators in AIVI are small pieces of syntax with fixed precedence and meaning a
 | `()` | grouping / tuple | expressions, types | Groups expressions, builds tuples, and supports suffix literals like `(x)ms`. |
 | `~tag[...]` | sigil | literals | Introduces custom literal syntaxes such as regexes, paths, and structured UI literals. |
 
+### Flow-line operators
+
+These tokens appear in **flow-line position** rather than normal infix position. They do not participate in the ordinary precedence table; their structure is described in [Flow Syntax](flows.md).
+
+| Token | Name | Role in a flow |
+|---|---|---|
+| `|>` | sequential line | Run the next ordinary step. |
+| `~|>` | tap | Run an effectful observation and keep the incoming subject. |
+| `>|>` | guard | Continue only when the predicate holds, optionally failing with `or fail ...`. |
+| `?|>` | attempt | Capture failure for the following recovery block. |
+| `!|>` | recover | Handle the nearest preceding attempted failure. |
+| `||>` | branch | Select among flow-shaped branch arms. |
+| `*|>` | fan-out start | Start a per-item fan-out body that rejoins as a list at `*-|`. |
+| `*-|` | fan-out end | End the current `*|>` body and rejoin the outer spine. |
+| `&|>` | applicative sibling | Combine independent sibling computations over the same input. |
+| `@|>` | anchor | Mark a restart point for `recurse`. |
+| `#name` | binding | Bind the successful result of a flow line. |
+| `@timeout`, `@delay`, `@concurrent`, `@retry`, `@cleanup` | line modifiers | Refine one flow line without creating a separate block syntax. |
+
 For the full syntax grammar, see the [grammar reference](grammar.md).
 
 ## 11.2 Infix operators and precedence
+
 
 The parser reads infix operators from lowest to highest precedence in this order:
 

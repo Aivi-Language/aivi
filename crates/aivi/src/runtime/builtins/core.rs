@@ -167,8 +167,18 @@ pub(crate) fn register_builtins(env: &Env) {
                         args,
                     })
                 }
+                Value::Effect(effect) => {
+                    let func = func.clone();
+                    let effect = EffectValue::Thunk {
+                        func: Arc::new(move |runtime| {
+                            let value = runtime.run_effect_value(Value::Effect(effect.clone()))?;
+                            runtime.apply(func.clone(), value)
+                        }),
+                    };
+                    Ok(Value::Effect(Arc::new(effect)))
+                }
                 other => Err(RuntimeError::Message(format!(
-                    "map expects List/Option/Result/Validation, got {}",
+                    "map expects List/Option/Result/Validation/Effect, got {}",
                     format_value(&other)
                 ))),
             }
@@ -369,8 +379,19 @@ pub(crate) fn register_builtins(env: &Env) {
                         args: x_args,
                     })
                 }
+                (Value::Effect(func_effect), Value::Effect(value_effect)) => {
+                    let effect = EffectValue::Thunk {
+                        func: Arc::new(move |runtime| {
+                            let func = runtime.run_effect_value(Value::Effect(func_effect.clone()))?;
+                            let value =
+                                runtime.run_effect_value(Value::Effect(value_effect.clone()))?;
+                            runtime.apply(func, value)
+                        }),
+                    };
+                    Ok(Value::Effect(Arc::new(effect)))
+                }
                 (func_container, value_container) => Err(RuntimeError::Message(format!(
-                    "ap expects List/Option/Result/Validation, got {} and {}",
+                    "ap expects List/Option/Result/Validation/Effect, got {} and {}",
                     format_value(&func_container),
                     format_value(&value_container)
                 ))),

@@ -34,166 +34,147 @@ readFixtureImageMeta = path => imageMeta path
 readFixtureImage : Text -> Effect Text PixelImage
 readFixtureImage = path => image path
 
-cleanupPath = path => do Effect {
-  present <- exists path
-  if present
-    then do Effect {
-      deleteResult <- delete path
-      _            <- assertOk deleteResult
-      pure Unit
-    }
-    else pure Unit
-}
+cleanupPath = path =>
+  Unit
+|> _ => exists path#present
+|> _ => if present then deleteOk path else pure Unit
+
+writeTextOk = path => contents =>
+  Unit
+|> _ => writeText path contents#result
+|> _ => assertOk result
+
+deleteOk = path =>
+  path
+|> delete
+|> assertOk
+
+assertNonEmptyErr = result =>
+  result
+|> assertErr#err
+|> _ => assert (text.length err > 0)
+
+escapeHandle = path =>
+  Unit
+|> _ => file.open path@cleanup file.close#handle
 
 @test "exists missing"
-exists_missing = do Effect {
-  _   <- cleanupPath missingPath
-  res <- exists missingPath
-  assert (res == False)
-}
+exists_missing = Unit
+~|>_ => cleanupPath missingPath
+ |> _ => exists missingPath
+ |> assertEq False
 
 @test "write text read text roundtrip"
-writeText_readText_roundtrip = do Effect {
-  _             <- cleanupPath roundtripPath
-  writeResult   <- writeText roundtripPath "hello aivi"
-  _             <- assertOk writeResult
-  contentResult <- readText roundtripPath
-  content       <- assertOk contentResult
-  assertEq content "hello aivi"
-  deleteResult <- delete roundtripPath
-  _            <- assertOk deleteResult
-  existsAfter  <- exists roundtripPath
-  assertEq existsAfter False
-}
+writeText_readText_roundtrip = Unit
+~|>_ => cleanupPath roundtripPath
+~|>_ => writeTextOk roundtripPath "hello aivi"
+ |> _ => readText roundtripPath#contentResult
+ |> _ => assertOk contentResult#content
+~|>_ => assertEq content "hello aivi"
+~|>_ => deleteOk roundtripPath
+ |> _ => exists roundtripPath
+ |> assertEq False
 
 @test "stat reports written file"
-stat_reports_written_file = do Effect {
-  _           <- cleanupPath statPath
-  writeResult <- writeText statPath "hello"
-  _           <- assertOk writeResult
-  statsResult <- stat statPath
-  stats       <- assertOk statsResult
-  assertEq stats.size 5
-  assert stats.isFile
-  assertEq stats.isDirectory False
-  assert (stats.modified >= stats.created)
-  _ <- cleanupPath statPath
-}
+stat_reports_written_file = Unit
+~|>_ => cleanupPath statPath
+~|>_ => writeTextOk statPath "hello"
+ |> _ => stat statPath#statsResult
+ |> _ => assertOk statsResult#stats
+~|>_ => assertEq stats.size 5
+~|>_ => assert stats.isFile
+~|>_ => assertEq stats.isDirectory False
+~|>_ => assert (stats.modified >= stats.created)
+ |> _ => cleanupPath statPath
 
 @test "read text missing returns err"
-readText_missing_returns_err = do Effect {
-  _             <- cleanupPath missingPath
-  contentResult <- readText missingPath
-  err           <- assertErr contentResult
-  assert (text.length err > 0)
-}
+readText_missing_returns_err = Unit
+~|>_ => cleanupPath missingPath
+ |> _ => readText missingPath#contentResult
+ |> _ => assertNonEmptyErr contentResult
 
 @test "delete missing returns err"
-delete_missing_returns_err = do Effect {
-  _            <- cleanupPath missingPath
-  deleteResult <- delete missingPath
-  err          <- assertErr deleteResult
-  assert (text.length err > 0)
-}
+delete_missing_returns_err = Unit
+~|>_ => cleanupPath missingPath
+ |> _ => delete missingPath#deleteResult
+ |> _ => assertNonEmptyErr deleteResult
 
 @test "exists tracks lifecycle"
-exists_tracks_lifecycle = do Effect {
-  _      <- cleanupPath lifecyclePath
-  before <- exists lifecyclePath
-  assertEq before False
-  writeResult <- writeText lifecyclePath "created"
-  _           <- assertOk writeResult
-  during      <- exists lifecyclePath
-  assertEq during True
-  deleteResult <- delete lifecyclePath
-  _            <- assertOk deleteResult
-  after        <- exists lifecyclePath
-  assertEq after False
-}
+exists_tracks_lifecycle = Unit
+~|>_ => cleanupPath lifecyclePath
+ |> _ => exists lifecyclePath#before
+~|>_ => assertEq before False
+~|>_ => writeTextOk lifecyclePath "created"
+ |> _ => exists lifecyclePath#during
+~|>_ => assertEq during True
+~|>_ => deleteOk lifecyclePath
+ |> _ => exists lifecyclePath
+ |> assertEq False
 
 @test "open readAll close prevents further reads"
-open_readAll_close_prevents_further_reads = do Effect {
-  _              <- cleanupPath resourcePath
-  writeResult    <- writeText resourcePath "hello from handle"
-  _              <- assertOk writeResult
-  handle         <- open resourcePath
-  contentResult  <- readAll handle
-  content        <- assertOk contentResult
-  _              <- assertEq content "hello from handle"
-  _              <- close handle
-  readAfterClose <- readAll handle
-  err            <- assertErr readAfterClose
-  _              <- assert (text.length err > 0)
-  _              <- cleanupPath resourcePath
-  pure Unit
-}
+open_readAll_close_prevents_further_reads = Unit
+~|>_ => cleanupPath resourcePath
+~|>_ => writeTextOk resourcePath "hello from handle"
+ |> _ => open resourcePath#handle
+ |> _ => readAll handle#contentResult
+ |> _ => assertOk contentResult#content
+~|>_ => assertEq content "hello from handle"
+~|>_ => close handle
+ |> _ => readAll handle#readAfterClose
+~|>_ => assertNonEmptyErr readAfterClose
+ |> _ => cleanupPath resourcePath
 
 @test "open auto-closes when scope exits"
-open_auto_closes_when_scope_exits = do Effect {
-  _             <- cleanupPath resourcePath
-  writeResult   <- writeText resourcePath "hello from scope"
-  _             <- assertOk writeResult
-  escapedHandle <- do Effect {
-    handle        <- open resourcePath
-    pure handle
-  }
-  readAfterScope <- readAll escapedHandle
-  err            <- assertErr readAfterScope
-  _              <- assert (text.length err > 0)
-  _              <- cleanupPath resourcePath
-  pure Unit
-}
+open_auto_closes_when_scope_exits = Unit
+~|>_ => cleanupPath resourcePath
+~|>_ => writeTextOk resourcePath "hello from scope"
+ |> _ => escapeHandle resourcePath#escapedHandle
+ |> _ => readAll escapedHandle#readAfterScope
+~|>_ => assertNonEmptyErr readAfterScope
+ |> _ => cleanupPath resourcePath
 
 @test "readJson decodes typed record"
-readJson_decodes_typed_record = do Effect {
-  _           <- cleanupPath jsonPath
-  writeResult <- writeText jsonPath "\{\"host\":\"localhost\",\"port\":8080,\"enabled\":true}"
-  _           <- assertOk writeResult
-  config      <- readConfig jsonPath
-  _           <- assertEq config.host "localhost"
-  _           <- assertEq config.port 8080
-  _           <- assertEq config.enabled True
-  _           <- cleanupPath jsonPath
-  pure Unit
-}
+readJson_decodes_typed_record = Unit
+~|>_ => cleanupPath jsonPath
+~|>_ => writeTextOk jsonPath "\{\"host\":\"localhost\",\"port\":8080,\"enabled\":true}"
+ |> _ => readConfig jsonPath#config
+~|>_ => assertEq config.host "localhost"
+~|>_ => assertEq config.port 8080
+~|>_ => assertEq config.enabled True
+ |> _ => cleanupPath jsonPath
 
 @test "readCsv decodes typed rows"
-readCsv_decodes_typed_rows = do Effect {
-  _           <- cleanupPath csvPath
-  writeResult <- writeText csvPath "id,name,active\n1,Ada,true\n2,Lin,false\n"
-  _           <- assertOk writeResult
-  users       <- readUsers csvPath
-  _           <- assertEq (List.length users) 2
-  first       <- assertSome (List.at 0 users)
-  second      <- assertSome (List.at 1 users)
-  _           <- assertEq first.id 1
-  _           <- assertEq first.name "Ada"
-  _           <- assertEq first.active True
-  _           <- assertEq second.id 2
-  _           <- assertEq second.name "Lin"
-  _           <- assertEq second.active False
-  _           <- cleanupPath csvPath
-  pure Unit
-}
+readCsv_decodes_typed_rows = Unit
+~|>_ => cleanupPath csvPath
+~|>_ => writeTextOk csvPath "id,name,active\n1,Ada,true\n2,Lin,false\n"
+ |> _ => readUsers csvPath#users
+~|>_ => assertEq (List.length users) 2
+ |> _ => assertSome (List.at 0 users)#first
+ |> _ => assertSome (List.at 1 users)#second
+~|>_ => assertEq first.id 1
+~|>_ => assertEq first.name "Ada"
+~|>_ => assertEq first.active True
+~|>_ => assertEq second.id 2
+~|>_ => assertEq second.name "Lin"
+~|>_ => assertEq second.active False
+ |> _ => cleanupPath csvPath
 
 @test "imageMeta reads fixture metadata"
-imageMeta_reads_fixture_metadata = do Effect {
-  meta <- readFixtureImageMeta imagePath
-  _    <- assertEq meta.width 64
-  _    <- assertEq meta.height 64
-  assertEq meta.format "Png"
-}
+imageMeta_reads_fixture_metadata = Unit
+   |> _ => readFixtureImageMeta imagePath#meta
+  ~|>_ => assertEq meta.width 64
+  ~|>_ => assertEq meta.height 64
+   |> _ => assertEq meta.format "Png"
 
 @test "image reads fixture pixels"
-image_reads_fixture_pixels = do Effect {
-  img         <- readFixtureImage imagePath
-  _           <- assertEq img.width 64
-  _           <- assertEq img.height 64
-  _           <- assertEq img.format "Rgb8"
-  _           <- assertEq (List.length img.pixels) 64
-  firstRow    <- assertSome (List.at 0 img.pixels)
-  _           <- assertEq (List.length firstRow) 64
-  sampleRow   <- assertSome (List.at 20 img.pixels)
-  samplePixel <- assertSome (List.at 20 sampleRow)
-  assertEq samplePixel (7, 129, 247)
-}
+image_reads_fixture_pixels = Unit
+   |> _ => readFixtureImage imagePath#img
+  ~|>_ => assertEq img.width 64
+  ~|>_ => assertEq img.height 64
+  ~|>_ => assertEq img.format "Rgb8"
+  ~|>_ => assertEq (List.length img.pixels) 64
+   |> _ => assertSome (List.at 0 img.pixels)#firstRow
+  ~|>_ => assertEq (List.length firstRow) 64
+   |> _ => assertSome (List.at 20 img.pixels)#sampleRow
+   |> _ => assertSome (List.at 20 sampleRow)#samplePixel
+   |> _ => assertEq samplePixel (7, 129, 247)

@@ -25,12 +25,8 @@ WsError = { message: Text }
 WsMessage = TextMsg Text | BinaryMsg (List Int) | Ping | Pong | Close
 ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
 
-listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource HttpError Server
-listen = config handler => resource {
-  runningServer <- httpServer.listen config handler
-  yield runningServer
-  _ <- httpServer.stop runningServer
-}
+listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Effect HttpError Server
+listen = config handler => httpServer.listen config handler
 
 stop : Server -> Effect HttpError Unit
 stop = runningServer => httpServer.stop runningServer

@@ -1,0 +1,9 @@
+// EXPECT-ERROR: expected `*-|` to end this `*|>` fan-out block
+@no_prelude
+module integrationTests.compileFail.unterminatedFanoutBlock
+
+use aivi
+
+bad = users
+*|>_
+ |> _.id

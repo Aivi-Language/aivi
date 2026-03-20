@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::{deserialize_optional_source_origin_lossy, SourceOrigin};
 use crate::surface::{
-    BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern,
-    SpannedName, TextPart,
+    BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, FlowLine, FlowStepKind, MatchArm,
+    Module, ModuleItem, Pattern, SpannedName, TextPart,
 };
 use std::cell::Cell;
 

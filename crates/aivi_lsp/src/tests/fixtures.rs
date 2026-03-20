@@ -758,11 +758,10 @@ fn build_hover_reports_local_effect_bindings() {
 module examples.local_hover
 use aivi
 
-main = do Effect {
-  init Unit
-  appId <- appNew "com.example.counter"
-  appRun appId
-}
+main =
+  "com.example.counter"
+     |> appNew #appId
+     |> _ => appRun appId
 "#;
     let uri = sample_uri();
     let doc_index = DocIndex::default();
@@ -789,10 +788,10 @@ appNew = _ => todo "runtime"
 module examples.app
 use examples.gtk
 
-main = do Effect {
-  appId <- appNew "com.example.counter"
-  appId
-}
+main =
+  "com.example.counter"
+     |> appNew #appId
+     |> _ => appId
 "#;
     let lib_uri = Url::parse("file:///gtk.aivi").expect("valid uri");
     let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
@@ -812,7 +811,7 @@ main = do Effect {
     }
 
     let doc_index = DocIndex::default();
-    let position = position_for(app_text, "appId\n}");
+    let position = position_after(app_text, "|> _ => ");
     let hover =
         Backend::build_hover_with_workspace(app_text, &app_uri, position, &workspace, &doc_index)
             .expect("hover found");

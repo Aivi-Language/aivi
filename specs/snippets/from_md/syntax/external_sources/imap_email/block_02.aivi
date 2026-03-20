@@ -7,16 +7,15 @@ InboxMessage = {
   body: Text
 }
 
-do Effect {
-  msgs <- load (email.imap {
+loadInbox =
+  email.imap {
     host: "imap.gmail.com"
     user: "user@gmail.com"
     auth: OAuth2 myToken
-    mailbox: Some "INBOX" // read from the inbox
-    filter: Some "UNSEEN" // only unread messages
-    limit: Some 50 // cap the batch size
+    mailbox: Some "INBOX"
+    filter: Some "UNSEEN"
+    limit: Some 50
     port: None
     starttls: None
-  })
-  pure msgs
-}
+  }
+     |> load

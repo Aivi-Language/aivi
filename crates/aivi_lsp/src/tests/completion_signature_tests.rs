@@ -276,19 +276,17 @@ fn completion_includes_lambda_params_in_scope() {
 }
 
 #[test]
-fn completion_includes_do_block_bind_vars() {
-    let text = "@no_prelude\nmodule examples.do_complete\nuse aivi\nrun = do Effect {\n  myVar <- appNew \"test\"\n  my\n}\n";
+fn completion_includes_flow_bind_vars() {
+    let text = "@no_prelude\nmodule examples.flow_complete\nuse aivi\nrun =\n  \"test\"\n     |> pure #myVar\n     |> _ => myVar\n";
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi"]);
-    // put cursor at the `my` on the last line before `}`
-    let position = position_for(text, "  my\n}");
-    let position = tower_lsp::lsp_types::Position::new(position.line, position.character + 2);
+    let position = position_after(text, "=> ");
     let items =
         Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(
         labels.contains(&"myVar"),
-        "do-block bind variable 'myVar' should appear in completions, got: {:?}",
+        "flow binding 'myVar' should appear in completions, got: {:?}",
         &labels[..labels.len().min(20)]
     );
 }
@@ -384,12 +382,12 @@ fn completion_includes_aivi_snippets() {
     );
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(
-        labels.contains(&"do Effect"),
-        "'do Effect' snippet should appear"
+        labels.contains(&"flow"),
+        "'flow' snippet should appear"
     );
     assert!(labels.contains(&"match"), "'match' snippet should appear");
     assert!(labels.contains(&"lambda"), "'lambda' snippet should appear");
-    assert!(labels.contains(&"unless"), "'unless' snippet should appear");
+    assert!(labels.contains(&"cleanup"), "'cleanup' snippet should appear");
 }
 
 #[test]
@@ -651,7 +649,7 @@ fn completion_includes_keywords() {
         &GtkIndex::default(),
     );
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    // Keywords like "module", "use", "if", "match", "do" should appear
+    // Keywords like "module", "use", "if", and "match" should appear.
     assert!(labels.contains(&"if"), "'if' keyword should appear");
     assert!(labels.contains(&"use"), "'use' keyword should appear");
 }
@@ -891,16 +889,16 @@ fn signature_help_with_doc_comment() {
 }
 
 #[test]
-fn signature_help_inside_do_block() {
+fn signature_help_inside_flow_lambda() {
     let text =
-        "@no_prelude\nmodule examples.doblock\nuse aivi\nprocess : Text -> Effect Unit\nprocess = _ => pure ()\nrun = do Effect {\n  _ <- process \"data\"\n}\n";
+        "@no_prelude\nmodule examples.flowblock\nuse aivi\nprocess : Text -> Effect Unit\nprocess = _ => pure ()\nrun = Unit |> (_ => process \"data\")\n";
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi"]);
     let position = position_for(text, "\"data\"");
     let help = Backend::build_signature_help_with_workspace(text, &uri, position, &workspace);
     assert!(
         help.is_some(),
-        "expected signature help for call inside do block"
+        "expected signature help for call inside flow lambda"
     );
 }
 

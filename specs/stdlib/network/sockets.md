@@ -52,7 +52,7 @@ On the client side:
 2. Use `send` and `recv`.
 3. Call `close` when done.
 
-`listen` is resource-scoped, so the listener is cleaned up automatically when its `Resource` scope ends. `Connection` values are not resource-scoped, so every accepted or connected socket should be closed explicitly.
+`listen` returns a listener handle that you normally pair with `@cleanup (_.shutdown Graceful)` or another explicit shutdown helper. `Connection` values are still not auto-managed, so every accepted or connected socket should be closed explicitly.
 
 ### Client example
 
@@ -62,7 +62,7 @@ On the client side:
 
 | Function | Explanation |
 | --- | --- |
-| **listen** address<br><code>Address -> Resource SocketError Listener</code> | Binds a TCP listener to `address`. The listener is cleaned up with its resource scope. |
+| **listen** address<br><code>Address -> Effect SocketError Listener</code> | Binds a TCP listener to `address`. Pair the returned listener with `@cleanup` when you want structural shutdown. |
 | **accept** listener<br><code>Listener -> Effect SocketError Connection</code> | Waits for an incoming TCP connection and returns it. |
 | **connect** address<br><code>Address -> Effect SocketError Connection</code> | Opens a TCP connection to a remote address. |
 | **send** connection bytes<br><code>Connection -> List Int -> Effect SocketError Unit</code> | Sends raw bytes over a TCP connection. Each `Int` must be in the byte range `0..255`. |
@@ -71,8 +71,8 @@ On the client side:
 
 ## Practical guidance
 
-- Use `listen` inside a `Resource` scope so listeners always shut down cleanly.
-- Close every `Connection` you open or accept, even when the surrounding listener is resource-scoped.
+- Use `listen` in a flow that also registers the listener cleanup so servers always shut down cleanly.
+- Close every `Connection` you open or accept, even when the listener itself is cleaned up structurally.
 - Reach for [`aivi.net.streams`](./streams.md) when you want chunked processing pipelines on top of a `Connection`.
 - Reach for [`aivi.net.http`](./http.md) or [`aivi.rest`](./rest.md) when the remote protocol is already HTTP-based.
 

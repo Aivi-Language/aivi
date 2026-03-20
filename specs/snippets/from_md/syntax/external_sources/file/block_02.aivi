@@ -1,7 +1,6 @@
 User = { name: Text, age: Int }
 
 loadUsers : Effect (SourceError File) (List User)
-loadUsers = do Effect {
-  users <- load (file.json "./users.json")
-  pure users
-}
+loadUsers =
+  file.json "./users.json"
+     |> load

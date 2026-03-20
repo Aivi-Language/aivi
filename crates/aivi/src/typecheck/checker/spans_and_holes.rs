@@ -17,6 +17,7 @@ fn expr_span(expr: &Expr) -> Span {
         | Expr::Match { span, .. }
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
+        | Expr::Flow { span, .. }
         | Expr::Block { span, .. } => span.clone(),
         Expr::Mock { span, .. } => span.clone(),
         Expr::Raw { span, .. } => span.clone(),
@@ -261,6 +262,11 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
                 .collect();
             Expr::Block { kind, items, span }
         }
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(desugar_holes_inner(*root, false)),
+            lines,
+            span,
+        },
         Expr::Ident(name) => Expr::Ident(name),
         Expr::Literal(literal) => Expr::Literal(literal),
         Expr::Raw { text, span } => Expr::Raw { text, span },
@@ -334,6 +340,7 @@ fn contains_hole(expr: &Expr) -> bool {
         Expr::Binary { op, left, right, .. } => {
             contains_hole(left) || (op != "|>" && op != "->>" && contains_hole(right))
         }
+        Expr::Flow { root, .. } => contains_hole(root),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_hole(expr),
             BlockItem::Let { expr, .. } => contains_hole(expr),
@@ -585,6 +592,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                     },
                 })
                 .collect(),
+            span,
+        },
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(replace_holes_inner(*root, counter, params)),
+            lines,
             span,
         },
         Expr::Mock { .. } => expr,

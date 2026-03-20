@@ -7,6 +7,7 @@ struct Parser {
     /// When set, plain `{ ... }` blocks inside a `loop` body are promoted to
     /// the given block kind so that keywords like `recurse` are recognised.
     loop_block_kind: Option<BlockKind>,
+    min_flow_alignment: usize,
 }
 
 impl Parser {
@@ -18,6 +19,7 @@ impl Parser {
             path: path.display().to_string(),
             gensym: 0,
             loop_block_kind: None,
+            min_flow_alignment: 0,
         }
     }
 

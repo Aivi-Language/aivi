@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use aivi::{parse_modules, BlockItem, DomainItem, Expr, MatchArm, ModuleItem, Pattern};
+use aivi::{
+    parse_modules, BlockItem, DomainItem, Expr, FlowLine, FlowModifier, MatchArm, ModuleItem,
+    Pattern,
+};
 use tower_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, Documentation, InsertTextFormat, MarkupContent, MarkupKind,
     Position, Url,
@@ -505,9 +508,9 @@ impl Backend {
     /// Each entry: (label, snippet body with $tabstops, detail description).
     const AIVI_SNIPPETS: &[(&str, &str, &str)] = &[
         (
-            "do Effect",
-            "do ${1:Effect} {\n  ${2:result} <- ${3:expression}\n  $0\n}",
-            "do Effect block",
+            "flow",
+            "${1:input}\n   |> ${2:step}\n   |> ${0:finish}",
+            "flat flow expression",
         ),
         (
             "match",
@@ -515,19 +518,19 @@ impl Backend {
             "match expression",
         ),
         (
-            "generate",
-            "generate {\n  ${1:x} <- ${2:source}\n  yield ${0:x}\n}",
-            "generator expression",
+            "attempt/recover",
+            "${1:input}\n   ?|> ${2:riskyStep}\n   !|> ${3:error} => ${0:recover}",
+            "attempt with inline recovery",
         ),
         (
-            "loop/recurse",
-            "loop ${1:init} => ${2:state} =>\n  ${3:body}\n  recurse ${0:next}",
-            "loop with recurse",
+            "tap",
+            "${1:value}\n   ~|> ${2:observe}\n   |> ${0:continue}",
+            "effectful observation that preserves the subject",
         ),
         (
-            "resource",
-            "resource {\n  ${1:handle} <- ${2:acquire}\n  $0\n}",
-            "resource block (auto-cleanup)",
+            "cleanup",
+            "${1:path}\n   |> ${2:file.open} @cleanup ${3:file.close} #${0:handle}",
+            "resource-style acquisition with cleanup",
         ),
         ("lambda", "${1:x} => ${0:body}", "lambda expression"),
         (
@@ -536,19 +539,9 @@ impl Backend {
             "if-then-else",
         ),
         (
-            "when",
-            "when ${1:condition} <- ${0:effect}",
-            "conditional effect (in do block)",
-        ),
-        (
-            "unless",
-            "unless ${1:condition} <- ${0:effect}",
-            "negated conditional effect (in do block)",
-        ),
-        (
-            "given/or",
-            "given ${1:condition} or fail ${0:errorExpr}",
-            "given guard (in do block)",
+            "guard",
+            "${1:value}\n   >|> ${2:predicate} or fail ${0:errorExpr}",
+            "flow guard",
         ),
         (
             "gtk signal-first app",
@@ -782,6 +775,12 @@ impl Backend {
                     Self::collect_block_locals(items, position, out);
                 }
             }
+            Expr::Flow { root, lines, .. } => {
+                if Self::expr_contains_lsp(expr, position) {
+                    Self::collect_expr_locals(root, position, out);
+                    Self::collect_flow_locals(lines, position, out);
+                }
+            }
             Expr::Match { arms, .. } => {
                 if Self::expr_contains_lsp(expr, position) {
                     Self::collect_match_arm_locals(arms, position, out);
@@ -808,6 +807,70 @@ impl Backend {
                 Self::collect_expr_locals(right, position, out);
             }
             _ => {}
+        }
+    }
+
+    fn collect_flow_locals(lines: &[FlowLine], position: Position, out: &mut Vec<String>) {
+        for line in lines {
+            match line {
+                FlowLine::Step(step) => {
+                    if let Some(binding) = &step.binding {
+                        if Self::span_starts_before_lsp(&binding.span, position) {
+                            out.push(binding.name.name.clone());
+                        }
+                    }
+                    if Self::expr_contains_lsp(&step.expr, position) {
+                        Self::collect_expr_locals(&step.expr, position, out);
+                    }
+                    for modifier in &step.modifiers {
+                        match modifier {
+                            FlowModifier::Timeout { duration, .. }
+                            | FlowModifier::Delay { duration, .. }
+                            | FlowModifier::Concurrent {
+                                limit: duration, ..
+                            }
+                            | FlowModifier::Retry {
+                                interval: duration, ..
+                            } => {
+                                if Self::expr_contains_lsp(duration, position) {
+                                    Self::collect_expr_locals(duration, position, out);
+                                }
+                            }
+                            FlowModifier::Cleanup { expr, .. } => {
+                                if Self::expr_contains_lsp(expr, position) {
+                                    Self::collect_expr_locals(expr, position, out);
+                                }
+                            }
+                        }
+                    }
+                    if Self::span_contains_lsp(&step.span, position) {
+                        Self::collect_flow_locals(&step.subflow, position, out);
+                    }
+                }
+                FlowLine::Guard(guard) => {
+                    if Self::expr_contains_lsp(&guard.predicate, position) {
+                        Self::collect_expr_locals(&guard.predicate, position, out);
+                    }
+                    if let Some(fail_expr) = &guard.fail_expr {
+                        if Self::expr_contains_lsp(fail_expr, position) {
+                            Self::collect_expr_locals(fail_expr, position, out);
+                        }
+                    }
+                }
+                FlowLine::Branch(arm) | FlowLine::Recover(arm) => {
+                    if Self::expr_contains_lsp(&arm.body, position) {
+                        Self::collect_single_pattern_names(&arm.pattern, out);
+                        Self::collect_expr_locals(&arm.body, position, out);
+                    }
+                    if let Some(guard) = &arm.guard {
+                        if Self::expr_contains_lsp(guard, position) {
+                            Self::collect_single_pattern_names(&arm.pattern, out);
+                            Self::collect_expr_locals(guard, position, out);
+                        }
+                    }
+                }
+                FlowLine::Anchor(_) => {}
+            }
         }
     }
 

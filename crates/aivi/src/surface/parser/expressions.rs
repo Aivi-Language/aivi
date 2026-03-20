@@ -52,6 +52,7 @@ impl Parser {
             return Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"));
         }
         let mut expr = self.parse_lambda_or_binary()?;
+        expr = self.parse_flow_suffix_after(expr, self.min_flow_alignment);
         // Result fallback sugar:
         //   res or "boom"
         //   res or | Err NotFound m => m | Err _ => "boom"
@@ -79,14 +80,27 @@ impl Parser {
         Some(expr)
     }
     fn parse_expr_without_result_or(&mut self) -> Option<Expr> {
+        self.parse_expr_without_result_or_with_min_flow_alignment(0)
+    }
+
+    fn parse_expr_without_result_or_with_min_flow_alignment(
+        &mut self,
+        min_flow_alignment: usize,
+    ) -> Option<Expr> {
+        let previous_min_flow_alignment = self.min_flow_alignment;
+        self.min_flow_alignment = self.min_flow_alignment.max(min_flow_alignment);
         self.consume_newlines();
-        if self.check_symbol("|") {
+        let parsed = if self.check_symbol("|") {
             // Multi-clause unary function. `or` isn't allowed in the function head.
             // The bodies are parsed with the normal expression parser.
             let start = self.peek_span().unwrap_or_else(|| self.previous_span());
-            return Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"));
-        }
-        self.parse_lambda_or_binary()
+            Some(self.parse_bare_arm_expr(start, "expected '=>' in match arm"))
+        } else {
+            self.parse_lambda_or_binary()
+                .map(|expr| self.parse_flow_suffix_after(expr, min_flow_alignment))
+        };
+        self.min_flow_alignment = previous_min_flow_alignment;
+        parsed
     }
 
     fn parse_result_or_suffix(&mut self, base: Expr) -> Option<Expr> {
@@ -262,6 +276,7 @@ impl Parser {
             path: self.path.clone(),
             gensym: self.gensym,
             loop_block_kind: self.loop_block_kind.clone(),
+            min_flow_alignment: self.min_flow_alignment,
         }
     }
 

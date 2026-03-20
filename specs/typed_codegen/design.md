@@ -81,7 +81,7 @@ Every JIT or AOT function receives `*mut JitRuntimeCtx` as its first parameter. 
 AIVI uses reference counting via Rust's `Arc`. There is no tracing garbage collector.
 
 - **Immutable values** such as lists, records, large numeric values, and many host-facing runtime handles are shared by incrementing reference counts instead of deep-copying.
-- **Resource cleanup** is coordinated by `resource { ... }` scopes and the runtime's cleanup stack; dropping the last reference is only part of that story.
+- **Resource cleanup** is coordinated by flow scopes, `@cleanup` registrations, and the runtime's cleanup stack; dropping the last reference is only part of that story.
 - **No user-visible lifetimes** are exposed in the language surface.
 
 ### Perceus-style RC reuse analysis

@@ -346,6 +346,7 @@ fn contains_placeholder(expr: &Expr) -> bool {
         Expr::Binary { left, right, .. } => {
             contains_placeholder(left) || contains_placeholder(right)
         }
+        Expr::Flow { root, .. } => contains_placeholder(root),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_placeholder(expr),
             BlockItem::Let { expr, .. } => contains_placeholder(expr),
@@ -548,6 +549,11 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                 }
             }
         }
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(desugar_placeholder_lambdas(*root)),
+            lines,
+            span,
+        },
         Expr::Block { kind, items, span } => Expr::Block {
             kind,
             items: items
@@ -637,6 +643,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
         | Expr::Match { span, .. }
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
+        | Expr::Flow { span, .. }
         | Expr::Block { span, .. }
         | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),
@@ -842,6 +849,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             op,
             left: Box::new(replace_holes_inner(*left, counter, params)),
             right: Box::new(replace_holes_inner(*right, counter, params)),
+            span,
+        },
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(replace_holes_inner(*root, counter, params)),
+            lines,
             span,
         },
         Expr::Block { kind, items, span } => Expr::Block {

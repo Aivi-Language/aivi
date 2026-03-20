@@ -132,6 +132,9 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                 collect_expr(left, env, bound, out);
                 collect_expr(right, env, bound, out);
             }
+            Expr::Flow { root, .. } => {
+                collect_expr(root, env, bound, out);
+            }
             Expr::UnaryNeg { expr, .. } => {
                 collect_expr(expr, env, bound, out);
             }
@@ -327,6 +330,9 @@ fn collect_query_implicit_field_names(
             Expr::Binary { left, right, .. } => {
                 collect_expr(left, env, method_names, bound, out);
                 collect_expr(right, env, method_names, bound, out);
+            }
+            Expr::Flow { root, .. } => {
+                collect_expr(root, env, method_names, bound, out);
             }
             Expr::Block { items, .. } => {
                 let before = bound.len();
@@ -600,6 +606,11 @@ fn rewrite_implicit_field_vars(
             right: Box::new(rewrite_implicit_field_vars(*right, implicit_param, unbound)),
             span,
         },
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(rewrite_implicit_field_vars(*root, implicit_param, unbound)),
+            lines,
+            span,
+        },
         Expr::Block { kind, items, span } => Expr::Block {
             kind,
             items: items
@@ -727,6 +738,7 @@ fn expr_contains_placeholder(expr: &Expr) -> bool {
         Expr::Binary { left, right, .. } => {
             expr_contains_placeholder(left) || expr_contains_placeholder(right)
         }
+        Expr::Flow { root, .. } => expr_contains_placeholder(root),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. }
             | BlockItem::Let { expr, .. }
@@ -797,6 +809,7 @@ fn expr_contains_field_section(expr: &Expr) -> bool {
         Expr::Binary { left, right, .. } => {
             expr_contains_field_section(left) || expr_contains_field_section(right)
         }
+        Expr::Flow { root, .. } => expr_contains_field_section(root),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. }
             | BlockItem::Let { expr, .. }

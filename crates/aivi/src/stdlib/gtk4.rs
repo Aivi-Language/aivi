@@ -218,14 +218,14 @@ appRun : AppId -> Effect GtkError Unit
 appRun = gtk4.appRun
 
 runGtkApp : { appId: Text, root: GtkNode, onStart: Effect GtkError Unit } -> Effect GtkError Unit
-runGtkApp = config => do Effect {
-  _   <- init Unit
-  app <- appNew config.appId
-  win <- mountAppWindow app [config.root]
-  _   <- config.onStart
-  _   <- windowPresent win
-  appRun app
-}
+runGtkApp = config =>
+  config
+    ~|> (_ => init Unit)
+     |> (_ => appNew config.appId) #app
+     |> (_ => mountAppWindow app [config.root]) #win
+    ~|> (_ => config.onStart)
+    ~|> (_ => windowPresent win)
+     |> (_ => appRun app)
 
 widgetShow : WidgetId -> Effect GtkError Unit
 widgetShow = gtk4.widgetShow

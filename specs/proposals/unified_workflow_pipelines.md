@@ -49,7 +49,7 @@ Control stages do not directly replace the current subject; instead they remembe
 
 In other words:
 
-- `|>`, `!|>`, `?|>`, `&|>`, and `*|>` describe **what data flow happens next**,
+- `|>`, `!|>`, `?|>`, `&|>`, `*|>` and `+|>` describe **what data flow happens next**,
 - `:|>` describes **how the next part of the workflow behaves**.
 
 ## Stage family
@@ -61,13 +61,15 @@ In other words:
 | `?\|>`       | optional bind             |
 | `&\|>`       | applicative branch        |
 | `*\|>`       | sequence / generator bind |
+| `+\|>`       | as * but applicative      |
 | `:\|>`       | control / meta stage      |
 
 The current `|>` rule still applies: the value on the left flows into the final argument position on the right.
 
 ## Control clauses
 
-`:` remains outside the data-flow family on purpose. A `:|>` stage never means "transform the current subject". Instead, it configures the next stage or opens a scoped subflow.
+`:` remains outside the data-flow family on purpose. A `:|>` stage never means "transform the current subject". Instead, it configures the next stage or opens a scoped subflow. However it does take the previous subject and passes it on to
+policies that take an unspecified arg still. ie, yes/no/cleanup etc
 
 Comma-separated clauses inside one `:|>` stage are applied left-to-right.
 
@@ -146,14 +148,14 @@ Branching uses a dedicated control form so grouped branch pipelines remain forma
 
 ```aivi
 request
-   |> useCache #user
-     :|> yes
-         |> cache.read key
-     :|> no
-        :|> timeout 3s
-        !|> fetch key
-        !|> decode User
-   |> "{user.firstName} {user.lastName}"
+  |> useCache
+    :|> yes
+        |> cache.read key
+    :|> no
+      :|> timeout 3s
+      !|> fetch key
+      !|> decode User #user
+  |> "{user.firstName} {user.lastName}"
 ```
 
 ## Resources and cleanup
@@ -199,6 +201,8 @@ Inside an `all` group:
 
 `*|>` replaces the separate `generate { ... }` surface. A `*|>` stage expands zero-many outputs and flattens them into the surrounding workflow.
 
+suggestion: +|> should fan out with applicative mode
+
 | Clause         | Meaning                                                                                         |
 | -------------- | ----------------------------------------------------------------------------------------------- |
 | `concurrent n` | Permit up to `n` in-flight branches for the next fan-out stage or grouped subflow.              |
@@ -208,7 +212,7 @@ Example:
 
 ```aivi
 seed
-  :|> loop #cursor
+  :|> loop #cursor // loop receives seed as subject
       !|> fetchPage cursor #page
       *|> .items
       :|> recurse page.nextCursor while page.hasMore
@@ -218,12 +222,20 @@ Concurrent fan-out:
 
 ```aivi
 urls
-  :|> concurrent 8, timeout 3s, cancelOnError
-  *|> fetch
+  :|> concurrent 8, timeout 3s
+  *|> fetch // stops on first fetch fail or decode error  
+      !|> decode Item
+```
+Q: would this work?
+
+```aivi
+urls
+  :|> concurrent 8, timeout 3s
+  +|> fetch // collects validations
       !|> decode Item
 ```
 
-The compiler should reject `concurrent` on stages that cannot fan out, because silent no-op concurrency settings would be misleading.
+The compiler should reject `concurrent` on stages that cannot fan out, because silent no-op concurrency settings would be misleading.Idea
 
 ## Grouping and subflows
 
@@ -235,11 +247,10 @@ Examples:
 
 ```aivi
 request
-  :|> flow
-      !|> fetch key
+  :|> flow #user // Q:should this be here or after decode User?
       :|> timeout 3s
+      !|> fetch key
       !|> decode User
-  :|> #user
    |> "{user.firstName} {user.lastName}"
 ```
 
@@ -252,10 +263,9 @@ url
 
 This keeps grouping uniform:
 
-- `if` owns `then` and `else` subflows,
-- `when` and `unless` can own subflows,
+- if/else could be done with :|> yes :|> no
+- `when/yes` and `unless/no` can own subflows,
 - `attempt` can own a subflow,
-- `all` owns applicative branches,
 - `flow` is the generic "just group these stages" form.
 
 ## Loop and recurse
@@ -265,17 +275,16 @@ This proposal keeps structured feedback, but it moves it into the control-stage 
 | Clause                                 | Meaning                                                                                  |
 | -------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `loop #name = expr, ...`               | Introduce named loop-carried state for the current subflow.                              |
-| `recurse #name = expr, ... while pred` | Jump back to the nearest loop head with updated carried state while the predicate holds. |
+| `recurse expr, ... while pred` | Jump back to the nearest loop head with updated carried state while the predicate holds. |
 
 Example:
 
 ```aivi
-initialCursor
-  :|> loop #cursor = initialCursor, #all = []
-  !|> fetchPage cursor
-  :|> #page
-  :|> recurse #cursor = page.nextCursor, #all = all ++ page.items while page.hasMore
-   |> all ++ page.items
+all = initialCursor
+  :|> loop #cursor
+  !|> fetchPage cursor #page
+  *|> page
+  :|> recurse page.nextCursor while page.hasMore
 ```
 
 Resource cleanup registered during one iteration runs before the next iteration begins unless the cleanup is intentionally registered outside the loop scope.
@@ -292,18 +301,19 @@ That means the bare pipe is rendered with one leading space when it appears alon
 
 ```aivi
 request
-  :|> if useCache
-      then cache.read key
-      else fetch key
-        :|> timeout 3s
-        !|> decode User
-  :|> #user
-   |> "{user.firstName} {user.lastName}"
+  |> useCache
+   :|> yes
+      |> cache.read key
+   :|> no
+     :|> timeout 3s
+     !|> fetch key
+     !|> decode User #user
+  |> "{user.firstName} {user.lastName}"
 ```
 
 Formatting rules:
 
-- sigiled stages (`:|>`, `!|>`, `?|>`, `&|>`, `*|>`) keep their prefix immediately before `|`,
+- sigiled stages (`:|>`, `!|>`, `?|>`, `&|>`, `*|>`, `+|>`) keep their prefix immediately before `|`,
 - the plain stage is rendered as ` |>`,
 - `then` and `else` align with each other,
 - branch-local stages indent under their owning branch,
@@ -313,63 +323,18 @@ Formatting rules:
 
 If the `|` column always lines up, long workflow pipelines stay visually scannable even when they mix pure transforms, failure-aware steps, metadata stages, and grouped branches.
 
+Q: how do we replace
+@test "demo test"
+myTest = do Effect {
+  assertEq 1 1
+  assertEq 2 1
+}
+Q: can we just start with no subject? that way we could also directly use *|> and +|>
+myTest = !|> {
+  
+}
+ 
 ## Migration and refactor plan
 
 Adopting this proposal would require a deliberate end-to-end refactor.
 
-### Phase 1: grammar and CST
-
-- add the new pipe-family tokens and grouped `:|>` clause forms,
-- parse subflows explicitly so the formatter and LSP can recover structure,
-- keep legacy workflow forms temporarily only if needed for migration,
-- emit diagnostics that point users toward the new surface as soon as it exists.
-
-### Phase 2: lowering and typechecking
-
-- lower unified workflow pipelines to the existing effect / chain / applicative / generator / resource core,
-- preserve source spans so diagnostics still mention the correct stage,
-- add policy-aware lowering for `attempt`, `recover`, `default`, `expect`, `cleanup`, `concurrent`, and `loop` / `recurse`,
-- make `&|>` groups check independence the same way `do Applicative { ... }` does today.
-
-### Phase 3: runtime and standard library integration
-
-- route retries, timeouts, cancellation, and cleanup through the runtime effect layer,
-- define how concurrent `*|>` and `&|>` interact with cancellation and failure propagation,
-- keep resource cleanup guaranteed on success, failure, and cancellation,
-- expose any supporting helpers needed by the lowered forms without reintroducing user-visible duplicate syntax.
-
-### Phase 4: formatter, LSP, and editor tooling
-
-- teach the formatter the `|` alignment rule,
-- format nested subflows deterministically,
-- add semantic tokens, hover help, and completion support for the new clauses,
-- regenerate VSCode syntax assets after the grammar settles.
-
-### Phase 5: tests and documentation
-
-- add parser, formatter, and compile-fail coverage for every new stage family and control clause,
-- migrate integration examples from `do Effect`, `do M`, `do Applicative`, `generate`, and `resource`,
-- update `AIVI_LANGUAGE.md` only after the implementation exists,
-- update language-overview and reference pages at the same time as the cutover.
-
-### Phase 6: cutover and deletion
-
-When the new surface is complete and validated:
-
-- delete the legacy workflow grammar and lowering paths,
-- delete obsolete examples and integration tests that cover only the removed forms,
-- rewrite the affected syntax reference pages so they describe only the unified pipeline surface,
-- remove long-term duplicate documentation and "old vs new" split guidance.
-
-The success condition is strict: after cutover, AIVI should no longer have two different surface families for the same workflow concepts.
-
-## Open questions for the refactor
-
-This proposal is intentionally concrete enough to guide a refactor, but a few implementation details still need hard decisions before the parser work starts:
-
-- should `default` apply uniformly to `Option`, `Result`, and effect failure, or should some cases require `recover` for clarity?
-- should `ordered` be the default for concurrent fan-out, with an opt-in clause for completion-order emission?
-- how much of the old `do Event { ... }` surface should lower directly through the unified pipeline core versus staying as library-level helpers on top?
-- should grouped `recover` and `attempt` remain keyword clauses inside `:|>`, or should one of them gain a shorter dedicated spelling after real-world formatter experiments?
-
-Those decisions belong in the implementation RFC and parser prototype, not in the current v0.1 reference pages.

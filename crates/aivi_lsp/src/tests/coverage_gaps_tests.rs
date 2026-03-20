@@ -526,8 +526,8 @@ val = Some 1 match
 }
 
 #[test]
-fn pattern_discipline_block_unused_bind_in_do() {
-    let text = "module demo\n\nval = do Effect {\n  unused <- pure 42\n  anotherUnused = 99\n  pure 1\n}\n";
+fn pattern_discipline_block_unused_bindings() {
+    let text = "module demo\n\nval = {\n  unused = 42\n  anotherUnused = 99\n  1\n}\n";
     let diags = Backend::build_diagnostics_strict(
         text,
         &Url::parse("file:///strict_test.aivi").unwrap(),
@@ -540,7 +540,7 @@ fn pattern_discipline_block_unused_bind_in_do() {
     let s221_count = diags.iter().filter(|d| {
         matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "AIVI-S221")
     }).count();
-    assert!(s221_count >= 2, "expected at least 2 AIVI-S221 for unused bindings in do block");
+    assert!(s221_count >= 2, "expected at least 2 AIVI-S221 for unused block bindings");
 }
 
 // ── signature.rs — additional signature help coverage ─────────────────────────

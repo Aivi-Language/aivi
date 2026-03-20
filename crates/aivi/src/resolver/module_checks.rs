@@ -2,8 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::diagnostics::{fuzzy_suggest, Diagnostic, DiagnosticSeverity, FileDiagnostic};
 use crate::surface::{
-    BlockItem, Decorator, Def, DomainItem, Expr, Literal, Module, ModuleItem, Pattern,
-    RecordTypeField, ScopeItemKind, TextPart, TypeAlias, TypeDecl, TypeExpr, TypeSig,
+    BlockItem, Decorator, Def, DomainItem, Expr, FlowLine, FlowModifier, FlowStep, FlowStepKind,
+    Literal, Module, ModuleItem, Pattern, RecordTypeField, ScopeItemKind, TextPart, TypeAlias,
+    TypeDecl, TypeExpr, TypeSig,
 };
 
 pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
@@ -232,6 +233,47 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
     }
 
     fn collect_expr(expr: &Expr, out: &mut HashSet<String>) {
+        fn collect_flow_modifier(modifier: &FlowModifier, out: &mut HashSet<String>) {
+            match modifier {
+                FlowModifier::Timeout { duration, .. } | FlowModifier::Delay { duration, .. } => {
+                    collect_expr(duration, out);
+                }
+                FlowModifier::Concurrent { limit, .. } => collect_expr(limit, out),
+                FlowModifier::Retry { interval, .. } => collect_expr(interval, out),
+                FlowModifier::Cleanup { expr, .. } => collect_expr(expr, out),
+            }
+        }
+
+        fn collect_flow_step(step: &FlowStep, out: &mut HashSet<String>) {
+            collect_expr(&step.expr, out);
+            for modifier in &step.modifiers {
+                collect_flow_modifier(modifier, out);
+            }
+            collect_flow_lines(&step.subflow, out);
+        }
+
+        fn collect_flow_lines(lines: &[FlowLine], out: &mut HashSet<String>) {
+            for line in lines {
+                match line {
+                    FlowLine::Step(step) => collect_flow_step(step, out),
+                    FlowLine::Guard(guard) => {
+                        collect_expr(&guard.predicate, out);
+                        if let Some(fail_expr) = &guard.fail_expr {
+                            collect_expr(fail_expr, out);
+                        }
+                    }
+                    FlowLine::Branch(arm) | FlowLine::Recover(arm) => {
+                        collect_pattern_uses(&arm.pattern, out);
+                        if let Some(guard) = &arm.guard {
+                            collect_expr(guard, out);
+                        }
+                        collect_expr(&arm.body, out);
+                    }
+                    FlowLine::Anchor(_) => {}
+                }
+            }
+        }
+
         match expr {
             Expr::Ident(name) => {
                 out.insert(name.name.clone());
@@ -316,6 +358,10 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
             Expr::Binary { left, right, .. } => {
                 collect_expr(left, out);
                 collect_expr(right, out);
+            }
+            Expr::Flow { root, lines, .. } => {
+                collect_expr(root, out);
+                collect_flow_lines(lines, out);
             }
             Expr::Block { items, .. } => {
                 for item in items {

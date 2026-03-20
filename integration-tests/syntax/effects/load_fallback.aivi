@@ -1,0 +1,10 @@
+@no_prelude
+module integrationTests.syntax.effects.loadFallback
+
+use aivi
+use aivi.testing
+
+@test "load fallback expression"
+loadFallbackExpression = env.get "AIVI__MISSING_TEST__"
+  |> source => (load source or "fallback")
+  |> assertEq "fallback"

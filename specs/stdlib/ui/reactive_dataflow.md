@@ -66,11 +66,9 @@ saveEnabled = combineAll (dirty, saveEvent.running) ((dirty, running) => dirty &
 
 ```aivi
 batch (_ =>
-  do Effect {
-    update state (patch { saving: True })
-    set lastError None
-    pure Unit
-  }
+  Unit
+     |> _ => update state (patch { saving: True })
+     |> _ => set lastError None
 )
 ```
 
@@ -132,9 +130,7 @@ This is the boundary that keeps long-lived reactive graphs from leaking after a 
 `Event` handles are not a separate async architecture. They are graph nodes with lifecycle signals.
 
 ```aivi
-refreshData = do Event {
-  fetchRows
-}
+refreshData = event.from (_ => fetchRows)
 
 rows = combineAll (cachedRows, refreshData.result) ((cached, fresh) =>
   fresh match

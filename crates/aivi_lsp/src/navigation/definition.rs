@@ -238,6 +238,7 @@ impl Backend {
                         .and_then(|expr| Self::lowered_tag_call_ident_in_expr(expr, position))
                 })
                 .or_else(|| Self::lowered_tag_call_ident_in_expr(body, position)),
+            aivi::Expr::Flow { root, .. } => Self::lowered_tag_call_ident_in_expr(root, position),
             aivi::Expr::Ident(_)
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }

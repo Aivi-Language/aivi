@@ -51,28 +51,8 @@ close : Send a -> Effect e Unit
 close = sender => channel.close sender
 
 fold : s -> (s -> a -> Effect e s) -> Recv a -> Effect e s
-fold = init => fn => receiver => do Effect {
-  loop state = init => {
-    result <- channel.recv receiver
-    result match
-      | Err _ => pure state
-      | Ok value => do Effect {
-          next <- fn state value
-          recurse next
-        }
-  }
-}
+fold = init => fn => receiver => channel.fold init fn receiver
 
 forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit
-forEach = receiver => fn => do Effect {
-  loop _ = Unit => {
-    result <- channel.recv receiver
-    result match
-      | Err _ => pure Unit
-      | Ok value => do Effect {
-          _ <- fn value
-          recurse Unit
-        }
-  }
-}
+forEach = receiver => fn => channel.forEach receiver fn
 "#;

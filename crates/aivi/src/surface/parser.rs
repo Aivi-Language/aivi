@@ -3,6 +3,7 @@ include!("parser/module.rs");
 include!("parser/declarations.rs");
 include!("parser/definitions.rs");
 include!("parser/expressions.rs");
+include!("parser/flows.rs");
 include!("parser/primary.rs");
 include!("parser/sigils.rs");
 include!("parser/literals_and_blocks.rs");

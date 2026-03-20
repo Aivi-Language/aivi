@@ -420,6 +420,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     );
 
     let a = checker.fresh_var_id();
+    let fold_state = checker.fresh_var_id();
+    let fold_err = checker.fresh_var_id();
+    let for_each_err = checker.fresh_var_id();
     let send_ty = Type::con("Send").app(vec![Type::Var(a)]);
     let recv_ty = Type::con("Recv").app(vec![Type::Var(a)]);
     let channel_record = Type::Record {
@@ -471,6 +474,50 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(
                     Box::new(send_ty),
                     Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "fold".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(fold_state)),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(fold_state)),
+                            Box::new(Type::Func(
+                                Box::new(Type::Var(a)),
+                                Box::new(
+                                    Type::con("Effect")
+                                        .app(vec![Type::Var(fold_err), Type::Var(fold_state)]),
+                                ),
+                            )),
+                        )),
+                        Box::new(Type::Func(
+                            Box::new(recv_ty.clone()),
+                            Box::new(
+                                Type::con("Effect")
+                                    .app(vec![Type::Var(fold_err), Type::Var(fold_state)]),
+                            ),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "forEach".to_string(),
+                Type::Func(
+                    Box::new(recv_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(a)),
+                            Box::new(
+                                Type::con("Effect")
+                                    .app(vec![Type::Var(for_each_err), Type::con("Unit")]),
+                            ),
+                        )),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![Type::Var(for_each_err), Type::con("Unit")]),
+                        ),
+                    )),
                 ),
             ),
         ]

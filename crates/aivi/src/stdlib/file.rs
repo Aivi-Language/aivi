@@ -13,11 +13,9 @@ use aivi
 FileStats = { size: Int, created: Int, modified: Int, isFile: Bool, isDirectory: Bool }
 
 open : Text -> Resource Text FileHandle
-open = path => resource {
-  handle <- file.open path
-  yield handle
-  _ <- file.close handle
-}
+open = path =>
+  path
+     |> file.open @cleanup file.close #handle
 
 readAll : FileHandle -> Effect Text (Result Text Text)
 readAll = handle => attempt (file.readAll handle)

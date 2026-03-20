@@ -280,6 +280,7 @@ impl Backend {
                 }
                 Self::find_call_info(body, position)
             }
+            Expr::Flow { root, .. } => Self::find_call_info(root, position),
             Expr::Ident(_) | Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => {
                 None
             }
@@ -340,6 +341,7 @@ impl Backend {
             | Expr::Match { span, .. }
             | Expr::If { span, .. }
             | Expr::Binary { span, .. }
+            | Expr::Flow { span, .. }
             | Expr::Block { span, .. }
             | Expr::Raw { span, .. }
             | Expr::Mock { span, .. } => span,

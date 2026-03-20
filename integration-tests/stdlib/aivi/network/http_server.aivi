@@ -10,18 +10,31 @@ use aivi.system (env)
 use aivi.text as text
 use aivi.url (parse)
 
-withEnvPort = key run => do Effect {
-  portResult <- attempt (load (env.get key))
-  portResult match
-    | Err _     => pure Unit
-    | Ok raw    => text.parseInt raw match
-      | Some port => run port
-      | None      => pure Unit
-}
+parseEnvPort : Text -> (Int -> Effect Text Unit) -> Effect Text Unit
+parseEnvPort = raw => run => (
+  raw
+  |> text.parseInt#parsed
+  |> _ => parsed match
+    | Some port => run port
+    | None      => pure Unit
+)
+
+withEnvPort : Text -> (Int -> Effect Text Unit) -> Effect Text Unit
+withEnvPort = key => run => (
+  Unit
+  |> _ => attempt (env.get key)#envResult
+  |> _ => envResult match
+    | Err _  => pure Unit
+    | Ok raw => parseEnvPort raw run
+)
 
 addressAt = port => text.concat ["127.0.0.1:", text.debugText port]
 
-urlAt = port path => assertOk (parse (text.concat ["http://", addressAt port, path]))
+urlAt = port => path => (
+  text.concat ["http://", addressAt port, path]
+  |> parse
+  |> assertOk
+)
 
 isEchoPost = request =>
   request.method == "POST"
@@ -46,88 +59,100 @@ httpHandler = request => pure (
     }
 )
 
-wsEcho = tx => socket => do Effect {
-  message <- wsRecv socket
-  message match
-    | TextMsg text => do Effect {
-        _ <- wsSend socket (TextMsg text)
-        _ <- send tx text
-        wsClose socket
-      }
-    | _ => do Effect {
-        _ <- send tx "unexpected"
-        wsClose socket
-      }
-}
+startServer : Text -> (Request -> Effect HttpError ServerReply) -> Effect Text Server
+startServer = address => handler => (
+  attempt (listen { address: address } handler)
+   |> assertOk#server
+  ~|>_ => sleep 25
+   |> _ => pure server
+)
 
-wsHandler = tx => request =>
-  if request.path == "/ws" then pure (Ws (wsEcho tx))
+stopServer : Server -> Effect Text Unit
+stopServer = server => (
+  attempt (stop server)
+  |> assertOk
+)
+
+wsEcho = socket => (
+  socket
+  |> wsRecv#message
+  |> _ => wsSend socket message
+  |> _ => wsClose socket
+)
+
+wsHandler = request =>
+  if request.path == "/ws" || request.path == "/ws?" then pure (Ws wsEcho)
   else pure (Http { status: 404, headers: [], body: RawBytes [] })
 
+listenResourceRoundTrip = port => requestUrl => (
+  Unit
+  |> _ => startServer (addressAt port) httpHandler@cleanup stopServer#server
+  |> _ => post requestUrl "client-body"#responseResult
+  |> _ => pure { responseResult: responseResult }
+)
+
+websocketRoundTrip = port => (
+  Unit
+   |> _ => startServer (addressAt port) wsHandler#server
+  ~|>_ => sleep 500
+  ~|>_ => stopServer server
+   |> _ => pure Unit
+)
+
+listenAndStopHandleHttpRequestsCase = port => (
+  Unit
+   |> _ => urlAt port "/echo"#requestUrl
+   |> _ => startServer (addressAt port) httpHandler#server
+   |> _ => post requestUrl "client-body"#responseResult
+  ~|>_ => stopServer server
+   |> _ => get requestUrl#stoppedResult
+   |> _ => assertOk responseResult#response
+  ~|>response => assert_eq response.status 200
+  ~|>response => assert_eq response.body "ok"
+  ~|>_ => assertErr stoppedResult
+   |> _ => pure Unit
+)
+
+listenResourceCleanupStopsTheHttpServerOnScopeExitCase = port => (
+  Unit
+   |> _ => urlAt port "/echo"#requestUrl
+   |> _ => listenResourceRoundTrip port requestUrl#workflow
+   |> _ => assertOk workflow.responseResult#response
+  ~|>response => assert_eq response.status 200
+  ~|>response => assert_eq response.body "ok"
+   |> _ => get requestUrl#stoppedResult
+  ~|>_ => assertErr stoppedResult
+   |> _ => pure Unit
+)
+
+assertHttpReply = reply => expectedStatus => expectedBody => (
+  reply match
+    | Http response =>
+        Unit
+        ~|>_ => assert_eq response.status expectedStatus
+         |> _ => assert_eq response.body expectedBody
+    | _ => assert False
+)
+
 @test "listen and stop handle a real http request"
-listen_and_stop_handle_http_requests = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" (port => do Effect {
-    requestUrl     <- urlAt port "/echo"
-    workflowResult <- attempt (do Effect {
-        server         <- listen { address: addressAt port } httpHandler
-        responseResult <- attempt (post requestUrl "client-body")
-        _              <- stop server
-        stoppedResult  <- attempt (get requestUrl)
-        pure { responseResult: responseResult, stoppedResult: stoppedResult }
-    })
-    workflow        <- assertOk workflowResult
-    responseResult  <- assertOk workflow.responseResult
-    response        <- assertOk responseResult
-    _               <- assert_eq response.status 200
-    _               <- assert_eq response.body "ok"
-    stoppedResponse <- assertOk workflow.stoppedResult
-    _               <- assertErr stoppedResponse
-    pure Unit
-})
+listen_and_stop_handle_http_requests = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" listenAndStopHandleHttpRequestsCase
 
 @test "listen resource cleanup stops the http server on scope exit"
-listen_resource_cleanup_stops_the_http_server_on_scope_exit = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" (port => do Effect {
-    requestUrl     <- urlAt port "/echo"
-    workflowResult <- attempt (do Effect {
-        _              <- listen { address: addressAt port } httpHandler
-        responseResult <- attempt (post requestUrl "client-body")
-        pure { responseResult: responseResult }
-    })
-    workflow        <- assertOk workflowResult
-    responseResult  <- assertOk workflow.responseResult
-    response        <- assertOk responseResult
-    _               <- assert_eq response.status 200
-    _               <- assert_eq response.body "ok"
-    stoppedResult   <- attempt (get requestUrl)
-    stoppedResponse <- assertOk stoppedResult
-    _               <- assertErr stoppedResponse
-    pure Unit
-})
+listen_resource_cleanup_stops_the_http_server_on_scope_exit = withEnvPort "AIVI_TEST_HTTP_SERVER_PORT" listenResourceCleanupStopsTheHttpServerOnScopeExitCase
 
 @test "websocket receive send and close echo a real client message"
-websocket_receive_send_and_close_echo = withEnvPort "AIVI_TEST_HTTP_WS_PORT" (port => do Effect {
-    wsResult <- attempt (do Effect {
-        (tx, rx) <- make ""
-        server   <- listen { address: addressAt port } (wsHandler tx)
-        result   <- attempt (timeoutWith 10000 "missing websocket message" (recv rx))
-        _        <- close tx
-        _        <- stop server
-        pure result
-    })
-    received <- assertOk wsResult
-    result   <- assertOk received
-    result match
-      | Ok value => assert_eq value "hello websocket"
-      | Err _    => assert False
-})
+websocket_receive_send_and_close_echo = withEnvPort "AIVI_TEST_HTTP_WS_PORT" websocketRoundTrip
 
 @test "server config"
-server_config = do Effect {
+server_config = {
   cfg = { address: "127.0.0.1:0" }
-  assert_eq cfg.address "127.0.0.1:0"
+
+  Unit
+  ~|>_ => assert_eq cfg.address "127.0.0.1:0"
 }
 
 @test "request fields"
-request_fields = do Effect {
+request_fields = {
   req = {
     method: "GET"
     path: "/health"
@@ -135,13 +160,15 @@ request_fields = do Effect {
     body: []
     remoteAddr: Some "127.0.0.1"
   }
-  _ <- assert_eq req.method "GET"
-  _ <- assert_eq req.path "/health"
-  assert_eq req.remoteAddr (Some "127.0.0.1")
+
+  Unit
+  ~|>_ => assert_eq req.method "GET"
+  ~|>_ => assert_eq req.path "/health"
+  ~|>_ => assert_eq req.remoteAddr (Some "127.0.0.1")
 }
 
 @test "response construction"
-response_construction = do Effect {
+response_construction = {
   textReply = Http {
     status: 200
     headers: [{ name: "Content-Type", value: "text/plain" }]
@@ -157,51 +184,49 @@ response_construction = do Effect {
     headers: []
     body: { message: "hi" }
   }
-  _ <- (textReply match
-    | Http response => do Effect {
-        _ <- assert_eq response.status 200
-        assert_eq response.body (Plain "Hello")
-      }
-    | _ => assert False
-  )
-  _ <- (bytesReply match
-    | Http response => assert_eq response.body (RawBytes [72, 101, 108, 108, 111])
-    | _             => assert False
-  )
-  jsonReply match
-    | Http response => assert_eq response.body (Json (toJson { message: "hi" }))
-    | _             => assert False
+
+  Unit
+  ~|>_ => assertHttpReply textReply 200 (Plain "Hello")
+  ~|>_ => assertHttpReply bytesReply 200 (RawBytes [72, 101, 108, 108, 111])
+  ~|>_ => assertHttpReply jsonReply 200 (Json (toJson { message: "hi" }))
 }
 
 @test "ws message variants"
-ws_message_variants = do Effect {
+ws_message_variants = {
   textMsg   = TextMsg "hello ws"
   binaryMsg = BinaryMsg [1, 2, 3]
-  _ <- (textMsg match
-    | TextMsg text => assert_eq text "hello ws"
-    | _            => assert False
+
+  Unit
+  ~|>_ => (
+    textMsg match
+      | TextMsg text => assert_eq text "hello ws"
+      | _            => assert False
   )
-  _ <- (binaryMsg match
-    | BinaryMsg bytes => assert_eq (List.length bytes) 3
-    | _               => assert False
+  ~|>_ => (
+    binaryMsg match
+      | BinaryMsg bytes => assert_eq (List.length bytes) 3
+      | _               => assert False
   )
-  _ <- assert_eq Ping Ping
-  _ <- assert_eq Pong Pong
-  assert_eq Close Close
+  ~|>_ => assert_eq Ping Ping
+  ~|>_ => assert_eq Pong Pong
+  ~|>_ => assert_eq Close Close
 }
 
 @test "server reply http variant"
-server_reply_http = do Effect {
+server_reply_http = {
   reply = Http { status: 404, headers: [], body: RawBytes [] }
+
   reply match
     | Http response => assert_eq response.status 404
     | _             => assert False
 }
 
 @test "http and ws error fields"
-http_and_ws_error_fields = do Effect {
+http_and_ws_error_fields = {
   httpErr = { message: "internal server error" }
   wsErr   = { message: "connection closed" }
-  _ <- assert_eq httpErr.message "internal server error"
-  assert_eq wsErr.message "connection closed"
+
+  Unit
+  ~|>_ => assert_eq httpErr.message "internal server error"
+  ~|>_ => assert_eq wsErr.message "connection closed"
 }

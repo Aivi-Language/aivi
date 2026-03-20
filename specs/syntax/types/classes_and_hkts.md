@@ -148,4 +148,4 @@ Qualified forms such as `List.empty` and `Map.empty` work even when no surroundi
 ## See also
 
 - [`aivi.logic`](../../stdlib/core/logic.md) — the standard class hierarchy and real built-in instances
-- [`do` notation](../do_notation.md) — how `Applicative` and `Chain` power `do M { ... }`
+- [Flow Syntax](../flows.md) — how `|>` and `&|>` reuse `Chain` and `Applicative` behavior

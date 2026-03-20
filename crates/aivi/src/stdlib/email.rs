@@ -69,11 +69,9 @@ flattenBodies = parts => parts match
   | [x, ...xs] => text.concat [x.body, "\n", flattenBodies xs]
 
 imapOpen : ImapConfig -> Resource Text ImapSession
-imapOpen = config => resource {
-  session <- email.imapOpen config
-  yield session
-  _ <- email.imapClose session
-}
+imapOpen = config =>
+  config
+     |> email.imapOpen @cleanup email.imapClose #session
 
 imapSelect : Text -> ImapSession -> Effect Text MailboxInfo
 imapSelect = mailbox => session => email.imapSelect mailbox session

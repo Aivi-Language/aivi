@@ -33,7 +33,7 @@ If you keep those rules in mind, most of the syntax becomes easier to read.
 | variables that change over time | you usually create a new value instead |
 | `null` / `undefined` | use `Option A` |
 | exceptions | use `Result E A` or `Effect E A` |
-| loops | use pipelines, generators, folds, or recursion |
+| loops | use pipelines, `*|>` ... `*-|` fan-out, folds, or recursion |
 | objects with mutable fields | use typed records and patch them into new records |
 | helper methods like `users.map(...)` | use functions like `map f users` or `users \|> map f` |
 
@@ -140,29 +140,41 @@ See [Predicates](syntax/predicates), [Collections](stdlib/core/collections), and
 
 ---
 
-## Effects and `do Effect`
+## Effects and flow syntax
 
-Pure code and effectful code are separated.
+Pure code and effectful code are separated, but everyday workflows still read left to right with flat flows.
 
 <<< ./snippets/from_md/language-overview/block_06.aivi{aivi}
 
 
 `Effect FileError Text` means: this computation may perform effects, may fail with `FileError`, and if it succeeds it returns `Text`.
 
-If you are new to FP, the important thing is not the jargon. The important thing is that file access, network access, printing, and other side effects are visible in the type instead of being hidden.
+The flow operators keep the steps flat:
 
-See [Effects](syntax/effects), [do Notation](syntax/do_notation), and [Resources](syntax/resources).
+- `|>` sequences ordinary work,
+- `>|>` enforces preconditions,
+- `?|>` / `!|>` recover from one fallible step,
+- `@cleanup` registers cleanup on the acquisition line.
+
+See [Flow Syntax](syntax/flows), [Effects](syntax/effects), and [Cleanup & Lifetimes](syntax/resources).
 
 ---
 
-## Generators instead of loops
+## Fan-out and collection shaping
 
 <<< ./snippets/from_md/language-overview/block_07.aivi{aivi}
 
 
-Generators are a convenient way to describe a stream of values without writing a mutable loop.
+Read that as:
 
-See [Generators](syntax/generators).
+1. start with a range,
+2. fan out one item at a time,
+3. keep only the even values,
+4. transform each surviving item.
+
+`*|>` ... `*-|` is the flow-syntax way to express zero-many work. After the block, use ordinary collection helpers such as `map`, `filter`, `partition`, `groupBy`, `toSet`, or `fold`.
+
+See [Flow Syntax](syntax/flows), [Fan-out & Collection Shaping](syntax/generators), and [Collections](stdlib/core/collections).
 
 ---
 
@@ -232,6 +244,6 @@ This single example shows much of the language style:
 
 - **Start writing code:** continue with [Bindings & Scope](syntax/bindings) and [Functions & Pipes](syntax/functions).
 - **Learn how AIVI models data:** read [Primitive Types](syntax/types/primitive_types), [Custom Data Types (ADTs)](syntax/types/algebraic_data_types), and [Records](syntax/types/closed_records).
-- **Work with I/O and failures:** read [Effects](syntax/effects), [do Notation](syntax/do_notation), and [Resources](syntax/resources).
+- **Work with I/O and failures:** read [Flow Syntax](syntax/flows), [Effects](syntax/effects), and [Cleanup & Lifetimes](syntax/resources).
 - **Connect to files and services:** read [Modules](syntax/modules) and [External Sources](syntax/external_sources).
 - **Need the big picture first?** Read [Introduction](introduction).

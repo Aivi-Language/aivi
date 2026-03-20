@@ -75,10 +75,10 @@ Use the table of contents below as a map once you know the kind of answer you ne
 - [Opaque Types](syntax/types/opaque_types)
 - [Domains & Units](syntax/domains)
 #### Effects & Workflows
+- [Flow Syntax](syntax/flows)
 - [Effects](syntax/effects)
-- [do Notation](syntax/do_notation)
-- [Resources](syntax/resources)
-- [Generators](syntax/generators)
+- [Cleanup & Lifetimes](syntax/resources)
+- [Fan-out & Collection Shaping](syntax/generators)
 #### Modules & External Data
 - [Modules](syntax/modules)
 ##### External Sources

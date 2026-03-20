@@ -568,6 +568,9 @@ impl Backend {
                 }
                 Self::collect_expr_references(body, ident, text, uri, locations);
             }
+            Expr::Flow { root, .. } => {
+                Self::collect_expr_references(root, ident, text, uri, locations);
+            }
             Expr::Raw { .. } => {}
         }
     }

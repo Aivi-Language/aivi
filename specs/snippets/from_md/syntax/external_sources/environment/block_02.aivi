@@ -1,6 +1,6 @@
 AppConfig = { port: Int, debug: Bool }
 
-do Effect {
-  cfg <- load (env.decode "AIVI_APP") // looks for variables under the AIVI_APP prefix
-  pure cfg
-}
+config : Effect (SourceError Env) AppConfig
+config =
+  env.decode "AIVI_APP"
+     |> load

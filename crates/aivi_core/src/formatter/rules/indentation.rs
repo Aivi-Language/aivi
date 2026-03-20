@@ -1975,6 +1975,7 @@
                 | crate::surface::Expr::Match { span, .. }
                 | crate::surface::Expr::If { span, .. }
                 | crate::surface::Expr::Binary { span, .. }
+                | crate::surface::Expr::Flow { span, .. }
                 | crate::surface::Expr::Block { span, .. }
                 | crate::surface::Expr::Mock { span, .. }
                 | crate::surface::Expr::Raw { span, .. } => span.clone(),

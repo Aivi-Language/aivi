@@ -284,23 +284,21 @@ val = None match
 
 #[test]
 fn pattern_discipline_block_ends_with_binding_s220() {
-    // A `do` block that ends with a let-binding (no final expression).
-    let text = "module demo\n\nval = do Effect {\n  x <- pure 1\n  y = x\n}\n";
+    let text = "module demo\n\nval = {\n  x = 1\n  y = x\n}\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(has_code(&diags, "AIVI-S220"), "expected AIVI-S220 block ends with binding");
 }
 
 #[test]
 fn pattern_discipline_block_ends_with_expr_no_s220() {
-    let text = "module demo\n\nval = do Effect {\n  x <- pure 1\n  x\n}\n";
+    let text = "module demo\n\nval = {\n  x = 1\n  x\n}\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(!has_code(&diags, "AIVI-S220"));
 }
 
 #[test]
 fn pattern_discipline_unused_let_binding_s221() {
-    // A binding that is never used (AIVI has no `let` keyword; bindings use `=`).
-    let text = "module demo\n\nval = do Effect {\n  unused = 99\n  pure 1\n}\n";
+    let text = "module demo\n\nval = {\n  unused = 99\n  1\n}\n";
     let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(has_code(&diags, "AIVI-S221"), "expected AIVI-S221 unused let binding");
 }
@@ -544,15 +542,15 @@ fn is_invisible_unicode_normal_chars_are_not_invisible() {
     }
 }
 
-// ── keywords_v01 helper ───────────────────────────────────────────────────────
+// ── keywords helper ───────────────────────────────────────────────────────────
 
 #[test]
-fn keywords_v01_contains_known_keywords() {
+fn keywords_helper_contains_core_keywords() {
     let kw = crate::strict::keywords_v01();
-    // `do`, `match`, `if` are fundamental keywords that must always be present.
-    assert!(kw.contains("do"), "keywords must include 'do'");
+    // `match`, `if`, and `module` are fundamental keywords that must always be present.
     assert!(kw.contains("match"), "keywords must include 'match'");
     assert!(kw.contains("if"), "keywords must include 'if'");
+    assert!(kw.contains("module"), "keywords must include 'module'");
 }
 
 #[test]

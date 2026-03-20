@@ -1,0 +1,35 @@
+@no_prelude
+module integrationTests.syntax.effects.cleanupIdempotency
+
+use aivi
+use aivi.testing
+use aivi.file
+
+deleteIfExists = path =>
+  path
+   |> exists
+  ||>True => delete path
+  ||>False => pure Unit
+
+writeMarkerOnExit = markerPath =>
+  markerPath
+|> pure@cleanup (_ => writeText markerPath "cleanup-ran")
+|> _ => pure Unit
+
+@test "cleanup fires for one acquisition"
+cleanupFiresForOneAcquisition = "/tmp/aivi_idempotency_marker.txt"
+  |> pure@cleanup deleteIfExists#markerPath
+  |> _ => writeMarkerOnExit markerPath
+  |> _ => readText markerPath
+  |> assertEq (Ok "cleanup-ran")
+
+@test "independent cleanup scopes stay separate"
+independentCleanupScopesStaySeparate = "/tmp/aivi_idempotency_1.txt"
+   |> pure@cleanup deleteIfExists#path1
+   |> _ => pure "/tmp/aivi_idempotency_2.txt"@cleanup deleteIfExists#path2
+   |> _ => writeMarkerOnExit path1
+   |> _ => writeMarkerOnExit path2
+   |> _ => readText path1
+  ~|>assertEq (Ok "cleanup-ran")
+   |> _ => readText path2
+   |> assertEq (Ok "cleanup-ran")

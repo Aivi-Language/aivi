@@ -360,6 +360,7 @@ impl TypeChecker {
             Expr::Binary { left, right, .. } => {
                 Self::expr_mentions_query_surface(left) || Self::expr_mentions_query_surface(right)
             }
+            Expr::Flow { root, .. } => Self::expr_mentions_query_surface(root),
             Expr::FieldAccess { base, .. }
             | Expr::UnaryNeg { expr: base, .. }
             | Expr::Suffixed { base, .. } => Self::expr_mentions_query_surface(base),
@@ -609,6 +610,9 @@ impl TypeChecker {
             }
             Expr::UnaryNeg { expr, .. } | Expr::Suffixed { base: expr, .. } => {
                 self.validate_query_row_expr(expr, placeholder, bindings);
+            }
+            Expr::Flow { root, .. } => {
+                self.validate_query_row_expr(root, placeholder, bindings);
             }
             Expr::Block { items, .. } => {
                 for item in items {

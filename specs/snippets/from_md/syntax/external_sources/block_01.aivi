@@ -1,10 +1,15 @@
 User = { id: Int, name: Text, enabled: Bool }
 
-usersSource : Source File (List User)
-usersSource = file.csv "./users.csv"
+usersFromFile : Source File (List User)
+usersFromFile = file.csv "./users.csv"
 
 configSource : Source File { port: Int, debug: Bool }
 configSource = file.json {
   path: "./config.json"
   schema: source.schema.derive
 }
+
+loadUsers : Effect LoadError (List User)
+loadUsers =
+  usersFromFile
+     |> load

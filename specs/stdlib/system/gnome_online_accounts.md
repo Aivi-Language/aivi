@@ -121,13 +121,12 @@ InboxMessage = {
   body: Text
 }
 
-loadUnread = accountId => do Effect {
-  accountCfg <- Goa.imapConfig accountId
-  msgs <- imap (
-    Goa.toImapConfig accountCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
-  )
-  pure msgs
-}
+loadUnread = accountId =>
+  accountId
+     |> Goa.imapConfig #accountCfg
+     |> _ => imap (
+          Goa.toImapConfig accountCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
+        )
 ```
 
 And this is the corresponding SMTP composition pattern:
@@ -136,18 +135,18 @@ And this is the corresponding SMTP composition pattern:
 use aivi.email
 use aivi.gnome.onlineAccounts as Goa
 
-sendHello = accountId => do Effect {
-  smtpCfg <- Goa.smtpConfig accountId
-  smtpSend (
-    Goa.toSmtpConfig
-      smtpCfg
-      ["team@example.com"]
-      None
-      None
-      "Hello"
-      "Sent with GNOME Online Accounts credentials"
-  )
-}
+sendHello = accountId =>
+  accountId
+     |> Goa.smtpConfig #smtpCfg
+     |> _ => smtpSend (
+          Goa.toSmtpConfig
+            smtpCfg
+            ["team@example.com"]
+            None
+            None
+            "Hello"
+            "Sent with GNOME Online Accounts credentials"
+        )
 ```
 
 ## Notes and failure behavior

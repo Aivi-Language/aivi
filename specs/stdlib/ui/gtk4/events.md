@@ -2,7 +2,7 @@
 
 Part of the [Writing Native Apps](../gtk4.md) guide.
 
-`do Event { ... }` creates an `EventHandle E A`. The body uses the same readable effect style as `do Effect { ... }`, but the resulting value carries lifecycle state as signals.
+`event.from` lifts a flow-shaped handler into an `EventHandle E A`. The resulting value carries lifecycle state as signals.
 
 ## The public shape
 
@@ -25,10 +25,12 @@ use aivi.ui.gtk4
 draft = signal { title: "Inbox" }
 
 saveDraft : EventHandle GtkError Text
-saveDraft = do Event {
-  persistDraft (get draft)
-  pure "Saved"
-}
+saveDraft =
+  event.from (_ =>
+    get draft
+       |> persistDraft
+       |> _ => "Saved"
+  )
 
 saveLabel = saveDraft.running ->>
   | True  => "Saving..."
@@ -53,7 +55,7 @@ view = ~<gtk>
 
 Because `result`, `error`, `done`, and `running` are signals, they participate in the same reactive graph as the rest of the app. Bind them directly to labels, sensitivity flags, spinners, and status views.
 
-## When to use a callback and when to use `do Event`
+## When to use a callback and when to use an event handle
 
 Prefer a direct callback when:
 
@@ -61,12 +63,10 @@ Prefer a direct callback when:
 - you need the callback payload immediately,
 - there is no shared pending/success/error state to expose.
 
-Prefer `do Event { ... }` when:
+Prefer `event.from (...)` when:
 
 - several widgets should trigger the same action,
 - the UI should bind to `running`, `result`, or `error`,
 - you want a reusable effect handle instead of re-writing the same callback body.
 
 A useful pattern is: callback functions gather payloads, signals hold live form state, and an event handle owns the actual submission effect.
-
-Next: [Structure](./structure.md)

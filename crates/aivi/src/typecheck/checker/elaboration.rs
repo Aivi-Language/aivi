@@ -158,6 +158,18 @@ impl TypeChecker {
             Expr::Binary {
                 op, left, right, ..
             } => self.infer_binary(op, left, right, env),
+            Expr::Flow { root, lines, span } => {
+                let desugared = self.desugar_flow_expr(
+                    Expr::Flow {
+                        root: Box::new((**root).clone()),
+                        lines: lines.clone(),
+                        span: span.clone(),
+                    },
+                    None,
+                    env,
+                )?;
+                self.infer_expr(&desugared, env)
+            }
             Expr::Block { kind, items, .. } => self.infer_block(kind, items, env),
             Expr::Raw { .. } => Ok(self.fresh_var()),
             Expr::Mock { body, .. } => self.infer_expr(body, env),
@@ -528,6 +540,18 @@ impl TypeChecker {
                 span,
             } if op == "->>" || op == "<<-" || op == "<|" => {
                 self.elab_binary_expr(op, *left, *right, span, expected, env)
+            }
+            Expr::Flow { root, lines, span } => {
+                let desugared = self.desugar_flow_expr(
+                    Expr::Flow {
+                        root,
+                        lines,
+                        span: span.clone(),
+                    },
+                    expected.clone(),
+                    env,
+                )?;
+                self.elab_expr(desugared, expected, env)
             }
             Expr::Block { kind, items, span } => {
                 // For generic do-monad blocks (do Result, do Option, etc.), skip
@@ -1017,6 +1041,7 @@ impl TypeChecker {
             | Expr::Index { .. }
             | Expr::Raw { .. }
             | Expr::Suffixed { .. }
+            | Expr::Flow { .. }
             | Expr::Block { .. }
             | Expr::Mock { .. } => false,
         }

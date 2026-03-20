@@ -9,15 +9,17 @@ use aivi.text as text
 // -- Request construction (mirrors http) --
 
 @test "build secure get request"
-buildSecureGetRequest = do Effect {
+buildSecureGetRequest = {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/get", query: [], hash: None }
   req    = { method: "GET", url: reqUrl, headers: [], body: None }
-  assertEq req.method "GET"
-  assertEq req.body None
+
+  Unit
+  ~|>_ => assertEq req.method "GET"
+  ~|>_ => assertEq req.body None
 }
 
 @test "build secure post request"
-buildSecurePostRequest = do Effect {
+buildSecurePostRequest = {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
   req    = {
     method: "POST"
@@ -25,44 +27,46 @@ buildSecurePostRequest = do Effect {
     headers: [{ name: "Authorization", value: "Bearer token" }]
     body: Some "data"
   }
-  _ <- assertEq req.method "POST"
-  assertEq (List.length req.headers) 1
+
+  Unit
+  ~|>_ => assertEq req.method "POST"
+  ~|>_ => assertEq (List.length req.headers) 1
 }
 
 @test "response fields"
-responseFields = do Effect {
+responseFields = {
   resp = { status: 200, headers: [], body: "ok" }
-  _ <- assertEq resp.status 200
-  assertEq resp.body "ok"
+
+  Unit
+  ~|>_ => assertEq resp.status 200
+  ~|>_ => assertEq resp.body "ok"
 }
 
 @test "error fields"
-errorFields = do Effect {
+errorFields = {
   err = { message: "tls handshake failed" }
-  assertEq err.message "tls handshake failed"
+
+  Unit
+  ~|>_ => assertEq err.message "tls handshake failed"
 }
 
 // -- HTTPS-specific runtime behavior --
 
 @test "secure get rejects non https urls"
-secureGetRejectsNonHttpsUrls = do Effect {
-  result <- attempt (get ~u(http://127.0.0.1:39081/plain))
-  result match
-    | Err err => assert (text.contains "https URL" err)
-    | Ok _    => fail "expected https url error"
-}
+secureGetRejectsNonHttpsUrls = Unit
+   |> _ => attempt (get ~u(http://127.0.0.1:39081/plain))
+  ||>Err err => assert (text.contains "https URL" err)
+  ||>Ok _ => fail "expected https url error"
 
 @test "secure post rejects non https urls"
-securePostRejectsNonHttpsUrls = do Effect {
-  result <- attempt (post ~u(http://127.0.0.1:39082/plain) "payload")
-  result match
-    | Err err => assert (text.contains "https URL" err)
-    | Ok _    => fail "expected https url error"
-}
+securePostRejectsNonHttpsUrls = Unit
+   |> _ => attempt (post ~u(http://127.0.0.1:39082/plain) "payload")
+  ||>Err err => assert (text.contains "https URL" err)
+  ||>Ok _ => fail "expected https url error"
 
 @test "secure fetch rejects non https urls"
-secureFetchRejectsNonHttpsUrls = do Effect {
-  result <- attempt (
+secureFetchRejectsNonHttpsUrls = Unit
+  |> _ => attempt (
     fetch {
       method: "POST"
       url: ~u(http://127.0.0.1:39083/form)
@@ -70,7 +74,5 @@ secureFetchRejectsNonHttpsUrls = do Effect {
       body: Some (Form [{ name: "name", value: "Ada" }])
     }
   )
-  result match
-    | Err err => assert (text.contains "https URL" err)
-    | Ok _    => fail "expected https url error"
-}
+  ||>Err err => assert (text.contains "https URL" err)
+  ||>Ok _ => fail "expected https url error"

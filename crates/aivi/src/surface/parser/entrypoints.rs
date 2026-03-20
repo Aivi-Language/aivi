@@ -371,6 +371,14 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 right: Box::new(rewrite_expr(*right, aliases)),
                 span,
             },
+            Expr::Flow { root, lines, span } => Expr::Flow {
+                root: Box::new(rewrite_expr(*root, aliases)),
+                lines: lines
+                    .into_iter()
+                    .map(|line| rewrite_flow_line(line, aliases))
+                    .collect(),
+                span,
+            },
             Expr::Block { kind, items, span } => Expr::Block {
                 kind,
                 items: items
@@ -450,6 +458,77 @@ fn expand_module_aliases(modules: &mut [Module]) {
                     span,
                 }
             }
+        }
+    }
+
+    fn rewrite_flow_modifier(modifier: FlowModifier, aliases: &HashMap<String, String>) -> FlowModifier {
+        match modifier {
+            FlowModifier::Timeout { duration, span } => FlowModifier::Timeout {
+                duration: rewrite_expr(duration, aliases),
+                span,
+            },
+            FlowModifier::Delay { duration, span } => FlowModifier::Delay {
+                duration: rewrite_expr(duration, aliases),
+                span,
+            },
+            FlowModifier::Concurrent { limit, span } => FlowModifier::Concurrent {
+                limit: rewrite_expr(limit, aliases),
+                span,
+            },
+            FlowModifier::Retry {
+                attempts,
+                interval,
+                exponential,
+                span,
+            } => FlowModifier::Retry {
+                attempts,
+                interval: rewrite_expr(interval, aliases),
+                exponential,
+                span,
+            },
+            FlowModifier::Cleanup { expr, span } => FlowModifier::Cleanup {
+                expr: rewrite_expr(expr, aliases),
+                span,
+            },
+        }
+    }
+
+    fn rewrite_flow_arm(arm: FlowArm, aliases: &HashMap<String, String>) -> FlowArm {
+        FlowArm {
+            pattern: arm.pattern,
+            guard: arm.guard.map(|guard| rewrite_expr(guard, aliases)),
+            guard_negated: arm.guard_negated,
+            body: rewrite_expr(arm.body, aliases),
+            span: arm.span,
+        }
+    }
+
+    fn rewrite_flow_line(line: FlowLine, aliases: &HashMap<String, String>) -> FlowLine {
+        match line {
+            FlowLine::Step(step) => FlowLine::Step(FlowStep {
+                kind: step.kind,
+                expr: rewrite_expr(step.expr, aliases),
+                modifiers: step
+                    .modifiers
+                    .into_iter()
+                    .map(|modifier| rewrite_flow_modifier(modifier, aliases))
+                    .collect(),
+                binding: step.binding,
+                subflow: step
+                    .subflow
+                    .into_iter()
+                    .map(|line| rewrite_flow_line(line, aliases))
+                    .collect(),
+                span: step.span,
+            }),
+            FlowLine::Guard(guard) => FlowLine::Guard(FlowGuard {
+                predicate: rewrite_expr(guard.predicate, aliases),
+                fail_expr: guard.fail_expr.map(|expr| rewrite_expr(expr, aliases)),
+                span: guard.span,
+            }),
+            FlowLine::Branch(arm) => FlowLine::Branch(rewrite_flow_arm(arm, aliases)),
+            FlowLine::Recover(arm) => FlowLine::Recover(rewrite_flow_arm(arm, aliases)),
+            FlowLine::Anchor(anchor) => FlowLine::Anchor(anchor),
         }
     }
 

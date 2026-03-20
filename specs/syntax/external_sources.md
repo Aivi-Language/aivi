@@ -17,7 +17,7 @@ That split keeps I/O explicit. You can define a source once, pass it around like
 Most source-heavy code follows the same simple pattern:
 
 1. **Describe the boundary.**
-2. **Load it inside `do Effect { ... }`.**
+2. **Load it inside a flat flow.**
 
 <<< ../snippets/from_md/syntax/external_sources/block_01.aivi{aivi}
 
@@ -39,7 +39,7 @@ For new code, prefer schema-first record forms such as `file.json { path: "...",
 
 If you already know which connector you need, jump straight to the guide above. If you want the big picture first, keep reading this page in order: start with `Source K A`, skim the common source kinds, then finish with error handling and composition.
 
-This overview focuses on the source constructors currently documented end-to-end for v0.1: file, HTTP/REST, environment, IMAP email, image, and `@static` compile-time sources. Related domains such as [`aivi.database`](../stdlib/system/database.md) still matter for external data, but they are documented in their own module specs rather than as stable `Source` constructors on this overview page.
+This overview focuses on the source constructors currently documented end-to-end for v0.2: file, HTTP/REST, environment, IMAP email, image, and `@static` compile-time sources. Related domains such as [`aivi.database`](../stdlib/system/database.md) still matter for external data, but they are documented in their own module specs rather than as stable `Source` constructors on this overview page.
 
 ## 12.1 The Source Type
 
@@ -59,7 +59,7 @@ Most source-based programs follow the same four steps:
 
 1. define the data type you want,
 2. build a source that can decode into that type,
-3. call `load` inside `do Effect { ... }`,
+3. call `load` inside a flow,
 4. handle failures at the boundary.
 
 That keeps parsing, validation, and I/O at the edge of the program instead of spreading them throughout business logic.

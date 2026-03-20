@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::diagnostics::{Diagnostic, FileDiagnostic, Span};
 use crate::surface::{
-    BlockItem, BlockKind, Def, DomainItem, Expr, ListItem, Literal, Module, ModuleItem,
-    PathSegment, Pattern, RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias,
-    TypeDecl, TypeExpr, TypeSig,
+    BlockItem, BlockKind, Def, DomainItem, Expr, FlowBinding, FlowLine, FlowModifier,
+    FlowStep, FlowStepKind, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment, Pattern,
+    RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
 use super::types::{
@@ -75,7 +75,10 @@ pub(super) struct TypeChecker {
 
 impl TypeChecker {
     pub(super) fn with_ephemeral_state_rollback<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        let next_var = self.next_var;
+        // NOTE: next_var is intentionally NOT saved/restored. Ephemeral inference
+        // may create type variables that survive in the returned value (e.g. in
+        // FlowCarrierInfo.value_ty). Rolling back next_var would let those IDs be
+        // reused by later fresh_var() calls, causing spurious occurs-check failures.
         let subst = self.subst.clone();
         let var_names = self.var_names.clone();
         let checked_defs = self.checked_defs.clone();
@@ -92,7 +95,6 @@ impl TypeChecker {
 
         let result = f(self);
 
-        self.next_var = next_var;
         self.subst = subst;
         self.var_names = var_names;
         self.checked_defs = checked_defs;

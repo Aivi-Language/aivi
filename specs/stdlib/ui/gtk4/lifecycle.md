@@ -26,13 +26,13 @@ settingsDialog = ~<gtk>
   </AdwPreferencesDialog>
 </gtk>
 
-main = do Effect {
-  _   <- init Unit
-  app <- appNew "com.example.mailfox"
-  win <- mountAppWindow app [windowRoot, settingsDialog]
-  _   <- windowPresent win
-  appRun app
-}
+main =
+  Unit
+     |> init
+     |> _ => appNew "com.example.mailfox" #app
+     |> _ => mountAppWindow app [windowRoot, settingsDialog] #win
+     |> _ => windowPresent win
+     |> _ => appRun app
 ```
 
 `mountAppWindow : AppId -> List GtkNode -> Effect GtkError WindowId` follows these rules:
@@ -79,19 +79,19 @@ windowRoot = ~<gtk>
   </AdwApplicationWindow>
 </gtk>
 
-main = do Effect {
-  _      <- init Unit
-  app    <- appNew "com.example.mailfox"
-  action <- actionNew "preferences"
-  _      <- appAddAction app action
-  win    <- mountAppWindow app [windowRoot]
-  menu   <- menuModelNew Unit
-  _      <- menuModelAppendItem menu "Preferences" "app.preferences"
-  button <- widgetById "appMenu"
-  _      <- menuButtonSetMenuModel button menu
-  _      <- windowPresent win
-  appRun app
-}
+main =
+  Unit
+     |> init
+     |> _ => appNew "com.example.mailfox" #app
+     |> _ => actionNew "preferences" #action
+     |> _ => appAddAction app action
+     |> _ => mountAppWindow app [windowRoot] #win
+     |> _ => menuModelNew Unit #menu
+     |> _ => menuModelAppendItem menu "Preferences" "app.preferences"
+     |> _ => widgetById "appMenu" #button
+     |> _ => menuButtonSetMenuModel button menu
+     |> _ => windowPresent win
+     |> _ => appRun app
 ```
 
 ### Desktop handoff
@@ -109,20 +109,20 @@ docsButton = ~<gtk>
 
 ### Low-level tick feeds
 
-Use `gtkSetInterval` only when direct callbacks or `Event` handles are not a good fit and you explicitly want raw `GtkTick` events:
+Use `gtkSetInterval` only when direct callbacks or event handles are not a good fit and you explicitly want raw `GtkTick` events:
 
 ```aivi
 use aivi.concurrency
 
-main = do Effect {
-  _  <- gtkSetInterval 1000
-  rx <- signalStream Unit
-  concurrency.forEach rx (event =>
-    event match
-      | GtkTick => pollExternalState
-      | _       => pure Unit
-  )
-}
+main =
+  Unit
+     |> _ => gtkSetInterval 1000
+     |> _ => signalStream Unit #rx
+     |> _ => concurrency.forEach rx (event =>
+          event match
+            | GtkTick => pollExternalState
+            | _       => pure Unit
+        )
 ```
 
 ## Raw GTK events
@@ -150,15 +150,15 @@ The second field is the widget name from `id="..."`, or `""` when the widget has
 use aivi.concurrency
 use aivi.ui.gtk4
 
-main = do Effect {
-  rx <- signalStream Unit
-  concurrency.forEach rx (event =>
-    event match
-      | GtkUnknownSignal _ _ "action" actionName _ => handleAction actionName
-      | GtkTick                                     => pure Unit
-      | _                                           => pure Unit
-  )
-}
+main =
+  Unit
+     |> _ => signalStream Unit #rx
+     |> _ => concurrency.forEach rx (event =>
+          event match
+            | GtkUnknownSignal _ _ "action" actionName _ => handleAction actionName
+            | GtkTick                                     => pure Unit
+            | _                                           => pure Unit
+        )
 ```
 
 Next: [MCP Debugging](./mcp_debugging.md)

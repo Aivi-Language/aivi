@@ -134,7 +134,7 @@ When you need fallback choice or want to collapse one nested `Result`, use the s
 - **[`attempt`](../../syntax/effects.md)** turns effect failures into `Result` values.
 - **[`aivi.logic`](logic.md)** provides shared `Result` operations such as `map`, `chain`, `bimap`, `alt`, and `of`.
 - **[`aivi.option`](option.md)** is useful when you only care whether a value exists, not why it is missing.
-- **[`do Result { ... }`](../../syntax/do_notation.md)** gives you readable step-by-step syntax for chaining result-producing computations.
+- **[Flow Syntax](../../syntax/flows.md)** is useful when several result-producing steps read better left-to-right.
 - **[`aivi.validation`](validation.md)** is a better fit when you want to collect several errors instead of stopping at the first one.
 
 ## Example: validation-style pipeline with `Result`

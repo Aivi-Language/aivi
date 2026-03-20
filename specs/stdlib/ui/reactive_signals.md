@@ -135,10 +135,12 @@ Useful rules:
 `Event` handles fit the same model. They are effectful runtime values with reactive lifecycle fields:
 
 ```aivi
-saveDraft = do Event {
-  persistDraft (get draft)
-  pure "Saved"
-}
+saveDraft =
+  event.from (_ =>
+    get draft
+      |> persistDraft
+      |> _ => "Saved"
+  )
 
 saveMessage = derive saveDraft.result (maybeResult =>
   maybeResult match

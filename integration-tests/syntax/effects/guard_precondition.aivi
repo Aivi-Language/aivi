@@ -1,0 +1,25 @@
+@no_prelude
+module integrationTests.syntax.effects.guardPrecondition
+
+use aivi
+use aivi.testing
+
+positiveOnly : Int -> Effect Text Int
+positiveOnly = n =>
+  n
+  >|>_ > 0 or fail "must be positive"
+   |> pure
+
+@test "guard success continues"
+guardSuccessContinues = Unit
+   |> _ => attempt (positiveOnly 5)#attemptResult
+   |> _ => assertOk attemptResult#value
+  ~|>_ => assertEq value 5
+   |> _ => pure Unit
+
+@test "guard failure returns the original error"
+guardFailureReturnsTheOriginalError = Unit
+   |> _ => attempt (positiveOnly (-1))#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "must be positive"
+   |> _ => pure Unit

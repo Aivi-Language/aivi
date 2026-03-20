@@ -1,0 +1,8 @@
+// EXPECT-ERROR: `#name!` was removed
+@no_prelude
+module integrationTests.compileFail.removedContinuationBinding
+
+use aivi
+
+bad = token
+&|>fetchProfile token#profile!

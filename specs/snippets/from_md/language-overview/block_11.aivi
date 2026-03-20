@@ -1,10 +1,10 @@
 User = { id: Int, name: Text, active: Bool }
 
 activeUserNames : Effect LoadError (List Text)
-activeUserNames = do Effect {
-  users <- load (file.csv "users.csv")
-  pure (users
-    |> filter active
-    |> map .name
-  )
-}
+activeUserNames =
+  file.csv "users.csv"
+     |> load
+     *|> _
+     >|> active
+      |> .name
+     *-|

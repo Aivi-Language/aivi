@@ -1,0 +1,8 @@
+// EXPECT-ERROR: unexpected `*-|` outside a `*|>` fan-out block
+@no_prelude
+module integrationTests.compileFail.unexpectedFanoutEnd
+
+use aivi
+
+bad = users
+*-|

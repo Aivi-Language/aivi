@@ -76,10 +76,9 @@ fn aivi_path_dependency() -> String {
 fn starter_bin_source() -> &'static str {
     r#"module app.main
 main : Effect Text Unit
-main = do Effect {
-  _ <- print \"Hello from AIVI!\"
-  pure Unit
-}
+main =
+  Unit
+     |> (_ => print \"Hello from AIVI!\")
 "#
 }
 

@@ -127,6 +127,9 @@ impl TypeChecker {
                 Self::collect_applicative_references(left, interesting, bound, out);
                 Self::collect_applicative_references(right, interesting, bound, out);
             }
+            Expr::Flow { root, .. } => {
+                Self::collect_applicative_references(root, interesting, bound, out);
+            }
             Expr::Block { items, .. } => {
                 let before = bound.len();
                 for item in items {

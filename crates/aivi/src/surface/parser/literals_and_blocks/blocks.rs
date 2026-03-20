@@ -609,6 +609,14 @@ fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
             right: Box::new(replace_recurse_in_expr(*right, fn_name)),
             span,
         },
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(replace_recurse_in_expr(*root, fn_name)),
+            lines: lines
+                .into_iter()
+                .map(|line| replace_recurse_in_flow_line(line, fn_name))
+                .collect(),
+            span,
+        },
         Expr::Tuple { items, span } => Expr::Tuple {
             items: items
                 .into_iter()
@@ -702,6 +710,81 @@ fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
                 span,
             }
         }
+    }
+}
+
+fn replace_recurse_in_flow_modifier(modifier: FlowModifier, fn_name: &SpannedName) -> FlowModifier {
+    match modifier {
+        FlowModifier::Timeout { duration, span } => FlowModifier::Timeout {
+            duration: replace_recurse_in_expr(duration, fn_name),
+            span,
+        },
+        FlowModifier::Delay { duration, span } => FlowModifier::Delay {
+            duration: replace_recurse_in_expr(duration, fn_name),
+            span,
+        },
+        FlowModifier::Concurrent { limit, span } => FlowModifier::Concurrent {
+            limit: replace_recurse_in_expr(limit, fn_name),
+            span,
+        },
+        FlowModifier::Retry {
+            attempts,
+            interval,
+            exponential,
+            span,
+        } => FlowModifier::Retry {
+            attempts,
+            interval: replace_recurse_in_expr(interval, fn_name),
+            exponential,
+            span,
+        },
+        FlowModifier::Cleanup { expr, span } => FlowModifier::Cleanup {
+            expr: replace_recurse_in_expr(expr, fn_name),
+            span,
+        },
+    }
+}
+
+fn replace_recurse_in_flow_arm(arm: FlowArm, fn_name: &SpannedName) -> FlowArm {
+    FlowArm {
+        pattern: arm.pattern,
+        guard: arm
+            .guard
+            .map(|guard| replace_recurse_in_expr(guard, fn_name)),
+        guard_negated: arm.guard_negated,
+        body: replace_recurse_in_expr(arm.body, fn_name),
+        span: arm.span,
+    }
+}
+
+fn replace_recurse_in_flow_line(line: FlowLine, fn_name: &SpannedName) -> FlowLine {
+    match line {
+        FlowLine::Step(step) => FlowLine::Step(FlowStep {
+            kind: step.kind,
+            expr: replace_recurse_in_expr(step.expr, fn_name),
+            modifiers: step
+                .modifiers
+                .into_iter()
+                .map(|modifier| replace_recurse_in_flow_modifier(modifier, fn_name))
+                .collect(),
+            binding: step.binding,
+            subflow: step
+                .subflow
+                .into_iter()
+                .map(|line| replace_recurse_in_flow_line(line, fn_name))
+                .collect(),
+            span: step.span,
+        }),
+        FlowLine::Guard(guard) => FlowLine::Guard(FlowGuard {
+            predicate: replace_recurse_in_expr(guard.predicate, fn_name),
+            fail_expr: guard
+                .fail_expr
+                .map(|expr| replace_recurse_in_expr(expr, fn_name)),
+            span: guard.span,
+        }),
+        FlowLine::Branch(arm) => FlowLine::Branch(replace_recurse_in_flow_arm(arm, fn_name)),
+        FlowLine::Recover(arm) => FlowLine::Recover(replace_recurse_in_flow_arm(arm, fn_name)),
+        FlowLine::Anchor(anchor) => FlowLine::Anchor(anchor),
     }
 }
 

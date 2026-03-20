@@ -24,6 +24,7 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
             | Expr::Match { span, .. }
             | Expr::If { span, .. }
             | Expr::Binary { span, .. }
+            | Expr::Flow { span, .. }
             | Expr::Block { span, .. }
             | Expr::Mock { span, .. }
             | Expr::Raw { span, .. } => span.clone(),
@@ -113,6 +114,115 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
                         suggestion: None,
                     },
                 ));
+            }
+        }
+    }
+}
+
+fn check_flow_step(
+    step: &FlowStep,
+    scope: &mut HashMap<String, Option<String>>,
+    diagnostics: &mut Vec<FileDiagnostic>,
+    module: &Module,
+    allow_unknown: bool,
+) {
+    check_expr(&step.expr, scope, diagnostics, module, allow_unknown);
+    for modifier in &step.modifiers {
+        match modifier {
+            FlowModifier::Timeout { duration, .. } | FlowModifier::Delay { duration, .. } => {
+                check_expr(duration, scope, diagnostics, module, allow_unknown);
+            }
+            FlowModifier::Concurrent { limit, .. } => {
+                check_expr(limit, scope, diagnostics, module, allow_unknown);
+            }
+            FlowModifier::Retry { interval, .. } => {
+                check_expr(interval, scope, diagnostics, module, allow_unknown);
+            }
+            FlowModifier::Cleanup { expr, .. } => {
+                check_expr(expr, scope, diagnostics, module, allow_unknown);
+            }
+        }
+    }
+
+    if !step.subflow.is_empty() {
+        let mut subflow_scope = scope.clone();
+        check_flow_lines(
+            &step.subflow,
+            &mut subflow_scope,
+            diagnostics,
+            module,
+            allow_unknown,
+        );
+    }
+}
+
+fn check_flow_lines(
+    lines: &[FlowLine],
+    scope: &mut HashMap<String, Option<String>>,
+    diagnostics: &mut Vec<FileDiagnostic>,
+    module: &Module,
+    allow_unknown: bool,
+) {
+    let mut index = 0;
+    while index < lines.len() {
+        match &lines[index] {
+            FlowLine::Step(step) if matches!(step.kind, FlowStepKind::Applicative) =>
+            {
+                let group_kind = step.kind;
+                let group_scope = scope.clone();
+                let mut pending_bindings = Vec::new();
+
+                while index < lines.len() {
+                    let FlowLine::Step(step) = &lines[index] else {
+                        break;
+                    };
+                    if step.kind != group_kind {
+                        break;
+                    }
+
+                    let mut line_scope = group_scope.clone();
+                    check_flow_step(step, &mut line_scope, diagnostics, module, allow_unknown);
+                    if let Some(binding) = &step.binding {
+                        pending_bindings.push(binding.name.name.clone());
+                    }
+                    index += 1;
+                }
+
+                for binding in pending_bindings {
+                    scope.insert(binding, None);
+                }
+            }
+            FlowLine::Step(step) => {
+                check_flow_step(step, scope, diagnostics, module, allow_unknown);
+                if let Some(binding) = &step.binding {
+                    scope.insert(binding.name.name.clone(), None);
+                }
+                index += 1;
+            }
+            FlowLine::Guard(guard) => {
+                check_expr(&guard.predicate, scope, diagnostics, module, allow_unknown);
+                if let Some(fail_expr) = &guard.fail_expr {
+                    check_expr(fail_expr, scope, diagnostics, module, allow_unknown);
+                }
+                index += 1;
+            }
+            FlowLine::Branch(arm) | FlowLine::Recover(arm) => {
+                let mut arm_scope = scope.clone();
+                collect_pattern_binding(&arm.pattern, &mut arm_scope);
+                if let Some(guard) = &arm.guard {
+                    check_expr(guard, &mut arm_scope, diagnostics, module, allow_unknown);
+                }
+                check_expr(
+                    &arm.body,
+                    &mut arm_scope,
+                    diagnostics,
+                    module,
+                    allow_unknown,
+                );
+                index += 1;
+            }
+            FlowLine::Anchor(_) => {
+                index += 1;
             }
         }
     }
@@ -264,6 +374,11 @@ fn check_expr(
                 allow_unknown || binary_rhs_allows_function_lifting(op.as_str());
             check_expr(right, scope, diagnostics, module, right_allow_unknown);
         }
+        Expr::Flow { root, lines, .. } => {
+            let mut flow_scope = scope.clone();
+            check_expr(root, &mut flow_scope, diagnostics, module, allow_unknown);
+            check_flow_lines(lines, &mut flow_scope, diagnostics, module, allow_unknown);
+        }
         Expr::Block { items, .. } => {
             let mut block_scope = scope.clone();
             for item in items {
@@ -387,6 +502,7 @@ fn index_expr_allows_predicate_lifting(index: &Expr) -> bool {
         | Expr::Index { .. }
         | Expr::Raw { .. }
         | Expr::Suffixed { .. }
+        | Expr::Flow { .. }
         | Expr::Block { .. }
         | Expr::Mock { .. } => false,
     }

@@ -40,10 +40,10 @@ export const sidebar = [
         text: 'Effects & Workflows',
         collapsed: true,
         items: [
+          { text: 'Flow Syntax', link: '/syntax/flows' },
           { text: 'Effects', link: '/syntax/effects' },
-          { text: 'do Notation', link: '/syntax/do_notation' },
-          { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Generators', link: '/syntax/generators' }
+          { text: 'Cleanup & Lifetimes', link: '/syntax/resources' },
+          { text: 'Fan-out & Collection Shaping', link: '/syntax/generators' }
         ]
       },
       {
@@ -239,7 +239,6 @@ export const sidebar = [
     items: [
       { text: 'Compiler & Backend', link: '/typed_codegen/design' },
       { text: 'Minimality Proof', link: '/typed_codegen/minimality' },
-      { text: 'Unified Workflow Pipelines (Proposal)', link: '/proposals/unified_workflow_pipelines' },
       { text: 'Spec Doc Markers', link: '/doc-markers-spec' }
     ]
   }

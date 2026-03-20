@@ -42,12 +42,12 @@ mkIntPoolConfig = options => harness => {
   healthCheckInterval: options.healthCheckInterval
   backoffPolicy: options.backoffPolicy
   queuePolicy: options.queuePolicy
-  acquire: _ => do Effect {
+  acquire: _ => {
     current = get harness.nextId
     _       = set harness.nextId (current + 1)
     pure current
   }
-  release: conn => do Effect {
+  release: conn => {
     _ = update harness.released (items => [...items, conn])
     pure Unit
   }
@@ -55,24 +55,24 @@ mkIntPoolConfig = options => harness => {
 }
 
 assertInvalidConfig : Result PoolError A -> Text -> Effect Text Unit
-assertInvalidConfig = result => expected => do Effect {
-  err <- assertErr result
-  err match
-    | InvalidConfig reason => assertEq reason expected
-    | _                    => assert False
-}
+assertInvalidConfig = result => expected =>
+  result
+|> assertErr#err
+|> _ => err match
+  | InvalidConfig reason => assertEq reason expected
+  | _                    => assert False
 
-createIntPool = options => harness => do Effect {
-  poolResult <- Pool.create (mkIntPoolConfig options harness)
-  assertOk poolResult
-}
+createIntPool = options => harness =>
+  Unit
+|> _ => Pool.create (mkIntPoolConfig options harness)#poolResult
+|> _ => assertOk poolResult
 
-expectAcquireInt = pool => do Effect {
-  connResult <- Pool.acquire pool
-  assertOk connResult
-}
+expectAcquireInt = pool =>
+  Unit
+|> _ => Pool.acquire pool#connResult
+|> _ => assertOk connResult
 
-exerciseQueuePolicy = queuePolicy => expected => do Effect {
+exerciseQueuePolicy = queuePolicy => expected => {
   harness = mkHarness Unit
   options = {
     maxSize: 2
@@ -84,70 +84,73 @@ exerciseQueuePolicy = queuePolicy => expected => do Effect {
     queuePolicy: queuePolicy
   }
 
-  pool   <- createIntPool options harness
-  first  <- expectAcquireInt pool
-  second <- expectAcquireInt pool
-  _      <- Pool.release pool first
-  _      <- Pool.release pool second
-  reused <- expectAcquireInt pool
-  _      <- assertEq reused expected
-  _      <- Pool.release pool reused
-  _      <- Pool.close pool
-  assertEq (List.length (get harness.released)) 2
+  Unit
+   |> _ => createIntPool options harness#pool
+   |> _ => expectAcquireInt pool#first
+   |> _ => expectAcquireInt pool#second
+  ~|>_ => Pool.release pool first
+  ~|>_ => Pool.release pool second
+   |> _ => expectAcquireInt pool#reused
+  ~|>_ => assertEq reused expected
+  ~|>_ => Pool.release pool reused
+  ~|>_ => Pool.close pool
+   |> _ => assertEq (List.length (get harness.released)) 2
 }
 
 boomConn : Int -> Effect Text Int
 boomConn = _ => fail "boom"
 
 @test "pool error construct"
-poolError_construct = do Effect {
+poolError_construct = {
   e1 = Pool.Timeout
   e2 = Pool.Closed
   e3 = Pool.HealthFailed
   e4 = Pool.InvalidConfig "bad"
-  assertEq e1 Pool.Timeout
-  assertEq e2 Pool.Closed
-  assertEq e3 Pool.HealthFailed
-  e4 match
+
+  Unit
+  ~|>_ => assertEq e1 Pool.Timeout
+  ~|>_ => assertEq e2 Pool.Closed
+  ~|>_ => assertEq e3 Pool.HealthFailed
+   |> _ => e4 match
     | InvalidConfig reason => assertEq reason "bad"
     | _                    => assert False
 }
 
 @test "queue policy construct"
-queuePolicy_construct = do Effect {
-  q1 = Pool.Fifo
-  q2 = Pool.Lifo
-  assertEq q1 Pool.Fifo
-  assertEq q2 Pool.Lifo
-}
+queuePolicy_construct = Unit
+~|>_ => assertEq Pool.Fifo Pool.Fifo
+ |> _ => assertEq Pool.Lifo Pool.Lifo
+
+assertFixedPolicy : Pool.BackoffPolicy -> Effect Text Unit
+assertFixedPolicy = policy => policy match
+  | Fixed span => assertEq span.millis 25
+  | _          => assert False
+
+assertExponentialPolicy : Pool.BackoffPolicy -> Effect Text Unit
+assertExponentialPolicy = policy => policy match
+  | Exponential opts =>
+      Unit
+      ~|>_ => assertEq opts.base.millis 5
+       |> _ => assertEq opts.max.millis 40
+  | _ => assert False
 
 @test "backoff policy construct"
-backoffPolicy_construct = do Effect {
-  fixed       = Pool.Fixed ({ millis: 25 })
-  exponential = Pool.Exponential { base: { millis: 5 }, max: { millis: 40 } }
-
-  fixed match
-    | Fixed span => assertEq span.millis 25
-    | _          => assert False
-
-  exponential match
-    | Exponential opts => do Effect {
-        _ <- assertEq opts.base.millis 5
-        assertEq opts.max.millis 40
-      }
-    | _ => assert False
-}
+backoffPolicy_construct = Unit
+  |> _ => assertFixedPolicy (Pool.Fixed ({ millis: 25 }))
+  |> _ => assertExponentialPolicy (Pool.Exponential { base: { millis: 5 }, max: { millis: 40 } })
 
 @test "pool stats type"
-poolStats_type = do Effect {
+poolStats_type = {
   s = { size: 4, idle: 2, inUse: 2, waiters: 0, closed: False }
-  assertEq s.size 4
-  assertEq s.idle 2
-  assert (s.closed == False)
+
+  Unit
+  ~|>_ => assertEq s.size 4
+  ~|>_ => assertEq s.idle 2
+   |> _ => assert (s.closed == False)
 }
 
 @test "create validates pool config"
-create_validates_pool_config = do Effect {
+create_validates_pool_config = {
   harness = mkHarness Unit
 
   zeroSize = {
@@ -159,8 +162,6 @@ create_validates_pool_config = do Effect {
     backoffPolicy: Pool.Fixed ({ millis: 1 })
     queuePolicy: Pool.Fifo
   }
-  zeroSizeResult <- Pool.create (mkIntPoolConfig zeroSize harness)
-  _              <- assertInvalidConfig zeroSizeResult "maxSize must be > 0"
 
   tooManyIdle = {
     maxSize: 1
@@ -171,8 +172,6 @@ create_validates_pool_config = do Effect {
     backoffPolicy: Pool.Fixed ({ millis: 1 })
     queuePolicy: Pool.Fifo
   }
-  tooManyIdleResult <- Pool.create (mkIntPoolConfig tooManyIdle harness)
-  _                 <- assertInvalidConfig tooManyIdleResult "minIdle must be <= maxSize"
 
   negativeAcquireTimeout = {
     maxSize: 1
@@ -183,8 +182,6 @@ create_validates_pool_config = do Effect {
     backoffPolicy: Pool.Fixed ({ millis: 1 })
     queuePolicy: Pool.Fifo
   }
-  negativeAcquireTimeoutResult <- Pool.create (mkIntPoolConfig negativeAcquireTimeout harness)
-  _                            <- assertInvalidConfig negativeAcquireTimeoutResult "acquireTimeout must be >= 0"
 
   negativeIdleTimeout = {
     maxSize: 1
@@ -195,8 +192,6 @@ create_validates_pool_config = do Effect {
     backoffPolicy: Pool.Fixed ({ millis: 1 })
     queuePolicy: Pool.Fifo
   }
-  negativeIdleTimeoutResult <- Pool.create (mkIntPoolConfig negativeIdleTimeout harness)
-  _                         <- assertInvalidConfig negativeIdleTimeoutResult "idleTimeout must be >= 0 when present"
 
   invalidBackoff = {
     maxSize: 1
@@ -207,10 +202,19 @@ create_validates_pool_config = do Effect {
     backoffPolicy: Pool.Exponential { base: { millis: 10 }, max: { millis: 5 } }
     queuePolicy: Pool.Fifo
   }
-  invalidBackoffResult <- Pool.create (mkIntPoolConfig invalidBackoff harness)
-  _                    <- assertInvalidConfig invalidBackoffResult "backoffPolicy.Exponential.max must be >= base"
 
-  unexpectedFieldResult <- Pool.create {
+  Unit
+   |> _ => Pool.create (mkIntPoolConfig zeroSize harness)#zeroSizeResult
+  ~|>_ => assertInvalidConfig zeroSizeResult "maxSize must be > 0"
+   |> _ => Pool.create (mkIntPoolConfig tooManyIdle harness)#tooManyIdleResult
+  ~|>_ => assertInvalidConfig tooManyIdleResult "minIdle must be <= maxSize"
+   |> _ => Pool.create (mkIntPoolConfig negativeAcquireTimeout harness)#negativeAcquireTimeoutResult
+  ~|>_ => assertInvalidConfig negativeAcquireTimeoutResult "acquireTimeout must be >= 0"
+   |> _ => Pool.create (mkIntPoolConfig negativeIdleTimeout harness)#negativeIdleTimeoutResult
+  ~|>_ => assertInvalidConfig negativeIdleTimeoutResult "idleTimeout must be >= 0 when present"
+   |> _ => Pool.create (mkIntPoolConfig invalidBackoff harness)#invalidBackoffResult
+  ~|>_ => assertInvalidConfig invalidBackoffResult "backoffPolicy.Exponential.max must be >= base"
+   |> _ => Pool.create {
     maxSize: 1
     minIdle: 0
     acquireTimeout: { millis: 20 }
@@ -222,19 +226,18 @@ create_validates_pool_config = do Effect {
     acquire: _ => pure 1
     release: _ => pure Unit
     healthCheck: _ => pure True
-  }
-  _ <- assertInvalidConfig unexpectedFieldResult "unexpected pool config field(s): extraSetting"
-  assertEq (get harness.released) []
+  }#unexpectedFieldResult
+  ~|>_ => assertInvalidConfig unexpectedFieldResult "unexpected pool config field(s): extraSetting"
+   |> _ => assertEq (get harness.released) []
 }
 
 @test "queue policy controls idle reuse order"
-queue_policy_controls_idle_reuse_order = do Effect {
-  _ <- exerciseQueuePolicy Pool.Fifo 0
-  exerciseQueuePolicy Pool.Lifo 1
-}
+queue_policy_controls_idle_reuse_order = Unit
+~|>_ => exerciseQueuePolicy Pool.Fifo 0
+ |> _ => exerciseQueuePolicy Pool.Lifo 1
 
 @test "stats reflect pool lifecycle"
-stats_reflect_pool_lifecycle = do Effect {
+stats_reflect_pool_lifecycle = {
   harness = mkHarness Unit
   options = {
     maxSize: 2
@@ -246,44 +249,41 @@ stats_reflect_pool_lifecycle = do Effect {
     queuePolicy: Pool.Fifo
   }
 
-  pool    <- createIntPool options harness
-  initial <- Pool.stats pool
-  _       <- assertEq initial.size 1
-  _       <- assertEq initial.idle 1
-  _       <- assertEq initial.inUse 0
-  _       <- assertEq initial.waiters 0
-  _       <- assertEq initial.closed False
-
-  conn     <- expectAcquireInt pool
-  borrowed <- Pool.stats pool
-  _        <- assertEq conn 0
-  _        <- assertEq borrowed.size 1
-  _        <- assertEq borrowed.idle 0
-  _        <- assertEq borrowed.inUse 1
-  _        <- assertEq (get harness.released) []
-
-  _        <- Pool.release pool conn
-  returned <- Pool.stats pool
-  _        <- assertEq returned.size 1
-  _        <- assertEq returned.idle 1
-  _        <- assertEq returned.inUse 0
-  _        <- assertEq returned.closed False
-
-  _      <- Pool.close pool
-  closed <- Pool.stats pool
-  _      <- assertEq closed.size 0
-  _      <- assertEq closed.idle 0
-  _      <- assertEq closed.inUse 0
-  _      <- assertEq closed.closed True
-  _      <- assertEq (get harness.released) [0]
-
-  closedResult <- Pool.acquire pool
-  closedErr    <- assertErr closedResult
-  assertEq closedErr Pool.Closed
+  Unit
+   |> _ => createIntPool options harness#pool
+   |> _ => Pool.stats pool#initial
+  ~|>_ => assertEq initial.size 1
+  ~|>_ => assertEq initial.idle 1
+  ~|>_ => assertEq initial.inUse 0
+  ~|>_ => assertEq initial.waiters 0
+  ~|>_ => assertEq initial.closed False
+   |> _ => expectAcquireInt pool#conn
+   |> _ => Pool.stats pool#borrowed
+  ~|>_ => assertEq conn 0
+  ~|>_ => assertEq borrowed.size 1
+  ~|>_ => assertEq borrowed.idle 0
+  ~|>_ => assertEq borrowed.inUse 1
+  ~|>_ => assertEq (get harness.released) []
+  ~|>_ => Pool.release pool conn
+   |> _ => Pool.stats pool#returned
+  ~|>_ => assertEq returned.size 1
+  ~|>_ => assertEq returned.idle 1
+  ~|>_ => assertEq returned.inUse 0
+  ~|>_ => assertEq returned.closed False
+  ~|>_ => Pool.close pool
+   |> _ => Pool.stats pool#closed
+  ~|>_ => assertEq closed.size 0
+  ~|>_ => assertEq closed.idle 0
+  ~|>_ => assertEq closed.inUse 0
+  ~|>_ => assertEq closed.closed True
+  ~|>_ => assertEq (get harness.released) [0]
+   |> _ => Pool.acquire pool#closedResult
+   |> _ => assertErr closedResult#closedErr
+   |> _ => assertEq closedErr Pool.Closed
 }
 
 @test "acquire times out when pool is exhausted"
-acquire_times_out_when_pool_is_exhausted = do Effect {
+acquire_times_out_when_pool_is_exhausted = {
   harness = mkHarness Unit
   options = {
     maxSize: 1
@@ -295,21 +295,22 @@ acquire_times_out_when_pool_is_exhausted = do Effect {
     queuePolicy: Pool.Fifo
   }
 
-  pool       <- createIntPool options harness
-  conn       <- expectAcquireInt pool
-  timeoutRes <- Pool.acquire pool
-  timeoutErr <- assertErr timeoutRes
-  busyStats  <- Pool.stats pool
-  _          <- assertEq timeoutErr Pool.Timeout
-  _          <- assertEq busyStats.inUse 1
-  _          <- assertEq busyStats.idle 0
-  _          <- Pool.release pool conn
-  _          <- Pool.close pool
-  assertEq (get harness.released) [0]
+  Unit
+   |> _ => createIntPool options harness#pool
+   |> _ => expectAcquireInt pool#conn
+   |> _ => Pool.acquire pool#timeoutRes
+   |> _ => assertErr timeoutRes#timeoutErr
+   |> _ => Pool.stats pool#busyStats
+  ~|>_ => assertEq timeoutErr Pool.Timeout
+  ~|>_ => assertEq busyStats.inUse 1
+  ~|>_ => assertEq busyStats.idle 0
+  ~|>_ => Pool.release pool conn
+  ~|>_ => Pool.close pool
+   |> _ => assertEq (get harness.released) [0]
 }
 
 @test "withConn releases connection after user failure"
-withConn_releases_connection_after_user_failure = do Effect {
+withConn_releases_connection_after_user_failure = {
   harness = mkHarness Unit
   options = {
     maxSize: 1
@@ -321,21 +322,28 @@ withConn_releases_connection_after_user_failure = do Effect {
     queuePolicy: Pool.Fifo
   }
 
-  pool   <- createIntPool options harness
-  result <- attempt (Pool.withConn pool boomConn)
-  result match
+  Unit
+   |> _ => createIntPool options harness#pool
+   |> _ => attempt (Pool.withConn pool boomConn)#result
+  ~|>_ => result match
     | Err msg => assertEq msg "boom"
     | Ok _    => assert False
-
-  stats <- Pool.stats pool
-  _     <- assertEq stats.idle 1
-  _     <- assertEq stats.inUse 0
-  _     <- Pool.close pool
-  assertEq (get harness.released) [0]
+     |> _ => Pool.stats pool#stats
+    ~|>_ => assertEq stats.idle 1
+    ~|>_ => assertEq stats.inUse 0
+    ~|>_ => Pool.close pool
+     |> _ => assertEq (get harness.released) [0]
 }
 
+delayedRelease = pool => conn =>
+  Unit
+  ~|>_ => sleep 10
+  ~|>_ => Pool.release pool conn
+
+releaseLater = pool => conn => spawn (delayedRelease pool conn)
+
 @test "drain releases idle connections and keeps pool open"
-drain_releases_idle_connections_and_keeps_pool_open = do Effect {
+drain_releases_idle_connections_and_keeps_pool_open = {
   harness = mkHarness Unit
   options = {
     maxSize: 2
@@ -347,28 +355,25 @@ drain_releases_idle_connections_and_keeps_pool_open = do Effect {
     queuePolicy: Pool.Fifo
   }
 
-  pool     <- createIntPool options harness
-  conn0    <- expectAcquireInt pool
-  conn1    <- expectAcquireInt pool
-  _        <- Pool.release pool conn0
-  releaser <- spawn (do Effect {
-      _        <- sleep 10
-      Pool.release pool conn1
-  })
-  _       <- Pool.drain pool
-  _       <- releaser.join
-  drained <- Pool.stats pool
-  _       <- assertEq drained.size 0
-  _       <- assertEq drained.idle 0
-  _       <- assertEq drained.inUse 0
-  _       <- assertEq drained.closed False
-  _       <- assertEq (get harness.released) [0, conn1]
-
-  reused <- expectAcquireInt pool
-  _      <- assertEq reused 2
-  _      <- Pool.release pool reused
-  _      <- Pool.close pool
-  assertEq (get harness.released) [0, conn1, 2]
+  Unit
+   |> _ => createIntPool options harness#pool
+   |> _ => expectAcquireInt pool#conn0
+   |> _ => expectAcquireInt pool#conn1
+  ~|>_ => Pool.release pool conn0
+   |> _ => releaseLater pool conn1#releaser
+  ~|>_ => Pool.drain pool
+  ~|>_ => releaser.join
+   |> _ => Pool.stats pool#drained
+  ~|>_ => assertEq drained.size 0
+  ~|>_ => assertEq drained.idle 0
+  ~|>_ => assertEq drained.inUse 0
+  ~|>_ => assertEq drained.closed False
+  ~|>_ => assertEq (get harness.released) [0, conn1]
+   |> _ => expectAcquireInt pool#reused
+  ~|>_ => assertEq reused 2
+  ~|>_ => Pool.release pool reused
+  ~|>_ => Pool.close pool
+   |> _ => assertEq (get harness.released) [0, conn1, 2]
 }
 
 poolPath = "/tmp/aivi-db-pool-transaction.sqlite"
@@ -394,32 +399,25 @@ poolCfg = {
 }
 
 @test "pooled connections isolate uncommitted writes"
-pooled_connections_isolate_uncommitted_writes = do Effect {
-  _    <- File.delete poolPath
-  init <- Db.connect { driver: Sqlite, url: poolPath }
-  _    <- Db.runMigrationsOn init [users]
-  _    <- Db.close init
-
-  poolResult <- Pool.create poolCfg
-  pool       <- assertOk poolResult
-
-  outerResult <- Pool.withConn pool (conn1 => do Effect {
-      _           <- Db.beginTxOn conn1
-      _           <- Db.insertOn conn1 users { id: 1, name: "Outer" }
-
-      beforeResult <- Pool.withConn pool (conn2 => Db.rowsOn conn2 users)
-      rowsBefore   <- assertOk beforeResult
-      assertEq (List.length rowsBefore) 0
-
-      _ <- Db.commitTxOn conn1
-
-      afterResult <- Pool.withConn pool (conn2 => Db.rowsOn conn2 users)
-      rowsAfter   <- assertOk afterResult
-      pure rowsAfter
-  })
-
-  rows <- assertOk outerResult
-  _    <- Pool.close pool
-  _    <- File.delete poolPath
-  assertEq (List.length rows) 1
-}
+pooled_connections_isolate_uncommitted_writes = Unit
+~|>_ => File.delete poolPath
+ |> _ => Db.connect { driver: Sqlite, url: poolPath }#init
+~|>_ => Db.runMigrationsOn init [users]
+~|>_ => Db.close init
+ |> _ => Pool.create poolCfg#poolResult
+ |> _ => assertOk poolResult#pool
+ |> _ => Pool.withConn pool (conn1 =>
+  Unit
+  ~|>_ => Db.beginTxOn conn1
+  ~|>_ => Db.insertOn conn1 users { id: 1, name: "Outer" }
+   |> _ => Pool.withConn pool (conn2 => Db.rowsOn conn2 users)#beforeResult
+   |> _ => assertOk beforeResult#rowsBefore
+  ~|>_ => assertEq (List.length rowsBefore) 0
+  ~|>_ => Db.commitTxOn conn1
+   |> _ => Pool.withConn pool (conn2 => Db.rowsOn conn2 users)#afterResult
+   |> _ => assertOk afterResult
+)#outerResult
+ |> _ => assertOk outerResult#rows
+~|>_ => Pool.close pool
+~|>_ => File.delete poolPath
+ |> _ => assertEq (List.length rows) 1

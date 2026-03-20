@@ -147,26 +147,26 @@ orderBy = _order _query =>
 
 limit : Int -> Query A -> Query A
 limit = n q => {
-  run: conn => do Effect {
-    xs <- q.run conn
-    pure (List.take n xs)
-  }
+  run: conn =>
+    conn
+       |> q.run
+       |> List.take n
 }
 
 offset : Int -> Query A -> Query A
 offset = n q => {
-  run: conn => do Effect {
-    xs <- q.run conn
-    pure (List.drop n xs)
-  }
+  run: conn =>
+    conn
+       |> q.run
+       |> List.drop n
 }
 
 distinct : Query A -> Query A
 distinct = q => {
-  run: conn => do Effect {
-    xs <- q.run conn
-    pure (List.dedup xs)
-  }
+  run: conn =>
+    conn
+       |> q.run
+       |> List.dedup
 }
 
 selectMap : M -> Query A -> Query B
@@ -238,11 +238,9 @@ connect : DbConfig -> Effect DbError DbConnection
 connect = config => database.connect config
 
 open : DbConfig -> Resource DbError DbConnection
-open = config => resource {
-  conn <- connect config
-  yield conn
-  _ <- close conn
-}
+open = config =>
+  config
+     |> connect @cleanup close #conn
 
 close : DbConnection -> Effect DbError Unit
 close = conn => database.close conn
@@ -293,34 +291,24 @@ rollbackTxOn : DbConnection -> Effect DbError Unit
 rollbackTxOn = conn => database.rollbackTxOn conn
 
 inTransaction : Effect DbError A -> Effect DbError A
-inTransaction = action => do Effect {
-  beginTx
-  result <- attempt action
-  result match
-    | Ok value => do Effect {
-        commitTx
-        pure value
-      }
-    | Err err => do Effect {
-        rollbackTx
-        fail err
-      }
-}
+inTransaction = action =>
+  Unit
+    ~|> (_ => beginTx)
+    ?|> (_ => action)
+    !|> err => err
+       ~|> (_ => rollbackTx)
+        |> fail
+    ~|> (_ => commitTx)
 
 inTransactionOn : DbConnection -> Effect DbError A -> Effect DbError A
-inTransactionOn = conn action => do Effect {
-  beginTxOn conn
-  result <- attempt action
-  result match
-    | Ok value => do Effect {
-        commitTxOn conn
-        pure value
-      }
-    | Err err => do Effect {
-        rollbackTxOn conn
-        fail err
-      }
-}
+inTransactionOn = conn action =>
+  Unit
+    ~|> (_ => beginTxOn conn)
+    ?|> (_ => action)
+    !|> err => err
+       ~|> (_ => rollbackTxOn conn)
+        |> fail
+    ~|> (_ => commitTxOn conn)
 
 savepoint : SavepointName -> Effect DbError Unit
 savepoint = name => database.savepoint name

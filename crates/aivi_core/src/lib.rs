@@ -67,9 +67,11 @@ pub use surface::{
     ArenaRecordPatternField, ArenaRecordTypeField, ArenaScopeItem, ArenaTextPart, ArenaTypeAlias,
     ArenaTypeCtor, ArenaTypeDecl, ArenaTypeExpr, ArenaTypeSig, ArenaTypeVarConstraint,
     ArenaUseDecl, AstArena, BlockItem, BlockKind, ClassDecl, Decorator, Def, DomainDecl,
-    DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
-    Pattern, RecordField, RecordPatternField, RecordTypeField, ScopeItemKind, SpannedName,
-    SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl, UseItem,
+    DomainItem, Expr, FlowAnchor, FlowArm, FlowBinding, FlowGuard, FlowLine, FlowModifier,
+    FlowStep, FlowStepKind, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem,
+    PathSegment, Pattern, RecordField, RecordPatternField, RecordTypeField, ScopeItemKind,
+    SpannedName, SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig,
+    UseDecl, UseItem,
 };
 pub use typecheck::{
     check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,

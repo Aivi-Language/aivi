@@ -1,7 +1,8 @@
 use crate::intern::{ExprId, PatternId, Symbol, TypeExprId};
 use crate::surface::{
     BlockItem, BlockKind, ClassDecl, ClassMember, Decorator, Def, DomainDecl, DomainItem,
-    ExportItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
+    ExportItem, Expr, FlowArm, FlowBinding, FlowGuard, FlowLine, FlowModifier, FlowStep,
+    FlowStepKind, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
     Pattern, RecordField, RecordPatternField, RecordTypeField, TextPart, TypeAlias, TypeCtor,
     TypeDecl, TypeExpr, TypeSig, TypeVarConstraint, UseDecl, UseItem,
 };
@@ -401,6 +402,14 @@ impl ArenaBuilder {
                 right: self.lower_expr(right),
                 span: span.clone(),
             },
+            Expr::Flow { root, lines, span } => ArenaExpr::Flow {
+                root: self.lower_expr(root),
+                lines: lines
+                    .iter()
+                    .map(|line| self.lower_flow_line(line))
+                    .collect(),
+                span: span.clone(),
+            },
             Expr::Block { kind, items, span } => ArenaExpr::Block {
                 kind: self.lower_block_kind(kind),
                 items: items.iter().map(|x| self.lower_block_item(x)).collect(),
@@ -416,6 +425,108 @@ impl ArenaBuilder {
             }
         };
         self.arena.alloc_expr(lowered)
+    }
+
+    fn lower_flow_binding(&mut self, binding: &FlowBinding) -> ArenaFlowBinding {
+        ArenaFlowBinding {
+            name: SpannedSymbol::from(&binding.name),
+            span: binding.span.clone(),
+        }
+    }
+
+    fn lower_flow_modifier(&mut self, modifier: &FlowModifier) -> ArenaFlowModifier {
+        match modifier {
+            FlowModifier::Timeout { duration, span } => ArenaFlowModifier::Timeout {
+                duration: self.lower_expr(duration),
+                span: span.clone(),
+            },
+            FlowModifier::Delay { duration, span } => ArenaFlowModifier::Delay {
+                duration: self.lower_expr(duration),
+                span: span.clone(),
+            },
+            FlowModifier::Concurrent { limit, span } => ArenaFlowModifier::Concurrent {
+                limit: self.lower_expr(limit),
+                span: span.clone(),
+            },
+            FlowModifier::Retry {
+                attempts,
+                interval,
+                exponential,
+                span,
+            } => ArenaFlowModifier::Retry {
+                attempts: *attempts,
+                interval: self.lower_expr(interval),
+                exponential: *exponential,
+                span: span.clone(),
+            },
+            FlowModifier::Cleanup { expr, span } => ArenaFlowModifier::Cleanup {
+                expr: self.lower_expr(expr),
+                span: span.clone(),
+            },
+        }
+    }
+
+    fn lower_flow_step_kind(&mut self, kind: FlowStepKind) -> ArenaFlowStepKind {
+        match kind {
+            FlowStepKind::Flow => ArenaFlowStepKind::Flow,
+            FlowStepKind::Tap => ArenaFlowStepKind::Tap,
+            FlowStepKind::Attempt => ArenaFlowStepKind::Attempt,
+            FlowStepKind::FanOut => ArenaFlowStepKind::FanOut,
+            FlowStepKind::Applicative => ArenaFlowStepKind::Applicative,
+        }
+    }
+
+    fn lower_flow_step(&mut self, step: &FlowStep) -> ArenaFlowStep {
+        ArenaFlowStep {
+            kind: self.lower_flow_step_kind(step.kind),
+            expr: self.lower_expr(&step.expr),
+            modifiers: step
+                .modifiers
+                .iter()
+                .map(|modifier| self.lower_flow_modifier(modifier))
+                .collect(),
+            binding: step
+                .binding
+                .as_ref()
+                .map(|binding| self.lower_flow_binding(binding)),
+            subflow: step
+                .subflow
+                .iter()
+                .map(|line| self.lower_flow_line(line))
+                .collect(),
+            span: step.span.clone(),
+        }
+    }
+
+    fn lower_flow_guard(&mut self, guard: &FlowGuard) -> ArenaFlowGuard {
+        ArenaFlowGuard {
+            predicate: self.lower_expr(&guard.predicate),
+            fail_expr: guard.fail_expr.as_ref().map(|expr| self.lower_expr(expr)),
+            span: guard.span.clone(),
+        }
+    }
+
+    fn lower_flow_arm(&mut self, arm: &FlowArm) -> ArenaFlowArm {
+        ArenaFlowArm {
+            pattern: self.lower_pattern(&arm.pattern),
+            guard: arm.guard.as_ref().map(|expr| self.lower_expr(expr)),
+            guard_negated: arm.guard_negated,
+            body: self.lower_expr(&arm.body),
+            span: arm.span.clone(),
+        }
+    }
+
+    fn lower_flow_line(&mut self, line: &FlowLine) -> ArenaFlowLine {
+        match line {
+            FlowLine::Step(step) => ArenaFlowLine::Step(self.lower_flow_step(step)),
+            FlowLine::Guard(guard) => ArenaFlowLine::Guard(self.lower_flow_guard(guard)),
+            FlowLine::Branch(arm) => ArenaFlowLine::Branch(self.lower_flow_arm(arm)),
+            FlowLine::Recover(arm) => ArenaFlowLine::Recover(self.lower_flow_arm(arm)),
+            FlowLine::Anchor(anchor) => ArenaFlowLine::Anchor(ArenaFlowAnchor {
+                name: SpannedSymbol::from(&anchor.name),
+                span: anchor.span.clone(),
+            }),
+        }
     }
 
     fn lower_match_arm(&mut self, arm: &MatchArm) -> ArenaMatchArm {

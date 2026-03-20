@@ -34,8 +34,8 @@ The grammar here is about **parsing**. Typing, elaboration, and runtime behavior
 ### Keywords
 
 ```text
-as class do domain effect else export generate given hiding if in
-instance match mock module opaque or over patch recurse resource snapshot then unless use when with yield loop
+as class domain else export given hiding if in
+instance match mock module opaque or over patch recurse snapshot then unless use when with
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, and `Err` are ordinary constructors, not keywords.)
@@ -189,17 +189,35 @@ Notes:
 
 ## 0.3 Expressions
 
-Expressions are where most everyday syntax lives: application, pipelines, `match`, blocks, and literals.
+Expressions are where most everyday syntax lives: application, pipelines, flow expressions, `match`, blocks, and literals.
 
 Useful reading rules:
 
 - application is by whitespace
 - field access is postfix (`value.field`)
 - pipes have lower precedence than arithmetic and comparisons
-- `do`, `generate`, and `resource` are expression forms
+- a flat flow starts with an expression seed followed by aligned flow lines
 
 ```ebnf
-Expr           := IfExpr
+Expr           := FlowExpr | SimpleExpr
+
+FlowExpr       := SimpleExpr Sep FlowLine { Sep FlowLine }
+FlowLine       := FlowAnchor
+               | FlowPrefix FlowBody [ FlowBinding ] { Sep FlowModifier }
+               | FlowFanoutEnd
+FlowAnchor     := "@|>" lowerIdent
+FlowPrefix     := "|>" | "~|>" | ">|>" | "?|>" | "!|>" | "||>" | "*|>" | "&|>"
+FlowFanoutEnd  := "*-|"
+FlowBody       := SimpleExpr
+               | Pattern "=>" SimpleExpr
+FlowBinding    := "#" lowerIdent
+FlowModifier   := "@timeout" SimpleExpr
+               | "@delay" SimpleExpr
+               | "@concurrent" IntLit
+               | "@retry" IntLit "x" SimpleExpr [ "exp" ]
+               | "@cleanup" SimpleExpr
+
+SimpleExpr     := IfExpr
 
 IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr
@@ -221,7 +239,7 @@ PatParam       := lowerIdent [ "as" PatParam ]
    body starts by shadowing `name` with `name |> updater`. The updater uses the same
    grammar as a pipe RHS (`PipeArg`), so placeholder transforms like `_ + 1`,
    accessor sugar like `.field`, explicit lambdas, and bare matcher blocks all work.
-   In v0.1, only simple identifier parameters may use the `<|` head form. *)
+   In v0.2, only simple identifier parameters may use the `<|` head form. *)
 
 MatchExpr      := PipeExpr [ "match" MatchArms ] [ OrFallback ]
 MatchArms      := Sep? "|" Arm { Sep "|" Arm }
@@ -279,48 +297,20 @@ Atom           := Literal
                | "patch" PatchLit
                | MockExpr
                | Block
-               | DoBlock
-               | EffectBlock
-               | GenerateBlock
-               | ResourceBlock
+               | RecurseExpr
+
+RecurseExpr    := "recurse" lowerIdent [ SimpleExpr ]
 
 SuffixedParens := "(" Expr ")" Suffix
 Suffix         := lowerIdent | "%"
 
 Block          := "{" { Stmt } "}"
-DoBlock        := "do" UpperIdent "{" { DoStmt } "}"
-EffectBlock    := "effect" "{" { DoStmt } "}"   (* deprecated alias for `do Effect { ... }` *)
-GenerateBlock  := "generate" "{" { GenStmt } "}"
-ResourceBlock  := "resource" "{" { ResStmt } "}"
 
 MockExpr       := "mock" MockBinding { Sep? "mock" MockBinding } "in" Expr
 MockBinding    := [ "snapshot" ] MockPath [ "=" Expr ]
 MockPath       := lowerIdent { "." lowerIdent }
 
-Stmt           := BindStmt | ValueBinding | Expr Sep
-BindStmt       := Pattern "<-" Expr [ OrFallback ] Sep
-
-DoStmt         := BindStmt
-               | ValueBinding
-               | Expr Sep
-               | "when" Expr "<-" Expr Sep
-               | "unless" Expr "<-" Expr Sep
-               | "given" Expr "or" ( Expr | OrArms ) Sep
-               | "recurse" Expr Sep
-               | "loop" Pattern "=" Expr "=>" Block Sep
-
-GenStmt        := BindStmt
-               | GuardStmt
-               | ValueBinding
-               | "yield" Expr Sep
-               | "recurse" Expr Sep
-               | "loop" Pattern "=" Expr "=>" "{" { GenStmt } "}" Sep
-GuardStmt      := lowerIdent "->" Expr Sep
-
-ResStmt        := ValueBinding
-               | BindStmt
-               | Expr Sep
-               | "yield" Expr Sep
+Stmt           := ValueBinding | Expr Sep
 
 TupleLit       := "(" Expr "," Expr { "," Expr } ")"
 ListLit        := "[" [ ListItem { FieldSep ListItem } ] "]"
@@ -363,17 +353,22 @@ Literal        := "True"
 
 **Notes**
 
+- Flow-line operators such as `>|>` and `&|>` live in flow-line position rather than infix precedence position. Exact alignment and validity rules are defined in [Flow Syntax](flows.md).
+- `!|>` recovery lines must immediately follow the `?|>` region they handle.
+- `||>` branch lines and `!|>` recovery lines are contiguous blocks.
+- `*|>` bodies are delimited explicitly by a matching `*-|` at the same spine alignment.
+- `#name!` was removed; continue from bound sibling values explicitly on later lines.
 - `{ ... }` is used for both record-shaped forms (`RecordLit`, `RecordType`, `RecordPat`, `PatchLit`, and module/domain bodies) and expression blocks.
 - Parsing `{ ... }` should disambiguate **record literal vs block** by lookahead:
   - if the first non-newline token can start a record entry (`...`, `name`, or `name.path:`), parse as `RecordLit`
   - otherwise parse as `Block`
-- `RecordTypeSpread` (`...Type`) merges record-type entries left to right, with later entries overriding earlier ones
-- a `RecordTypeSpread` target must elaborate to a closed record type
-- `.field` is shorthand for `x => x.field`
-- `_` is not a value; in expression position it appears only as placeholder-lambda sugar
-- `mock snapshot some.binding` records the real binding result for later replay; see [@test — Test Declarations](decorators/test.md#mock-expressions)
-- `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals, and HTML/GTK angle sigils are documented in [Operators and Context](operators.md#118-sigils)
-- `RecordSpread` (`...expr`) merges fields left to right, with later fields overriding earlier ones
+- `RecordTypeSpread` (`...Type`) merges record-type entries left to right, with later entries overriding earlier ones.
+- a `RecordTypeSpread` target must elaborate to a closed record type.
+- `.field` is shorthand for `x => x.field`.
+- `_` is not a value; in expression position it appears only as placeholder-lambda sugar.
+- `mock snapshot some.binding` records the real binding result for later replay; see [@test — Test Declarations](decorators/test.md#mock-expressions).
+- `RawSigilLit` content is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are structured literals, and HTML/GTK angle sigils are documented in [Operators and Context](operators.md#118-sigils).
+- `RecordSpread` (`...expr`) merges fields left to right, with later fields overriding earlier ones.
 - `name.path: value` inside a record literal builds nested record-shaped data from scratch. If you meant “update an existing nested value”, use `<|` / `patch`.
 - Postfix brackets reuse one syntax family for list indexing, map indexing, and database row selectors such as `users[id == userId]`. Which meaning applies is decided during elaboration from the left-hand side type.
 

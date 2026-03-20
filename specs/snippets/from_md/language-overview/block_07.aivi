@@ -1,5 +1,6 @@
-evens = generate {
-  x <- [1..10]
-  x -> x % 2 == 0 // guard: keep only even numbers
-  yield x
-}
+doubledEvens =
+  [1..10]
+     *|> _
+     >|> _ % 2 == 0
+      |> _ * 2
+     *-|

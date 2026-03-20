@@ -8,7 +8,7 @@ AIVI native apps are built from five pieces that fit together directly:
 - `signal ->> ...` derives live read-only state.
 - `signal <<- ...` writes live state.
 - `~<gtk>...</gtk>` describes the mounted GTK tree.
-- callbacks and `do Event { ... }` values connect user input to state changes and effects.
+- callbacks and flow-shaped event handles connect user input to state changes and effects.
 
 GTK runtime APIs are ordinary AIVI values and effects. A good default is:
 
@@ -16,7 +16,7 @@ GTK runtime APIs are ordinary AIVI values and effects. A good default is:
 2. derive display-only data with `->>`,
 3. render with the GTK sigil,
 4. update signals from callbacks,
-5. use `do Event { ... }` when a callback should own shared effect state.
+5. use `event.from (...)` when a callback should own shared effect state.
 
 ## Choose your starting point
 
@@ -25,7 +25,7 @@ GTK runtime APIs are ordinary AIVI values and effects. A good default is:
 | build a normal single-window app | `runGtkApp` plus a root `~<gtk>` tree |
 | keep UI state live | `signal`, `->>`, `<<-` |
 | wire user input from common widgets | callback sugar such as `onClick` and `onInput` |
-| run one shared effectful action from several widgets | `do Event { ... }` and pass the handle to the widgets |
+| run one shared effectful action from several widgets | `event.from (...)` and pass the handle to the widgets |
 | show or repeat dynamic child content | `<show>` and `<each key={...}>` |
 | debug or test below the sugar layer | `buildWithIds`, `signalStream`, `signalPoll`, `signalEmit` |
 

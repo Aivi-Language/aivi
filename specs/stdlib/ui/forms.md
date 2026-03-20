@@ -13,7 +13,7 @@ This module fits directly into signal-first GTK apps. Keep `Field A` values insi
 
 <<< ../../snippets/from_md/stdlib/ui/forms/block_01.aivi{aivi}
 
-The exported `toContact`-style helper pattern now reads best with `do Applicative { ... }`: validate each field independently, then finish the block with the plain domain value you want to build.
+The exported `toContact`-style helper pattern now reads best with `&|>`: validate each field independently, then continue with the plain domain value you want to build.
 
 ## `Field A`
 
@@ -63,20 +63,20 @@ A good rule of thumb is:
 
 1. keep editable draft state in a signal,
 2. show field errors through derived signals,
-3. build the final domain value with `Validation` and `do Applicative`,
+3. build the final domain value with `Validation` and `&|>`,
 4. run submission IO through an `Event` handle.
 
 For example, a typed submit payload usually reads best as:
 
 ```aivi
-contactValidation = s => do Applicative {
-  name <- validate nameRule s.name
-  email <- validate emailRule s.email
-  MkContact name email
-}
+contactValidation = s =>
+  s
+     &|> validate nameRule s.name #name
+     &|> validate emailRule s.email #email
+      |> MkContact name email
 ```
 
-Each `<-` line validates one field independently, so both field errors can accumulate in the final `Validation (List Text) Contact`.
+Each `&|>` line validates one field independently, so both field errors can accumulate in the final `Validation (List Text) Contact`.
 
 ## Async submit pattern
 

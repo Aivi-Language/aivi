@@ -1,21 +1,8 @@
-# Minimality (informal)
+# Why the Surface Language Can Stay Small
 
-AIVI has a rich surface language, but the compiler lowers it to a much smaller core. This is useful for both implementers and advanced users: once lowering is complete, the backend only needs to understand a compact set of building blocks.
+AIVI deliberately offers a rich surface syntax while still lowering to a small semantic core. This page sketches that minimality argument for readers who want to understand why flows, patches, predicates, and domain features do not require a huge kernel.
 
-This page is mainly for contributors and curious advanced readers. The point is not that AIVI source code is tiny; it is that many different source features end up using the same small implementation core.
-
-If you want the surrounding pipeline first, start with [Compiler & Backend Design](design.md).
-
-A few terms used on this page:
-
-- **λ** means an anonymous function
-- **currying** means representing a multi-argument function as a chain of one-argument functions
-- **`let rec`** means a recursive binding in the core language
-- **HKT** means a higher-kinded type, a type constructor that itself takes type parameters
-- **Church-encoded** (representing data as fold functions, a technique from lambda calculus) means representing a structure by the function that consumes it instead of by a dedicated runtime object
-- **dictionary** means a record of class methods that the compiler can pass implicitly
-
-## Surface feature → kernel building block
+## Surface features versus kernel primitives
 
 This table mixes true kernel primitives with a few compile-time rewrites and backend-retained forms. The point is that each surface feature stops introducing new semantic machinery once lowering is complete.
 
@@ -28,11 +15,10 @@ This table mixes true kernel primitives with a few compile-time rewrites and bac
 | Records | closed records + update |
 | Patching | update + fold |
 | Predicates | λ + case |
-| Generators | fold (Church-encoded) |
-| Effects (`do Effect {}`) | `bind` + `pure` |
-| Generic do-monads | `chain` + `of` |
-| Relation queries | compiled query plans + runtime SQL execution |
-| Resources | `__makeResource` |
+| Flat flows (`|>`, `>|>`, `?|>`, `!|>`) | `bind` / `pure` / `attempt` + case |
+| Applicative siblings (`&|>`) | `map` + `ap` |
+| Fan-out (`*|>` ... `*-|`) | fold (Church-encoded) |
+| Cleanup (`@cleanup`) | scope-registered finalization |
 | Plain blocks | immediately-applied λ |
 | Domains | static rewrite to ordinary calls or templates |
 | Sigils | specialized lowering (raw sigils stay literals; structured sigils become ordinary expressions) |
@@ -46,26 +32,23 @@ In other words, the surface language is expressive, but the implementation core 
 
 AIVI's kernel is lambda calculus (a tiny mathematical model of functions) with algebraic data types, closed records with update, universal types, fold, and an opaque effect monad.
 
-That means features that look quite different in source code—`do Effect`, `resource`, `generate`, domains, or predicates—end up being lowered to the same small set of primitives.
+That means features that look quite different in source code—flat flows, cleanup registration, fan-out, domains, or predicates—end up being lowered to the same small set of primitives.
 
-## How block forms are lowered
+## How flow forms are lowered
 
-These forms do not all disappear in the same pass. Generic `do M` blocks other than `do Effect` are rewritten during the surface → HIR lowering step; `do Effect`, `resource`, `generate`, and `plain` blocks are rewritten later by `desugar_blocks()` during the HIR → block-free HIR step.
+These forms do not all disappear in the same pass. Some are normalized during surface → HIR lowering, while others survive until later desugaring passes that erase flow structure and explicit cleanup scopes.
 
-The combined result is block-free HIR composed of nested lambdas and ordinary function calls.
-
-| Block kind | Stage | Desugared form |
-|:---------- |:----- |:-------------- |
-| `do Option { x <- e1; e2 }` | Surface → HIR | `chain (λx → e2) e1` |
-| `do Result { x <- e1; e2 }` | Surface → HIR | `chain (λx → e2) e1` |
-| `users[active] |> orderBy (desc .createdAt)` | Surface → HIR | `__db_query_compiled <static-plan> <sources> <captures>` |
-| `do Effect { x <- e1; e2 }` | HIR → block-free HIR | `__withResourceScope (bind e1 (λx → e2))` |
-| `do Effect { x = e; rest }` | HIR → block-free HIR | `__withResourceScope (bind (pure e) (λx → rest))` |
-| `resource { acq; yield v; cleanup }` | HIR → block-free HIR | `__makeResource (λ_ → acquire_chain)`, where `acquire_chain` is lowered with the `do Effect` rules and yields `(v, λ_ → cleanup_chain)` so cleanup closes over acquisition bindings |
-| `generate { yield e; ... }` | HIR → block-free HIR | Church-encoded fold via `gen_bind`, `gen_yield`, and `gen_append` (the generator is represented by the fold that consumes it, not by a separate runtime generator data type) |
+| Surface form | Stage | Desugared form |
+|:------------ |:----- |:-------------- |
+| `seed |> step1 |> step2` | Surface → HIR | nested `bind` / map over the current carrier |
+| `seed ?|> risky !|> Pat => recover` | Surface → HIR | `attempt risky` plus pattern-based recovery |
+| `input &|> a #x &|> b #y |> body` | Surface → HIR | applicative `map` / `ap` chain |
+| `items *|> ... *-|` | HIR → block-free HIR | Church-encoded fold / list builder |
+| `line @cleanup cleanup` | HIR → block-free HIR | register finalizer around the lowered successful result |
+| `seed @|> retry ... recurse retry` | Surface → HIR | local loop / restart structure |
 | `plain { x = e; body }` | HIR → block-free HIR | `(λx → body) e` |
 
-By the time lowering reaches RustIR, these block forms no longer exist as separate syntax categories.
+By the time lowering reaches RustIR, these flow-oriented surface forms no longer exist as separate syntax categories.
 
 ## Why some non-kernel variants are kept
 
@@ -84,5 +67,5 @@ These variants do not add expressive power. They are retained because the backen
 ## See also
 
 - [Compiler & Backend Design](design.md) for the full compilation pipeline
-- [Generic `do M` Blocks](../syntax/do_notation.md) and [Effects](../syntax/effects.md) for the surface rules behind the block examples
+- [Flow Syntax](../syntax/flows.md) and [Effects](../syntax/effects.md) for the current workflow surface
 - [Domains & Units](../syntax/domains.md), [Operators and Context](../syntax/operators.md), and [Classes and Higher-Kinded Types](../syntax/types/classes_and_hkts.md) for the surface features summarized here

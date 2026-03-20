@@ -7,80 +7,63 @@ use aivi.net.http
 use aivi.json
 use aivi.url (parse)
 
+expectUrl = raw =>
+  parse raw
+|> assertOk
+
 @test "Json body variant construction"
-jsonBodyVariant = do Effect {
-  reqUrl <- (parse "https://example.com/token" match
-    | Ok u  => pure u
-    | Err _ => fail "bad url"
-  )
-  req = {
+jsonBodyVariant = "https://example.com/token"
+  |> expectUrl#reqUrl
+  |> _ => pure {
     method: "POST"
     url: reqUrl
     headers: []
     body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
-  }
-  assertEq req.method "POST"
-  req.body match
-    | Some (Json _) => assert True
-    | _             => assert False
-}
+  }#req
+  ~|>_ => assertEq req.method "POST"
+   |> _ => req.body
+  ||>Some (Json _) => assert True
+  ||>_ => assert False
 
 @test "record literal coerces to Body"
-recordCoercesToBody = do Effect {
-  reqUrl <- (parse "https://example.com/token" match
-    | Ok u  => pure u
-    | Err _ => fail "bad url"
-  )
-  req = {
+recordCoercesToBody = "https://example.com/token"
+  |> expectUrl#reqUrl
+  |> _ => pure {
     method: "POST"
     url: reqUrl
     headers: []
     body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
-  }
-  req.body match
-    | Some (Json _) => assert True
-    | _             => assert False
-}
+  }#req
+   |> _ => req.body
+  ||>Some (Json _) => assert True
+  ||>_ => assert False
 
 @test "text coerces to Body via Plain"
-textCoercesToBody = do Effect {
-  reqUrl <- (parse "https://example.com/token" match
-    | Ok u  => pure u
-    | Err _ => fail "bad url"
-  )
-  req = {
+textCoercesToBody = "https://example.com/token"
+  |> expectUrl#reqUrl
+  |> _ => pure {
     method: "POST"
     url: reqUrl
     headers: []
     body: Some (Plain "hello world")
-  }
-  req.body match
-    | Some (Plain t) => assertEq t "hello world"
-    | _              => assert False
-}
+  }#req
+   |> _ => req.body
+  ||>Some (Plain t) => assertEq t "hello world"
+  ||>_ => assert False
 
 @test "toJson encodes record to JsonObject"
-toJsonRecord = do Effect {
-  encoded = toJson { name: "Alice", age: 30 }
-  encoded match
-    | JsonObject _ => assert True
-    | _            => assert False
-}
+toJsonRecord = toJson { name: "Alice", age: 30 }
+||>JsonObject _ => assert True
+||>_ => assert False
 
 @test "toJson encodes text to JsonString"
-toJsonText = do Effect {
-  encoded = toJson "hello"
-  assertEq encoded (JsonString "hello")
-}
+toJsonText = toJson "hello"
+  |> assertEq (JsonString "hello")
 
 @test "toJson encodes int to JsonInt"
-toJsonInt = do Effect {
-  encoded = toJson 42
-  assertEq encoded (JsonInt 42)
-}
+toJsonInt = toJson 42
+  |> assertEq (JsonInt 42)
 
 @test "toJson encodes None to JsonNull"
-toJsonNone = do Effect {
-  encoded = toJson None
-  assertEq encoded JsonNull
-}
+toJsonNone = toJson None
+  |> assertEq JsonNull

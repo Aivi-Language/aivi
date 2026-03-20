@@ -1,143 +1,98 @@
-# Generators
+# Fan-out and Collection Shaping
 
-Generators are **pure sequence builders**. They let you describe a stream of values without mutation, manual iterator state, or I/O.
+AIVI v0.2 uses flat flow syntax for zero-many workflows. The main tool is `*|>`, which fans out over an iterable, runs a per-item fan-out body, and rejoins with an ordinary list result at `*-|`.
 
-A helpful mental model is: a generator describes how to produce the next value when a consumer asks for it. That is what **pull-based** means here: the consumer asks for the next item, and the generator tells it how to compute that item.
+There is no separate `generate { ... }` surface in the current language.
 
-They:
+## The basic shape
 
-- stay pure
-- do not perform effects
-- can model finite or infinite data
-
-## 7.1 Generator type
-
-<<< ../snippets/from_md/syntax/generators/generator_type.aivi{aivi}
-
-A generator is an ordinary value you can pass around, return from a function, and combine with other pure code.
-
-## 7.2 Generator expressions
-
-A small example shows the overall shape:
-
-<<< ../snippets/from_md/syntax/generators/block_01.aivi{aivi}
-
-::: repl
 ```aivi
-/use aivi.generator
-xs = [1, -2, 3, -4, 5]
-result = generate {
-  value <- xs
-  value -> value > 0
-  yield value * 2
-} |> toList
-// => [2, 6, 10]
+evens =
+  [1..10]
+     *|> _
+     >|> _ % 2 == 0
+      |> _ * 2
+     *-|
 ```
-:::
 
-Read that block top to bottom:
+Read that as:
 
-1. take values from `xs`
-2. keep only the positive ones
-3. yield each remaining value after doubling it
+1. start from an iterable,
+2. enter a per-item fan-out body with `*|>`,
+3. keep only items whose guard passes,
+4. emit the transformed value for each surviving item,
+5. rejoin as a normal list at `*-|`.
 
-A generator expression can also be as small as a few explicit `yield` statements:
+## What `*|>` does
 
-<<< ../snippets/from_md/syntax/generators/generator_expressions.aivi{aivi}
+Inside a fan-out block:
 
-### Common statement forms
+- each item becomes the current spine subject,
+- ordinary `|>` lines transform that item,
+- `>|>` without `or fail ...` means **skip this item**,
+- bindings created inside the fan-out body stay local to that item,
+- the whole block yields a plain list value once `*-|` closes it.
 
-Generators use three common statement forms:
+That final point matters: after the block finishes, use ordinary collection helpers rather than a second special workflow syntax.
 
-- `item <- xs` binds `item` to each value produced by `xs`
-- `name = expr` is a plain pure local binding
-- `item -> predicate` keeps the current `item` only when the predicate is true
+## Shape the result with ordinary functions
 
-In a guard, the current item is also available implicitly, using the same rule as [Predicates § 4.2](predicates.md#42-implicit-binding-rule): bare field names resolve to fields on the current item. That is why these forms are equivalent, and why `email` below means `u.email`:
+```aivi
+activeUserIds =
+  users
+     *|> _
+     >|> active
+      |> .id
+     *-|
+      |> toSet
+```
 
-<<< ../snippets/from_md/syntax/generators/guards_and_predicates_01.aivi{aivi}
+Collection shaping stays in regular functions such as `map`, `filter`, `partition`, `groupBy`, `toSet`, and `fold`.
 
-A small but important distinction: `.email` is an accessor function (`user => user.email`). It is useful for `map .email`, but in a guard you usually want a boolean-valued expression such as `email` or `user.email`.
+## Nesting fan-out
 
-For example, if `xs` contains records with a `price` field, this keeps only the items whose price is above `80`:
+Nested `*|>` blocks express zero-many combinations without introducing a separate comprehension syntax.
 
-<<< ../snippets/from_md/syntax/generators/guards_and_predicates_02.aivi{aivi}
+```aivi
+grid =
+  xs
+     *|> _ #x
+      |> ys
+     *|> _ #y
+      |> (x, y)
+     *-|
+     *-|
+```
 
-Predicate rules are identical to `filter`.
+Use helper functions when nesting stops being readable.
 
-### Comparisons to other languages
+## Concurrency
 
-If you are translating an idea from another language, this quick note can help. If not, feel free to skip to the next section.
+`*|>` supports `@concurrent` when the runtime may process item fan-out bodies in parallel:
 
-**From Python or JavaScript:** the `yield` spelling may look familiar, but AIVI generators are pure values, not mutable iterators with hidden local state.
+```aivi
+savedIds =
+  users
+     *|> _ @concurrent 8
+      |> normalizeUser
+      |> saveUser
+      |> .id
+     *-|
+```
 
-**From Haskell or Scala:** AIVI does **not** use list-comprehension syntax.
+`@concurrent` limits how many item fan-out bodies may run at once. It does not change the logical result shape.
 
-Haskell-style syntax such as this is not used:
+## Relationship to `aivi.generator`
 
-<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_01.aivi{aivi}
+The [`aivi.generator`](../stdlib/core/generator.md) module still documents reusable lazy generator values as library data. The language-level workflow surface for zero-many processing, though, is `*|>` plus ordinary collection functions.
 
-Write the same idea with a `generate` block instead:
+## When to use fan-out versus plain collection helpers
 
-<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_02.aivi{aivi}
+Use `*|>` when the sequence logic itself needs workflow structure, for example:
 
-## 7.3 Effectful streaming
+- guards that should skip items,
+- per-item fallible or effectful steps,
+- nested zero-many expansions,
+- scoped bindings that make the item pipeline easier to read.
 
-AIVI does not include `generate async`. Keep generators pure, and model async or I/O-backed streaming in one of these ways:
-
-- use an `Effect` that *produces* a generator
-- use a dedicated stream type from the standard library when that abstraction fits better
-
-This keeps a clear line between pure sequence construction and effectful work.
-
-## 7.4 Building larger sequences
-
-Generators are a concise way to express sequence logic without intermediate collections or mutation.
-
-### Cartesian products
-
-A **Cartesian product** is the combination of every item from one sequence with every item from another sequence.
-
-<<< ../snippets/from_md/syntax/generators/cartesian_products.aivi{aivi}
-
-### Filtering and transformation together
-
-Assume `users` is a sequence of user records with `active`, `tier`, `name`, and `email` fields. This example keeps only active premium users whose email passes validation, then yields a smaller normalized record for each matching user:
-
-<<< ../snippets/from_md/syntax/generators/complex_filtering_and_transformation.aivi{aivi}
-
-### Infinite sequences
-
-<<< ../snippets/from_md/syntax/generators/expressive_infinity.aivi{aivi}
-
-This generator produces the Fibonacci sequence forever. The loop state `(a, b)` starts at `(0, 1)`, yields `a`, then continues with the next pair `(b, a + b)`. Because every iteration reaches `recurse`, the generator does not terminate on its own; consumers stop by taking only the prefix they need.
-
-## 7.5 Tail-recursive loops
-
-`loop (pattern) = initialState => { ... }` introduces a local tail-recursive loop for generators. Inside the loop body, `recurse nextState` continues with the next iteration and updated state.
-
-This is the generator-friendly way to express “keep going with new state” without mutation.
-If you only need the practical rule, remember: `recurse` means “run the loop again with this new state”.
-
-### Syntax
-
-<<< ../snippets/from_md/syntax/generators/syntax.aivi{aivi}
-
-- **`pattern`** binds the loop state. It may be a tuple, record, or simple name.
-- **`initialState`** is the starting state.
-- **`recurse expr`** restarts the loop with the new state `expr`. It must appear in tail position.
-- If `recurse` is never reached, the loop terminates.
-
-### Desugaring
-
-“Desugaring” means the compiler rewrites the loop into an ordinary local recursive function.
-
-<<< ../snippets/from_md/syntax/generators/desugaring_01.aivi{aivi}
-
-becomes approximately:
-
-<<< ../snippets/from_md/syntax/generators/desugaring_02.aivi{aivi}
-
-### Use in effect blocks
-
-`loop` and `recurse` are also available in `do Effect { ... }` blocks for stateful iteration. See [Effects § 9.6](effects.md#96-tail-recursive-loops).
+Use plain `map`, `filter`, and `fold` when a single expression already says the whole transformation clearly.

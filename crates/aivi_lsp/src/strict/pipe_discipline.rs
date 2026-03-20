@@ -159,6 +159,7 @@ pub(super) fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diag
                 }
                 walk_expr(body, out);
             }
+            aivi::Expr::Flow { root, .. } => walk_expr(root, out),
         }
     }
 
@@ -317,6 +318,7 @@ pub(super) fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<
                 }
                 walk_expr(body, out);
             }
+            aivi::Expr::Flow { root, .. } => walk_expr(root, out),
         }
     }
 

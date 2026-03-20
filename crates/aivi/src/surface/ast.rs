@@ -354,6 +354,11 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
+    Flow {
+        root: Box<Expr>,
+        lines: Vec<FlowLine>,
+        span: Span,
+    },
     Block {
         kind: BlockKind,
         items: Vec<BlockItem>,
@@ -415,6 +420,88 @@ pub struct MatchArm {
     pub guard_negated: bool,
     pub body: Expr,
     pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FlowBinding {
+    pub name: SpannedName,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum FlowModifier {
+    Timeout {
+        duration: Expr,
+        span: Span,
+    },
+    Delay {
+        duration: Expr,
+        span: Span,
+    },
+    Concurrent {
+        limit: Expr,
+        span: Span,
+    },
+    Retry {
+        attempts: u32,
+        interval: Expr,
+        exponential: bool,
+        span: Span,
+    },
+    Cleanup {
+        expr: Expr,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlowStepKind {
+    Flow,
+    Tap,
+    Attempt,
+    FanOut,
+    Applicative,
+}
+
+#[derive(Debug, Clone)]
+pub struct FlowStep {
+    pub kind: FlowStepKind,
+    pub expr: Expr,
+    pub modifiers: Vec<FlowModifier>,
+    pub binding: Option<FlowBinding>,
+    pub subflow: Vec<FlowLine>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FlowGuard {
+    pub predicate: Expr,
+    pub fail_expr: Option<Expr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FlowArm {
+    pub pattern: Pattern,
+    pub guard: Option<Expr>,
+    pub guard_negated: bool,
+    pub body: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FlowAnchor {
+    pub name: SpannedName,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum FlowLine {
+    Step(FlowStep),
+    Guard(FlowGuard),
+    Branch(FlowArm),
+    Recover(FlowArm),
+    Anchor(FlowAnchor),
 }
 
 #[derive(Debug, Clone)]

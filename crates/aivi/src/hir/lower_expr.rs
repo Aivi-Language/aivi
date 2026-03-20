@@ -37,6 +37,12 @@ fn lower_expr_inner_ctx(
                 })
                 .collect(),
         },
+        Expr::Flow { root, lines, span } => lower_expr_ctx(
+            desugar_flow_lowering_fallback(*root, &lines, span),
+            id_gen,
+            ctx,
+            false,
+        ),
         Expr::Literal(literal) => match literal {
             crate::surface::Literal::Number { text, .. } => {
                 fn split_suffixed(text: &str) -> Option<(String, String)> {
@@ -554,6 +560,160 @@ fn lower_expr_inner_ctx(
     }
 }
 
+fn desugar_flow_lowering_fallback(
+    root: Expr,
+    lines: &[FlowLine],
+    _span: crate::diagnostics::Span,
+) -> Expr {
+    desugar_flow_lowering_tail(root.clone(), lines).unwrap_or(root)
+}
+
+fn desugar_flow_lowering_tail(root: Expr, lines: &[FlowLine]) -> Option<Expr> {
+    if lines.is_empty() {
+        return Some(root);
+    }
+    match &lines[0] {
+        FlowLine::Anchor(_) => desugar_flow_lowering_tail(root, &lines[1..]),
+        FlowLine::Step(step) if step.kind == FlowStepKind::Flow => {
+            let applied = Expr::Binary {
+                op: "|>".to_string(),
+                left: Box::new(root),
+                right: Box::new(step.expr.clone()),
+                span: step.span.clone(),
+            };
+            if let Some(binding) = &step.binding {
+                let rest = desugar_flow_lowering_tail(Expr::Ident(binding.name.clone()), &lines[1..])?;
+                Some(Expr::Block {
+                    kind: BlockKind::Plain,
+                    items: vec![
+                        BlockItem::Let {
+                            pattern: Pattern::Ident(binding.name.clone()),
+                            expr: applied,
+                            span: binding.span.clone(),
+                        },
+                        BlockItem::Expr {
+                            expr: rest,
+                            span: step.span.clone(),
+                        },
+                    ],
+                    span: step.span.clone(),
+                })
+            } else {
+                desugar_flow_lowering_tail(applied, &lines[1..])
+            }
+        }
+        FlowLine::Step(step) if step.kind == FlowStepKind::Tap => {
+            let observed = Expr::Binary {
+                op: "|>".to_string(),
+                left: Box::new(root.clone()),
+                right: Box::new(step.expr.clone()),
+                span: step.span.clone(),
+            };
+            let rest = desugar_flow_lowering_tail(root, &lines[1..])?;
+            Some(Expr::Block {
+                kind: BlockKind::Plain,
+                items: vec![
+                    BlockItem::Let {
+                        pattern: step
+                            .binding
+                            .as_ref()
+                            .map(|binding| Pattern::Ident(binding.name.clone()))
+                            .unwrap_or_else(|| Pattern::Wildcard(step.span.clone())),
+                        expr: observed,
+                        span: step.span.clone(),
+                    },
+                    BlockItem::Expr {
+                        expr: rest,
+                        span: step.span.clone(),
+                    },
+                ],
+                span: step.span.clone(),
+            })
+        }
+        FlowLine::Guard(guard) if guard.fail_expr.is_some() => {
+            let rest = desugar_flow_lowering_tail(root.clone(), &lines[1..])?;
+            Some(Expr::Block {
+                kind: BlockKind::Do {
+                    monad: SpannedName {
+                        name: "Effect".to_string(),
+                        span: guard.span.clone(),
+                    },
+                },
+                items: vec![
+                    BlockItem::Given {
+                        cond: Expr::Binary {
+                            op: "|>".to_string(),
+                            left: Box::new(root),
+                            right: Box::new(guard.predicate.clone()),
+                            span: guard.span.clone(),
+                        },
+                        fail_expr: Expr::Call {
+                            func: Box::new(Expr::Ident(SpannedName {
+                                name: "fail".to_string(),
+                                span: guard.span.clone(),
+                            })),
+                            args: vec![guard.fail_expr.clone().expect("guard fail expr")],
+                            span: guard.span.clone(),
+                        },
+                        span: guard.span.clone(),
+                    },
+                    BlockItem::Expr {
+                        expr: rest,
+                        span: guard.span.clone(),
+                    },
+                ],
+                span: guard.span.clone(),
+            })
+        }
+        FlowLine::Branch(_) => {
+            let mut consumed = 0;
+            let mut arms = Vec::new();
+            while let Some(FlowLine::Branch(arm)) = lines.get(consumed) {
+                arms.push(MatchArm {
+                    pattern: arm.pattern.clone(),
+                    guard: arm.guard.clone(),
+                    guard_negated: arm.guard_negated,
+                    body: arm.body.clone(),
+                    span: arm.span.clone(),
+                });
+                consumed += 1;
+            }
+            let matched = Expr::Match {
+                scrutinee: Some(Box::new(root)),
+                arms,
+                span: flow_line_surface_span(&lines[0]),
+            };
+            desugar_flow_lowering_tail(matched, &lines[consumed..])
+        }
+        FlowLine::Step(step)
+            if matches!(
+                step.kind,
+                FlowStepKind::Attempt
+                    | FlowStepKind::Applicative
+                    | FlowStepKind::FanOut
+            ) =>
+        {
+            Some(Expr::Binary {
+                op: "|>".to_string(),
+                left: Box::new(root),
+                right: Box::new(step.expr.clone()),
+                span: step.span.clone(),
+            })
+        }
+        FlowLine::Guard(_) | FlowLine::Recover(_) => Some(root),
+        FlowLine::Step(_) => Some(root),
+    }
+}
+
+fn flow_line_surface_span(line: &FlowLine) -> crate::diagnostics::Span {
+    match line {
+        FlowLine::Step(step) => step.span.clone(),
+        FlowLine::Guard(guard) => guard.span.clone(),
+        FlowLine::Branch(arm) | FlowLine::Recover(arm) => arm.span.clone(),
+        FlowLine::Anchor(anchor) => anchor.span.clone(),
+    }
+}
+
 fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
     match expr {
         Expr::Ident(name) => name.span.clone(),
@@ -579,6 +739,7 @@ fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
         | Expr::Match { span, .. }
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
+        | Expr::Flow { span, .. }
         | Expr::Block { span, .. }
         | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),
@@ -1217,6 +1378,7 @@ fn looks_like_db_selector_predicate(expr: &Expr) -> bool {
         | Expr::Index { .. }
         | Expr::Raw { .. }
         | Expr::Suffixed { .. }
+        | Expr::Flow { .. }
         | Expr::Block { .. }
         | Expr::Mock { .. } => false,
     }

@@ -135,6 +135,7 @@ pub(super) fn strict_missing_import_suggestions(
                 }
                 collect_idents(body, out);
             }
+            aivi::Expr::Flow { root, .. } => collect_idents(root, out),
         }
     }
 
@@ -385,6 +386,7 @@ pub(super) fn strict_expected_type_coercions(
                 }
                 collect_calls(body, out);
             }
+            aivi::Expr::Flow { root, .. } => collect_calls(root, out),
         }
     }
 

@@ -2,27 +2,22 @@
 module integrationTests.stdlib.aivi.network.http.tests
 
 use aivi
+use aivi.concurrency (sleep)
 use aivi.testing
 use aivi.net.http
 use aivi.net.httpServer (Http, RawBytes)
-use aivi (
-  concurrency (sleep)
-)
 use aivi.json
 use aivi.text as text
 
-startServer = address => handler => do Effect {
-  result <- attempt (httpServer.listen { address: address } handler)
-  server <- assertOk result
-  _      <- sleep 25
-  pure server
-}
+startServer = address => handler =>
+  attempt (httpServer.listen { address: address } handler)
+   |> assertOk#server
+  ~|>_ => sleep 25
+   |> _ => pure server
 
-stopServer = server => do Effect {
-  result <- attempt (httpServer.stop server)
-  _      <- assertOk result
-  pure Unit
-}
+stopServer = server =>
+  attempt (httpServer.stop server)
+|> assertOk
 
 headerValue = name => headers => headers match
   | []                => None
@@ -46,117 +41,102 @@ jsonBytesReply = status => body => Http {
 // -- Request construction --
 
 @test "get performs request and exposes response"
-getPerformsRequest = do Effect {
-  handler = request => do Effect {
-    matchesRequest = request.method == "GET" && request.path == "/echo?lang=aivi"
-    pure (
-      if matchesRequest
-        then Http {
-          status: 200
-          headers: [{ name: "Content-Type", value: "text/plain" }]
-          body: "ok"
-        }
-        else Http {
-          status: 404
-          headers: [{ name: "Content-Type", value: "text/plain" }]
-          body: "bad"
-        }
-    )
-  }
+getPerformsRequest = {
+  handler = request => pure (
+    if request.method == "GET" && request.path == "/echo?lang=aivi"
+      then Http {
+        status: 200
+        headers: [{ name: "Content-Type", value: "text/plain" }]
+        body: "ok"
+      }
+      else Http {
+        status: 404
+        headers: [{ name: "Content-Type", value: "text/plain" }]
+        body: "bad"
+      }
+  )
 
-  server   <- startServer "127.0.0.1:39081" handler
-  result   <- get ~u(http://127.0.0.1:39081/echo?lang=aivi)
-  _        <- stopServer server
-  response <- assertOk result
-  _        <- assert_eq response.status 200
-  _        <- assert_eq response.body "ok"
-  assert_eq (headerValue "content-type" response.headers) (Some "text/plain")
+  Unit
+   |> _ => startServer "127.0.0.1:39081" handler@cleanup stopServer#server
+   |> _ => get ~u(http://127.0.0.1:39081/echo?lang=aivi)#responseResult
+   |> _ => assertOk responseResult#response
+  ~|>response => assert_eq response.status 200
+  ~|>response => assert_eq response.body "ok"
+   |> response => assert_eq (headerValue "content-type" response.headers) (Some "text/plain")
 }
 
 @test "server response record coerces to json and adds application json header"
-serverResponseRecordCoercesToJson = do Effect {
-  handler = request => do Effect {
-    matchesRequest = request.method == "GET" && (request.path == "/json-response" || request.path == "/json-response?")
-    pure (
-      if matchesRequest
-        then Http {
-          status: 200
-          headers: []
-          body: { name: "Ada", age: 42 }
-        }
-        else Http {
-          status: 404
-          headers: [{ name: "Content-Type", value: "text/plain" }]
-          body: "bad"
-        }
-    )
-  }
+serverResponseRecordCoercesToJson = {
+  handler = request => pure (
+    if request.method == "GET" && (request.path == "/json-response" || request.path == "/json-response?")
+      then Http {
+        status: 200
+        headers: []
+        body: { name: "Ada", age: 42 }
+      }
+      else Http {
+        status: 404
+        headers: [{ name: "Content-Type", value: "text/plain" }]
+        body: "bad"
+      }
+  )
 
-  server   <- startServer "127.0.0.1:39085" handler
-  result   <- get ~u(http://127.0.0.1:39085/json-response)
-  _        <- stopServer server
-  response <- assertOk result
-  _        <- assert_eq response.status 200
-  _        <- assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
-  assert_eq (headerValue "content-type" response.headers) (Some "application/json")
+  Unit
+   |> _ => startServer "127.0.0.1:39085" handler@cleanup stopServer#server
+   |> _ => get ~u(http://127.0.0.1:39085/json-response)#responseResult
+   |> _ => assertOk responseResult#response
+  ~|>response => assert_eq response.status 200
+  ~|>response => assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
+   |> response => assert_eq (headerValue "content-type" response.headers) (Some "application/json")
 }
 
 @test "post sends plain text body"
-postSendsPlainTextBody = do Effect {
-  handler = request => do Effect {
-    matchesRequest = request.method == "POST" && (request.path == "/submit" || request.path == "/submit?")
-    pure (
-      if matchesRequest
-        then bytesTextReply 200 request.body
-        else bytesTextReply 405 [110, 111]
-    )
-  }
+postSendsPlainTextBody = {
+  handler = request => pure (
+    if request.method == "POST" && (request.path == "/submit" || request.path == "/submit?")
+      then bytesTextReply 200 request.body
+      else bytesTextReply 405 [110, 111]
+  )
 
-  server   <- startServer "127.0.0.1:39082" handler
-  result   <- post ~u(http://127.0.0.1:39082/submit) "hello world"
-  _        <- stopServer server
-  response <- assertOk result
-  _        <- assert_eq response.status 200
-  assert_eq response.body "hello world"
+  Unit
+   |> _ => startServer "127.0.0.1:39082" handler@cleanup stopServer#server
+   |> _ => post ~u(http://127.0.0.1:39082/submit) "hello world"#responseResult
+   |> _ => assertOk responseResult#response
+  ~|>response => assert_eq response.status 200
+   |> response => assert_eq response.body "hello world"
 }
 
 @test "fetch json body adds application json header"
-fetchJsonBodyAddsApplicationJsonHeader = do Effect {
-  handler = request => do Effect {
-    matchesRequest = request.method == "PATCH" && (request.path == "/json" || request.path == "/json?") && headerValue "content-type" request.headers == Some "application/json"
-    pure (
-      if matchesRequest
-        then jsonBytesReply 200 request.body
-        else bytesTextReply 400 [98, 97, 100]
-    )
-  }
-
-  server <- startServer "127.0.0.1:39083" handler
-  result <- fetch {
+fetchJsonBodyAddsApplicationJsonHeader = {
+  handler = request => pure (
+    if request.method == "PATCH" && (request.path == "/json" || request.path == "/json?") && headerValue "content-type" request.headers == Some "application/json"
+      then jsonBytesReply 200 request.body
+      else bytesTextReply 400 [98, 97, 100]
+  )
+  request = {
     method: "PATCH"
     url: ~u(http://127.0.0.1:39083/json)
     headers: []
     body: Some (Json (toJson { name: "Ada", age: 42 }))
   }
-  _        <- stopServer server
-  response <- assertOk result
-  _        <- assert_eq response.status 200
-  assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
+
+  Unit
+   |> _ => startServer "127.0.0.1:39083" handler@cleanup stopServer#server
+   |> _ => fetch request#responseResult
+   |> _ => assertOk responseResult#response
+  ~|>response => assert_eq response.status 200
+  ~|>response => assert_eq response.body "\{\"age\":42,\"name\":\"Ada\"}"
+   |> _ => pure Unit
 }
 
 @test "fetch form body percent encodes pairs"
-fetchFormBodyPercentEncodesPairs = do Effect {
-  handler = request => do Effect {
-    matchesRequest = request.method == "POST" && (request.path == "/form" || request.path == "/form?") && headerValue "content-type" request.headers == Some "application/x-www-form-urlencoded"
-    pure (
-      if matchesRequest
-        then bytesTextReply 200 request.body
-        else bytesTextReply 400 [98, 97, 100]
-    )
-  }
-
-  server <- startServer "127.0.0.1:39084" handler
-  result <- fetch {
+fetchFormBodyPercentEncodesPairs = {
+  handler = request => pure (
+    if request.method == "POST" && (request.path == "/form" || request.path == "/form?") && headerValue "content-type" request.headers == Some "application/x-www-form-urlencoded"
+      then bytesTextReply 200 request.body
+      else bytesTextReply 400 [98, 97, 100]
+  )
+  request = {
     method: "POST"
     url: ~u(http://127.0.0.1:39084/form)
     headers: [{ name: "Content-Type", value: "application/x-www-form-urlencoded" }]
@@ -167,8 +147,12 @@ fetchFormBodyPercentEncodesPairs = do Effect {
       ]
     )
   }
-  _        <- stopServer server
-  response <- assertOk result
-  _        <- assert_eq response.status 200
-  assert_eq response.body "name=Ada+Lovelace&city=Paris"
+
+  Unit
+   |> _ => startServer "127.0.0.1:39084" handler@cleanup stopServer#server
+   |> _ => fetch request#responseResult
+   |> _ => assertOk responseResult#response
+  ~|>response => assert_eq response.status 200
+  ~|>response => assert_eq response.body "name=Ada+Lovelace&city=Paris"
+   |> _ => pure Unit
 }

@@ -6,17 +6,19 @@ use aivi.testing
 use aivi.email
 
 @test "mime parsing helpers"
-mime_parsing_helpers = do Effect {
-  raw   = "Subject: hi\nContent-Type: text/plain\n\nhello"
-  parts = mimeParts raw
-  assertEq (List.length parts >= 1) True
+mime_parsing_helpers = {
+  raw      = "Subject: hi\nContent-Type: text/plain\n\nhello"
+  parts    = mimeParts raw
   combined = flattenBodies parts
-  assert (text.contains "hello" combined)
+
+  Unit
+  ~|>_ => assertEq (List.length parts >= 1) True
+  ~|>_ => assert (text.contains "hello" combined)
 }
 
 @test "smtp surface with multi-recipient"
-smtp_surface = do Effect {
-  _ <- attempt (smtpSend {
+smtp_surface = Unit
+  |> _ => attempt (smtpSend {
       host: "smtp.example.com"
       user: "u"
       auth: Password "p"
@@ -28,47 +30,51 @@ smtp_surface = do Effect {
       body: "world"
       port: None
       starttls: None
-  }
-  )
-  assert True
-}
+  })
+  |> _ => assert True
 
 @test "email auth password constructor"
-email_auth_password = do Effect {
+email_auth_password = {
   pwAuth = Password "secret"
-  pwAuth match
-    | Password p => assertEq p "secret"
-    | _          => assert False
+
+  pwAuth
+  ||>Password p => assertEq p "secret"
+  ||>_ => assert False
 }
 
 @test "email auth oauth2 constructor"
-email_auth_oauth2 = do Effect {
+email_auth_oauth2 = {
   oauthAuth = OAuth2 "mytoken123"
-  oauthAuth match
-    | OAuth2 t => assertEq t "mytoken123"
-    | _        => assert False
+
+  oauthAuth
+  ||>OAuth2 t => assertEq t "mytoken123"
+  ||>_ => assert False
 }
 
 @test "idle result timed out"
-idle_result_timed_out = do Effect {
+idle_result_timed_out = {
   t = TimedOut
-  t match
-    | TimedOut => assert True
-    | _        => assert False
+
+  t
+  ||>TimedOut => assert True
+  ||>_ => assert False
 }
 
 @test "idle result mailbox changed"
-idle_result_mailbox_changed = do Effect {
+idle_result_mailbox_changed = {
   m = MailboxChanged
-  m match
-    | MailboxChanged => assert True
-    | _              => assert False
+
+  m
+  ||>MailboxChanged => assert True
+  ||>_ => assert False
 }
 
 @test "mailbox info record shape"
-mailbox_info_shape = do Effect {
+mailbox_info_shape = {
   info = { name: "INBOX", separator: Some "/", attributes: ["\\HasNoChildren"] }
-  assertEq info.name "INBOX"
-  assertEq info.separator (Some "/")
-  assertEq (List.length info.attributes) 1
+
+  Unit
+  ~|>_ => assertEq info.name "INBOX"
+  ~|>_ => assertEq info.separator (Some "/")
+  ~|>_ => assertEq (List.length info.attributes) 1
 }

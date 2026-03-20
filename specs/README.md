@@ -45,10 +45,10 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 - [Opaque Types](syntax/types/opaque_types.md)
 - [Domains & Units](syntax/domains.md)
 #### Effects & Workflows
+- [Flow Syntax](syntax/flows.md)
 - [Effects](syntax/effects.md)
-- [do Notation](syntax/do_notation.md)
-- [Resources](syntax/resources.md)
-- [Generators](syntax/generators.md)
+- [Cleanup & Lifetimes](syntax/resources.md)
+- [Fan-out & Collection Shaping](syntax/generators.md)
 #### Modules & External Data
 - [Modules](syntax/modules.md)
 ##### External Sources

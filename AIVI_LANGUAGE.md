@@ -16,7 +16,7 @@ Use this as the compact default reference for generating AIVI. If a case is uncl
 - Effects are explicit: `Effect E A`.
 - Functions are curried; application is by whitespace.
 - Pattern bindings with `=` must be total; use `match` for refutable cases.
-- Opening `{` stays on the same line: `do Effect {`, `generate {`, `x match`.
+- Opening `{` stays on the same line for record/sigil forms: `patch { ... }`, `x match`, `~<gtk>...</gtk>`.
 - Avoid deep nesting; extract helpers.
 
 ## 2. Lexical / naming
@@ -28,7 +28,7 @@ Use this as the compact default reference for generating AIVI. If a case is uncl
 - Text: `"hello { name }"`.
 - Numbers: `42`, `3.14`, suffixed literals like `10px`, `30s`, `100%`.
 - Constructors, not keywords: `True False None Some Ok Err`.
-- Deprecated: `effect {}` → use `do Effect {}`. `name@pat` → use `name as pat`.
+- Whole-value pattern binding uses `name as pat`; do not write `name@pat`.
 
 ## 3. Bindings / destructuring
 
@@ -258,65 +258,55 @@ For `Signal A`, use `<<-`:
 - function → `update`
 - record literal preserves patch semantics
 
-## 11. Blocks
+## 11. Flows
 
-### `generate { ... }`
+Flat flow syntax is the default way to write sequential, fallible, applicative, zero-many, and handler-shaped workflows.
 
-Pure lazy sequence builder.
-
-```aivi
-generate {
-  x <- [1 .. 10]
-  x -> x % 2 == 0
-  yield x
-}
-```
-
-Inside `generate`:
-
-- `x <- source`
-- `x = expr`
-- `x -> pred`
-- `yield expr`
-- `loop ... => { ... recurse ... }`
-
-### `do Effect { ... }`
-
-Most common effect block.
+### Ordinary sequential flow
 
 ```aivi
-do Effect {
-  cfg <- loadConfig
-  name = cfg.appName
-  when cfg.verbose <- print "verbose"
-  given cfg.ok or fail BadConfig
-  pure name
-}
+loadConfig : Path -> Effect ConfigError Config
+loadConfig = path =>
+  file.json {
+    path: path
+    schema: source.schema.derive
+  }
+  |> load #cfg
+ >|> cfg.enabled or fail DisabledConfig
+  |> normalizeConfig
 ```
 
-Inside `do Effect`:
+### Flow operators
 
-- `x <- eff`
-- `x = expr`
-- `x <- resource`
-- `when cond <- eff`
-- `unless cond <- eff`
-- `given cond or failExpr`
-- final expression is an effect, usually `pure value`
-- local `loop`/`recurse` supported
+- ` |>` — ordinary sequential step
+- `~|>` — tap; run an effect and keep the incoming subject
+- `>|>` — guard; use `or fail ...` for preconditions
+- `?|>` / `!|>` — attempt and recover
+- `||>` — branch over the current subject
+- `*|>` — start a fan-out body over an iterable
+- `*-|` — end the current fan-out body and rejoin the outer spine
+- `&|>` — independent siblings over shared input; carrier type decides how they combine
+- `@|>` — anchor for `recurse`
 
-### `do M { ... }`
+Bindings and modifiers:
 
-Generic monadic block for `Option`, `Result`, `Query`, etc.
+- `#name` binds a successful line result
+- modifiers: `@timeout`, `@delay`, `@concurrent`, `@retry`, `@cleanup`
 
-### `do Applicative { ... }`
+### Applicative and zero-many shapes
 
-Use for independent validations; final line is a plain value.
+```aivi
+draft
+   &|> validateTitle #title
+   &|> validateEmail #email
+    |> SaveRequest { title, email }
 
-### `do Event { ... }`
-
-Convenience for event handles. Same body rules as `do Effect`.
-Returns a handle with reactive fields like `result`, `error`, `done`, `running`.
+users
+   *|> _
+   >|> active
+    |> .name
+   *-|
+```
 
 ## 12. Effects
 
@@ -327,38 +317,37 @@ bind    : Effect E A -> (A -> Effect E B) -> Effect E B
 attempt : Effect E A -> Effect F (Result E A)
 ```
 
-Fallbacks:
+Use flat flows for everyday effectful code.
 
 ```aivi
-txt <- load (file.read path) or "(missing)"
-val <- riskyOp or
-  | NotFound _ => pure default
-  | Timeout _  => fail "timed out"
-count = result or 0
+readText = path =>
+  path
+     |> file.read
+     |> attempt
+     |> result => result match
+          | Ok text => text
+          | Err _   => "(missing)"
 ```
 
-- `attempt` captures effect errors as `Result`.
-- `when` / `unless` are conditional effects.
-- `given cond or ...` is a precondition guard.
-- `if` is an expression; use nested `do Effect` for multi-step branches.
+- `attempt` captures effect errors as `Result` data.
+- Use `>|>` for preconditions and `?|>` / `!|>` for inline recovery.
+- `match` remains the ordinary branching tool for `Option`, `Result`, and ADTs.
 
-## 13. Resources
+## 13. Cleanup
 
 ```aivi
-managedFile = path => resource {
-  handle <- file.open path
-  yield handle
-  file.close handle
-}
+readAllText = path =>
+  path
+     |> file.open @cleanup file.close #handle
+     |> file.readAll handle
 ```
 
-- exactly one `yield`
-- code after `yield` is cleanup
+- register cleanup with `@cleanup`
 - cleanup runs on scope exit, error, or cancellation
-- resources release in LIFO order
-- `aivi.net.sockets.listen` returns a resource-scoped `Listener`; `Connection` values from `connect`/`accept` still need explicit `close`
+- multiple cleanups unwind in LIFO order
 
 ## 14. Modules / imports / exports
+
 
 ```aivi
 module my.app.api
@@ -384,7 +373,7 @@ use aivi.chronos.duration (domain Duration)
 
 ## 15. External sources
 
-Preferred: schema-first declarations, `load` only inside `do Effect`.
+Preferred: schema-first declarations, `load` inside flat flows.
 
 - On GNOME desktops, `aivi.gnome.onlineAccounts` can resolve desktop-managed mail auth/config for use with `aivi.email`.
 
@@ -443,7 +432,7 @@ GTK / reactive essentials:
 - `signal { ... }` creates state.
 - `signal ->> ...` derives signals.
 - `set`, `update`, `<<-` mutate signal values declaratively.
-- `do Event { ... }` creates event handles.
+- `event.from (...)` and related helpers create event handles from flow-shaped handler bodies.
 - GTK sigils support shorthand `Gtk*` / `Adw*` tags, payload-oriented signal sugar (`onClick`, `onActivate`, `onInput`, `onToggle`, `onValueChanged`, `onSelect`, `onFocusIn`, `onFocusOut`, `onClosed`, `onShowSidebarChanged`) with direct callback payloads, raw `<signal ... />` escape hatches, `<each>`, `<show>`, component tags, function-call tags (including zero-arg `<Pane />` -> `pane Unit` sugar for simple self-closing helpers), and nested `<property name="..."> <Gtk.../> </property>` helper-object graphs for GTK object-valued properties such as `model` and `factory`.
 
 ## 17. Decorators
@@ -464,10 +453,8 @@ Unknown decorators are compile errors.
 
 ```aivi
 mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
-in do Effect {
-  users <- fetchUsers
-  assertEq (length users) 1
-}
+in fetchUsers
+   |> users => assertEq (length users) 1
 ```
 
 Rules:
@@ -545,22 +532,22 @@ opt |> getOrElse default
 res |> getOrElse default
 opt |> map f |> filter pred |> chain g
 res |> map f |> mapErr g |> chain h
-do Applicative {
-  x <- v1
-  y <- v2
-  f x y
-}
-res <- attempt risky
-val <- risky or default
-when cond <- eff
-given cond or fail err
+Unit
+  &|> v1 #x
+  &|> v2 #y
+   |> f x y
+request
+  ?|> risky
+  !|> Timeout _ => default
+input
+  >|> isValid or fail err
 state <| { user.profile.name: "New" }
 state <| { items[*].price: _ * 1.1 }
-generate {
-  x <- src
-  x -> pred
-  yield f x
-}
+src
+  *|> _
+  >|> pred
+   |> f
+  *-|
 ```
 
 ## 23. Anti-patterns (never emit)
@@ -596,7 +583,7 @@ When writing AIVI, default to:
 4. signatures for public functions and all multi-clause functions
 5. curried defs with `=` and `=>`
 6. `match` for refutable branching
-7. `do Effect { ... }` for effects
+7. flow syntax (`|>`, `>|>`, `?|>`, `!|>`, `&|>`, `*|>` ... `*-|`) for workflows
 8. `Option` / `Result` instead of null / exceptions
-9. pipelines, predicates, patches, recursion, generators
+9. pipelines, predicates, patches, recursion, and fan-out flows
 10. concise helpers instead of nested expressions

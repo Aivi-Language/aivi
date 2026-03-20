@@ -83,6 +83,11 @@ fn qualify_expr(
             right: Box::new(qualify_expr(*right, import_map, scope)),
             span,
         },
+        Expr::Flow { root, lines, span } => Expr::Flow {
+            root: Box::new(qualify_expr(*root, import_map, scope)),
+            lines: qualify_flow_lines(lines, import_map, scope),
+            span,
+        },
         Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
             base: Box::new(qualify_expr(*base, import_map, scope)),
             field,
@@ -251,6 +256,162 @@ fn qualify_expr(
             span,
         },
     }
+}
+
+fn qualify_flow_modifier(
+    modifier: FlowModifier,
+    import_map: &std::collections::HashMap<String, String>,
+    scope: &std::collections::HashSet<String>,
+) -> FlowModifier {
+    match modifier {
+        FlowModifier::Timeout { duration, span } => FlowModifier::Timeout {
+            duration: qualify_expr(duration, import_map, scope),
+            span,
+        },
+        FlowModifier::Delay { duration, span } => FlowModifier::Delay {
+            duration: qualify_expr(duration, import_map, scope),
+            span,
+        },
+        FlowModifier::Concurrent { limit, span } => FlowModifier::Concurrent {
+            limit: qualify_expr(limit, import_map, scope),
+            span,
+        },
+        FlowModifier::Retry {
+            attempts,
+            interval,
+            exponential,
+            span,
+        } => FlowModifier::Retry {
+            attempts,
+            interval: qualify_expr(interval, import_map, scope),
+            exponential,
+            span,
+        },
+        FlowModifier::Cleanup { expr, span } => FlowModifier::Cleanup {
+            expr: qualify_expr(expr, import_map, scope),
+            span,
+        },
+    }
+}
+
+fn qualify_flow_step(
+    step: FlowStep,
+    import_map: &std::collections::HashMap<String, String>,
+    scope: &std::collections::HashSet<String>,
+) -> FlowStep {
+    FlowStep {
+        kind: step.kind,
+        expr: qualify_expr(step.expr, import_map, scope),
+        modifiers: step
+            .modifiers
+            .into_iter()
+            .map(|modifier| qualify_flow_modifier(modifier, import_map, scope))
+            .collect(),
+        binding: step.binding,
+        subflow: qualify_flow_lines(step.subflow, import_map, scope),
+        span: step.span,
+    }
+}
+
+fn qualify_flow_arm(
+    arm: FlowArm,
+    import_map: &std::collections::HashMap<String, String>,
+    scope: &std::collections::HashSet<String>,
+) -> FlowArm {
+    let mut inner_scope = scope.clone();
+    collect_pattern_names(&arm.pattern, &mut inner_scope);
+    FlowArm {
+        pattern: arm.pattern,
+        guard: arm
+            .guard
+            .map(|guard| qualify_expr(guard, import_map, &inner_scope)),
+        guard_negated: arm.guard_negated,
+        body: qualify_expr(arm.body, import_map, &inner_scope),
+        span: arm.span,
+    }
+}
+
+fn qualify_flow_lines(
+    lines: Vec<FlowLine>,
+    import_map: &std::collections::HashMap<String, String>,
+    scope: &std::collections::HashSet<String>,
+) -> Vec<FlowLine> {
+    let mut current_scope = scope.clone();
+    let mut qualified = Vec::with_capacity(lines.len());
+    let mut lines = lines.into_iter().peekable();
+
+    while let Some(line) = lines.next() {
+        match line {
+            FlowLine::Step(step) if matches!(step.kind, FlowStepKind::Applicative) =>
+            {
+                let group_kind = step.kind;
+                let group_scope = current_scope.clone();
+                let mut pending_bindings = Vec::new();
+
+                if let Some(binding) = &step.binding {
+                    pending_bindings.push(binding.name.name.clone());
+                }
+                qualified.push(FlowLine::Step(qualify_flow_step(
+                    step,
+                    import_map,
+                    &group_scope,
+                )));
+
+                while matches!(lines.peek(), Some(FlowLine::Step(next)) if next.kind == group_kind) {
+                    let FlowLine::Step(next) = lines.next().expect("peeked flow step") else {
+                        unreachable!("peek ensured a flow step");
+                    };
+                    if let Some(binding) = &next.binding {
+                        pending_bindings.push(binding.name.name.clone());
+                    }
+                    qualified.push(FlowLine::Step(qualify_flow_step(
+                        next,
+                        import_map,
+                        &group_scope,
+                    )));
+                }
+
+                for binding in pending_bindings {
+                    current_scope.insert(binding);
+                }
+            }
+            FlowLine::Step(step) => {
+                let binding_name = step.binding.as_ref().map(|binding| binding.name.name.clone());
+                qualified.push(FlowLine::Step(qualify_flow_step(
+                    step,
+                    import_map,
+                    &current_scope,
+                )));
+                if let Some(binding_name) = binding_name {
+                    current_scope.insert(binding_name);
+                }
+            }
+            FlowLine::Guard(guard) => qualified.push(FlowLine::Guard(FlowGuard {
+                predicate: qualify_expr(guard.predicate, import_map, &current_scope),
+                fail_expr: guard
+                    .fail_expr
+                    .map(|expr| qualify_expr(expr, import_map, &current_scope)),
+                span: guard.span,
+            })),
+            FlowLine::Branch(arm) => {
+                qualified.push(FlowLine::Branch(qualify_flow_arm(
+                    arm,
+                    import_map,
+                    &current_scope,
+                )));
+            }
+            FlowLine::Recover(arm) => {
+                qualified.push(FlowLine::Recover(qualify_flow_arm(
+                    arm,
+                    import_map,
+                    &current_scope,
+                )));
+            }
+            FlowLine::Anchor(anchor) => qualified.push(FlowLine::Anchor(anchor)),
+        }
+    }
+
+    qualified
 }
 
 /// Qualify block items, threading scope through let/bind patterns.

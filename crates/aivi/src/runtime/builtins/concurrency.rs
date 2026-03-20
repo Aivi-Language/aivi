@@ -2,9 +2,72 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use super::util::{builtin, expect_int};
+use super::util::{builtin, expect_int, make_err, make_ok, value_type_name};
 use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend, ChannelSender};
-use crate::runtime::{CancelToken, EffectValue, Runtime, RuntimeContext, RuntimeError, Value};
+use crate::runtime::{
+    wrap_runtime_error_with_snapshot, CancelToken, EffectValue, Runtime, RuntimeContext,
+    RuntimeError, Value,
+};
+
+fn expect_callable(value: Value, ctx: &str) -> Result<Value, RuntimeError> {
+    match value {
+        Value::Builtin(_) | Value::MultiClause(_) | Value::Thunk(_) => Ok(value),
+        other => Err(RuntimeError::TypeError {
+            context: ctx.to_string(),
+            expected: "Function".to_string(),
+            got: value_type_name(&other).to_string(),
+        }),
+    }
+}
+
+fn closed_result_value() -> Value {
+    make_err(Value::Constructor {
+        name: "Closed".to_string(),
+        args: Vec::new(),
+    })
+}
+
+fn recv_next(receiver: &Arc<ChannelRecv>, runtime: &mut Runtime) -> Result<Option<Value>, RuntimeError> {
+    let gtk_active = super::gtk4_real::is_gtk_pump_active();
+    let timeout = if gtk_active {
+        Duration::from_millis(16)
+    } else {
+        Duration::from_millis(100)
+    };
+    loop {
+        runtime.check_cancelled()?;
+        if gtk_active {
+            super::gtk4_real::pump_gtk_events();
+            runtime.reactive_flush_deferred()?;
+        }
+        let recv_guard = receiver
+            .inner
+            .receiver
+            .lock()
+            .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
+        match recv_guard.recv_timeout(timeout) {
+            Ok(value) => return Ok(Some(value)),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                drop(recv_guard);
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(None),
+        }
+    }
+}
+
+fn run_child_effect(runtime: &mut Runtime, effect: Value) -> Result<Value, RuntimeError> {
+    match runtime.run_effect_value(effect) {
+        Ok(value) => {
+            if let Some((err, snapshot)) = runtime.take_pending_runtime_error() {
+                Err(wrap_runtime_error_with_snapshot(err, snapshot))
+            } else {
+                Ok(value)
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
 
 pub(super) fn build_channel_record() -> Value {
     let mut fields = std::collections::HashMap::new();
@@ -113,45 +176,67 @@ pub(super) fn build_channel_record() -> Value {
             };
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
-                    // Use a longer timeout when GTK is not active to avoid busy-waiting.
-                    // ~60fps is sufficient for responsive GTK event pumping; non-GTK
-                    // only needs periodic cancellation checks.
-                    let gtk_active = super::gtk4_real::is_gtk_pump_active();
-                    let timeout = if gtk_active {
-                        Duration::from_millis(16)
-                    } else {
-                        Duration::from_millis(100)
-                    };
+                    match recv_next(&receiver, runtime)? {
+                        Some(value) => Ok(make_ok(value)),
+                        None => Ok(closed_result_value()),
+                    }
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "fold".to_string(),
+        builtin("channel.fold", 3, |mut args, _| {
+            let receiver = match args.pop().unwrap() {
+                Value::ChannelRecv(handle) => handle,
+                _ => {
+                    return Err(RuntimeError::Message(
+                        "channel.fold expects a recv handle".to_string(),
+                    ))
+                }
+            };
+            let step = expect_callable(args.pop().unwrap(), "channel.fold")?;
+            let init = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    let mut acc = init.clone();
                     loop {
-                        runtime.check_cancelled()?;
-                        if gtk_active {
-                            super::gtk4_real::pump_gtk_events();
-                            runtime.reactive_flush_deferred()?;
+                        match recv_next(&receiver, runtime)? {
+                            Some(item) => {
+                                let partial = runtime.apply(step.clone(), acc)?;
+                                let run_step = runtime.apply(partial, item)?;
+                                acc = runtime.run_effect_value(run_step)?;
+                            }
+                            None => return Ok(acc),
                         }
-                        let recv_guard =
-                            receiver.inner.receiver.lock().map_err(|_| {
-                                RuntimeError::Message("channel poisoned".to_string())
-                            })?;
-                        match recv_guard.recv_timeout(timeout) {
-                            Ok(value) => {
-                                return Ok(Value::Constructor {
-                                    name: "Ok".to_string(),
-                                    args: vec![value],
-                                });
+                    }
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "forEach".to_string(),
+        builtin("channel.forEach", 2, |mut args, _| {
+            let func = expect_callable(args.pop().unwrap(), "channel.forEach")?;
+            let receiver = match args.pop().unwrap() {
+                Value::ChannelRecv(handle) => handle,
+                _ => {
+                    return Err(RuntimeError::Message(
+                        "channel.forEach expects a recv handle".to_string(),
+                    ))
+                }
+            };
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    loop {
+                        match recv_next(&receiver, runtime)? {
+                            Some(item) => {
+                                let run_item = runtime.apply(func.clone(), item)?;
+                                runtime.run_effect_value(run_item)?;
                             }
-                            Err(mpsc::RecvTimeoutError::Timeout) => {
-                                drop(recv_guard);
-                                continue;
-                            }
-                            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                                return Ok(Value::Constructor {
-                                    name: "Err".to_string(),
-                                    args: vec![Value::Constructor {
-                                        name: "Closed".to_string(),
-                                        args: Vec::new(),
-                                    }],
-                                })
-                            }
+                            None => return Ok(Value::Unit),
                         }
                     }
                 }),
@@ -194,7 +279,7 @@ fn spawn_effect(
 ) {
     std::thread::spawn(move || {
         let mut runtime = Runtime::new(ctx, cancel);
-        let result = runtime.run_effect_value(effect);
+        let result = run_child_effect(&mut runtime, effect);
         let _ = sender.send((id, result));
     });
 }
@@ -211,7 +296,7 @@ fn spawn_task(effect_value: Value, ctx: Arc<RuntimeContext>, parent: Arc<CancelT
         let cancel_for_thread = cancel.clone();
         std::thread::spawn(move || {
             let mut runtime = Runtime::new(ctx, cancel_for_thread);
-            let output = runtime.run_effect_value(effect_value);
+            let output = run_child_effect(&mut runtime, effect_value);
             if let Ok(mut guard) = result.0.lock() {
                 *guard = Some(output);
                 result.1.notify_all();
@@ -302,7 +387,7 @@ pub(crate) fn build_concurrent_record() -> Value {
                 func: Arc::new(move |runtime| {
                     let cancel = CancelToken::child(runtime.cancel.clone());
                     let mut child = Runtime::new(ctx.clone(), cancel.clone());
-                    let result = child.run_effect_value(effect.clone());
+                    let result = run_child_effect(&mut child, effect.clone());
                     cancel.cancel();
                     result
                 }),
@@ -571,7 +656,7 @@ pub(crate) fn build_concurrent_record() -> Value {
                     for _ in 0..max_attempts {
                         runtime.check_cancelled()?;
                         let mut rt = Runtime::new(ctx.clone(), runtime.cancel.clone());
-                        match rt.run_effect_value(effect_value.clone()) {
+                        match run_child_effect(&mut rt, effect_value.clone()) {
                             Ok(v) => return Ok(v),
                             Err(RuntimeError::Cancelled) => return Err(RuntimeError::Cancelled),
                             Err(e) => last_err = e,

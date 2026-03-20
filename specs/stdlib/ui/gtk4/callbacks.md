@@ -44,10 +44,10 @@ form = signal { title: "", published: False }
 themeIndex = signal 0
 
 saveDraft : EventHandle GtkError Unit
-saveDraft = do Event {
-  persistDraft (get form)
-  pure Unit
-}
+saveDraft = event.from (_ =>
+  get form
+    |> persistDraft
+)
 
 view = ~<gtk>
   <GtkBox orientation="vertical" spacing="12">
@@ -87,17 +87,11 @@ use aivi.ui.gtk4
 sidebarOpen = signal True
 
 refresh : EventHandle GtkError Unit
-refresh = do Event {
-  reloadMailbox
-  pure Unit
-}
+refresh = event.from (_ => reloadMailbox)
 
 handleKey = event => event match
   | GtkKeyPressed _ "mailWindow" "F5" _ => refresh.run
-  | GtkKeyPressed _ "mailWindow" "Escape" _ => do Effect {
-      sidebarOpen <<- False
-      pure Unit
-    }
+  | GtkKeyPressed _ "mailWindow" "Escape" _ => sidebarOpen <<- False
   | _ => pure Unit
 ```
 

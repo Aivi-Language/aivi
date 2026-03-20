@@ -1220,6 +1220,7 @@ fn expr_can_capture(expr: &Expr, env: &RelationExprEnv, state: &QueryCompileStat
         Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields
             .iter()
             .all(|field| expr_can_capture(&field.value, env, state)),
+        Expr::Flow { root, .. } => expr_can_capture(root, env, state),
         Expr::FieldSection { .. }
         | Expr::Index { .. }
         | Expr::Lambda { .. }
@@ -2010,6 +2011,7 @@ fn selector_expr_can_capture(expr: &Expr, env: &SelectorCompileEnv) -> bool {
             selector_expr_can_capture(func, env)
                 && args.iter().all(|arg| selector_expr_can_capture(arg, env))
         }
+        Expr::Flow { root, .. } => selector_expr_can_capture(root, env),
         _ => false,
     }
 }

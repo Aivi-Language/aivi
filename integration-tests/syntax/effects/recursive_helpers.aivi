@@ -1,0 +1,23 @@
+@no_prelude
+module integrationTests.syntax.effects.recursiveHelpers
+
+use aivi
+use aivi.testing
+
+sumToTen = i sum =>
+  if i > 10 then sum else sumToTen (i + 1) (sum + i)
+
+countToFive = n =>
+  if n >= 5 then n else countToFive (n + 1)
+
+fibAt = a b count =>
+  if count >= 10 then a else fibAt b (a + b) (count + 1)
+
+@test "recursive sum to ten"
+recursiveSumToTen = assertEq (sumToTen 1 0) 55
+
+@test "recursive counter"
+recursiveCounter = assertEq (countToFive 0) 5
+
+@test "recursive fibonacci step"
+recursiveFibonacciStep = assertEq (fibAt 0 1 0) 55

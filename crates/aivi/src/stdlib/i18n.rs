@@ -35,12 +35,11 @@ bundleFromProperties : Locale -> Text -> Result Text Bundle
 bundleFromProperties = locale props => i18n.bundleFromProperties locale props
 
 bundleFromPropertiesFile : Locale -> Text -> Effect Text (Result Text Bundle)
-bundleFromPropertiesFile = locale path => do Effect {
-  res <- attempt (load (file.read path))
-  res match
-    | Err e => pure (Err e)
-    | Ok txt => pure (bundleFromProperties locale txt)
-}
+bundleFromPropertiesFile = locale path =>
+  path
+     |> (_ => attempt (file.read path))
+    ||> Err e  => Err e
+    ||> Ok txt => bundleFromProperties locale txt
 
 keyText : Key -> Text
 keyText = k => k.body

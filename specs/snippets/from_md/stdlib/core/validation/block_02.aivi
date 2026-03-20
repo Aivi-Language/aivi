@@ -2,8 +2,8 @@ MkPerson : Text -> Int -> { name: Text, age: Int }
 MkPerson  = name age => { name: name, age: age }
 nameCheck = Invalid ["Name is required"]
 ageCheck  = Invalid ["Age must be non-negative"]
-result    = do Applicative {
-  name <- nameCheck
-  age  <- ageCheck
-  MkPerson name age
-}
+result    =
+  Unit
+     &|> nameCheck #name
+     &|> ageCheck #age
+      |> MkPerson name age

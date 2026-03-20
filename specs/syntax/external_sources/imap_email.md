@@ -30,7 +30,7 @@ Load this source with [`load`](../effects.md#load) when you want the runtime to 
 
 ### Session lifecycle
 
-- `imapOpen : ImapConfig -> Resource Text ImapSession` (lower-level name: `email.imapOpen`)
+- `imapOpen : ImapConfig -> Effect Text ImapSession` (lower-level name: `email.imapOpen`)
 - `imapSelect : Text -> ImapSession -> Effect Text MailboxInfo`
 - `imapExamine : Text -> ImapSession -> Effect Text MailboxInfo`
 - `imapIdle : Int -> ImapSession -> Effect Text IdleResult`
@@ -104,33 +104,25 @@ InboxMessage = {
   body: Text
 }
 
-loadUnread = accountId => do Effect {
-  goaCfg <- Goa.imapConfig accountId
-  load (
-    email.imap (
-      Goa.toImapConfig goaCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
-    )
-  )
-}
+loadUnread = accountId =>
+  accountId
+     |> Goa.imapConfig #goaCfg
+     |> _ => email.imap (
+          Goa.toImapConfig goaCfg (Some "INBOX") (Some "UNSEEN") (Some 20)
+        )
+     |> load
 ```
 
 This keeps the mailbox query in your application while letting GOA supply the desktop-managed transport credentials.
 
 ## Example — explicit search and fetch
 
-If you need a little more control than the one-shot source gives you, this is the smallest useful session flow:
-
-<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_03.aivi{aivi}
-
-
-This pattern is useful when you want custom search strings or you want to decide yourself where the mailbox session scope begins and ends. Because `imapOpen` returns a `Resource`, binding it with `<-` acquires the session for the surrounding scope and releases it automatically when that scope exits; see [Resources](../resources.md).
+If you need a little more control than the one-shot source gives you, open the session in a flow, bind it with `#session`, register the matching cleanup at the acquisition line, and then continue with `imapSelect`, `imapSearch`, and `imapFetch`.
 
 ## Example — session with IDLE
 
-<<< ../../snippets/from_md/syntax/external_sources/imap_email/block_04.aivi{aivi}
+In a long-running application, keep the session acquisition in an outer flow scope and let the repeating `imapIdle` / fetch step live in a helper flow or anchored restart loop.
 
-
-This example shows the smallest useful “wait, then fetch new mail” loop step. In a long-running application, place the `imapOpen` acquisition in an outer scope and repeat the `imapIdle` call until your application decides to stop.
 
 Use the session API when you need:
 
@@ -144,6 +136,6 @@ Use the session API when you need:
 
 - [External Sources](../external_sources.md) for the broader `Source K A` model,
 - [Effects](../effects.md#load) for how `load` turns a `Source` into an `Effect`,
-- [Resources](../resources.md) for the acquisition and cleanup rules behind `imapOpen`,
+- [Cleanup & Lifetimes](../resources.md) for the acquisition and cleanup rules behind `imapOpen`,
 - [Effects](../effects.md) for effectful runtime operations,
 - [Email Module](../../stdlib/system/email.md) for the convenience wrappers and full type definitions.

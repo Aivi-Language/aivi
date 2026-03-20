@@ -1,0 +1,26 @@
+@no_prelude
+module integrationTests.syntax.effects.cleanupThreeLifo
+
+use aivi
+use aivi.testing
+use aivi.file
+
+deleteIfExists = path =>
+  path
+   |> exists
+  ||>True => delete path
+  ||>False => pure Unit
+
+threeStepLifoFlow = logPath =>
+  logPath
+|> pure@cleanup (_ => writeText logPath "A")
+|> _ => pure logPath@cleanup (_ => writeText logPath "B")
+|> _ => pure logPath@cleanup (_ => writeText logPath "C")
+|> _ => pure Unit
+
+@test "three cleanup registrations unwind in reverse order"
+threeCleanupRegistrationsUnwindInReverseOrder = "/tmp/aivi_three_lifo_log.txt"
+  |> pure@cleanup deleteIfExists#logPath
+  |> _ => threeStepLifoFlow logPath
+  |> _ => readText logPath
+  |> assertEq (Ok "A")

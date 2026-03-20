@@ -1,0 +1,34 @@
+@no_prelude
+module integrationTests.syntax.effects.resultFlow
+
+use aivi
+use aivi.testing
+
+combineResult = left right => (left, right) match
+  | (Ok x, Ok y) => Ok (x + y)
+  | (Err e, _)   => Err e
+  | (_, Err e)   => Err e
+  | _            => Err "unexpected"
+
+keepResult = result => result match
+  | Ok value => Ok value
+  | Err e    => Err e
+
+failResult = result => result match
+  | Ok _  => Err "failed"
+  | Err e => Err e
+
+@test "result chaining keeps the happy path"
+resultChainingKeepsTheHappyPath = assertEq (combineResult (Ok 10) (Ok 20)) (Ok 30)
+
+@test "result chaining stops on Err"
+resultChainingStopsOnErr = assertEq (combineResult (Ok 1) (Err "oops")) (Err "oops")
+
+@test "result mapping keeps an Ok value"
+resultMappingKeepsAnOkValue = assertEq (keepResult (Ok 99)) (Ok 99)
+
+@test "result mapping can return one value"
+resultMappingCanReturnOneValue = assertEq (keepResult (Ok 123)) (Ok 123)
+
+@test "result chaining can end with Err"
+resultChainingCanEndWithErr = assertEq (failResult (Ok 5)) (Err "failed")

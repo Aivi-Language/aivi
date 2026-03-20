@@ -1,0 +1,8 @@
+// EXPECT-ERROR: `!|>` must immediately follow `?|>`
+@no_prelude
+module integrationTests.compileFail.recoverWithoutAttempt
+
+use aivi
+
+bad = pure 1
+!|>_ => pure 0

@@ -1,9 +1,7 @@
-// Sugar
-val = do Effect {
-  x <- fetch |> decode
-  y <- decode x
-  pure y
-}
+// Flat flow surface
+val = path
+  |> file.read
+  |> text => parseConfig text
 
-// Desugared shape (conceptually)
-val2 = (fetch |> bind) (x => (decode x |> bind) (y => pure y))
+// Conceptual lowering
+val2 = bind (file.read path) (text => pure (parseConfig text))

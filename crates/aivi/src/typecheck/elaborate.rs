@@ -434,6 +434,9 @@ fn collect_reactive_source_refs_inner(expr: &Expr, refs: &mut Vec<String>) {
                 collect_reactive_source_refs_inner(arg, refs);
             }
         }
+        Expr::Flow { root, .. } => {
+            collect_reactive_source_refs_inner(root, refs);
+        }
         Expr::Binary { left, right, .. } => {
             collect_reactive_source_refs_inner(left, refs);
             collect_reactive_source_refs_inner(right, refs);

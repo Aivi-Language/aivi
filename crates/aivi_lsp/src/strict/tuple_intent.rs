@@ -139,6 +139,7 @@ pub(super) fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnos
                 }
                 walk_expr(body, out);
             }
+            aivi::Expr::Flow { root, .. } => walk_expr(root, out),
         }
     }
 

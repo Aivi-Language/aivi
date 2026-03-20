@@ -1,15 +1,12 @@
 use aivi.email
 
-do Effect {
-  msgs <- imap {
-    host: "imap.gmail.com"
-    user: "user@gmail.com"
-    auth: OAuth2 myAccessToken
-    mailbox: Some "INBOX"
-    filter: Some "UNSEEN" // only unread messages
-    limit: Some 20 // keep the fetch bounded
-    port: None
-    starttls: None
-  }
-  pure msgs
+fetchUnread = imap {
+  host: "imap.gmail.com"
+  user: "user@gmail.com"
+  auth: OAuth2 myAccessToken
+  mailbox: Some "INBOX"
+  filter: Some "UNSEEN"
+  limit: Some 20
+  port: None
+  starttls: None
 }

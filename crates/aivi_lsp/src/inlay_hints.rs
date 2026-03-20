@@ -317,6 +317,9 @@ impl Backend {
                 }
                 Self::collect_call_hints_in_expr(body, param_names, hints, range);
             }
+            Expr::Flow { root, .. } => {
+                Self::collect_call_hints_in_expr(root, param_names, hints, range);
+            }
             Expr::Ident(_) | Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => {}
         }
     }

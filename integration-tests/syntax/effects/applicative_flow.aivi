@@ -1,0 +1,32 @@
+@no_prelude
+module integrationTests.syntax.effects.applicativeFlow
+
+use aivi
+use aivi.testing
+
+combineOption = left right => (left, right) match
+  | (Some x, Some y) => Some (x + y)
+  | (Some _, None)   => None
+  | (None, _)        => None
+  | _                => None
+
+doubleOption = option => option match
+  | Some value => Some (value * 2)
+  | None       => None
+
+addRight = x ys => ys match
+  | []         => []
+  | [y, ...rs] => [x + y, ...addRight x rs]
+
+pairSums = xs ys => xs match
+  | []         => []
+  | [x, ...rs] => [...addRight x ys, ...pairSums rs ys]
+
+@test "independent option inputs combine explicitly"
+optionInputsCombineExplicitly = assertEq (combineOption (Some 10) (Some 20)) (Some 30)
+
+@test "independent shaping stays explicit"
+optionInputsSupportExplicitShaping = assertEq (combineOption (doubleOption (Some 10)) (Some 3)) (Some 23)
+
+@test "independent list inputs stay cartesian"
+listInputsStayCartesian = assertEq (pairSums [1, 2] [10, 20]) [11, 21, 12, 22]

@@ -184,11 +184,8 @@ instance Foldable (List A) = {
 instance Traversable (List A) = {
   traverse: f xs => xs match
     | []           => pure []
-    | [x, ...rest] => do Effect {
-      y <- f x
-      ys <- traverse f rest
-      pure [y, ...ys]
-    }
+    | [x, ...rest] =>
+      ap (map (y => ys => [y, ...ys]) (f x)) (traverse f rest)
 }
 
 instance Apply (List A) = {
@@ -242,10 +239,10 @@ instance Foldable (Option A) = {
 
 instance Traversable (Option A) = {
   traverse: f opt => opt match
-    | Some x => do Effect {
-      y <- f x
-      pure (Some y)
-    }
+    | Some x =>
+      x
+         |> f
+         |> Some
     | None => pure None
 }
 
@@ -275,10 +272,10 @@ instance Foldable (Result E A) = {
 
 instance Traversable (Result E A) = {
   traverse: f res => res match
-    | Ok x  => do Effect {
-      y <- f x
-      pure (Ok y)
-    }
+    | Ok x  =>
+      x
+         |> f
+         |> Ok
     | Err e => pure (Err e)
 }
 

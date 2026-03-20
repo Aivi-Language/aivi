@@ -139,7 +139,7 @@ For fallback choice and one-layer flattening, reach for the shared [`aivi.logic`
 - **`??` operator** — best for “use this default value if the left side is missing.”
 - **[`aivi.logic`](logic.md)** — provides shared class operations such as `map`, `of`, `chain`, `filter`, and `alt` where supported.
 - **[`aivi.result`](result.md)** — use it when you need to explain *why* a value is missing or invalid.
-- **[`do Option { ... }`](../../syntax/do_notation.md)** — useful when several optional steps depend on one another.
+- **[Flow Syntax](../../syntax/flows.md)** — useful when several optional steps read better as one flat left-to-right flow.
 
 ## Example: lookup, validate, and default an optional email
 

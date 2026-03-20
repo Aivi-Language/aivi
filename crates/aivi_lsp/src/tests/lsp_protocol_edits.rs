@@ -420,7 +420,7 @@ mod lsp_protocol_edits {
         initialize_lsp(&mut client_read, &mut client_write).await;
 
         let uri = Url::parse("file:///lsp/formatting.aivi").expect("uri");
-        let text = "@no_prelude\nmodule lsp.formatting\n\nmain = do Effect { _<-print \"hi\" }\n";
+        let text = "@no_prelude\nmodule lsp.formatting\n\nmain = Unit |> (_=>print \"hi\")\n";
         write_lsp_msg(
             &mut client_write,
             &json!({
@@ -465,8 +465,8 @@ mod lsp_protocol_edits {
             .and_then(Value::as_str)
             .unwrap_or_default();
         assert!(
-            new_text.contains("main = do Effect { _ <- print \"hi\" }"),
-            "expected formatted effect block spacing, got: {new_text:?}"
+            new_text.contains("main = Unit |> (_ => print \"hi\")"),
+            "expected formatted flow spacing, got: {new_text:?}"
         );
 
         shutdown_lsp(client_write, server_task).await;

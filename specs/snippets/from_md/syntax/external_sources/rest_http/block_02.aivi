@@ -1,11 +1,10 @@
 healthSource : Source Https (Result Error Response)
 healthSource = https.get ~u(https://status.example.com/health)
 
-do Effect {
-  result <- load healthSource
-  pure (
-    result match
-      | Ok response => response.status
-      | Err _       => 0
-  )
-}
+checkHealth =
+  healthSource
+     |> load
+     |> result =>
+          result match
+            | Ok response => response.status
+            | Err _       => 0

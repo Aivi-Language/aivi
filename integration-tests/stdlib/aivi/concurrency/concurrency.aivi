@@ -2,448 +2,424 @@
 module integrationTests.stdlib.aivi.concurrency.tests
 
 use aivi
-use aivi.prelude
 use aivi.testing
 use aivi.concurrency
 use aivi.reactive
 
-@test "channel roundtrip"
-channel_roundtrip = do Effect {
-  (tx, rx) <- make True
-  send tx True
-  res <- recv rx
-  res match
-    | Ok payload => assertEq payload True
-    | Err _      => assert False
-  close tx
+withChannel : A -> ((Send A, Recv A) -> Effect Text B) -> Effect Text B
+withChannel = initial => run =>
+  Unit
+|> _ => make initial
+|> run
+
+withBoundedChannel : Int -> ((Send A, Recv A) -> Effect Text B) -> Effect Text B
+withBoundedChannel = size => run =>
+  Unit
+|> _ => makeBounded size
+|> run
+
+sleepThen : Int -> A -> Effect Text A
+sleepThen = millis => value =>
+  Unit
+  ~|>_ => sleep millis
+   |> _ => pure value
+
+setSignalTo : Signal Int -> Int -> Effect Text Unit
+setSignalTo = sig => value => {
+  _ = set sig value
+  pure Unit
 }
+
+updateSignalBy : Signal Int -> Int -> Effect Text Unit
+updateSignalBy = sig => delta => {
+  _ = update sig (_ + delta)
+  pure Unit
+}
+
+tickSignalNTimes : Signal Int -> Int -> Effect Text Unit
+tickSignalNTimes = ticks => remaining =>
+  if remaining == 0 then pure Unit
+  else
+  Unit
+  ~|>_ => sleep 100
+  ~|>_ => updateSignalBy ticks 1
+   |> _ => tickSignalNTimes ticks (remaining - 1)
+
+sendUnitNTimes : Send Int -> Int -> Effect Text Unit
+sendUnitNTimes = tx => remaining =>
+  if remaining == 0 then pure Unit
+  else
+  Unit
+  ~|>_ => send tx 1
+   |> _ => sendUnitNTimes tx (remaining - 1)
+
+incrementSignalNTimes : Signal Int -> Int -> Effect Text Unit
+incrementSignalNTimes = sig => remaining =>
+  if remaining == 0 then pure Unit
+  else
+  Unit
+  ~|>_ => updateSignalBy sig 1
+   |> _ => incrementSignalNTimes sig (remaining - 1)
+
+assertRecvOk : A -> Result ChannelError A -> Effect Text Unit
+assertRecvOk = expected => result => result match
+  | Ok value => assertEq value expected
+  | Err _    => assert False
+
+assertClosed : Result ChannelError A -> Effect Text Unit
+assertClosed = result => result match
+  | Ok _       => assert False
+  | Err Closed => assert True
+
+@test "channel roundtrip"
+channel_roundtrip = withChannel True ((tx, rx) =>
+  Unit
+  ~|>_ => send tx True
+   |> _ => recv rx#res
+  ~|>_ => close tx
+   |> _ => assertRecvOk True res
+)
 
 @test "close drains then Err Closed"
-close_drains_then_closed = do Effect {
-  (tx, rx) <- make True
-  send tx True
-  close tx
-  first  <- recv rx
-  second <- recv rx
-  first match
-    | Ok payload => assertEq payload True
-    | Err _      => assert False
-  second match
-    | Ok _       => assert False
-    | Err Closed => assert True
-}
+close_drains_then_closed = withChannel True ((tx, rx) =>
+  Unit
+  ~|>_ => send tx True
+  ~|>_ => close tx
+   |> _ => recv rx#first
+   |> _ => recv rx#second
+  ~|>_ => assertRecvOk True first
+   |> _ => assertClosed second
+)
 
 @test "makeBounded roundtrip"
-make_bounded_roundtrip = do Effect {
-  (tx, rx) <- makeBounded 1
-  send tx 7
-  res <- recv rx
-  res match
-    | Ok value => assertEq value 7
-    | Err _    => assert False
-  close tx
-}
+make_bounded_roundtrip = withBoundedChannel 1 ((tx, rx) =>
+  Unit
+  ~|>_ => send tx 7
+   |> _ => recv rx#res
+  ~|>_ => close tx
+   |> _ => assertRecvOk 7 res
+)
 
 @test "fold accumulates"
-fold_accumulates = do Effect {
-  (tx, rx) <- make 0
-  send tx 1
-  send tx 2
-  send tx 3
-  close tx
-  total <- fold 0 (acc => x => pure (acc + x)) rx
-  assertEq total 6
-}
+fold_accumulates = withChannel 0 ((tx, rx) =>
+  Unit
+  ~|>_ => send tx 1
+  ~|>_ => send tx 2
+  ~|>_ => send tx 3
+  ~|>_ => close tx
+   |> _ => fold 0 (acc => x => pure (acc + x)) rx#total
+   |> _ => assertEq total 6
+)
 
 @test "fold returns init on empty"
-fold_empty = do Effect {
-  (tx, rx) <- make 0
-  close tx
-  result <- fold 42 (acc => _ => pure (acc + 1)) rx
-  assertEq result 42
-}
+fold_empty = withChannel 0 ((tx, rx) =>
+  Unit
+  ~|>_ => close tx
+   |> _ => fold 42 (acc => _ => pure (acc + 1)) rx#result
+   |> _ => assertEq result 42
+)
 
 @test "forEach processes in order"
-forEach_order = do Effect {
-  (tx, rx)       <- make 0
-  (outTx, outRx) <- make 0
-  send tx 10
-  send tx 20
-  close tx
-  forEach rx (x => send outTx x)
-  close outTx
-  first  <- recv outRx
-  second <- recv outRx
-  first match
-    | Ok v  => assertEq v 10
-    | Err _ => assert False
-  second match
-    | Ok v  => assertEq v 20
-    | Err _ => assert False
-}
+forEach_order = withChannel 0 ((tx, rx) =>
+  withChannel 0 ((outTx, outRx) =>
+    Unit
+    ~|>_ => send tx 10
+    ~|>_ => send tx 20
+    ~|>_ => close tx
+    ~|>_ => forEach rx (x => send outTx x)
+    ~|>_ => close outTx
+     |> _ => recv outRx#first
+     |> _ => recv outRx#second
+    ~|>_ => assertRecvOk 10 first
+     |> _ => assertRecvOk 20 second
+  )
+)
 
 @test "par returns both"
-par_success = do Effect {
-  pair <- par (pure 1) (pure 2)
-  pair match
-    | (left, right) => assertEq (left + right) 3
-}
+par_success = Unit
+  |> _ => par (pure 1) (pure 2)#pair
+  |> ((left, right) => assertEq (left + right) 3)
 
 @test "par propagates failure"
-par_failure = do Effect {
-  res <- attempt (par (pure 1) (fail "boom"))
-  res match
+par_failure = Unit
+  |> _ => attempt (par (pure 1) (fail "boom"))#res
+  |> _ => res match
     | Ok _    => assert False
     | Err msg => assertEq msg "boom"
-}
 
 @test "race picks faster right"
-race_right_wins = do Effect {
-  slow = _ => do Effect {
-    sleep 50
-    pure "left"
-  }
-  fast = _ => do Effect {
-    sleep 0
-    pure "right"
-  }
-  v <- race (slow Unit) (fast Unit)
-  assertEq v "right"
+race_right_wins = {
+  slow = _ => sleepThen 50 "left"
+  fast = _ => sleepThen 0 "right"
+
+  Unit
+  |> _ => race (slow Unit) (fast Unit)
+  |> assertEq "right"
 }
 
 @test "race picks faster left"
-race_left_wins = do Effect {
-  fast = _ => do Effect {
-    sleep 0
-    pure "left"
-  }
-  slow = _ => do Effect {
-    sleep 50
-    pure "right"
-  }
-  v <- race (fast Unit) (slow Unit)
-  assertEq v "left"
+race_left_wins = {
+  fast = _ => sleepThen 0 "left"
+  slow = _ => sleepThen 50 "right"
+
+  Unit
+  |> _ => race (fast Unit) (slow Unit)
+  |> assertEq "left"
 }
 
 @test "timeoutWith times out"
-timeout_times_out = do Effect {
-  inner = _ => do Effect {
-    sleep 50
-    pure 1
-  }
-  result <- attempt (timeoutWith 10 "timeout" (inner Unit))
-  result match
+timeout_times_out = {
+  inner = _ => sleepThen 50 1
+
+  Unit
+  |> _ => attempt (timeoutWith 10 "timeout" (inner Unit))#result
+  |> _ => result match
     | Ok _      => assert False
     | Err value => assertEq value "timeout"
 }
 
 @test "timeoutWith returns when effect wins"
-timeout_success = do Effect {
-  value <- timeoutWith 50 "timeout" (pure 9)
-  assertEq value 9
-}
+timeout_success = Unit
+  |> _ => timeoutWith 50 "timeout" (pure 9)
+  |> assertEq 9
 
 @test "spawn join"
-spawn_join = do Effect {
-  delayed = _ => do Effect {
-    sleep 10
-    pure 42
-  }
-  task  <- spawn (delayed Unit)
-  value <- task.join
-  assertEq value 42
+spawn_join = {
+  delayed = _ => sleepThen 10 42
+
+  Unit
+  |> _ => spawn (delayed Unit)#task
+  |> _ => task.join#value
+  |> _ => assertEq value 42
 }
 
 @test "spawn cancel sets isCancelled"
-spawn_cancel = do Effect {
-  longRunning = _ => do Effect {
-    sleep 1000
-    pure 1
-  }
-  task <- spawn (longRunning Unit)
-  _    <- task.cancel
-  b    <- task.isCancelled
-  assertEq b True
+spawn_cancel = {
+  longRunning = _ => sleepThen 1000 1
+
+  Unit
+   |> _ => spawn (longRunning Unit)#task
+  ~|>_ => task.cancel
+   |> _ => task.isCancelled#isCancelled
+   |> _ => assertEq isCancelled True
 }
 
 @test "spawned ticker updates a signal every 100ms"
-spawned_ticker_updates_signal = do Effect {
-  ticks = signal 0
-  (tx, rx) <- make 0
-  _watcher = watch ticks (value => send tx value)
+spawned_ticker_updates_signal = withChannel 0 ((tx, rx) => {
+    ticks    = signal 0
+    _watcher = watch ticks (value => send tx value)
 
-  task <- spawn (do Effect {
-      loop remaining = 3 => {
-        if remaining == 0 then pure Unit
-        else do Effect {
-          sleep 100
-          _ = update ticks (_ + 1)
-          recurse (remaining - 1)
-        }
-      }
-  })
-  first  <- timeoutWith 250 "missing first tick" (recv rx)
-  second <- timeoutWith 250 "missing second tick" (recv rx)
-  third  <- timeoutWith 250 "missing third tick" (recv rx)
-  _      <- task.join
-
-  first match
-    | Ok value => assertEq value 1
-    | Err _    => assert False
-  second match
-    | Ok value => assertEq value 2
-    | Err _    => assert False
-  third match
-    | Ok value => assertEq value 3
-    | Err _    => assert False
-
-  assertEq (get ticks) 3
-  close tx
-}
+    Unit
+     |> _ => spawn (tickSignalNTimes ticks 3)#task
+     |> _ => timeoutWith 250 "missing first tick" (recv rx)#first
+     |> _ => timeoutWith 250 "missing second tick" (recv rx)#second
+     |> _ => timeoutWith 250 "missing third tick" (recv rx)#third
+    ~|>_ => task.join
+    ~|>_ => assertRecvOk 1 first
+    ~|>_ => assertRecvOk 2 second
+    ~|>_ => assertRecvOk 3 third
+    ~|>_ => close tx
+     |> _ => assertEq (get ticks) 3
+})
 
 @test "two spawned threads can collect delayed computations"
-spawn_collects_delayed_computations = do Effect {
-  (tx, rx) <- make 0
+spawn_collects_delayed_computations = withChannel 0 ((tx, rx) => {
+    worker = value => delay =>
+      Unit
+      ~|>_ => sleep delay
+      ~|>_ => send tx value
+       |> _ => pure value
 
-  worker = value => delay => do Effect {
-    sleep delay
-    send tx value
-    pure value
-  }
-
-  slowTask <- spawn (worker 2 140)
-  fastTask <- spawn (worker 1 40)
-  first    <- timeoutWith 200 "missing fast worker result" (recv rx)
-  second   <- timeoutWith 300 "missing slow worker result" (recv rx)
-  slow     <- slowTask.join
-  fast     <- fastTask.join
-
-  first match
-    | Ok value => assertEq value 1
-    | Err _    => assert False
-  second match
-    | Ok value => assertEq value 2
-    | Err _    => assert False
-
-  assertEq (slow + fast) 3
-  close tx
-}
+      Unit
+       |> _ => spawn (worker 2 140)#slowTask
+       |> _ => spawn (worker 1 40)#fastTask
+       |> _ => timeoutWith 200 "missing fast worker result" (recv rx)#first
+       |> _ => timeoutWith 300 "missing slow worker result" (recv rx)#second
+       |> _ => slowTask.join#slow
+       |> _ => fastTask.join#fast
+      ~|>_ => assertRecvOk 1 first
+      ~|>_ => assertRecvOk 2 second
+      ~|>_ => close tx
+       |> _ => assertEq (slow + fast) 3
+})
 
 @test "retry succeeds after transient failures"
-retry_eventual_success = do Effect {
-  (tx, rx) <- make 0
-  send tx 0
-
-  step = _ => do Effect {
-    res <- recv rx
-    res match
+retry_eventual_success = withChannel 0 ((tx, rx) => {
+    step = _ =>
+      Unit
+    |> _ => recv rx#res
+    |> _ => res match
       | Err _ => fail "closed"
       | Ok n  =>
-        if n < 2 then do Effect {
-          send tx (n + 1)
-          fail "no"
-        }
-        else pure n
-  }
+        if n < 2 then
+          Unit
+          ~|>_ => send tx (n + 1)
+           |> _ => fail "no"
+        else
+          pure n
 
-    value <- retry 5 (step Unit)
-    assertEq value 2
-    close tx
-}
+          Unit
+          ~|>_ => send tx 0
+           |> _ => retry 5 (step Unit)#value
+           |> _ => assertEq value 2
+          ~|>_ => close tx
+})
 
-@test "multiple spawned threads can coordinate signal updates through a channel"
-multiple_threads_coordinate_signal_updates_through_channel = do Effect {
-  counter = signal 0
-  (tx, rx) <- make 0
+          @test "multiple spawned threads can coordinate signal updates through a channel"
+multiple_threads_coordinate_signal_updates_through_channel = withChannel 0 ((tx, rx) => {
+    counter = signal 0
 
-  worker = _ => do Effect {
-    loop remaining = 10 => {
-      if remaining == 0 then pure Unit
-      else do Effect {
-        send tx 1
-        recurse (remaining - 1)
-      }
-    }
-  }
-
-  t1 <- spawn (worker Unit)
-  t2 <- spawn (worker Unit)
-  t3 <- spawn (worker Unit)
-  _  <- t1.join
-  _  <- t2.join
-  _  <- t3.join
-  close tx
-
-  forEach rx (delta => do Effect {
-      _ = update counter (_ + delta)
-      pure Unit
-  })
-
-  assertEq (get counter) 30
-}
+    Unit
+     |> _ => spawn (sendUnitNTimes tx 10)#t1
+     |> _ => spawn (sendUnitNTimes tx 10)#t2
+     |> _ => spawn (sendUnitNTimes tx 10)#t3
+    ~|>_ => t1.join
+    ~|>_ => t2.join
+    ~|>_ => t3.join
+    ~|>_ => close tx
+    ~|>_ => forEach rx (delta => updateSignalBy counter delta)
+     |> _ => assertEq (get counter) 30
+})
 
 @test "derived signal reflects final value after concurrent writes"
-derived_reflects_final_after_concurrent = do Effect {
+derived_reflects_final_after_concurrent = {
   base    = signal 0
   doubled = derive base (_ * 2)
 
-  task <- spawn (do Effect {
-      loop remaining = 5 => {
-        if remaining == 0 then pure Unit
-        else do Effect {
-          _ = update base (_ + 1)
-          recurse (remaining - 1)
-        }
-      }
-  })
-  _ <- task.join
-
-  assertEq (get base) 5
-  assertEq (get doubled) 10
+  Unit
+   |> _ => spawn (incrementSignalNTimes base 5)#task
+  ~|>_ => task.join
+  ~|>_ => assertEq (get base) 5
+   |> _ => assertEq (get doubled) 10
 }
 
 @test "watcher fires for cross-thread signal updates via channel"
-watcher_fires_cross_thread = do Effect {
-  count = signal 0
-  (tx, rx) <- make 0
-  _watcher = watch count (value => send tx value)
+watcher_fires_cross_thread = withChannel 0 ((tx, rx) => {
+    count    = signal 0
+    _watcher = watch count (value => send tx value)
+    work     = setSignalTo count 7
 
-  task <- spawn (do Effect {
-      _ = set count 7
-      pure Unit
-  })
-  _ <- task.join
-
-  result <- timeoutWith 500 "missing watcher notification" (recv rx)
-  result match
-    | Ok value => assertEq value 7
-    | Err _    => assert False
-  close tx
-}
+    Unit
+     |> _ => spawn work#task
+    ~|>_ => task.join
+     |> _ => timeoutWith 500 "missing watcher notification" (recv rx)#result
+    ~|>_ => close tx
+     |> _ => result match
+      | Ok value => assertEq value 7
+      | Err _    => assert False
+})
 
 @test "batch from spawned thread delivers consistent derived state"
-batch_from_spawned_thread = do Effect {
+batch_from_spawned_thread = {
   a     = signal 1
   b     = signal 2
   total = combineAll (a, b) ((x, y) => x + y)
 
-  task <- spawn (do Effect {
-      _ = batch (_ => {
-          set a 10
-          set b 20
-      })
-      pure Unit
-  })
-  _ <- task.join
+  applyBatch = _ => {
+    _ = batch (_ => {
+        set a 10
+        set b 20
+    })
+    pure Unit
+  }
 
-  assertEq (get total) 30
+  Unit
+   |> _ => spawn (applyBatch Unit)#task
+  ~|>_ => task.join
+   |> _ => assertEq (get total) 30
 }
 
 @test "concurrent combineAll with many sources"
-concurrent_combineAll_many_sources = do Effect {
+concurrent_combineAll_many_sources = {
   s1    = signal 0
   s2    = signal 0
   s3    = signal 0
   s4    = signal 0
   total = combineAll (s1, s2, s3, s4) ((a, b, c, d) => a + b + c + d)
 
-  t1 <- spawn (do Effect {
-      _ = set s1 10
-      pure Unit
-  })
-  t2 <- spawn (do Effect {
-      _ = set s2 20
-      pure Unit
-  })
-  t3 <- spawn (do Effect {
-      _ = set s3 30
-      pure Unit
-  })
-  t4 <- spawn (do Effect {
-      _ = set s4 40
-      pure Unit
-  })
-  _ <- t1.join
-  _ <- t2.join
-  _ <- t3.join
-  _ <- t4.join
-
-  assertEq (get total) 100
+  Unit
+   |> _ => spawn (setSignalTo s1 10)#t1
+   |> _ => spawn (setSignalTo s2 20)#t2
+   |> _ => spawn (setSignalTo s3 30)#t3
+   |> _ => spawn (setSignalTo s4 40)#t4
+  ~|>_ => t1.join
+  ~|>_ => t2.join
+  ~|>_ => t3.join
+  ~|>_ => t4.join
+   |> _ => assertEq (get total) 100
 }
 
 @test "retry fails after attempts"
-retry_failure = do Effect {
-  (tx, rx) <- make 0
-  send tx 0
-
-  step = _ => do Effect {
-    res <- recv rx
-    res match
+retry_failure = withChannel 0 ((tx, rx) => {
+    step = _ =>
+      Unit
+    |> _ => recv rx#res
+    |> _ => res match
       | Err _ => fail "closed"
-      | Ok n  => do Effect {
-          send tx (n + 1)
-          fail "no"
-        }
-  }
+      | Ok n  =>
+        Unit
+        ~|>_ => send tx (n + 1)
+         |> _ => fail "no"
 
-  result <- attempt (retry 2 (step Unit))
-  result match
-    | Ok _    => assert False
-    | Err msg => assertEq msg "no"
-  close tx
-}
+        Unit
+        ~|>_ => send tx 0
+         |> _ => attempt (retry 2 (step Unit))#result
+        ~|>_ => close tx
+         |> _ => result match
+      | Ok _    => assert False
+      | Err msg => assertEq msg "no"
+})
 
 @test "spawn join repeats settled result"
-spawn_join_repeats_settled_result = do Effect {
-  task   <- spawn (pure 42)
-  first  <- task.join
-  second <- timeoutWith 100 "timeout" (task.join)
-  assertEq first 42
-  assertEq second 42
-}
+spawn_join_repeats_settled_result = Unit
+   |> _ => spawn (pure 42)#task
+   |> _ => task.join#first
+   |> _ => timeoutWith 100 "timeout" (task.join)#second
+  ~|>_ => assertEq first 42
+   |> _ => assertEq second 42
 
 @test "par fails fast without waiting for cancelled branch"
-par_fails_fast = do Effect {
-  (tx, rx) <- make 0
-  blocked = _ => do Effect {
-    _ <- recv rx
-    pure 2
-  }
+par_fails_fast = withChannel 0 ((tx, rx) => {
+    blocked = _ =>
+      Unit
+      ~|>_ => recv rx
+       |> _ => pure 2
 
-  result <- attempt (timeoutWith 50 "timeout" (par (fail "boom") (blocked Unit)))
-  close tx
-  result match
-    | Ok _    => assert False
-    | Err msg => assertEq msg "boom"
-}
+      Unit
+       |> _ => attempt (timeoutWith 50 "timeout" (par (fail "boom") (blocked Unit)))#result
+      ~|>_ => close tx
+       |> _ => result match
+      | Ok _    => assert False
+      | Err msg => assertEq msg "boom"
+})
 
 @test "race returns winner without waiting for cancelled branch"
-race_returns_winner_immediately = do Effect {
-  (tx, rx) <- make 0
-  blocked = _ => do Effect {
-    _ <- recv rx
-    pure "blocked"
-  }
+race_returns_winner_immediately = withChannel 0 ((tx, rx) => {
+    blocked = _ =>
+      Unit
+      ~|>_ => recv rx
+       |> _ => pure "blocked"
 
-  value <- timeoutWith 50 "timeout" (race (pure "winner") (blocked Unit))
-  close tx
-  assertEq value "winner"
-}
+      Unit
+       |> _ => timeoutWith 50 "timeout" (race (pure "winner") (blocked Unit))#value
+      ~|>_ => close tx
+       |> _ => assertEq value "winner"
+})
 
 @test "scope cancels spawned children on exit"
-scope_cancels_spawned_children_on_exit = do Effect {
-  (tx, rx) <- make 0
-  _        <- scope (_ => do Effect {
-      _        <- spawn (do Effect {
-          sleep 200
-          send tx 1
-      })
-      pure Unit
-  })
+scope_cancels_spawned_children_on_exit = withChannel 0 ((tx, rx) => {
+    child = Unit
+    ~|>_ => sleep 200
+    ~|>_ => send tx 1
 
-  result <- attempt (timeoutWith 100 "timeout" (recv rx))
-  close tx
-  result match
-    | Ok _    => assert False
-    | Err msg => assertEq msg "timeout"
-}
+    Unit
+    ~|>_ => scope (_ =>
+      Unit
+      ~|>_ => spawn child
+    )
+     |> _ => attempt (timeoutWith 100 "timeout" (recv rx))#result
+    ~|>_ => close tx
+     |> _ => result match
+      | Ok _    => assert False
+      | Err msg => assertEq msg "timeout"
+})

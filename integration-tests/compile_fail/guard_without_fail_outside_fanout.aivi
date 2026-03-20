@@ -1,0 +1,8 @@
+// EXPECT-ERROR: guard lines without `or fail ...` are only supported inside `*|>` fan-out bodies
+@no_prelude
+module integrationTests.compileFail.guardWithoutFailOutsideFanout
+
+use aivi
+
+bad = pure 1
+>|>_ > 0

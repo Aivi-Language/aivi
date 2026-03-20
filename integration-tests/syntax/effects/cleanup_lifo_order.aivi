@@ -1,0 +1,25 @@
+@no_prelude
+module integrationTests.syntax.effects.cleanupLifoOrder
+
+use aivi
+use aivi.testing
+use aivi.file
+
+deleteIfExists = path =>
+  path
+   |> exists
+  ||>True => delete path
+  ||>False => pure Unit
+
+lifoFlow = logPath =>
+  logPath
+|> pure@cleanup (_ => writeText logPath "A")
+|> _ => pure logPath@cleanup (_ => writeText logPath "B")
+|> _ => pure Unit
+
+@test "cleanup registrations unwind in reverse order"
+cleanupRegistrationsUnwindInReverseOrder = "/tmp/aivi_lifo2_log.txt"
+  |> pure@cleanup deleteIfExists#logPath
+  |> _ => lifoFlow logPath
+  |> _ => readText logPath
+  |> assertEq (Ok "A")

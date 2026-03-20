@@ -1,0 +1,66 @@
+@no_prelude
+module integrationTests.syntax.effects.guardBehavior
+
+use aivi
+use aivi.list
+use aivi.testing
+
+requireNonEmpty : List Int -> Effect Text (List Int)
+requireNonEmpty = xs =>
+  xs
+  >|>length _ > 0 or fail "list must not be empty"
+   |> pure
+
+withinRange : Int -> Effect Text Int
+withinRange = n =>
+  n
+  >|>_ > 0 or fail "must be positive"
+  >|>_ < 100 or fail "must be less than 100"
+   |> pure
+
+abortBeforeTail : Effect Text Unit
+abortBeforeTail = pure False
+>|>_ or fail "early exit"
+ |> _ => fail "should not reach here"
+
+@test "guard success keeps the current value"
+guardSuccessKeepsTheCurrentValue = Unit
+   |> _ => attempt (requireNonEmpty [1, 2, 3])#attemptResult
+   |> _ => assertOk attemptResult#value
+  ~|>_ => assertEq value [1, 2, 3]
+   |> _ => pure Unit
+
+@test "guard failure returns the fallback error"
+guardFailureReturnsTheFallbackError = Unit
+   |> _ => attempt (requireNonEmpty [])#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "list must not be empty"
+   |> _ => pure Unit
+
+@test "guard failure skips later steps"
+guardFailureSkipsLaterSteps = Unit
+   |> _ => attempt abortBeforeTail#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "early exit"
+   |> _ => pure Unit
+
+@test "multiple guards can all pass"
+multipleGuardsCanAllPass = Unit
+   |> _ => attempt (withinRange 50)#attemptResult
+   |> _ => assertOk attemptResult#value
+  ~|>_ => assertEq value 50
+   |> _ => pure Unit
+
+@test "the first guard can fail early"
+firstGuardCanFailEarly = Unit
+   |> _ => attempt (withinRange (-1))#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "must be positive"
+   |> _ => pure Unit
+
+@test "the second guard can fail after the first passes"
+secondGuardCanFailAfterTheFirstPasses = Unit
+   |> _ => attempt (withinRange 200)#attemptResult
+   |> _ => assertErr attemptResult#err
+  ~|>_ => assertEq err "must be less than 100"
+   |> _ => pure Unit

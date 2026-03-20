@@ -60,7 +60,7 @@ For example, `Option` uses all three ideas:
 
 - `map` changes `Some x` into `Some (f x)` and leaves `None` alone
 - applicative combination can build a value from several optional inputs such as `host`, `port`, and `token`
-- monadic sequencing powers `do Option { ... }`, where the second step can inspect the first step's result
+- monadic sequencing powers flat `Option` flows, where the second step can inspect the first step's result
 
 ## Why this matters in everyday code
 
@@ -156,7 +156,7 @@ A `Monad` combines applicative setup with `Chain`. It models step-by-step comput
 
 <<< ../../snippets/from_md/stdlib/core/logic/monad.aivi{aivi}
 
-If you use `do Option { ... }`, `do Result { ... }`, or `do Effect { ... }`, you are already working with monadic sequencing.
+If you use flat flows over `Option`, `Result`, or `Effect`, you are already working with monadic sequencing.
 
 ## 5. Folding and traversing
 
@@ -242,7 +242,7 @@ A `Profunctor` maps both the input and output side of a transformation.
 
 ### `Effect` sequencing is `chain`/`bind`
 
-`do Effect { ... }` is surface syntax for repeated sequencing. You can think of it as the readable form of chaining one effectful step after another.
+Flat flow syntax is surface syntax for repeated sequencing. You can think of it as the readable form of chaining one effectful step after another.
 
 <<< ../../snippets/from_md/stdlib/core/logic/effect_sequencing_is_chain_bind.aivi{aivi}
 

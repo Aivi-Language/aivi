@@ -66,7 +66,7 @@ Pattern matching is the standard way to work with structured data like `Option`,
 
 ### 4. Loops give way to transformations
 
-Instead of mutating counters or building collections step by step, you usually transform data with functions, generators, folds, or recursion.
+Instead of mutating counters or building collections step by step, you usually transform data with functions, flow fan-out (`*|>` ... `*-|`), folds, or recursion.
 
 <<< ./snippets/from_md/introduction/block_03.aivi{aivi}
 
@@ -86,7 +86,7 @@ This is one of the biggest differences from mainstream languages:
 - side effects are visible in the type system,
 - error handling stays structured instead of spreading through ad-hoc `try/catch` logic.
 
-The detailed model lives in [Effects](syntax/effects), [do Notation](syntax/do_notation), and [Resources](syntax/resources).
+The detailed model lives in [Flow Syntax](syntax/flows), [Effects](syntax/effects), and [Cleanup & Lifetimes](syntax/resources).
 
 ## Missing values and failures stay explicit
 

@@ -12,7 +12,7 @@ The `HttpServer` domain lets an AIVI program receive HTTP requests and send HTTP
 
 `aivi.net.httpServer` provides a runtime-managed HTTP server with support for HTTP/1.1, HTTP/2, and optional WebSocket upgrades. The runtime handles the server lifecycle; your code focuses on describing how to answer each request. If you need to call another service rather than host one, see [`aivi.net.http`](./http.md) or [`aivi.rest`](./rest.md).
 
-Because `listen` returns a [`Resource HttpError Server`](../../syntax/resources.md), the server shuts down automatically when the surrounding resource scope ends. That makes it a natural fit for services that need clean startup and cleanup.
+Because `listen` returns a server handle directly, the normal v0.2 pattern is to acquire it in a flow and register `@cleanup stop`. That keeps startup and shutdown in one flat workflow.
 
 ## Typical workflow
 
@@ -79,8 +79,8 @@ Runtime header rule: JSON responses automatically add `Content-Type: application
 
 | Function | Explanation |
 | --- | --- |
-| **listen** config handler<br><code>ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource HttpError Server</code> | Starts a server with `config` and uses `handler` to answer each request. The returned resource cleans up the server when the scope ends. |
-| **stop** server<br><code>Server -> Effect HttpError Unit</code> | Stops a running server. You can use this for explicit shutdown, though resource cleanup often makes it unnecessary. |
+| **listen** config handler<br><code>ServerConfig -> (Request -> Effect HttpError ServerReply) -> Effect HttpError Server</code> | Starts a server with `config` and uses `handler` to answer each request. Pair the returned server with `@cleanup stop` when you want structural shutdown. |
+| **stop** server<br><code>Server -> Effect HttpError Unit</code> | Stops a running server. This is also the cleanup function you would usually register with `@cleanup stop`. |
 | **wsRecv** socket<br><code>WebSocket -> Effect WsError WsMessage</code> | Waits for the next WebSocket message from the client. |
 | **wsSend** socket message<br><code>WebSocket -> WsMessage -> Effect WsError Unit</code> | Sends a WebSocket message back to the client. |
 | **wsClose** socket<br><code>WebSocket -> Effect WsError Unit</code> | Closes the WebSocket connection. |

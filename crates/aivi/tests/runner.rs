@@ -312,7 +312,7 @@ fn syntax_effects_selected_batch_one_files_execute_without_failures() {
         "integration-tests/syntax/domains/suffix_application_expr.aivi",
         "integration-tests/syntax/effects/attempt_and_match.aivi",
         "integration-tests/syntax/effects/attempt_converts_to_result.aivi",
-        "integration-tests/syntax/effects/do_list_block.aivi",
+        "integration-tests/syntax/effects/sequential_flow.aivi",
     ]
     .iter()
     .map(|p| root.join(p))
@@ -336,15 +336,20 @@ fn syntax_effects_selected_batch_two_files_execute_without_failures() {
     let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
-        "integration-tests/syntax/effects/do_monad_block.aivi",
-        "integration-tests/syntax/effects/do_option_block.aivi",
-        "integration-tests/syntax/effects/do_result_block.aivi",
-        "integration-tests/syntax/effects/given_or_behavior.aivi",
-        "integration-tests/syntax/effects/given_precondition.aivi",
-        "integration-tests/syntax/effects/loop_recurse.aivi",
-        "integration-tests/syntax/effects/or_sugar.aivi",
-        "integration-tests/syntax/effects/unless_conditional.aivi",
-        "integration-tests/syntax/effects/when_unless_desugar.aivi",
+        "integration-tests/syntax/effects/applicative_flow.aivi",
+        "integration-tests/syntax/effects/cleanup_failure.aivi",
+        "integration-tests/syntax/effects/cleanup_idempotency.aivi",
+        "integration-tests/syntax/effects/cleanup_lifo_order.aivi",
+        "integration-tests/syntax/effects/cleanup_on_pattern_fail.aivi",
+        "integration-tests/syntax/effects/cleanup_three_lifo.aivi",
+        "integration-tests/syntax/effects/conditional_helpers.aivi",
+        "integration-tests/syntax/effects/guard_behavior.aivi",
+        "integration-tests/syntax/effects/guard_precondition.aivi",
+        "integration-tests/syntax/effects/list_flow.aivi",
+        "integration-tests/syntax/effects/load_fallback.aivi",
+        "integration-tests/syntax/effects/option_flow.aivi",
+        "integration-tests/syntax/effects/recursive_helpers.aivi",
+        "integration-tests/syntax/effects/result_flow.aivi",
     ]
     .iter()
     .map(|p| root.join(p))

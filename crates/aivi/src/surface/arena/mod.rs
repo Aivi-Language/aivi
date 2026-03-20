@@ -127,6 +127,11 @@ pub enum ArenaExpr {
         right: ExprId,
         span: Span,
     },
+    Flow {
+        root: ExprId,
+        lines: Vec<ArenaFlowLine>,
+        span: Span,
+    },
     Block {
         kind: ArenaBlockKind,
         items: Vec<ArenaBlockItem>,
@@ -167,6 +172,88 @@ pub struct ArenaMatchArm {
     pub guard_negated: bool,
     pub body: ExprId,
     pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArenaFlowBinding {
+    pub name: SpannedSymbol,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum ArenaFlowModifier {
+    Timeout {
+        duration: ExprId,
+        span: Span,
+    },
+    Delay {
+        duration: ExprId,
+        span: Span,
+    },
+    Concurrent {
+        limit: ExprId,
+        span: Span,
+    },
+    Retry {
+        attempts: u32,
+        interval: ExprId,
+        exponential: bool,
+        span: Span,
+    },
+    Cleanup {
+        expr: ExprId,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArenaFlowStepKind {
+    Flow,
+    Tap,
+    Attempt,
+    FanOut,
+    Applicative,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArenaFlowStep {
+    pub kind: ArenaFlowStepKind,
+    pub expr: ExprId,
+    pub modifiers: Vec<ArenaFlowModifier>,
+    pub binding: Option<ArenaFlowBinding>,
+    pub subflow: Vec<ArenaFlowLine>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArenaFlowGuard {
+    pub predicate: ExprId,
+    pub fail_expr: Option<ExprId>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArenaFlowArm {
+    pub pattern: PatternId,
+    pub guard: Option<ExprId>,
+    pub guard_negated: bool,
+    pub body: ExprId,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArenaFlowAnchor {
+    pub name: SpannedSymbol,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum ArenaFlowLine {
+    Step(ArenaFlowStep),
+    Guard(ArenaFlowGuard),
+    Branch(ArenaFlowArm),
+    Recover(ArenaFlowArm),
+    Anchor(ArenaFlowAnchor),
 }
 
 #[derive(Debug, Clone)]

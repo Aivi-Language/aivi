@@ -6,7 +6,7 @@ Environment sources describe typed configuration reads from the process environm
 
 Environment sources are for configuration that comes from the process environment: ports, feature flags, API keys, deployment names, and similar values.
 
-They follow the same source pattern used for files or HTTP APIs: define a `Source Env A` first, then call `load` inside `do Effect { ... }` when you actually want to read from the host environment.
+They follow the same source pattern used for files or HTTP APIs: define a `Source Env A` first, then call `load` inside a flat flow when you actually want to read from the host environment.
 
 ## APIs
 

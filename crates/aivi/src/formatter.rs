@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn format_respects_indent_size() {
-        let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
+        let text = "module demo\n\nmain = Unit\n   |> (_ => print \"hi\")\n";
         let formatted = format_text_with_options(
             text,
             FormatOptions {
@@ -114,7 +114,7 @@ mod tests {
         let inner_line = formatted
             .lines()
             .nth(3)
-            .expect("expected formatted inner effect line");
+            .expect("expected formatted flow line");
         assert!(inner_line.starts_with("    "));
     }
 

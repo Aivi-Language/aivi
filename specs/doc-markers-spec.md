@@ -51,7 +51,7 @@ The JSON object in the opening marker gives tooling the lookup information it ne
 ### Field guide
 
 - `kind` — what sort of thing the content describes. Common values in the current docs include `module`, `function`, `type`, `class`, `domain`, `operator`, `class-member`, `decorator`, `syntax`, `feature`, and `topic`. Tooling may map unrecognized values to `"unknown"` for presentation while still indexing the entry by name.
-- `name` — the identifier or lookup label exactly as readers should find it, such as `isEmpty`, `<|`, `Option`, `@test`, or `do Effect`.
+- `name` — the identifier or lookup label exactly as readers should find it, such as `isEmpty`, `<|`, `Option`, `@cleanup`, or `Flow Syntax`.
 - `module` — the parent module for non-module items, such as `aivi.text`. Include it whenever the same `name` could appear in more than one module, because module-aware lookup is how tooling disambiguates those entries.
 - `signature` — an explicit signature when you want tooling to show one without inferring it.
 - `extractSignature` — whether tooling may try to infer a signature from nearby markdown; the default is `true`.
@@ -103,6 +103,14 @@ Use this when a function is documented in a compact API table.
 ```md
 &lt;!-- quick-info: {"kind":"operator","name":"|>","signature":"A -> (A -> B) -> B"} --&gt;
 Applies the value on the left to the function on the right.
+&lt;!-- /quick-info --&gt;
+```
+
+### Syntax-form documentation
+
+```md
+&lt;!-- quick-info: {"kind":"syntax","name":"@cleanup","extractSignature":false} --&gt;
+Registers cleanup for the successful result of the annotated flow line.
 &lt;!-- /quick-info --&gt;
 ```
 

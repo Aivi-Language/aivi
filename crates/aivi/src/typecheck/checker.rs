@@ -1,5 +1,6 @@
 include!("checker/preamble.rs");
 include!("checker/query_schema.rs");
+include!("checker/flows.rs");
 include!("checker/register.rs");
 include!("checker/instances.rs");
 include!("checker/elaboration.rs");

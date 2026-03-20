@@ -27,6 +27,23 @@ getValueTriple = event => event match
   | GtkValueChanged wid name val => (wid, name, val)
   | _                            => (0, "", 0.0)
 
+nodeTag = node => node match
+  | GtkElement name _ _ => name
+  | _                   => ""
+
+withApp = appId => run =>
+  Unit
+  ~|>_ => init Unit
+   |> _ => appNew appId#app
+   |> _ => run app
+
+withWindow = appId => title => width => height => run =>
+  withApp appId (app =>
+    Unit
+  |> _ => windowNew app title width height#win
+  |> _ => run win
+  )
+
 Row = { id: Text, name: Text }
 
 signalDrivenView : Signal Text -> Signal Bool -> Signal (List Row) -> GtkNode
@@ -72,85 +89,88 @@ payloadClosedDialogView = ~<gtk>
 </gtk>
 
 @test "GtkClicked carries widget name"
-signal_clicked = do Effect {
-  assertEq (getClickedPair (GtkClicked 1 "saveBtn")) (1, "saveBtn")
-}
+signal_clicked = Unit
+  |> _ => assertEq (getClickedPair (GtkClicked 1 "saveBtn")) (1, "saveBtn")
 
 @test "GtkInputChanged carries widget name and text"
-signal_input_changed = do Effect {
-  assertEq (getInputTriple (GtkInputChanged 2 "nameInput" "hello")) (2, "nameInput", "hello")
-}
+signal_input_changed = Unit
+  |> _ => assertEq (getInputTriple (GtkInputChanged 2 "nameInput" "hello")) (2, "nameInput", "hello")
 
 @test "GtkToggled carries widget name and bool"
-signal_toggled = do Effect {
-  assertEq (getToggledTriple (GtkToggled 3 "checkBox" True)) (3, "checkBox", True)
-}
+signal_toggled = Unit
+  |> _ => assertEq (getToggledTriple (GtkToggled 3 "checkBox" True)) (3, "checkBox", True)
 
 @test "GtkFocusIn carries widget name"
-signal_focus = do Effect {
-  assertEq (getFocusPair (GtkFocusIn 4 "entry")) (4, "entry")
-}
+signal_focus = Unit
+  |> _ => assertEq (getFocusPair (GtkFocusIn 4 "entry")) (4, "entry")
 
 @test "GtkSignalEvent pattern matching with wildcard widget id"
-signal_event_pattern_matching = do Effect {
+signal_event_pattern_matching = {
   clickHandled = (GtkClicked 1 "btn") match
     | GtkClicked _ _ => True
     | _              => False
-  assertEq clickHandled True
+
   inputText = (GtkInputChanged 2 "inp" "hi") match
     | GtkInputChanged _ _ txt => txt
     | _                       => ""
-  assertEq inputText "hi"
+
   toggleActive = (GtkToggled 3 "chk" True) match
     | GtkToggled _ _ active => active
     | _                     => False
-  assertEq toggleActive True
+
   focusHandled = (GtkFocusIn 4 "x") match
     | GtkFocusIn _ _ => True
     | _              => False
-  assertEq focusHandled True
+
+  Unit
+  ~|>_ => assertEq clickHandled True
+  ~|>_ => assertEq inputText "hi"
+  ~|>_ => assertEq toggleActive True
+   |> _ => assertEq focusHandled True
 }
 
 @test "GtkSignalEvent match by widget name"
-signal_event_match_by_name = do Effect {
+signal_event_match_by_name = {
   getTitleText = event => event match
     | GtkInputChanged _ "titleInput" txt => Some txt
     | _                                  => None
+
   getBodyText = event => event match
     | GtkInputChanged _ "bodyInput" txt => Some txt
     | _                                 => None
-  assertEq (getTitleText (GtkInputChanged 1 "titleInput" "hi")) (Some "hi")
-  assertEq (getBodyText (GtkInputChanged 2 "bodyInput" "lo")) (Some "lo")
-  assertEq (getTitleText (GtkInputChanged 3 "other" "x")) None
+
+  Unit
+  ~|>_ => assertEq (getTitleText (GtkInputChanged 1 "titleInput" "hi")) (Some "hi")
+  ~|>_ => assertEq (getBodyText (GtkInputChanged 2 "bodyInput" "lo")) (Some "lo")
+   |> _ => assertEq (getTitleText (GtkInputChanged 3 "other" "x")) None
 }
 
 @test "GtkNode constructors"
-gtk_node_constructors = do Effect {
-  elem = gtkElement "GtkBox" [] [gtkTextNode "hello"]
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkBox"
-}
+gtk_node_constructors = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkBox" [] [gtkTextNode "hello"])) "GtkBox"
 
 @test "gtk4 helper constructors are accessible"
-type_signatures = do Effect {
+type_signatures = {
   node       = gtkElement "GtkBox" [] [gtkTextNode "hello"]
   childCount = node match
     | GtkElement _ _ children => List.length children
     | _                       => 0
-  assertEq childCount 1
+
+  Unit
+  |> _ => assertEq childCount 1
 }
 
 @test "gtk sugar callbacks compile with ergonomic payloads"
-gtk_sugar_callback_payloads = do Effect {
+gtk_sugar_callback_payloads = {
   _ = payloadCallbackView
   _ = payloadClosedDialogView
-  assertEq True True
+
+  Unit
+  |> _ => assertEq True True
 }
 
 @test "signal-first gtk sigils compile with show each and derived signals"
-signal_first_sigil_shapes = do Effect {
+signal_first_sigil_shapes = {
   title   = signal "Hello"
   visible = signal True
   rows    = signal [
@@ -162,32 +182,33 @@ signal_first_sigil_shapes = do Effect {
   )
   _ = combined
   _ = signalDrivenView title visible rows
-  assertEq (get title) "Hello"
+
+  Unit
+  |> _ => assertEq (get title) "Hello"
 }
 
 @test "keyed each mounts from gtk sigil"
-keyed_each_mounts = do Effect {
-  _   <- init Unit
-  app <- appNew "integration-tests.keyed-each"
-  win <- windowNew app "KeyedEach" 320 120
-  rows = signal [
-    { id: "one", name: "First" }
-    { id: "two", name: "Second" }
-  ]
-  view = ~<gtk>
-    <GtkBox orientation="vertical" spacing="4">
-      <each items={rows} as={row} key={row => row.id}>
-        <GtkLabel label={row.name} />
-      </each>
-    </GtkBox>
-  </gtk>
-  root <- buildFromNode view
-  _    <- windowSetChild win root
-  assertEq True True
-}
+keyed_each_mounts = withWindow "integration-tests.keyed-each" "KeyedEach" 320 120 (win => {
+    rows = signal [
+      { id: "one", name: "First" }
+      { id: "two", name: "Second" }
+    ]
+    view = ~<gtk>
+      <GtkBox orientation="vertical" spacing="4">
+        <each items={rows} as={row} key={row => row.id}>
+          <GtkLabel label={row.name} />
+        </each>
+      </GtkBox>
+    </gtk>
+
+    Unit
+     |> _ => buildFromNode view#root
+    ~|>_ => windowSetChild win root
+     |> _ => assertEq True True
+})
 
 @test "curated gtk imperative escape hatches remain available"
-curated_gtk_escape_hatches_available = do Effect {
+curated_gtk_escape_hatches_available = {
   _               = init
   _               = appNew
   _               = windowNew
@@ -212,11 +233,13 @@ curated_gtk_escape_hatches_available = do Effect {
   _               = attachMenuModel
   _               = openDocs
   _               = startTickFeed
-  assertEq True True
+
+  Unit
+  |> _ => assertEq True True
 }
 
 @test "root application window sigils compile"
-root_application_window_sigil = do Effect {
+root_application_window_sigil = {
   root = ~<gtk>
     <AdwApplicationWindow title="Counter" defaultWidth={320} defaultHeight={180}>
       <GtkBox orientation="vertical" spacing={8}>
@@ -225,35 +248,37 @@ root_application_window_sigil = do Effect {
     </AdwApplicationWindow>
   </gtk>
   _ = root
-  assertEq True True
+
+  Unit
+  |> _ => assertEq True True
 }
 
 @test "mountAppWindow accepts multiple live roots"
-mount_app_window_accepts_multiple_live_roots = do Effect {
-  _   <- init Unit
-  app <- appNew "integration-tests.multi-root"
-  windowRoot = ~<gtk>
-    <AdwApplicationWindow id="root-window" title="Counter" defaultWidth={320} defaultHeight={180}>
-      <GtkBox orientation="vertical" spacing={8}>
-        <GtkLabel label="Hello" />
-      </GtkBox>
-    </AdwApplicationWindow>
-  </gtk>
-  dialogRoot = ~<gtk>
-    <AdwPreferencesDialog id="prefs-dialog" title="Preferences" open={True}>
-      <AdwPreferencesPage title="General" />
-    </AdwPreferencesDialog>
-  </gtk>
-  win      <- mountAppWindow app [windowRoot, dialogRoot]
-  lookedUp <- widgetById "root-window"
-  dialogId <- widgetById "prefs-dialog"
-  assertEq lookedUp win
-  assertEq False (dialogId == 0)
-  _ <- windowClose win
-}
+mount_app_window_accepts_multiple_live_roots = withApp "integration-tests.multi-root" (app => {
+    windowRoot = ~<gtk>
+      <AdwApplicationWindow id="root-window" title="Counter" defaultWidth={320} defaultHeight={180}>
+        <GtkBox orientation="vertical" spacing={8}>
+          <GtkLabel label="Hello" />
+        </GtkBox>
+      </AdwApplicationWindow>
+    </gtk>
+    dialogRoot = ~<gtk>
+      <AdwPreferencesDialog id="prefs-dialog" title="Preferences" open={True}>
+        <AdwPreferencesPage title="General" />
+      </AdwPreferencesDialog>
+    </gtk>
+
+    Unit
+     |> _ => mountAppWindow app [windowRoot, dialogRoot]#win
+     |> _ => widgetById "root-window"#lookedUp
+     |> _ => widgetById "prefs-dialog"#dialogId
+    ~|>_ => assertEq lookedUp win
+    ~|>_ => assertEq False (dialogId == 0)
+     |> _ => windowClose win
+})
 
 @test "GtkMenuButton accepts nested GtkPopover property graphs"
-menu_button_accepts_nested_popover_property_graphs = do Effect {
+menu_button_accepts_nested_popover_property_graphs = {
   view = ~<gtk>
     <GtkMenuButton id="settings-btn" iconName="preferences-system-symbolic">
       <property name="popover">
@@ -265,118 +290,77 @@ menu_button_accepts_nested_popover_property_graphs = do Effect {
       </property>
     </GtkMenuButton>
   </gtk>
-  _         <- buildWithIds view
-  buttonId  <- widgetById "settings-btn"
-  popoverId <- widgetById "settings-popover"
-  assertEq False (buttonId == 0)
-  assertEq False (popoverId == 0)
+
+  Unit
+   |> _ => buildWithIds view
+   |> _ => widgetById "settings-btn"#buttonId
+   |> _ => widgetById "settings-popover"#popoverId
+  ~|>_ => assertEq False (buttonId == 0)
+   |> _ => assertEq False (popoverId == 0)
 }
 
 @test "GtkValueChanged carries widget name and float value"
-signal_value_changed = do Effect {
-  assertEq (getValueTriple (GtkValueChanged 5 "slider" 0.75)) (5, "slider", 0.75)
-}
+signal_value_changed = Unit
+  |> _ => assertEq (getValueTriple (GtkValueChanged 5 "slider" 0.75)) (5, "slider", 0.75)
 
 @test "GtkGrid child position parses from type string"
-gtk_grid_node_constructors = do Effect {
-  elem = gtkElement "GtkGrid" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkGrid"
-}
+gtk_grid_node_constructors = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkGrid" [] [])) "GtkGrid"
 
 @test "GtkSpinButton node is constructable"
-gtk_spin_button_node = do Effect {
-  elem = gtkElement "GtkSpinButton" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkSpinButton"
-}
+gtk_spin_button_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkSpinButton" [] [])) "GtkSpinButton"
 
 @test "GtkAspectFrame node is constructable"
-gtk_aspect_frame_node = do Effect {
-  elem = gtkElement "GtkAspectFrame" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkAspectFrame"
-}
+gtk_aspect_frame_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkAspectFrame" [] [])) "GtkAspectFrame"
 
 @test "GtkComboBoxText node is constructable"
-gtk_combo_box_text_node = do Effect {
-  elem = gtkElement "GtkComboBoxText" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkComboBoxText"
-}
+gtk_combo_box_text_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkComboBoxText" [] [])) "GtkComboBoxText"
 
 @test "GtkSearchBar node is constructable"
-gtk_search_bar_node = do Effect {
-  elem = gtkElement "GtkSearchBar" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkSearchBar"
-}
+gtk_search_bar_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkSearchBar" [] [])) "GtkSearchBar"
 
 @test "GtkPicture node is constructable"
-gtk_picture_node = do Effect {
-  elem = gtkElement "GtkPicture" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkPicture"
-}
+gtk_picture_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkPicture" [] [])) "GtkPicture"
 
 @test "GtkCalendar node is constructable"
-gtk_calendar_node = do Effect {
-  elem = gtkElement "GtkCalendar" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkCalendar"
-}
+gtk_calendar_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkCalendar" [] [])) "GtkCalendar"
 
 @test "GtkCalendar day-selected signal is known"
-gtk_calendar_signal = do Effect {
+gtk_calendar_signal = {
   event = GtkActivated 1 "calendar"
   pair  = event match
     | GtkActivated wid name => (wid, name)
     | _                     => (0, "")
-  assertEq pair (1, "calendar")
+
+  Unit
+  |> _ => assertEq pair (1, "calendar")
 }
 
 @test "GtkActionBar node is constructable"
-gtk_action_bar_node = do Effect {
-  elem = gtkElement "GtkActionBar" [] []
-  tag  = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkActionBar"
-}
+gtk_action_bar_node = Unit
+  |> _ => assertEq (nodeTag (gtkElement "GtkActionBar" [] [])) "GtkActionBar"
 
 @test "GtkCenterBox node is constructable"
-gtk_center_box_node = do Effect {
+gtk_center_box_node = {
   startChild  = gtkElement "GtkLabel" [] []
   centerChild = gtkElement "GtkLabel" [] []
   endChild    = gtkElement "GtkLabel" [] []
   elem        = gtkElement "GtkCenterBox" [] [startChild, centerChild, endChild]
-  tag         = elem match
-    | GtkElement name _ _ => name
-    | _                   => ""
-  assertEq tag "GtkCenterBox"
+
+  Unit
+  |> _ => assertEq (nodeTag elem) "GtkCenterBox"
 }
 
 @test "GtkEventControllerMotion mounts as a controller child"
-gtk_motion_controller_mounts = do Effect {
-  _   <- init Unit
-  app <- appNew "integration-tests.motion-controller"
-  win <- windowNew app "MotionController" 320 120
-  hovered = signal False
-  view    = ~<gtk>
+gtk_motion_controller_mounts = withWindow "integration-tests.motion-controller" "MotionController" 320 120 (win => {
+    hovered = signal False
+    view    = ~<gtk>
       <GtkBox id="hover-target" orientation="vertical" spacing="4">
         <child type="controller">
           <GtkEventControllerMotion>
@@ -387,7 +371,9 @@ gtk_motion_controller_mounts = do Effect {
         <GtkLabel label="Hover target" />
       </GtkBox>
     </gtk>
-  root <- buildFromNode view
-  _    <- windowSetChild win root
-  assertEq (get hovered) False
-}
+
+    Unit
+     |> _ => buildFromNode view#root
+    ~|>_ => windowSetChild win root
+     |> _ => assertEq (get hovered) False
+})
