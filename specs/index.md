@@ -191,6 +191,7 @@ Use the table of contents below as a map once you know the kind of answer you ne
 ### Internals
 - [Compiler & Backend](typed_codegen/design)
 - [Minimality Proof](typed_codegen/minimality)
+- [Unified Workflow Pipelines (Proposal)](proposals/unified_workflow_pipelines)
 - [Spec Doc Markers](doc-markers-spec)
 
 <!-- toc:end -->

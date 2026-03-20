@@ -161,6 +161,7 @@ If you are new to AIVI, start with the two pages in **Start Here**: **[Language 
 ### Internals
 - [Compiler & Backend](typed_codegen/design.md)
 - [Minimality Proof](typed_codegen/minimality.md)
+- [Unified Workflow Pipelines (Proposal)](proposals/unified_workflow_pipelines.md)
 - [Spec Doc Markers](doc-markers-spec.md)
 
 <!-- toc:end -->
