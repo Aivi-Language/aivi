@@ -19,9 +19,12 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/markup-control-nodes/main.aivi",
         "milestone-2/valid/class-declarations/main.aivi",
         "milestone-2/valid/domain-declarations/main.aivi",
+        "milestone-2/valid/domain-literal-suffixes/main.aivi",
+        "milestone-2/valid/pipe-branch-and-join/main.aivi",
         "milestone-1/valid/records/record_shorthand_and_elision.aivi",
         "milestone-1/valid/sources/source_declarations.aivi",
         "milestone-1/valid/top-level/declarations.aivi",
+        "milestone-1/valid/pipes/pipe_algebra.aivi",
     ] {
         let path = fixture_path(relative);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -54,6 +57,9 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/source-decorator-non-signal/main.aivi",
         "milestone-2/invalid/unknown-import-module/main.aivi",
         "milestone-2/invalid/domain-recursive-carrier/main.aivi",
+        "milestone-2/invalid/ambiguous-domain-literal-suffix/main.aivi",
+        "milestone-2/invalid/unpaired-truthy-falsy/main.aivi",
+        "milestone-2/invalid/fanin-without-map/main.aivi",
     ] {
         let path = fixture_path(relative);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))

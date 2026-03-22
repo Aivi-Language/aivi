@@ -127,3 +127,21 @@ This log records narrow, reviewable implementation choices for ambiguous or stag
     - **Chosen interpretation:** Extend the focused `aivi-typing` `Eq` planner with an explicit nominal domain type node. A domain derives `Eq` exactly when its carrier derivation succeeds under the current context, and the resulting proof records a distinct domain wrapper step around the carrier proof. Because there is no surface opt-out mechanism yet, the current implementation treats domains as derivable whenever their carriers are derivable.
     - **Rationale:** This preserves nominal identity in the derivation model, keeps the current equality work aligned with the RFC’s domain guidance, and avoids smuggling domains through generic external references or alias-like collapse.
     - **Future refinement:** If/when a domain opt-out or explicit derive mechanism is added to the surface language, thread that flag into the domain `Eq` planner as a deliberate extension rather than by changing the nominal proof shape.
+
+22. **Area:** Literal-suffix expression parsing and HIR lowering (`RFC §20.5`)
+    - **Ambiguity / decision point:** The RFC allows forms such as `250ms`, but the existing surface grammar already treats adjacency as ordinary application (`f x`) and does not distinguish compact suffix syntax from spaced application.
+    - **Chosen interpretation:** Parse immediate-adjacency integer-plus-identifier forms such as `250ms` as a dedicated suffixed-integer literal node in CST and HIR. Spaced forms such as `250 ms` remain ordinary application. The current implementation covers integer-family suffixes only, because that is the only literal family materially exercised by the RFC examples and current frontend.
+    - **Rationale:** This adds the RFC’s domain-literal surface without weakening ordinary application syntax or inventing hidden whitespace rules. Using an explicit HIR node also keeps compile-time suffix resolution honest instead of pretending a domain literal is an ordinary top-level term.
+    - **Future refinement:** Extend the same explicit-literal approach to other literal families only after their surface syntax and typing rules are specified, and broaden suffix scope beyond same-module declarations when the module/import model grows.
+
+23. **Area:** Current scope of compile-time literal-suffix resolution (`RFC §20.5`)
+    - **Ambiguity / decision point:** The RFC discusses suffix ambiguity “in scope,” including imported domains, but the current implementation still has a deliberately narrow ordinary module/import model and no user-module import graph.
+    - **Chosen interpretation:** Compile-time literal suffix resolution currently ranges over visible domain literal declarations in the current module/HIR namespace. A unique suffix resolves to its owning domain literal declaration; multiple matching declarations are a compile-time ambiguity at the use site; no match is an unknown-suffix error.
+    - **Rationale:** This fully implements the local compile-time behavior the current frontend can represent without inventing a broader import/export system than the repository currently has.
+    - **Future refinement:** When user-module imports and re-exports are implemented, extend the same namespace model so imported domain literal declarations participate in suffix scope explicitly.
+
+24. **Area:** Structural legality checks for sharpened pipe operators (`RFC §11.4.1`, `§11.5.1`)
+    - **Ambiguity / decision point:** Some of the updated pipe rules are purely structural (`T|>` / `F|>` adjacency, `<|*` placement) while others are carrier/runtime dependent. The current codebase has HIR/lowering but not the later typing/runtime layers.
+    - **Chosen interpretation:** Enforce the purely structural rules at HIR lowering time now: a run of truthy/falsy shorthand stages must be exactly one adjacent `T|>` / `F|>` pair, and `<|*` is legal only immediately after `*|>`. Carrier-specific behavior for `?|>`, `*|>`, recurrence, and source lifecycle remains deferred to later typing/runtime layers.
+    - **Rationale:** This closes a real RFC gap in the existing frontend without smuggling type checking or scheduler behavior into Milestone 2.
+    - **Future refinement:** Add typed elaboration/planning for ordinary vs `Signal` carriers and runtime-specific recurrence/source checks once those later layers exist.

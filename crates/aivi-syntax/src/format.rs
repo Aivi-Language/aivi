@@ -3,8 +3,8 @@ use crate::cst::{
     DomainItem, DomainMember, DomainMemberName, Expr, ExprKind, FunctionParam, Identifier, Item,
     MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, Pattern, PatternKind,
     PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-    RecordPatternField, SourceDecorator, TypeDeclBody, TypeExpr, TypeExprKind, TypeField,
-    TypeVariant, UnaryOperator, UseItem,
+    RecordPatternField, SourceDecorator, SuffixedIntegerLiteral, TypeDeclBody, TypeExpr,
+    TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -604,6 +604,7 @@ impl Formatter {
         match &expr.kind {
             ExprKind::Name(name) => name.text.clone(),
             ExprKind::Integer(integer) => integer.raw.clone(),
+            ExprKind::SuffixedInteger(literal) => self.format_suffixed_integer_inline(literal),
             ExprKind::Text(text) => text.raw.clone(),
             ExprKind::Regex(regex) => regex.raw.clone(),
             ExprKind::Group(inner) => format!("({})", self.format_expr_inline(inner, 0)),
@@ -656,6 +657,10 @@ impl Formatter {
             }
             ExprKind::Markup(node) => self.format_markup_inline(node),
         }
+    }
+
+    fn format_suffixed_integer_inline(&self, literal: &SuffixedIntegerLiteral) -> String {
+        format!("{}{}", literal.literal.raw, literal.suffix.text)
     }
 
     fn format_expr_group_block(&self, inner: &Expr, force_multiline: bool) -> Block {
@@ -1409,6 +1414,23 @@ mod tests {
                 "    literal root : Text -> Path\n",
                 "    (/) : Path -> Text -> Path\n",
                 "    value : Path -> Text\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_keeps_compact_domain_literal_suffixes() {
+        let formatted = format_text(
+            "domain Duration over Int\n    literal ms:Int -> Duration\nval delay:Duration=250ms\nval applied=wrap 250ms\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "domain Duration over Int\n",
+                "    literal ms : Int -> Duration\n",
+                "\n",
+                "val delay:Duration = 250ms\n",
+                "val applied = wrap 250ms\n",
             )
         );
     }

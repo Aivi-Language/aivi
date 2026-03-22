@@ -10,13 +10,13 @@ use crate::{
     DecoratorId, DecoratorPayload, DomainItem, DomainMember, DomainMemberKind, EachControl,
     EmptyControl, ExportItem, Expr, ExprId, ExprKind, FragmentControl, FunctionItem,
     FunctionParameter, ImportBinding, ImportId, IntegerLiteral, Item, ItemHeader, ItemId, ItemKind,
-    MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind,
-    MatchControl, Module, Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage,
-    PipeStageKind, ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface,
-    RecordPatternField, RegexLiteral, ResolutionState, ShowControl, SignalItem, SourceDecorator,
-    TermReference, TermResolution, TextLiteral, TypeField, TypeId, TypeItem, TypeItemBody,
-    TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference, TypeResolution, TypeVariant,
-    UnaryOperator, UseItem, ValueItem, WithControl,
+    LiteralSuffixResolution, MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode,
+    MarkupNodeId, MarkupNodeKind, MatchControl, Module, Name, NamePath, Pattern, PatternId,
+    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase, RecordExpr, RecordExprField,
+    RecordFieldSurface, RecordPatternField, RegexLiteral, ResolutionState, ShowControl, SignalItem,
+    SourceDecorator, SuffixedIntegerLiteral, TermReference, TermResolution, TextLiteral, TypeField,
+    TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId,
+    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {
@@ -77,6 +77,7 @@ struct Namespaces {
     term_items: HashMap<String, Vec<NamedSite<ItemId>>>,
     type_items: HashMap<String, Vec<NamedSite<ItemId>>>,
     any_items: HashMap<String, Vec<NamedSite<ItemId>>>,
+    literal_suffixes: HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
     term_imports: HashMap<String, Vec<NamedSite<ImportId>>>,
     type_imports: HashMap<String, Vec<NamedSite<ImportId>>>,
 }
@@ -688,6 +689,14 @@ impl Lowerer {
                     raw: integer.raw.clone().into_boxed_str(),
                 }),
             }),
+            syn::ExprKind::SuffixedInteger(literal) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::SuffixedInteger(SuffixedIntegerLiteral {
+                    raw: literal.literal.raw.clone().into_boxed_str(),
+                    suffix: self.make_name(&literal.suffix.text, literal.suffix.span),
+                    resolution: ResolutionState::Unresolved,
+                }),
+            }),
             syn::ExprKind::Text(text) => self.alloc_expr(Expr {
                 span: expr.span,
                 kind: ExprKind::Text(TextLiteral {
@@ -829,6 +838,7 @@ impl Lowerer {
     }
 
     fn lower_pipe_expr(&mut self, pipe: &syn::PipeExpr) -> ExprId {
+        self.validate_pipe_stages(&pipe.stages);
         let mut current = pipe.head.as_ref().map(|head| self.lower_expr(head));
         let mut ordinary = Vec::new();
         let mut index = 0;
@@ -1009,6 +1019,65 @@ impl Lowerer {
         PipeStage {
             span: stage.span,
             kind,
+        }
+    }
+
+    fn validate_pipe_stages(&mut self, stages: &[syn::PipeStage]) {
+        let mut index = 0;
+        while index < stages.len() {
+            match stages[index].kind {
+                syn::PipeStageKind::Truthy { .. } | syn::PipeStageKind::Falsy { .. } => {
+                    let run_start = index;
+                    let mut truthy = 0usize;
+                    let mut falsy = 0usize;
+                    while index < stages.len() {
+                        match stages[index].kind {
+                            syn::PipeStageKind::Truthy { .. } => {
+                                truthy += 1;
+                                index += 1;
+                            }
+                            syn::PipeStageKind::Falsy { .. } => {
+                                falsy += 1;
+                                index += 1;
+                            }
+                            _ => break,
+                        }
+                    }
+                    if index - run_start != 2 || truthy != 1 || falsy != 1 {
+                        let mut diagnostic = Diagnostic::error(
+                            "`T|>` and `F|>` must appear as one adjacent pair within a pipe spine",
+                        )
+                        .with_code(code("invalid-truthy-falsy-pair"))
+                        .with_primary_label(
+                            stages[run_start].span,
+                            "this truthy/falsy shorthand run is not a single adjacent pair",
+                        );
+                        for stage in stages[run_start + 1..index].iter().take(2) {
+                            diagnostic = diagnostic.with_secondary_label(
+                                stage.span,
+                                "paired truthy/falsy stage involved here",
+                            );
+                        }
+                        self.diagnostics.push(diagnostic);
+                    }
+                }
+                syn::PipeStageKind::FanIn { .. } => {
+                    if index == 0
+                        || !matches!(stages[index - 1].kind, syn::PipeStageKind::Map { .. })
+                    {
+                        self.diagnostics.push(
+                            Diagnostic::error("`<|*` must immediately follow a `*|>` stage")
+                                .with_code(code("orphan-fan-in"))
+                                .with_primary_label(
+                                    stages[index].span,
+                                    "place `<|*` directly after the fan-out stage it joins",
+                                ),
+                        );
+                    }
+                    index += 1;
+                }
+                _ => index += 1,
+            }
         }
     }
 
@@ -2007,6 +2076,19 @@ impl Lowerer {
                         code("duplicate-item-name"),
                         "item",
                     );
+                    for (member_index, member) in item.members.iter().enumerate() {
+                        if member.kind == DomainMemberKind::Literal {
+                            insert_site(
+                                &mut namespaces.literal_suffixes,
+                                member.name.text(),
+                                LiteralSuffixResolution {
+                                    domain: item_id,
+                                    member_index,
+                                },
+                                member.span,
+                            );
+                        }
+                    }
                 }
                 Item::Use(item) => self.register_use_item(&item, &mut namespaces),
                 Item::Export(_) | Item::Instance(_) => {}
@@ -2204,6 +2286,13 @@ impl Lowerer {
                 }
             }
             ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => expr,
+            ExprKind::SuffixedInteger(mut literal) => {
+                literal.resolution = self.resolve_literal_suffix(&literal.suffix, namespaces);
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::SuffixedInteger(literal),
+                }
+            }
             ExprKind::Tuple(elements) => {
                 for element in elements.iter() {
                     self.resolve_expr(*element, namespaces, env);
@@ -2752,6 +2841,39 @@ impl Lowerer {
         }
     }
 
+    fn resolve_literal_suffix(
+        &mut self,
+        suffix: &Name,
+        namespaces: &Namespaces,
+    ) -> ResolutionState<LiteralSuffixResolution> {
+        let Some(candidates) = namespaces.literal_suffixes.get(suffix.text()) else {
+            self.emit_error(
+                suffix.span(),
+                format!("unknown literal suffix `{}`", suffix.text()),
+                code("unknown-literal-suffix"),
+            );
+            return ResolutionState::Unresolved;
+        };
+
+        if candidates.len() > 1 {
+            let mut diagnostic =
+                Diagnostic::error(format!("literal suffix `{}` is ambiguous", suffix.text()))
+                    .with_code(code("ambiguous-literal-suffix"))
+                    .with_primary_label(
+                        suffix.span(),
+                        "this suffixed literal matches multiple domain literal declarations",
+                    );
+            for candidate in candidates.iter().take(3) {
+                diagnostic = diagnostic
+                    .with_secondary_label(candidate.span, "matching literal suffix declared here");
+            }
+            self.diagnostics.push(diagnostic);
+            return ResolutionState::Unresolved;
+        }
+
+        ResolutionState::Resolved(candidates[0].value)
+    }
+
     fn type_contains_item_reference(&self, root: TypeId, target: ItemId) -> bool {
         let mut stack = vec![root];
         while let Some(type_id) = stack.pop() {
@@ -3124,7 +3246,8 @@ mod tests {
     use super::{lower_module, path_text};
     use crate::{
         BuiltinType, ClusterFinalizer, DecoratorPayload, DomainMemberKind, ExprKind, Item,
-        ResolutionState, TermResolution, TypeKind, TypeResolution, ValidationMode,
+        LiteralSuffixResolution, ResolutionState, TermResolution, TypeKind, TypeResolution,
+        ValidationMode,
     };
 
     fn fixture_root() -> PathBuf {
@@ -3187,9 +3310,12 @@ mod tests {
             "milestone-2/valid/markup-control-nodes/main.aivi",
             "milestone-2/valid/class-declarations/main.aivi",
             "milestone-2/valid/domain-declarations/main.aivi",
+            "milestone-2/valid/domain-literal-suffixes/main.aivi",
+            "milestone-2/valid/pipe-branch-and-join/main.aivi",
             "milestone-1/valid/records/record_shorthand_and_elision.aivi",
             "milestone-1/valid/sources/source_declarations.aivi",
             "milestone-1/valid/top-level/declarations.aivi",
+            "milestone-1/valid/pipes/pipe_algebra.aivi",
             "milestone-1/valid/pipes/applicative_clusters.aivi",
         ] {
             let lowered = lower_fixture(path);
@@ -3220,6 +3346,9 @@ mod tests {
             "milestone-2/invalid/source-decorator-non-signal/main.aivi",
             "milestone-2/invalid/unknown-import-module/main.aivi",
             "milestone-2/invalid/domain-recursive-carrier/main.aivi",
+            "milestone-2/invalid/ambiguous-domain-literal-suffix/main.aivi",
+            "milestone-2/invalid/unpaired-truthy-falsy/main.aivi",
+            "milestone-2/invalid/fanin-without-map/main.aivi",
         ] {
             let lowered = lower_fixture(path);
             assert!(
@@ -3380,6 +3509,62 @@ mod tests {
             other => panic!("expected `NonEmpty` to lower as a domain item, found {other:?}"),
         };
         assert_eq!(non_empty.parameters.len(), 1);
+    }
+
+    #[test]
+    fn resolves_suffixed_integers_to_domain_literal_declarations() {
+        let lowered = lower_fixture("milestone-2/valid/domain-literal-suffixes/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "domain literal suffix fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "domain literal suffix fixture should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let duration_domain_id = lowered
+            .module()
+            .root_items()
+            .iter()
+            .copied()
+            .find(|item_id| {
+                matches!(
+                    &lowered.module().items()[*item_id],
+                    Item::Domain(item) if item.name.text() == "Duration"
+                )
+            })
+            .expect("fixture should contain Duration domain");
+
+        let delay_body = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Value(item) if item.name.text() == "delay" => Some(item.body),
+                _ => None,
+            })
+            .expect("fixture should contain delay value");
+
+        match &lowered.module().exprs()[delay_body].kind {
+            ExprKind::SuffixedInteger(literal) => {
+                assert_eq!(&*literal.raw, "250");
+                assert_eq!(literal.suffix.text(), "ms");
+                assert_eq!(
+                    literal.resolution,
+                    ResolutionState::Resolved(LiteralSuffixResolution {
+                        domain: duration_domain_id,
+                        member_index: 0,
+                    })
+                );
+            }
+            other => panic!("expected suffixed integer expression, found {other:?}"),
+        }
     }
 
     #[test]

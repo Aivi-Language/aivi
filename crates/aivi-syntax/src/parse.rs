@@ -8,8 +8,8 @@ use crate::{
         MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody,
         OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind,
         ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral,
-        SourceDecorator, TextLiteral, TokenRange, TypeDeclBody, TypeExpr, TypeExprKind, TypeField,
-        TypeVariant, UnaryOperator, UseItem,
+        SourceDecorator, SuffixedIntegerLiteral, TextLiteral, TokenRange, TypeDeclBody, TypeExpr,
+        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_module},
 };
@@ -1363,14 +1363,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Integer => {
                 *cursor = index + 1;
-                let span = self.source_span_of_token(index);
-                Some(Expr {
-                    span,
-                    kind: ExprKind::Integer(IntegerLiteral {
-                        raw: self.tokens[index].text(self.source).to_owned(),
-                        span,
-                    }),
-                })
+                Some(self.parse_integer_expr(index, cursor, end))
             }
             TokenKind::StringLiteral => {
                 *cursor = index + 1;
@@ -1443,6 +1436,36 @@ impl<'a> Parser<'a> {
                 path: projection,
             },
         })
+    }
+
+    fn parse_integer_expr(&self, index: usize, cursor: &mut usize, end: usize) -> Expr {
+        let span = self.source_span_of_token(index);
+        let literal = IntegerLiteral {
+            raw: self.tokens[index].text(self.source).to_owned(),
+            span,
+        };
+        if let Some(suffix_index) = self.peek_nontrivia(*cursor, end) {
+            if self.tokens[suffix_index].kind() == TokenKind::Identifier
+                && self.tokens_are_adjacent(index, suffix_index)
+            {
+                *cursor = suffix_index + 1;
+                let suffix = self.identifier_from_token(suffix_index);
+                let span = self.join_spans(literal.span, suffix.span);
+                return Expr {
+                    span,
+                    kind: ExprKind::SuffixedInteger(SuffixedIntegerLiteral {
+                        literal,
+                        suffix,
+                        span,
+                    }),
+                };
+            }
+        }
+
+        Expr {
+            span,
+            kind: ExprKind::Integer(literal),
+        }
     }
 
     fn parse_ambient_projection(&mut self, cursor: &mut usize, end: usize) -> Option<Expr> {
@@ -2153,6 +2176,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn tokens_are_adjacent(&self, left: usize, right: usize) -> bool {
+        self.tokens[left].span().end() == self.tokens[right].span().start()
+    }
+
     fn make_base(&self, start: usize, end: usize, decorators: Vec<Decorator>) -> ItemBase {
         ItemBase {
             span: self.source_span_for_range(start, end),
@@ -2687,6 +2714,40 @@ export main
                 ));
             }
             other => panic!("expected domain item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parser_distinguishes_compact_literal_suffixes_from_spaced_application() {
+        let (_, parsed) = load(
+            "domain Duration over Int\n    literal ms : Int -> Duration\nval compact = 250ms\nval spaced = 250 ms\n",
+        );
+
+        assert!(!parsed.has_errors());
+        match &parsed.module.items[1] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::SuffixedInteger(literal)) => {
+                    assert_eq!(literal.literal.raw, "250");
+                    assert_eq!(literal.suffix.text, "ms");
+                }
+                other => panic!("expected compact suffixed integer, got {other:?}"),
+            },
+            other => panic!("expected compact value item, got {other:?}"),
+        }
+
+        match &parsed.module.items[2] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::Apply { callee, arguments }) => {
+                    assert!(matches!(callee.kind, ExprKind::Integer(_)));
+                    assert_eq!(arguments.len(), 1);
+                    assert!(matches!(
+                        arguments[0].kind,
+                        ExprKind::Name(ref identifier) if identifier.text == "ms"
+                    ));
+                }
+                other => panic!("expected spaced application, got {other:?}"),
+            },
+            other => panic!("expected spaced value item, got {other:?}"),
         }
     }
 

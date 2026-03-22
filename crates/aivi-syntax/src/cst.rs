@@ -78,6 +78,14 @@ pub struct IntegerLiteral {
     pub span: SourceSpan,
 }
 
+/// Integer literal immediately suffixed by a domain literal name, such as `250ms`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SuffixedIntegerLiteral {
+    pub literal: IntegerLiteral,
+    pub suffix: Identifier,
+    pub span: SourceSpan,
+}
+
 /// Text literal preserved in surface form.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextLiteral {
@@ -269,6 +277,7 @@ pub struct Expr {
 pub enum ExprKind {
     Name(Identifier),
     Integer(IntegerLiteral),
+    SuffixedInteger(SuffixedIntegerLiteral),
     Text(TextLiteral),
     Regex(RegexLiteral),
     Group(Box<Expr>),

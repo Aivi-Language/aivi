@@ -3,9 +3,10 @@ use aivi_base::{Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan};
 use crate::{
     arena::{Arena, ArenaId},
     hir::{
-        ClusterFinalizer, ControlNode, ControlNodeKind, DecoratorPayload, ExprKind, Item,
-        MarkupAttributeValue, MarkupNodeKind, Module, Name, NamePath, PatternKind, PipeStageKind,
-        ResolutionState, TermReference, TermResolution, TypeKind, TypeReference, TypeResolution,
+        ClusterFinalizer, ControlNode, ControlNodeKind, DecoratorPayload, DomainMemberKind,
+        ExprKind, Item, LiteralSuffixResolution, MarkupAttributeValue, MarkupNodeKind, Module,
+        Name, NamePath, PatternKind, PipeStageKind, ResolutionState, TermReference, TermResolution,
+        TypeKind, TypeReference, TypeResolution,
     },
     ids::{
         BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,
@@ -239,6 +240,7 @@ impl Validator<'_> {
             match &expr.kind {
                 ExprKind::Name(reference) => self.check_term_reference(reference),
                 ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => {}
+                ExprKind::SuffixedInteger(literal) => self.check_suffixed_integer(literal),
                 ExprKind::Tuple(elements) => {
                     for element in elements.iter() {
                         self.require_expr(expr.span, "expression", "tuple element", *element);
@@ -734,6 +736,22 @@ impl Validator<'_> {
         );
     }
 
+    fn check_suffixed_integer(&mut self, literal: &crate::hir::SuffixedIntegerLiteral) {
+        self.check_name(&literal.suffix);
+        self.check_resolution(
+            literal.suffix.span(),
+            "literal suffix",
+            literal.resolution.as_ref(),
+            |this, resolution| {
+                this.require_literal_suffix_resolution(
+                    literal.suffix.span(),
+                    &literal.suffix,
+                    *resolution,
+                );
+            },
+        );
+    }
+
     fn check_type_reference(&mut self, reference: &TypeReference) {
         self.check_name_path(&reference.path);
         self.check_resolution(
@@ -840,6 +858,59 @@ impl Validator<'_> {
         id: ItemId,
     ) {
         self.require_node(self.module.items(), span, owner, field, id, "item");
+    }
+
+    fn require_literal_suffix_resolution(
+        &mut self,
+        span: SourceSpan,
+        suffix: &Name,
+        resolution: LiteralSuffixResolution,
+    ) {
+        let Some(item) = self.module.items().get(resolution.domain) else {
+            self.diagnostics.push(
+                Diagnostic::error("literal suffix resolution points at a missing domain item")
+                    .with_code(code("invalid-literal-suffix-resolution"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "update the literal suffix resolution to target an existing domain item",
+                    )),
+            );
+            return;
+        };
+        let Item::Domain(domain) = item else {
+            self.diagnostics.push(
+                Diagnostic::error("literal suffix resolution does not target a domain item")
+                    .with_code(code("invalid-literal-suffix-resolution"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "literal suffixes must resolve to domain literal declarations",
+                    )),
+            );
+            return;
+        };
+        let Some(member) = domain.members.get(resolution.member_index) else {
+            self.diagnostics.push(
+                Diagnostic::error("literal suffix resolution points at a missing domain member")
+                    .with_code(code("invalid-literal-suffix-resolution"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "update the literal suffix resolution to target an existing literal member",
+                    )),
+            );
+            return;
+        };
+        if member.kind != DomainMemberKind::Literal || member.name.text() != suffix.text() {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "literal suffix resolution does not match the target domain literal",
+                )
+                .with_code(code("invalid-literal-suffix-resolution"))
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "the resolved domain literal must match the suffix spelling used here",
+                )),
+            );
+        }
     }
 
     fn require_expr(

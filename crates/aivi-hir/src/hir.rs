@@ -294,6 +294,13 @@ impl TypeReference {
     }
 }
 
+/// Resolved destination for a domain literal suffix use site such as `250ms`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LiteralSuffixResolution {
+    pub domain: ItemId,
+    pub member_index: usize,
+}
+
 /// Shared top-level metadata attached to every HIR item.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ItemHeader {
@@ -512,6 +519,14 @@ pub struct IntegerLiteral {
     pub raw: Box<str>,
 }
 
+/// One integer literal immediately suffixed by a resolved-or-resolvable domain suffix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SuffixedIntegerLiteral {
+    pub raw: Box<str>,
+    pub suffix: Name,
+    pub resolution: ResolutionState<LiteralSuffixResolution>,
+}
+
 /// One text literal preserved in raw form.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextLiteral {
@@ -555,6 +570,7 @@ pub struct Expr {
 pub enum ExprKind {
     Name(TermReference),
     Integer(IntegerLiteral),
+    SuffixedInteger(SuffixedIntegerLiteral),
     Text(TextLiteral),
     Regex(RegexLiteral),
     Tuple(AtLeastTwo<ExprId>),

@@ -1,0 +1,6 @@
+val ready = True
+val start = "start"
+
+val branch =
+    ready
+     T|> start
