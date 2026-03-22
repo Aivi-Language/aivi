@@ -1257,10 +1257,10 @@ impl Validator<'_> {
                 format!("`{}` expects `{expected_surface}`", field.label.text()),
             )
             .with_note(
-                "current source option typing checks only the resolved-HIR cases it can prove honestly: same-module annotations, same-module unannotated value bodies rechecked through that same proof slice, suffixed domain literals, same-module constructors checked against the expected contract type or re-inferred as bare roots, built-in `Option` / `Result` / `Validation` constructors when local type evidence fixes their surrounding shape, imported bindings whose compiler-known import metadata lowers into the current closed type surface, tuple/record/list expressions whose nested values stay within that same slice, and reactive `Signal` payloads used as ordinary source configuration values",
+                "current source option typing checks only the resolved-HIR cases it can prove honestly: same-module annotations, same-module unannotated value bodies rechecked through that same proof slice, suffixed domain literals, same-module constructors checked against the expected contract type or re-inferred as bare roots, built-in `Option` / `Result` / `Validation` constructors including bare roots that only prove a local container shape, imported bindings whose compiler-known import metadata lowers into the current closed type surface, tuple/record/list expressions whose nested values stay within that same slice, and reactive `Signal` payloads used as ordinary source configuration values",
             )
             .with_note(
-                "bare contract-parameter roots now also cover nested same-module generic constructor applications, `Some` roots, and constructor fields whose tuple/record or built-in container shape can be proved locally; root `None` / `Ok` / `Err` / `Valid` / `Invalid` holes without surrounding type evidence, imports without compiler-known type metadata, and otherwise unproven expressions still wait for fuller ordinary expression typing",
+                "bare contract-parameter roots now also cover nested same-module generic constructor applications, unannotated local value bodies, tuple/record/list literals, `Some` roots, context-free `None` / `Ok` / `Err` / `Valid` / `Invalid` holes carried through local source-option bindings, and constructor fields whose tuple/record or built-in container shape can be proved locally; imports without compiler-known type metadata and otherwise unproven ordinary expressions still wait for fuller expression typing",
             ),
         );
     }
@@ -1328,7 +1328,7 @@ impl Validator<'_> {
                 format!("argument #{} `{schema_name}` expects `{expected_surface}`", index + 1),
             )
             .with_note(
-                "current custom source contract typing reuses the same resolved-HIR proof surface as source options: same-module annotations, same-module unannotated value bodies rechecked through that same proof slice, suffixed domain literals, same-module constructors checked against the expected contract type or re-inferred as bare roots, imported bindings whose compiler-known import metadata lowers into the current closed type surface, tuple/record/list expressions whose nested values stay within that same slice, and reactive `Signal` payloads used as ordinary source configuration values",
+                "current custom source contract typing reuses the same resolved-HIR proof surface as source options: same-module annotations, same-module unannotated value bodies rechecked through that same proof slice, suffixed domain literals, same-module constructors checked against the expected contract type or re-inferred as bare roots, built-in `Option` / `Result` / `Validation` constructors including bare roots that only prove a local container shape, imported bindings whose compiler-known import metadata lowers into the current closed type surface, tuple/record/list expressions whose nested values stay within that same slice, and reactive `Signal` payloads used as ordinary source configuration values",
             ),
         );
     }
@@ -1404,7 +1404,7 @@ impl Validator<'_> {
             value_stack,
         )?;
         Some(
-            if source_option_expected_matches_gate_type(expected, &actual, bindings) {
+            if source_option_expected_matches_actual_type(expected, &actual, bindings) {
                 SourceOptionTypeCheck::Match
             } else {
                 SourceOptionTypeCheck::Mismatch(SourceOptionTypeMismatch {
@@ -1533,10 +1533,10 @@ impl Validator<'_> {
 
         let synthesized_expected = match expected {
             SourceOptionExpectedType::ContractParameter(parameter) => {
-                bindings.parameter(*parameter).and_then(|bound| {
+                bindings.parameter_gate_type(*parameter).and_then(|bound| {
                     SourceOptionExpectedType::from_gate_type(
                         self.module,
-                        bound,
+                        &bound,
                         SourceOptionTypeSurface::Expression,
                     )
                 })
@@ -1656,10 +1656,10 @@ impl Validator<'_> {
         let mut bind_parameter = None;
         let synthesized_expected = match expected {
             SourceOptionExpectedType::ContractParameter(parameter) => {
-                if let Some(bound) = bindings.parameter(*parameter) {
+                if let Some(bound) = bindings.parameter_gate_type(*parameter) {
                     let Some(bound_expected) = SourceOptionExpectedType::from_gate_type(
                         self.module,
-                        bound,
+                        &bound,
                         SourceOptionTypeSurface::Expression,
                     ) else {
                         return SourceOptionTypeCheck::Mismatch(SourceOptionTypeMismatch {
@@ -1685,7 +1685,7 @@ impl Validator<'_> {
                     };
                     bind_parameter = Some((
                         *parameter,
-                        GateType::OpaqueItem {
+                        SourceOptionActualType::OpaqueItem {
                             item: actual.parent_item,
                             name: actual.parent_name.clone(),
                             arguments: Vec::new(),
@@ -1714,7 +1714,7 @@ impl Validator<'_> {
 
         if actual.field_types.is_empty() {
             if let Some((parameter, bound_type)) = bind_parameter.as_ref() {
-                let matched = bindings.bind_or_match(*parameter, bound_type);
+                let matched = bindings.bind_or_match_actual(*parameter, bound_type);
                 debug_assert!(
                     matched,
                     "fresh contract-parameter binding should not conflict"
@@ -1755,7 +1755,7 @@ impl Validator<'_> {
             SourceOptionTypeCheck::Unknown
         } else {
             if let Some((parameter, bound_type)) = bind_parameter.as_ref() {
-                let matched = bindings.bind_or_match(*parameter, bound_type);
+                let matched = bindings.bind_or_match_actual(*parameter, bound_type);
                 debug_assert!(
                     matched,
                     "fresh contract-parameter binding should not conflict"
@@ -1784,7 +1784,7 @@ impl Validator<'_> {
             value_stack,
         ) {
             SourceOptionGenericConstructorRootCheck::Match(actual_type) => {
-                let matched = bindings.bind_or_match(parameter, &actual_type);
+                let matched = bindings.bind_or_match_actual(parameter, &actual_type);
                 debug_assert!(
                     matched,
                     "fresh contract-parameter binding should not conflict"
@@ -1817,7 +1817,7 @@ impl Validator<'_> {
             });
         }
 
-        let mut parameter_substitutions = HashMap::<TypeParameterId, GateType>::new();
+        let mut parameter_substitutions = HashMap::<TypeParameterId, SourceOptionActualType>::new();
         let mut trial_bindings = bindings.clone();
         let mut pending = arguments
             .iter()
@@ -1862,7 +1862,7 @@ impl Validator<'_> {
                         continue;
                     }
                 };
-                match self.source_option_hir_type_matches_gate_type(
+                match self.source_option_hir_type_matches_actual_type(
                     field_type,
                     &actual_argument,
                     &mut parameter_substitutions,
@@ -1897,7 +1897,7 @@ impl Validator<'_> {
         else {
             return SourceOptionGenericConstructorRootCheck::Unknown;
         };
-        SourceOptionGenericConstructorRootCheck::Match(GateType::OpaqueItem {
+        SourceOptionGenericConstructorRootCheck::Match(SourceOptionActualType::OpaqueItem {
             item: actual.parent_item,
             name: actual.parent_name.clone(),
             arguments,
@@ -1910,9 +1910,9 @@ impl Validator<'_> {
         typing: &mut GateTypeContext<'_>,
         bindings: &SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
-    ) -> Option<GateType> {
+    ) -> Option<SourceOptionActualType> {
         if let Some(actual) = typing.infer_expr(expr_id, &GateExprEnv::default(), None).ty {
-            return Some(actual);
+            return Some(SourceOptionActualType::from_gate_type(&actual));
         }
 
         match &self.module.exprs()[expr_id].kind {
@@ -1933,7 +1933,7 @@ impl Validator<'_> {
                 )
             }
             ExprKind::List(elements) => {
-                let mut element_type = None::<GateType>;
+                let mut element_type = None::<SourceOptionActualType>;
                 for element in elements {
                     let child = self.infer_source_option_expr_actual_type_inner(
                         *element,
@@ -1941,13 +1941,12 @@ impl Validator<'_> {
                         bindings,
                         value_stack,
                     )?;
-                    match &element_type {
-                        None => element_type = Some(child),
-                        Some(current) if current.same_shape(&child) => {}
-                        Some(_) => return None,
-                    }
+                    element_type = Some(match element_type.take() {
+                        None => child,
+                        Some(current) => current.unify(&child)?,
+                    });
                 }
-                Some(GateType::List(Box::new(element_type?)))
+                Some(SourceOptionActualType::List(Box::new(element_type?)))
             }
             ExprKind::Tuple(elements) => {
                 let mut lowered = Vec::with_capacity(elements.len());
@@ -1959,12 +1958,12 @@ impl Validator<'_> {
                         value_stack,
                     )?);
                 }
-                Some(GateType::Tuple(lowered))
+                Some(SourceOptionActualType::Tuple(lowered))
             }
             ExprKind::Record(record) => {
                 let mut fields = Vec::with_capacity(record.fields.len());
                 for field in &record.fields {
-                    fields.push(GateRecordField {
+                    fields.push(SourceOptionActualRecordField {
                         name: field.label.text().to_owned(),
                         ty: self.infer_source_option_expr_actual_type_inner(
                             field.value,
@@ -1974,7 +1973,7 @@ impl Validator<'_> {
                         )?,
                     });
                 }
-                Some(GateType::Record(fields))
+                Some(SourceOptionActualType::Record(fields))
             }
             _ => None,
         }
@@ -1986,13 +1985,13 @@ impl Validator<'_> {
         typing: &mut GateTypeContext<'_>,
         bindings: &SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
-    ) -> Option<GateType> {
+    ) -> Option<SourceOptionActualType> {
         match reference.resolution.as_ref() {
             ResolutionState::Unresolved => None,
             ResolutionState::Resolved(TermResolution::Local(_)) => None,
-            ResolutionState::Resolved(TermResolution::Import(import_id)) => {
-                typing.import_value_type(*import_id)
-            }
+            ResolutionState::Resolved(TermResolution::Import(import_id)) => typing
+                .import_value_type(*import_id)
+                .map(|actual| SourceOptionActualType::from_gate_type(&actual)),
             ResolutionState::Resolved(TermResolution::Builtin(builtin)) => self
                 .infer_source_option_builtin_actual_type(
                     *builtin,
@@ -2003,7 +2002,7 @@ impl Validator<'_> {
                 ),
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
                 if let Some(actual) = typing.item_value_type(*item_id) {
-                    return Some(actual);
+                    return Some(SourceOptionActualType::from_gate_type(&actual));
                 }
                 match &self.module.items()[*item_id] {
                     Item::Value(item) if item.annotation.is_none() => {
@@ -2040,7 +2039,7 @@ impl Validator<'_> {
         typing: &mut GateTypeContext<'_>,
         bindings: &SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
-    ) -> Option<GateType> {
+    ) -> Option<SourceOptionActualType> {
         if let ResolutionState::Resolved(TermResolution::Builtin(builtin)) =
             reference.resolution.as_ref()
         {
@@ -2068,12 +2067,15 @@ impl Validator<'_> {
         typing: &mut GateTypeContext<'_>,
         bindings: &SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
-    ) -> Option<GateType> {
+    ) -> Option<SourceOptionActualType> {
         match (builtin, arguments) {
             (BuiltinTerm::True | BuiltinTerm::False, []) => {
-                Some(GateType::Primitive(BuiltinType::Bool))
+                Some(SourceOptionActualType::Primitive(BuiltinType::Bool))
             }
-            (BuiltinTerm::Some, [argument]) => Some(GateType::Option(Box::new(
+            (BuiltinTerm::None, []) => Some(SourceOptionActualType::Option(Box::new(
+                SourceOptionActualType::Hole,
+            ))),
+            (BuiltinTerm::Some, [argument]) => Some(SourceOptionActualType::Option(Box::new(
                 self.infer_source_option_expr_actual_type_inner(
                     *argument,
                     typing,
@@ -2081,6 +2083,42 @@ impl Validator<'_> {
                     value_stack,
                 )?,
             ))),
+            (BuiltinTerm::Ok, [argument]) => Some(SourceOptionActualType::Result {
+                error: Box::new(SourceOptionActualType::Hole),
+                value: Box::new(self.infer_source_option_expr_actual_type_inner(
+                    *argument,
+                    typing,
+                    bindings,
+                    value_stack,
+                )?),
+            }),
+            (BuiltinTerm::Err, [argument]) => Some(SourceOptionActualType::Result {
+                error: Box::new(self.infer_source_option_expr_actual_type_inner(
+                    *argument,
+                    typing,
+                    bindings,
+                    value_stack,
+                )?),
+                value: Box::new(SourceOptionActualType::Hole),
+            }),
+            (BuiltinTerm::Valid, [argument]) => Some(SourceOptionActualType::Validation {
+                error: Box::new(SourceOptionActualType::Hole),
+                value: Box::new(self.infer_source_option_expr_actual_type_inner(
+                    *argument,
+                    typing,
+                    bindings,
+                    value_stack,
+                )?),
+            }),
+            (BuiltinTerm::Invalid, [argument]) => Some(SourceOptionActualType::Validation {
+                error: Box::new(self.infer_source_option_expr_actual_type_inner(
+                    *argument,
+                    typing,
+                    bindings,
+                    value_stack,
+                )?),
+                value: Box::new(SourceOptionActualType::Hole),
+            }),
             _ => None,
         }
     }
@@ -2092,7 +2130,7 @@ impl Validator<'_> {
         typing: &mut GateTypeContext<'_>,
         bindings: &SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
-    ) -> Option<GateType> {
+    ) -> Option<SourceOptionActualType> {
         let actual = self.source_constructor_actual(reference)?;
         match self.infer_source_option_generic_constructor_root(
             reference.path.span(),
@@ -2111,17 +2149,19 @@ impl Validator<'_> {
     fn source_option_constructor_field_expected_type(
         &self,
         field_type: TypeId,
-        substitutions: &HashMap<TypeParameterId, GateType>,
+        substitutions: &HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<SourceOptionExpectedType> {
         let substitutions = substitutions
             .iter()
             .filter_map(|(parameter, ty)| {
-                SourceOptionExpectedType::from_gate_type(
-                    self.module,
-                    ty,
-                    SourceOptionTypeSurface::Expression,
-                )
-                .map(|expected| (*parameter, expected))
+                ty.to_gate_type().and_then(|ty| {
+                    SourceOptionExpectedType::from_gate_type(
+                        self.module,
+                        &ty,
+                        SourceOptionTypeSurface::Expression,
+                    )
+                    .map(|expected| (*parameter, expected))
+                })
             })
             .collect::<HashMap<_, _>>();
         SourceOptionExpectedType::from_hir_type(
@@ -2132,15 +2172,15 @@ impl Validator<'_> {
         )
     }
 
-    fn source_option_hir_type_matches_gate_type(
+    fn source_option_hir_type_matches_actual_type(
         &self,
         expected: TypeId,
-        actual: &GateType,
-        substitutions: &mut HashMap<TypeParameterId, GateType>,
+        actual: &SourceOptionActualType,
+        substitutions: &mut HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<bool> {
         if !self.source_option_hir_type_is_signal_contract(expected) {
-            if let GateType::Signal(inner) = actual {
-                return self.source_option_hir_type_matches_gate_type_inner(
+            if let SourceOptionActualType::Signal(inner) = actual {
+                return self.source_option_hir_type_matches_actual_type_inner(
                     expected,
                     inner,
                     substitutions,
@@ -2148,24 +2188,24 @@ impl Validator<'_> {
             }
         }
 
-        self.source_option_hir_type_matches_gate_type_inner(expected, actual, substitutions)
+        self.source_option_hir_type_matches_actual_type_inner(expected, actual, substitutions)
     }
 
-    fn source_option_hir_type_matches_gate_type_inner(
+    fn source_option_hir_type_matches_actual_type_inner(
         &self,
         expected: TypeId,
-        actual: &GateType,
-        substitutions: &mut HashMap<TypeParameterId, GateType>,
+        actual: &SourceOptionActualType,
+        substitutions: &mut HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<bool> {
         match &self.module.types()[expected].kind {
-            TypeKind::Name(reference) => self.source_option_hir_type_reference_matches_gate_type(
+            TypeKind::Name(reference) => self.source_option_hir_type_reference_matches_actual_type(
                 reference,
                 actual,
                 substitutions,
             ),
             TypeKind::Apply { callee, arguments } => {
                 let arguments = arguments.iter().copied().collect::<Vec<_>>();
-                self.source_option_hir_type_application_matches_gate_type(
+                self.source_option_hir_type_application_matches_actual_type(
                     *callee,
                     &arguments,
                     actual,
@@ -2173,14 +2213,14 @@ impl Validator<'_> {
                 )
             }
             TypeKind::Tuple(elements) => {
-                let GateType::Tuple(actual_elements) = actual else {
-                    return Some(false);
+                let SourceOptionActualType::Tuple(actual_elements) = actual else {
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
                 if elements.len() != actual_elements.len() {
                     return Some(false);
                 }
                 for (expected, actual) in elements.iter().copied().zip(actual_elements) {
-                    match self.source_option_hir_type_matches_gate_type(
+                    match self.source_option_hir_type_matches_actual_type(
                         expected,
                         actual,
                         substitutions,
@@ -2193,8 +2233,8 @@ impl Validator<'_> {
                 Some(true)
             }
             TypeKind::Record(fields) => {
-                let GateType::Record(actual_fields) = actual else {
-                    return Some(false);
+                let SourceOptionActualType::Record(actual_fields) = actual else {
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
                 if fields.len() != actual_fields.len() {
                     return Some(false);
@@ -2203,7 +2243,7 @@ impl Validator<'_> {
                     if expected.label.text() != actual.name {
                         return Some(false);
                     }
-                    match self.source_option_hir_type_matches_gate_type(
+                    match self.source_option_hir_type_matches_actual_type(
                         expected.ty,
                         &actual.ty,
                         substitutions,
@@ -2215,15 +2255,37 @@ impl Validator<'_> {
                 }
                 Some(true)
             }
-            TypeKind::Arrow { .. } => None,
+            TypeKind::Arrow { parameter, result } => {
+                let SourceOptionActualType::Arrow {
+                    parameter: actual_parameter,
+                    result: actual_result,
+                } = actual
+                else {
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
+                };
+                match self.source_option_hir_type_matches_actual_type(
+                    *parameter,
+                    actual_parameter,
+                    substitutions,
+                ) {
+                    Some(true) => {}
+                    Some(false) => return Some(false),
+                    None => return None,
+                }
+                self.source_option_hir_type_matches_actual_type(
+                    *result,
+                    actual_result,
+                    substitutions,
+                )
+            }
         }
     }
 
-    fn source_option_hir_type_reference_matches_gate_type(
+    fn source_option_hir_type_reference_matches_actual_type(
         &self,
         reference: &TypeReference,
-        actual: &GateType,
-        substitutions: &mut HashMap<TypeParameterId, GateType>,
+        actual: &SourceOptionActualType,
+        substitutions: &mut HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<bool> {
         match reference.resolution.as_ref() {
             ResolutionState::Unresolved => None,
@@ -2236,67 +2298,73 @@ impl Validator<'_> {
                 | BuiltinType::Text
                 | BuiltinType::Unit
                 | BuiltinType::Bytes),
-            )) => Some(matches!(
-                actual,
-                GateType::Primitive(actual_builtin) if actual_builtin == builtin
-            )),
+            )) => Some(match actual {
+                SourceOptionActualType::Hole => true,
+                SourceOptionActualType::Primitive(actual_builtin) => actual_builtin == builtin,
+                _ => false,
+            }),
             ResolutionState::Resolved(TypeResolution::Builtin(_)) => None,
             ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
                 Some(match substitutions.entry(*parameter) {
-                    Entry::Occupied(entry) => entry.get().same_shape(actual),
+                    Entry::Occupied(mut entry) => match entry.get().unify(actual) {
+                        Some(unified) => {
+                            entry.insert(unified);
+                            true
+                        }
+                        None => false,
+                    },
                     Entry::Vacant(entry) => {
                         entry.insert(actual.clone());
                         true
                     }
                 })
             }
-            ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
-                self.source_option_hir_item_matches_gate_type(*item_id, &[], actual, substitutions)
-            }
+            ResolutionState::Resolved(TypeResolution::Item(item_id)) => self
+                .source_option_hir_item_matches_actual_type(*item_id, &[], actual, substitutions),
             ResolutionState::Resolved(TypeResolution::Import(_)) => None,
         }
     }
 
-    fn source_option_hir_type_application_matches_gate_type(
+    fn source_option_hir_type_application_matches_actual_type(
         &self,
         callee: TypeId,
         arguments: &[TypeId],
-        actual: &GateType,
-        substitutions: &mut HashMap<TypeParameterId, GateType>,
+        actual: &SourceOptionActualType,
+        substitutions: &mut HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<bool> {
         let TypeKind::Name(reference) = &self.module.types()[callee].kind else {
             return None;
         };
         match reference.resolution.as_ref() {
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::List)) => {
-                let GateType::List(actual) = actual else {
-                    return Some(false);
+                let SourceOptionActualType::List(actual) = actual else {
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
-                self.source_option_hir_type_matches_gate_type(
+                self.source_option_hir_type_matches_actual_type(
                     *arguments.first()?,
                     actual,
                     substitutions,
                 )
             }
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Option)) => {
-                let GateType::Option(actual) = actual else {
-                    return Some(false);
+                let SourceOptionActualType::Option(actual) = actual else {
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
-                self.source_option_hir_type_matches_gate_type(
+                self.source_option_hir_type_matches_actual_type(
                     *arguments.first()?,
                     actual,
                     substitutions,
                 )
             }
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Result)) => {
-                let GateType::Result {
+                let SourceOptionActualType::Result {
                     error: actual_error,
                     value: actual_value,
                 } = actual
                 else {
-                    return Some(false);
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
-                match self.source_option_hir_type_matches_gate_type(
+                match self.source_option_hir_type_matches_actual_type(
                     *arguments.first()?,
                     actual_error,
                     substitutions,
@@ -2305,21 +2373,21 @@ impl Validator<'_> {
                     Some(false) => return Some(false),
                     None => return None,
                 }
-                self.source_option_hir_type_matches_gate_type(
+                self.source_option_hir_type_matches_actual_type(
                     *arguments.get(1)?,
                     actual_value,
                     substitutions,
                 )
             }
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Validation)) => {
-                let GateType::Validation {
+                let SourceOptionActualType::Validation {
                     error: actual_error,
                     value: actual_value,
                 } = actual
                 else {
-                    return Some(false);
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
-                match self.source_option_hir_type_matches_gate_type(
+                match self.source_option_hir_type_matches_actual_type(
                     *arguments.first()?,
                     actual_error,
                     substitutions,
@@ -2328,31 +2396,31 @@ impl Validator<'_> {
                     Some(false) => return Some(false),
                     None => return None,
                 }
-                self.source_option_hir_type_matches_gate_type(
+                self.source_option_hir_type_matches_actual_type(
                     *arguments.get(1)?,
                     actual_value,
                     substitutions,
                 )
             }
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Signal)) => {
-                let GateType::Signal(actual) = actual else {
-                    return Some(false);
+                let SourceOptionActualType::Signal(actual) = actual else {
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
-                self.source_option_hir_type_matches_gate_type(
+                self.source_option_hir_type_matches_actual_type(
                     *arguments.first()?,
                     actual,
                     substitutions,
                 )
             }
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Task)) => {
-                let GateType::Task {
+                let SourceOptionActualType::Task {
                     error: actual_error,
                     value: actual_value,
                 } = actual
                 else {
-                    return Some(false);
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
-                match self.source_option_hir_type_matches_gate_type(
+                match self.source_option_hir_type_matches_actual_type(
                     *arguments.first()?,
                     actual_error,
                     substitutions,
@@ -2361,7 +2429,7 @@ impl Validator<'_> {
                     Some(false) => return Some(false),
                     None => return None,
                 }
-                self.source_option_hir_type_matches_gate_type(
+                self.source_option_hir_type_matches_actual_type(
                     *arguments.get(1)?,
                     actual_value,
                     substitutions,
@@ -2372,7 +2440,7 @@ impl Validator<'_> {
             | ResolutionState::Resolved(TypeResolution::Import(_))
             | ResolutionState::Unresolved => None,
             ResolutionState::Resolved(TypeResolution::Item(item_id)) => self
-                .source_option_hir_item_matches_gate_type(
+                .source_option_hir_item_matches_actual_type(
                     *item_id,
                     arguments,
                     actual,
@@ -2381,25 +2449,25 @@ impl Validator<'_> {
         }
     }
 
-    fn source_option_hir_item_matches_gate_type(
+    fn source_option_hir_item_matches_actual_type(
         &self,
         item_id: ItemId,
         expected_arguments: &[TypeId],
-        actual: &GateType,
-        substitutions: &mut HashMap<TypeParameterId, GateType>,
+        actual: &SourceOptionActualType,
+        substitutions: &mut HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<bool> {
         match &self.module.items()[item_id] {
             Item::Domain(_) => {
-                let GateType::Domain {
+                let SourceOptionActualType::Domain {
                     item, arguments, ..
                 } = actual
                 else {
-                    return Some(false);
+                    return Some(matches!(actual, SourceOptionActualType::Hole));
                 };
                 if *item != item_id {
                     return Some(false);
                 }
-                self.source_option_hir_type_arguments_match_gate_types(
+                self.source_option_hir_type_arguments_match_actual_types(
                     expected_arguments,
                     arguments,
                     substitutions,
@@ -2408,16 +2476,16 @@ impl Validator<'_> {
             Item::Type(item) => match &item.body {
                 TypeItemBody::Alias(_) => None,
                 TypeItemBody::Sum(_) => {
-                    let GateType::OpaqueItem {
+                    let SourceOptionActualType::OpaqueItem {
                         item, arguments, ..
                     } = actual
                     else {
-                        return Some(false);
+                        return Some(matches!(actual, SourceOptionActualType::Hole));
                     };
                     if *item != item_id {
                         return Some(false);
                     }
-                    self.source_option_hir_type_arguments_match_gate_types(
+                    self.source_option_hir_type_arguments_match_actual_types(
                         expected_arguments,
                         arguments,
                         substitutions,
@@ -2435,17 +2503,17 @@ impl Validator<'_> {
         }
     }
 
-    fn source_option_hir_type_arguments_match_gate_types(
+    fn source_option_hir_type_arguments_match_actual_types(
         &self,
         expected: &[TypeId],
-        actual: &[GateType],
-        substitutions: &mut HashMap<TypeParameterId, GateType>,
+        actual: &[SourceOptionActualType],
+        substitutions: &mut HashMap<TypeParameterId, SourceOptionActualType>,
     ) -> Option<bool> {
         if expected.len() != actual.len() {
             return Some(false);
         }
         for (expected, actual) in expected.iter().copied().zip(actual) {
-            match self.source_option_hir_type_matches_gate_type(expected, actual, substitutions) {
+            match self.source_option_hir_type_matches_actual_type(expected, actual, substitutions) {
                 Some(true) => {}
                 Some(false) => return Some(false),
                 None => return None,
@@ -5388,7 +5456,7 @@ enum SourceOptionTypeCheck {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SourceOptionGenericConstructorRootCheck {
-    Match(GateType),
+    Match(SourceOptionActualType),
     Mismatch(SourceOptionTypeMismatch),
     Unknown,
 }
@@ -5438,6 +5506,51 @@ enum SourceOptionExpectedType {
     Validation { error: Box<Self>, value: Box<Self> },
     Named(SourceOptionNamedType),
     ContractParameter(SourceTypeParameter),
+}
+
+/// Local source-option proof type that can keep builtin container holes explicit
+/// until later source-option evidence refines them into closed `GateType`s.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SourceOptionActualType {
+    Hole,
+    Primitive(BuiltinType),
+    Tuple(Vec<Self>),
+    Record(Vec<SourceOptionActualRecordField>),
+    Arrow {
+        parameter: Box<Self>,
+        result: Box<Self>,
+    },
+    List(Box<Self>),
+    Option(Box<Self>),
+    Result {
+        error: Box<Self>,
+        value: Box<Self>,
+    },
+    Validation {
+        error: Box<Self>,
+        value: Box<Self>,
+    },
+    Signal(Box<Self>),
+    Task {
+        error: Box<Self>,
+        value: Box<Self>,
+    },
+    Domain {
+        item: ItemId,
+        name: String,
+        arguments: Vec<Self>,
+    },
+    OpaqueItem {
+        item: ItemId,
+        name: String,
+        arguments: Vec<Self>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SourceOptionActualRecordField {
+    name: String,
+    ty: SourceOptionActualType,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -5673,6 +5786,316 @@ impl SourceOptionExpectedType {
     }
 }
 
+impl SourceOptionActualType {
+    fn from_gate_type(ty: &GateType) -> Self {
+        match ty {
+            GateType::Primitive(builtin) => Self::Primitive(*builtin),
+            GateType::Tuple(elements) => {
+                Self::Tuple(elements.iter().map(Self::from_gate_type).collect())
+            }
+            GateType::Record(fields) => Self::Record(
+                fields
+                    .iter()
+                    .map(|field| SourceOptionActualRecordField {
+                        name: field.name.clone(),
+                        ty: Self::from_gate_type(&field.ty),
+                    })
+                    .collect(),
+            ),
+            GateType::Arrow { parameter, result } => Self::Arrow {
+                parameter: Box::new(Self::from_gate_type(parameter)),
+                result: Box::new(Self::from_gate_type(result)),
+            },
+            GateType::List(element) => Self::List(Box::new(Self::from_gate_type(element))),
+            GateType::Option(element) => Self::Option(Box::new(Self::from_gate_type(element))),
+            GateType::Result { error, value } => Self::Result {
+                error: Box::new(Self::from_gate_type(error)),
+                value: Box::new(Self::from_gate_type(value)),
+            },
+            GateType::Validation { error, value } => Self::Validation {
+                error: Box::new(Self::from_gate_type(error)),
+                value: Box::new(Self::from_gate_type(value)),
+            },
+            GateType::Signal(element) => Self::Signal(Box::new(Self::from_gate_type(element))),
+            GateType::Task { error, value } => Self::Task {
+                error: Box::new(Self::from_gate_type(error)),
+                value: Box::new(Self::from_gate_type(value)),
+            },
+            GateType::Domain {
+                item,
+                name,
+                arguments,
+            } => Self::Domain {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments.iter().map(Self::from_gate_type).collect(),
+            },
+            GateType::OpaqueItem {
+                item,
+                name,
+                arguments,
+            } => Self::OpaqueItem {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments.iter().map(Self::from_gate_type).collect(),
+            },
+        }
+    }
+
+    fn to_gate_type(&self) -> Option<GateType> {
+        match self {
+            Self::Hole => None,
+            Self::Primitive(builtin) => Some(GateType::Primitive(*builtin)),
+            Self::Tuple(elements) => Some(GateType::Tuple(
+                elements
+                    .iter()
+                    .map(Self::to_gate_type)
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Self::Record(fields) => Some(GateType::Record(
+                fields
+                    .iter()
+                    .map(|field| {
+                        Some(GateRecordField {
+                            name: field.name.clone(),
+                            ty: field.ty.to_gate_type()?,
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Self::Arrow { parameter, result } => Some(GateType::Arrow {
+                parameter: Box::new(parameter.to_gate_type()?),
+                result: Box::new(result.to_gate_type()?),
+            }),
+            Self::List(element) => Some(GateType::List(Box::new(element.to_gate_type()?))),
+            Self::Option(element) => Some(GateType::Option(Box::new(element.to_gate_type()?))),
+            Self::Result { error, value } => Some(GateType::Result {
+                error: Box::new(error.to_gate_type()?),
+                value: Box::new(value.to_gate_type()?),
+            }),
+            Self::Validation { error, value } => Some(GateType::Validation {
+                error: Box::new(error.to_gate_type()?),
+                value: Box::new(value.to_gate_type()?),
+            }),
+            Self::Signal(element) => Some(GateType::Signal(Box::new(element.to_gate_type()?))),
+            Self::Task { error, value } => Some(GateType::Task {
+                error: Box::new(error.to_gate_type()?),
+                value: Box::new(value.to_gate_type()?),
+            }),
+            Self::Domain {
+                item,
+                name,
+                arguments,
+            } => Some(GateType::Domain {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(Self::to_gate_type)
+                    .collect::<Option<Vec<_>>>()?,
+            }),
+            Self::OpaqueItem {
+                item,
+                name,
+                arguments,
+            } => Some(GateType::OpaqueItem {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(Self::to_gate_type)
+                    .collect::<Option<Vec<_>>>()?,
+            }),
+        }
+    }
+
+    fn unify(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Hole, actual) | (actual, Self::Hole) => Some(actual.clone()),
+            (Self::Primitive(left), Self::Primitive(right)) if left == right => {
+                Some(Self::Primitive(*left))
+            }
+            (Self::Tuple(left), Self::Tuple(right)) if left.len() == right.len() => {
+                Some(Self::Tuple(
+                    left.iter()
+                        .zip(right)
+                        .map(|(left, right)| left.unify(right))
+                        .collect::<Option<Vec<_>>>()?,
+                ))
+            }
+            (Self::Record(left), Self::Record(right)) if left.len() == right.len() => {
+                let mut fields = Vec::with_capacity(left.len());
+                for (left, right) in left.iter().zip(right) {
+                    if left.name != right.name {
+                        return None;
+                    }
+                    fields.push(SourceOptionActualRecordField {
+                        name: left.name.clone(),
+                        ty: left.ty.unify(&right.ty)?,
+                    });
+                }
+                Some(Self::Record(fields))
+            }
+            (
+                Self::Arrow {
+                    parameter: left_parameter,
+                    result: left_result,
+                },
+                Self::Arrow {
+                    parameter: right_parameter,
+                    result: right_result,
+                },
+            ) => Some(Self::Arrow {
+                parameter: Box::new(left_parameter.unify(right_parameter)?),
+                result: Box::new(left_result.unify(right_result)?),
+            }),
+            (Self::List(left), Self::List(right)) => Some(Self::List(Box::new(left.unify(right)?))),
+            (Self::Option(left), Self::Option(right)) => {
+                Some(Self::Option(Box::new(left.unify(right)?)))
+            }
+            (
+                Self::Result {
+                    error: left_error,
+                    value: left_value,
+                },
+                Self::Result {
+                    error: right_error,
+                    value: right_value,
+                },
+            ) => Some(Self::Result {
+                error: Box::new(left_error.unify(right_error)?),
+                value: Box::new(left_value.unify(right_value)?),
+            }),
+            (
+                Self::Validation {
+                    error: left_error,
+                    value: left_value,
+                },
+                Self::Validation {
+                    error: right_error,
+                    value: right_value,
+                },
+            ) => Some(Self::Validation {
+                error: Box::new(left_error.unify(right_error)?),
+                value: Box::new(left_value.unify(right_value)?),
+            }),
+            (Self::Signal(left), Self::Signal(right)) => {
+                Some(Self::Signal(Box::new(left.unify(right)?)))
+            }
+            (
+                Self::Task {
+                    error: left_error,
+                    value: left_value,
+                },
+                Self::Task {
+                    error: right_error,
+                    value: right_value,
+                },
+            ) => Some(Self::Task {
+                error: Box::new(left_error.unify(right_error)?),
+                value: Box::new(left_value.unify(right_value)?),
+            }),
+            (
+                Self::Domain {
+                    item: left_item,
+                    name,
+                    arguments: left_arguments,
+                },
+                Self::Domain {
+                    item: right_item,
+                    arguments: right_arguments,
+                    ..
+                },
+            ) if left_item == right_item && left_arguments.len() == right_arguments.len() => {
+                Some(Self::Domain {
+                    item: *left_item,
+                    name: name.clone(),
+                    arguments: left_arguments
+                        .iter()
+                        .zip(right_arguments)
+                        .map(|(left, right)| left.unify(right))
+                        .collect::<Option<Vec<_>>>()?,
+                })
+            }
+            (
+                Self::OpaqueItem {
+                    item: left_item,
+                    name,
+                    arguments: left_arguments,
+                },
+                Self::OpaqueItem {
+                    item: right_item,
+                    arguments: right_arguments,
+                    ..
+                },
+            ) if left_item == right_item && left_arguments.len() == right_arguments.len() => {
+                Some(Self::OpaqueItem {
+                    item: *left_item,
+                    name: name.clone(),
+                    arguments: left_arguments
+                        .iter()
+                        .zip(right_arguments)
+                        .map(|(left, right)| left.unify(right))
+                        .collect::<Option<Vec<_>>>()?,
+                })
+            }
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for SourceOptionActualType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Hole => write!(f, "_"),
+            Self::Primitive(builtin) => write!(f, "{}", builtin_type_name(*builtin)),
+            Self::Tuple(elements) => {
+                write!(f, "(")?;
+                for (index, element) in elements.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{element}")?;
+                }
+                write!(f, ")")
+            }
+            Self::Record(fields) => {
+                write!(f, "{{ ")?;
+                for (index, field) in fields.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", field.name, field.ty)?;
+                }
+                write!(f, " }}")
+            }
+            Self::Arrow { parameter, result } => write!(f, "{parameter} -> {result}"),
+            Self::List(element) => write!(f, "List {element}"),
+            Self::Option(element) => write!(f, "Option {element}"),
+            Self::Result { error, value } => write!(f, "Result {error} {value}"),
+            Self::Validation { error, value } => write!(f, "Validation {error} {value}"),
+            Self::Signal(element) => write!(f, "Signal {element}"),
+            Self::Task { error, value } => write!(f, "Task {error} {value}"),
+            Self::Domain {
+                name, arguments, ..
+            }
+            | Self::OpaqueItem {
+                name, arguments, ..
+            } => {
+                if arguments.is_empty() {
+                    write!(f, "{name}")
+                } else {
+                    write!(f, "{name}")?;
+                    for argument in arguments {
+                        write!(f, " {argument}")?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SourceOptionNamedType {
     item: ItemId,
@@ -5725,17 +6148,31 @@ struct SourceOptionConstructorActual {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SourceOptionTypeBindings {
-    parameters: HashMap<SourceTypeParameter, GateType>,
+    parameters: HashMap<SourceTypeParameter, SourceOptionActualType>,
 }
 
 impl SourceOptionTypeBindings {
-    fn parameter(&self, parameter: SourceTypeParameter) -> Option<&GateType> {
+    fn parameter(&self, parameter: SourceTypeParameter) -> Option<&SourceOptionActualType> {
         self.parameters.get(&parameter)
     }
 
-    fn bind_or_match(&mut self, parameter: SourceTypeParameter, actual: &GateType) -> bool {
+    fn parameter_gate_type(&self, parameter: SourceTypeParameter) -> Option<GateType> {
+        self.parameter(parameter)?.to_gate_type()
+    }
+
+    fn bind_or_match_actual(
+        &mut self,
+        parameter: SourceTypeParameter,
+        actual: &SourceOptionActualType,
+    ) -> bool {
         match self.parameters.entry(parameter) {
-            Entry::Occupied(entry) => entry.get().same_shape(actual),
+            Entry::Occupied(mut entry) => {
+                let Some(unified) = entry.get().unify(actual) else {
+                    return false;
+                };
+                entry.insert(unified);
+                true
+            }
             Entry::Vacant(entry) => {
                 entry.insert(actual.clone());
                 true
@@ -5744,64 +6181,81 @@ impl SourceOptionTypeBindings {
     }
 }
 
-fn source_option_expected_matches_gate_type(
+fn source_option_expected_matches_actual_type(
     expected: &SourceOptionExpectedType,
-    actual: &GateType,
+    actual: &SourceOptionActualType,
     bindings: &mut SourceOptionTypeBindings,
 ) -> bool {
     if !expected.is_signal_contract() {
-        if let GateType::Signal(inner) = actual {
-            return source_option_expected_matches_gate_type_inner(expected, inner, bindings);
+        if let SourceOptionActualType::Signal(inner) = actual {
+            return source_option_expected_matches_actual_type_inner(expected, inner, bindings);
         }
     }
 
-    source_option_expected_matches_gate_type_inner(expected, actual, bindings)
+    source_option_expected_matches_actual_type_inner(expected, actual, bindings)
 }
 
-fn source_option_expected_matches_gate_type_inner(
+fn source_option_expected_matches_actual_type_inner(
     expected: &SourceOptionExpectedType,
-    actual: &GateType,
+    actual: &SourceOptionActualType,
     bindings: &mut SourceOptionTypeBindings,
 ) -> bool {
     match (expected, actual) {
         (SourceOptionExpectedType::ContractParameter(parameter), _) => {
-            bindings.bind_or_match(*parameter, actual)
+            bindings.bind_or_match_actual(*parameter, actual)
         }
-        (SourceOptionExpectedType::Primitive(expected), GateType::Primitive(actual)) => {
-            expected == actual
+        (SourceOptionExpectedType::Primitive(_), SourceOptionActualType::Hole) => true,
+        (
+            SourceOptionExpectedType::Primitive(expected),
+            SourceOptionActualType::Primitive(actual),
+        ) => expected == actual,
+        (SourceOptionExpectedType::List(_), SourceOptionActualType::Hole) => true,
+        (SourceOptionExpectedType::List(expected), SourceOptionActualType::List(actual)) => {
+            source_option_expected_matches_actual_type(expected, actual, bindings)
         }
-        (SourceOptionExpectedType::List(expected), GateType::List(actual)) => {
-            source_option_expected_matches_gate_type(expected, actual, bindings)
+        (SourceOptionExpectedType::Signal(_), SourceOptionActualType::Hole) => true,
+        (SourceOptionExpectedType::Signal(expected), SourceOptionActualType::Signal(actual)) => {
+            source_option_expected_matches_actual_type(expected, actual, bindings)
         }
-        (SourceOptionExpectedType::Signal(expected), GateType::Signal(actual)) => {
-            source_option_expected_matches_gate_type(expected, actual, bindings)
+        (SourceOptionExpectedType::Option(_), SourceOptionActualType::Hole) => true,
+        (SourceOptionExpectedType::Option(expected), SourceOptionActualType::Option(actual)) => {
+            source_option_expected_matches_actual_type(expected, actual, bindings)
         }
-        (SourceOptionExpectedType::Option(expected), GateType::Option(actual)) => {
-            source_option_expected_matches_gate_type(expected, actual, bindings)
+        (SourceOptionExpectedType::Result { error, value }, SourceOptionActualType::Hole) => {
+            let _ = (error, value);
+            true
         }
         (
             SourceOptionExpectedType::Result { error, value },
-            GateType::Result {
+            SourceOptionActualType::Result {
                 error: actual_error,
                 value: actual_value,
             },
         ) => {
-            source_option_expected_matches_gate_type(error, actual_error, bindings)
-                && source_option_expected_matches_gate_type(value, actual_value, bindings)
+            source_option_expected_matches_actual_type(error, actual_error, bindings)
+                && source_option_expected_matches_actual_type(value, actual_value, bindings)
+        }
+        (SourceOptionExpectedType::Validation { error, value }, SourceOptionActualType::Hole) => {
+            let _ = (error, value);
+            true
         }
         (
             SourceOptionExpectedType::Validation { error, value },
-            GateType::Validation {
+            SourceOptionActualType::Validation {
                 error: actual_error,
                 value: actual_value,
             },
         ) => {
-            source_option_expected_matches_gate_type(error, actual_error, bindings)
-                && source_option_expected_matches_gate_type(value, actual_value, bindings)
+            source_option_expected_matches_actual_type(error, actual_error, bindings)
+                && source_option_expected_matches_actual_type(value, actual_value, bindings)
+        }
+        (SourceOptionExpectedType::Named(expected), SourceOptionActualType::Hole) => {
+            let _ = expected;
+            true
         }
         (
             SourceOptionExpectedType::Named(expected),
-            GateType::Domain {
+            SourceOptionActualType::Domain {
                 item, arguments, ..
             },
         ) if expected.kind == SourceOptionNamedKind::Domain && expected.item == *item => {
@@ -5809,7 +6263,7 @@ fn source_option_expected_matches_gate_type_inner(
         }
         (
             SourceOptionExpectedType::Named(expected),
-            GateType::OpaqueItem {
+            SourceOptionActualType::OpaqueItem {
                 item, arguments, ..
             },
         ) if expected.kind == SourceOptionNamedKind::Type && expected.item == *item => {
@@ -5821,12 +6275,12 @@ fn source_option_expected_matches_gate_type_inner(
 
 fn source_option_expected_args_match(
     expected: &[SourceOptionExpectedType],
-    actual: &[GateType],
+    actual: &[SourceOptionActualType],
     bindings: &mut SourceOptionTypeBindings,
 ) -> bool {
     expected.len() == actual.len()
         && expected.iter().zip(actual).all(|(expected, actual)| {
-            source_option_expected_matches_gate_type(expected, actual, bindings)
+            source_option_expected_matches_actual_type(expected, actual, bindings)
         })
 }
 
@@ -6091,11 +6545,12 @@ mod tests {
     use aivi_typing::SourceTypeParameter;
 
     use crate::{
-        ApplicativeCluster, BuiltinTerm, BuiltinType, ClusterFinalizer, ClusterPresentation,
-        ControlNode, Expr, ExprKind, IntegerLiteral, Item, ItemHeader, MarkupNode, MarkupNodeKind,
-        Module, Name, NamePath, NonEmpty, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind,
-        RecordExpr, ShowControl, TermReference, TermResolution, TypeItem, TypeItemBody, TypeKind,
-        TypeNode, TypeParameter, TypeReference, TypeResolution, TypeVariant, ValidationMode,
+        ApplicativeCluster, Binding, BindingKind, BuiltinTerm, BuiltinType, ClusterFinalizer,
+        ClusterPresentation, ControlNode, Expr, ExprKind, FunctionItem, FunctionParameter,
+        IntegerLiteral, Item, ItemHeader, MarkupNode, MarkupNodeKind, Module, Name, NamePath,
+        NonEmpty, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind, RecordExpr,
+        ShowControl, TermReference, TermResolution, TypeItem, TypeItemBody, TypeKind, TypeNode,
+        TypeParameter, TypeReference, TypeResolution, TypeVariant, ValidationMode,
     };
 
     use super::*;
@@ -6226,6 +6681,27 @@ mod tests {
                 )),
             })
             .expect("builtin expression allocation should fit")
+    }
+
+    fn builtin_apply_expr(
+        module: &mut Module,
+        builtin: BuiltinTerm,
+        text: &str,
+        arguments: Vec<crate::ExprId>,
+    ) -> crate::ExprId {
+        let callee = builtin_expr(module, builtin, text);
+        match arguments.split_first() {
+            None => callee,
+            Some((first, rest)) => module
+                .alloc_expr(Expr {
+                    span: unit_span(),
+                    kind: ExprKind::Apply {
+                        callee,
+                        arguments: NonEmpty::new(*first, rest.to_vec()),
+                    },
+                })
+                .expect("builtin constructor application should fit"),
+        }
     }
 
     fn item_expr(module: &mut Module, item: crate::ItemId, text: &str) -> crate::ExprId {
@@ -6601,8 +7077,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::Primitive(BuiltinType::Int)),
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Primitive(BuiltinType::Int)),
         );
     }
 
@@ -6643,8 +7119,8 @@ mod tests {
             SourceOptionTypeCheck::Mismatch(_),
         ));
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::Primitive(BuiltinType::Int)),
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Primitive(BuiltinType::Int)),
         );
     }
 
@@ -6671,8 +7147,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: mode,
                 name: "Mode".to_owned(),
                 arguments: Vec::new(),
@@ -6728,8 +7204,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: box_item,
                 name: "Box".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
@@ -6812,8 +7288,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: box_item,
                 name: "Box".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
@@ -6874,8 +7350,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: outer_item,
                 name: "Outer".to_owned(),
                 arguments: vec![GateType::OpaqueItem {
@@ -6938,8 +7414,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: box_item,
                 name: "Box".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
@@ -6984,10 +7460,263 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::Option(Box::new(GateType::Primitive(
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Option(Box::new(GateType::Primitive(
                 BuiltinType::Int,
             )))),
+        );
+    }
+
+    #[test]
+    fn source_option_root_contract_parameters_bind_context_free_builtin_none_roots() {
+        let mut module = Module::new(FileId::new(0));
+        let expr = builtin_expr(&mut module, BuiltinTerm::None, "None");
+        let validator = Validator {
+            module: &module,
+            mode: ValidationMode::RequireResolvedNames,
+            diagnostics: Vec::new(),
+        };
+        let mut typing = GateTypeContext::new(&module);
+        let mut bindings = SourceOptionTypeBindings::default();
+
+        assert_eq!(
+            validator.check_source_option_expr(
+                expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter(SourceTypeParameter::A),
+            Some(&SourceOptionActualType::Option(Box::new(
+                SourceOptionActualType::Hole,
+            ))),
+        );
+    }
+
+    #[test]
+    fn source_option_root_contract_parameters_refine_context_free_builtin_none_roots() {
+        let mut module = Module::new(FileId::new(0));
+        let none_expr = builtin_expr(&mut module, BuiltinTerm::None, "None");
+        let element = module
+            .alloc_expr(Expr {
+                span: unit_span(),
+                kind: ExprKind::Integer(IntegerLiteral { raw: "1".into() }),
+            })
+            .expect("expression allocation should fit");
+        let some_expr = builtin_apply_expr(&mut module, BuiltinTerm::Some, "Some", vec![element]);
+        let validator = Validator {
+            module: &module,
+            mode: ValidationMode::RequireResolvedNames,
+            diagnostics: Vec::new(),
+        };
+        let mut typing = GateTypeContext::new(&module);
+        let mut bindings = SourceOptionTypeBindings::default();
+
+        assert_eq!(
+            validator.check_source_option_expr(
+                none_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            validator.check_source_option_expr(
+                some_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Option(Box::new(GateType::Primitive(
+                BuiltinType::Int,
+            )))),
+        );
+    }
+
+    #[test]
+    fn source_option_root_contract_parameters_refine_context_free_builtin_result_roots() {
+        let mut module = Module::new(FileId::new(0));
+        let ok_value = module
+            .alloc_expr(Expr {
+                span: unit_span(),
+                kind: ExprKind::Integer(IntegerLiteral { raw: "1".into() }),
+            })
+            .expect("expression allocation should fit");
+        let ok_expr = builtin_apply_expr(&mut module, BuiltinTerm::Ok, "Ok", vec![ok_value]);
+        let err_value = builtin_expr(&mut module, BuiltinTerm::True, "True");
+        let err_expr = builtin_apply_expr(&mut module, BuiltinTerm::Err, "Err", vec![err_value]);
+        let validator = Validator {
+            module: &module,
+            mode: ValidationMode::RequireResolvedNames,
+            diagnostics: Vec::new(),
+        };
+        let mut typing = GateTypeContext::new(&module);
+        let mut bindings = SourceOptionTypeBindings::default();
+
+        assert_eq!(
+            validator.check_source_option_expr(
+                ok_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter(SourceTypeParameter::A),
+            Some(&SourceOptionActualType::Result {
+                error: Box::new(SourceOptionActualType::Hole),
+                value: Box::new(SourceOptionActualType::Primitive(BuiltinType::Int)),
+            }),
+        );
+        assert_eq!(
+            validator.check_source_option_expr(
+                err_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Result {
+                error: Box::new(GateType::Primitive(BuiltinType::Bool)),
+                value: Box::new(GateType::Primitive(BuiltinType::Int)),
+            }),
+        );
+    }
+
+    #[test]
+    fn source_option_root_contract_parameters_refine_context_free_builtin_validation_roots() {
+        let mut module = Module::new(FileId::new(0));
+        let valid_value = module
+            .alloc_expr(Expr {
+                span: unit_span(),
+                kind: ExprKind::Integer(IntegerLiteral { raw: "1".into() }),
+            })
+            .expect("expression allocation should fit");
+        let valid_expr =
+            builtin_apply_expr(&mut module, BuiltinTerm::Valid, "Valid", vec![valid_value]);
+        let invalid_value = builtin_expr(&mut module, BuiltinTerm::True, "True");
+        let invalid_expr = builtin_apply_expr(
+            &mut module,
+            BuiltinTerm::Invalid,
+            "Invalid",
+            vec![invalid_value],
+        );
+        let validator = Validator {
+            module: &module,
+            mode: ValidationMode::RequireResolvedNames,
+            diagnostics: Vec::new(),
+        };
+        let mut typing = GateTypeContext::new(&module);
+        let mut bindings = SourceOptionTypeBindings::default();
+
+        assert_eq!(
+            validator.check_source_option_expr(
+                valid_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            validator.check_source_option_expr(
+                invalid_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Validation {
+                error: Box::new(GateType::Primitive(BuiltinType::Bool)),
+                value: Box::new(GateType::Primitive(BuiltinType::Int)),
+            }),
+        );
+    }
+
+    #[test]
+    fn source_option_root_contract_parameters_bind_generic_constructor_roots_with_builtin_holes() {
+        let mut module = Module::new(FileId::new(0));
+        let payload = type_parameter(&mut module, "A");
+        let payload_ref = module
+            .alloc_type(TypeNode {
+                span: unit_span(),
+                kind: TypeKind::Name(TypeReference::resolved(
+                    NamePath::from_vec(vec![name("A")]).expect("parameter path should stay valid"),
+                    TypeResolution::TypeParameter(payload),
+                )),
+            })
+            .expect("parameter type allocation should fit");
+        let box_item = push_sum_type(&mut module, "Box", vec![payload], "Box", vec![payload_ref]);
+        let none_expr = builtin_expr(&mut module, BuiltinTerm::None, "None");
+        let first_expr = constructor_expr(&mut module, box_item, "Box", vec![none_expr]);
+        let element = module
+            .alloc_expr(Expr {
+                span: unit_span(),
+                kind: ExprKind::Integer(IntegerLiteral { raw: "1".into() }),
+            })
+            .expect("expression allocation should fit");
+        let some_expr = builtin_apply_expr(&mut module, BuiltinTerm::Some, "Some", vec![element]);
+        let second_expr = constructor_expr(&mut module, box_item, "Box", vec![some_expr]);
+        let validator = Validator {
+            module: &module,
+            mode: ValidationMode::RequireResolvedNames,
+            diagnostics: Vec::new(),
+        };
+        let mut typing = GateTypeContext::new(&module);
+        let mut bindings = SourceOptionTypeBindings::default();
+
+        assert_eq!(
+            validator.check_source_option_expr(
+                first_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter(SourceTypeParameter::A),
+            Some(&SourceOptionActualType::OpaqueItem {
+                item: box_item,
+                name: "Box".to_owned(),
+                arguments: vec![SourceOptionActualType::Option(Box::new(
+                    SourceOptionActualType::Hole,
+                ))],
+            }),
+        );
+        assert_eq!(
+            validator.check_source_option_expr(
+                second_expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
+                item: box_item,
+                name: "Box".to_owned(),
+                arguments: vec![GateType::Option(Box::new(GateType::Primitive(
+                    BuiltinType::Int,
+                )))],
+            }),
         );
     }
 
@@ -7047,8 +7776,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: pair_item,
                 name: "Pair".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
@@ -7133,8 +7862,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: outcome_item,
                 name: "OutcomeBox".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
@@ -7201,8 +7930,8 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: pair_box,
                 name: "PairBox".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
@@ -7295,10 +8024,99 @@ mod tests {
             SourceOptionTypeCheck::Match,
         );
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::OpaqueItem {
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
                 item: config_box,
                 name: "ConfigBox".to_owned(),
+                arguments: vec![GateType::Primitive(BuiltinType::Int)],
+            }),
+        );
+    }
+
+    #[test]
+    fn source_option_root_contract_parameters_bind_arrow_constructor_fields() {
+        let mut module = Module::new(FileId::new(0));
+        let payload = type_parameter(&mut module, "A");
+        let payload_ref = module
+            .alloc_type(TypeNode {
+                span: unit_span(),
+                kind: TypeKind::Name(TypeReference::resolved(
+                    NamePath::from_vec(vec![name("A")]).expect("parameter path should stay valid"),
+                    TypeResolution::TypeParameter(payload),
+                )),
+            })
+            .expect("parameter type allocation should fit");
+        let int_ref = builtin_type(&mut module, BuiltinType::Int);
+        let bool_ref = builtin_type(&mut module, BuiltinType::Bool);
+        let arrow_field = module
+            .alloc_type(TypeNode {
+                span: unit_span(),
+                kind: TypeKind::Arrow {
+                    parameter: payload_ref,
+                    result: bool_ref,
+                },
+            })
+            .expect("arrow type allocation should fit");
+        let function_box = push_sum_type(
+            &mut module,
+            "FunctionBox",
+            vec![payload],
+            "FunctionBox",
+            vec![arrow_field],
+        );
+        let parameter_binding = module
+            .alloc_binding(Binding {
+                span: unit_span(),
+                name: name("value"),
+                kind: BindingKind::FunctionParameter,
+            })
+            .expect("binding allocation should fit");
+        let body = builtin_expr(&mut module, BuiltinTerm::True, "True");
+        let function_item = module
+            .push_item(Item::Function(FunctionItem {
+                header: ItemHeader {
+                    span: unit_span(),
+                    decorators: Vec::new(),
+                },
+                name: name("keepTrue"),
+                parameters: vec![FunctionParameter {
+                    span: unit_span(),
+                    binding: parameter_binding,
+                    annotation: Some(int_ref),
+                }],
+                annotation: Some(bool_ref),
+                body,
+            }))
+            .expect("function item allocation should fit");
+        let function_expr = item_expr(&mut module, function_item, "keepTrue");
+        let expr = constructor_expr(
+            &mut module,
+            function_box,
+            "FunctionBox",
+            vec![function_expr],
+        );
+        let validator = Validator {
+            module: &module,
+            mode: ValidationMode::RequireResolvedNames,
+            diagnostics: Vec::new(),
+        };
+        let mut typing = GateTypeContext::new(&module);
+        let mut bindings = SourceOptionTypeBindings::default();
+
+        assert_eq!(
+            validator.check_source_option_expr(
+                expr,
+                &SourceOptionExpectedType::ContractParameter(SourceTypeParameter::A),
+                &mut typing,
+                &mut bindings,
+            ),
+            SourceOptionTypeCheck::Match,
+        );
+        assert_eq!(
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::OpaqueItem {
+                item: function_box,
+                name: "FunctionBox".to_owned(),
                 arguments: vec![GateType::Primitive(BuiltinType::Int)],
             }),
         );
@@ -7378,19 +8196,21 @@ mod tests {
         ));
         let mut bindings = SourceOptionTypeBindings::default();
 
-        assert!(source_option_expected_matches_gate_type(
+        assert!(source_option_expected_matches_actual_type(
             &expected,
-            &GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Bool))),
+            &SourceOptionActualType::from_gate_type(&GateType::Signal(Box::new(
+                GateType::Primitive(BuiltinType::Bool),
+            ))),
             &mut bindings,
         ));
         assert_eq!(
-            bindings.parameter(SourceTypeParameter::A),
-            Some(&GateType::Primitive(BuiltinType::Bool)),
+            bindings.parameter_gate_type(SourceTypeParameter::A),
+            Some(GateType::Primitive(BuiltinType::Bool)),
         );
         let mut bindings = SourceOptionTypeBindings::default();
-        assert!(!source_option_expected_matches_gate_type(
+        assert!(!source_option_expected_matches_actual_type(
             &expected,
-            &GateType::Primitive(BuiltinType::Bool),
+            &SourceOptionActualType::from_gate_type(&GateType::Primitive(BuiltinType::Bool)),
             &mut bindings,
         ));
     }

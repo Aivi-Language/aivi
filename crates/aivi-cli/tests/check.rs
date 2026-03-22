@@ -19,6 +19,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/custom-source-recurrence-wakeup/main.aivi",
         "milestone-2/valid/source-decorator-signals/main.aivi",
         "milestone-2/valid/source-option-contract-parameters/main.aivi",
+        "milestone-2/valid/source-option-contract-parameter-context-free-builtins/main.aivi",
         "milestone-2/valid/source-option-imported-binding-match/main.aivi",
         "milestone-2/valid/applicative-clusters/main.aivi",
         "milestone-2/valid/markup-control-nodes/main.aivi",
