@@ -132,10 +132,34 @@ pub enum TypeNode {
     Tuple(Vec<TypeId>),
     Record(RecordShape),
     Sum(SumShape),
+    Domain(DomainShape),
     List(TypeId),
     Option(TypeId),
     Result { error: TypeId, value: TypeId },
     Validation { error: TypeId, value: TypeId },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DomainShape {
+    name: Box<str>,
+    carrier: TypeId,
+}
+
+impl DomainShape {
+    pub fn new(name: impl Into<String>, carrier: TypeId) -> Self {
+        Self {
+            name: name.into().into_boxed_str(),
+            carrier,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn carrier(&self) -> TypeId {
+        self.carrier
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -330,6 +354,10 @@ impl TypeStore {
         Ok(self.push(TypeNode::Sum(SumShape::new(closedness, variants)?)))
     }
 
+    pub fn domain(&mut self, name: impl Into<String>, carrier: TypeId) -> TypeId {
+        self.push(TypeNode::Domain(DomainShape::new(name, carrier)))
+    }
+
     pub fn list(&mut self, element: TypeId) -> TypeId {
         self.push(TypeNode::List(element))
     }
@@ -441,6 +469,10 @@ pub enum EqStep {
         ty: TypeId,
         variants: Vec<EqVariantPlan>,
     },
+    Domain {
+        ty: TypeId,
+        carrier: EqPlanId,
+    },
     List {
         ty: TypeId,
         element: EqPlanId,
@@ -469,6 +501,7 @@ impl EqStep {
             | Self::Tuple { ty, .. }
             | Self::Record { ty, .. }
             | Self::Sum { ty, .. }
+            | Self::Domain { ty, .. }
             | Self::List { ty, .. }
             | Self::Option { ty, .. }
             | Self::Result { ty, .. }
@@ -533,6 +566,7 @@ pub enum EqPathSegment {
     TupleElement(usize),
     RecordField(FieldName),
     SumVariantPayload(VariantName),
+    DomainCarrier,
     ListElement,
     OptionValue,
     ResultError,
@@ -671,6 +705,10 @@ impl EqDeriver {
                             }
                         }
                     }
+                    TypeNode::Domain(domain) => {
+                        frames.push(Frame::ExitDomain { ty });
+                        schedule_child(&mut frames, domain.carrier(), EqPathSegment::DomainCarrier);
+                    }
                     TypeNode::List(element) => {
                         frames.push(Frame::ExitList { ty });
                         schedule_child(&mut frames, *element, EqPathSegment::ListElement);
@@ -726,6 +764,10 @@ impl EqDeriver {
                         .collect();
                     assembled.push(push_step(&mut steps, EqStep::Sum { ty, variants }));
                 }
+                Frame::ExitDomain { ty } => {
+                    let carrier = pop_one(&mut assembled);
+                    assembled.push(push_step(&mut steps, EqStep::Domain { ty, carrier }));
+                }
                 Frame::ExitList { ty } => {
                     let element = pop_one(&mut assembled);
                     assembled.push(push_step(&mut steps, EqStep::List { ty, element }));
@@ -775,6 +817,9 @@ enum Frame {
     ExitSum {
         ty: TypeId,
         variants: Vec<PendingVariant>,
+    },
+    ExitDomain {
+        ty: TypeId,
     },
     ExitList {
         ty: TypeId,
@@ -971,6 +1016,50 @@ mod tests {
     }
 
     #[test]
+    fn domains_keep_nominal_roots_but_reuse_carrier_eq() {
+        let mut types = TypeStore::new();
+        let int_ty = types.primitive(PrimitiveType::Int);
+        let duration = types.domain("Duration", int_ty);
+
+        let derivation =
+            EqDeriver::derive(&types, duration, &EqContext::new()).expect("domain should derive");
+        let EqStep::Domain { ty, carrier } = derivation.root_step() else {
+            panic!("expected domain root witness");
+        };
+        assert_eq!(*ty, duration);
+        assert!(matches!(
+            derivation.step(*carrier),
+            EqStep::IntrinsicScalar {
+                ty: carrier_ty,
+                scalar: PrimitiveType::Int,
+            } if *carrier_ty == int_ty
+        ));
+
+        let parameter = types.define_parameter("A");
+        let element = types.parameter(parameter);
+        let carrier = types.list(element);
+        let non_empty = types.domain("NonEmpty", carrier);
+        let mut context = EqContext::new();
+        context.assume_parameter(parameter);
+
+        let derivation =
+            EqDeriver::derive(&types, non_empty, &context).expect("generic domain should derive");
+        let EqStep::Domain { carrier, .. } = derivation.root_step() else {
+            panic!("expected generic domain root witness");
+        };
+        let EqStep::List { element, .. } = derivation.step(*carrier) else {
+            panic!("expected carrier list witness");
+        };
+        assert!(matches!(
+            derivation.step(*element),
+            EqStep::FromContext {
+                reference: TypeReference::Parameter(id),
+                ..
+            } if *id == parameter
+        ));
+    }
+
+    #[test]
     fn bytes_is_explicitly_not_compiler_derived_in_v1() {
         let mut types = TypeStore::new();
         let bytes = types.primitive(PrimitiveType::Bytes);
@@ -1147,6 +1236,29 @@ mod tests {
                 EqPathSegment::ResultValue,
                 EqPathSegment::SumVariantPayload(VariantName::new("Blocked")),
             ]
+        );
+    }
+
+    #[test]
+    fn domain_missing_eq_reports_the_carrier_path() {
+        let mut types = TypeStore::new();
+        let missing = types.define_external("MissingEq");
+        let missing_ty = types.external(missing);
+        let wrapped = types.option(missing_ty);
+        let subject = types.domain("Secret", wrapped);
+
+        let error = EqDeriver::derive(&types, subject, &EqContext::new())
+            .expect_err("domain carrier without eq should fail");
+        assert_eq!(
+            error.kind(),
+            &EqDerivationErrorKind::MissingEq {
+                ty: missing_ty,
+                reference: TypeReference::External(missing),
+            }
+        );
+        assert_eq!(
+            error.path(),
+            &[EqPathSegment::DomainCarrier, EqPathSegment::OptionValue]
         );
     }
 

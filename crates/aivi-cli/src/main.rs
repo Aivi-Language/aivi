@@ -8,7 +8,8 @@ use std::{
     process::ExitCode,
 };
 
-use aivi_base::{FileId, Severity, SourceDatabase};
+use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase};
+use aivi_hir::{ValidationMode, lower_module};
 use aivi_syntax::{Formatter, ItemKind, TokenKind, lex_module, parse_module};
 
 fn main() -> ExitCode {
@@ -65,20 +66,24 @@ fn check_file(path: &Path) -> Result<ExitCode, String> {
     let (sources, file_id) = load_source(path)?;
     let file = &sources[file_id];
     let parsed = parse_module(file);
-    let mut saw_error = false;
-
-    for diagnostic in parsed.all_diagnostics() {
-        eprintln!("{}\n", diagnostic.render(&sources));
-        if diagnostic.severity == Severity::Error {
-            saw_error = true;
-        }
-    }
-
-    if saw_error {
+    let syntax_failed = print_diagnostics(&sources, parsed.all_diagnostics());
+    if syntax_failed {
         Ok(ExitCode::FAILURE)
     } else {
+        let lowered = lower_module(&parsed.module);
+        let lowering_failed = print_diagnostics(&sources, lowered.diagnostics());
+        let validation_mode = if lowering_failed {
+            ValidationMode::Structural
+        } else {
+            ValidationMode::RequireResolvedNames
+        };
+        let validation = lowered.module().validate(validation_mode);
+        let validation_failed = print_diagnostics(&sources, validation.diagnostics());
+        if lowering_failed || validation_failed {
+            return Ok(ExitCode::FAILURE);
+        }
         println!(
-            "syntax ok: {} ({} item{})",
+            "syntax + HIR passed: {} ({} item{})",
             path.display(),
             parsed.module.items.len(),
             if parsed.module.items.len() == 1 {
@@ -89,6 +94,20 @@ fn check_file(path: &Path) -> Result<ExitCode, String> {
         );
         Ok(ExitCode::SUCCESS)
     }
+}
+
+fn print_diagnostics<'a>(
+    sources: &SourceDatabase,
+    diagnostics: impl IntoIterator<Item = &'a Diagnostic>,
+) -> bool {
+    let mut saw_error = false;
+    for diagnostic in diagnostics {
+        eprintln!("{}\n", diagnostic.render(sources));
+        if diagnostic.severity == Severity::Error {
+            saw_error = true;
+        }
+    }
+    saw_error
 }
 
 fn lex_file(path: &Path) -> Result<ExitCode, String> {
@@ -144,16 +163,17 @@ fn format_file(path: &Path) -> Result<ExitCode, String> {
 fn print_usage() {
     eprintln!("usage:\n  aivi <path>\n  aivi check <path>\n  aivi lex <path>\n  aivi fmt <path>");
     eprintln!(
-        "commands:\n  check  Lex and parse a module, reporting diagnostics\n  lex    Dump the lossless token stream\n  fmt    Canonically format the supported Milestone 1 subset"
+        "commands:\n  check  Lex, parse, lower, and validate a module\n  lex    Dump the lossless token stream\n  fmt    Canonically format the supported surface subset"
     );
     eprintln!(
-        "milestone-1 surface items: {:?}",
+        "milestone-2 surface items: {:?}",
         [
             ItemKind::Type,
             ItemKind::Value,
             ItemKind::Function,
             ItemKind::Signal,
             ItemKind::Class,
+            ItemKind::Domain,
             ItemKind::Use,
             ItemKind::Export,
         ]
@@ -179,4 +199,33 @@ enum Command {
     Check,
     Lex,
     Fmt,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_file;
+    use std::{path::PathBuf, process::ExitCode};
+
+    fn fixture(path: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/frontend")
+            .join(path)
+    }
+
+    #[test]
+    fn check_accepts_milestone_two_source_fixture() {
+        let result = check_file(&fixture(
+            "milestone-2/valid/source-decorator-signals/main.aivi",
+        ))
+        .expect("check should run");
+        assert_eq!(result, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn check_rejects_milestone_two_invalid_fixture() {
+        let result = check_file(&fixture("milestone-2/invalid/unknown-decorator/main.aivi"))
+            .expect("check should run");
+        assert_eq!(result, ExitCode::FAILURE);
+    }
 }

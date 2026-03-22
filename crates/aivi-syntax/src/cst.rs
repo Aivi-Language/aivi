@@ -200,6 +200,44 @@ pub struct ClassBody {
     pub span: SourceSpan,
 }
 
+/// Domain member name, either an ordinary/operator signature or a literal suffix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DomainMemberName {
+    Signature(ClassMemberName),
+    Literal(Identifier),
+}
+
+impl DomainMemberName {
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Signature(name) => name.text(),
+            Self::Literal(identifier) => identifier.text.as_str(),
+        }
+    }
+
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            Self::Signature(name) => name.span(),
+            Self::Literal(identifier) => identifier.span,
+        }
+    }
+}
+
+/// One domain-owned signature or literal declaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DomainMember {
+    pub name: DomainMemberName,
+    pub annotation: Option<TypeExpr>,
+    pub span: SourceSpan,
+}
+
+/// Body of a `domain` declaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DomainBody {
+    pub members: Vec<DomainMember>,
+    pub span: SourceSpan,
+}
+
 /// Prefix operators supported by the surface subset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
@@ -464,6 +502,17 @@ pub struct ExportItem {
     pub name: Option<Identifier>,
 }
 
+/// `domain` declaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DomainItem {
+    pub base: ItemBase,
+    pub keyword_span: SourceSpan,
+    pub name: Option<Identifier>,
+    pub type_parameters: Vec<Identifier>,
+    pub carrier: Option<TypeExpr>,
+    pub body: Option<DomainBody>,
+}
+
 /// Error recovery item that still preserves source coverage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ErrorItem {
@@ -479,6 +528,7 @@ pub enum Item {
     Function(NamedItem),
     Signal(NamedItem),
     Class(NamedItem),
+    Domain(DomainItem),
     Use(UseItem),
     Export(ExportItem),
     Error(ErrorItem),
@@ -492,6 +542,7 @@ pub enum ItemKind {
     Function,
     Signal,
     Class,
+    Domain,
     Use,
     Export,
     Error,
@@ -505,6 +556,7 @@ impl Item {
             Item::Function(_) => ItemKind::Function,
             Item::Signal(_) => ItemKind::Signal,
             Item::Class(_) => ItemKind::Class,
+            Item::Domain(_) => ItemKind::Domain,
             Item::Use(_) => ItemKind::Use,
             Item::Export(_) => ItemKind::Export,
             Item::Error(_) => ItemKind::Error,
@@ -518,6 +570,7 @@ impl Item {
             | Item::Function(item)
             | Item::Signal(item)
             | Item::Class(item) => &item.base,
+            Item::Domain(item) => &item.base,
             Item::Use(item) => &item.base,
             Item::Export(item) => &item.base,
             Item::Error(item) => &item.base,

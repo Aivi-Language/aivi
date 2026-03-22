@@ -11,6 +11,15 @@ name = "aivi-cli"
 version = "0.1.0"
 dependencies = [
  "aivi-base",
+ "aivi-hir",
+ "aivi-syntax",
+]
+
+[[package]]
+name = "aivi-hir"
+version = "0.1.0"
+dependencies = [
+ "aivi-base",
  "aivi-syntax",
 ]
 

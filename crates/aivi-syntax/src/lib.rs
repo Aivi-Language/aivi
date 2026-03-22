@@ -9,12 +9,13 @@ pub mod parse;
 
 pub use cst::{
     BinaryOperator, ClassBody, ClassMember, ClassMemberName, Decorator, DecoratorArguments,
-    DecoratorPayload, ErrorItem, ExportItem, Expr, ExprKind, FunctionParam, Identifier,
-    IntegerLiteral, Item, ItemBase, ItemKind, MarkupAttribute, MarkupAttributeValue, MarkupNode,
-    Module, NamedItem, NamedItemBody, OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr,
-    PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-    RecordPatternField, RegexLiteral, SourceDecorator, TextLiteral, TokenRange, TypeDeclBody,
-    TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+    DecoratorPayload, DomainBody, DomainItem, DomainMember, DomainMemberName, ErrorItem,
+    ExportItem, Expr, ExprKind, FunctionParam, Identifier, IntegerLiteral, Item, ItemBase,
+    ItemKind, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody,
+    OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind,
+    ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral,
+    SourceDecorator, TextLiteral, TokenRange, TypeDeclBody, TypeExpr, TypeExprKind, TypeField,
+    TypeVariant, UnaryOperator, UseItem,
 };
 pub use format::Formatter;
 pub use lex::{LexedModule, Token, TokenKind, lex_module};

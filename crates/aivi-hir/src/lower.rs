@@ -1,0 +1,3487 @@
+use std::collections::HashMap;
+
+use aivi_base::{Diagnostic, DiagnosticCode, Severity, SourceSpan};
+use aivi_syntax as syn;
+
+use crate::{
+    ApplicativeCluster, AtLeastTwo, BinaryOperator, Binding, BindingId, BindingKind,
+    BindingPattern, BuiltinTerm, BuiltinType, CaseControl, ClassItem, ClassMember,
+    ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeId, Decorator, DecoratorCall,
+    DecoratorId, DecoratorPayload, DomainItem, DomainMember, DomainMemberKind, EachControl,
+    EmptyControl, ExportItem, Expr, ExprId, ExprKind, FragmentControl, FunctionItem,
+    FunctionParameter, ImportBinding, ImportId, IntegerLiteral, Item, ItemHeader, ItemId, ItemKind,
+    MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind,
+    MatchControl, Module, Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage,
+    PipeStageKind, ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface,
+    RecordPatternField, RegexLiteral, ResolutionState, ShowControl, SignalItem, SourceDecorator,
+    TermReference, TermResolution, TextLiteral, TypeField, TypeId, TypeItem, TypeItemBody,
+    TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference, TypeResolution, TypeVariant,
+    UnaryOperator, UseItem, ValueItem, WithControl,
+};
+
+pub struct LoweringResult {
+    module: Module,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl LoweringResult {
+    pub fn new(module: Module, diagnostics: Vec<Diagnostic>) -> Self {
+        Self {
+            module,
+            diagnostics,
+        }
+    }
+
+    pub fn module(&self) -> &Module {
+        &self.module
+    }
+
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error)
+    }
+
+    pub fn into_parts(self) -> (Module, Vec<Diagnostic>) {
+        (self.module, self.diagnostics)
+    }
+}
+
+pub fn lower_module(module: &syn::Module) -> LoweringResult {
+    let mut lowerer = Lowerer::new(module.file);
+    for item in &module.items {
+        lowerer.lower_item(item);
+    }
+    let namespaces = lowerer.build_namespaces();
+    lowerer.resolve_module(&namespaces);
+    LoweringResult::new(lowerer.module, lowerer.diagnostics)
+}
+
+struct Lowerer {
+    module: Module,
+    diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Copy)]
+struct NamedSite<T> {
+    value: T,
+    span: SourceSpan,
+}
+
+#[derive(Default)]
+struct Namespaces {
+    term_items: HashMap<String, Vec<NamedSite<ItemId>>>,
+    type_items: HashMap<String, Vec<NamedSite<ItemId>>>,
+    any_items: HashMap<String, Vec<NamedSite<ItemId>>>,
+    term_imports: HashMap<String, Vec<NamedSite<ImportId>>>,
+    type_imports: HashMap<String, Vec<NamedSite<ImportId>>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KnownImportKind {
+    OrdinaryTerm,
+    Bundle,
+}
+
+#[derive(Clone, Copy)]
+enum LookupResult<T> {
+    Unique(T),
+    Ambiguous,
+    Missing,
+}
+
+#[derive(Clone, Default)]
+struct ResolveEnv {
+    term_scopes: Vec<HashMap<String, BindingId>>,
+    type_scopes: Vec<HashMap<String, TypeParameterId>>,
+}
+
+#[derive(Clone, Copy)]
+enum MarkupPlacement {
+    Renderable,
+    EachEmpty,
+    MatchCase,
+}
+
+enum LoweredMarkup {
+    Renderable(MarkupNodeId),
+    Empty(ControlNodeId),
+    Case(ControlNodeId),
+}
+
+impl Lowerer {
+    fn new(file: aivi_base::FileId) -> Self {
+        Self {
+            module: Module::new(file),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn lower_item(&mut self, item: &syn::Item) {
+        let lowered = match item {
+            syn::Item::Type(item) => Some(Item::Type(self.lower_type_item(item))),
+            syn::Item::Value(item) => Some(Item::Value(self.lower_value_item(item))),
+            syn::Item::Function(item) => Some(Item::Function(self.lower_function_item(item))),
+            syn::Item::Signal(item) => Some(Item::Signal(self.lower_signal_item(item))),
+            syn::Item::Class(item) => Some(Item::Class(self.lower_class_item(item))),
+            syn::Item::Domain(item) => Some(Item::Domain(self.lower_domain_item(item))),
+            syn::Item::Use(item) => Some(Item::Use(self.lower_use_item(item))),
+            syn::Item::Export(item) => Some(Item::Export(self.lower_export_item(item))),
+            syn::Item::Error(item) => {
+                self.emit_error(
+                    item.base.span,
+                    "error recovery item cannot enter Milestone 2 HIR",
+                    code("error-item"),
+                );
+                None
+            }
+        };
+
+        if let Some(item) = lowered {
+            self.module
+                .push_item(item)
+                .expect("HIR item arena should not overflow during lowering");
+        }
+    }
+
+    fn lower_type_item(&mut self, item: &syn::NamedItem) -> TypeItem {
+        let header = self.lower_item_header(&item.base.decorators, ItemKind::Type, item.base.span);
+        let name = self.required_name(item.name.as_ref(), item.base.span, "type declaration");
+        let parameters = self.lower_type_parameters(&item.type_parameters);
+        let body = match item.type_body() {
+            Some(syn::TypeDeclBody::Alias(expr)) => TypeItemBody::Alias(self.lower_type_expr(expr)),
+            Some(syn::TypeDeclBody::Sum(variants)) => {
+                let variants = variants
+                    .iter()
+                    .map(|variant| TypeVariant {
+                        span: variant.span,
+                        name: self.required_name(
+                            variant.name.as_ref(),
+                            variant.span,
+                            "type variant",
+                        ),
+                        fields: variant
+                            .fields
+                            .iter()
+                            .map(|field| self.lower_type_expr(field))
+                            .collect(),
+                    })
+                    .collect::<Vec<_>>();
+                match crate::NonEmpty::from_vec(variants) {
+                    Ok(variants) => TypeItemBody::Sum(variants),
+                    Err(_) => {
+                        self.emit_error(
+                            item.base.span,
+                            "sum type must contain at least one constructor",
+                            code("empty-sum-type"),
+                        );
+                        TypeItemBody::Alias(self.placeholder_type(item.base.span))
+                    }
+                }
+            }
+            None => {
+                self.emit_error(
+                    item.base.span,
+                    "type declaration is missing a body",
+                    code("missing-type-body"),
+                );
+                TypeItemBody::Alias(self.placeholder_type(item.base.span))
+            }
+        };
+
+        TypeItem {
+            header,
+            name,
+            parameters,
+            body,
+        }
+    }
+
+    fn lower_value_item(&mut self, item: &syn::NamedItem) -> ValueItem {
+        if !item.type_parameters.is_empty() {
+            self.emit_error(
+                item.base.span,
+                "generic `val` declarations are not preserved in Milestone 2 HIR yet",
+                code("unsupported-generic-value"),
+            );
+        }
+        let header = self.lower_item_header(&item.base.decorators, ItemKind::Value, item.base.span);
+        let name = self.required_name(item.name.as_ref(), item.base.span, "value declaration");
+        let annotation = item
+            .annotation
+            .as_ref()
+            .map(|annotation| self.lower_type_expr(annotation));
+        let body = item
+            .expr_body()
+            .map(|expr| self.lower_expr(expr))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "value declaration is missing a body",
+                    code("missing-value-body"),
+                );
+                self.placeholder_expr(item.base.span)
+            });
+
+        ValueItem {
+            header,
+            name,
+            annotation,
+            body,
+        }
+    }
+
+    fn lower_function_item(&mut self, item: &syn::NamedItem) -> FunctionItem {
+        if !item.type_parameters.is_empty() {
+            self.emit_error(
+                item.base.span,
+                "generic `fun` declarations are not preserved in Milestone 2 HIR yet",
+                code("unsupported-generic-function"),
+            );
+        }
+        let header =
+            self.lower_item_header(&item.base.decorators, ItemKind::Function, item.base.span);
+        let name = self.required_name(item.name.as_ref(), item.base.span, "function declaration");
+        let parameters = item
+            .parameters
+            .iter()
+            .map(|parameter| self.lower_function_parameter(parameter))
+            .collect();
+        let annotation = item
+            .annotation
+            .as_ref()
+            .map(|annotation| self.lower_type_expr(annotation));
+        let body = item
+            .expr_body()
+            .map(|expr| self.lower_expr(expr))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "function declaration is missing a body",
+                    code("missing-function-body"),
+                );
+                self.placeholder_expr(item.base.span)
+            });
+
+        FunctionItem {
+            header,
+            name,
+            parameters,
+            annotation,
+            body,
+        }
+    }
+
+    fn lower_signal_item(&mut self, item: &syn::NamedItem) -> SignalItem {
+        if !item.type_parameters.is_empty() {
+            self.emit_error(
+                item.base.span,
+                "generic `sig` declarations are not preserved in Milestone 2 HIR yet",
+                code("unsupported-generic-signal"),
+            );
+        }
+        let header =
+            self.lower_item_header(&item.base.decorators, ItemKind::Signal, item.base.span);
+        let name = self.required_name(item.name.as_ref(), item.base.span, "signal declaration");
+        let annotation = item
+            .annotation
+            .as_ref()
+            .map(|annotation| self.lower_type_expr(annotation));
+        let body = item.expr_body().map(|expr| self.lower_expr(expr));
+        if body.is_none()
+            && !item
+                .base
+                .decorators
+                .iter()
+                .any(|decorator| decorator.name.as_dotted() == "source")
+        {
+            self.emit_error(
+                item.base.span,
+                "signal declaration without `@source` must provide a body in Milestone 2",
+                code("missing-signal-body"),
+            );
+        }
+
+        SignalItem {
+            header,
+            name,
+            annotation,
+            body,
+        }
+    }
+
+    fn lower_class_item(&mut self, item: &syn::NamedItem) -> ClassItem {
+        let header = self.lower_item_header(&item.base.decorators, ItemKind::Class, item.base.span);
+        let name = self.required_name(item.name.as_ref(), item.base.span, "class declaration");
+        let mut parameters = self.lower_type_parameters(&item.type_parameters);
+        if parameters.is_empty() {
+            self.emit_error(
+                item.base.span,
+                "class declarations require at least one type parameter",
+                code("missing-class-parameter"),
+            );
+            parameters.push(self.alloc_type_parameter(TypeParameter {
+                span: item.base.span,
+                name: self.make_name("A", item.base.span),
+            }));
+        }
+        let parameters = crate::NonEmpty::from_vec(parameters)
+            .expect("class fallback parameter list should be non-empty");
+        let superclasses = item
+            .annotation
+            .as_ref()
+            .map(|annotation| vec![self.lower_type_expr(annotation)])
+            .unwrap_or_default();
+        let members = item
+            .class_body()
+            .map(|body| {
+                body.members
+                    .iter()
+                    .map(|member| ClassMember {
+                        span: member.span,
+                        name: self.make_name(member.name.text(), member.name.span()),
+                        annotation: member
+                            .annotation
+                            .as_ref()
+                            .map(|annotation| self.lower_type_expr(annotation))
+                            .unwrap_or_else(|| {
+                                self.emit_error(
+                                    member.span,
+                                    "class member is missing a type annotation",
+                                    code("missing-class-member-type"),
+                                );
+                                self.placeholder_type(member.span)
+                            }),
+                    })
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "class declaration is missing a body",
+                    code("missing-class-body"),
+                );
+                Vec::new()
+            });
+
+        ClassItem {
+            header,
+            name,
+            parameters,
+            superclasses,
+            members,
+        }
+    }
+
+    fn lower_domain_item(&mut self, item: &syn::DomainItem) -> DomainItem {
+        let header =
+            self.lower_item_header(&item.base.decorators, ItemKind::Domain, item.base.span);
+        let name = self.required_name(item.name.as_ref(), item.base.span, "domain declaration");
+        let parameters = self.lower_type_parameters(&item.type_parameters);
+        let carrier = item
+            .carrier
+            .as_ref()
+            .map(|carrier| self.lower_type_expr(carrier))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "domain declaration is missing a carrier type after `over`",
+                    code("missing-domain-carrier"),
+                );
+                self.placeholder_type(item.base.span)
+            });
+
+        let mut members = Vec::new();
+        let mut seen_members = HashMap::<String, SourceSpan>::new();
+        if let Some(body) = &item.body {
+            for member in &body.members {
+                let lowered = self.lower_domain_member(member);
+                let key = domain_member_key(&lowered);
+                if let Some(previous_span) = seen_members.insert(key.clone(), lowered.span) {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "duplicate domain member `{}`",
+                            domain_member_display(&lowered)
+                        ))
+                        .with_code(code("duplicate-domain-member"))
+                        .with_primary_label(
+                            lowered.span,
+                            "this domain member reuses an existing member name",
+                        )
+                        .with_secondary_label(previous_span, "previous domain member here"),
+                    );
+                }
+                members.push(lowered);
+            }
+        }
+
+        DomainItem {
+            header,
+            name,
+            parameters,
+            carrier,
+            members,
+        }
+    }
+
+    fn lower_domain_member(&mut self, member: &syn::DomainMember) -> DomainMember {
+        let (kind, name) = match &member.name {
+            syn::DomainMemberName::Signature(signature) => match signature {
+                syn::ClassMemberName::Identifier(identifier) => (
+                    DomainMemberKind::Method,
+                    self.make_name(&identifier.text, identifier.span),
+                ),
+                syn::ClassMemberName::Operator(operator) => (
+                    DomainMemberKind::Operator,
+                    self.make_name(&operator.text, operator.span),
+                ),
+            },
+            syn::DomainMemberName::Literal(identifier) => (
+                DomainMemberKind::Literal,
+                self.make_name(&identifier.text, identifier.span),
+            ),
+        };
+        let annotation = member
+            .annotation
+            .as_ref()
+            .map(|annotation| self.lower_type_expr(annotation))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    member.span,
+                    format!(
+                        "domain member `{}` is missing a type annotation",
+                        domain_member_surface_name(&member.name)
+                    ),
+                    code("missing-domain-member-type"),
+                );
+                self.placeholder_type(member.span)
+            });
+
+        DomainMember {
+            span: member.span,
+            kind,
+            name,
+            annotation,
+        }
+    }
+
+    fn lower_use_item(&mut self, item: &syn::UseItem) -> UseItem {
+        let header = self.lower_item_header(&item.base.decorators, ItemKind::Use, item.base.span);
+        let module = item
+            .path
+            .as_ref()
+            .map(|path| self.lower_qualified_name(path))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "use declaration is missing a module path",
+                    code("missing-use-path"),
+                );
+                self.make_path(&[self.make_name("invalid", item.base.span)])
+            });
+        let mut imports = item
+            .imports
+            .iter()
+            .map(|import| {
+                let imported_name = import
+                    .segments
+                    .last()
+                    .map(|segment| self.make_name(&segment.text, segment.span))
+                    .unwrap_or_else(|| self.make_name("invalid", item.base.span));
+                self.alloc_import(ImportBinding {
+                    span: import.span,
+                    imported_name: imported_name.clone(),
+                    local_name: imported_name,
+                })
+            })
+            .collect::<Vec<_>>();
+        if imports.is_empty() {
+            self.emit_error(
+                item.base.span,
+                "use declaration must import at least one member",
+                code("empty-use-imports"),
+            );
+            imports.push(self.alloc_import(ImportBinding {
+                span: item.base.span,
+                imported_name: self.make_name("invalid", item.base.span),
+                local_name: self.make_name("invalid", item.base.span),
+            }));
+        }
+        let imports =
+            crate::NonEmpty::from_vec(imports).expect("fallback import list should be non-empty");
+
+        UseItem {
+            header,
+            module,
+            imports,
+        }
+    }
+
+    fn lower_export_item(&mut self, item: &syn::ExportItem) -> ExportItem {
+        let header =
+            self.lower_item_header(&item.base.decorators, ItemKind::Export, item.base.span);
+        let target_name =
+            self.required_name(item.name.as_ref(), item.base.span, "export declaration");
+        let target = self.make_path(&[target_name]);
+        ExportItem {
+            header,
+            target,
+            resolution: ResolutionState::Unresolved,
+        }
+    }
+
+    fn lower_item_header(
+        &mut self,
+        decorators: &[syn::Decorator],
+        target: ItemKind,
+        span: SourceSpan,
+    ) -> ItemHeader {
+        let decorators = decorators
+            .iter()
+            .map(|decorator| self.lower_decorator(decorator, target))
+            .collect();
+        ItemHeader { span, decorators }
+    }
+
+    fn lower_decorator(&mut self, decorator: &syn::Decorator, target: ItemKind) -> DecoratorId {
+        let name = self.lower_qualified_name(&decorator.name);
+        let payload = if is_source_decorator(&name) {
+            if target != ItemKind::Signal {
+                self.emit_error(
+                    decorator.span,
+                    "`@source` is only valid on `sig` declarations in Milestone 2",
+                    code("invalid-source-target"),
+                );
+            }
+            match &decorator.payload {
+                syn::DecoratorPayload::Source(source) => {
+                    DecoratorPayload::Source(SourceDecorator {
+                        provider: source
+                            .provider
+                            .as_ref()
+                            .map(|provider| self.lower_qualified_name(provider)),
+                        arguments: source
+                            .arguments
+                            .iter()
+                            .map(|expr| self.lower_expr(expr))
+                            .collect(),
+                        options: source
+                            .options
+                            .as_ref()
+                            .map(|record| self.lower_record_expr_as_expr(record)),
+                    })
+                }
+                syn::DecoratorPayload::Arguments(arguments) => {
+                    DecoratorPayload::Source(SourceDecorator {
+                        provider: None,
+                        arguments: arguments
+                            .arguments
+                            .iter()
+                            .map(|expr| self.lower_expr(expr))
+                            .collect(),
+                        options: arguments
+                            .options
+                            .as_ref()
+                            .map(|record| self.lower_record_expr_as_expr(record)),
+                    })
+                }
+                syn::DecoratorPayload::Bare => DecoratorPayload::Source(SourceDecorator {
+                    provider: None,
+                    arguments: Vec::new(),
+                    options: None,
+                }),
+            }
+        } else {
+            self.emit_error(
+                decorator.span,
+                format!("unknown decorator `@{}`", path_text(&name)),
+                code("unknown-decorator"),
+            );
+            match &decorator.payload {
+                syn::DecoratorPayload::Bare => DecoratorPayload::Bare,
+                syn::DecoratorPayload::Arguments(arguments) => {
+                    DecoratorPayload::Call(DecoratorCall {
+                        arguments: arguments
+                            .arguments
+                            .iter()
+                            .map(|expr| self.lower_expr(expr))
+                            .collect(),
+                        options: arguments
+                            .options
+                            .as_ref()
+                            .map(|record| self.lower_record_expr_as_expr(record)),
+                    })
+                }
+                syn::DecoratorPayload::Source(source) => DecoratorPayload::Call(DecoratorCall {
+                    arguments: source
+                        .arguments
+                        .iter()
+                        .map(|expr| self.lower_expr(expr))
+                        .collect(),
+                    options: source
+                        .options
+                        .as_ref()
+                        .map(|record| self.lower_record_expr_as_expr(record)),
+                }),
+            }
+        };
+
+        self.alloc_decorator(Decorator {
+            span: decorator.span,
+            name,
+            payload,
+        })
+    }
+
+    fn lower_function_parameter(&mut self, parameter: &syn::FunctionParam) -> FunctionParameter {
+        let name = self.required_name(
+            parameter.name.as_ref(),
+            parameter.span,
+            "function parameter",
+        );
+        let binding = self.alloc_binding(Binding {
+            span: parameter.span,
+            name: name.clone(),
+            kind: BindingKind::FunctionParameter,
+        });
+        FunctionParameter {
+            span: parameter.span,
+            binding,
+            annotation: parameter
+                .annotation
+                .as_ref()
+                .map(|annotation| self.lower_type_expr(annotation)),
+        }
+    }
+
+    fn lower_type_parameters(&mut self, parameters: &[syn::Identifier]) -> Vec<TypeParameterId> {
+        parameters
+            .iter()
+            .map(|parameter| {
+                self.alloc_type_parameter(TypeParameter {
+                    span: parameter.span,
+                    name: self.make_name(&parameter.text, parameter.span),
+                })
+            })
+            .collect()
+    }
+
+    fn lower_expr(&mut self, expr: &syn::Expr) -> ExprId {
+        match &expr.kind {
+            syn::ExprKind::Group(inner) => self.lower_expr(inner),
+            syn::ExprKind::Name(name) => {
+                let reference = TermReference::unresolved(
+                    self.make_path(&[self.make_name(&name.text, name.span)]),
+                );
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Name(reference),
+                })
+            }
+            syn::ExprKind::Integer(integer) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::Integer(IntegerLiteral {
+                    raw: integer.raw.clone().into_boxed_str(),
+                }),
+            }),
+            syn::ExprKind::Text(text) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::Text(TextLiteral {
+                    raw: text.raw.clone().into_boxed_str(),
+                    has_interpolation: text.has_interpolation,
+                }),
+            }),
+            syn::ExprKind::Regex(regex) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::Regex(RegexLiteral {
+                    raw: regex.raw.clone().into_boxed_str(),
+                }),
+            }),
+            syn::ExprKind::Tuple(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|element| self.lower_expr(element))
+                    .collect::<Vec<_>>();
+                let elements = match AtLeastTwo::from_vec(elements) {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        self.emit_error(
+                            expr.span,
+                            "tuple expressions require at least two elements",
+                            code("short-tuple-expr"),
+                        );
+                        AtLeastTwo::new(
+                            self.placeholder_expr(expr.span),
+                            self.placeholder_expr(expr.span),
+                            Vec::new(),
+                        )
+                    }
+                };
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Tuple(elements),
+                })
+            }
+            syn::ExprKind::List(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|element| self.lower_expr(element))
+                    .collect();
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::List(elements),
+                })
+            }
+            syn::ExprKind::Record(record) => {
+                let record = self.lower_record_expr(record);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Record(record),
+                })
+            }
+            syn::ExprKind::AmbientProjection(path) => {
+                let path = self.lower_projection_path(path);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Projection {
+                        base: ProjectionBase::Ambient,
+                        path,
+                    },
+                })
+            }
+            syn::ExprKind::Projection { base, path } => {
+                let base = self.lower_expr(base);
+                let path = self.lower_projection_path(path);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Projection {
+                        base: ProjectionBase::Expr(base),
+                        path,
+                    },
+                })
+            }
+            syn::ExprKind::Apply { callee, arguments } => {
+                let callee = self.lower_expr(callee);
+                let arguments = arguments
+                    .iter()
+                    .map(|argument| self.lower_expr(argument))
+                    .collect::<Vec<_>>();
+                let arguments = match crate::NonEmpty::from_vec(arguments) {
+                    Ok(arguments) => arguments,
+                    Err(_) => {
+                        self.emit_error(
+                            expr.span,
+                            "applications require at least one argument",
+                            code("empty-apply-args"),
+                        );
+                        crate::NonEmpty::new(self.placeholder_expr(expr.span), Vec::new())
+                    }
+                };
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Apply { callee, arguments },
+                })
+            }
+            syn::ExprKind::Unary {
+                operator,
+                expr: inner,
+            } => {
+                let inner = self.lower_expr(inner);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Unary {
+                        operator: lower_unary_operator(*operator),
+                        expr: inner,
+                    },
+                })
+            }
+            syn::ExprKind::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                let left = self.lower_expr(left);
+                let right = self.lower_expr(right);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Binary {
+                        left,
+                        operator: lower_binary_operator(*operator),
+                        right,
+                    },
+                })
+            }
+            syn::ExprKind::Pipe(pipe) => self.lower_pipe_expr(pipe),
+            syn::ExprKind::Markup(markup) => {
+                let markup = self.lower_markup_node(markup, MarkupPlacement::Renderable);
+                let span = markup.span(self);
+                let markup = self.renderable_markup(markup, span, "top-level markup");
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Markup(markup),
+                })
+            }
+        }
+    }
+
+    fn lower_pipe_expr(&mut self, pipe: &syn::PipeExpr) -> ExprId {
+        let mut current = pipe.head.as_ref().map(|head| self.lower_expr(head));
+        let mut ordinary = Vec::new();
+        let mut index = 0;
+        while index < pipe.stages.len() {
+            match &pipe.stages[index].kind {
+                syn::PipeStageKind::Apply { .. } => {
+                    self.flush_pipe_segment(&mut current, &mut ordinary, pipe.span);
+                    let cluster_expr =
+                        self.lower_cluster_segment(current.take(), &pipe.stages, &mut index);
+                    current = Some(cluster_expr);
+                }
+                syn::PipeStageKind::ClusterFinalizer { expr } => {
+                    self.emit_error(
+                        pipe.stages[index].span,
+                        "cluster finalizer appeared without an active `&|>` region",
+                        code("orphan-cluster-finalizer"),
+                    );
+                    ordinary.push(PipeStage {
+                        span: pipe.stages[index].span,
+                        kind: PipeStageKind::Transform {
+                            expr: self.lower_expr(expr),
+                        },
+                    });
+                    index += 1;
+                }
+                _ => {
+                    ordinary.push(self.lower_pipe_stage(&pipe.stages[index]));
+                    index += 1;
+                }
+            }
+        }
+        self.flush_pipe_segment(&mut current, &mut ordinary, pipe.span);
+        current.unwrap_or_else(|| {
+            self.emit_error(
+                pipe.span,
+                "pipe expression is missing a head expression",
+                code("missing-pipe-head"),
+            );
+            self.placeholder_expr(pipe.span)
+        })
+    }
+
+    fn flush_pipe_segment(
+        &mut self,
+        current: &mut Option<ExprId>,
+        ordinary: &mut Vec<PipeStage>,
+        span: SourceSpan,
+    ) {
+        if ordinary.is_empty() {
+            return;
+        }
+        let head = current.take().unwrap_or_else(|| {
+            self.emit_error(
+                span,
+                "pipe stage sequence is missing a head expression",
+                code("missing-pipe-head"),
+            );
+            self.placeholder_expr(span)
+        });
+        let stages = std::mem::take(ordinary);
+        let stages =
+            crate::NonEmpty::from_vec(stages).expect("flush only runs for non-empty stage buffers");
+        let expr = self.alloc_expr(Expr {
+            span,
+            kind: ExprKind::Pipe(PipeExpr { head, stages }),
+        });
+        *current = Some(expr);
+    }
+
+    fn lower_cluster_segment(
+        &mut self,
+        head: Option<ExprId>,
+        stages: &[syn::PipeStage],
+        index: &mut usize,
+    ) -> ExprId {
+        let presentation = if head.is_some() {
+            ClusterPresentation::ExpressionHeaded
+        } else {
+            ClusterPresentation::Leading
+        };
+        let mut members = head.into_iter().collect::<Vec<_>>();
+        let mut cluster_span = members
+            .first()
+            .and_then(|expr| self.module.exprs().get(*expr))
+            .map(|expr| expr.span)
+            .unwrap_or(stages[*index].span);
+        while *index < stages.len() {
+            match &stages[*index].kind {
+                syn::PipeStageKind::Apply { expr } => {
+                    let lowered = self.lower_expr(expr);
+                    cluster_span = cluster_span
+                        .join(self.module.exprs()[lowered].span)
+                        .unwrap_or(cluster_span);
+                    members.push(lowered);
+                    *index += 1;
+                }
+                _ => break,
+            }
+        }
+
+        let finalizer = if *index < stages.len() {
+            if let syn::PipeStageKind::ClusterFinalizer { expr } = &stages[*index].kind {
+                let lowered = self.lower_expr(expr);
+                cluster_span = cluster_span
+                    .join(self.module.exprs()[lowered].span)
+                    .unwrap_or(cluster_span);
+                *index += 1;
+                ClusterFinalizer::Explicit(lowered)
+            } else {
+                ClusterFinalizer::ImplicitTuple
+            }
+        } else {
+            ClusterFinalizer::ImplicitTuple
+        };
+
+        if members.len() < 2 {
+            self.emit_error(
+                cluster_span,
+                "`&|>` clusters require at least two members",
+                code("short-cluster"),
+            );
+            members.push(self.placeholder_expr(cluster_span));
+        }
+        let members =
+            AtLeastTwo::from_vec(members).expect("cluster fallback should guarantee two members");
+        let cluster = self.alloc_cluster(ApplicativeCluster {
+            span: cluster_span,
+            presentation,
+            members,
+            finalizer,
+        });
+        self.alloc_expr(Expr {
+            span: cluster_span,
+            kind: ExprKind::Cluster(cluster),
+        })
+    }
+
+    fn lower_pipe_stage(&mut self, stage: &syn::PipeStage) -> PipeStage {
+        let kind = match &stage.kind {
+            syn::PipeStageKind::Transform { expr } => PipeStageKind::Transform {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::Gate { expr } => PipeStageKind::Gate {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::Case(arm) => PipeStageKind::Case {
+                pattern: self.lower_pattern(&arm.pattern),
+                body: self.lower_expr(&arm.body),
+            },
+            syn::PipeStageKind::Map { expr } => PipeStageKind::Map {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::Apply { expr } => PipeStageKind::Apply {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::ClusterFinalizer { expr } => PipeStageKind::Transform {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::RecurStart { expr } => PipeStageKind::RecurStart {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::RecurStep { expr } => PipeStageKind::RecurStep {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::Tap { expr } => PipeStageKind::Tap {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::FanIn { expr } => PipeStageKind::FanIn {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::Truthy { expr } => PipeStageKind::Truthy {
+                expr: self.lower_expr(expr),
+            },
+            syn::PipeStageKind::Falsy { expr } => PipeStageKind::Falsy {
+                expr: self.lower_expr(expr),
+            },
+        };
+        PipeStage {
+            span: stage.span,
+            kind,
+        }
+    }
+
+    fn lower_record_expr(&mut self, record: &syn::RecordExpr) -> RecordExpr {
+        RecordExpr {
+            fields: record
+                .fields
+                .iter()
+                .map(|field| {
+                    let value = field
+                        .value
+                        .as_ref()
+                        .map(|value| self.lower_expr(value))
+                        .unwrap_or_else(|| {
+                            self.alloc_expr(Expr {
+                                span: field.label.span,
+                                kind: ExprKind::Name(TermReference::unresolved(self.make_path(&[
+                                    self.make_name(&field.label.text, field.label.span),
+                                ]))),
+                            })
+                        });
+                    RecordExprField {
+                        span: field.span,
+                        label: self.make_name(&field.label.text, field.label.span),
+                        value,
+                        surface: if field.value.is_some() {
+                            RecordFieldSurface::Explicit
+                        } else {
+                            RecordFieldSurface::Shorthand
+                        },
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    fn lower_record_expr_as_expr(&mut self, record: &syn::RecordExpr) -> ExprId {
+        let span = record.span;
+        let record = self.lower_record_expr(record);
+        self.alloc_expr(Expr {
+            span,
+            kind: ExprKind::Record(record),
+        })
+    }
+
+    fn lower_pattern(&mut self, pattern: &syn::Pattern) -> PatternId {
+        if let syn::PatternKind::Group(inner) = &pattern.kind {
+            return self.lower_pattern(inner);
+        }
+        let kind = match &pattern.kind {
+            syn::PatternKind::Wildcard => PatternKind::Wildcard,
+            syn::PatternKind::Name(name) => self.lower_name_pattern(name),
+            syn::PatternKind::Integer(integer) => PatternKind::Integer(IntegerLiteral {
+                raw: integer.raw.clone().into_boxed_str(),
+            }),
+            syn::PatternKind::Text(text) => PatternKind::Text(TextLiteral {
+                raw: text.raw.clone().into_boxed_str(),
+                has_interpolation: text.has_interpolation,
+            }),
+            syn::PatternKind::Group(_) => unreachable!("group patterns are handled above"),
+            syn::PatternKind::Tuple(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|element| self.lower_pattern(element))
+                    .collect::<Vec<_>>();
+                let elements = match AtLeastTwo::from_vec(elements) {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        self.emit_error(
+                            pattern.span,
+                            "tuple patterns require at least two elements",
+                            code("short-tuple-pattern"),
+                        );
+                        AtLeastTwo::new(
+                            self.placeholder_pattern(pattern.span),
+                            self.placeholder_pattern(pattern.span),
+                            Vec::new(),
+                        )
+                    }
+                };
+                PatternKind::Tuple(elements)
+            }
+            syn::PatternKind::Record(fields) => PatternKind::Record(
+                fields
+                    .iter()
+                    .map(|field| RecordPatternField {
+                        span: field.span,
+                        label: self.make_name(&field.label.text, field.label.span),
+                        pattern: field
+                            .pattern
+                            .as_ref()
+                            .map(|pattern| self.lower_pattern(pattern))
+                            .unwrap_or_else(|| {
+                                let binding_name =
+                                    self.make_name(&field.label.text, field.label.span);
+                                let binding = self.alloc_binding(Binding {
+                                    span: field.label.span,
+                                    name: binding_name.clone(),
+                                    kind: BindingKind::Pattern,
+                                });
+                                self.alloc_pattern(Pattern {
+                                    span: field.label.span,
+                                    kind: PatternKind::Binding(BindingPattern {
+                                        binding,
+                                        name: binding_name,
+                                    }),
+                                })
+                            }),
+                        surface: if field.pattern.is_some() {
+                            RecordFieldSurface::Explicit
+                        } else {
+                            RecordFieldSurface::Shorthand
+                        },
+                    })
+                    .collect(),
+            ),
+            syn::PatternKind::Apply { callee, arguments } => PatternKind::Constructor {
+                callee: self.pattern_callee_from_pattern(callee, pattern.span),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| self.lower_pattern(argument))
+                    .collect(),
+            },
+        };
+        self.alloc_pattern(Pattern {
+            span: pattern.span,
+            kind,
+        })
+    }
+
+    fn lower_expr_pattern(&mut self, expr: &syn::Expr) -> PatternId {
+        if let syn::ExprKind::Group(inner) = &expr.kind {
+            return self.lower_expr_pattern(inner);
+        }
+        let kind = match &expr.kind {
+            syn::ExprKind::Name(name) => self.lower_name_pattern(name),
+            syn::ExprKind::Integer(integer) => PatternKind::Integer(IntegerLiteral {
+                raw: integer.raw.clone().into_boxed_str(),
+            }),
+            syn::ExprKind::Text(text) => PatternKind::Text(TextLiteral {
+                raw: text.raw.clone().into_boxed_str(),
+                has_interpolation: text.has_interpolation,
+            }),
+            syn::ExprKind::Tuple(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|element| self.lower_expr_pattern(element))
+                    .collect::<Vec<_>>();
+                let elements = match AtLeastTwo::from_vec(elements) {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        self.emit_error(
+                            expr.span,
+                            "tuple patterns require at least two elements",
+                            code("short-tuple-pattern"),
+                        );
+                        AtLeastTwo::new(
+                            self.placeholder_pattern(expr.span),
+                            self.placeholder_pattern(expr.span),
+                            Vec::new(),
+                        )
+                    }
+                };
+                PatternKind::Tuple(elements)
+            }
+            syn::ExprKind::Record(record) => PatternKind::Record(
+                record
+                    .fields
+                    .iter()
+                    .map(|field| RecordPatternField {
+                        span: field.span,
+                        label: self.make_name(&field.label.text, field.label.span),
+                        pattern: field
+                            .value
+                            .as_ref()
+                            .map(|value| self.lower_expr_pattern(value))
+                            .unwrap_or_else(|| {
+                                let binding_name =
+                                    self.make_name(&field.label.text, field.label.span);
+                                let binding = self.alloc_binding(Binding {
+                                    span: field.label.span,
+                                    name: binding_name.clone(),
+                                    kind: BindingKind::Pattern,
+                                });
+                                self.alloc_pattern(Pattern {
+                                    span: field.label.span,
+                                    kind: PatternKind::Binding(BindingPattern {
+                                        binding,
+                                        name: binding_name,
+                                    }),
+                                })
+                            }),
+                        surface: if field.value.is_some() {
+                            RecordFieldSurface::Explicit
+                        } else {
+                            RecordFieldSurface::Shorthand
+                        },
+                    })
+                    .collect(),
+            ),
+            syn::ExprKind::Apply { callee, arguments } => PatternKind::Constructor {
+                callee: self.pattern_callee_from_expr(callee, expr.span),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| self.lower_expr_pattern(argument))
+                    .collect(),
+            },
+            syn::ExprKind::Group(_) => unreachable!("group expressions are handled above"),
+            _ => {
+                self.emit_error(
+                    expr.span,
+                    "markup `pattern={...}` expressions must stay within the pattern subset",
+                    code("invalid-pattern-expr"),
+                );
+                PatternKind::Wildcard
+            }
+        };
+        self.alloc_pattern(Pattern {
+            span: expr.span,
+            kind,
+        })
+    }
+
+    fn lower_name_pattern(&mut self, name: &syn::Identifier) -> PatternKind {
+        if name.is_uppercase_initial() {
+            PatternKind::UnresolvedName(TermReference::unresolved(
+                self.make_path(&[self.make_name(&name.text, name.span)]),
+            ))
+        } else {
+            let binding_name = self.make_name(&name.text, name.span);
+            let binding = self.alloc_binding(Binding {
+                span: name.span,
+                name: binding_name.clone(),
+                kind: BindingKind::Pattern,
+            });
+            PatternKind::Binding(BindingPattern {
+                binding,
+                name: binding_name,
+            })
+        }
+    }
+
+    fn pattern_callee_from_pattern(
+        &mut self,
+        callee: &syn::Pattern,
+        span: SourceSpan,
+    ) -> TermReference {
+        match &callee.kind {
+            syn::PatternKind::Name(name) => {
+                TermReference::unresolved(self.make_path(&[self.make_name(&name.text, name.span)]))
+            }
+            syn::PatternKind::Group(inner) => self.pattern_callee_from_pattern(inner, span),
+            _ => {
+                self.emit_error(
+                    span,
+                    "pattern constructor heads must be names",
+                    code("invalid-pattern-callee"),
+                );
+                TermReference::unresolved(self.make_path(&[self.make_name("invalid", span)]))
+            }
+        }
+    }
+
+    fn pattern_callee_from_expr(&mut self, callee: &syn::Expr, span: SourceSpan) -> TermReference {
+        match &callee.kind {
+            syn::ExprKind::Name(name) => {
+                TermReference::unresolved(self.make_path(&[self.make_name(&name.text, name.span)]))
+            }
+            syn::ExprKind::Group(inner) => self.pattern_callee_from_expr(inner, span),
+            _ => {
+                self.emit_error(
+                    span,
+                    "pattern constructor heads must be names",
+                    code("invalid-pattern-callee"),
+                );
+                TermReference::unresolved(self.make_path(&[self.make_name("invalid", span)]))
+            }
+        }
+    }
+
+    fn lower_type_expr(&mut self, ty: &syn::TypeExpr) -> TypeId {
+        match &ty.kind {
+            syn::TypeExprKind::Group(inner) => self.lower_type_expr(inner),
+            syn::TypeExprKind::Name(name) => {
+                let path = self.make_path(&[self.make_name(&name.text, name.span)]);
+                self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Name(TypeReference {
+                        path,
+                        resolution: ResolutionState::Unresolved,
+                    }),
+                })
+            }
+            syn::TypeExprKind::Tuple(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|element| self.lower_type_expr(element))
+                    .collect::<Vec<_>>();
+                let elements = match AtLeastTwo::from_vec(elements) {
+                    Ok(elements) => elements,
+                    Err(_) => {
+                        self.emit_error(
+                            ty.span,
+                            "tuple types require at least two elements",
+                            code("short-tuple-type"),
+                        );
+                        AtLeastTwo::new(
+                            self.placeholder_type(ty.span),
+                            self.placeholder_type(ty.span),
+                            Vec::new(),
+                        )
+                    }
+                };
+                self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Tuple(elements),
+                })
+            }
+            syn::TypeExprKind::Record(fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|field| TypeField {
+                        span: field.span,
+                        label: self.make_name(&field.label.text, field.label.span),
+                        ty: field
+                            .ty
+                            .as_ref()
+                            .map(|ty| self.lower_type_expr(ty))
+                            .unwrap_or_else(|| {
+                                self.emit_error(
+                                    field.span,
+                                    "record type field is missing a type",
+                                    code("missing-record-field-type"),
+                                );
+                                self.placeholder_type(field.span)
+                            }),
+                    })
+                    .collect();
+                self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Record(fields),
+                })
+            }
+            syn::TypeExprKind::Arrow { parameter, result } => {
+                let parameter = self.lower_type_expr(parameter);
+                let result = self.lower_type_expr(result);
+                self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Arrow { parameter, result },
+                })
+            }
+            syn::TypeExprKind::Apply { callee, arguments } => {
+                let callee = self.lower_type_expr(callee);
+                let arguments = arguments
+                    .iter()
+                    .map(|argument| self.lower_type_expr(argument))
+                    .collect::<Vec<_>>();
+                let arguments = match crate::NonEmpty::from_vec(arguments) {
+                    Ok(arguments) => arguments,
+                    Err(_) => {
+                        self.emit_error(
+                            ty.span,
+                            "type application requires at least one argument",
+                            code("empty-type-args"),
+                        );
+                        crate::NonEmpty::new(self.placeholder_type(ty.span), Vec::new())
+                    }
+                };
+                self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Apply { callee, arguments },
+                })
+            }
+        }
+    }
+
+    fn lower_markup_node(
+        &mut self,
+        node: &syn::MarkupNode,
+        placement: MarkupPlacement,
+    ) -> LoweredMarkup {
+        match node.name.text.as_str() {
+            "show" => {
+                let control = ControlNode::Show(self.lower_show_control(node));
+                LoweredMarkup::Renderable(self.wrap_control(control))
+            }
+            "each" => {
+                let control = ControlNode::Each(self.lower_each_control(node));
+                LoweredMarkup::Renderable(self.wrap_control(control))
+            }
+            "match" => {
+                let control = ControlNode::Match(self.lower_match_control(node));
+                LoweredMarkup::Renderable(self.wrap_control(control))
+            }
+            "fragment" => {
+                let control = ControlNode::Fragment(self.lower_fragment_control(node));
+                LoweredMarkup::Renderable(self.wrap_control(control))
+            }
+            "with" => {
+                let control = ControlNode::With(self.lower_with_control(node));
+                LoweredMarkup::Renderable(self.wrap_control(control))
+            }
+            "empty" => {
+                let control = ControlNode::Empty(self.lower_empty_control(node));
+                let control = self.alloc_control(control);
+                match placement {
+                    MarkupPlacement::EachEmpty => LoweredMarkup::Empty(control),
+                    _ => LoweredMarkup::Renderable(self.invalid_branch_control(
+                        control,
+                        node.span,
+                        "`<empty>` is only valid directly under `<each>`",
+                    )),
+                }
+            }
+            "case" => {
+                let control = ControlNode::Case(self.lower_case_control(node));
+                let control = self.alloc_control(control);
+                match placement {
+                    MarkupPlacement::MatchCase => LoweredMarkup::Case(control),
+                    _ => LoweredMarkup::Renderable(self.invalid_branch_control(
+                        control,
+                        node.span,
+                        "`<case>` is only valid directly under `<match>`",
+                    )),
+                }
+            }
+            _ => LoweredMarkup::Renderable(self.lower_markup_element(node)),
+        }
+    }
+
+    fn lower_markup_element(&mut self, node: &syn::MarkupNode) -> MarkupNodeId {
+        let attributes = node
+            .attributes
+            .iter()
+            .map(|attribute| MarkupAttribute {
+                span: attribute.span,
+                name: self.make_name(&attribute.name.text, attribute.name.span),
+                value: match &attribute.value {
+                    Some(syn::MarkupAttributeValue::Text(text)) => {
+                        MarkupAttributeValue::Text(TextLiteral {
+                            raw: text.raw.clone().into_boxed_str(),
+                            has_interpolation: text.has_interpolation,
+                        })
+                    }
+                    Some(syn::MarkupAttributeValue::Expr(expr)) => {
+                        MarkupAttributeValue::Expr(self.lower_expr(expr))
+                    }
+                    None => MarkupAttributeValue::ImplicitTrue,
+                },
+            })
+            .collect();
+        let children = node
+            .children
+            .iter()
+            .map(|child| {
+                let lowered = self.lower_markup_node(child, MarkupPlacement::Renderable);
+                self.renderable_markup(lowered, child.span, "ordinary markup element")
+            })
+            .collect();
+        let name = self.make_path(&[self.make_name(&node.name.text, node.name.span)]);
+        let close_name = node
+            .close_name
+            .as_ref()
+            .map(|close_name| self.make_path(&[self.make_name(&close_name.text, close_name.span)]));
+        self.alloc_markup_node(MarkupNode {
+            span: node.span,
+            kind: MarkupNodeKind::Element(MarkupElement {
+                name,
+                attributes,
+                children,
+                close_name,
+                self_closing: node.self_closing,
+            }),
+        })
+    }
+
+    fn lower_show_control(&mut self, node: &syn::MarkupNode) -> ShowControl {
+        ShowControl {
+            span: node.span,
+            when: self.required_markup_expr_attr(node, "when"),
+            keep_mounted: self.optional_markup_expr_attr(node, "keepMounted"),
+            children: self.lower_renderable_children(
+                &node.children,
+                MarkupPlacement::Renderable,
+                "`<show>`",
+            ),
+        }
+    }
+
+    fn lower_each_control(&mut self, node: &syn::MarkupNode) -> EachControl {
+        let binding = self.required_markup_binder_attr(node, "as", BindingKind::MarkupEach);
+        let mut children = Vec::new();
+        let mut empty = None;
+        for child in &node.children {
+            match self.lower_markup_node(child, MarkupPlacement::EachEmpty) {
+                LoweredMarkup::Renderable(node_id) => children.push(node_id),
+                LoweredMarkup::Empty(control_id) => {
+                    if empty.is_some() {
+                        self.emit_error(
+                            child.span,
+                            "`<each>` may contain at most one `<empty>` branch",
+                            code("duplicate-empty-branch"),
+                        );
+                    } else {
+                        empty = Some(control_id);
+                    }
+                }
+                LoweredMarkup::Case(control_id) => {
+                    children.push(self.invalid_branch_control(
+                        control_id,
+                        child.span,
+                        "`<case>` is only valid directly under `<match>`",
+                    ));
+                }
+            }
+        }
+        EachControl {
+            span: node.span,
+            collection: self.required_markup_expr_attr(node, "of"),
+            binding,
+            key: self.optional_markup_expr_attr(node, "key"),
+            children,
+            empty,
+        }
+    }
+
+    fn lower_match_control(&mut self, node: &syn::MarkupNode) -> MatchControl {
+        let mut cases = Vec::new();
+        for child in &node.children {
+            match self.lower_markup_node(child, MarkupPlacement::MatchCase) {
+                LoweredMarkup::Case(control_id) => cases.push(control_id),
+                LoweredMarkup::Renderable(_) | LoweredMarkup::Empty(_) => {
+                    self.emit_error(
+                        child.span,
+                        "`<match>` children must be `<case>` branches",
+                        code("invalid-match-child"),
+                    );
+                }
+            }
+        }
+        if cases.is_empty() {
+            self.emit_error(
+                node.span,
+                "`<match>` requires at least one `<case>` branch",
+                code("missing-match-case"),
+            );
+            let wildcard = self.alloc_pattern(Pattern {
+                span: node.span,
+                kind: PatternKind::Wildcard,
+            });
+            cases.push(self.alloc_control(ControlNode::Case(CaseControl {
+                span: node.span,
+                pattern: wildcard,
+                children: Vec::new(),
+            })));
+        }
+        MatchControl {
+            span: node.span,
+            scrutinee: self.required_markup_expr_attr(node, "on"),
+            cases: crate::NonEmpty::from_vec(cases)
+                .expect("match fallback should provide one case"),
+        }
+    }
+
+    fn lower_fragment_control(&mut self, node: &syn::MarkupNode) -> FragmentControl {
+        FragmentControl {
+            span: node.span,
+            children: self.lower_renderable_children(
+                &node.children,
+                MarkupPlacement::Renderable,
+                "`<fragment>`",
+            ),
+        }
+    }
+
+    fn lower_with_control(&mut self, node: &syn::MarkupNode) -> WithControl {
+        WithControl {
+            span: node.span,
+            value: self.required_markup_expr_attr(node, "value"),
+            binding: self.required_markup_binder_attr(node, "as", BindingKind::MarkupWith),
+            children: self.lower_renderable_children(
+                &node.children,
+                MarkupPlacement::Renderable,
+                "`<with>`",
+            ),
+        }
+    }
+
+    fn lower_empty_control(&mut self, node: &syn::MarkupNode) -> EmptyControl {
+        EmptyControl {
+            span: node.span,
+            children: self.lower_renderable_children(
+                &node.children,
+                MarkupPlacement::Renderable,
+                "`<empty>`",
+            ),
+        }
+    }
+
+    fn lower_case_control(&mut self, node: &syn::MarkupNode) -> CaseControl {
+        let pattern_expr = self.required_markup_attr(node, "pattern");
+        let pattern = pattern_expr
+            .as_ref()
+            .map(|expr| self.lower_expr_pattern(expr))
+            .unwrap_or_else(|| self.placeholder_pattern(node.span));
+        CaseControl {
+            span: node.span,
+            pattern,
+            children: self.lower_renderable_children(
+                &node.children,
+                MarkupPlacement::Renderable,
+                "`<case>`",
+            ),
+        }
+    }
+
+    fn lower_renderable_children(
+        &mut self,
+        children: &[syn::MarkupNode],
+        placement: MarkupPlacement,
+        parent: &str,
+    ) -> Vec<MarkupNodeId> {
+        children
+            .iter()
+            .map(|child| {
+                let lowered = self.lower_markup_node(child, placement);
+                self.renderable_markup(lowered, child.span, parent)
+            })
+            .collect()
+    }
+
+    fn renderable_markup(
+        &mut self,
+        lowered: LoweredMarkup,
+        span: SourceSpan,
+        parent: &str,
+    ) -> MarkupNodeId {
+        match lowered {
+            LoweredMarkup::Renderable(id) => id,
+            LoweredMarkup::Empty(control_id) => self.invalid_branch_control(
+                control_id,
+                span,
+                format!("`<empty>` cannot render directly under {parent}"),
+            ),
+            LoweredMarkup::Case(control_id) => self.invalid_branch_control(
+                control_id,
+                span,
+                format!("`<case>` cannot render directly under {parent}"),
+            ),
+        }
+    }
+
+    fn invalid_branch_control(
+        &mut self,
+        control_id: ControlNodeId,
+        span: SourceSpan,
+        message: impl Into<String>,
+    ) -> MarkupNodeId {
+        self.emit_error(span, message, code("misplaced-control-branch"));
+        let children = match self
+            .module
+            .control_nodes()
+            .get(control_id)
+            .expect("misplaced control branch should exist")
+            .clone()
+        {
+            ControlNode::Empty(node) => node.children,
+            ControlNode::Case(node) => node.children,
+            _ => Vec::new(),
+        };
+        let control = self.alloc_control(ControlNode::Fragment(FragmentControl { span, children }));
+        self.alloc_markup_node(MarkupNode {
+            span,
+            kind: MarkupNodeKind::Control(control),
+        })
+    }
+
+    fn required_markup_expr_attr(&mut self, node: &syn::MarkupNode, name: &str) -> ExprId {
+        self.required_markup_attr(node, name)
+            .as_ref()
+            .map(|expr| self.lower_expr(expr))
+            .unwrap_or_else(|| self.placeholder_expr(node.span))
+    }
+
+    fn optional_markup_expr_attr(&mut self, node: &syn::MarkupNode, name: &str) -> Option<ExprId> {
+        self.find_markup_attr(node, name)
+            .and_then(|attribute| match &attribute.value {
+                Some(syn::MarkupAttributeValue::Expr(expr)) => Some(self.lower_expr(expr)),
+                Some(syn::MarkupAttributeValue::Text(_)) => {
+                    self.emit_error(
+                        attribute.span,
+                        format!("attribute `{name}` expects an expression"),
+                        code("invalid-control-attr"),
+                    );
+                    Some(self.placeholder_expr(attribute.span))
+                }
+                None => {
+                    self.emit_error(
+                        attribute.span,
+                        format!("attribute `{name}` expects an expression"),
+                        code("invalid-control-attr"),
+                    );
+                    Some(self.placeholder_expr(attribute.span))
+                }
+            })
+    }
+
+    fn required_markup_binder_attr(
+        &mut self,
+        node: &syn::MarkupNode,
+        name: &str,
+        kind: BindingKind,
+    ) -> BindingId {
+        let Some(attribute) = self.find_markup_attr(node, name) else {
+            self.emit_error(
+                node.span,
+                format!("markup control node is missing required `{name}` attribute"),
+                code("missing-control-attr"),
+            );
+            return self.alloc_binding(Binding {
+                span: node.span,
+                name: self.make_name("invalid", node.span),
+                kind,
+            });
+        };
+        match &attribute.value {
+            Some(syn::MarkupAttributeValue::Expr(expr)) => match &expr.kind {
+                syn::ExprKind::Name(identifier) => self.alloc_binding(Binding {
+                    span: identifier.span,
+                    name: self.make_name(&identifier.text, identifier.span),
+                    kind,
+                }),
+                syn::ExprKind::Group(inner) => match &inner.kind {
+                    syn::ExprKind::Name(identifier) => self.alloc_binding(Binding {
+                        span: identifier.span,
+                        name: self.make_name(&identifier.text, identifier.span),
+                        kind,
+                    }),
+                    _ => {
+                        self.emit_error(
+                            attribute.span,
+                            format!("attribute `{name}` expects a binder name"),
+                            code("invalid-binder-attr"),
+                        );
+                        self.alloc_binding(Binding {
+                            span: attribute.span,
+                            name: self.make_name("invalid", attribute.span),
+                            kind,
+                        })
+                    }
+                },
+                _ => {
+                    self.emit_error(
+                        attribute.span,
+                        format!("attribute `{name}` expects a binder name"),
+                        code("invalid-binder-attr"),
+                    );
+                    self.alloc_binding(Binding {
+                        span: attribute.span,
+                        name: self.make_name("invalid", attribute.span),
+                        kind,
+                    })
+                }
+            },
+            _ => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects a binder name"),
+                    code("invalid-binder-attr"),
+                );
+                self.alloc_binding(Binding {
+                    span: attribute.span,
+                    name: self.make_name("invalid", attribute.span),
+                    kind,
+                })
+            }
+        }
+    }
+
+    fn required_markup_attr<'a>(
+        &mut self,
+        node: &'a syn::MarkupNode,
+        name: &str,
+    ) -> Option<&'a syn::Expr> {
+        let Some(attribute) = self.find_markup_attr(node, name) else {
+            self.emit_error(
+                node.span,
+                format!("markup control node is missing required `{name}` attribute"),
+                code("missing-control-attr"),
+            );
+            return None;
+        };
+        match &attribute.value {
+            Some(syn::MarkupAttributeValue::Expr(expr)) => Some(expr),
+            Some(syn::MarkupAttributeValue::Text(_)) => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects an expression"),
+                    code("invalid-control-attr"),
+                );
+                None
+            }
+            None => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects an expression"),
+                    code("invalid-control-attr"),
+                );
+                None
+            }
+        }
+    }
+
+    fn find_markup_attr<'a>(
+        &self,
+        node: &'a syn::MarkupNode,
+        name: &str,
+    ) -> Option<&'a syn::MarkupAttribute> {
+        node.attributes
+            .iter()
+            .find(|attribute| attribute.name.text == name)
+    }
+
+    fn lower_projection_path(&mut self, path: &syn::ProjectionPath) -> NamePath {
+        let names = path
+            .fields
+            .iter()
+            .map(|field| self.make_name(&field.text, field.span))
+            .collect::<Vec<_>>();
+        self.make_path(&names)
+    }
+
+    fn lower_qualified_name(&mut self, name: &syn::QualifiedName) -> NamePath {
+        let segments = name
+            .segments
+            .iter()
+            .map(|segment| self.make_name(&segment.text, segment.span))
+            .collect::<Vec<_>>();
+        self.make_path(&segments)
+    }
+
+    fn required_name(
+        &mut self,
+        name: Option<&syn::Identifier>,
+        span: SourceSpan,
+        subject: &str,
+    ) -> Name {
+        match name {
+            Some(name) => self.make_name(&name.text, name.span),
+            None => {
+                self.emit_error(
+                    span,
+                    format!("{subject} is missing a name"),
+                    code("missing-name"),
+                );
+                self.make_name("invalid", span)
+            }
+        }
+    }
+
+    fn build_namespaces(&mut self) -> Namespaces {
+        let mut namespaces = Namespaces::default();
+        let root_ids = self.module.root_items().to_vec();
+        for item_id in root_ids {
+            let item = self.module.items()[item_id].clone();
+            match item {
+                Item::Type(item) => {
+                    insert_named(
+                        &mut namespaces.type_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-type-name"),
+                        "type",
+                    );
+                    insert_named(
+                        &mut namespaces.any_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-item-name"),
+                        "item",
+                    );
+                    if let TypeItemBody::Sum(variants) = &item.body {
+                        for variant in variants.iter() {
+                            insert_named(
+                                &mut namespaces.term_items,
+                                variant.name.text(),
+                                item_id,
+                                variant.span,
+                                &mut self.diagnostics,
+                                code("duplicate-constructor-name"),
+                                "constructor",
+                            );
+                        }
+                    }
+                }
+                Item::Value(item) => {
+                    insert_named(
+                        &mut namespaces.term_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-term-name"),
+                        "term",
+                    );
+                    insert_named(
+                        &mut namespaces.any_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-item-name"),
+                        "item",
+                    );
+                }
+                Item::Function(item) => {
+                    insert_named(
+                        &mut namespaces.term_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-term-name"),
+                        "term",
+                    );
+                    insert_named(
+                        &mut namespaces.any_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-item-name"),
+                        "item",
+                    );
+                }
+                Item::Signal(item) => {
+                    insert_named(
+                        &mut namespaces.term_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-term-name"),
+                        "term",
+                    );
+                    insert_named(
+                        &mut namespaces.any_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-item-name"),
+                        "item",
+                    );
+                }
+                Item::Class(item) => {
+                    insert_named(
+                        &mut namespaces.type_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-type-name"),
+                        "type",
+                    );
+                    insert_named(
+                        &mut namespaces.any_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-item-name"),
+                        "item",
+                    );
+                }
+                Item::Domain(item) => {
+                    insert_named(
+                        &mut namespaces.type_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-type-name"),
+                        "type",
+                    );
+                    insert_named(
+                        &mut namespaces.any_items,
+                        item.name.text(),
+                        item_id,
+                        item.header.span,
+                        &mut self.diagnostics,
+                        code("duplicate-item-name"),
+                        "item",
+                    );
+                }
+                Item::Use(item) => self.register_use_item(&item, &mut namespaces),
+                Item::Export(_) | Item::Instance(_) => {}
+            }
+        }
+        namespaces
+    }
+
+    fn register_use_item(&mut self, item: &UseItem, namespaces: &mut Namespaces) {
+        let module_name = path_text(&item.module);
+        for import_id in item.imports.iter() {
+            let import = self.module.imports()[*import_id].clone();
+            let Some(kind) = known_import_kind(&module_name, import.imported_name.text()) else {
+                let message = if is_known_module(&module_name) {
+                    format!(
+                        "module `{module_name}` does not export `{}` in Milestone 2",
+                        import.imported_name.text()
+                    )
+                } else {
+                    format!("unknown import module `{module_name}`")
+                };
+                let error_code = if is_known_module(&module_name) {
+                    code("unknown-imported-name")
+                } else {
+                    code("unknown-import-module")
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(message)
+                        .with_code(error_code)
+                        .with_primary_label(
+                            import.span,
+                            "this import cannot be resolved by the current Milestone 2 catalog",
+                        )
+                        .with_secondary_label(item.header.span, "declared by this `use` item"),
+                );
+                continue;
+            };
+            match kind {
+                KnownImportKind::OrdinaryTerm => insert_site(
+                    &mut namespaces.term_imports,
+                    import.local_name.text(),
+                    *import_id,
+                    import.span,
+                ),
+                KnownImportKind::Bundle => {}
+            }
+        }
+    }
+
+    fn resolve_module(&mut self, namespaces: &Namespaces) {
+        let root_ids = self.module.root_items().to_vec();
+        for item_id in root_ids {
+            self.resolve_item(item_id, namespaces);
+        }
+    }
+
+    fn resolve_item(&mut self, item_id: ItemId, namespaces: &Namespaces) {
+        let item = self.module.items()[item_id].clone();
+        for decorator in item.decorators() {
+            self.resolve_decorator(*decorator, namespaces);
+        }
+        let resolved = match item {
+            Item::Type(item) => {
+                let mut env = ResolveEnv::default();
+                env.push_type_scope(self.type_parameter_scope(item.parameters.iter().copied()));
+                match &item.body {
+                    TypeItemBody::Alias(alias) => self.resolve_type(*alias, namespaces, &env),
+                    TypeItemBody::Sum(variants) => {
+                        for variant in variants.iter() {
+                            for field in &variant.fields {
+                                self.resolve_type(*field, namespaces, &env);
+                            }
+                        }
+                    }
+                }
+                Item::Type(item)
+            }
+            Item::Value(item) => {
+                let env = ResolveEnv::default();
+                if let Some(annotation) = item.annotation {
+                    self.resolve_type(annotation, namespaces, &env);
+                }
+                self.resolve_expr(item.body, namespaces, &env);
+                Item::Value(item)
+            }
+            Item::Function(item) => {
+                let mut env = ResolveEnv::default();
+                env.push_term_scope(
+                    self.binding_scope(item.parameters.iter().map(|parameter| parameter.binding)),
+                );
+                for parameter in &item.parameters {
+                    if let Some(annotation) = parameter.annotation {
+                        self.resolve_type(annotation, namespaces, &env);
+                    }
+                }
+                if let Some(annotation) = item.annotation {
+                    self.resolve_type(annotation, namespaces, &env);
+                }
+                self.resolve_expr(item.body, namespaces, &env);
+                Item::Function(item)
+            }
+            Item::Signal(item) => {
+                let env = ResolveEnv::default();
+                if let Some(annotation) = item.annotation {
+                    self.resolve_type(annotation, namespaces, &env);
+                }
+                if let Some(body) = item.body {
+                    self.resolve_expr(body, namespaces, &env);
+                }
+                Item::Signal(item)
+            }
+            Item::Class(item) => {
+                let mut env = ResolveEnv::default();
+                env.push_type_scope(self.type_parameter_scope(item.parameters.iter().copied()));
+                for superclass in &item.superclasses {
+                    self.resolve_type(*superclass, namespaces, &env);
+                }
+                for member in &item.members {
+                    self.resolve_type(member.annotation, namespaces, &env);
+                }
+                Item::Class(item)
+            }
+            Item::Domain(item) => {
+                let mut env = ResolveEnv::default();
+                env.push_type_scope(self.type_parameter_scope(item.parameters.iter().copied()));
+                self.resolve_type(item.carrier, namespaces, &env);
+                if self.type_contains_item_reference(item.carrier, item_id) {
+                    self.emit_error(
+                        item.header.span,
+                        format!(
+                            "domain `{}` cannot use itself in its carrier type",
+                            item.name.text()
+                        ),
+                        code("recursive-domain-carrier"),
+                    );
+                }
+                for member in &item.members {
+                    self.resolve_type(member.annotation, namespaces, &env);
+                }
+                Item::Domain(item)
+            }
+            Item::Use(item) => Item::Use(item),
+            Item::Export(mut item) => {
+                item.resolution = self.resolve_export_target(&item.target, namespaces);
+                Item::Export(item)
+            }
+            Item::Instance(item) => Item::Instance(item),
+        };
+        *self
+            .module
+            .arenas
+            .items
+            .get_mut(item_id)
+            .expect("resolved item id should still exist") = resolved;
+    }
+
+    fn resolve_decorator(&mut self, decorator_id: DecoratorId, namespaces: &Namespaces) {
+        let decorator = self.module.decorators()[decorator_id].clone();
+        let env = ResolveEnv::default();
+        match &decorator.payload {
+            DecoratorPayload::Bare => {}
+            DecoratorPayload::Call(call) => {
+                for argument in &call.arguments {
+                    self.resolve_expr(*argument, namespaces, &env);
+                }
+                if let Some(options) = call.options {
+                    self.resolve_expr(options, namespaces, &env);
+                }
+            }
+            DecoratorPayload::Source(source) => {
+                for argument in &source.arguments {
+                    self.resolve_expr(*argument, namespaces, &env);
+                }
+                if let Some(options) = source.options {
+                    self.resolve_expr(options, namespaces, &env);
+                }
+            }
+        }
+        *self
+            .module
+            .arenas
+            .decorators
+            .get_mut(decorator_id)
+            .expect("resolved decorator id should still exist") = decorator;
+    }
+
+    fn resolve_expr(&mut self, expr_id: ExprId, namespaces: &Namespaces, env: &ResolveEnv) {
+        let expr = self.module.exprs()[expr_id].clone();
+        let resolved = match expr.kind {
+            ExprKind::Name(mut reference) => {
+                self.resolve_term_reference(&mut reference, namespaces, env);
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Name(reference),
+                }
+            }
+            ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => expr,
+            ExprKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.resolve_expr(*element, namespaces, env);
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Tuple(elements),
+                }
+            }
+            ExprKind::List(elements) => {
+                for element in &elements {
+                    self.resolve_expr(*element, namespaces, env);
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::List(elements),
+                }
+            }
+            ExprKind::Record(record) => {
+                for field in &record.fields {
+                    self.resolve_expr(field.value, namespaces, env);
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Record(record),
+                }
+            }
+            ExprKind::Projection { base, path } => {
+                if let ProjectionBase::Expr(base) = base {
+                    self.resolve_expr(base, namespaces, env);
+                    Expr {
+                        span: expr.span,
+                        kind: ExprKind::Projection {
+                            base: ProjectionBase::Expr(base),
+                            path,
+                        },
+                    }
+                } else {
+                    Expr {
+                        span: expr.span,
+                        kind: ExprKind::Projection { base, path },
+                    }
+                }
+            }
+            ExprKind::Apply { callee, arguments } => {
+                self.resolve_expr(callee, namespaces, env);
+                for argument in arguments.iter() {
+                    self.resolve_expr(*argument, namespaces, env);
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Apply { callee, arguments },
+                }
+            }
+            ExprKind::Unary {
+                operator,
+                expr: inner,
+            } => {
+                self.resolve_expr(inner, namespaces, env);
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Unary {
+                        operator,
+                        expr: inner,
+                    },
+                }
+            }
+            ExprKind::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                self.resolve_expr(left, namespaces, env);
+                self.resolve_expr(right, namespaces, env);
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Binary {
+                        left,
+                        operator,
+                        right,
+                    },
+                }
+            }
+            ExprKind::Pipe(pipe) => {
+                self.resolve_expr(pipe.head, namespaces, env);
+                for stage in pipe.stages.iter() {
+                    match &stage.kind {
+                        PipeStageKind::Transform { expr }
+                        | PipeStageKind::Gate { expr }
+                        | PipeStageKind::Map { expr }
+                        | PipeStageKind::Apply { expr }
+                        | PipeStageKind::Tap { expr }
+                        | PipeStageKind::FanIn { expr }
+                        | PipeStageKind::Truthy { expr }
+                        | PipeStageKind::Falsy { expr }
+                        | PipeStageKind::RecurStart { expr }
+                        | PipeStageKind::RecurStep { expr } => {
+                            self.resolve_expr(*expr, namespaces, env)
+                        }
+                        PipeStageKind::Case { pattern, body } => {
+                            let bindings = self.resolve_pattern(*pattern, namespaces, env);
+                            let mut branch_env = env.clone();
+                            branch_env.push_term_scope(self.binding_scope(bindings));
+                            self.resolve_expr(*body, namespaces, &branch_env);
+                        }
+                    }
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Pipe(pipe),
+                }
+            }
+            ExprKind::Cluster(cluster_id) => {
+                self.resolve_cluster(cluster_id, namespaces, env);
+                expr
+            }
+            ExprKind::Markup(node_id) => {
+                self.resolve_markup_node(node_id, namespaces, env);
+                expr
+            }
+        };
+        *self
+            .module
+            .arenas
+            .exprs
+            .get_mut(expr_id)
+            .expect("resolved expr id should still exist") = resolved;
+    }
+
+    fn resolve_cluster(
+        &mut self,
+        cluster_id: crate::ClusterId,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) {
+        let cluster = self.module.clusters()[cluster_id].clone();
+        for member in cluster.members.iter() {
+            self.resolve_expr(*member, namespaces, env);
+        }
+        if let ClusterFinalizer::Explicit(expr) = cluster.finalizer {
+            self.resolve_expr(expr, namespaces, env);
+        }
+    }
+
+    fn resolve_markup_node(
+        &mut self,
+        node_id: MarkupNodeId,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) {
+        let node = self.module.markup_nodes()[node_id].clone();
+        match node.kind {
+            MarkupNodeKind::Element(element) => {
+                for attribute in &element.attributes {
+                    if let MarkupAttributeValue::Expr(expr) = attribute.value {
+                        self.resolve_expr(expr, namespaces, env);
+                    }
+                }
+                for child in &element.children {
+                    self.resolve_markup_node(*child, namespaces, env);
+                }
+            }
+            MarkupNodeKind::Control(control_id) => {
+                self.resolve_control_node(control_id, namespaces, env)
+            }
+        }
+    }
+
+    fn resolve_control_node(
+        &mut self,
+        control_id: ControlNodeId,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) {
+        let control = self.module.control_nodes()[control_id].clone();
+        match control {
+            ControlNode::Show(node) => {
+                self.resolve_expr(node.when, namespaces, env);
+                if let Some(expr) = node.keep_mounted {
+                    self.resolve_expr(expr, namespaces, env);
+                }
+                for child in &node.children {
+                    self.resolve_markup_node(*child, namespaces, env);
+                }
+            }
+            ControlNode::Each(node) => {
+                self.resolve_expr(node.collection, namespaces, env);
+                let mut child_env = env.clone();
+                child_env.push_term_scope(self.binding_scope([node.binding]));
+                if let Some(key) = node.key {
+                    self.resolve_expr(key, namespaces, &child_env);
+                }
+                for child in &node.children {
+                    self.resolve_markup_node(*child, namespaces, &child_env);
+                }
+                if let Some(empty) = node.empty {
+                    self.resolve_control_node(empty, namespaces, env);
+                }
+            }
+            ControlNode::Match(node) => {
+                self.resolve_expr(node.scrutinee, namespaces, env);
+                for case in node.cases.iter() {
+                    self.resolve_control_node(*case, namespaces, env);
+                }
+            }
+            ControlNode::Empty(node) => {
+                for child in &node.children {
+                    self.resolve_markup_node(*child, namespaces, env);
+                }
+            }
+            ControlNode::Case(node) => {
+                let bindings = self.resolve_pattern(node.pattern, namespaces, env);
+                let mut child_env = env.clone();
+                child_env.push_term_scope(self.binding_scope(bindings));
+                for child in &node.children {
+                    self.resolve_markup_node(*child, namespaces, &child_env);
+                }
+            }
+            ControlNode::Fragment(node) => {
+                for child in &node.children {
+                    self.resolve_markup_node(*child, namespaces, env);
+                }
+            }
+            ControlNode::With(node) => {
+                self.resolve_expr(node.value, namespaces, env);
+                let mut child_env = env.clone();
+                child_env.push_term_scope(self.binding_scope([node.binding]));
+                for child in &node.children {
+                    self.resolve_markup_node(*child, namespaces, &child_env);
+                }
+            }
+        }
+    }
+
+    fn resolve_pattern(
+        &mut self,
+        pattern_id: PatternId,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) -> Vec<BindingId> {
+        let pattern = self.module.patterns()[pattern_id].clone();
+        let mut bindings = Vec::new();
+        let resolved = match pattern.kind {
+            PatternKind::Wildcard | PatternKind::Integer(_) | PatternKind::Text(_) => pattern,
+            PatternKind::Binding(binding) => {
+                bindings.push(binding.binding);
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::Binding(binding),
+                }
+            }
+            PatternKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    bindings.extend(self.resolve_pattern(*element, namespaces, env));
+                }
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::Tuple(elements),
+                }
+            }
+            PatternKind::Record(fields) => {
+                for field in &fields {
+                    bindings.extend(self.resolve_pattern(field.pattern, namespaces, env));
+                }
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::Record(fields),
+                }
+            }
+            PatternKind::Constructor {
+                mut callee,
+                arguments,
+            } => {
+                self.resolve_term_reference(&mut callee, namespaces, env);
+                for argument in &arguments {
+                    bindings.extend(self.resolve_pattern(*argument, namespaces, env));
+                }
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::Constructor { callee, arguments },
+                }
+            }
+            PatternKind::UnresolvedName(mut reference) => {
+                self.resolve_term_reference(&mut reference, namespaces, env);
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::UnresolvedName(reference),
+                }
+            }
+        };
+        *self
+            .module
+            .arenas
+            .patterns
+            .get_mut(pattern_id)
+            .expect("resolved pattern id should still exist") = resolved;
+        bindings
+    }
+
+    fn resolve_type(&mut self, type_id: TypeId, namespaces: &Namespaces, env: &ResolveEnv) {
+        let ty = self.module.types()[type_id].clone();
+        let resolved = match ty.kind {
+            TypeKind::Name(mut reference) => {
+                self.resolve_type_reference(&mut reference, namespaces, env);
+                TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Name(reference),
+                }
+            }
+            TypeKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.resolve_type(*element, namespaces, env);
+                }
+                TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Tuple(elements),
+                }
+            }
+            TypeKind::Record(fields) => {
+                for field in &fields {
+                    self.resolve_type(field.ty, namespaces, env);
+                }
+                TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Record(fields),
+                }
+            }
+            TypeKind::Arrow { parameter, result } => {
+                self.resolve_type(parameter, namespaces, env);
+                self.resolve_type(result, namespaces, env);
+                TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Arrow { parameter, result },
+                }
+            }
+            TypeKind::Apply { callee, arguments } => {
+                self.resolve_type(callee, namespaces, env);
+                for argument in arguments.iter() {
+                    self.resolve_type(*argument, namespaces, env);
+                }
+                TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Apply { callee, arguments },
+                }
+            }
+        };
+        *self
+            .module
+            .arenas
+            .types
+            .get_mut(type_id)
+            .expect("resolved type id should still exist") = resolved;
+    }
+
+    fn resolve_term_reference(
+        &mut self,
+        reference: &mut TermReference,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) {
+        if reference.path.segments().len() != 1 {
+            self.emit_error(
+                reference.span(),
+                format!(
+                    "ordinary term reference `{}` is not supported in Milestone 2",
+                    path_text(&reference.path)
+                ),
+                code("unsupported-qualified-term-ref"),
+            );
+            reference.resolution = ResolutionState::Unresolved;
+            return;
+        }
+        let name = reference.path.segments().first().text();
+        if let Some(binding) = env.lookup_term(name) {
+            reference.resolution = ResolutionState::Resolved(TermResolution::Local(binding));
+            return;
+        }
+        match lookup_item(&namespaces.term_items, name) {
+            LookupResult::Unique(item) => {
+                reference.resolution = ResolutionState::Resolved(TermResolution::Item(item));
+                return;
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    reference.span(),
+                    format!("term `{name}` is ambiguous in this module"),
+                    code("ambiguous-term-name"),
+                );
+                reference.resolution = ResolutionState::Unresolved;
+                return;
+            }
+            LookupResult::Missing => {}
+        }
+        match lookup_item(&namespaces.term_imports, name) {
+            LookupResult::Unique(import) => {
+                reference.resolution = ResolutionState::Resolved(TermResolution::Import(import));
+                return;
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    reference.span(),
+                    format!("imported term `{name}` is ambiguous"),
+                    code("ambiguous-import-name"),
+                );
+                reference.resolution = ResolutionState::Unresolved;
+                return;
+            }
+            LookupResult::Missing => {}
+        }
+        if let Some(builtin) = builtin_term(name) {
+            reference.resolution = ResolutionState::Resolved(TermResolution::Builtin(builtin));
+            return;
+        }
+        self.emit_error(
+            reference.span(),
+            format!("unknown term `{name}`"),
+            code("unresolved-term-name"),
+        );
+        reference.resolution = ResolutionState::Unresolved;
+    }
+
+    fn resolve_type_reference(
+        &mut self,
+        reference: &mut TypeReference,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) {
+        if reference.path.segments().len() != 1 {
+            self.emit_error(
+                reference.span(),
+                format!(
+                    "ordinary type reference `{}` is not supported in Milestone 2",
+                    path_text(&reference.path)
+                ),
+                code("unsupported-qualified-type-ref"),
+            );
+            reference.resolution = ResolutionState::Unresolved;
+            return;
+        }
+        let name = reference.path.segments().first().text();
+        if let Some(parameter) = env.lookup_type(name) {
+            reference.resolution =
+                ResolutionState::Resolved(TypeResolution::TypeParameter(parameter));
+            return;
+        }
+        match lookup_item(&namespaces.type_items, name) {
+            LookupResult::Unique(item) => {
+                reference.resolution = ResolutionState::Resolved(TypeResolution::Item(item));
+                return;
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    reference.span(),
+                    format!("type `{name}` is ambiguous in this module"),
+                    code("ambiguous-type-name"),
+                );
+                reference.resolution = ResolutionState::Unresolved;
+                return;
+            }
+            LookupResult::Missing => {}
+        }
+        match lookup_item(&namespaces.type_imports, name) {
+            LookupResult::Unique(import) => {
+                reference.resolution = ResolutionState::Resolved(TypeResolution::Import(import));
+                return;
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    reference.span(),
+                    format!("imported type `{name}` is ambiguous"),
+                    code("ambiguous-import-name"),
+                );
+                reference.resolution = ResolutionState::Unresolved;
+                return;
+            }
+            LookupResult::Missing => {}
+        }
+        if let Some(builtin) = builtin_type(name) {
+            reference.resolution = ResolutionState::Resolved(TypeResolution::Builtin(builtin));
+            return;
+        }
+        self.emit_error(
+            reference.span(),
+            format!("unknown type `{name}`"),
+            code("unresolved-type-name"),
+        );
+        reference.resolution = ResolutionState::Unresolved;
+    }
+
+    fn resolve_export_target(
+        &mut self,
+        target: &NamePath,
+        namespaces: &Namespaces,
+    ) -> ResolutionState<ItemId> {
+        let name = target.segments().first().text();
+        let mut candidates = Vec::new();
+
+        match lookup_item(&namespaces.term_items, name) {
+            LookupResult::Unique(item) => candidates.push(item),
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    target.span(),
+                    format!("export `{}` is ambiguous", path_text(target)),
+                    code("ambiguous-export"),
+                );
+                return ResolutionState::Unresolved;
+            }
+            LookupResult::Missing => {}
+        }
+
+        match lookup_item(&namespaces.type_items, name) {
+            LookupResult::Unique(item) => {
+                if !candidates.contains(&item) {
+                    candidates.push(item);
+                }
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    target.span(),
+                    format!("export `{}` is ambiguous", path_text(target)),
+                    code("ambiguous-export"),
+                );
+                return ResolutionState::Unresolved;
+            }
+            LookupResult::Missing => {}
+        }
+
+        match candidates.as_slice() {
+            [item] => ResolutionState::Resolved(*item),
+            [] => {
+                self.emit_error(
+                    target.span(),
+                    format!("cannot export unknown item `{}`", path_text(target)),
+                    code("unknown-export-target"),
+                );
+                ResolutionState::Unresolved
+            }
+            _ => {
+                self.emit_error(
+                    target.span(),
+                    format!("export `{}` is ambiguous", path_text(target)),
+                    code("ambiguous-export"),
+                );
+                ResolutionState::Unresolved
+            }
+        }
+    }
+
+    fn type_contains_item_reference(&self, root: TypeId, target: ItemId) -> bool {
+        let mut stack = vec![root];
+        while let Some(type_id) = stack.pop() {
+            let ty = &self.module.types()[type_id];
+            match &ty.kind {
+                TypeKind::Name(reference) => {
+                    if matches!(
+                        reference.resolution,
+                        ResolutionState::Resolved(TypeResolution::Item(item_id)) if item_id == target
+                    ) {
+                        return true;
+                    }
+                }
+                TypeKind::Tuple(elements) => {
+                    stack.extend(elements.iter().copied());
+                }
+                TypeKind::Record(fields) => {
+                    stack.extend(fields.iter().map(|field| field.ty));
+                }
+                TypeKind::Arrow { parameter, result } => {
+                    stack.push(*parameter);
+                    stack.push(*result);
+                }
+                TypeKind::Apply { callee, arguments } => {
+                    stack.push(*callee);
+                    stack.extend(arguments.iter().copied());
+                }
+            }
+        }
+        false
+    }
+
+    fn binding_scope<I>(&self, bindings: I) -> HashMap<String, BindingId>
+    where
+        I: IntoIterator<Item = BindingId>,
+    {
+        bindings
+            .into_iter()
+            .map(|binding| {
+                let binding_name = self.module.bindings()[binding].name.text().to_owned();
+                (binding_name, binding)
+            })
+            .collect()
+    }
+
+    fn type_parameter_scope<I>(&self, parameters: I) -> HashMap<String, TypeParameterId>
+    where
+        I: IntoIterator<Item = TypeParameterId>,
+    {
+        parameters
+            .into_iter()
+            .map(|parameter| {
+                let parameter_name = self.module.type_parameters()[parameter]
+                    .name
+                    .text()
+                    .to_owned();
+                (parameter_name, parameter)
+            })
+            .collect()
+    }
+
+    fn placeholder_expr(&mut self, span: SourceSpan) -> ExprId {
+        self.alloc_expr(Expr {
+            span,
+            kind: ExprKind::Name(TermReference::unresolved(
+                self.make_path(&[self.make_name("invalid", span)]),
+            )),
+        })
+    }
+
+    fn placeholder_type(&mut self, span: SourceSpan) -> TypeId {
+        self.alloc_type(TypeNode {
+            span,
+            kind: TypeKind::Name(TypeReference {
+                path: self.make_path(&[self.make_name("Unit", span)]),
+                resolution: ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Unit)),
+            }),
+        })
+    }
+
+    fn placeholder_pattern(&mut self, span: SourceSpan) -> PatternId {
+        self.alloc_pattern(Pattern {
+            span,
+            kind: PatternKind::Wildcard,
+        })
+    }
+
+    fn make_name(&self, text: &str, span: SourceSpan) -> Name {
+        Name::new(text.to_owned(), span).expect("non-empty lowered names should always be valid")
+    }
+
+    fn make_path(&self, names: &[Name]) -> NamePath {
+        NamePath::from_vec(names.to_vec())
+            .expect("non-empty same-file paths should always be valid")
+    }
+
+    fn emit_error(
+        &mut self,
+        span: SourceSpan,
+        message: impl Into<String>,
+        error_code: DiagnosticCode,
+    ) {
+        self.diagnostics.push(
+            Diagnostic::error(message)
+                .with_code(error_code)
+                .with_primary_label(span, "reported during Milestone 2 HIR lowering"),
+        );
+    }
+
+    fn alloc_expr(&mut self, expr: Expr) -> ExprId {
+        self.module
+            .alloc_expr(expr)
+            .expect("HIR expr arena should not overflow during lowering")
+    }
+
+    fn alloc_pattern(&mut self, pattern: Pattern) -> PatternId {
+        self.module
+            .alloc_pattern(pattern)
+            .expect("HIR pattern arena should not overflow during lowering")
+    }
+
+    fn alloc_type(&mut self, ty: TypeNode) -> TypeId {
+        self.module
+            .alloc_type(ty)
+            .expect("HIR type arena should not overflow during lowering")
+    }
+
+    fn alloc_decorator(&mut self, decorator: Decorator) -> DecoratorId {
+        self.module
+            .alloc_decorator(decorator)
+            .expect("HIR decorator arena should not overflow during lowering")
+    }
+
+    fn alloc_markup_node(&mut self, node: MarkupNode) -> MarkupNodeId {
+        self.module
+            .alloc_markup_node(node)
+            .expect("HIR markup arena should not overflow during lowering")
+    }
+
+    fn alloc_control(&mut self, control: ControlNode) -> ControlNodeId {
+        self.module
+            .alloc_control_node(control)
+            .expect("HIR control arena should not overflow during lowering")
+    }
+
+    fn wrap_control(&mut self, control: ControlNode) -> MarkupNodeId {
+        let span = control.span();
+        let control_id = self.alloc_control(control);
+        self.alloc_markup_node(MarkupNode {
+            span,
+            kind: MarkupNodeKind::Control(control_id),
+        })
+    }
+
+    fn alloc_cluster(&mut self, cluster: ApplicativeCluster) -> crate::ClusterId {
+        self.module
+            .alloc_cluster(cluster)
+            .expect("HIR cluster arena should not overflow during lowering")
+    }
+
+    fn alloc_binding(&mut self, binding: Binding) -> BindingId {
+        self.module
+            .alloc_binding(binding)
+            .expect("HIR binding arena should not overflow during lowering")
+    }
+
+    fn alloc_type_parameter(&mut self, parameter: TypeParameter) -> TypeParameterId {
+        self.module
+            .alloc_type_parameter(parameter)
+            .expect("HIR type parameter arena should not overflow during lowering")
+    }
+
+    fn alloc_import(&mut self, import: ImportBinding) -> ImportId {
+        self.module
+            .alloc_import(import)
+            .expect("HIR import arena should not overflow during lowering")
+    }
+}
+
+impl ResolveEnv {
+    fn push_term_scope(&mut self, scope: HashMap<String, BindingId>) {
+        self.term_scopes.push(scope);
+    }
+
+    fn push_type_scope(&mut self, scope: HashMap<String, TypeParameterId>) {
+        self.type_scopes.push(scope);
+    }
+
+    fn lookup_term(&self, name: &str) -> Option<BindingId> {
+        self.term_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+    }
+
+    fn lookup_type(&self, name: &str) -> Option<TypeParameterId> {
+        self.type_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+    }
+}
+
+impl LoweredMarkup {
+    fn span(&self, lowerer: &Lowerer) -> SourceSpan {
+        match self {
+            Self::Renderable(id) => lowerer.module.markup_nodes()[*id].span,
+            Self::Empty(id) | Self::Case(id) => lowerer.module.control_nodes()[*id].span(),
+        }
+    }
+}
+
+fn lower_unary_operator(operator: syn::UnaryOperator) -> UnaryOperator {
+    match operator {
+        syn::UnaryOperator::Not => UnaryOperator::Not,
+    }
+}
+
+fn lower_binary_operator(operator: syn::BinaryOperator) -> BinaryOperator {
+    match operator {
+        syn::BinaryOperator::Add => BinaryOperator::Add,
+        syn::BinaryOperator::Subtract => BinaryOperator::Subtract,
+        syn::BinaryOperator::GreaterThan => BinaryOperator::GreaterThan,
+        syn::BinaryOperator::LessThan => BinaryOperator::LessThan,
+        syn::BinaryOperator::Equals => BinaryOperator::Equals,
+        syn::BinaryOperator::NotEquals => BinaryOperator::NotEquals,
+        syn::BinaryOperator::And => BinaryOperator::And,
+        syn::BinaryOperator::Or => BinaryOperator::Or,
+    }
+}
+
+fn insert_named(
+    map: &mut HashMap<String, Vec<NamedSite<ItemId>>>,
+    name: &str,
+    item_id: ItemId,
+    span: SourceSpan,
+    diagnostics: &mut Vec<Diagnostic>,
+    error_code: DiagnosticCode,
+    subject: &str,
+) {
+    let entry = map.entry(name.to_owned()).or_default();
+    if let Some(previous) = entry.first().copied() {
+        diagnostics.push(
+            Diagnostic::error(format!("duplicate {subject} name `{name}`"))
+                .with_code(error_code)
+                .with_primary_label(span, "this declaration reuses an existing top-level name")
+                .with_secondary_label(previous.span, "previous declaration here"),
+        );
+    }
+    entry.push(NamedSite {
+        value: item_id,
+        span,
+    });
+}
+
+fn insert_site<T: Copy>(
+    map: &mut HashMap<String, Vec<NamedSite<T>>>,
+    name: &str,
+    value: T,
+    span: SourceSpan,
+) {
+    map.entry(name.to_owned())
+        .or_default()
+        .push(NamedSite { value, span });
+}
+
+fn lookup_item<T: Copy>(map: &HashMap<String, Vec<NamedSite<T>>>, name: &str) -> LookupResult<T> {
+    match map.get(name) {
+        Some(values) if values.len() == 1 => LookupResult::Unique(values[0].value),
+        Some(_) => LookupResult::Ambiguous,
+        None => LookupResult::Missing,
+    }
+}
+
+fn is_source_decorator(path: &NamePath) -> bool {
+    path.segments().len() == 1 && path.segments().first().text() == "source"
+}
+
+fn path_text(path: &NamePath) -> String {
+    path.segments()
+        .iter()
+        .map(|segment| segment.text())
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+fn domain_member_surface_name(name: &syn::DomainMemberName) -> String {
+    match name {
+        syn::DomainMemberName::Signature(syn::ClassMemberName::Identifier(identifier)) => {
+            identifier.text.clone()
+        }
+        syn::DomainMemberName::Signature(syn::ClassMemberName::Operator(operator)) => {
+            format!("({})", operator.text)
+        }
+        syn::DomainMemberName::Literal(identifier) => format!("literal {}", identifier.text),
+    }
+}
+
+fn domain_member_key(member: &DomainMember) -> String {
+    format!("{:?}:{}", member.kind, member.name.text())
+}
+
+fn domain_member_display(member: &DomainMember) -> String {
+    match member.kind {
+        DomainMemberKind::Method => member.name.text().to_owned(),
+        DomainMemberKind::Operator => format!("({})", member.name.text()),
+        DomainMemberKind::Literal => format!("literal {}", member.name.text()),
+    }
+}
+
+fn builtin_term(name: &str) -> Option<BuiltinTerm> {
+    match name {
+        "True" => Some(BuiltinTerm::True),
+        "False" => Some(BuiltinTerm::False),
+        "None" => Some(BuiltinTerm::None),
+        "Some" => Some(BuiltinTerm::Some),
+        "Ok" => Some(BuiltinTerm::Ok),
+        "Err" => Some(BuiltinTerm::Err),
+        "Valid" => Some(BuiltinTerm::Valid),
+        "Invalid" => Some(BuiltinTerm::Invalid),
+        _ => None,
+    }
+}
+
+fn builtin_type(name: &str) -> Option<BuiltinType> {
+    match name {
+        "Int" => Some(BuiltinType::Int),
+        "Float" => Some(BuiltinType::Float),
+        "Decimal" => Some(BuiltinType::Decimal),
+        "BigInt" => Some(BuiltinType::BigInt),
+        "Bool" => Some(BuiltinType::Bool),
+        "Text" => Some(BuiltinType::Text),
+        "Unit" => Some(BuiltinType::Unit),
+        "Bytes" => Some(BuiltinType::Bytes),
+        "List" => Some(BuiltinType::List),
+        "Option" => Some(BuiltinType::Option),
+        "Result" => Some(BuiltinType::Result),
+        "Validation" => Some(BuiltinType::Validation),
+        "Signal" => Some(BuiltinType::Signal),
+        "Task" => Some(BuiltinType::Task),
+        _ => None,
+    }
+}
+
+fn is_known_module(module: &str) -> bool {
+    matches!(module, "aivi.network" | "aivi.defaults")
+}
+
+fn known_import_kind(module: &str, member: &str) -> Option<KnownImportKind> {
+    match (module, member) {
+        ("aivi.network", "http") | ("aivi.network", "socket") => {
+            Some(KnownImportKind::OrdinaryTerm)
+        }
+        ("aivi.defaults", "Option") => Some(KnownImportKind::Bundle),
+        _ => None,
+    }
+}
+
+fn code(name: &'static str) -> DiagnosticCode {
+    DiagnosticCode::new("hir", name)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use aivi_base::SourceDatabase;
+    use aivi_syntax::parse_module;
+
+    use super::{lower_module, path_text};
+    use crate::{
+        BuiltinType, ClusterFinalizer, DecoratorPayload, DomainMemberKind, ExprKind, Item,
+        ResolutionState, TermResolution, TypeKind, TypeResolution, ValidationMode,
+    };
+
+    fn fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("fixtures")
+            .join("frontend")
+    }
+
+    fn lower_text(path: &str, text: &str) -> super::LoweringResult {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, text);
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "fixture {path} should parse before HIR lowering: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        lower_module(&parsed.module)
+    }
+
+    fn lower_fixture(path: &str) -> super::LoweringResult {
+        let text =
+            fs::read_to_string(fixture_root().join(path)).expect("fixture should be readable");
+        lower_text(path, &text)
+    }
+
+    fn find_named_item<'a>(module: &'a crate::Module, name: &str) -> &'a Item {
+        module
+            .root_items()
+            .iter()
+            .map(|item_id| &module.items()[*item_id])
+            .find(|item| match item {
+                Item::Type(item) => item.name.text() == name,
+                Item::Value(item) => item.name.text() == name,
+                Item::Function(item) => item.name.text() == name,
+                Item::Signal(item) => item.name.text() == name,
+                Item::Class(item) => item.name.text() == name,
+                Item::Domain(item) => item.name.text() == name,
+                Item::Instance(_) | Item::Use(_) | Item::Export(_) => false,
+            })
+            .unwrap_or_else(|| panic!("expected to find named item `{name}`"))
+    }
+
+    fn find_signal<'a>(module: &'a crate::Module, name: &str) -> &'a crate::SignalItem {
+        match find_named_item(module, name) {
+            Item::Signal(item) => item,
+            other => panic!("expected `{name}` to be a signal item, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lowers_valid_fixture_corpus() {
+        for path in [
+            "milestone-2/valid/local-top-level-refs/main.aivi",
+            "milestone-2/valid/use-member-imports/main.aivi",
+            "milestone-2/valid/source-decorator-signals/main.aivi",
+            "milestone-2/valid/applicative-clusters/main.aivi",
+            "milestone-2/valid/markup-control-nodes/main.aivi",
+            "milestone-2/valid/class-declarations/main.aivi",
+            "milestone-2/valid/domain-declarations/main.aivi",
+            "milestone-1/valid/records/record_shorthand_and_elision.aivi",
+            "milestone-1/valid/sources/source_declarations.aivi",
+            "milestone-1/valid/top-level/declarations.aivi",
+            "milestone-1/valid/pipes/applicative_clusters.aivi",
+        ] {
+            let lowered = lower_fixture(path);
+            assert!(
+                !lowered.has_errors(),
+                "expected {path} to lower cleanly, got diagnostics: {:?}",
+                lowered.diagnostics()
+            );
+            let report = lowered
+                .module()
+                .validate(ValidationMode::RequireResolvedNames);
+            assert!(
+                report.is_ok(),
+                "expected {path} to validate as resolved HIR, got diagnostics: {:?}",
+                report.diagnostics()
+            );
+        }
+    }
+
+    #[test]
+    fn reports_invalid_fixture_corpus_but_keeps_structural_hir() {
+        for path in [
+            "milestone-2/invalid/duplicate-top-level-names/main.aivi",
+            "milestone-2/invalid/unknown-imported-names/main.aivi",
+            "milestone-2/invalid/unknown-decorator/main.aivi",
+            "milestone-2/invalid/unresolved-names/main.aivi",
+            "milestone-2/invalid/misplaced-control-branches/main.aivi",
+            "milestone-2/invalid/source-decorator-non-signal/main.aivi",
+            "milestone-2/invalid/unknown-import-module/main.aivi",
+            "milestone-2/invalid/domain-recursive-carrier/main.aivi",
+        ] {
+            let lowered = lower_fixture(path);
+            assert!(
+                lowered.has_errors(),
+                "expected {path} to fail HIR lowering, got diagnostics: {:?}",
+                lowered.diagnostics()
+            );
+            let report = lowered.module().validate(ValidationMode::Structural);
+            assert!(
+                report.is_ok(),
+                "expected {path} to keep structurally valid HIR, got diagnostics: {:?}",
+                report.diagnostics()
+            );
+        }
+    }
+
+    #[test]
+    fn preserves_bodyless_source_signals_and_provider_paths() {
+        let lowered = lower_fixture("milestone-2/valid/source-decorator-signals/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "source-decorator fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let users = find_signal(lowered.module(), "users");
+        assert!(
+            users.body.is_none(),
+            "source-backed signals should stay bodyless in HIR"
+        );
+        let users_decorator = lowered.module().decorators()[users.header.decorators[0]].clone();
+        match users_decorator.payload {
+            DecoratorPayload::Source(source) => {
+                assert_eq!(
+                    source.provider.as_ref().map(path_text).as_deref(),
+                    Some("http.get"),
+                    "@source provider path should be preserved exactly"
+                );
+            }
+            other => panic!("expected source decorator payload, found {other:?}"),
+        }
+
+        let tick = find_signal(lowered.module(), "tick");
+        assert!(
+            tick.body.is_none(),
+            "bodyless timer source signal should stay bodyless"
+        );
+    }
+
+    #[test]
+    fn lowers_trailing_clusters_with_implicit_tuple_finalizers() {
+        let lowered = lower_fixture("milestone-1/valid/pipes/applicative_clusters.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "cluster fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let tupled_names = find_signal(lowered.module(), "tupledNames");
+        let body = tupled_names
+            .body
+            .expect("tupledNames signal should have a lowered cluster body");
+        let cluster_id = match &lowered.module().exprs()[body].kind {
+            ExprKind::Cluster(cluster) => *cluster,
+            other => panic!("expected cluster expression, found {other:?}"),
+        };
+        assert!(
+            matches!(
+                lowered.module().clusters()[cluster_id].finalizer,
+                ClusterFinalizer::ImplicitTuple
+            ),
+            "pipe-end clusters should lower with an implicit tuple finalizer"
+        );
+    }
+
+    #[test]
+    fn bundle_imports_do_not_hijack_builtin_option_resolution() {
+        let lowered = lower_fixture("milestone-1/valid/records/record_shorthand_and_elision.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "record shorthand fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        assert!(
+            lowered
+                .module()
+                .imports()
+                .iter()
+                .any(|(_, import)| import.imported_name.text() == "Option"),
+            "fixture should preserve the explicit Option bundle import"
+        );
+
+        let option_refs = lowered
+            .module()
+            .types()
+            .iter()
+            .filter_map(|(_, ty)| match &ty.kind {
+                TypeKind::Name(reference)
+                    if reference.path.segments().first().text() == "Option" =>
+                {
+                    Some(reference)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !option_refs.is_empty(),
+            "expected Option references in the lowered HIR"
+        );
+        assert!(
+            option_refs.iter().all(|reference| matches!(
+                reference.resolution,
+                ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Option))
+            )),
+            "Option type references should resolve to the builtin even when a bundle import exists: {option_refs:?}"
+        );
+    }
+
+    #[test]
+    fn lowers_domains_with_carriers_parameters_and_members() {
+        let lowered = lower_fixture("milestone-2/valid/domain-declarations/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "domain fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "domain fixture should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let path = match find_named_item(lowered.module(), "Path") {
+            Item::Domain(item) => item,
+            other => panic!("expected `Path` to lower as a domain item, found {other:?}"),
+        };
+        assert!(matches!(
+            lowered.module().types()[path.carrier].kind,
+            TypeKind::Name(ref reference)
+                if matches!(
+                    reference.resolution,
+                    ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Text))
+                )
+        ));
+        assert_eq!(path.members.len(), 3);
+        assert!(matches!(path.members[0].kind, DomainMemberKind::Literal));
+        assert_eq!(path.members[0].name.text(), "root");
+        assert!(matches!(path.members[1].kind, DomainMemberKind::Operator));
+        assert_eq!(path.members[1].name.text(), "/");
+        assert!(matches!(path.members[2].kind, DomainMemberKind::Method));
+        assert_eq!(path.members[2].name.text(), "value");
+
+        let non_empty = match find_named_item(lowered.module(), "NonEmpty") {
+            Item::Domain(item) => item,
+            other => panic!("expected `NonEmpty` to lower as a domain item, found {other:?}"),
+        };
+        assert_eq!(non_empty.parameters.len(), 1);
+    }
+
+    #[test]
+    fn exports_can_target_constructors_through_parent_type_items() {
+        let lowered = lower_text(
+            "constructor-export.aivi",
+            "type Status = Idle | Busy\nexport Idle\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "constructor export source should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "constructor export should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let export = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Export(item) => Some(item),
+                _ => None,
+            })
+            .expect("constructor-export source should contain one export item");
+
+        let resolved = match export.resolution {
+            ResolutionState::Resolved(item) => item,
+            ResolutionState::Unresolved => panic!("constructor export should resolve"),
+        };
+        match &lowered.module().items()[resolved] {
+            Item::Type(item) => assert_eq!(item.name.text(), "Status"),
+            other => {
+                panic!("constructor export should resolve to the parent type item, found {other:?}")
+            }
+        }
+    }
+
+    #[test]
+    fn local_module_definitions_shadow_builtins() {
+        let lowered = lower_text(
+            "builtin-shadowing.aivi",
+            concat!(
+                "val True = 0\n",
+                "val chosen = True\n",
+                "type Option = Option Int\n",
+                "val wrapped:Option = Option 1\n",
+            ),
+        );
+        assert!(
+            !lowered.has_errors(),
+            "builtin shadowing source should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "builtin shadowing source should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let chosen = match find_named_item(lowered.module(), "chosen") {
+            Item::Value(item) => item,
+            other => panic!("expected chosen to be a value item, found {other:?}"),
+        };
+        let chosen_resolution = match &lowered.module().exprs()[chosen.body].kind {
+            ExprKind::Name(reference) => &reference.resolution,
+            other => panic!("expected chosen body to be a name, found {other:?}"),
+        };
+        assert!(
+            matches!(
+                chosen_resolution,
+                ResolutionState::Resolved(TermResolution::Item(_))
+            ),
+            "local term definitions should shadow builtin terms: {chosen_resolution:?}"
+        );
+
+        let wrapped = match find_named_item(lowered.module(), "wrapped") {
+            Item::Value(item) => item,
+            other => panic!("expected wrapped to be a value item, found {other:?}"),
+        };
+        let annotation = wrapped
+            .annotation
+            .expect("wrapped should preserve its type annotation");
+        let annotation_resolution = match &lowered.module().types()[annotation].kind {
+            TypeKind::Name(reference) => &reference.resolution,
+            other => panic!("expected wrapped annotation to be a name, found {other:?}"),
+        };
+        assert!(
+            matches!(
+                annotation_resolution,
+                ResolutionState::Resolved(TypeResolution::Item(_))
+            ),
+            "local type definitions should shadow builtin types: {annotation_resolution:?}"
+        );
+    }
+}

@@ -3,12 +3,13 @@ use aivi_base::{Diagnostic, DiagnosticCode, Severity, SourceFile, SourceSpan, Sp
 use crate::{
     cst::{
         BinaryOperator, ClassBody, ClassMember, ClassMemberName, Decorator, DecoratorArguments,
-        DecoratorPayload, ErrorItem, ExportItem, Expr, ExprKind, FunctionParam, Identifier,
-        IntegerLiteral, Item, ItemBase, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module,
-        NamedItem, NamedItemBody, OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr,
-        PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-        RecordPatternField, RegexLiteral, SourceDecorator, TextLiteral, TokenRange, TypeDeclBody,
-        TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+        DecoratorPayload, DomainBody, DomainItem, DomainMember, DomainMemberName, ErrorItem,
+        ExportItem, Expr, ExprKind, FunctionParam, Identifier, IntegerLiteral, Item, ItemBase,
+        MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody,
+        OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind,
+        ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral,
+        SourceDecorator, TextLiteral, TokenRange, TypeDeclBody, TypeExpr, TypeExprKind, TypeField,
+        TypeVariant, UnaryOperator, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_module},
 };
@@ -26,6 +27,13 @@ const MISSING_DECLARATION_BODY: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-declaration-body");
 const MISSING_CLASS_MEMBER_TYPE: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-class-member-type");
+const MISSING_DOMAIN_OVER: DiagnosticCode = DiagnosticCode::new("syntax", "missing-domain-over");
+const MISSING_DOMAIN_CARRIER: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-domain-carrier");
+const MISSING_DOMAIN_MEMBER_NAME: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-domain-member-name");
+const MISSING_DOMAIN_MEMBER_TYPE: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-domain-member-type");
 const MISSING_FUNCTION_ARROW: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-function-arrow");
 const MISMATCHED_MARKUP_CLOSE: DiagnosticCode =
@@ -172,6 +180,7 @@ impl<'a> Parser<'a> {
                 Item::Signal(self.parse_signal_item(base, keyword_index, end, "signal declaration"))
             }
             TokenKind::ClassKw => Item::Class(self.parse_class_item(base, keyword_index, end)),
+            TokenKind::DomainKw => Item::Domain(self.parse_domain_item(base, keyword_index, end)),
             TokenKind::UseKw => Item::Use(self.parse_use_item(base, keyword_index, end)),
             TokenKind::ExportKw => Item::Export(self.parse_export_item(base, keyword_index, end)),
             _ => unreachable!("finish_item only accepts top-level declaration keywords"),
@@ -269,6 +278,66 @@ impl<'a> Parser<'a> {
             type_parameters,
             annotation: None,
             parameters: Vec::new(),
+            body,
+        }
+    }
+
+    fn parse_domain_item(
+        &mut self,
+        base: ItemBase,
+        keyword_index: usize,
+        end: usize,
+    ) -> DomainItem {
+        let mut cursor = keyword_index + 1;
+        let name =
+            self.parse_named_item_name(keyword_index, &mut cursor, end, "domain declaration");
+        let mut type_parameters = Vec::new();
+
+        while let Some(index) = self.peek_nontrivia(cursor, end) {
+            if self.tokens[index].line_start() || self.is_identifier_text(index, "over") {
+                break;
+            }
+            if self.tokens[index].kind() != TokenKind::Identifier {
+                break;
+            }
+            type_parameters.push(self.identifier_from_token(index));
+            cursor = index + 1;
+        }
+
+        let over_span = if let Some(index) = self.consume_identifier_text(&mut cursor, end, "over")
+        {
+            Some(self.source_span_of_token(index))
+        } else {
+            self.diagnostics.push(
+                Diagnostic::error("domain declaration is missing `over` before its carrier type")
+                    .with_code(MISSING_DOMAIN_OVER)
+                    .with_primary_label(
+                        self.source_span_of_token(keyword_index),
+                        "expected `over` followed by the carrier type",
+                    ),
+            );
+            None
+        };
+
+        let carrier = self.parse_type_expr(&mut cursor, end, TypeStop::default());
+        if carrier.is_none() {
+            self.diagnostics.push(
+                Diagnostic::error("domain declaration is missing its carrier type")
+                    .with_code(MISSING_DOMAIN_CARRIER)
+                    .with_primary_label(
+                        over_span.unwrap_or_else(|| self.source_span_of_token(keyword_index)),
+                        "expected a carrier type such as `Int`, `Text`, or `List A`",
+                    ),
+            );
+        }
+
+        let body = self.parse_domain_body(&mut cursor, end);
+        DomainItem {
+            base,
+            keyword_span: self.source_span_of_token(keyword_index),
+            name,
+            type_parameters,
+            carrier,
             body,
         }
     }
@@ -439,9 +508,29 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_domain_body(&mut self, cursor: &mut usize, end: usize) -> Option<DomainBody> {
+        let body_start = *cursor;
+        let mut members = Vec::new();
+
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if !self.tokens[index].line_start() {
+                break;
+            }
+            let Some(member) = self.parse_domain_member(cursor, end) else {
+                break;
+            };
+            members.push(member);
+        }
+
+        (!members.is_empty()).then_some(DomainBody {
+            members,
+            span: self.source_span_for_range(body_start, *cursor),
+        })
+    }
+
     fn parse_class_member(&mut self, cursor: &mut usize, end: usize) -> Option<ClassMember> {
         let start = *cursor;
-        let name = self.parse_class_member_name(cursor, end)?;
+        let name = self.parse_signature_member_name(cursor, end)?;
         let annotation = if self.consume_kind(cursor, end, TokenKind::Colon).is_some() {
             self.parse_type_expr(cursor, end, TypeStop::default())
                 .or_else(|| {
@@ -471,7 +560,62 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_class_member_name(&self, cursor: &mut usize, end: usize) -> Option<ClassMemberName> {
+    fn parse_domain_member(&mut self, cursor: &mut usize, end: usize) -> Option<DomainMember> {
+        let start = *cursor;
+        let name = if self
+            .consume_identifier_text(cursor, end, "literal")
+            .is_some()
+        {
+            let Some(suffix) = self.parse_identifier(cursor, end) else {
+                self.diagnostics.push(
+                    Diagnostic::error("domain literal declaration is missing its suffix name")
+                        .with_code(MISSING_DOMAIN_MEMBER_NAME)
+                        .with_primary_label(
+                            self.source_span_for_range(start, *cursor),
+                            "expected a suffix name such as `ms` or `sec`",
+                        ),
+                );
+                return None;
+            };
+            DomainMemberName::Literal(suffix)
+        } else {
+            DomainMemberName::Signature(self.parse_signature_member_name(cursor, end)?)
+        };
+
+        let annotation = if self.consume_kind(cursor, end, TokenKind::Colon).is_some() {
+            self.parse_type_expr(cursor, end, TypeStop::default())
+                .or_else(|| {
+                    self.diagnostics.push(
+                        Diagnostic::error("domain member is missing its type after `:`")
+                            .with_code(MISSING_DOMAIN_MEMBER_TYPE)
+                            .with_primary_label(
+                                name.span(),
+                                "expected a member type such as `Int -> Duration`",
+                            ),
+                    );
+                    None
+                })
+        } else {
+            self.diagnostics.push(
+                Diagnostic::error("domain member is missing `:` before its type")
+                    .with_code(MISSING_DOMAIN_MEMBER_TYPE)
+                    .with_primary_label(name.span(), "expected `:` followed by a member type"),
+            );
+            None
+        };
+
+        Some(DomainMember {
+            name,
+            annotation,
+            span: self.source_span_for_range(start, *cursor),
+        })
+    }
+
+    fn parse_signature_member_name(
+        &self,
+        cursor: &mut usize,
+        end: usize,
+    ) -> Option<ClassMemberName> {
         if let Some(identifier) = self.parse_identifier(cursor, end) {
             return Some(ClassMemberName::Identifier(identifier));
         }
@@ -479,7 +623,14 @@ impl<'a> Parser<'a> {
         let start = self.consume_kind(cursor, end, TokenKind::LParen)?;
         let operator_index = self.peek_nontrivia(*cursor, end)?;
         let operator = match self.tokens[operator_index].kind() {
-            TokenKind::EqualEqual | TokenKind::BangEqual => OperatorName {
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::EqualEqual
+            | TokenKind::BangEqual
+            | TokenKind::Less
+            | TokenKind::Greater => OperatorName {
                 text: self.tokens[operator_index].text(self.source).to_owned(),
                 span: self.source_span_of_token(operator_index),
             },
@@ -2129,6 +2280,20 @@ impl<'a> Parser<'a> {
         Some(index)
     }
 
+    fn consume_identifier_text(
+        &self,
+        cursor: &mut usize,
+        end: usize,
+        expected: &str,
+    ) -> Option<usize> {
+        let index = self.peek_nontrivia(*cursor, end)?;
+        if !self.is_identifier_text(index, expected) {
+            return None;
+        }
+        *cursor = index + 1;
+        Some(index)
+    }
+
     fn is_identifier_text(&self, index: usize, expected: &str) -> bool {
         self.tokens[index].kind() == TokenKind::Identifier
             && self.tokens[index].text(self.source) == expected
@@ -2307,6 +2472,9 @@ mod tests {
             "operators.aivi",
             r#"class Eq A
     (==) : A -> A -> Bool
+domain Duration over Int
+    literal ms : Int -> Duration
+    (*) : Duration -> Int -> Duration
 sig flow = value |> compute ?|> ready ||> Ready => keep *|> .email &|> build @|> loop <|@ step | debug <|* merge T|> start F|> stop
 val same = left == right
 val different = left != right
@@ -2325,9 +2493,11 @@ val datePattern = rx"\d{4}-\d{2}-\d{2}"
             .collect();
 
         assert!(kinds.contains(&TokenKind::ClassKw));
+        assert!(kinds.contains(&TokenKind::DomainKw));
         assert!(kinds.contains(&TokenKind::ThinArrow));
         assert!(kinds.contains(&TokenKind::EqualEqual));
         assert!(kinds.contains(&TokenKind::BangEqual));
+        assert!(kinds.contains(&TokenKind::Star));
         assert!(kinds.contains(&TokenKind::PipeTransform));
         assert!(kinds.contains(&TokenKind::PipeGate));
         assert!(kinds.contains(&TokenKind::PipeCase));
@@ -2482,6 +2652,63 @@ export main
             },
             other => panic!("expected function item, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parser_builds_domain_members_from_fixture() {
+        let parsed = parse_fixture("valid/top-level/domains.aivi");
+
+        assert!(!parsed.has_errors());
+        match &parsed.module.items[1] {
+            Item::Domain(item) => {
+                assert_eq!(
+                    item.name.as_ref().map(|name| name.text.as_str()),
+                    Some("Path")
+                );
+                assert!(matches!(
+                    item.carrier.as_ref().map(|carrier| &carrier.kind),
+                    Some(TypeExprKind::Name(identifier)) if identifier.text == "Text"
+                ));
+                let body = item.body.as_ref().expect("domain should have a body");
+                assert_eq!(body.members.len(), 3);
+                assert!(matches!(
+                    body.members[0].name,
+                    DomainMemberName::Literal(ref suffix) if suffix.text == "root"
+                ));
+                assert!(matches!(
+                    body.members[1].name,
+                    DomainMemberName::Signature(ClassMemberName::Operator(ref operator))
+                        if operator.text == "/"
+                ));
+                assert!(matches!(
+                    body.members[2].name,
+                    DomainMemberName::Signature(ClassMemberName::Identifier(ref identifier))
+                        if identifier.text == "value"
+                ));
+            }
+            other => panic!("expected domain item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parser_reports_missing_domain_over_and_carrier() {
+        let (_, missing_over) = load("domain Duration Int\n");
+        assert!(missing_over.has_errors());
+        assert!(
+            missing_over
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(MISSING_DOMAIN_OVER))
+        );
+
+        let (_, missing_carrier) = load("domain Duration over\n");
+        assert!(missing_carrier.has_errors());
+        assert!(
+            missing_carrier
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(MISSING_DOMAIN_CARRIER))
+        );
     }
 
     #[test]

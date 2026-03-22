@@ -1,9 +1,10 @@
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
-    Expr, ExprKind, FunctionParam, Identifier, Item, MarkupAttribute, MarkupAttributeValue,
-    MarkupNode, Module, NamedItem, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind,
-    ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, SourceDecorator,
-    TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+    DomainItem, DomainMember, DomainMemberName, Expr, ExprKind, FunctionParam, Identifier, Item,
+    MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, Pattern, PatternKind,
+    PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
+    RecordPatternField, SourceDecorator, TypeDeclBody, TypeExpr, TypeExprKind, TypeField,
+    TypeVariant, UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -67,6 +68,7 @@ impl Formatter {
             Item::Function(item) => lines.extend(self.format_function_item(item)),
             Item::Signal(item) => lines.extend(self.format_value_item("sig", item, true)),
             Item::Class(item) => lines.extend(self.format_class_item(item)),
+            Item::Domain(item) => lines.extend(self.format_domain_item(item)),
             Item::Use(item) => lines.extend(self.format_use_item(item)),
             Item::Export(item) => {
                 lines.push(format!("export {}", self.item_name(&item.name)));
@@ -244,11 +246,54 @@ impl Formatter {
         lines
     }
 
+    fn format_domain_item(&self, item: &DomainItem) -> Vec<String> {
+        let mut header = format!("domain {}", self.item_name(&item.name));
+        for parameter in &item.type_parameters {
+            header.push(' ');
+            header.push_str(&parameter.text);
+        }
+        header.push_str(" over ");
+        if let Some(carrier) = &item.carrier {
+            header.push_str(&self.format_type_inline(carrier, 0));
+        }
+
+        let Some(body) = &item.body else {
+            return vec![header];
+        };
+
+        let mut lines = vec![header];
+        for member in &body.members {
+            lines.extend(self.format_domain_member(member));
+        }
+        lines
+    }
+
     fn format_class_member(&self, member: &ClassMember) -> Vec<String> {
         let prefix = format!(
             "{}{} : ",
             spaces(INDENT_WIDTH),
             self.format_class_member_name(&member.name)
+        );
+        let Some(annotation) = &member.annotation else {
+            return vec![prefix.trim_end().to_owned()];
+        };
+        let force_break = self.should_force_type_break(display_width(&prefix), annotation);
+        let block = self.format_type_block(annotation, force_break);
+        if block.is_inline() {
+            vec![format!(
+                "{prefix}{}",
+                block.inline_text().expect("inline block")
+            )]
+        } else {
+            block.prefixed(&prefix).into_lines()
+        }
+    }
+
+    fn format_domain_member(&self, member: &DomainMember) -> Vec<String> {
+        let prefix = format!(
+            "{}{} : ",
+            spaces(INDENT_WIDTH),
+            self.format_domain_member_name(&member.name)
         );
         let Some(annotation) = &member.annotation else {
             return vec![prefix.trim_end().to_owned()];
@@ -1065,6 +1110,13 @@ impl Formatter {
         }
     }
 
+    fn format_domain_member_name(&self, name: &DomainMemberName) -> String {
+        match name {
+            DomainMemberName::Signature(name) => self.format_class_member_name(name),
+            DomainMemberName::Literal(identifier) => format!("literal {}", identifier.text),
+        }
+    }
+
     fn item_name<'a>(&self, name: &'a Option<Identifier>) -> &'a str {
         name.as_ref().map(|name| name.text.as_str()).unwrap_or("_")
     }
@@ -1338,6 +1390,25 @@ mod tests {
                 "\n",
                 "fun equivalent:Bool #left:Int #right:Int =>\n",
                 "    left + 1 == right - 1 and left != right\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_domain_layout_fixture() {
+        let formatted = format_fixture("valid/formatting/domain_layout.aivi");
+        assert_eq!(
+            formatted,
+            concat!(
+                "domain Duration over Int\n",
+                "    literal ms : Int -> Duration\n",
+                "    (*) : Duration -> Int -> Duration\n",
+                "    value : Duration -> Int\n",
+                "\n",
+                "domain Path over Text\n",
+                "    literal root : Text -> Path\n",
+                "    (/) : Path -> Text -> Path\n",
+                "    value : Path -> Text\n",
             )
         );
     }

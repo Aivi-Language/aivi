@@ -43,8 +43,10 @@ pub enum TokenKind {
     FunKw,
     SigKw,
     ClassKw,
+    DomainKw,
     UseKw,
     ExportKw,
+    Star,
     PipeTransform,
     PipeGate,
     PipeCase,
@@ -72,6 +74,7 @@ impl TokenKind {
                 | TokenKind::FunKw
                 | TokenKind::SigKw
                 | TokenKind::ClassKw
+                | TokenKind::DomainKw
                 | TokenKind::UseKw
                 | TokenKind::ExportKw
         )
@@ -314,6 +317,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
             ',' => TokenKind::Comma,
             '+' => TokenKind::Plus,
             '-' => TokenKind::Minus,
+            '*' => TokenKind::Star,
             '(' => TokenKind::LParen,
             ')' => TokenKind::RParen,
             '{' => TokenKind::LBrace,
@@ -389,6 +393,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "fun" => Some(TokenKind::FunKw),
         "sig" => Some(TokenKind::SigKw),
         "class" => Some(TokenKind::ClassKw),
+        "domain" => Some(TokenKind::DomainKw),
         "use" => Some(TokenKind::UseKw),
         "export" => Some(TokenKind::ExportKw),
         _ => None,

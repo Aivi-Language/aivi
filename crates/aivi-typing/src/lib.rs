@@ -9,8 +9,9 @@
 pub mod eq;
 
 pub use eq::{
-    Class, Closedness, EqContext, EqDerivation, EqDerivationError, EqDerivationErrorKind,
-    EqDeriver, EqFieldPlan, EqPathSegment, EqPlanId, EqStep, EqVariantPlan, ExternalTypeId,
-    FieldName, InstanceHead, PrimitiveType, RecordField, RecordShape, ShapeError, ShapeErrorKind,
-    SumShape, SumVariant, TypeId, TypeNode, TypeParameterId, TypeReference, TypeStore, VariantName,
+    Class, Closedness, DomainShape, EqContext, EqDerivation, EqDerivationError,
+    EqDerivationErrorKind, EqDeriver, EqFieldPlan, EqPathSegment, EqPlanId, EqStep, EqVariantPlan,
+    ExternalTypeId, FieldName, InstanceHead, PrimitiveType, RecordField, RecordShape, ShapeError,
+    ShapeErrorKind, SumShape, SumVariant, TypeId, TypeNode, TypeParameterId, TypeReference,
+    TypeStore, VariantName,
 };

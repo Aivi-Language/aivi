@@ -467,21 +467,38 @@ type Validation E A =
   | Valid A
 ```
 
-?? can we do without haskel code, it will confuse the agent
-Applicative behavior: 
+Unlike `Result E A`, the applicative instance for `Validation E` accumulates independent errors instead of short-circuiting on the first failure.
+
+### 8.1 Applicative semantics
+
+For `Validation E`, applicative combination behaves as follows:
+
+- `pure x` yields `Valid x`
+- applying `Valid f` to `Valid x` yields `Valid (f x)`
+- applying `Invalid e` to `Valid _` yields `Invalid e`
+- applying `Valid _` to `Invalid e` yields `Invalid e`
+- applying `Invalid e1` to `Invalid e2` yields `Invalid (e1 ++ e2)`
+
+Here `++` is concatenation of the underlying `NonEmptyList E`.
+
+### 8.2 Intent
+
+`Validation` is the canonical carrier for form validation under `&|>` because the inputs are independent and all failures should be reported together.
+
+Example:
 
 ```aivi
-pure x = Valid x
+sig validatedUser =
+ &|> validateName nameText
+ &|> validateEmail emailText
+ &|> validateAge ageText
+  |> UserDraft
 ```
 
-```aivi
-Valid f      <*> Valid x      = Valid (f x)
-Invalid e    <*> Valid _      = Invalid e
-Valid _      <*> Invalid e    = Invalid e
-Invalid e1   <*> Invalid e2   = Invalid (e1 ++ e2)
-```
+If all validators succeed, the result is `Valid (UserDraft ...)`.
+If one or more validators fail, all reported errors are accumulated into one `Invalid` value in source order.
 
-`Validation` is the canonical carrier for form validation under `&|>`.
+`Validation E` is intentionally applicative-only in v1. Dependent validation that requires earlier successful values to choose later checks should use `Result`, `Task`, or explicit pattern matching instead.
 
 ---
 
@@ -676,9 +693,37 @@ Allows the current subject through only if the predicate holds.
 users ?|> .active
 ```
 
-For signals, this filters updates. For ordinary value flow, it lowers through the chosen flow carrier.
+The gate body is typed against the current ambient subject and must produce `Bool`.
 
-?? what does this mean?
+Signal semantics:
+
+- for `Signal A`, updates whose predicate is `True` are forwarded
+- updates whose predicate is `False` are suppressed
+- the result type remains `Signal A`
+- no synthetic negative update is emitted
+
+Ordinary-value semantics:
+
+- for an ordinary subject `A`, `?|>` lowers to `Option A`
+- success yields `Some subject`
+- failure yields `None`
+
+Example:
+
+```aivi
+user
+ ?|> .active
+ T|> .email
+ F|> "inactive"
+```
+
+This is the canonical expression-level replacement for keeping or dropping a value without introducing `if` / `else`.
+
+Restrictions:
+
+- the predicate must be pure
+- `?|>` is not a general branch operator; use `||>` when the two paths compute unrelated shapes
+- `?|>` does not inspect prior history or future updates; it is pointwise over the current subject
 
 ### 11.4 `||>` case split
 
@@ -732,16 +777,16 @@ maybeUser
 
 ```aivi
 loaded
- T|> render
- F|> showError
+ T|> render _
+ F|> showError _
 ```
 
 elaborates to:
 
 ```aivi
 loaded
- ||> Ok _  => render
- ||> Err _ => showError
+ ||> Ok a  => render a
+ ||> Err e => showError e
 ```
 
 The canonical truthy / falsy constructor pairs in v1 are:
@@ -755,16 +800,14 @@ Rules:
 
 - `T|>` and `F|>` may appear only as an adjacent pair within one pipe spine
 - the subject type must have a known canonical truthy / falsy pair
-- they do not bind constructor payloads
-- use `||>` when payload binding is required
+- inside a `T|>` or `F|>` body, `_` is rebound to the matched payload when that constructor has exactly one payload
+- zero-payload cases such as `True`, `False`, and `None` do not introduce a branch payload
+- use `||>` when named binding, nested patterns, or more than two constructors are required
 - user-defined truthy / falsy overloads are not supported in v1
-- in T/F cases _ carries the first inner constructor value: showError _ 
-
 
 ### 11.5 `*|>` map / fan-out
 
-
-Maps over an ordinary or reactive collection.
+Maps over each element of a collection.
 
 ```aivi
 users
@@ -772,6 +815,34 @@ users
 ```
 
 Each element becomes the ambient subject within the fan-out body.
+
+Typing and lowering rules:
+
+- for `List A`, `*|>` maps `A -> B` to produce `List B`
+- for `Signal (List A)`, fan-out is lifted pointwise to produce `Signal (List B)`
+- the body is typed as if it were a normal pipe body with the element as ambient subject
+- the outer collection is not implicitly ambient inside the body; capture it by name if needed
+
+`*|>` is pure mapping only. It does not implicitly flatten nested collections, sequence `Task`s, or merge nested `Signal`s.
+
+### 11.5.1 `<|*` fan-out join
+
+Joins the collection produced by the immediately preceding `*|>` with an explicit reducer.
+
+```aivi
+users
+ *|> .email
+ <|* Text.join ", "
+```
+
+`xs *|> f <|* g` elaborates to `g (map f xs)`.
+
+For `Signal (List A)`, the same rule is lifted pointwise over signal updates.
+
+Restrictions:
+
+- `<|*` is legal only immediately after a `*|>` segment
+- the join function is explicit; there is no implicit flattening or collection-specific default join
 
 ### 11.6 `|` tap
 
@@ -784,9 +855,27 @@ value
  |> finish
 ```
 
+The tap body is evaluated with the current subject as ambient subject. Its result is ignored. The outgoing subject is exactly the incoming subject.
+
+Conceptually, `x | f` behaves like `let _ = f x in x`.
+
+`|` is intended for tracing, metrics, and named observers. It is not a hidden mutation or control-flow channel.
+
 ### 11.7 `@|>` and `<|@`
 
-These mark explicit recurrent flows used for retry/poll/stream-style pipelines. Their exact runtime lowering is scheduler-owned and must remain stack-safe.
+These mark explicit recurrent flows used for retry, polling, and stream-style pipelines.
+
+`@|>` enters a recurrent region. Each subsequent `<|@` stage contributes to the per-iteration step function over the current loop state.
+
+Conceptually, a recurrent spine denotes a scheduler-owned loop node rather than direct self-recursion. The current iteration value is the ambient subject within the recurrent region.
+
+Normative v1 rules:
+
+- recurrent pipes are legal only where the compiler can lower them to a built-in runtime node for `Task`, `Signal`, or `@source` helpers
+- recurrence wakeups must be explicit: timer, backoff, source event, or provider-defined trigger
+- each iteration is scheduled and stack-safe; recurrent pipes must not lower to unbounded direct recursion
+- cancellation or owner teardown disposes the pending recurrence immediately
+- if the compiler cannot determine a valid runtime lowering target, the recurrent pipe is rejected
 
 ---
 
@@ -1027,7 +1116,20 @@ External inputs enter through `@source` on `sig`.
 @source http.get "/users"
 sig users : Signal (Result HttpError (List User))
 ```
-?? Text interpolation with signals must work in args. so we can add env specific baseUrls for example.
+
+Source arguments and options are ordinary typed expressions. They may use interpolation and may depend on signals whose dependency sets are statically known.
+
+Example:
+
+```aivi
+@source http.get "{baseUrl}/users" with {
+    headers: authHeaders,
+    decode: Strict
+}
+sig users : Signal (Result HttpError (List User))
+```
+
+If an argument or option depends on a signal, the source node becomes dependent on that signal. Changing that dependency reconfigures the source transactionally while keeping the graph shape static.
 
 ### 14.1 Source contract
 
@@ -1037,6 +1139,7 @@ Sources may represent:
 
 - HTTP
 - file watching
+- file reads
 - sockets
 - D-Bus
 - timers
@@ -1068,7 +1171,7 @@ Optioned form:
 
 ```aivi
 @source http.get "/users" with {
-    decode: strict,
+    decode: Strict,
     retry: 3,
     timeoutMs: 5000
 }
@@ -1082,6 +1185,11 @@ Rules:
 - options are a closed record whose legal fields are provider-defined
 - unknown options are a compile-time error
 - duplicate options are a compile-time error
+- argument and option expressions may be ordinary values or signal-derived expressions with statically known dependencies
+- if a reactive argument or option changes, the runtime re-evaluates the source configuration using the latest stable upstream values for that scheduler tick
+- if the change affects source identity such as URL, path, channel, or process arguments, the old runtime subscription is disposed and a new one is created
+
+Reactive source configuration does not make sources dynamic in the type-theoretic sense. The provider kind and dependency graph remain statically known; only runtime configuration values change.
 
 ### 14.1.2 Recommended v1 source variants
 
@@ -1096,7 +1204,7 @@ sig users : Signal (Result HttpError (List User))
 @source http.post "/login" with {
     body: creds,
     headers: authHeaders,
-    decode: strict,
+    decode: Strict,
     timeoutMs: 5000
 }
 sig login : Signal (Result HttpError Session)
@@ -1110,8 +1218,17 @@ Recommended HTTP options:
 - `decode : DecodeMode`
 - `timeoutMs : Int`
 - `retry : Int`
+- `refreshOn : Signal B`
+- `refreshEveryMs : Int`
+- `activeWhen : Signal Bool`
 
-?? how can we schedule refreshes? signal deps at least, but db life cycles would be also good.
+HTTP source semantics:
+
+- a request source issues one request when subscribed unless the provider defines a different default
+- `refreshOn` reissues the request whenever the trigger signal updates
+- `refreshEveryMs` creates scheduler-owned polling using the latest stable source configuration
+- `activeWhen` gates startup and refresh; when it becomes `False`, polling is suspended and in-flight work may be cancelled or marked stale by the runtime
+- when reactive URL, query, header, or body inputs change, the runtime issues a new request with the latest values and must not publish stale responses from superseded requests
 
 #### Timer
 
@@ -1128,29 +1245,45 @@ Recommended timer options:
 - `immediate : Bool`
 - `jitterMs : Int`
 - `coalesce : Bool`
+- `activeWhen : Signal Bool`
 
-#### File watching
+#### File watching and reading
 
 ```aivi
 @source fs.watch "/tmp/demo.txt" with {
     events: [Created, Changed, Deleted]
 }
 sig fileEvents : Signal FsEvent
+
+@source fs.read "/tmp/demo.txt" with {
+    decode: Strict,
+    reloadOn: fileEvents
+}
+sig fileText : Signal (Result FsError Text)
 ```
 
-?? how can we load the file on change?
+`fs.watch` publishes file-system events only. It does not implicitly read file contents.
+`fs.read` publishes a snapshot of the current file contents and may be retriggered explicitly.
 
 Recommended file-watch options:
 
 - `events : List FsWatchEvent`
 - `recursive : Bool`
+
+Recommended file-read options:
+
 - `decode : DecodeMode`
+- `reloadOn : Signal A`
+- `debounceMs : Int`
+- `readOnStart : Bool`
+
+This split keeps change detection and snapshot loading explicit. A common pattern is to watch a path, debounce the resulting events, and use those events to trigger `fs.read`.
 
 #### Socket / channel / mailbox
 
 ```aivi
 @source socket.connect "ws://localhost:8080" with {
-    decode: strict
+    decode: Strict
 }
 sig inbox : Signal (Result SocketError Message)
 
@@ -1164,6 +1297,7 @@ Recommended socket and mailbox options:
 - `buffer : Int`
 - `reconnect : Bool`
 - `heartbeatMs : Int`
+- `activeWhen : Signal Bool`
 
 #### Process events
 
@@ -1178,6 +1312,7 @@ Recommended process options:
 - `env : Map Text Text`
 - `stdout : StreamMode`
 - `stderr : StreamMode`
+- `restartOn : Signal A`
 
 #### GTK / window events
 
@@ -1213,10 +1348,10 @@ Semantics:
 
 - `Strict` rejects unknown or missing required fields according to closed-type decoding rules
 - `Permissive` may ignore extra fields but still requires required fields unless a decoder override says otherwise
+- decode happens before scheduler publication
 - delivery into the scheduler remains typed and transactional
 
 ### 14.2 Decoding
-
 
 AIVI includes compiler-generated structural decoding by default.
 
@@ -1226,12 +1361,21 @@ Default decoding rules:
 - extra fields are rejected in strict mode by default
 - sum decoding is explicit
 - decoder override remains possible where necessary
+- domain-backed fields decode through the domain's explicit parser or constructor surface; they do not silently accept the raw carrier unless that surface says so
 
 Record default elision for user-written literals does **not** weaken source decoding by default.
 
+Decode failures are reported through the source's typed error channel. They do not escape as untyped runtime exceptions.
+
 ### 14.3 Cancellation and lifecycle
 
-Source subscriptions must carry explicit runtime cancellation/disposal semantics. When the owning graph or view is torn down, the source subscription is disposed.
+Source subscriptions must carry explicit runtime cancellation and disposal semantics. When the owning graph or view is torn down, the source subscription is disposed.
+
+Additional lifecycle rules:
+
+- reconfiguration caused by reactive source arguments disposes the superseded runtime resource before publishing new values from the replacement resource
+- long-lived sources may use `activeWhen` to suspend or resume delivery without changing the static graph shape
+- request-like sources such as HTTP and `fs.read` must either cancel in-flight work when reconfigured or mark stale completions so they cannot publish into the live graph
 
 ---
 
@@ -1547,18 +1691,370 @@ Invalid regex literals are compile-time errors.
 
 ## 20. Domains
 
-Domains bind carrier types, literal suffixes, operators, and smart construction semantics.
+Domains are nominal value spaces defined over an existing carrier type.
 
-Examples include:
+They are used when a value should:
 
-- duration
-- color
-- path
-- URL
-- geometry
-- calendar/date arithmetic
+- have the runtime representation of some existing type
+- remain distinct at the type level
+- optionally support domain-specific literal suffixes
+- optionally expose domain-specific operators and smart constructors
+- reject accidental mixing with the raw carrier or with other domains over the same carrier
 
-Numeric literal suffixes such as `10min` and `250ms` are part of the domain story. Implicit casts across domains do not exist.
+Typical examples include:
+
+- `Duration over Int`
+- `Url over Text`
+- `Path over Text`
+- `Color over Int`
+- `NonEmpty A over List A`
+
+A domain is not a type alias. A domain is not subtyping. A domain does not imply implicit casts.
+
+### 20.1 Declaration form
+
+Canonical syntax:
+
+```aivi
+domain Duration over Int
+domain Url over Text
+domain Path over Text
+domain NonEmpty A over List A
+domain ResourceId A over Text
+```
+
+General form:
+
+```text
+DomainDecl ::= "domain" TypeName TypeParam* "over" Type DomainBody?
+```
+
+Rules:
+
+- `domain D over C` introduces a new nominal type `D`
+- `domain D A over C A` introduces a new unary type constructor
+- the domain's kind is determined by its parameters exactly as for ordinary type constructors
+- the carrier type on the right of `over` may mention only the domain's declared type parameters
+- full type-level lambdas remain out of scope for v1
+
+Examples of kinds:
+
+- `Duration : Type`
+- `Url : Type`
+- `NonEmpty : Type -> Type`
+- `ResourceId : Type -> Type`
+
+### 20.2 Core meaning
+
+A declaration:
+
+```aivi
+domain D A1 ... An over C
+```
+
+defines a fresh nominal type constructor `D A1 ... An` with carrier `C`.
+
+From the user's point of view:
+
+- `D A1 ... An` is distinct from `C`
+- `D A1 ... An` is distinct from every other domain, even if they share the same carrier
+- carrier operations are not inherited implicitly
+- domain values do not pattern-match as carrier values
+- implicit conversion between domain and carrier does not exist
+
+This means:
+
+```aivi
+domain Duration over Int
+domain UserId over Int
+```
+
+do **not** allow `Duration` where `Int` is expected, and do **not** allow `UserId` where `Duration` is expected.
+
+### 20.3 Relation to opaque and branded types
+
+A domain is the canonical surface form for a branded or opaque wrapper whose representation is intentionally based on another type.
+
+Conceptually, a domain behaves like an opaque nominal wrapper over its carrier, but with optional language support for:
+
+- literals
+- operators
+- parsing and smart construction
+- formatting hooks
+
+In other words:
+
+- use `type` for ordinary ADTs and records
+- use `domain` for nominal value spaces over an existing representation
+
+### 20.4 Construction and elimination
+
+A domain may be introduced only through domain-owned constructors or smart constructors.
+
+Recommended surface shape:
+
+```aivi
+domain Url over Text
+    parse : Text -> Result UrlError Url
+    value : Url -> Text
+```
+
+```aivi
+domain Duration over Int
+    millis     : Int -> Duration
+    trySeconds : Int -> Result DurationError Duration
+    value      : Duration -> Int
+```
+
+The exact names are domain-defined, but the semantics are fixed:
+
+- construction is explicit
+- unwrapping is explicit
+- domain invariants may be enforced by smart constructors
+- unsafe or unchecked construction should be library-internal or explicitly marked
+
+For v1, domains should not expose implicit coercions, automatic unboxing, or pattern aliases over the carrier.
+
+### 20.5 Literal suffixes
+
+Domains may bind literal suffixes.
+
+Example:
+
+```aivi
+domain Duration over Int
+    literal ms  : Int -> Duration
+    literal sec : Int -> Duration
+    literal min : Int -> Duration
+```
+
+This enables:
+
+```aivi
+val a:Duration = 250ms
+val b:Duration = 10sec
+val c:Duration = 3min
+```
+
+Literal-suffix rules:
+
+- suffix resolution is compile-time only
+- a suffix maps to exactly one domain literal definition in scope
+- the suffix function must accept the literal family's base type
+- numeric suffixes do not imply cross-domain arithmetic
+- unsuffixed literals remain ordinary numeric literals
+
+Examples:
+
+- `250ms : Duration`
+- `250 : Int`
+- `250ms + 3min` is legal only if `Duration` defines `+`
+- `250ms + 3` is illegal unless an explicit constructor or operator admits it
+
+If two imported domains define the same suffix, that is a compile-time ambiguity error.
+
+### 20.6 Domain operators
+
+Domains may define a restricted set of domain-local operators.
+
+Example:
+
+```aivi
+domain Duration over Int
+    literal ms : Int -> Duration
+    (+)        : Duration -> Duration -> Duration
+    (-)        : Duration -> Duration -> Duration
+    (*)        : Duration -> Int -> Duration
+    compare    : Duration -> Duration -> Ordering
+```
+
+Example:
+
+```aivi
+domain Path over Text
+    (/) : Path -> Text -> Path
+```
+
+Operator rules:
+
+- operator resolution is static
+- operators are not inherited from the carrier automatically
+- operators must be declared by the domain or provided by instances over the domain type
+- domain operators must preserve explicitness and must not trigger hidden conversion to or from the carrier
+
+### 20.7 Smart construction and invariants
+
+Domains are the preferred place to attach invariants that are stronger than the carrier type.
+
+Examples:
+
+- `Url over Text` may require URL parsing
+- `Path over Text` may normalize separators
+- `Color over Int` may require packed ARGB layout
+- `NonEmpty A over List A` may reject empty lists
+
+Example:
+
+```aivi
+domain NonEmpty A over List A
+    fromList : List A -> Option (NonEmpty A)
+    head     : NonEmpty A -> A
+    tail     : NonEmpty A -> List A
+```
+
+The carrier type alone does not imply the invariant. The domain does.
+
+### 20.8 Parameterized domains
+
+Domains may be parameterized in the same style as ordinary type constructors.
+
+Example:
+
+```aivi
+domain ResourceId A over Text
+domain NonEmpty A over List A
+```
+
+Typing rules:
+
+- parameters are ordinary type parameters
+- kinds follow the ordinary kind system
+- the carrier may use those parameters
+- partial application of parameterized domains is allowed when the resulting kind matches the expected constructor kind
+
+This keeps domain syntax parallel to the rest of the type system without adding new kind machinery.
+
+### 20.9 Equality and instances
+
+A domain does not automatically inherit all instances of its carrier.
+
+Recommended v1 rule:
+
+- `Eq` may be compiler-derived for a domain if its carrier has `Eq` and the domain does not opt out
+
+Example:
+
+```aivi
+domain Duration over Int
+```
+
+may derive `Eq`, but that does **not** make it interchangeable with `Int`.
+
+For other classes, instances should be explicit unless the language later adopts a clear derive mechanism for domains.
+
+### 20.10 Runtime representation
+
+A domain is representation-backed by its carrier, but user code must not rely on that representation detail for semantics.
+
+Implementation guidance:
+
+- a domain may compile to the same runtime layout as its carrier
+- the compiler may erase wrapper overhead where sound
+- diagnostics and typing must still treat the domain as distinct
+
+This preserves performance without weakening the surface model.
+
+### 20.11 No implicit casts
+
+Domains never participate in implicit cast chains.
+
+Illegal examples:
+
+```aivi
+val x:Int = 250ms
+val y:Duration = 250
+val z:UserId = durationValue
+```
+
+Legal examples:
+
+```aivi
+val x:Duration = 250ms
+val y:Int = Duration.value x
+val z:Duration = Duration.millis 250
+```
+
+This rule is normative.
+
+### 20.12 Diagnostics
+
+Diagnostics for domains should be explicit and domain-aware.
+
+Examples:
+
+- when a carrier is used where a domain is expected:
+  - `expected Duration but found Int`
+  - suggestion: `use Duration.millis`, `Duration.parse`, or another domain constructor
+
+- when a domain is used where a carrier is expected:
+  - `expected Text but found Url`
+  - suggestion: `use Url.value`
+
+- when a suffix is ambiguous:
+  - `literal suffix 'ms' is provided by multiple domains in scope`
+
+- when an operator is missing:
+  - `operator '+' is not defined for Duration and Int`
+
+### 20.13 Recommended examples
+
+#### Duration
+
+```aivi
+domain Duration over Int
+    literal ms  : Int -> Duration
+    literal sec : Int -> Duration
+    literal min : Int -> Duration
+    (+)         : Duration -> Duration -> Duration
+    (-)         : Duration -> Duration -> Duration
+    value       : Duration -> Int
+```
+
+#### Url
+
+```aivi
+domain Url over Text
+    parse : Text -> Result UrlError Url
+    value : Url -> Text
+```
+
+#### Path
+
+```aivi
+domain Path over Text
+    parse : Text -> Result PathError Path
+    (/)   : Path -> Text -> Path
+    value : Path -> Text
+```
+
+#### NonEmpty
+
+```aivi
+domain NonEmpty A over List A
+    fromList : List A -> Option (NonEmpty A)
+    head     : NonEmpty A -> A
+    tail     : NonEmpty A -> List A
+```
+
+### 20.14 Design boundary for v1
+
+Domains in v1 are intentionally narrow.
+
+They do:
+
+- define nominal carrier-backed types
+- support optional literals
+- support optional domain operators
+- support explicit smart constructors and explicit unwrapping
+- compose with the existing kind system
+
+They do **not**:
+
+- introduce subtyping
+- introduce implicit casts
+- introduce open-ended type-level computation
+- allow arbitrary carrier pattern matching through the domain
+- replace ordinary ADTs or records
 
 ---
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/aivi-base",
+    "crates/aivi-hir",
     "crates/aivi-syntax",
     "crates/aivi-cli",
     "crates/aivi-typing",
@@ -14,6 +15,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 aivi-base = { path = "crates/aivi-base" }
+aivi-hir = { path = "crates/aivi-hir" }
 aivi-syntax = { path = "crates/aivi-syntax" }
 aivi-typing = { path = "crates/aivi-typing" }
 
