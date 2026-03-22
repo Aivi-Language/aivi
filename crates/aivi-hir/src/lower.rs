@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use aivi_base::{Diagnostic, DiagnosticCode, Severity, SourceSpan};
 use aivi_syntax as syn;
@@ -14,9 +14,10 @@ use crate::{
     MarkupNodeId, MarkupNodeKind, MatchControl, Module, Name, NamePath, Pattern, PatternId,
     PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase, RecordExpr, RecordExprField,
     RecordFieldSurface, RecordPatternField, RegexLiteral, ResolutionState, ShowControl, SignalItem,
-    SourceDecorator, SuffixedIntegerLiteral, TermReference, TermResolution, TextLiteral, TypeField,
-    TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId,
-    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
+    SourceDecorator, SourceMetadata, SuffixedIntegerLiteral, TermReference, TermResolution,
+    TextFragment, TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId, TypeItem,
+    TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference,
+    TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {
@@ -58,12 +59,22 @@ pub fn lower_module(module: &syn::Module) -> LoweringResult {
     }
     let namespaces = lowerer.build_namespaces();
     lowerer.resolve_module(&namespaces);
+    lowerer.populate_signal_metadata();
     LoweringResult::new(lowerer.module, lowerer.diagnostics)
 }
 
 struct Lowerer {
     module: Module,
     diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Copy)]
+enum DependencyWork {
+    Expr(ExprId),
+    Pattern(PatternId),
+    Markup(MarkupNodeId),
+    Control(ControlNodeId),
+    Cluster(crate::ClusterId),
 }
 
 #[derive(Clone, Copy)]
@@ -312,6 +323,8 @@ impl Lowerer {
             name,
             annotation,
             body,
+            signal_dependencies: Vec::new(),
+            source_metadata: None,
         }
     }
 
@@ -560,7 +573,7 @@ impl Lowerer {
             }
             match &decorator.payload {
                 syn::DecoratorPayload::Source(source) => {
-                    DecoratorPayload::Source(SourceDecorator {
+                    let source = SourceDecorator {
                         provider: source
                             .provider
                             .as_ref()
@@ -574,10 +587,12 @@ impl Lowerer {
                             .options
                             .as_ref()
                             .map(|record| self.lower_record_expr_as_expr(record)),
-                    })
+                    };
+                    self.validate_source_decorator_shape(decorator.span, &source);
+                    DecoratorPayload::Source(source)
                 }
                 syn::DecoratorPayload::Arguments(arguments) => {
-                    DecoratorPayload::Source(SourceDecorator {
+                    let source = SourceDecorator {
                         provider: None,
                         arguments: arguments
                             .arguments
@@ -588,13 +603,19 @@ impl Lowerer {
                             .options
                             .as_ref()
                             .map(|record| self.lower_record_expr_as_expr(record)),
-                    })
+                    };
+                    self.validate_source_decorator_shape(decorator.span, &source);
+                    DecoratorPayload::Source(source)
                 }
-                syn::DecoratorPayload::Bare => DecoratorPayload::Source(SourceDecorator {
-                    provider: None,
-                    arguments: Vec::new(),
-                    options: None,
-                }),
+                syn::DecoratorPayload::Bare => {
+                    let source = SourceDecorator {
+                        provider: None,
+                        arguments: Vec::new(),
+                        options: None,
+                    };
+                    self.validate_source_decorator_shape(decorator.span, &source);
+                    DecoratorPayload::Source(source)
+                }
             }
         } else {
             self.emit_error(
@@ -636,6 +657,73 @@ impl Lowerer {
             name,
             payload,
         })
+    }
+
+    fn validate_source_decorator_shape(&mut self, span: SourceSpan, source: &SourceDecorator) {
+        let provider_key = match source.provider.as_ref() {
+            Some(provider) if provider.segments().len() >= 2 => Some(path_text(provider)),
+            Some(provider) => {
+                self.emit_error(
+                    provider.span(),
+                    "source decorators must name a provider variant such as `timer.every`",
+                    code("invalid-source-provider"),
+                );
+                None
+            }
+            None => {
+                self.emit_error(
+                    span,
+                    "source decorators must name a provider variant such as `timer.every`",
+                    code("missing-source-provider"),
+                );
+                None
+            }
+        }
+        .and_then(|provider_key| {
+            source_option_names(&provider_key).map(|options| (provider_key, options))
+        });
+
+        let Some(options) = source.options else {
+            return;
+        };
+        let ExprKind::Record(record) = &self.module.exprs()[options].kind else {
+            self.emit_error(
+                span,
+                "`@source ... with` options must lower to a closed record literal",
+                code("invalid-source-options"),
+            );
+            return;
+        };
+
+        let mut seen = HashMap::new();
+        for field in &record.fields {
+            if let Some(previous_span) = seen.insert(field.label.text().to_owned(), field.span) {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("duplicate source option `{}`", field.label.text()))
+                        .with_code(code("duplicate-source-option"))
+                        .with_primary_label(field.span, "this option label is repeated")
+                        .with_secondary_label(previous_span, "previous source option here"),
+                );
+            }
+            if let Some((provider_key, allowed_options)) = provider_key.as_ref() {
+                if !allowed_options
+                    .iter()
+                    .any(|allowed| *allowed == field.label.text())
+                {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "unknown source option `{}` for `{provider_key}`",
+                            field.label.text()
+                        ))
+                        .with_code(code("unknown-source-option"))
+                        .with_primary_label(
+                            field.span,
+                            "this option is not supported for the selected source provider",
+                        ),
+                    );
+                }
+            }
+        }
     }
 
     fn lower_function_parameter(&mut self, parameter: &syn::FunctionParam) -> FunctionParameter {
@@ -697,13 +785,13 @@ impl Lowerer {
                     resolution: ResolutionState::Unresolved,
                 }),
             }),
-            syn::ExprKind::Text(text) => self.alloc_expr(Expr {
-                span: expr.span,
-                kind: ExprKind::Text(TextLiteral {
-                    raw: text.raw.clone().into_boxed_str(),
-                    has_interpolation: text.has_interpolation,
-                }),
-            }),
+            syn::ExprKind::Text(text) => {
+                let text = self.lower_text_literal(text);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Text(text),
+                })
+            }
             syn::ExprKind::Regex(regex) => self.alloc_expr(Expr {
                 span: expr.span,
                 kind: ExprKind::Regex(RegexLiteral {
@@ -837,6 +925,27 @@ impl Lowerer {
         }
     }
 
+    fn lower_text_literal(&mut self, text: &syn::TextLiteral) -> TextLiteral {
+        TextLiteral {
+            segments: text
+                .segments
+                .iter()
+                .map(|segment| match segment {
+                    syn::TextSegment::Text(fragment) => TextSegment::Text(TextFragment {
+                        raw: fragment.raw.clone().into_boxed_str(),
+                        span: fragment.span,
+                    }),
+                    syn::TextSegment::Interpolation(interpolation) => {
+                        TextSegment::Interpolation(TextInterpolation {
+                            span: interpolation.span,
+                            expr: self.lower_expr(&interpolation.expr),
+                        })
+                    }
+                })
+                .collect(),
+        }
+    }
+
     fn lower_pipe_expr(&mut self, pipe: &syn::PipeExpr) -> ExprId {
         self.validate_pipe_stages(&pipe.stages);
         let mut current = pipe.head.as_ref().map(|head| self.lower_expr(head));
@@ -948,6 +1057,11 @@ impl Lowerer {
                 *index += 1;
                 ClusterFinalizer::Explicit(lowered)
             } else {
+                self.emit_error(
+                    stages[*index].span,
+                    "unfinished `&|>` cluster cannot continue with this pipe stage",
+                    code("illegal-unfinished-cluster"),
+                );
                 ClusterFinalizer::ImplicitTuple
             }
         } else {
@@ -1133,10 +1247,16 @@ impl Lowerer {
             syn::PatternKind::Integer(integer) => PatternKind::Integer(IntegerLiteral {
                 raw: integer.raw.clone().into_boxed_str(),
             }),
-            syn::PatternKind::Text(text) => PatternKind::Text(TextLiteral {
-                raw: text.raw.clone().into_boxed_str(),
-                has_interpolation: text.has_interpolation,
-            }),
+            syn::PatternKind::Text(text) => {
+                if text.has_interpolation() {
+                    self.emit_error(
+                        text.span,
+                        "pattern text literals cannot contain interpolation",
+                        code("interpolated-pattern-text"),
+                    );
+                }
+                PatternKind::Text(self.lower_text_literal(text))
+            }
             syn::PatternKind::Group(_) => unreachable!("group patterns are handled above"),
             syn::PatternKind::Tuple(elements) => {
                 let elements = elements
@@ -1217,10 +1337,16 @@ impl Lowerer {
             syn::ExprKind::Integer(integer) => PatternKind::Integer(IntegerLiteral {
                 raw: integer.raw.clone().into_boxed_str(),
             }),
-            syn::ExprKind::Text(text) => PatternKind::Text(TextLiteral {
-                raw: text.raw.clone().into_boxed_str(),
-                has_interpolation: text.has_interpolation,
-            }),
+            syn::ExprKind::Text(text) => {
+                if text.has_interpolation() {
+                    self.emit_error(
+                        text.span,
+                        "pattern text literals cannot contain interpolation",
+                        code("interpolated-pattern-text"),
+                    );
+                }
+                PatternKind::Text(self.lower_text_literal(text))
+            }
             syn::ExprKind::Tuple(elements) => {
                 let elements = elements
                     .iter()
@@ -1517,10 +1643,7 @@ impl Lowerer {
                 name: self.make_name(&attribute.name.text, attribute.name.span),
                 value: match &attribute.value {
                     Some(syn::MarkupAttributeValue::Text(text)) => {
-                        MarkupAttributeValue::Text(TextLiteral {
-                            raw: text.raw.clone().into_boxed_str(),
-                            has_interpolation: text.has_interpolation,
-                        })
+                        MarkupAttributeValue::Text(self.lower_text_literal(text))
                     }
                     Some(syn::MarkupAttributeValue::Expr(expr)) => {
                         MarkupAttributeValue::Expr(self.lower_expr(expr))
@@ -2245,6 +2368,297 @@ impl Lowerer {
             .expect("resolved item id should still exist") = resolved;
     }
 
+    fn populate_signal_metadata(&mut self) {
+        let item_ids = self
+            .module
+            .items()
+            .iter()
+            .map(|(item_id, _)| item_id)
+            .collect::<Vec<_>>();
+        for item_id in item_ids {
+            let (signal_dependencies, source_metadata) = match &self.module.items()[item_id] {
+                Item::Signal(item) => self.compute_signal_metadata(item),
+                _ => continue,
+            };
+            let Some(Item::Signal(item)) = self.module.arenas.items.get_mut(item_id) else {
+                continue;
+            };
+            item.signal_dependencies = signal_dependencies;
+            item.source_metadata = source_metadata;
+        }
+    }
+
+    fn compute_signal_metadata(&self, item: &SignalItem) -> (Vec<ItemId>, Option<SourceMetadata>) {
+        let source = item.header.decorators.iter().find_map(|decorator_id| {
+            let decorator = &self.module.decorators()[*decorator_id];
+            match &decorator.payload {
+                DecoratorPayload::Source(source) => Some(source),
+                _ => None,
+            }
+        });
+        let mut work = Vec::new();
+        if let Some(body) = item.body {
+            work.push(DependencyWork::Expr(body));
+        }
+        let source_dependencies = source.map(|source| {
+            let mut roots = source
+                .arguments
+                .iter()
+                .copied()
+                .map(DependencyWork::Expr)
+                .collect::<Vec<_>>();
+            if let Some(options) = source.options {
+                roots.push(DependencyWork::Expr(options));
+            }
+            self.collect_signal_dependencies(roots)
+        });
+        if let Some(source) = source {
+            work.extend(source.arguments.iter().copied().map(DependencyWork::Expr));
+            if let Some(options) = source.options {
+                work.push(DependencyWork::Expr(options));
+            }
+        }
+        let signal_dependencies = self.collect_signal_dependencies(work);
+        let source_metadata = source.map(|source| {
+            let source_dependencies = source_dependencies.unwrap_or_default();
+            SourceMetadata {
+                provider_key: source
+                    .provider
+                    .as_ref()
+                    .map(|path| path_text(path).into_boxed_str()),
+                is_reactive: !source_dependencies.is_empty(),
+                signal_dependencies: source_dependencies,
+            }
+        });
+        (signal_dependencies, source_metadata)
+    }
+
+    fn collect_signal_dependencies(&self, mut work: Vec<DependencyWork>) -> Vec<ItemId> {
+        let mut dependencies = HashSet::new();
+        let mut seen_exprs = HashSet::new();
+        let mut seen_patterns = HashSet::new();
+        let mut seen_markups = HashSet::new();
+        let mut seen_controls = HashSet::new();
+        let mut seen_clusters = HashSet::new();
+
+        while let Some(node) = work.pop() {
+            match node {
+                DependencyWork::Expr(expr_id) => {
+                    if !seen_exprs.insert(expr_id) {
+                        continue;
+                    }
+                    match &self.module.exprs()[expr_id].kind {
+                        ExprKind::Name(reference) => {
+                            if let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+                                reference.resolution
+                            {
+                                if matches!(self.module.items()[item_id], Item::Signal(_)) {
+                                    dependencies.insert(item_id);
+                                }
+                            }
+                        }
+                        ExprKind::Integer(_)
+                        | ExprKind::SuffixedInteger(_)
+                        | ExprKind::Regex(_) => {}
+                        ExprKind::Text(text) => {
+                            for segment in &text.segments {
+                                if let TextSegment::Interpolation(interpolation) = segment {
+                                    work.push(DependencyWork::Expr(interpolation.expr));
+                                }
+                            }
+                        }
+                        ExprKind::Tuple(elements) => {
+                            work.extend(elements.iter().copied().map(DependencyWork::Expr));
+                        }
+                        ExprKind::List(elements) => {
+                            work.extend(elements.iter().copied().map(DependencyWork::Expr));
+                        }
+                        ExprKind::Record(record) => {
+                            work.extend(
+                                record
+                                    .fields
+                                    .iter()
+                                    .map(|field| DependencyWork::Expr(field.value)),
+                            );
+                        }
+                        ExprKind::Projection { base, .. } => {
+                            if let ProjectionBase::Expr(base) = base {
+                                work.push(DependencyWork::Expr(*base));
+                            }
+                        }
+                        ExprKind::Apply { callee, arguments } => {
+                            work.push(DependencyWork::Expr(*callee));
+                            work.extend(arguments.iter().copied().map(DependencyWork::Expr));
+                        }
+                        ExprKind::Unary { expr, .. } => work.push(DependencyWork::Expr(*expr)),
+                        ExprKind::Binary { left, right, .. } => {
+                            work.push(DependencyWork::Expr(*left));
+                            work.push(DependencyWork::Expr(*right));
+                        }
+                        ExprKind::Pipe(pipe) => {
+                            work.push(DependencyWork::Expr(pipe.head));
+                            for stage in pipe.stages.iter() {
+                                match &stage.kind {
+                                    PipeStageKind::Transform { expr }
+                                    | PipeStageKind::Gate { expr }
+                                    | PipeStageKind::Map { expr }
+                                    | PipeStageKind::Apply { expr }
+                                    | PipeStageKind::Tap { expr }
+                                    | PipeStageKind::FanIn { expr }
+                                    | PipeStageKind::Truthy { expr }
+                                    | PipeStageKind::Falsy { expr }
+                                    | PipeStageKind::RecurStart { expr }
+                                    | PipeStageKind::RecurStep { expr } => {
+                                        work.push(DependencyWork::Expr(*expr))
+                                    }
+                                    PipeStageKind::Case { pattern, body } => {
+                                        work.push(DependencyWork::Expr(*body));
+                                        work.push(DependencyWork::Pattern(*pattern));
+                                    }
+                                }
+                            }
+                        }
+                        ExprKind::Cluster(cluster_id) => {
+                            work.push(DependencyWork::Cluster(*cluster_id))
+                        }
+                        ExprKind::Markup(node_id) => work.push(DependencyWork::Markup(*node_id)),
+                    }
+                }
+                DependencyWork::Pattern(pattern_id) => {
+                    if !seen_patterns.insert(pattern_id) {
+                        continue;
+                    }
+                    match &self.module.patterns()[pattern_id].kind {
+                        PatternKind::Wildcard
+                        | PatternKind::Binding(_)
+                        | PatternKind::Integer(_)
+                        | PatternKind::UnresolvedName(_) => {}
+                        PatternKind::Text(text) => {
+                            for segment in &text.segments {
+                                if let TextSegment::Interpolation(interpolation) = segment {
+                                    work.push(DependencyWork::Expr(interpolation.expr));
+                                }
+                            }
+                        }
+                        PatternKind::Tuple(elements) => {
+                            work.extend(elements.iter().copied().map(DependencyWork::Pattern));
+                        }
+                        PatternKind::Record(fields) => {
+                            work.extend(
+                                fields
+                                    .iter()
+                                    .map(|field| DependencyWork::Pattern(field.pattern)),
+                            );
+                        }
+                        PatternKind::Constructor { arguments, .. } => {
+                            work.extend(arguments.iter().copied().map(DependencyWork::Pattern));
+                        }
+                    }
+                }
+                DependencyWork::Markup(node_id) => {
+                    if !seen_markups.insert(node_id) {
+                        continue;
+                    }
+                    match &self.module.markup_nodes()[node_id].kind {
+                        MarkupNodeKind::Element(element) => {
+                            for attribute in &element.attributes {
+                                match &attribute.value {
+                                    MarkupAttributeValue::ImplicitTrue => {}
+                                    MarkupAttributeValue::Expr(expr) => {
+                                        work.push(DependencyWork::Expr(*expr))
+                                    }
+                                    MarkupAttributeValue::Text(text) => {
+                                        for segment in &text.segments {
+                                            if let TextSegment::Interpolation(interpolation) =
+                                                segment
+                                            {
+                                                work.push(DependencyWork::Expr(interpolation.expr));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            work.extend(
+                                element.children.iter().copied().map(DependencyWork::Markup),
+                            );
+                        }
+                        MarkupNodeKind::Control(control_id) => {
+                            work.push(DependencyWork::Control(*control_id))
+                        }
+                    }
+                }
+                DependencyWork::Control(control_id) => {
+                    if !seen_controls.insert(control_id) {
+                        continue;
+                    }
+                    match &self.module.control_nodes()[control_id] {
+                        ControlNode::Show(show) => {
+                            work.push(DependencyWork::Expr(show.when));
+                            if let Some(keep_mounted) = show.keep_mounted {
+                                work.push(DependencyWork::Expr(keep_mounted));
+                            }
+                            work.extend(show.children.iter().copied().map(DependencyWork::Markup));
+                        }
+                        ControlNode::Each(each) => {
+                            work.push(DependencyWork::Expr(each.collection));
+                            if let Some(key) = each.key {
+                                work.push(DependencyWork::Expr(key));
+                            }
+                            work.extend(each.children.iter().copied().map(DependencyWork::Markup));
+                            if let Some(empty) = each.empty {
+                                work.push(DependencyWork::Control(empty));
+                            }
+                        }
+                        ControlNode::Empty(empty) => {
+                            work.extend(empty.children.iter().copied().map(DependencyWork::Markup));
+                        }
+                        ControlNode::Match(match_node) => {
+                            work.push(DependencyWork::Expr(match_node.scrutinee));
+                            work.extend(
+                                match_node
+                                    .cases
+                                    .iter()
+                                    .copied()
+                                    .map(DependencyWork::Control),
+                            );
+                        }
+                        ControlNode::Case(case) => {
+                            work.push(DependencyWork::Pattern(case.pattern));
+                            work.extend(case.children.iter().copied().map(DependencyWork::Markup));
+                        }
+                        ControlNode::Fragment(fragment) => {
+                            work.extend(
+                                fragment
+                                    .children
+                                    .iter()
+                                    .copied()
+                                    .map(DependencyWork::Markup),
+                            );
+                        }
+                        ControlNode::With(with) => {
+                            work.push(DependencyWork::Expr(with.value));
+                            work.extend(with.children.iter().copied().map(DependencyWork::Markup));
+                        }
+                    }
+                }
+                DependencyWork::Cluster(cluster_id) => {
+                    if !seen_clusters.insert(cluster_id) {
+                        continue;
+                    }
+                    let cluster = &self.module.clusters()[cluster_id];
+                    work.extend(cluster.members.iter().copied().map(DependencyWork::Expr));
+                    if let ClusterFinalizer::Explicit(expr) = cluster.finalizer {
+                        work.push(DependencyWork::Expr(expr));
+                    }
+                }
+            }
+        }
+
+        let mut signal_dependencies = dependencies.into_iter().collect::<Vec<_>>();
+        signal_dependencies.sort();
+        signal_dependencies
+    }
+
     fn resolve_decorator(&mut self, decorator_id: DecoratorId, namespaces: &Namespaces) {
         let decorator = self.module.decorators()[decorator_id].clone();
         let env = ResolveEnv::default();
@@ -2285,7 +2699,14 @@ impl Lowerer {
                     kind: ExprKind::Name(reference),
                 }
             }
-            ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => expr,
+            ExprKind::Integer(_) | ExprKind::Regex(_) => expr,
+            ExprKind::Text(text) => {
+                self.resolve_text_literal(&text, namespaces, env);
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Text(text),
+                }
+            }
             ExprKind::SuffixedInteger(mut literal) => {
                 literal.resolution = self.resolve_literal_suffix(&literal.suffix, namespaces);
                 Expr {
@@ -2447,8 +2868,14 @@ impl Lowerer {
         match node.kind {
             MarkupNodeKind::Element(element) => {
                 for attribute in &element.attributes {
-                    if let MarkupAttributeValue::Expr(expr) = attribute.value {
-                        self.resolve_expr(expr, namespaces, env);
+                    match &attribute.value {
+                        MarkupAttributeValue::Expr(expr) => {
+                            self.resolve_expr(*expr, namespaces, env)
+                        }
+                        MarkupAttributeValue::Text(text) => {
+                            self.resolve_text_literal(text, namespaces, env)
+                        }
+                        MarkupAttributeValue::ImplicitTrue => {}
                     }
                 }
                 for child in &element.children {
@@ -2536,7 +2963,14 @@ impl Lowerer {
         let pattern = self.module.patterns()[pattern_id].clone();
         let mut bindings = Vec::new();
         let resolved = match pattern.kind {
-            PatternKind::Wildcard | PatternKind::Integer(_) | PatternKind::Text(_) => pattern,
+            PatternKind::Wildcard | PatternKind::Integer(_) => pattern,
+            PatternKind::Text(text) => {
+                self.resolve_text_literal(&text, namespaces, env);
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::Text(text),
+                }
+            }
             PatternKind::Binding(binding) => {
                 bindings.push(binding.binding);
                 Pattern {
@@ -2590,6 +3024,19 @@ impl Lowerer {
             .get_mut(pattern_id)
             .expect("resolved pattern id should still exist") = resolved;
         bindings
+    }
+
+    fn resolve_text_literal(
+        &mut self,
+        text: &TextLiteral,
+        namespaces: &Namespaces,
+        env: &ResolveEnv,
+    ) {
+        for segment in &text.segments {
+            if let TextSegment::Interpolation(interpolation) = segment {
+                self.resolve_expr(interpolation.expr, namespaces, env);
+            }
+        }
     }
 
     fn resolve_type(&mut self, type_id: TypeId, namespaces: &Namespaces, env: &ResolveEnv) {
@@ -3152,6 +3599,31 @@ fn is_source_decorator(path: &NamePath) -> bool {
     path.segments().len() == 1 && path.segments().first().text() == "source"
 }
 
+fn source_option_names(provider_key: &str) -> Option<&'static [&'static str]> {
+    match provider_key {
+        "http.get" | "http.post" => Some(&[
+            "headers",
+            "query",
+            "body",
+            "decode",
+            "timeout",
+            "retry",
+            "refreshOn",
+            "refreshEvery",
+            "activeWhen",
+        ]),
+        "timer.every" | "timer.after" => Some(&["immediate", "jitter", "coalesce", "activeWhen"]),
+        "fs.watch" => Some(&["events", "recursive"]),
+        "fs.read" => Some(&["decode", "reloadOn", "debounce", "readOnStart"]),
+        "socket.connect" | "mailbox.subscribe" => {
+            Some(&["decode", "buffer", "reconnect", "heartbeat", "activeWhen"])
+        }
+        "process.spawn" => Some(&["cwd", "env", "stdout", "stderr", "restartOn"]),
+        "window.keyDown" => Some(&["capture", "repeat", "focusOnly"]),
+        _ => None,
+    }
+}
+
 fn path_text(path: &NamePath) -> String {
     path.segments()
         .iter()
@@ -3246,8 +3718,8 @@ mod tests {
     use super::{lower_module, path_text};
     use crate::{
         BuiltinType, ClusterFinalizer, DecoratorPayload, DomainMemberKind, ExprKind, Item,
-        LiteralSuffixResolution, ResolutionState, TermResolution, TypeKind, TypeResolution,
-        ValidationMode,
+        LiteralSuffixResolution, ResolutionState, TermResolution, TextSegment, TypeKind,
+        TypeResolution, ValidationMode,
     };
 
     fn fixture_root() -> PathBuf {
@@ -3300,6 +3772,18 @@ mod tests {
         }
     }
 
+    fn signal_dependency_names(module: &crate::Module, item: &crate::SignalItem) -> Vec<String> {
+        item.signal_dependencies
+            .iter()
+            .map(|item_id| match &module.items()[*item_id] {
+                Item::Signal(signal) => signal.name.text().to_owned(),
+                other => {
+                    panic!("expected signal dependency to point at a signal item, found {other:?}")
+                }
+            })
+            .collect()
+    }
+
     #[test]
     fn lowers_valid_fixture_corpus() {
         for path in [
@@ -3314,6 +3798,7 @@ mod tests {
             "milestone-2/valid/pipe-branch-and-join/main.aivi",
             "milestone-1/valid/records/record_shorthand_and_elision.aivi",
             "milestone-1/valid/sources/source_declarations.aivi",
+            "milestone-1/valid/strings/text_and_regex.aivi",
             "milestone-1/valid/top-level/declarations.aivi",
             "milestone-1/valid/pipes/pipe_algebra.aivi",
             "milestone-1/valid/pipes/applicative_clusters.aivi",
@@ -3349,6 +3834,11 @@ mod tests {
             "milestone-2/invalid/ambiguous-domain-literal-suffix/main.aivi",
             "milestone-2/invalid/unpaired-truthy-falsy/main.aivi",
             "milestone-2/invalid/fanin-without-map/main.aivi",
+            "milestone-2/invalid/interpolated-pattern-text/main.aivi",
+            "milestone-1/invalid/cluster_unfinished_gate.aivi",
+            "milestone-1/invalid/source_unknown_option.aivi",
+            "milestone-2/invalid/source-duplicate-option/main.aivi",
+            "milestone-2/invalid/source-provider-without-variant/main.aivi",
         ] {
             let lowered = lower_fixture(path);
             assert!(
@@ -3379,6 +3869,28 @@ mod tests {
             users.body.is_none(),
             "source-backed signals should stay bodyless in HIR"
         );
+        let metadata = users
+            .source_metadata
+            .as_ref()
+            .expect("source-backed signal should carry source metadata");
+        assert_eq!(
+            metadata.provider_key.as_deref(),
+            Some("http.get"),
+            "source metadata should preserve the provider key"
+        );
+        assert!(
+            metadata.is_reactive,
+            "interpolated source arguments should mark the source as reactive"
+        );
+        assert_eq!(
+            metadata.signal_dependencies.len(),
+            1,
+            "source metadata should capture the static signal dependency set"
+        );
+        assert_eq!(
+            users.signal_dependencies, metadata.signal_dependencies,
+            "source-backed signals should expose the same dependency set at the signal boundary"
+        );
         let users_decorator = lowered.module().decorators()[users.header.decorators[0]].clone();
         match users_decorator.payload {
             DecoratorPayload::Source(source) => {
@@ -3395,6 +3907,232 @@ mod tests {
         assert!(
             tick.body.is_none(),
             "bodyless timer source signal should stay bodyless"
+        );
+        let metadata = tick
+            .source_metadata
+            .as_ref()
+            .expect("timer source should still carry source metadata");
+        assert_eq!(metadata.provider_key.as_deref(), Some("timer.every"));
+        assert!(
+            !metadata.is_reactive,
+            "non-reactive source arguments should stay non-reactive"
+        );
+        assert!(
+            metadata.signal_dependencies.is_empty(),
+            "non-reactive sources should not record signal dependencies"
+        );
+        assert_eq!(
+            tick.signal_dependencies, metadata.signal_dependencies,
+            "non-reactive source signals should expose an empty dependency set"
+        );
+    }
+
+    #[test]
+    fn lowers_structured_text_interpolation_in_source_arguments() {
+        let lowered = lower_fixture("milestone-2/valid/source-decorator-signals/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "source-decorator fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let users = find_signal(lowered.module(), "users");
+        let users_decorator = &lowered.module().decorators()[users.header.decorators[0]];
+        let DecoratorPayload::Source(source) = &users_decorator.payload else {
+            panic!("expected source decorator payload");
+        };
+        let argument = source.arguments[0];
+        let ExprKind::Text(text) = &lowered.module().exprs()[argument].kind else {
+            panic!("expected interpolated text argument");
+        };
+        assert_eq!(text.segments.len(), 2);
+        match &text.segments[0] {
+            TextSegment::Interpolation(interpolation) => {
+                let ExprKind::Name(reference) = &lowered.module().exprs()[interpolation.expr].kind
+                else {
+                    panic!("expected interpolation hole to lower as a name expression");
+                };
+                assert_eq!(
+                    path_text(&reference.path),
+                    "apiHost",
+                    "interpolation should preserve the embedded expression"
+                );
+                assert!(
+                    matches!(
+                        reference.resolution,
+                        ResolutionState::Resolved(TermResolution::Item(_))
+                    ),
+                    "interpolation names should resolve like ordinary expressions"
+                );
+            }
+            other => panic!("expected leading interpolation segment, got {other:?}"),
+        }
+        match &text.segments[1] {
+            TextSegment::Text(fragment) => assert_eq!(&*fragment.raw, "/users"),
+            other => panic!("expected trailing text segment, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tracks_signal_dependencies_for_ordinary_derived_signals() {
+        let lowered = lower_fixture("milestone-2/valid/applicative-clusters/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "applicative cluster fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let validated_user = find_signal(lowered.module(), "validatedUser");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), validated_user),
+            vec![
+                "nameText".to_owned(),
+                "emailText".to_owned(),
+                "ageValue".to_owned(),
+            ],
+            "derived signals should collect the union of referenced signal dependencies"
+        );
+        assert!(
+            validated_user.source_metadata.is_none(),
+            "ordinary derived signals should not carry source metadata"
+        );
+
+        let name_pair = find_signal(lowered.module(), "namePair");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), name_pair),
+            vec!["firstName".to_owned(), "lastName".to_owned()],
+            "applicative derived signals should keep deterministic dependency ordering"
+        );
+
+        let local_refs = lower_fixture("milestone-2/valid/local-top-level-refs/main.aivi");
+        assert!(
+            !local_refs.has_errors(),
+            "local top-level refs fixture should lower cleanly: {:?}",
+            local_refs.diagnostics()
+        );
+        let next_refresh = find_signal(local_refs.module(), "nextRefresh");
+        assert_eq!(
+            signal_dependency_names(local_refs.module(), next_refresh),
+            vec!["refreshMs".to_owned()],
+            "value references must not leak into signal dependency metadata"
+        );
+    }
+
+    #[test]
+    fn rejects_interpolated_pattern_text() {
+        let lowered = lower_text(
+            "interpolated-pattern-text.aivi",
+            "val subject = \"Ada\"\nval result = subject ||> \"{subject}\" => 1\n",
+        );
+        assert!(
+            lowered.has_errors(),
+            "interpolated pattern text should be rejected"
+        );
+        assert!(
+            lowered
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(super::code("interpolated-pattern-text"))),
+            "expected interpolated-pattern-text diagnostic, got {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered.module().validate(ValidationMode::Structural);
+        assert!(
+            report.is_ok(),
+            "invalid interpolated-pattern-text fixture should keep structural HIR: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn rejects_unfinished_cluster_continuations() {
+        let lowered = lower_fixture("milestone-1/invalid/cluster_unfinished_gate.aivi");
+        assert!(
+            lowered.has_errors(),
+            "unfinished applicative clusters should be rejected"
+        );
+        assert!(
+            lowered.diagnostics().iter().any(
+                |diagnostic| diagnostic.code == Some(super::code("illegal-unfinished-cluster"))
+            ),
+            "expected illegal-unfinished-cluster diagnostic, got {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered.module().validate(ValidationMode::Structural);
+        assert!(
+            report.is_ok(),
+            "unfinished cluster errors should keep structurally valid HIR: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_source_options() {
+        let lowered = lower_fixture("milestone-2/invalid/source-duplicate-option/main.aivi");
+        assert!(
+            lowered.has_errors(),
+            "duplicate source options should be rejected"
+        );
+        assert!(
+            lowered
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(super::code("duplicate-source-option"))),
+            "expected duplicate-source-option diagnostic, got {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered.module().validate(ValidationMode::Structural);
+        assert!(
+            report.is_ok(),
+            "duplicate source options should keep structurally valid HIR: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn rejects_source_provider_without_variant() {
+        let lowered =
+            lower_fixture("milestone-2/invalid/source-provider-without-variant/main.aivi");
+        assert!(
+            lowered.has_errors(),
+            "source providers without variants should be rejected"
+        );
+        assert!(
+            lowered
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(super::code("invalid-source-provider"))),
+            "expected invalid-source-provider diagnostic, got {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered.module().validate(ValidationMode::Structural);
+        assert!(
+            report.is_ok(),
+            "source provider shape errors should keep structurally valid HIR: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_source_options_for_known_providers() {
+        let lowered = lower_fixture("milestone-1/invalid/source_unknown_option.aivi");
+        assert!(
+            lowered.has_errors(),
+            "unknown source options on known providers should be rejected"
+        );
+        assert!(
+            lowered
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(super::code("unknown-source-option"))),
+            "expected unknown-source-option diagnostic, got {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered.module().validate(ValidationMode::Structural);
+        assert!(
+            report.is_ok(),
+            "unknown source option errors should keep structurally valid HIR: {:?}",
+            report.diagnostics()
         );
     }
 

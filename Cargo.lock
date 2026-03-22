@@ -21,6 +21,7 @@ version = "0.1.0"
 dependencies = [
  "aivi-base",
  "aivi-syntax",
+ "aivi-typing",
 ]
 
 [[package]]

@@ -8,10 +8,11 @@ use crate::{
         MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody,
         OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind,
         ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral,
-        SourceDecorator, SuffixedIntegerLiteral, TextLiteral, TokenRange, TypeDeclBody, TypeExpr,
-        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+        SourceDecorator, SuffixedIntegerLiteral, TextFragment, TextInterpolation, TextLiteral,
+        TextSegment, TokenRange, TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant,
+        UnaryOperator, UseItem,
     },
-    lex::{LexedModule, Token, TokenKind, lex_module},
+    lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
 
 const UNEXPECTED_TOP_LEVEL_TOKEN: DiagnosticCode =
@@ -40,8 +41,10 @@ const MISMATCHED_MARKUP_CLOSE: DiagnosticCode =
     DiagnosticCode::new("syntax", "mismatched-markup-close");
 const UNTERMINATED_MARKUP_NODE: DiagnosticCode =
     DiagnosticCode::new("syntax", "unterminated-markup-node");
-const ILLEGAL_CLUSTER_STAGE: DiagnosticCode =
-    DiagnosticCode::new("syntax", "illegal-cluster-stage");
+const INVALID_TEXT_INTERPOLATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "invalid-text-interpolation");
+const UNTERMINATED_TEXT_INTERPOLATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "unterminated-text-interpolation");
 
 /// Parser output retaining the lossless token buffer and recoverable diagnostics.
 #[derive(Clone, Debug)]
@@ -1155,21 +1158,16 @@ impl<'a> Parser<'a> {
                     }
                 }
                 TokenKind::PipeGate => {
-                    if cluster_active {
-                        self.emit_illegal_cluster_stage(index);
-                        cluster_active = false;
-                    }
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::Gate { expr }
                 }
                 TokenKind::PipeCase => {
-                    if cluster_active {
-                        self.emit_illegal_cluster_stage(index);
-                        cluster_active = false;
-                    }
+                    cluster_active = false;
                     PipeStageKind::Case(self.parse_pipe_case_arm(cursor, end, stop)?)
                 }
                 TokenKind::PipeMap => {
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::Map { expr }
                 }
@@ -1179,34 +1177,32 @@ impl<'a> Parser<'a> {
                     PipeStageKind::Apply { expr }
                 }
                 TokenKind::PipeRecurStart => {
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::RecurStart { expr }
                 }
                 TokenKind::PipeRecurStep => {
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::RecurStep { expr }
                 }
                 TokenKind::PipeTap => {
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::Tap { expr }
                 }
                 TokenKind::PipeFanIn => {
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::FanIn { expr }
                 }
                 TokenKind::TruthyBranch => {
-                    if cluster_active {
-                        self.emit_illegal_cluster_stage(index);
-                        cluster_active = false;
-                    }
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::Truthy { expr }
                 }
                 TokenKind::FalsyBranch => {
-                    if cluster_active {
-                        self.emit_illegal_cluster_stage(index);
-                        cluster_active = false;
-                    }
+                    cluster_active = false;
                     let expr = self.parse_binary_expr(cursor, end, stop.with_pipe_stage())?;
                     PipeStageKind::Falsy { expr }
                 }
@@ -2084,20 +2080,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn emit_illegal_cluster_stage(&mut self, operator_index: usize) {
-        self.diagnostics.push(
-            Diagnostic::error("unfinished `&|>` cluster cannot continue with this pipe stage")
-                .with_code(ILLEGAL_CLUSTER_STAGE)
-                .with_primary_label(
-                    self.source_span_of_token(operator_index),
-                    format!(
-                        "finalize the applicative cluster before `{}`",
-                        self.tokens[operator_index].text(self.source)
-                    ),
-                ),
-        );
-    }
-
     fn missing_body_diagnostic(&mut self, keyword_index: usize, message: &str, label: &str) {
         self.diagnostics.push(
             Diagnostic::error(message)
@@ -2106,12 +2088,179 @@ impl<'a> Parser<'a> {
         );
     }
 
-    fn text_literal_from_token(&self, index: usize) -> TextLiteral {
-        let raw = self.tokens[index].text(self.source).to_owned();
-        TextLiteral {
-            has_interpolation: contains_interpolation(&raw),
-            raw,
-            span: self.source_span_of_token(index),
+    fn text_literal_from_token(&mut self, index: usize) -> TextLiteral {
+        let span = self.source_span_of_token(index);
+        let raw = self.tokens[index].text(self.source);
+        self.parse_text_literal(raw, span)
+    }
+
+    fn parse_text_literal(&mut self, raw: &str, span: SourceSpan) -> TextLiteral {
+        let start = span.span().start().as_usize();
+        let end = span.span().end().as_usize();
+        let body_start = if raw.starts_with('"') {
+            start + 1
+        } else {
+            start
+        };
+        let body_end = if raw.ends_with('"') && end > body_start {
+            end - 1
+        } else {
+            end
+        };
+
+        let mut segments = Vec::new();
+        let mut cursor = body_start;
+        let mut fragment_start = body_start;
+        let text = self.source.text();
+
+        while cursor < body_end {
+            let next = text[cursor..body_end]
+                .chars()
+                .next()
+                .expect("text literal scan must stay on a UTF-8 boundary");
+            match next {
+                '\\' => {
+                    cursor += 1;
+                    if cursor < body_end {
+                        let escaped = text[cursor..body_end]
+                            .chars()
+                            .next()
+                            .expect("escaped text segment must stay on a UTF-8 boundary");
+                        cursor += escaped.len_utf8();
+                    }
+                }
+                '{' => {
+                    self.push_text_fragment(&mut segments, fragment_start, cursor, false);
+                    let Some(close_start) = self.find_text_interpolation_close(cursor, body_end)
+                    else {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "text interpolation is not terminated before the end of the string literal",
+                            )
+                            .with_code(UNTERMINATED_TEXT_INTERPOLATION)
+                            .with_primary_label(
+                                SourceSpan::new(self.source.id(), Span::from(cursor..body_end)),
+                                "expected a closing `}` for this interpolation",
+                            ),
+                        );
+                        let allow_empty = segments.is_empty();
+                        self.push_text_fragment(&mut segments, cursor, body_end, allow_empty);
+                        fragment_start = body_end;
+                        break;
+                    };
+                    let interpolation_end = close_start + 1;
+                    let interpolation_span =
+                        SourceSpan::new(self.source.id(), Span::from(cursor..interpolation_end));
+                    let expr_range = cursor + 1..close_start;
+                    if self.source.text()[expr_range.clone()].trim().is_empty() {
+                        self.diagnostics.push(
+                            Diagnostic::error("text interpolation must contain an expression")
+                                .with_code(INVALID_TEXT_INTERPOLATION)
+                                .with_primary_label(
+                                    interpolation_span,
+                                    "add an expression between `{` and `}`",
+                                ),
+                        );
+                        self.push_text_fragment(&mut segments, cursor, interpolation_end, false);
+                    } else if let Some(expr) =
+                        self.parse_text_interpolation_expr(expr_range, interpolation_span)
+                    {
+                        segments.push(TextSegment::Interpolation(TextInterpolation {
+                            expr: Box::new(expr),
+                            span: interpolation_span,
+                        }));
+                    } else {
+                        self.push_text_fragment(&mut segments, cursor, interpolation_end, false);
+                    }
+                    cursor = interpolation_end;
+                    fragment_start = interpolation_end;
+                }
+                _ => cursor += next.len_utf8(),
+            }
+        }
+
+        let allow_empty = segments.is_empty();
+        self.push_text_fragment(&mut segments, fragment_start, body_end, allow_empty);
+        TextLiteral { span, segments }
+    }
+
+    fn push_text_fragment(
+        &self,
+        segments: &mut Vec<TextSegment>,
+        start: usize,
+        end: usize,
+        allow_empty: bool,
+    ) {
+        if start == end && !allow_empty {
+            return;
+        }
+        let span = self.source.source_span(start..end);
+        segments.push(TextSegment::Text(TextFragment {
+            raw: self.source.slice(span.span()).to_owned(),
+            span,
+        }));
+    }
+
+    fn find_text_interpolation_close(&self, open_brace: usize, body_end: usize) -> Option<usize> {
+        let lexed = lex_fragment(self.source, open_brace + 1..body_end);
+        let mut brace_depth = 0usize;
+        for token in lexed.tokens() {
+            match token.kind() {
+                TokenKind::LBrace => brace_depth += 1,
+                TokenKind::RBrace => {
+                    if brace_depth == 0 {
+                        return Some(token.span().start().as_usize());
+                    }
+                    brace_depth -= 1;
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn parse_text_interpolation_expr(
+        &mut self,
+        range: std::ops::Range<usize>,
+        interpolation_span: SourceSpan,
+    ) -> Option<Expr> {
+        let lexed = lex_fragment(self.source, range);
+        self.diagnostics.extend(lexed.diagnostics().iter().cloned());
+
+        let mut parser = Parser::new(self.source, lexed.tokens());
+        let mut cursor = 0usize;
+        let expr = parser.parse_expr(&mut cursor, lexed.tokens().len(), ExprStop::default());
+        let trailing = parser.next_significant_from(cursor);
+        self.diagnostics.extend(parser.diagnostics);
+
+        match expr {
+            Some(expr) if trailing.is_none() => Some(expr),
+            Some(_) => {
+                let trailing_index = trailing.expect("checked above");
+                self.diagnostics.push(
+                    Diagnostic::error("text interpolation must contain exactly one expression")
+                        .with_code(INVALID_TEXT_INTERPOLATION)
+                        .with_primary_label(
+                            SourceSpan::new(
+                                self.source.id(),
+                                lexed.tokens()[trailing_index].span(),
+                            ),
+                            "this token is outside the interpolation expression",
+                        ),
+                );
+                None
+            }
+            None => {
+                self.diagnostics.push(
+                    Diagnostic::error("text interpolation must contain a valid expression")
+                        .with_code(INVALID_TEXT_INTERPOLATION)
+                        .with_primary_label(
+                            interpolation_span,
+                            "could not parse the expression inside this interpolation",
+                        ),
+                );
+                None
+            }
         }
     }
 
@@ -2439,28 +2588,6 @@ impl TypeStop {
     }
 }
 
-fn contains_interpolation(raw: &str) -> bool {
-    let body = raw
-        .strip_prefix('"')
-        .and_then(|text| text.strip_suffix('"'));
-    let Some(body) = body else {
-        return false;
-    };
-    let mut escaped = false;
-    for character in body.chars() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match character {
-            '\\' => escaped = true,
-            '{' => return true,
-            _ => {}
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use std::{fs, path::PathBuf};
@@ -2615,6 +2742,36 @@ export main
                 ));
             }
             other => panic!("expected function item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parser_structures_text_interpolation_segments() {
+        let (_, parsed) = load(r#"val greeting = "Hello {name}, use \{literal\} braces""#);
+
+        assert!(!parsed.has_errors());
+        match &parsed.module.items[0] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::Text(text)) => {
+                    assert_eq!(text.segments.len(), 3);
+                    assert!(matches!(
+                        &text.segments[0],
+                        TextSegment::Text(fragment) if fragment.raw == "Hello "
+                    ));
+                    assert!(matches!(
+                        &text.segments[1],
+                        TextSegment::Interpolation(interpolation)
+                            if matches!(interpolation.expr.kind, ExprKind::Name(ref identifier) if identifier.text == "name")
+                    ));
+                    assert!(matches!(
+                        &text.segments[2],
+                        TextSegment::Text(fragment)
+                            if fragment.raw == r#", use \{literal\} braces"#
+                    ));
+                }
+                other => panic!("expected interpolated text literal, got {other:?}"),
+            },
+            other => panic!("expected value item, got {other:?}"),
         }
     }
 
@@ -2830,7 +2987,6 @@ export main
     fn parser_flags_only_syntax_invalid_fixtures() {
         for relative in [
             "invalid/markup_mismatched_close.aivi",
-            "invalid/cluster_unfinished_gate.aivi",
             "invalid/regex_bad_pattern.aivi",
         ] {
             let parsed = parse_fixture(relative);
@@ -2847,6 +3003,7 @@ export main
             "invalid/record_missing_required_field.aivi",
             "invalid/each_missing_key.aivi",
             "invalid/gate_non_list.aivi",
+            "invalid/cluster_unfinished_gate.aivi",
         ] {
             let parsed = parse_fixture(relative);
             assert!(

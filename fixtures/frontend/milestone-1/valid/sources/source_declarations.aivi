@@ -18,12 +18,18 @@ type DecodeMode =
   | Strict
   | Permissive
 
+domain Duration over Int
+    literal s : Int -> Duration
+
+domain Repeat over Int
+    literal x : Int -> Repeat
+
 sig apiHost = "https://api.example.com"
 
 @source http.get "{apiHost}/users" with {
     decode: Strict,
-    retry: 3,
-    timeoutMs: 5000
+    retry: 3x,
+    timeout: 5s
 }
 sig users : Signal (Result HttpError (List User))
 

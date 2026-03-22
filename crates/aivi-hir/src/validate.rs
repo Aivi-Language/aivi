@@ -1,12 +1,19 @@
+use std::collections::HashMap;
+
 use aivi_base::{Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan};
+use aivi_typing::{
+    Kind, KindCheckError, KindCheckErrorKind, KindChecker, KindExprId,
+    KindParameterId as TypingKindParameterId, KindRecordField, KindStore,
+};
 
 use crate::{
     arena::{Arena, ArenaId},
     hir::{
-        ClusterFinalizer, ControlNode, ControlNodeKind, DecoratorPayload, DomainMemberKind,
-        ExprKind, Item, LiteralSuffixResolution, MarkupAttributeValue, MarkupNodeKind, Module,
-        Name, NamePath, PatternKind, PipeStageKind, ResolutionState, TermReference, TermResolution,
-        TypeKind, TypeReference, TypeResolution,
+        BuiltinType, ClusterFinalizer, ControlNode, ControlNodeKind, DecoratorPayload,
+        DomainMemberKind, ExprKind, Item, LiteralSuffixResolution, MarkupAttributeValue,
+        MarkupNodeKind, Module, Name, NamePath, PatternKind, PipeStageKind, ResolutionState,
+        SourceMetadata, TermReference, TermResolution, TextLiteral, TextSegment, TypeKind,
+        TypeReference, TypeResolution,
     },
     ids::{
         BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,
@@ -75,6 +82,7 @@ impl Validator<'_> {
         self.validate_control_nodes();
         self.validate_clusters();
         self.validate_items();
+        self.validate_type_kinds();
     }
 
     fn validate_roots(&mut self) {
@@ -189,7 +197,8 @@ impl Validator<'_> {
         for (_, pattern) in self.module.patterns().iter() {
             self.check_span("pattern", pattern.span);
             match &pattern.kind {
-                PatternKind::Wildcard | PatternKind::Integer(_) | PatternKind::Text(_) => {}
+                PatternKind::Wildcard | PatternKind::Integer(_) => {}
+                PatternKind::Text(text) => self.check_text_literal(pattern.span, text),
                 PatternKind::Binding(binding) => {
                     self.check_name(&binding.name);
                     self.require_binding(pattern.span, "pattern", "binding", binding.binding);
@@ -239,7 +248,8 @@ impl Validator<'_> {
             self.check_span("expression", expr.span);
             match &expr.kind {
                 ExprKind::Name(reference) => self.check_term_reference(reference),
-                ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => {}
+                ExprKind::Integer(_) | ExprKind::Regex(_) => {}
+                ExprKind::Text(text) => self.check_text_literal(expr.span, text),
                 ExprKind::SuffixedInteger(literal) => self.check_suffixed_integer(literal),
                 ExprKind::Tuple(elements) => {
                     for element in elements.iter() {
@@ -338,13 +348,17 @@ impl Validator<'_> {
                     for attribute in &element.attributes {
                         self.check_span("markup attribute", attribute.span);
                         self.check_name(&attribute.name);
-                        if let MarkupAttributeValue::Expr(expr) = attribute.value {
-                            self.require_expr(
+                        match &attribute.value {
+                            MarkupAttributeValue::Expr(expr) => self.require_expr(
                                 attribute.span,
                                 "markup attribute",
                                 "attribute expression",
-                                expr,
-                            );
+                                *expr,
+                            ),
+                            MarkupAttributeValue::Text(text) => {
+                                self.check_text_literal(attribute.span, text)
+                            }
+                            MarkupAttributeValue::ImplicitTrue => {}
                         }
                     }
                     for child in &element.children {
@@ -589,6 +603,40 @@ impl Validator<'_> {
                     if let Some(body) = item.body {
                         self.require_expr(item.header.span, "signal item", "body", body);
                     }
+                    self.check_signal_dependencies(item.header.span, &item.signal_dependencies);
+                    let has_source_decorator = item.header.decorators.iter().any(|decorator_id| {
+                        matches!(
+                            self.module
+                                .decorators()
+                                .get(*decorator_id)
+                                .map(|decorator| &decorator.payload),
+                            Some(DecoratorPayload::Source(_))
+                        )
+                    });
+                    match (has_source_decorator, item.source_metadata.as_ref()) {
+                        (true, Some(metadata)) => {
+                            self.check_source_metadata(item.header.span, metadata)
+                        }
+                        (true, None) => self.diagnostics.push(
+                            Diagnostic::error("source-backed signal is missing source metadata")
+                                .with_code(code("missing-source-metadata"))
+                                .with_label(DiagnosticLabel::primary(
+                                    item.header.span,
+                                    "populate source metadata after name resolution",
+                                )),
+                        ),
+                        (false, Some(_)) => self.diagnostics.push(
+                            Diagnostic::error(
+                                "non-source signal unexpectedly carries source metadata",
+                            )
+                            .with_code(code("unexpected-source-metadata"))
+                            .with_label(DiagnosticLabel::primary(
+                                item.header.span,
+                                "only `@source` signals should carry source metadata",
+                            )),
+                        ),
+                        (false, None) => {}
+                    }
                 }
                 Item::Class(item) => {
                     self.check_name(&item.name);
@@ -704,6 +752,397 @@ impl Validator<'_> {
         }
     }
 
+    fn validate_type_kinds(&mut self) {
+        if self.mode != ValidationMode::RequireResolvedNames {
+            return;
+        }
+
+        let items = self
+            .module
+            .items()
+            .iter()
+            .map(|(_, item)| item.clone())
+            .collect::<Vec<_>>();
+
+        for item in items {
+            match item {
+                Item::Type(item) => {
+                    let parameters = item.parameters.clone();
+                    match item.body {
+                        crate::hir::TypeItemBody::Alias(alias) => {
+                            self.check_expected_type_kind(alias, &parameters, "type alias body");
+                        }
+                        crate::hir::TypeItemBody::Sum(variants) => {
+                            for variant in variants.iter() {
+                                for field in &variant.fields {
+                                    self.check_expected_type_kind(
+                                        *field,
+                                        &parameters,
+                                        "type variant field",
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                Item::Value(item) => {
+                    if let Some(annotation) = item.annotation {
+                        self.check_expected_type_kind(annotation, &[], "value annotation");
+                    }
+                }
+                Item::Function(item) => {
+                    if let Some(annotation) = item.annotation {
+                        self.check_expected_type_kind(annotation, &[], "function annotation");
+                    }
+                    for parameter in &item.parameters {
+                        if let Some(annotation) = parameter.annotation {
+                            self.check_expected_type_kind(
+                                annotation,
+                                &[],
+                                "function parameter annotation",
+                            );
+                        }
+                    }
+                }
+                Item::Signal(item) => {
+                    if let Some(annotation) = item.annotation {
+                        self.check_expected_type_kind(annotation, &[], "signal annotation");
+                    }
+                }
+                Item::Class(item) => {
+                    let parameters = item.parameters.iter().copied().collect::<Vec<_>>();
+                    for superclass in &item.superclasses {
+                        self.check_expected_type_kind(*superclass, &parameters, "class superclass");
+                    }
+                    for member in &item.members {
+                        self.check_expected_type_kind(
+                            member.annotation,
+                            &parameters,
+                            "class member annotation",
+                        );
+                    }
+                }
+                Item::Domain(item) => {
+                    let parameters = item.parameters.clone();
+                    self.check_expected_type_kind(item.carrier, &parameters, "domain carrier");
+                    for member in &item.members {
+                        self.check_expected_type_kind(
+                            member.annotation,
+                            &parameters,
+                            "domain member annotation",
+                        );
+                    }
+                }
+                Item::Instance(item) => {
+                    self.check_type_reference_kind(
+                        &item.class,
+                        &[],
+                        Kind::constructor(item.arguments.len()),
+                        "instance class head",
+                    );
+                    for argument in item.arguments.iter() {
+                        self.check_expected_type_kind(*argument, &[], "instance argument");
+                    }
+                    for context in &item.context {
+                        self.check_expected_type_kind(*context, &[], "instance context");
+                    }
+                    for member in &item.members {
+                        if let Some(annotation) = member.annotation {
+                            self.check_expected_type_kind(
+                                annotation,
+                                &[],
+                                "instance member annotation",
+                            );
+                        }
+                    }
+                }
+                Item::Use(_) | Item::Export(_) => {}
+            }
+        }
+    }
+
+    fn check_expected_type_kind(
+        &mut self,
+        ty: TypeId,
+        parameters: &[TypeParameterId],
+        subject: &'static str,
+    ) {
+        self.check_type_kind(ty, parameters, Kind::Type, subject);
+    }
+
+    fn check_type_kind(
+        &mut self,
+        ty: TypeId,
+        parameters: &[TypeParameterId],
+        expected: Kind,
+        subject: &'static str,
+    ) {
+        let Some((store, root, spans)) = self.build_kind_graph_for_type(ty, parameters) else {
+            return;
+        };
+        if let Err(error) = KindChecker.expect_kind(&store, root, &expected) {
+            self.emit_kind_error(subject, &spans, error);
+        }
+    }
+
+    fn check_type_reference_kind(
+        &mut self,
+        reference: &TypeReference,
+        parameters: &[TypeParameterId],
+        expected: Kind,
+        subject: &'static str,
+    ) {
+        let Some((store, root, spans)) = self.build_kind_graph_for_reference(reference, parameters)
+        else {
+            return;
+        };
+        if let Err(error) = KindChecker.expect_kind(&store, root, &expected) {
+            self.emit_kind_error(subject, &spans, error);
+        }
+    }
+
+    fn build_kind_graph_for_type(
+        &mut self,
+        root: TypeId,
+        parameters: &[TypeParameterId],
+    ) -> Option<(KindStore, KindExprId, HashMap<KindExprId, SourceSpan>)> {
+        let mut store = KindStore::default();
+        let mut spans = HashMap::new();
+        let mut parameter_map = self.kind_parameter_map(parameters, &mut store);
+        let mut lowered = HashMap::new();
+        let mut stack = vec![KindBuildFrame::Enter(root)];
+
+        while let Some(frame) = stack.pop() {
+            match frame {
+                KindBuildFrame::Enter(type_id) => {
+                    if lowered.contains_key(&type_id) {
+                        continue;
+                    }
+                    match &self.module.types()[type_id].kind {
+                        TypeKind::Name(reference) => {
+                            let expr = self.kind_expr_for_reference(
+                                reference,
+                                &mut store,
+                                &mut spans,
+                                &mut parameter_map,
+                            )?;
+                            lowered.insert(type_id, expr);
+                        }
+                        TypeKind::Tuple(elements) => {
+                            stack.push(KindBuildFrame::Exit(type_id));
+                            for element in elements.iter().rev() {
+                                stack.push(KindBuildFrame::Enter(*element));
+                            }
+                        }
+                        TypeKind::Record(fields) => {
+                            stack.push(KindBuildFrame::Exit(type_id));
+                            for field in fields.iter().rev() {
+                                stack.push(KindBuildFrame::Enter(field.ty));
+                            }
+                        }
+                        TypeKind::Arrow { parameter, result } => {
+                            stack.push(KindBuildFrame::Exit(type_id));
+                            stack.push(KindBuildFrame::Enter(*result));
+                            stack.push(KindBuildFrame::Enter(*parameter));
+                        }
+                        TypeKind::Apply { callee, arguments } => {
+                            stack.push(KindBuildFrame::Exit(type_id));
+                            for argument in arguments.iter().rev() {
+                                stack.push(KindBuildFrame::Enter(*argument));
+                            }
+                            stack.push(KindBuildFrame::Enter(*callee));
+                        }
+                    }
+                }
+                KindBuildFrame::Exit(type_id) => {
+                    let expr = match &self.module.types()[type_id].kind {
+                        TypeKind::Name(_) => unreachable!("name nodes lower during enter"),
+                        TypeKind::Tuple(elements) => store.tuple_expr(
+                            elements
+                                .iter()
+                                .map(|element| lowered[element])
+                                .collect::<Vec<_>>(),
+                        ),
+                        TypeKind::Record(fields) => store.record_expr(
+                            fields
+                                .iter()
+                                .map(|field| KindRecordField::new(field.label.text(), lowered[&field.ty]))
+                                .collect::<Vec<_>>(),
+                        ),
+                        TypeKind::Arrow { parameter, result } => {
+                            store.arrow_expr(lowered[parameter], lowered[result])
+                        }
+                        TypeKind::Apply { callee, arguments } => {
+                            let mut expr = lowered[callee];
+                            for argument in arguments.iter() {
+                                expr = store.apply_expr(expr, lowered[argument]);
+                                spans.insert(expr, self.module.types()[type_id].span);
+                            }
+                            expr
+                        }
+                    };
+                    spans.entry(expr).or_insert(self.module.types()[type_id].span);
+                    lowered.insert(type_id, expr);
+                }
+            }
+        }
+
+        Some((store, lowered[&root], spans))
+    }
+
+    fn build_kind_graph_for_reference(
+        &mut self,
+        reference: &TypeReference,
+        parameters: &[TypeParameterId],
+    ) -> Option<(KindStore, KindExprId, HashMap<KindExprId, SourceSpan>)> {
+        let mut store = KindStore::default();
+        let mut spans = HashMap::new();
+        let mut parameter_map = self.kind_parameter_map(parameters, &mut store);
+        let root = self.kind_expr_for_reference(reference, &mut store, &mut spans, &mut parameter_map)?;
+        Some((store, root, spans))
+    }
+
+    fn kind_parameter_map(
+        &self,
+        parameters: &[TypeParameterId],
+        store: &mut KindStore,
+    ) -> HashMap<TypeParameterId, TypingKindParameterId> {
+        let mut parameter_map = HashMap::new();
+        for parameter in parameters {
+            let kind_parameter = store.add_parameter(
+                self.module.type_parameters()[*parameter].name.text().to_owned(),
+            );
+            parameter_map.insert(*parameter, kind_parameter);
+        }
+        parameter_map
+    }
+
+    fn kind_expr_for_reference(
+        &mut self,
+        reference: &TypeReference,
+        store: &mut KindStore,
+        spans: &mut HashMap<KindExprId, SourceSpan>,
+        parameters: &mut HashMap<TypeParameterId, TypingKindParameterId>,
+    ) -> Option<KindExprId> {
+        let expr = match reference.resolution.as_ref() {
+            ResolutionState::Unresolved => return None,
+            ResolutionState::Resolved(TypeResolution::Builtin(builtin)) => {
+                let constructor = store.add_constructor(
+                    builtin_type_name(*builtin),
+                    builtin_kind(*builtin),
+                );
+                store.constructor_expr(constructor)
+            }
+            ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
+                let parameter = *parameters.entry(*parameter).or_insert_with(|| {
+                    store.add_parameter(
+                        self.module.type_parameters()[*parameter].name.text().to_owned(),
+                    )
+                });
+                store.parameter_expr(parameter)
+            }
+            ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
+                let constructor = store.add_constructor(
+                    item_type_name(&self.module.items()[*item_id]),
+                    self.kind_for_item(*item_id)?,
+                );
+                store.constructor_expr(constructor)
+            }
+            ResolutionState::Resolved(TypeResolution::Import(_)) => return None,
+        };
+        spans.insert(expr, reference.span());
+        Some(expr)
+    }
+
+    fn kind_for_item(&mut self, item_id: ItemId) -> Option<Kind> {
+        match &self.module.items()[item_id] {
+            Item::Type(item) => Some(Kind::constructor(item.parameters.len())),
+            Item::Class(item) => Some(Kind::constructor(item.parameters.len())),
+            Item::Domain(item) => Some(Kind::constructor(item.parameters.len())),
+            other => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "type resolution unexpectedly points at non-type item kind {:?}",
+                        other.kind()
+                    ))
+                    .with_code(code("invalid-type-resolution"))
+                    .with_label(DiagnosticLabel::primary(
+                        other.span(),
+                        "only type, class, and domain items may appear in type resolution",
+                    )),
+                );
+                None
+            }
+        }
+    }
+
+    fn emit_kind_error(
+        &mut self,
+        subject: &'static str,
+        spans: &HashMap<KindExprId, SourceSpan>,
+        error: KindCheckError,
+    ) {
+        match error.kind() {
+            KindCheckErrorKind::CannotApplyNonConstructor { callee_kind, .. } => {
+                let span = spans.get(&error.expr()).copied().unwrap_or_default();
+                self.diagnostics.push(
+                    Diagnostic::error("type application is over-saturated")
+                        .with_code(code("invalid-type-application"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            format!(
+                                "this application already has kind `{callee_kind}` and cannot take another type argument"
+                            ),
+                        )),
+                );
+            }
+            KindCheckErrorKind::ArgumentKindMismatch {
+                expected,
+                argument,
+                found,
+                ..
+            } => {
+                let span = spans.get(argument).copied().unwrap_or_default();
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "type argument kind mismatch: expected `{expected}`, found `{found}`"
+                    ))
+                    .with_code(code("invalid-type-argument-kind"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "this type argument does not match the constructor's expected kind",
+                    )),
+                );
+            }
+            KindCheckErrorKind::ExpectedType { child, found } => {
+                let span = spans.get(child).copied().unwrap_or_default();
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} requires a concrete type, found kind `{found}`"
+                    ))
+                    .with_code(code("expected-type-kind"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "fully apply this type constructor before using it here",
+                    )),
+                );
+            }
+            KindCheckErrorKind::ExpectedKind { expected, found } => {
+                let span = spans.get(&error.expr()).copied().unwrap_or_default();
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} has kind `{found}`, expected `{expected}`"
+                    ))
+                    .with_code(code("expected-kind-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "adjust the applied type arguments to match the expected constructor kind",
+                    )),
+                );
+            }
+        }
+    }
+
     fn check_name(&mut self, name: &Name) {
         self.check_span("name", name.span());
     }
@@ -750,6 +1189,76 @@ impl Validator<'_> {
                 );
             },
         );
+    }
+
+    fn check_text_literal(&mut self, owner_span: SourceSpan, text: &TextLiteral) {
+        for segment in &text.segments {
+            match segment {
+                TextSegment::Text(fragment) => self.check_span("text fragment", fragment.span),
+                TextSegment::Interpolation(interpolation) => {
+                    self.check_span("text interpolation", interpolation.span);
+                    self.require_expr(
+                        owner_span,
+                        "text literal",
+                        "interpolation expression",
+                        interpolation.expr,
+                    );
+                }
+            }
+        }
+    }
+
+    fn check_source_metadata(&mut self, span: SourceSpan, metadata: &SourceMetadata) {
+        for dependency in &metadata.signal_dependencies {
+            self.require_item(span, "source metadata", "signal dependency", *dependency);
+            if let Some(item) = self.module.items().get(*dependency) {
+                if !matches!(item, Item::Signal(_)) {
+                    self.diagnostics.push(
+                        Diagnostic::error("source metadata dependency must point at a signal item")
+                            .with_code(code("invalid-source-dependency"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "update the source metadata to reference only signal items",
+                            )),
+                    );
+                }
+            }
+        }
+    }
+
+    fn check_signal_dependencies(&mut self, span: SourceSpan, dependencies: &[ItemId]) {
+        let mut previous = None;
+        for dependency in dependencies {
+            self.require_item(span, "signal item", "signal dependency", *dependency);
+            if let Some(item) = self.module.items().get(*dependency) {
+                if !matches!(item, Item::Signal(_)) {
+                    self.diagnostics.push(
+                        Diagnostic::error("signal dependency must point at a signal item")
+                            .with_code(code("invalid-signal-dependency"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "update the signal dependency list to reference only signal items",
+                            )),
+                    );
+                }
+            }
+            if let Some(previous) = previous {
+                if previous >= *dependency {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "signal dependency lists must stay sorted and duplicate-free",
+                        )
+                        .with_code(code("unordered-signal-dependencies"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "normalize signal dependency ordering after resolution",
+                        )),
+                    );
+                    break;
+                }
+            }
+            previous = Some(*dependency);
+        }
     }
 
     fn check_type_reference(&mut self, reference: &TypeReference) {
@@ -1069,6 +1578,55 @@ impl Validator<'_> {
 
 fn code(name: &'static str) -> DiagnosticCode {
     DiagnosticCode::new("hir", name)
+}
+
+fn builtin_kind(builtin: BuiltinType) -> Kind {
+    match builtin {
+        BuiltinType::Int
+        | BuiltinType::Float
+        | BuiltinType::Decimal
+        | BuiltinType::BigInt
+        | BuiltinType::Bool
+        | BuiltinType::Text
+        | BuiltinType::Unit
+        | BuiltinType::Bytes => Kind::Type,
+        BuiltinType::List | BuiltinType::Option | BuiltinType::Signal => Kind::constructor(1),
+        BuiltinType::Result | BuiltinType::Validation | BuiltinType::Task => Kind::constructor(2),
+    }
+}
+
+fn builtin_type_name(builtin: BuiltinType) -> &'static str {
+    match builtin {
+        BuiltinType::Int => "Int",
+        BuiltinType::Float => "Float",
+        BuiltinType::Decimal => "Decimal",
+        BuiltinType::BigInt => "BigInt",
+        BuiltinType::Bool => "Bool",
+        BuiltinType::Text => "Text",
+        BuiltinType::Unit => "Unit",
+        BuiltinType::Bytes => "Bytes",
+        BuiltinType::List => "List",
+        BuiltinType::Option => "Option",
+        BuiltinType::Result => "Result",
+        BuiltinType::Validation => "Validation",
+        BuiltinType::Signal => "Signal",
+        BuiltinType::Task => "Task",
+    }
+}
+
+fn item_type_name(item: &Item) -> String {
+    match item {
+        Item::Type(item) => item.name.text().to_owned(),
+        Item::Class(item) => item.name.text().to_owned(),
+        Item::Domain(item) => item.name.text().to_owned(),
+        other => format!("{:?}", other.kind()),
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum KindBuildFrame {
+    Enter(TypeId),
+    Exit(TypeId),
 }
 
 #[cfg(test)]

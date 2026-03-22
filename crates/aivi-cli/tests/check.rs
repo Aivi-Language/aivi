@@ -23,6 +23,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/pipe-branch-and-join/main.aivi",
         "milestone-1/valid/records/record_shorthand_and_elision.aivi",
         "milestone-1/valid/sources/source_declarations.aivi",
+        "milestone-1/valid/strings/text_and_regex.aivi",
         "milestone-1/valid/top-level/declarations.aivi",
         "milestone-1/valid/pipes/pipe_algebra.aivi",
     ] {
@@ -60,6 +61,11 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/ambiguous-domain-literal-suffix/main.aivi",
         "milestone-2/invalid/unpaired-truthy-falsy/main.aivi",
         "milestone-2/invalid/fanin-without-map/main.aivi",
+        "milestone-2/invalid/interpolated-pattern-text/main.aivi",
+        "milestone-1/invalid/cluster_unfinished_gate.aivi",
+        "milestone-1/invalid/source_unknown_option.aivi",
+        "milestone-2/invalid/source-duplicate-option/main.aivi",
+        "milestone-2/invalid/source-provider-without-variant/main.aivi",
     ] {
         let path = fixture_path(relative);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))

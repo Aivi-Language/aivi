@@ -145,3 +145,45 @@ This log records narrow, reviewable implementation choices for ambiguous or stag
     - **Chosen interpretation:** Enforce the purely structural rules at HIR lowering time now: a run of truthy/falsy shorthand stages must be exactly one adjacent `T|>` / `F|>` pair, and `<|*` is legal only immediately after `*|>`. Carrier-specific behavior for `?|>`, `*|>`, recurrence, and source lifecycle remains deferred to later typing/runtime layers.
     - **Rationale:** This closes a real RFC gap in the existing frontend without smuggling type checking or scheduler behavior into Milestone 2.
     - **Future refinement:** Add typed elaboration/planning for ordinary vs `Signal` carriers and runtime-specific recurrence/source checks once those later layers exist.
+
+25. **Area:** Structural text interpolation in syntax and HIR (`RFC §19.1`, `§14`)
+    - **Ambiguity / decision point:** The frontend previously preserved string literals only as raw text plus a boolean interpolation flag, which was not enough for source dependency extraction, and the RFC does not define string-pattern destructuring semantics.
+    - **Chosen interpretation:** Parse text literals eagerly into explicit alternating text fragments and `{ ... }` expression holes in CST and HIR. Raw text fragments preserve the literal interior spelling between holes, while interpolation holes parse as ordinary expressions with their own spans and canonical formatter output. Interpolated text remains legal in expression and markup/source-text positions, but interpolated text literals in pattern position are rejected as an explicit compile-time error.
+    - **Rationale:** This provides the structural representation required by RFC text composition and source reactivity without introducing stringly heuristics, while the pattern-side restriction chooses the narrowest coherent behavior until the RFC gives explicit destructuring semantics.
+    - **Future refinement:** If AIVI later adds string-pattern matching or richer interpolation escapes, extend the segment model intentionally rather than by weakening the current explicit-hole representation.
+
+26. **Area:** Source reactivity metadata extraction (`RFC §13.1`, `§14`)
+    - **Ambiguity / decision point:** The RFC requires statically known source dependency sets, but the current Milestone 2 HIR has only local module resolution and import bindings do not encode the imported item kind.
+    - **Chosen interpretation:** After name resolution, every `@source`-backed `sig` receives `SourceMetadata` containing the resolved provider key, the sorted same-module set of directly referenced `sig` items reachable through source arguments/options (including text interpolation holes and nested expression structure), and an `is_reactive` flag derived from whether that dependency set is non-empty. Imported references are not treated as signal dependencies in the current implementation because Milestone 2 cannot yet prove that an import names a signal item.
+    - **Rationale:** This matches the RFC’s “statically known dependencies” requirement as far as the current IR can represent honestly, keeps extraction structural rather than string-based, and avoids inventing cross-module signal knowledge that the current import model does not preserve.
+    - **Future refinement:** Once imports resolve to richer item metadata or a typed inter-module graph exists, extend the same metadata pass so imported signal references participate in dependency extraction explicitly.
+
+27. **Area:** General signal dependency metadata in HIR (`RFC §13.1`, `§14`)
+    - **Ambiguity / decision point:** The RFC’s dependency discussion is source-driven, but ordinary derived `sig` items also need a stable structural dependency set if later scheduler/runtime layers are to stay deterministic.
+    - **Chosen interpretation:** Every `sig`, not only `@source`-backed signals, now carries a sorted, duplicate-free same-module `signal_dependencies` list computed after name resolution from ordinary expression structure. For `@source` signals this list is the whole signal-facing dependency set, while `SourceMetadata.signal_dependencies` remains the source-config subset.
+    - **Rationale:** This keeps dependency extraction uniform across signal forms, avoids a special-case metadata path for sources, and gives later layers one coherent place to read resolved signal-to-signal structure.
+    - **Future refinement:** Broaden the same pass to imported signals only when the import model can prove signal item kinds without guessing.
+
+28. **Area:** Structural `@source` diagnostics in HIR lowering (`RFC §14.1.1`)
+    - **Ambiguity / decision point:** Some source-declaration errors are knowable from surface structure alone, while others depend on later typing or runtime provider contracts.
+    - **Chosen interpretation:** Milestone 2 lowering now rejects structurally invalid `@source` forms immediately: missing provider variants, underspecified provider paths such as `http` without a variant, non-record `with` payloads, and duplicate option labels. These remain lowering diagnostics only; they do not change the resolved HIR shape for otherwise valid structure.
+    - **Rationale:** This captures real user mistakes at the earliest honest layer without pretending HIR already knows provider schemas, option value types, or runtime lifecycle semantics.
+    - **Future refinement:** Add richer provider-aware diagnostics only where the RFC gives a closed static contract that can be enforced without leaking typed/runtime behavior into Milestone 2.
+
+29. **Area:** Built-in source option schemas and domain-valued source options (`RFC §14.1.2`, `§20.5`)
+    - **Ambiguity / decision point:** The RFC lists recommended v1 provider options, while newer examples prefer domain-shaped quantities such as `5s` and `3x` over raw millisecond/count integers.
+    - **Chosen interpretation:** Milestone 2 now uses a provider-keyed structural option registry for the compiler-known built-in source variants and validates option *names* against that registry. For quantity-like options, the registry follows the domain-oriented vocabulary (`timeout`, `refreshEvery`, `jitter`, `debounce`, `heartbeat`) rather than `*Ms` spellings. Option *values* are still just ordinary expressions at this layer, so domain literal forms such as `5s` and `3x` are accepted and resolved normally, but their expected types are not enforced until later typing.
+    - **Rationale:** This lets the frontend reject misspelled source options now, aligns examples with the RFC’s domain-literal direction, and avoids fake type checking in HIR lowering.
+    - **Future refinement:** When typed source schemas exist, validate source option expression types against provider contracts explicitly instead of relying only on option-name legality.
+
+30. **Area:** Unfinished applicative-cluster diagnostics (`RFC §12.7`, `§24`)
+    - **Ambiguity / decision point:** The surface fixture corpus already contained unfinished `&|>` clusters such as a cluster followed by `?|>`, but the parser was still rejecting them as syntax even though the RFC positions this as a later pipe-normalization legality rule.
+    - **Chosen interpretation:** Parsing now accepts these pipe shapes structurally and leaves the legality check to HIR lowering. If a contiguous `&|>` region does not end in an explicit cluster finalizer and more pipe stages follow, lowering reports `illegal-unfinished-cluster` and still preserves structurally valid HIR.
+    - **Rationale:** This moves the diagnostic to the correct layer, keeps the CST faithful to the authored surface, and matches the RFC’s Milestone 4 framing without prematurely normalizing clusters in the parser.
+    - **Future refinement:** Extend the same Milestone 4 legality pass with the remaining cluster restrictions and exact normalization once typed applicative constructors are available.
+
+31. **Area:** Milestone 3 kind-checking foundation (`RFC §6.1`, `§20.1`, `§20.8`)
+    - **Ambiguity / decision point:** Milestone 3 requires kind checking and named constructor partial application, but the current codebase had only a focused structural `Eq` planner and no reusable kind model.
+    - **Chosen interpretation:** Add a dedicated `aivi-typing::kind` module that models the v1 kind language (`Type` plus right-associative arrows), named type constructors, type parameters, structural type expressions, iterative kind inference, and explicit expected-kind checks. Parameterized domains use the same constructor-kind model as ordinary named constructors.
+    - **Rationale:** This creates the missing type-side foundation without smuggling kind logic into the `Eq` planner, keeps stack-safety explicit via iterative inference, and gives later HIR/typed-core integration a principled API for constructor partial-application checks.
+    - **Future refinement:** Thread this kind model into resolved HIR type expressions, then layer class/instance resolution and typed-core elaboration on top of the same constructor-kind discipline.

@@ -162,14 +162,25 @@ impl LexedModule {
 }
 
 pub fn lex_module(source: &SourceFile) -> LexedModule {
+    lex_range(source, 0..source.len())
+}
+
+pub(crate) fn lex_fragment(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule {
+    lex_range(source, range)
+}
+
+fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule {
     let text = source.text();
     let bytes = text.as_bytes();
-    let mut cursor = 0usize;
-    let mut at_line_start = true;
+    let mut cursor = range.start;
+    let mut at_line_start = range.start == 0
+        || bytes
+            .get(range.start.saturating_sub(1))
+            .is_some_and(|byte| *byte == b'\n');
     let mut tokens = Vec::new();
     let mut diagnostics = Vec::new();
 
-    while cursor < bytes.len() {
+    while cursor < range.end {
         if bytes[cursor] == b'\n' {
             tokens.push(Token::new(
                 TokenKind::Newline,
@@ -183,7 +194,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
 
         if matches!(bytes[cursor], b' ' | b'\t' | b'\r') {
             let start = cursor;
-            while cursor < bytes.len() && matches!(bytes[cursor], b' ' | b'\t' | b'\r') {
+            while cursor < range.end && matches!(bytes[cursor], b' ' | b'\t' | b'\r') {
                 cursor += 1;
             }
             tokens.push(Token::new(
@@ -196,9 +207,9 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
 
         let line_start = at_line_start;
 
-        if bytes[cursor..].starts_with(b"rx\"") {
+        if bytes[cursor..range.end].starts_with(b"rx\"") {
             let start = cursor;
-            let (end, terminated) = scan_quoted_body(text, bytes, cursor + 2);
+            let (end, terminated) = scan_quoted_body(text, bytes, cursor + 2, range.end);
             cursor = end;
             tokens.push(Token::new(
                 TokenKind::RegexLiteral,
@@ -231,7 +242,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
             continue;
         }
 
-        if let Some((kind, width)) = match_compound(bytes, cursor) {
+        if let Some((kind, width)) = match_compound(bytes, cursor, range.end) {
             tokens.push(Token::new(
                 kind,
                 source.span(cursor..cursor + width),
@@ -250,7 +261,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
         if character.is_ascii_digit() {
             let start = cursor;
             cursor += character.len_utf8();
-            while cursor < bytes.len() && bytes[cursor].is_ascii_digit() {
+            while cursor < range.end && bytes[cursor].is_ascii_digit() {
                 cursor += 1;
             }
             tokens.push(Token::new(
@@ -265,7 +276,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
         if is_identifier_start(character) {
             let start = cursor;
             cursor += character.len_utf8();
-            while cursor < bytes.len() {
+            while cursor < range.end {
                 let next = text[cursor..]
                     .chars()
                     .next()
@@ -285,7 +296,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
 
         if character == '"' {
             let start = cursor;
-            let (end, terminated) = scan_quoted_body(text, bytes, cursor);
+            let (end, terminated) = scan_quoted_body(text, bytes, cursor, range.end);
             cursor = end;
             tokens.push(Token::new(
                 TokenKind::StringLiteral,
@@ -356,7 +367,7 @@ pub fn lex_module(source: &SourceFile) -> LexedModule {
     }
 }
 
-fn match_compound(bytes: &[u8], cursor: usize) -> Option<(TokenKind, usize)> {
+fn match_compound(bytes: &[u8], cursor: usize, end: usize) -> Option<(TokenKind, usize)> {
     const PATTERNS: [(&[u8], TokenKind); 15] = [
         (b"<|@", TokenKind::PipeRecurStep),
         (b"<|*", TokenKind::PipeFanIn),
@@ -375,15 +386,14 @@ fn match_compound(bytes: &[u8], cursor: usize) -> Option<(TokenKind, usize)> {
         (b"|>", TokenKind::PipeTransform),
     ];
 
+    let fragment = &bytes[cursor..end];
     for (pattern, kind) in PATTERNS {
-        if bytes[cursor..].starts_with(pattern) {
+        if fragment.starts_with(pattern) {
             return Some((kind, pattern.len()));
         }
     }
 
-    bytes[cursor..]
-        .starts_with(b"=>")
-        .then_some((TokenKind::Arrow, 2))
+    fragment.starts_with(b"=>").then_some((TokenKind::Arrow, 2))
 }
 
 fn keyword_kind(text: &str) -> Option<TokenKind> {
@@ -408,7 +418,7 @@ fn is_identifier_continue(character: char) -> bool {
     is_identifier_start(character) || character.is_ascii_digit()
 }
 
-fn scan_quoted_body(text: &str, bytes: &[u8], start: usize) -> (usize, bool) {
+fn scan_quoted_body(text: &str, bytes: &[u8], start: usize, end: usize) -> (usize, bool) {
     let mut cursor = start;
     let mut terminated = false;
 
@@ -417,7 +427,7 @@ fn scan_quoted_body(text: &str, bytes: &[u8], start: usize) -> (usize, bool) {
     }
 
     cursor += 1;
-    while cursor < bytes.len() {
+    while cursor < end {
         let next = text[cursor..]
             .chars()
             .next()
@@ -425,7 +435,7 @@ fn scan_quoted_body(text: &str, bytes: &[u8], start: usize) -> (usize, bool) {
         match next {
             '\\' => {
                 cursor += 1;
-                if cursor < bytes.len() {
+                if cursor < end {
                     let escaped = text[cursor..]
                         .chars()
                         .next()

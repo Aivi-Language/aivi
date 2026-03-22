@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 
-//! Milestone 3 type-side semantics, starting with explicit `Eq` derivation plans.
+//! Milestone 3 type-side semantics, starting with explicit kind-checking foundations and
+//! compiler-derived `Eq` derivation plans.
 //!
-//! The crate intentionally models only the structural fragment needed for compiler-derived
-//! equality plus named leaf references supplied by the caller. It does not pretend full
-//! instance resolution or runtime evaluation already exists.
+//! The crate intentionally models only the focused structural fragments needed by the current
+//! implementation wave. It does not pretend full instance resolution, typed-core elaboration,
+//! or runtime evaluation already exists.
 
 pub mod eq;
+pub mod kind;
 
 pub use eq::{
     Class, Closedness, DomainShape, EqContext, EqDerivation, EqDerivationError,
@@ -14,4 +16,8 @@ pub use eq::{
     ExternalTypeId, FieldName, InstanceHead, PrimitiveType, RecordField, RecordShape, ShapeError,
     ShapeErrorKind, SumShape, SumVariant, TypeId, TypeNode, TypeParameterId, TypeReference,
     TypeStore, VariantName,
+};
+pub use kind::{
+    Kind, KindCheckError, KindCheckErrorKind, KindChecker, KindExpr, KindExprId, KindParameterId,
+    KindRecordField, KindStore, TypeConstructorId,
 };

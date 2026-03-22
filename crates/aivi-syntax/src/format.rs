@@ -3,8 +3,8 @@ use crate::cst::{
     DomainItem, DomainMember, DomainMemberName, Expr, ExprKind, FunctionParam, Identifier, Item,
     MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, Pattern, PatternKind,
     PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-    RecordPatternField, SourceDecorator, SuffixedIntegerLiteral, TypeDeclBody, TypeExpr,
-    TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+    RecordPatternField, SourceDecorator, SuffixedIntegerLiteral, TextLiteral, TextSegment,
+    TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -605,7 +605,7 @@ impl Formatter {
             ExprKind::Name(name) => name.text.clone(),
             ExprKind::Integer(integer) => integer.raw.clone(),
             ExprKind::SuffixedInteger(literal) => self.format_suffixed_integer_inline(literal),
-            ExprKind::Text(text) => text.raw.clone(),
+            ExprKind::Text(text) => self.format_text_literal(text),
             ExprKind::Regex(regex) => regex.raw.clone(),
             ExprKind::Group(inner) => format!("({})", self.format_expr_inline(inner, 0)),
             ExprKind::Tuple(elements) => self.format_expr_tuple_inline(elements),
@@ -1034,7 +1034,7 @@ impl Formatter {
     fn format_markup_attribute(&self, attribute: &MarkupAttribute) -> String {
         match &attribute.value {
             Some(MarkupAttributeValue::Text(text)) => {
-                format!("{}={}", attribute.name.text, text.raw)
+                format!("{}={}", attribute.name.text, self.format_text_literal(text))
             }
             Some(MarkupAttributeValue::Expr(expr)) => format!(
                 "{}={{{}}}",
@@ -1050,7 +1050,7 @@ impl Formatter {
             PatternKind::Wildcard => "_".to_owned(),
             PatternKind::Name(name) => name.text.clone(),
             PatternKind::Integer(integer) => integer.raw.clone(),
-            PatternKind::Text(text) => text.raw.clone(),
+            PatternKind::Text(text) => self.format_text_literal(text),
             PatternKind::Group(inner) => format!("({})", self.format_pattern_inline(inner, 0)),
             PatternKind::Tuple(elements) => self.format_pattern_tuple_inline(elements),
             PatternKind::Record(fields) => self.format_pattern_record_inline(fields),
@@ -1064,6 +1064,22 @@ impl Formatter {
                 wrap_if_needed(rendered, PATTERN_APPLY_PREC, parent_prec)
             }
         }
+    }
+
+    fn format_text_literal(&self, text: &TextLiteral) -> String {
+        let mut rendered = String::from("\"");
+        for segment in &text.segments {
+            match segment {
+                TextSegment::Text(fragment) => rendered.push_str(&fragment.raw),
+                TextSegment::Interpolation(interpolation) => {
+                    rendered.push('{');
+                    rendered.push_str(&self.format_expr_inline(&interpolation.expr, 0));
+                    rendered.push('}');
+                }
+            }
+        }
+        rendered.push('"');
+        rendered
     }
 
     fn format_pattern_tuple_inline(&self, elements: &[Pattern]) -> String {
@@ -1450,6 +1466,15 @@ mod tests {
                 "     ||> Idle          => \"idle\"\n",
                 "     ||> Failed reason => \"failed {reason}\"\n",
             )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_text_interpolation_holes() {
+        let formatted = format_text("val greeting=\"Hello { name }, use \\{literal\\} braces\"\n");
+        assert_eq!(
+            formatted,
+            "val greeting = \"Hello {name}, use \\{literal\\} braces\"\n",
         );
     }
 

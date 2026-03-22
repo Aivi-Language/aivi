@@ -614,7 +614,6 @@ Shorthand does not introduce open records, punning across different field names,
 
 ### 9.5 Restrictions
 
-
 Omission is legal only when:
 
 - the expected record type is known
@@ -1172,8 +1171,8 @@ Optioned form:
 ```aivi
 @source http.get "/users" with {
     decode: Strict,
-    retry: 3,
-    timeoutMs: 5000
+    retry: 3x,
+    timeout: 5s
 }
 sig users : Signal (Result HttpError (List User))
 ```
@@ -1205,7 +1204,7 @@ sig users : Signal (Result HttpError (List User))
     body: creds,
     headers: authHeaders,
     decode: Strict,
-    timeoutMs: 5000
+    timeout: 5s
 }
 sig login : Signal (Result HttpError Session)
 ```
@@ -1216,10 +1215,10 @@ Recommended HTTP options:
 - `query : Map Text Text`
 - `body : A`
 - `decode : DecodeMode`
-- `timeoutMs : Int`
-- `retry : Int`
+- `timeout : Duration`
+- `retry : Retry`
 - `refreshOn : Signal B`
-- `refreshEveryMs : Int`
+- `refreshEvery : Duration`
 - `activeWhen : Signal Bool`
 
 HTTP source semantics:
@@ -1274,7 +1273,7 @@ Recommended file-read options:
 
 - `decode : DecodeMode`
 - `reloadOn : Signal A`
-- `debounceMs : Int`
+- `debounce : Duration`
 - `readOnStart : Bool`
 
 This split keeps change detection and snapshot loading explicit. A common pattern is to watch a path, debounce the resulting events, and use those events to trigger `fs.read`.
@@ -1296,7 +1295,7 @@ Recommended socket and mailbox options:
 - `decode : DecodeMode`
 - `buffer : Int`
 - `reconnect : Bool`
-- `heartbeatMs : Int`
+- `heartbeat : Duration`
 - `activeWhen : Signal Bool`
 
 #### Process events
@@ -1983,17 +1982,21 @@ Diagnostics for domains should be explicit and domain-aware.
 Examples:
 
 - when a carrier is used where a domain is expected:
+  
   - `expected Duration but found Int`
   - suggestion: `use Duration.millis`, `Duration.parse`, or another domain constructor
 
 - when a domain is used where a carrier is expected:
+  
   - `expected Text but found Url`
   - suggestion: `use Url.value`
 
 - when a suffix is ambiguous:
+  
   - `literal suffix 'ms' is provided by multiple domains in scope`
 
 - when an operator is missing:
+  
   - `operator '+' is not defined for Duration and Int`
 
 ### 20.13 Recommended examples

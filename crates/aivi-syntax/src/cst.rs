@@ -86,12 +86,40 @@ pub struct SuffixedIntegerLiteral {
     pub span: SourceSpan,
 }
 
-/// Text literal preserved in surface form.
+/// Text literal preserved as explicit text fragments plus interpolation holes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextLiteral {
+    pub span: SourceSpan,
+    pub segments: Vec<TextSegment>,
+}
+
+impl TextLiteral {
+    pub fn has_interpolation(&self) -> bool {
+        self.segments
+            .iter()
+            .any(|segment| matches!(segment, TextSegment::Interpolation(_)))
+    }
+}
+
+/// One structural text-literal segment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TextSegment {
+    Text(TextFragment),
+    Interpolation(TextInterpolation),
+}
+
+/// Raw text content between interpolation holes, without the surrounding quotes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextFragment {
     pub raw: String,
     pub span: SourceSpan,
-    pub has_interpolation: bool,
+}
+
+/// One `{ ... }` interpolation hole inside a text literal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextInterpolation {
+    pub expr: Box<Expr>,
+    pub span: SourceSpan,
 }
 
 /// Regex literal preserved in surface form.

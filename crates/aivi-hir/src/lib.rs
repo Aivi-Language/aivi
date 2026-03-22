@@ -21,9 +21,10 @@ pub use hir::{
     ModuleArenas, Name, NameError, NamePath, NamePathError, Pattern, PatternKind, PipeExpr,
     PipeStage, PipeStageKind, ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface,
     RecordPatternField, RegexLiteral, ResolutionState, RootItemError, ShowControl, SignalItem,
-    SourceDecorator, SuffixedIntegerLiteral, TermReference, TermResolution, TextLiteral, TypeField,
-    TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeReference, TypeResolution,
-    TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
+    SourceDecorator, SourceMetadata, SuffixedIntegerLiteral, TermReference, TermResolution,
+    TextFragment, TextInterpolation, TextLiteral, TextSegment, TypeField, TypeItem, TypeItemBody,
+    TypeKind, TypeNode, TypeParameter, TypeReference, TypeResolution, TypeVariant, UnaryOperator,
+    UseItem, ValueItem, WithControl,
 };
 pub use ids::{
     BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,

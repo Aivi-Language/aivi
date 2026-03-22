@@ -435,6 +435,15 @@ pub struct SignalItem {
     pub name: Name,
     pub annotation: Option<TypeId>,
     pub body: Option<ExprId>,
+    pub signal_dependencies: Vec<ItemId>,
+    pub source_metadata: Option<SourceMetadata>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceMetadata {
+    pub provider_key: Option<Box<str>>,
+    pub signal_dependencies: Vec<ItemId>,
+    pub is_reactive: bool,
 }
 
 /// One `class` declaration.
@@ -527,11 +536,36 @@ pub struct SuffixedIntegerLiteral {
     pub resolution: ResolutionState<LiteralSuffixResolution>,
 }
 
-/// One text literal preserved in raw form.
+/// One text literal preserved as explicit text fragments plus interpolation holes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextLiteral {
+    pub segments: Vec<TextSegment>,
+}
+
+impl TextLiteral {
+    pub fn has_interpolation(&self) -> bool {
+        self.segments
+            .iter()
+            .any(|segment| matches!(segment, TextSegment::Interpolation(_)))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TextSegment {
+    Text(TextFragment),
+    Interpolation(TextInterpolation),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextFragment {
     pub raw: Box<str>,
-    pub has_interpolation: bool,
+    pub span: SourceSpan,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextInterpolation {
+    pub span: SourceSpan,
+    pub expr: ExprId,
 }
 
 /// One regex literal preserved in raw form.
